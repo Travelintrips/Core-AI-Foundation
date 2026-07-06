@@ -9,7 +9,8 @@ import {
   LayoutDashboard, 
   Play, 
   Settings, 
-  ShieldAlert
+  ShieldAlert,
+  Users
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -21,6 +22,7 @@ interface LayoutProps {
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/registry", label: "Registry", icon: Box },
+  { href: "/agents", label: "Agents", icon: Users },
   { href: "/orchestrator", label: "Orchestrator", icon: Play },
   { href: "/workflows", label: "Workflows", icon: GitMerge },
   { href: "/workflow-executions", label: "Executions", icon: Activity },

@@ -28,6 +28,8 @@ tags:
     description: AI Analytics
   - name: settings
     description: AI Settings
+  - name: agents
+    description: AI Agent Registry
 
 paths:
   /healthz:
@@ -218,6 +220,159 @@ paths:
       summary: Delete an AI model
       parameters:
         - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── AGENTS ────────────────────────────────────────────────────────────────
+
+  /ai/agents:
+    get:
+      operationId: listAgents
+      tags: [agents]
+      summary: List all AI agents
+      responses:
+        "200":
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiAgent"
+    post:
+      operationId: createAgent
+      tags: [agents]
+      summary: Register a new AI agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiAgentInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiAgent"
+
+  /ai/agents/{id}:
+    get:
+      operationId: getAgent
+      tags: [agents]
+      summary: Get an AI agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiAgent"
+    patch:
+      operationId: updateAgent
+      tags: [agents]
+      summary: Update an AI agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiAgentUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiAgent"
+    delete:
+      operationId: deleteAgent
+      tags: [agents]
+      summary: Delete an AI agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /ai/agents/{id}/capabilities:
+    get:
+      operationId: listAgentCapabilities
+      tags: [agents]
+      summary: List capabilities for an agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of capabilities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiAgentCapability"
+    post:
+      operationId: addAgentCapability
+      tags: [agents]
+      summary: Add a capability to an agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiAgentCapabilityInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiAgentCapability"
+
+  /ai/agents/{id}/capabilities/{capId}:
+    delete:
+      operationId: deleteAgentCapability
+      tags: [agents]
+      summary: Remove a capability from an agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: capId
           in: path
           required: true
           schema:
@@ -1119,6 +1274,168 @@ components:
           type: boolean
         metadata:
           type: object
+
+    # ── Agents ─────────────────────────────────────────────────────────────
+
+    AiAgent:
+      type: object
+      required: [id, name, slug, role, status, priority, allowedTools, version, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        role:
+          type: string
+        description:
+          type: ["string", "null"]
+        providerId:
+          type: ["integer", "null"]
+        providerName:
+          type: ["string", "null"]
+        modelId:
+          type: ["integer", "null"]
+        modelName:
+          type: ["string", "null"]
+        priority:
+          type: integer
+          description: Higher = higher priority. 100 is default.
+        temperature:
+          type: ["number", "null"]
+          description: Sampling temperature (0–2)
+        maxTokens:
+          type: ["integer", "null"]
+        status:
+          type: string
+          enum: [active, inactive, draft]
+        allowedTools:
+          type: array
+          items:
+            type: string
+        knowledgeBaseId:
+          type: ["integer", "null"]
+        version:
+          type: string
+        owner:
+          type: ["string", "null"]
+        metadata:
+          type: ["object", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AiAgentInput:
+      type: object
+      required: [name, slug, role]
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        role:
+          type: string
+        description:
+          type: string
+        providerId:
+          type: integer
+        modelId:
+          type: integer
+        priority:
+          type: integer
+        temperature:
+          type: number
+        maxTokens:
+          type: integer
+        status:
+          type: string
+          enum: [active, inactive, draft]
+        allowedTools:
+          type: array
+          items:
+            type: string
+        knowledgeBaseId:
+          type: integer
+        version:
+          type: string
+        owner:
+          type: string
+        metadata:
+          type: object
+
+    AiAgentUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        role:
+          type: string
+        description:
+          type: string
+        providerId:
+          type: integer
+        modelId:
+          type: integer
+        priority:
+          type: integer
+        temperature:
+          type: number
+        maxTokens:
+          type: integer
+        status:
+          type: string
+          enum: [active, inactive, draft]
+        allowedTools:
+          type: array
+          items:
+            type: string
+        knowledgeBaseId:
+          type: integer
+        version:
+          type: string
+        owner:
+          type: string
+        metadata:
+          type: object
+
+    AiAgentCapability:
+      type: object
+      required: [id, agentId, name, sortOrder, createdAt]
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        category:
+          type: ["string", "null"]
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    AiAgentCapabilityInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        sortOrder:
+          type: integer
 
     # ── Orchestrator ───────────────────────────────────────────────────────
 

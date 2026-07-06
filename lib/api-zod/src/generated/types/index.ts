@@ -6,6 +6,17 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './aiAgent';
+export * from './aiAgentCapability';
+export * from './aiAgentCapabilityInput';
+export * from './aiAgentInput';
+export * from './aiAgentInputMetadata';
+export * from './aiAgentInputStatus';
+export * from './aiAgentMetadata';
+export * from './aiAgentStatus';
+export * from './aiAgentUpdate';
+export * from './aiAgentUpdateMetadata';
+export * from './aiAgentUpdateStatus';
 export * from './aiModel';
 export * from './aiModelInput';
 export * from './aiModelInputMetadata';

@@ -8,6 +8,7 @@ import NotFound from "@/pages/not-found";
 
 import Dashboard from "@/pages/dashboard";
 import Registry from "@/pages/registry";
+import Agents from "@/pages/agents";
 import Orchestrator from "@/pages/orchestrator";
 import Workflows from "@/pages/workflows";
 import WorkflowExecutions from "@/pages/workflow-executions";
@@ -25,6 +26,7 @@ function Router() {
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/registry" component={Registry} />
+        <Route path="/agents" component={Agents} />
         <Route path="/orchestrator" component={Orchestrator} />
         <Route path="/workflows" component={Workflows} />
         <Route path="/workflow-executions" component={WorkflowExecutions} />
