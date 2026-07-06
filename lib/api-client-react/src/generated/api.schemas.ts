@@ -116,6 +116,134 @@ export interface AiModelUpdate {
   metadata?: AiModelUpdateMetadata;
 }
 
+export type AiAgentStatus = typeof AiAgentStatus[keyof typeof AiAgentStatus];
+
+
+export const AiAgentStatus = {
+  active: 'active',
+  inactive: 'inactive',
+  draft: 'draft',
+} as const;
+
+/**
+ * @nullable
+ */
+export type AiAgentMetadata = { [key: string]: unknown } | null;
+
+export interface AiAgent {
+  id: number;
+  name: string;
+  slug: string;
+  role: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  providerId?: number | null;
+  /** @nullable */
+  providerName?: string | null;
+  /** @nullable */
+  modelId?: number | null;
+  /** @nullable */
+  modelName?: string | null;
+  /** Higher = higher priority. 100 is default. */
+  priority: number;
+  /**
+     * Sampling temperature (0–2)
+     * @nullable
+     */
+  temperature?: number | null;
+  /** @nullable */
+  maxTokens?: number | null;
+  status: AiAgentStatus;
+  allowedTools: string[];
+  /** @nullable */
+  knowledgeBaseId?: number | null;
+  version: string;
+  /** @nullable */
+  owner?: string | null;
+  /** @nullable */
+  metadata?: AiAgentMetadata;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AiAgentInputStatus = typeof AiAgentInputStatus[keyof typeof AiAgentInputStatus];
+
+
+export const AiAgentInputStatus = {
+  active: 'active',
+  inactive: 'inactive',
+  draft: 'draft',
+} as const;
+
+export type AiAgentInputMetadata = { [key: string]: unknown };
+
+export interface AiAgentInput {
+  name: string;
+  slug: string;
+  role: string;
+  description?: string;
+  providerId?: number;
+  modelId?: number;
+  priority?: number;
+  temperature?: number;
+  maxTokens?: number;
+  status?: AiAgentInputStatus;
+  allowedTools?: string[];
+  knowledgeBaseId?: number;
+  version?: string;
+  owner?: string;
+  metadata?: AiAgentInputMetadata;
+}
+
+export type AiAgentUpdateStatus = typeof AiAgentUpdateStatus[keyof typeof AiAgentUpdateStatus];
+
+
+export const AiAgentUpdateStatus = {
+  active: 'active',
+  inactive: 'inactive',
+  draft: 'draft',
+} as const;
+
+export type AiAgentUpdateMetadata = { [key: string]: unknown };
+
+export interface AiAgentUpdate {
+  name?: string;
+  slug?: string;
+  role?: string;
+  description?: string;
+  providerId?: number;
+  modelId?: number;
+  priority?: number;
+  temperature?: number;
+  maxTokens?: number;
+  status?: AiAgentUpdateStatus;
+  allowedTools?: string[];
+  knowledgeBaseId?: number;
+  version?: string;
+  owner?: string;
+  metadata?: AiAgentUpdateMetadata;
+}
+
+export interface AiAgentCapability {
+  id: number;
+  agentId: number;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  category?: string | null;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface AiAgentCapabilityInput {
+  name: string;
+  description?: string;
+  category?: string;
+  sortOrder?: number;
+}
+
 /**
  * Extra model parameters (temperature, max_tokens, etc.)
  * @nullable

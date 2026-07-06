@@ -10,3 +10,5 @@ export * from "./ai-knowledge-documents";
 export * from "./ai-memory";
 export * from "./ai-audit-logs";
 export * from "./ai-settings";
+export * from "./ai-agents";
+export * from "./ai-agent-capabilities";

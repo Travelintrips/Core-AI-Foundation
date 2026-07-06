@@ -272,6 +272,236 @@ export const DeleteModelResponse = zod.void()
 
 
 /**
+ * @summary List all AI agents
+ */
+export const ListAgentsResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "role": zod.string(),
+  "description": zod.string().nullish(),
+  "providerId": zod.number().nullish(),
+  "providerName": zod.string().nullish(),
+  "modelId": zod.number().nullish(),
+  "modelName": zod.string().nullish(),
+  "priority": zod.number().describe('Higher = higher priority. 100 is default.'),
+  "temperature": zod.number().nullish().describe('Sampling temperature (0–2)'),
+  "maxTokens": zod.number().nullish(),
+  "status": zod.enum(['active', 'inactive', 'draft']),
+  "allowedTools": zod.array(zod.string()),
+  "knowledgeBaseId": zod.number().nullish(),
+  "version": zod.string(),
+  "owner": zod.string().nullish(),
+  "metadata": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListAgentsResponse = zod.array(ListAgentsResponseItem)
+
+
+/**
+ * @summary Register a new AI agent
+ */
+export const CreateAgentBody = zod.object({
+  "name": zod.string(),
+  "slug": zod.string(),
+  "role": zod.string(),
+  "description": zod.string().optional(),
+  "providerId": zod.number().optional(),
+  "modelId": zod.number().optional(),
+  "priority": zod.number().optional(),
+  "temperature": zod.number().optional(),
+  "maxTokens": zod.number().optional(),
+  "status": zod.enum(['active', 'inactive', 'draft']).optional(),
+  "allowedTools": zod.array(zod.string()).optional(),
+  "knowledgeBaseId": zod.number().optional(),
+  "version": zod.string().optional(),
+  "owner": zod.string().optional(),
+  "metadata": zod.object({
+
+}).passthrough().optional()
+})
+
+export const CreateAgentResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "role": zod.string(),
+  "description": zod.string().nullish(),
+  "providerId": zod.number().nullish(),
+  "providerName": zod.string().nullish(),
+  "modelId": zod.number().nullish(),
+  "modelName": zod.string().nullish(),
+  "priority": zod.number().describe('Higher = higher priority. 100 is default.'),
+  "temperature": zod.number().nullish().describe('Sampling temperature (0–2)'),
+  "maxTokens": zod.number().nullish(),
+  "status": zod.enum(['active', 'inactive', 'draft']),
+  "allowedTools": zod.array(zod.string()),
+  "knowledgeBaseId": zod.number().nullish(),
+  "version": zod.string(),
+  "owner": zod.string().nullish(),
+  "metadata": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get an AI agent
+ */
+export const GetAgentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetAgentResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "role": zod.string(),
+  "description": zod.string().nullish(),
+  "providerId": zod.number().nullish(),
+  "providerName": zod.string().nullish(),
+  "modelId": zod.number().nullish(),
+  "modelName": zod.string().nullish(),
+  "priority": zod.number().describe('Higher = higher priority. 100 is default.'),
+  "temperature": zod.number().nullish().describe('Sampling temperature (0–2)'),
+  "maxTokens": zod.number().nullish(),
+  "status": zod.enum(['active', 'inactive', 'draft']),
+  "allowedTools": zod.array(zod.string()),
+  "knowledgeBaseId": zod.number().nullish(),
+  "version": zod.string(),
+  "owner": zod.string().nullish(),
+  "metadata": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update an AI agent
+ */
+export const UpdateAgentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateAgentBody = zod.object({
+  "name": zod.string().optional(),
+  "slug": zod.string().optional(),
+  "role": zod.string().optional(),
+  "description": zod.string().optional(),
+  "providerId": zod.number().optional(),
+  "modelId": zod.number().optional(),
+  "priority": zod.number().optional(),
+  "temperature": zod.number().optional(),
+  "maxTokens": zod.number().optional(),
+  "status": zod.enum(['active', 'inactive', 'draft']).optional(),
+  "allowedTools": zod.array(zod.string()).optional(),
+  "knowledgeBaseId": zod.number().optional(),
+  "version": zod.string().optional(),
+  "owner": zod.string().optional(),
+  "metadata": zod.object({
+
+}).passthrough().optional()
+})
+
+export const UpdateAgentResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "slug": zod.string(),
+  "role": zod.string(),
+  "description": zod.string().nullish(),
+  "providerId": zod.number().nullish(),
+  "providerName": zod.string().nullish(),
+  "modelId": zod.number().nullish(),
+  "modelName": zod.string().nullish(),
+  "priority": zod.number().describe('Higher = higher priority. 100 is default.'),
+  "temperature": zod.number().nullish().describe('Sampling temperature (0–2)'),
+  "maxTokens": zod.number().nullish(),
+  "status": zod.enum(['active', 'inactive', 'draft']),
+  "allowedTools": zod.array(zod.string()),
+  "knowledgeBaseId": zod.number().nullish(),
+  "version": zod.string(),
+  "owner": zod.string().nullish(),
+  "metadata": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete an AI agent
+ */
+export const DeleteAgentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteAgentResponse = zod.void()
+
+
+/**
+ * @summary List capabilities for an agent
+ */
+export const ListAgentCapabilitiesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListAgentCapabilitiesResponseItem = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "sortOrder": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+export const ListAgentCapabilitiesResponse = zod.array(ListAgentCapabilitiesResponseItem)
+
+
+/**
+ * @summary Add a capability to an agent
+ */
+export const AddAgentCapabilityParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AddAgentCapabilityBody = zod.object({
+  "name": zod.string(),
+  "description": zod.string().optional(),
+  "category": zod.string().optional(),
+  "sortOrder": zod.number().optional()
+})
+
+export const AddAgentCapabilityResponse = zod.object({
+  "id": zod.number(),
+  "agentId": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "sortOrder": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Remove a capability from an agent
+ */
+export const DeleteAgentCapabilityParams = zod.object({
+  "id": zod.coerce.number(),
+  "capId": zod.coerce.number()
+})
+
+export const DeleteAgentCapabilityResponse = zod.void()
+
+
+/**
  * @summary Execute an AI request through the orchestrator
  */
 export const OrchestratorExecuteBody = zod.object({

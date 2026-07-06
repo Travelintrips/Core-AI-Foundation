@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import registryRouter from "./registry";
+import agentsRouter from "./agents";
 import orchestratorRouter from "./orchestrator";
 import workflowsRouter from "./workflows";
 import promptsRouter from "./prompts";
@@ -14,6 +15,7 @@ const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(registryRouter);
+router.use(agentsRouter);
 router.use(orchestratorRouter);
 router.use(workflowsRouter);
 router.use(promptsRouter);
