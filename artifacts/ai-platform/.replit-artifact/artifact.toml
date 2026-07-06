@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "AI Platform Enterprise"
+version = "1.0.0"
+id = "artifacts/ai-platform"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20785
+
+[services.development]
+run = "pnpm --filter @workspace/ai-platform run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ai-platform", "run", "build" ]
+publicDir = "artifacts/ai-platform/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20785"
+BASE_PATH = "/"

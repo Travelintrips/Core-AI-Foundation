@@ -1,0 +1,3 @@
+- [react-icons-v5-provider-icons](react-icons-v5-provider-icons.md) — SiOpenai/SiAnthropic/SiGoogle don't exist in react-icons v5.4.0; use Cpu+color or SiReplicate/SiMistralai
+- [ai-platform-workflow-env-vars](ai-platform-workflow-env-vars.md) — Both workflows require PORT and BASE_PATH injected; hardcoded ports cause EADDRINUSE on restart
+- [api-server-zod-import-rule](api-server-zod-import-rule.md) — Never import zod/v4 directly in api-server routes; use @workspace/api-zod schemas only

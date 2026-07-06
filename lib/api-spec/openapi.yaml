@@ -3,20 +3,38 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: AI Platform Enterprise API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: registry
+    description: AI Provider and Model Registry
+  - name: orchestrator
+    description: AI Orchestrator - routing and execution
+  - name: workflows
+    description: AI Workflow Engine
+  - name: prompts
+    description: AI Prompt Library
+  - name: knowledge
+    description: AI Knowledge Base
+  - name: memory
+    description: AI Memory
+  - name: audit
+    description: AI Audit Log
+  - name: analytics
+    description: AI Analytics
+  - name: settings
+    description: AI Settings
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +42,922 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ─── REGISTRY: Providers ───────────────────────────────────────────────────
+
+  /ai/providers:
+    get:
+      operationId: listProviders
+      tags: [registry]
+      summary: List all AI providers
+      responses:
+        "200":
+          description: List of providers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiProvider"
+    post:
+      operationId: createProvider
+      tags: [registry]
+      summary: Register a new AI provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiProviderInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiProvider"
+
+  /ai/providers/{id}:
+    get:
+      operationId: getProvider
+      tags: [registry]
+      summary: Get an AI provider
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Provider
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiProvider"
+    patch:
+      operationId: updateProvider
+      tags: [registry]
+      summary: Update an AI provider
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiProviderUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiProvider"
+    delete:
+      operationId: deleteProvider
+      tags: [registry]
+      summary: Delete an AI provider
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── REGISTRY: Models ──────────────────────────────────────────────────────
+
+  /ai/models:
+    get:
+      operationId: listModels
+      tags: [registry]
+      summary: List all AI models
+      parameters:
+        - name: providerId
+          in: query
+          schema:
+            type: ["integer", "null"]
+      responses:
+        "200":
+          description: List of models
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiModel"
+    post:
+      operationId: createModel
+      tags: [registry]
+      summary: Register a new AI model
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiModelInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiModel"
+
+  /ai/models/{id}:
+    get:
+      operationId: getModel
+      tags: [registry]
+      summary: Get an AI model
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Model
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiModel"
+    patch:
+      operationId: updateModel
+      tags: [registry]
+      summary: Update an AI model
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiModelUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiModel"
+    delete:
+      operationId: deleteModel
+      tags: [registry]
+      summary: Delete an AI model
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── ORCHESTRATOR ──────────────────────────────────────────────────────────
+
+  /ai/orchestrator/execute:
+    post:
+      operationId: orchestratorExecute
+      tags: [orchestrator]
+      summary: Execute an AI request through the orchestrator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrchestratorExecuteInput"
+      responses:
+        "200":
+          description: Execution result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrchestratorResult"
+
+  /ai/orchestrator/sessions:
+    get:
+      operationId: listOrchestratorSessions
+      tags: [orchestrator]
+      summary: List orchestrator sessions
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrchestratorSession"
+
+  /ai/orchestrator/sessions/{id}:
+    get:
+      operationId: getOrchestratorSession
+      tags: [orchestrator]
+      summary: Get an orchestrator session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrchestratorSession"
+
+  # ─── WORKFLOWS ─────────────────────────────────────────────────────────────
+
+  /ai/workflows:
+    get:
+      operationId: listWorkflows
+      tags: [workflows]
+      summary: List all AI workflows
+      responses:
+        "200":
+          description: List of workflows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiWorkflow"
+    post:
+      operationId: createWorkflow
+      tags: [workflows]
+      summary: Create a new workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiWorkflowInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiWorkflow"
+
+  /ai/workflows/{id}:
+    get:
+      operationId: getWorkflow
+      tags: [workflows]
+      summary: Get a workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Workflow
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiWorkflow"
+    patch:
+      operationId: updateWorkflow
+      tags: [workflows]
+      summary: Update a workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiWorkflowUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiWorkflow"
+    delete:
+      operationId: deleteWorkflow
+      tags: [workflows]
+      summary: Delete a workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /ai/workflows/{id}/execute:
+    post:
+      operationId: executeWorkflow
+      tags: [workflows]
+      summary: Execute a workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkflowExecuteInput"
+      responses:
+        "200":
+          description: Execution result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowExecution"
+
+  /ai/workflow-executions:
+    get:
+      operationId: listWorkflowExecutions
+      tags: [workflows]
+      summary: List workflow executions
+      parameters:
+        - name: workflowId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of executions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkflowExecution"
+
+  /ai/workflow-executions/{id}:
+    get:
+      operationId: getWorkflowExecution
+      tags: [workflows]
+      summary: Get a workflow execution
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Execution
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowExecution"
+
+  # ─── PROMPTS ───────────────────────────────────────────────────────────────
+
+  /ai/prompts:
+    get:
+      operationId: listPrompts
+      tags: [prompts]
+      summary: List all prompts
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of prompts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiPrompt"
+    post:
+      operationId: createPrompt
+      tags: [prompts]
+      summary: Create a new prompt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiPromptInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiPrompt"
+
+  /ai/prompts/{id}:
+    get:
+      operationId: getPrompt
+      tags: [prompts]
+      summary: Get a prompt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Prompt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiPrompt"
+    patch:
+      operationId: updatePrompt
+      tags: [prompts]
+      summary: Update a prompt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiPromptUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiPrompt"
+    delete:
+      operationId: deletePrompt
+      tags: [prompts]
+      summary: Delete a prompt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /ai/prompts/{id}/versions:
+    get:
+      operationId: listPromptVersions
+      tags: [prompts]
+      summary: List prompt versions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of versions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiPromptVersion"
+    post:
+      operationId: createPromptVersion
+      tags: [prompts]
+      summary: Create a new version of a prompt
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiPromptVersionInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiPromptVersion"
+
+  # ─── KNOWLEDGE BASE ────────────────────────────────────────────────────────
+
+  /ai/knowledge-bases:
+    get:
+      operationId: listKnowledgeBases
+      tags: [knowledge]
+      summary: List all knowledge bases
+      responses:
+        "200":
+          description: List of knowledge bases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KnowledgeBase"
+    post:
+      operationId: createKnowledgeBase
+      tags: [knowledge]
+      summary: Create a knowledge base
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeBaseInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeBase"
+
+  /ai/knowledge-bases/{id}:
+    get:
+      operationId: getKnowledgeBase
+      tags: [knowledge]
+      summary: Get a knowledge base
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Knowledge base
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeBase"
+    patch:
+      operationId: updateKnowledgeBase
+      tags: [knowledge]
+      summary: Update a knowledge base
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeBaseUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeBase"
+    delete:
+      operationId: deleteKnowledgeBase
+      tags: [knowledge]
+      summary: Delete a knowledge base
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /ai/knowledge-bases/{id}/documents:
+    get:
+      operationId: listKnowledgeDocuments
+      tags: [knowledge]
+      summary: List documents in a knowledge base
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KnowledgeDocument"
+    post:
+      operationId: addKnowledgeDocument
+      tags: [knowledge]
+      summary: Add a document to a knowledge base
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeDocumentInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeDocument"
+
+  /ai/knowledge-bases/{kbId}/documents/{docId}:
+    delete:
+      operationId: deleteKnowledgeDocument
+      tags: [knowledge]
+      summary: Delete a document from a knowledge base
+      parameters:
+        - name: kbId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: docId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── MEMORY ────────────────────────────────────────────────────────────────
+
+  /ai/memory:
+    get:
+      operationId: listMemoryEntries
+      tags: [memory]
+      summary: List memory entries
+      parameters:
+        - name: agentId
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: sessionId
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of memory entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MemoryEntry"
+    post:
+      operationId: createMemoryEntry
+      tags: [memory]
+      summary: Create a memory entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemoryEntryInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntry"
+
+  /ai/memory/{id}:
+    get:
+      operationId: getMemoryEntry
+      tags: [memory]
+      summary: Get a memory entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Memory entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntry"
+    delete:
+      operationId: deleteMemoryEntry
+      tags: [memory]
+      summary: Delete a memory entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── AUDIT LOG ─────────────────────────────────────────────────────────────
+
+  /ai/audit-logs:
+    get:
+      operationId: listAuditLogs
+      tags: [audit]
+      summary: List audit logs
+      parameters:
+        - name: module
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: action
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: limit
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: offset
+          in: query
+          schema:
+            type: ["integer", "null"]
+      responses:
+        "200":
+          description: List of audit logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogPage"
+
+  # ─── ANALYTICS ─────────────────────────────────────────────────────────────
+
+  /ai/analytics/overview:
+    get:
+      operationId: getAnalyticsOverview
+      tags: [analytics]
+      summary: Get platform-level analytics overview
+      responses:
+        "200":
+          description: Analytics overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsOverview"
+
+  /ai/analytics/usage:
+    get:
+      operationId: getAnalyticsUsage
+      tags: [analytics]
+      summary: Get usage statistics over time
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: ["integer", "null"]
+      responses:
+        "200":
+          description: Usage data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UsageDataPoint"
+
+  /ai/analytics/provider-breakdown:
+    get:
+      operationId: getProviderBreakdown
+      tags: [analytics]
+      summary: Get token usage breakdown by provider
+      responses:
+        "200":
+          description: Provider breakdown
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProviderBreakdown"
+
+  # ─── SETTINGS ──────────────────────────────────────────────────────────────
+
+  /ai/settings:
+    get:
+      operationId: listSettings
+      tags: [settings]
+      summary: List all platform settings
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiSetting"
+
+  /ai/settings/{key}:
+    get:
+      operationId: getSetting
+      tags: [settings]
+      summary: Get a specific setting
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Setting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiSetting"
+    put:
+      operationId: upsertSetting
+      tags: [settings]
+      summary: Create or update a setting
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiSettingInput"
+      responses:
+        "200":
+          description: Upserted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiSetting"
+    delete:
+      operationId: deleteSetting
+      tags: [settings]
+      summary: Delete a setting
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +968,765 @@ components:
       required:
         - status
 
+    # ── Providers ──────────────────────────────────────────────────────────
+
+    AiProvider:
+      type: object
+      required: [id, name, slug, baseUrl, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+          description: "e.g. openai, anthropic, gemini, replicate"
+        baseUrl:
+          type: string
+        apiKeyEnvVar:
+          type: ["string", "null"]
+          description: Name of env var holding the API key
+        isActive:
+          type: boolean
+        metadata:
+          type: ["object", "null"]
+          description: Extra provider config (JSON)
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AiProviderInput:
+      type: object
+      required: [name, slug, baseUrl]
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        baseUrl:
+          type: string
+        apiKeyEnvVar:
+          type: string
+        isActive:
+          type: boolean
+        metadata:
+          type: object
+
+    AiProviderUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        baseUrl:
+          type: string
+        apiKeyEnvVar:
+          type: string
+        isActive:
+          type: boolean
+        metadata:
+          type: object
+
+    # ── Models ─────────────────────────────────────────────────────────────
+
+    AiModel:
+      type: object
+      required: [id, providerId, name, modelId, capabilities, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        providerId:
+          type: integer
+        providerName:
+          type: ["string", "null"]
+        name:
+          type: string
+          description: Human-friendly name
+        modelId:
+          type: string
+          description: Provider model identifier (e.g. gpt-4o, claude-3-5-sonnet)
+        capabilities:
+          type: array
+          items:
+            type: string
+          description: "e.g. [text, vision, code, embeddings]"
+        contextWindow:
+          type: ["integer", "null"]
+        maxOutputTokens:
+          type: ["integer", "null"]
+        costPerInputToken:
+          type: ["number", "null"]
+        costPerOutputToken:
+          type: ["number", "null"]
+        isActive:
+          type: boolean
+        metadata:
+          type: ["object", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AiModelInput:
+      type: object
+      required: [providerId, name, modelId, capabilities]
+      properties:
+        providerId:
+          type: integer
+        name:
+          type: string
+        modelId:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        contextWindow:
+          type: integer
+        maxOutputTokens:
+          type: integer
+        costPerInputToken:
+          type: number
+        costPerOutputToken:
+          type: number
+        isActive:
+          type: boolean
+        metadata:
+          type: object
+
+    AiModelUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        contextWindow:
+          type: integer
+        maxOutputTokens:
+          type: integer
+        costPerInputToken:
+          type: number
+        costPerOutputToken:
+          type: number
+        isActive:
+          type: boolean
+        metadata:
+          type: object
+
+    # ── Orchestrator ───────────────────────────────────────────────────────
+
+    OrchestratorExecuteInput:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+        modelId:
+          type: ["integer", "null"]
+          description: Specific model to use; if null, orchestrator routes automatically
+        systemPrompt:
+          type: ["string", "null"]
+        sessionId:
+          type: ["string", "null"]
+        agentId:
+          type: ["string", "null"]
+        parameters:
+          type: ["object", "null"]
+          description: Extra model parameters (temperature, max_tokens, etc.)
+
+    OrchestratorResult:
+      type: object
+      required: [sessionId, content, modelUsed, providerId, tokensUsed, createdAt]
+      properties:
+        sessionId:
+          type: string
+        content:
+          type: string
+        modelUsed:
+          type: string
+        providerId:
+          type: integer
+        tokensUsed:
+          type: integer
+        promptTokens:
+          type: integer
+        completionTokens:
+          type: integer
+        latencyMs:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    OrchestratorSession:
+      type: object
+      required: [id, sessionId, agentId, createdAt]
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: string
+        agentId:
+          type: ["string", "null"]
+        totalTokens:
+          type: integer
+        totalRequests:
+          type: integer
+        lastModelUsed:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ── Workflows ──────────────────────────────────────────────────────────
+
+    AiWorkflow:
+      type: object
+      required: [id, name, status, steps, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [draft, active, paused, archived]
+        steps:
+          type: array
+          items:
+            type: object
+          description: JSON array of workflow step definitions
+        triggerType:
+          type: ["string", "null"]
+          description: "e.g. manual, schedule, webhook"
+        triggerConfig:
+          type: ["object", "null"]
+        defaultModelId:
+          type: ["integer", "null"]
+        tags:
+          type: array
+          items:
+            type: string
+        executionCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AiWorkflowInput:
+      type: object
+      required: [name, steps]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        steps:
+          type: array
+          items:
+            type: object
+        triggerType:
+          type: string
+        triggerConfig:
+          type: object
+        defaultModelId:
+          type: integer
+        tags:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [draft, active, paused, archived]
+
+    AiWorkflowUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        steps:
+          type: array
+          items:
+            type: object
+        triggerType:
+          type: string
+        triggerConfig:
+          type: object
+        defaultModelId:
+          type: integer
+        tags:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [draft, active, paused, archived]
+
+    WorkflowExecuteInput:
+      type: object
+      properties:
+        inputs:
+          type: object
+          description: Runtime input variables for the workflow
+
+    WorkflowExecution:
+      type: object
+      required: [id, workflowId, status, createdAt]
+      properties:
+        id:
+          type: integer
+        workflowId:
+          type: integer
+        workflowName:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        inputs:
+          type: ["object", "null"]
+        outputs:
+          type: ["object", "null"]
+        stepResults:
+          type: ["object", "null"]
+        errorMessage:
+          type: ["string", "null"]
+        tokensUsed:
+          type: ["integer", "null"]
+        durationMs:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    # ── Prompts ────────────────────────────────────────────────────────────
+
+    AiPrompt:
+      type: object
+      required: [id, name, content, category, version, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        content:
+          type: string
+        category:
+          type: string
+        variables:
+          type: array
+          items:
+            type: string
+          description: List of variable names used in the prompt template
+        version:
+          type: integer
+        isActive:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+        usageCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AiPromptInput:
+      type: object
+      required: [name, content, category]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+        category:
+          type: string
+        variables:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+
+    AiPromptUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+        category:
+          type: string
+        variables:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        isActive:
+          type: boolean
+
+    AiPromptVersion:
+      type: object
+      required: [id, promptId, version, content, createdAt]
+      properties:
+        id:
+          type: integer
+        promptId:
+          type: integer
+        version:
+          type: integer
+        content:
+          type: string
+        changeNote:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    AiPromptVersionInput:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+        changeNote:
+          type: string
+
+    # ── Knowledge Base ─────────────────────────────────────────────────────
+
+    KnowledgeBase:
+      type: object
+      required: [id, name, embeddingModel, documentCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        embeddingModel:
+          type: string
+        documentCount:
+          type: integer
+        isActive:
+          type: boolean
+        metadata:
+          type: ["object", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    KnowledgeBaseInput:
+      type: object
+      required: [name, embeddingModel]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        embeddingModel:
+          type: string
+        isActive:
+          type: boolean
+        metadata:
+          type: object
+
+    KnowledgeBaseUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        embeddingModel:
+          type: string
+        isActive:
+          type: boolean
+        metadata:
+          type: object
+
+    KnowledgeDocument:
+      type: object
+      required: [id, knowledgeBaseId, title, contentType, status, createdAt]
+      properties:
+        id:
+          type: integer
+        knowledgeBaseId:
+          type: integer
+        title:
+          type: string
+        content:
+          type: ["string", "null"]
+        contentType:
+          type: string
+          enum: [text, url, file, markdown]
+        sourceUrl:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, indexed, failed]
+        chunkCount:
+          type: ["integer", "null"]
+        metadata:
+          type: ["object", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    KnowledgeDocumentInput:
+      type: object
+      required: [title, contentType]
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        contentType:
+          type: string
+          enum: [text, url, file, markdown]
+        sourceUrl:
+          type: string
+        metadata:
+          type: object
+
+    # ── Memory ─────────────────────────────────────────────────────────────
+
+    MemoryEntry:
+      type: object
+      required: [id, agentId, memoryType, content, createdAt]
+      properties:
+        id:
+          type: integer
+        agentId:
+          type: string
+        sessionId:
+          type: ["string", "null"]
+        memoryType:
+          type: string
+          enum: [short_term, long_term, episodic, semantic]
+        content:
+          type: string
+        key:
+          type: ["string", "null"]
+        importance:
+          type: ["number", "null"]
+        expiresAt:
+          type: ["string", "null"]
+          format: date-time
+        metadata:
+          type: ["object", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    MemoryEntryInput:
+      type: object
+      required: [agentId, memoryType, content]
+      properties:
+        agentId:
+          type: string
+        sessionId:
+          type: string
+        memoryType:
+          type: string
+          enum: [short_term, long_term, episodic, semantic]
+        content:
+          type: string
+        key:
+          type: string
+        importance:
+          type: number
+        expiresAt:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+
+    # ── Audit Log ──────────────────────────────────────────────────────────
+
+    AuditLog:
+      type: object
+      required: [id, module, action, createdAt]
+      properties:
+        id:
+          type: integer
+        module:
+          type: string
+          description: "e.g. registry, orchestrator, workflow, prompt, knowledge, memory"
+        action:
+          type: string
+          description: "e.g. create, update, delete, execute"
+        resourceId:
+          type: ["string", "null"]
+        resourceType:
+          type: ["string", "null"]
+        actorId:
+          type: ["string", "null"]
+        details:
+          type: ["object", "null"]
+        status:
+          type: string
+          enum: [success, failure, warning]
+        ipAddress:
+          type: ["string", "null"]
+        duration:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    AuditLogPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLog"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    # ── Analytics ──────────────────────────────────────────────────────────
+
+    AnalyticsOverview:
+      type: object
+      required: [totalProviders, totalModels, totalWorkflows, totalPrompts, totalKnowledgeBases, totalMemoryEntries, totalTokensUsed, totalExecutions, activeWorkflows]
+      properties:
+        totalProviders:
+          type: integer
+        totalModels:
+          type: integer
+        totalWorkflows:
+          type: integer
+        totalPrompts:
+          type: integer
+        totalKnowledgeBases:
+          type: integer
+        totalMemoryEntries:
+          type: integer
+        totalTokensUsed:
+          type: integer
+        totalExecutions:
+          type: integer
+        activeWorkflows:
+          type: integer
+        avgLatencyMs:
+          type: ["number", "null"]
+        successRate:
+          type: ["number", "null"]
+
+    UsageDataPoint:
+      type: object
+      required: [date, executions, tokensUsed]
+      properties:
+        date:
+          type: string
+          format: date
+        executions:
+          type: integer
+        tokensUsed:
+          type: integer
+        avgLatencyMs:
+          type: ["number", "null"]
+
+    ProviderBreakdown:
+      type: object
+      required: [providerId, providerName, tokensUsed, executions]
+      properties:
+        providerId:
+          type: integer
+        providerName:
+          type: string
+        tokensUsed:
+          type: integer
+        executions:
+          type: integer
+        avgLatencyMs:
+          type: ["number", "null"]
+
+    # ── Settings ───────────────────────────────────────────────────────────
+
+    AiSetting:
+      type: object
+      required: [id, key, value, valueType, category, updatedAt]
+      properties:
+        id:
+          type: integer
+        key:
+          type: string
+        value:
+          type: string
+        valueType:
+          type: string
+          enum: [string, number, boolean, json]
+        category:
+          type: string
+        description:
+          type: ["string", "null"]
+        isSecret:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+
+    AiSettingInput:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: string
+        valueType:
+          type: string
+          enum: [string, number, boolean, json]
+        category:
+          type: string
+        description:
+          type: string
+        isSecret:
+          type: boolean
