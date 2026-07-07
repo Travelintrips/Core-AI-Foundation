@@ -1,0 +1,83 @@
+Lanjutkan AI Enterprise Platform yang sudah ada.
+
+Saat ini fitur dashboard, registry, agents, orchestrator playground, workflows, prompts, knowledge, memory, audit, dan settings sudah ada. Namun orchestrator masih simulasi, provider/model belum seeded, auth belum ada, secrets masih plaintext, workflow execution belum nyata.
+
+Tolong kerjakan Fase 1 dan Fase 2 dengan aman dan modular.
+
+Prioritas pekerjaan:
+
+1. Seed AI Providers:
+
+* OpenAI
+* Anthropic
+* Google Gemini
+* Replicate
+
+2. Seed AI Models awal:
+
+* OpenAI untuk orchestrator, brief, copywriting, reasoning
+* Anthropic Claude untuk dokumen panjang dan review
+* Gemini untuk multimodal
+* Replicate untuk image generation seperti FLUX/SDXL
+
+3. Buat service modular:
+
+* aiProviderService
+* aiModelService
+* aiModelRouter
+* aiExecutionService
+* aiAuditService
+* aiSecretService
+
+4. Ubah Orchestrator dari simulasi menjadi real AI call:
+
+* Jika user pilih model manual, gunakan model tersebut.
+* Jika Auto-Route, pilih model berdasarkan capability, provider aktif, model aktif, priority, cost, dan task type.
+* Simpan metadata response: provider, model, token usage, latency, status, error message jika gagal.
+
+5. Jangan hardcode API key.
+
+* Semua API key harus dibaca dari environment variable.
+* Settings tidak boleh menyimpan secret plaintext.
+* Settings hanya boleh menyimpan secret reference, contoh: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, REPLICATE_API_TOKEN.
+
+6. Tambahkan proteksi API:
+
+* Minimal admin API key middleware dulu jika belum ada sistem login.
+* Semua route registry, agents, prompts, workflows, knowledge, settings, dan orchestrator harus diproteksi.
+* Health check boleh tetap public.
+
+7. Tambahkan audit log:
+
+* create/update/delete provider
+* create/update/delete model
+* create/update/delete agent
+* create/update/delete prompt
+* create/update/delete workflow
+* orchestrator execution
+* failed AI execution
+
+8. Pastikan error handling rapi:
+
+* Jika provider tidak punya API key, tampilkan error yang jelas.
+* Jika model inactive, jangan bisa dipakai.
+* Jika provider inactive, jangan bisa dipakai.
+* Jika AI call gagal, fallback ke model alternatif jika Auto-Route aktif.
+
+9. Buat seed agent pertama:
+
+* Brand Strategist Agent
+  Capability:
+  branding, positioning, target_market, usp, persona, brand_voice, brand_guideline
+  Provider default: OpenAI
+  Status: active
+
+10. Tambahkan test atau minimal endpoint verification:
+
+* GET /api/ai/health
+* POST /api/ai/orchestrator/test
+* GET /api/ai/providers
+* GET /api/ai/models
+* GET /api/ai/agents
+
+Jangan merombak UI besar-besaran. Fokus pada backend real execution, security dasar, seed data, routing model, audit, dan integrasi Orchestrator agar tidak simulasi lagi.
