@@ -1327,6 +1327,216 @@ export interface AssetFeedbackInput {
   notes?: string | null;
 }
 
+export interface ClientReviewLinkInput {
+  clientName: string;
+  /** @nullable */
+  clientEmail?: string | null;
+  /** @nullable */
+  clientPhone?: string | null;
+  /**
+     * @minimum 1
+     * @maximum 90
+     */
+  expiresInDays?: number;
+}
+
+export type ClientReviewStatus = typeof ClientReviewStatus[keyof typeof ClientReviewStatus];
+
+
+export const ClientReviewStatus = {
+  not_shared: 'not_shared',
+  shared: 'shared',
+  viewed: 'viewed',
+  approved: 'approved',
+  rejected: 'rejected',
+  revision_requested: 'revision_requested',
+  expired: 'expired',
+  revoked: 'revoked',
+} as const;
+
+export interface ClientReview {
+  id: number;
+  projectId: string;
+  clientName: string;
+  /** @nullable */
+  clientEmail?: string | null;
+  /** @nullable */
+  clientPhone?: string | null;
+  status: ClientReviewStatus;
+  tokenExpiresAt: string;
+  /** @nullable */
+  sharedAt?: string | null;
+  /** @nullable */
+  viewedAt?: string | null;
+  /** @nullable */
+  approvedAt?: string | null;
+  /** @nullable */
+  rejectedAt?: string | null;
+  /** @nullable */
+  revisionRequestedAt?: string | null;
+  /** @nullable */
+  revokedAt?: string | null;
+  commentCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ClientReviewWithToken = ClientReview & {
+  /** Plaintext token — shown once only, save immediately */
+  token: string;
+};
+
+export type ClientCommentAuthorType = typeof ClientCommentAuthorType[keyof typeof ClientCommentAuthorType];
+
+
+export const ClientCommentAuthorType = {
+  client: 'client',
+  admin: 'admin',
+} as const;
+
+export type ClientCommentStatus = typeof ClientCommentStatus[keyof typeof ClientCommentStatus];
+
+
+export const ClientCommentStatus = {
+  open: 'open',
+  resolved: 'resolved',
+  archived: 'archived',
+} as const;
+
+export interface ClientComment {
+  id: number;
+  reviewId: number;
+  projectId: string;
+  /** @nullable */
+  assetId?: number | null;
+  /** @nullable */
+  stepId?: number | null;
+  /** @nullable */
+  parentCommentId?: number | null;
+  authorName: string;
+  authorType: ClientCommentAuthorType;
+  comment: string;
+  status: ClientCommentStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClientCommentInput {
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  comment: string;
+  authorName: string;
+  /** @nullable */
+  assetId?: number | null;
+  /** @nullable */
+  stepId?: number | null;
+  /** @nullable */
+  parentCommentId?: number | null;
+}
+
+export type PublicProjectReviewReviewStatus = typeof PublicProjectReviewReviewStatus[keyof typeof PublicProjectReviewReviewStatus];
+
+
+export const PublicProjectReviewReviewStatus = {
+  shared: 'shared',
+  viewed: 'viewed',
+  approved: 'approved',
+  rejected: 'rejected',
+  revision_requested: 'revision_requested',
+} as const;
+
+export type PublicProjectReviewStatus = typeof PublicProjectReviewStatus[keyof typeof PublicProjectReviewStatus];
+
+
+export const PublicProjectReviewStatus = {
+  pending: 'pending',
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+/**
+ * Copy/caption output from the copywriter step
+ * @nullable
+ */
+export type PublicProjectReviewCopyOutput = { [key: string]: unknown } | null;
+
+/**
+ * Creative direction summary
+ * @nullable
+ */
+export type PublicProjectReviewCreativeDirection = { [key: string]: unknown } | null;
+
+export interface PublicAsset {
+  id: number;
+  /** @nullable */
+  imageUrl?: string | null;
+  /** @nullable */
+  thumbnailUrl?: string | null;
+  /** @nullable */
+  aspectRatio?: string | null;
+  status: string;
+}
+
+export interface PublicProjectReview {
+  reviewId: number;
+  projectId: string;
+  clientName: string;
+  reviewStatus: PublicProjectReviewReviewStatus;
+  brandName: string;
+  businessType: string;
+  targetMarket?: string;
+  productOrService?: string;
+  /** @nullable */
+  stylePreference?: string | null;
+  goal: string;
+  status: PublicProjectReviewStatus;
+  /**
+     * Copy/caption output from the copywriter step
+     * @nullable
+     */
+  copyOutput?: PublicProjectReviewCopyOutput;
+  /**
+     * Creative direction summary
+     * @nullable
+     */
+  creativeDirection?: PublicProjectReviewCreativeDirection;
+  assets?: PublicAsset[];
+  comments?: ClientComment[];
+  createdAt: string;
+}
+
+export interface ClientApprovalInput {
+  /** @nullable */
+  notes?: string | null;
+}
+
+export type ClientActionResultStatus = typeof ClientActionResultStatus[keyof typeof ClientActionResultStatus];
+
+
+export const ClientActionResultStatus = {
+  approved: 'approved',
+  rejected: 'rejected',
+  revision_requested: 'revision_requested',
+} as const;
+
+export interface ClientActionResult {
+  success: boolean;
+  status: ClientActionResultStatus;
+  message?: string;
+}
+
+export interface ClientReviewAnalytics {
+  totalShared: number;
+  viewedRate: number;
+  approvalRate: number;
+  revisionRate: number;
+  /** @nullable */
+  avgTimeToApprovalHours?: number | null;
+}
+
 export interface ErrorResponse {
   error: string;
 }

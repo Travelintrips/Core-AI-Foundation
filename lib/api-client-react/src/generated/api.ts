@@ -49,8 +49,16 @@ import type {
   AssetFeedbackInput,
   AssetStatusUpdate,
   AuditLogPage,
+  ClientActionResult,
+  ClientApprovalInput,
+  ClientComment,
+  ClientCommentInput,
   ClientMemoryInput,
   ClientMemoryResponse,
+  ClientReview,
+  ClientReviewAnalytics,
+  ClientReviewLinkInput,
+  ClientReviewWithToken,
   CostAnalyticsResponse,
   CreativeAiAsset,
   CreativeBriefInput,
@@ -82,6 +90,7 @@ import type {
   OrchestratorResult,
   OrchestratorSession,
   ProviderBreakdown,
+  PublicProjectReview,
   UsageDataPoint,
   WorkflowExecuteInput,
   WorkflowExecution
@@ -5920,4 +5929,737 @@ export function useGetCostAnalytics<TData = Awaited<ReturnType<typeof getCostAna
 
 
 
+
+export const getCreateClientReviewLinkUrl = (id: string,) => {
+
+
+
+
+  return `/api/creative-ai/projects/${id}/client-review-link`
+}
+
+/**
+ * @summary Create a secure client review link for a project
+ */
+export const createClientReviewLink = async (id: string,
+    clientReviewLinkInput: ClientReviewLinkInput, options?: RequestInit): Promise<ClientReviewWithToken> => {
+
+  return customFetch<ClientReviewWithToken>(getCreateClientReviewLinkUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clientReviewLinkInput)
+  }
+);}
+
+
+
+
+export const getCreateClientReviewLinkMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClientReviewLink>>, TError,{id: string;data: BodyType<ClientReviewLinkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createClientReviewLink>>, TError,{id: string;data: BodyType<ClientReviewLinkInput>}, TContext> => {
+
+const mutationKey = ['createClientReviewLink'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createClientReviewLink>>, {id: string;data: BodyType<ClientReviewLinkInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createClientReviewLink(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateClientReviewLinkMutationResult = NonNullable<Awaited<ReturnType<typeof createClientReviewLink>>>
+    export type CreateClientReviewLinkMutationBody = BodyType<ClientReviewLinkInput>
+    export type CreateClientReviewLinkMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a secure client review link for a project
+ */
+export const useCreateClientReviewLink = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClientReviewLink>>, TError,{id: string;data: BodyType<ClientReviewLinkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createClientReviewLink>>,
+        TError,
+        {id: string;data: BodyType<ClientReviewLinkInput>},
+        TContext
+      > => {
+      return useMutation(getCreateClientReviewLinkMutationOptions(options));
+    }
+
+export const getListClientReviewsUrl = (id: string,) => {
+
+
+
+
+  return `/api/creative-ai/projects/${id}/client-reviews`
+}
+
+/**
+ * @summary List all client review links for a project
+ */
+export const listClientReviews = async (id: string, options?: RequestInit): Promise<ClientReview[]> => {
+
+  return customFetch<ClientReview[]>(getListClientReviewsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListClientReviewsQueryKey = (id: string,) => {
+    return [
+    `/api/creative-ai/projects/${id}/client-reviews`
+    ] as const;
+    }
+
+
+export const getListClientReviewsQueryOptions = <TData = Awaited<ReturnType<typeof listClientReviews>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClientReviews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListClientReviewsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listClientReviews>>> = ({ signal }) => listClientReviews(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listClientReviews>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListClientReviewsQueryResult = NonNullable<Awaited<ReturnType<typeof listClientReviews>>>
+export type ListClientReviewsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all client review links for a project
+ */
+
+export function useListClientReviews<TData = Awaited<ReturnType<typeof listClientReviews>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listClientReviews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListClientReviewsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRevokeClientReviewUrl = (reviewId: number,) => {
+
+
+
+
+  return `/api/creative-ai/client-reviews/${reviewId}/revoke`
+}
+
+/**
+ * @summary Revoke a client review link
+ */
+export const revokeClientReview = async (reviewId: number, options?: RequestInit): Promise<ClientReview> => {
+
+  return customFetch<ClientReview>(getRevokeClientReviewUrl(reviewId),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+export const getRevokeClientReviewMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeClientReview>>, TError,{reviewId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeClientReview>>, TError,{reviewId: number}, TContext> => {
+
+const mutationKey = ['revokeClientReview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeClientReview>>, {reviewId: number}> = (props) => {
+          const {reviewId} = props ?? {};
+
+          return  revokeClientReview(reviewId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeClientReviewMutationResult = NonNullable<Awaited<ReturnType<typeof revokeClientReview>>>
+
+    export type RevokeClientReviewMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Revoke a client review link
+ */
+export const useRevokeClientReview = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeClientReview>>, TError,{reviewId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokeClientReview>>,
+        TError,
+        {reviewId: number},
+        TContext
+      > => {
+      return useMutation(getRevokeClientReviewMutationOptions(options));
+    }
+
+export const getListReviewCommentsUrl = (id: string,) => {
+
+
+
+
+  return `/api/creative-ai/projects/${id}/review-comments`
+}
+
+/**
+ * @summary List all client comments for a project
+ */
+export const listReviewComments = async (id: string, options?: RequestInit): Promise<ClientComment[]> => {
+
+  return customFetch<ClientComment[]>(getListReviewCommentsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListReviewCommentsQueryKey = (id: string,) => {
+    return [
+    `/api/creative-ai/projects/${id}/review-comments`
+    ] as const;
+    }
+
+
+export const getListReviewCommentsQueryOptions = <TData = Awaited<ReturnType<typeof listReviewComments>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReviewComments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListReviewCommentsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listReviewComments>>> = ({ signal }) => listReviewComments(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listReviewComments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListReviewCommentsQueryResult = NonNullable<Awaited<ReturnType<typeof listReviewComments>>>
+export type ListReviewCommentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all client comments for a project
+ */
+
+export function useListReviewComments<TData = Awaited<ReturnType<typeof listReviewComments>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReviewComments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListReviewCommentsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetClientReviewAnalyticsUrl = () => {
+
+
+
+
+  return `/api/creative-ai/analytics/client-reviews`
+}
+
+/**
+ * @summary Client review analytics
+ */
+export const getClientReviewAnalytics = async ( options?: RequestInit): Promise<ClientReviewAnalytics> => {
+
+  return customFetch<ClientReviewAnalytics>(getGetClientReviewAnalyticsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClientReviewAnalyticsQueryKey = () => {
+    return [
+    `/api/creative-ai/analytics/client-reviews`
+    ] as const;
+    }
+
+
+export const getGetClientReviewAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getClientReviewAnalytics>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientReviewAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClientReviewAnalyticsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClientReviewAnalytics>>> = ({ signal }) => getClientReviewAnalytics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClientReviewAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClientReviewAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getClientReviewAnalytics>>>
+export type GetClientReviewAnalyticsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Client review analytics
+ */
+
+export function useGetClientReviewAnalytics<TData = Awaited<ReturnType<typeof getClientReviewAnalytics>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClientReviewAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClientReviewAnalyticsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPublicCreativeReviewUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/creative-review/${token}`
+}
+
+/**
+ * @summary Get a project for client review via secure token (no admin key needed)
+ */
+export const getPublicCreativeReview = async (token: string, options?: RequestInit): Promise<PublicProjectReview> => {
+
+  return customFetch<PublicProjectReview>(getGetPublicCreativeReviewUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicCreativeReviewQueryKey = (token: string,) => {
+    return [
+    `/api/public/creative-review/${token}`
+    ] as const;
+    }
+
+
+export const getGetPublicCreativeReviewQueryOptions = <TData = Awaited<ReturnType<typeof getPublicCreativeReview>>, TError = ErrorType<ErrorResponse>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicCreativeReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicCreativeReviewQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicCreativeReview>>> = ({ signal }) => getPublicCreativeReview(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicCreativeReview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicCreativeReviewQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicCreativeReview>>>
+export type GetPublicCreativeReviewQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get a project for client review via secure token (no admin key needed)
+ */
+
+export function useGetPublicCreativeReview<TData = Awaited<ReturnType<typeof getPublicCreativeReview>>, TError = ErrorType<ErrorResponse>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicCreativeReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicCreativeReviewQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAddClientCommentUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/creative-review/${token}/comment`
+}
+
+/**
+ * @summary Add a comment to a creative review
+ */
+export const addClientComment = async (token: string,
+    clientCommentInput: ClientCommentInput, options?: RequestInit): Promise<ClientComment> => {
+
+  return customFetch<ClientComment>(getAddClientCommentUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clientCommentInput)
+  }
+);}
+
+
+
+
+export const getAddClientCommentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addClientComment>>, TError,{token: string;data: BodyType<ClientCommentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addClientComment>>, TError,{token: string;data: BodyType<ClientCommentInput>}, TContext> => {
+
+const mutationKey = ['addClientComment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addClientComment>>, {token: string;data: BodyType<ClientCommentInput>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  addClientComment(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddClientCommentMutationResult = NonNullable<Awaited<ReturnType<typeof addClientComment>>>
+    export type AddClientCommentMutationBody = BodyType<ClientCommentInput>
+    export type AddClientCommentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Add a comment to a creative review
+ */
+export const useAddClientComment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addClientComment>>, TError,{token: string;data: BodyType<ClientCommentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addClientComment>>,
+        TError,
+        {token: string;data: BodyType<ClientCommentInput>},
+        TContext
+      > => {
+      return useMutation(getAddClientCommentMutationOptions(options));
+    }
+
+export const getApproveCreativeReviewUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/creative-review/${token}/approve`
+}
+
+/**
+ * @summary Client approves the project
+ */
+export const approveCreativeReview = async (token: string,
+    clientApprovalInput?: ClientApprovalInput, options?: RequestInit): Promise<ClientActionResult> => {
+
+  return customFetch<ClientActionResult>(getApproveCreativeReviewUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clientApprovalInput)
+  }
+);}
+
+
+
+
+export const getApproveCreativeReviewMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveCreativeReview>>, TError,{token: string;data?: BodyType<ClientApprovalInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveCreativeReview>>, TError,{token: string;data?: BodyType<ClientApprovalInput>}, TContext> => {
+
+const mutationKey = ['approveCreativeReview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveCreativeReview>>, {token: string;data?: BodyType<ClientApprovalInput>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  approveCreativeReview(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveCreativeReviewMutationResult = NonNullable<Awaited<ReturnType<typeof approveCreativeReview>>>
+    export type ApproveCreativeReviewMutationBody = BodyType<ClientApprovalInput> | undefined
+    export type ApproveCreativeReviewMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Client approves the project
+ */
+export const useApproveCreativeReview = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveCreativeReview>>, TError,{token: string;data?: BodyType<ClientApprovalInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveCreativeReview>>,
+        TError,
+        {token: string;data?: BodyType<ClientApprovalInput>},
+        TContext
+      > => {
+      return useMutation(getApproveCreativeReviewMutationOptions(options));
+    }
+
+export const getRejectCreativeReviewUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/creative-review/${token}/reject`
+}
+
+/**
+ * @summary Client rejects the project
+ */
+export const rejectCreativeReview = async (token: string,
+    clientApprovalInput?: ClientApprovalInput, options?: RequestInit): Promise<ClientActionResult> => {
+
+  return customFetch<ClientActionResult>(getRejectCreativeReviewUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clientApprovalInput)
+  }
+);}
+
+
+
+
+export const getRejectCreativeReviewMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectCreativeReview>>, TError,{token: string;data?: BodyType<ClientApprovalInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rejectCreativeReview>>, TError,{token: string;data?: BodyType<ClientApprovalInput>}, TContext> => {
+
+const mutationKey = ['rejectCreativeReview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rejectCreativeReview>>, {token: string;data?: BodyType<ClientApprovalInput>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  rejectCreativeReview(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RejectCreativeReviewMutationResult = NonNullable<Awaited<ReturnType<typeof rejectCreativeReview>>>
+    export type RejectCreativeReviewMutationBody = BodyType<ClientApprovalInput> | undefined
+    export type RejectCreativeReviewMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Client rejects the project
+ */
+export const useRejectCreativeReview = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectCreativeReview>>, TError,{token: string;data?: BodyType<ClientApprovalInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rejectCreativeReview>>,
+        TError,
+        {token: string;data?: BodyType<ClientApprovalInput>},
+        TContext
+      > => {
+      return useMutation(getRejectCreativeReviewMutationOptions(options));
+    }
+
+export const getRequestRevisionCreativeReviewUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/creative-review/${token}/request-revision`
+}
+
+/**
+ * @summary Client requests revision
+ */
+export const requestRevisionCreativeReview = async (token: string,
+    clientApprovalInput?: ClientApprovalInput, options?: RequestInit): Promise<ClientActionResult> => {
+
+  return customFetch<ClientActionResult>(getRequestRevisionCreativeReviewUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clientApprovalInput)
+  }
+);}
+
+
+
+
+export const getRequestRevisionCreativeReviewMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestRevisionCreativeReview>>, TError,{token: string;data?: BodyType<ClientApprovalInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestRevisionCreativeReview>>, TError,{token: string;data?: BodyType<ClientApprovalInput>}, TContext> => {
+
+const mutationKey = ['requestRevisionCreativeReview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestRevisionCreativeReview>>, {token: string;data?: BodyType<ClientApprovalInput>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  requestRevisionCreativeReview(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestRevisionCreativeReviewMutationResult = NonNullable<Awaited<ReturnType<typeof requestRevisionCreativeReview>>>
+    export type RequestRevisionCreativeReviewMutationBody = BodyType<ClientApprovalInput> | undefined
+    export type RequestRevisionCreativeReviewMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Client requests revision
+ */
+export const useRequestRevisionCreativeReview = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestRevisionCreativeReview>>, TError,{token: string;data?: BodyType<ClientApprovalInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestRevisionCreativeReview>>,
+        TError,
+        {token: string;data?: BodyType<ClientApprovalInput>},
+        TContext
+      > => {
+      return useMutation(getRequestRevisionCreativeReviewMutationOptions(options));
+    }
 

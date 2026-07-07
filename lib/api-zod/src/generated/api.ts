@@ -2019,3 +2019,274 @@ export const GetCostAnalyticsResponse = zod.object({
 })
 
 
+/**
+ * @summary Create a secure client review link for a project
+ */
+export const CreateClientReviewLinkParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const createClientReviewLinkBodyExpiresInDaysDefault = 7;
+export const createClientReviewLinkBodyExpiresInDaysMax = 90;
+
+
+
+export const CreateClientReviewLinkBody = zod.object({
+  "clientName": zod.string(),
+  "clientEmail": zod.string().nullish(),
+  "clientPhone": zod.string().nullish(),
+  "expiresInDays": zod.number().min(1).max(createClientReviewLinkBodyExpiresInDaysMax).default(createClientReviewLinkBodyExpiresInDaysDefault)
+})
+
+export const CreateClientReviewLinkResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.string(),
+  "clientName": zod.string(),
+  "clientEmail": zod.string().nullish(),
+  "clientPhone": zod.string().nullish(),
+  "status": zod.enum(['not_shared', 'shared', 'viewed', 'approved', 'rejected', 'revision_requested', 'expired', 'revoked']),
+  "tokenExpiresAt": zod.coerce.date(),
+  "sharedAt": zod.coerce.date().nullish(),
+  "viewedAt": zod.coerce.date().nullish(),
+  "approvedAt": zod.coerce.date().nullish(),
+  "rejectedAt": zod.coerce.date().nullish(),
+  "revisionRequestedAt": zod.coerce.date().nullish(),
+  "revokedAt": zod.coerce.date().nullish(),
+  "commentCount": zod.number().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "token": zod.string().describe('Plaintext token — shown once only, save immediately')
+}))
+
+
+/**
+ * @summary List all client review links for a project
+ */
+export const ListClientReviewsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListClientReviewsResponseItem = zod.object({
+  "id": zod.number(),
+  "projectId": zod.string(),
+  "clientName": zod.string(),
+  "clientEmail": zod.string().nullish(),
+  "clientPhone": zod.string().nullish(),
+  "status": zod.enum(['not_shared', 'shared', 'viewed', 'approved', 'rejected', 'revision_requested', 'expired', 'revoked']),
+  "tokenExpiresAt": zod.coerce.date(),
+  "sharedAt": zod.coerce.date().nullish(),
+  "viewedAt": zod.coerce.date().nullish(),
+  "approvedAt": zod.coerce.date().nullish(),
+  "rejectedAt": zod.coerce.date().nullish(),
+  "revisionRequestedAt": zod.coerce.date().nullish(),
+  "revokedAt": zod.coerce.date().nullish(),
+  "commentCount": zod.number().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListClientReviewsResponse = zod.array(ListClientReviewsResponseItem)
+
+
+/**
+ * @summary Revoke a client review link
+ */
+export const RevokeClientReviewParams = zod.object({
+  "reviewId": zod.coerce.number()
+})
+
+export const RevokeClientReviewResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.string(),
+  "clientName": zod.string(),
+  "clientEmail": zod.string().nullish(),
+  "clientPhone": zod.string().nullish(),
+  "status": zod.enum(['not_shared', 'shared', 'viewed', 'approved', 'rejected', 'revision_requested', 'expired', 'revoked']),
+  "tokenExpiresAt": zod.coerce.date(),
+  "sharedAt": zod.coerce.date().nullish(),
+  "viewedAt": zod.coerce.date().nullish(),
+  "approvedAt": zod.coerce.date().nullish(),
+  "rejectedAt": zod.coerce.date().nullish(),
+  "revisionRequestedAt": zod.coerce.date().nullish(),
+  "revokedAt": zod.coerce.date().nullish(),
+  "commentCount": zod.number().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List all client comments for a project
+ */
+export const ListReviewCommentsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListReviewCommentsResponseItem = zod.object({
+  "id": zod.number(),
+  "reviewId": zod.number(),
+  "projectId": zod.string(),
+  "assetId": zod.number().nullish(),
+  "stepId": zod.number().nullish(),
+  "parentCommentId": zod.number().nullish(),
+  "authorName": zod.string(),
+  "authorType": zod.enum(['client', 'admin']),
+  "comment": zod.string(),
+  "status": zod.enum(['open', 'resolved', 'archived']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListReviewCommentsResponse = zod.array(ListReviewCommentsResponseItem)
+
+
+/**
+ * @summary Client review analytics
+ */
+export const GetClientReviewAnalyticsResponse = zod.object({
+  "totalShared": zod.number(),
+  "viewedRate": zod.number(),
+  "approvalRate": zod.number(),
+  "revisionRate": zod.number(),
+  "avgTimeToApprovalHours": zod.number().nullish()
+})
+
+
+/**
+ * @summary Get a project for client review via secure token (no admin key needed)
+ */
+export const GetPublicCreativeReviewParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetPublicCreativeReviewResponse = zod.object({
+  "reviewId": zod.number(),
+  "projectId": zod.string(),
+  "clientName": zod.string(),
+  "reviewStatus": zod.enum(['shared', 'viewed', 'approved', 'rejected', 'revision_requested']),
+  "brandName": zod.string(),
+  "businessType": zod.string(),
+  "targetMarket": zod.string().optional(),
+  "productOrService": zod.string().optional(),
+  "stylePreference": zod.string().nullish(),
+  "goal": zod.string(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed']),
+  "copyOutput": zod.object({
+
+}).passthrough().nullish().describe('Copy\/caption output from the copywriter step'),
+  "creativeDirection": zod.object({
+
+}).passthrough().nullish().describe('Creative direction summary'),
+  "assets": zod.array(zod.object({
+  "id": zod.number(),
+  "imageUrl": zod.string().nullish(),
+  "thumbnailUrl": zod.string().nullish(),
+  "aspectRatio": zod.string().nullish(),
+  "status": zod.string()
+})).optional(),
+  "comments": zod.array(zod.object({
+  "id": zod.number(),
+  "reviewId": zod.number(),
+  "projectId": zod.string(),
+  "assetId": zod.number().nullish(),
+  "stepId": zod.number().nullish(),
+  "parentCommentId": zod.number().nullish(),
+  "authorName": zod.string(),
+  "authorType": zod.enum(['client', 'admin']),
+  "comment": zod.string(),
+  "status": zod.enum(['open', 'resolved', 'archived']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})).optional(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Add a comment to a creative review
+ */
+export const AddClientCommentParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const addClientCommentBodyCommentMax = 2000;
+
+
+
+export const AddClientCommentBody = zod.object({
+  "comment": zod.string().min(1).max(addClientCommentBodyCommentMax),
+  "authorName": zod.string(),
+  "assetId": zod.number().nullish(),
+  "stepId": zod.number().nullish(),
+  "parentCommentId": zod.number().nullish()
+})
+
+export const AddClientCommentResponse = zod.object({
+  "id": zod.number(),
+  "reviewId": zod.number(),
+  "projectId": zod.string(),
+  "assetId": zod.number().nullish(),
+  "stepId": zod.number().nullish(),
+  "parentCommentId": zod.number().nullish(),
+  "authorName": zod.string(),
+  "authorType": zod.enum(['client', 'admin']),
+  "comment": zod.string(),
+  "status": zod.enum(['open', 'resolved', 'archived']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Client approves the project
+ */
+export const ApproveCreativeReviewParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const ApproveCreativeReviewBody = zod.object({
+  "notes": zod.string().nullish()
+})
+
+export const ApproveCreativeReviewResponse = zod.object({
+  "success": zod.boolean(),
+  "status": zod.enum(['approved', 'rejected', 'revision_requested']),
+  "message": zod.string().optional()
+})
+
+
+/**
+ * @summary Client rejects the project
+ */
+export const RejectCreativeReviewParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const RejectCreativeReviewBody = zod.object({
+  "notes": zod.string().nullish()
+})
+
+export const RejectCreativeReviewResponse = zod.object({
+  "success": zod.boolean(),
+  "status": zod.enum(['approved', 'rejected', 'revision_requested']),
+  "message": zod.string().optional()
+})
+
+
+/**
+ * @summary Client requests revision
+ */
+export const RequestRevisionCreativeReviewParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const RequestRevisionCreativeReviewBody = zod.object({
+  "notes": zod.string().nullish()
+})
+
+export const RequestRevisionCreativeReviewResponse = zod.object({
+  "success": zod.boolean(),
+  "status": zod.enum(['approved', 'rejected', 'revision_requested']),
+  "message": zod.string().optional()
+})
+
+

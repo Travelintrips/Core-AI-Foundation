@@ -38,8 +38,14 @@ export function adminAuth(req: Request, res: Response, next: NextFunction): void
   next();
 }
 
-/** Paths that bypass auth entirely (health checks) */
-const PUBLIC_PATH_PREFIXES = ["/healthz", "/health", "/ai/health", "/ai/healthz"];
+/** Paths that bypass auth entirely (health checks + public client review) */
+const PUBLIC_PATH_PREFIXES = [
+  "/healthz",
+  "/health",
+  "/ai/health",
+  "/ai/healthz",
+  "/public",   // public client review endpoints — token-protected, not admin-key-protected
+];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {
   for (const prefix of PUBLIC_PATH_PREFIXES) {

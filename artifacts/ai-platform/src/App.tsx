@@ -19,10 +19,11 @@ import Knowledge from "@/pages/knowledge";
 import Memory from "@/pages/memory";
 import Audit from "@/pages/audit";
 import Settings from "@/pages/settings";
+import ClientReviewPage from "@/pages/client-review";
 
 const queryClient = new QueryClient();
 
-function Router() {
+function AdminRouter() {
   return (
     <Layout>
       <Switch>
@@ -51,7 +52,12 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
+            <Switch>
+              {/* Public client review page — no admin Layout */}
+              <Route path="/review/creative/:token" component={ClientReviewPage} />
+              {/* Admin platform */}
+              <Route component={AdminRouter} />
+            </Switch>
           </WouterRouter>
           <Toaster />
         </TooltipProvider>

@@ -14,9 +14,17 @@ import {
   getGetCreativeProjectQueryKey,
   getListProjectFeedbackQueryKey,
   getListProjectAssetsQueryKey,
+  useCreateClientReviewLink,
+  useListClientReviews,
+  useRevokeClientReview,
+  useListReviewComments,
+  getListClientReviewsQueryKey,
+  getListReviewCommentsQueryKey,
   type CreativeProject,
   type FeedbackEntry,
   type CreativeAiAsset,
+  type ClientReview,
+  type ClientComment,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,6 +64,12 @@ import {
   ImageOff,
   Wand2,
   ExternalLink,
+  Link2,
+  UserCheck,
+  ShieldOff,
+  CalendarClock,
+  Send,
+  Eye,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -730,6 +744,309 @@ function AssetCard({ asset, onApprove, onRevision, onReject, isUpdating }: Asset
   );
 }
 
+// ── Client Review Section ──────────────────────────────────────────────────────
+
+function ClientReviewSection({ projectId }: { projectId: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [freshToken, setFreshToken] = useState<{ token: string; id: number } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [form, setForm] = useState({ clientName: "", clientEmail: "", clientPhone: "", expiresInDays: 7 });
+
+  const { data: reviews = [] } = useListClientReviews(projectId, {
+    query: { queryKey: getListClientReviewsQueryKey(projectId) },
+  });
+  const { data: comments = [] } = useListReviewComments(projectId, {
+    query: { queryKey: getListReviewCommentsQueryKey(projectId) },
+  });
+
+  const createLink = useCreateClientReviewLink({
+    mutation: {
+      onSuccess: (data) => {
+        setFreshToken({ token: data.token!, id: data.id });
+        setShowCreate(false);
+        setForm({ clientName: "", clientEmail: "", clientPhone: "", expiresInDays: 7 });
+        queryClient.invalidateQueries({ queryKey: getListClientReviewsQueryKey(projectId) });
+        toast({ title: "Review link created — copy it now!" });
+      },
+      onError: () => toast({ title: "Failed to create review link", variant: "destructive" }),
+    },
+  });
+
+  const revokeLink = useRevokeClientReview({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListClientReviewsQueryKey(projectId) });
+        toast({ title: "Review link revoked" });
+      },
+      onError: () => toast({ title: "Failed to revoke", variant: "destructive" }),
+    },
+  });
+
+  const publicBase =
+    `${window.location.origin}${import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}/review/creative/`;
+
+  const handleCopyLink = (token: string) => {
+    navigator.clipboard.writeText(publicBase + token);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const reviewStatusColor = (s: string) => {
+    switch (s) {
+      case "approved":           return "bg-green-500/15 text-green-400 border-green-500/30";
+      case "rejected":           return "bg-red-500/15 text-red-400 border-red-500/30";
+      case "revision_requested": return "bg-yellow-500/15 text-yellow-400 border-yellow-500/30";
+      case "viewed":             return "bg-blue-500/15 text-blue-400 border-blue-500/30";
+      case "shared":             return "bg-cyan-500/15 text-cyan-400 border-cyan-500/30";
+      default:                   return "bg-muted text-muted-foreground border-border";
+    }
+  };
+
+  return (
+    <div className="mt-4 space-y-3 border-t border-border/50 pt-4">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <UserCheck className="size-4 text-primary" />
+          <span className="font-mono text-sm font-semibold">Client Review</span>
+          {reviews.length > 0 && (
+            <Badge variant="outline" className="text-[10px] font-mono h-5 px-1.5 border-border/50 text-muted-foreground">
+              {reviews.length}
+            </Badge>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowCreate((v) => !v)}
+          className="h-6 gap-1.5 text-[10px] font-mono text-muted-foreground hover:text-primary"
+        >
+          <Link2 className="size-3" />
+          Create Link
+        </Button>
+      </div>
+
+      {/* Create form */}
+      {showCreate && (
+        <div className="border border-border/50 rounded-lg p-4 space-y-3 bg-muted/10">
+          <p className="text-[11px] font-mono text-muted-foreground">Generate a secure one-time link for your client.</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-[10px] font-mono text-muted-foreground">Client Name *</Label>
+              <Input
+                value={form.clientName}
+                onChange={(e) => setForm((f) => ({ ...f, clientName: e.target.value }))}
+                placeholder="e.g. Jane Smith"
+                className="h-7 text-xs font-mono mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-[10px] font-mono text-muted-foreground">Expires in (days)</Label>
+              <Input
+                type="number"
+                value={form.expiresInDays}
+                onChange={(e) => setForm((f) => ({ ...f, expiresInDays: parseInt(e.target.value) || 7 }))}
+                min={1}
+                max={90}
+                className="h-7 text-xs font-mono mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-[10px] font-mono text-muted-foreground">Client Email</Label>
+              <Input
+                value={form.clientEmail}
+                onChange={(e) => setForm((f) => ({ ...f, clientEmail: e.target.value }))}
+                placeholder="client@example.com"
+                className="h-7 text-xs font-mono mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-[10px] font-mono text-muted-foreground">Phone</Label>
+              <Input
+                value={form.clientPhone}
+                onChange={(e) => setForm((f) => ({ ...f, clientPhone: e.target.value }))}
+                placeholder="+62..."
+                className="h-7 text-xs font-mono mt-1"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              disabled={!form.clientName || createLink.isPending}
+              onClick={() =>
+                createLink.mutate({
+                  id: projectId,
+                  data: {
+                    clientName: form.clientName,
+                    clientEmail: form.clientEmail || null,
+                    clientPhone: form.clientPhone || null,
+                    expiresInDays: form.expiresInDays,
+                  },
+                })
+              }
+              className="h-7 text-[10px] font-mono gap-1.5"
+            >
+              {createLink.isPending ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />}
+              Generate Link
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowCreate(false)}
+              className="h-7 text-[10px] font-mono"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Fresh token — shown once */}
+      {freshToken && (
+        <div className="border border-primary/30 bg-primary/5 rounded-lg p-3 space-y-2">
+          <div className="flex items-center gap-1.5 text-[11px] text-primary font-mono font-semibold">
+            <AlertCircle className="size-3.5 shrink-0" />
+            Copy this link now — it won't be shown again!
+          </div>
+          <div className="flex items-center gap-2 bg-muted/40 rounded px-2 py-1.5">
+            <span className="flex-1 font-mono text-[10px] text-foreground/80 truncate min-w-0">
+              {publicBase}{freshToken.token}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6 shrink-0"
+              onClick={() => handleCopyLink(freshToken.token)}
+            >
+              {copied ? <Check className="size-3 text-green-400" /> : <Copy className="size-3" />}
+            </Button>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setFreshToken(null)}
+            className="h-5 text-[10px] font-mono text-muted-foreground p-0"
+          >
+            I've saved the link — dismiss
+          </Button>
+        </div>
+      )}
+
+      {/* Existing reviews list */}
+      {reviews.length > 0 && (
+        <div className="space-y-2">
+          {reviews.map((review) => (
+            <div key={review.id} className="border border-border/40 rounded-lg p-3 space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <UserCheck className="size-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs font-mono font-medium truncate">{review.clientName}</span>
+                  {review.clientEmail && (
+                    <span className="text-[10px] font-mono text-muted-foreground truncate hidden sm:block">
+                      {review.clientEmail}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Badge
+                    className={cn("text-[10px] border font-mono px-1.5 h-5", reviewStatusColor(review.status))}
+                  >
+                    {review.status.replace(/_/g, " ")}
+                  </Badge>
+                  {!["revoked", "approved", "rejected", "expired"].includes(review.status) && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 text-muted-foreground hover:text-red-400"
+                      title="Revoke link"
+                      onClick={() => revokeLink.mutate({ reviewId: review.id })}
+                      disabled={revokeLink.isPending}
+                    >
+                      <ShieldOff className="size-3" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-[10px] font-mono text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <CalendarClock className="size-3" />
+                  Expires {format(new Date(review.tokenExpiresAt), "MMM d, yyyy")}
+                </span>
+                {review.viewedAt && (
+                  <span className="flex items-center gap-1 text-blue-400">
+                    <Eye className="size-3" />
+                    Viewed {format(new Date(review.viewedAt), "MMM d, HH:mm")}
+                  </span>
+                )}
+                {(review.commentCount ?? 0) > 0 && (
+                  <span className="flex items-center gap-1">
+                    <MessageSquare className="size-3" />
+                    {review.commentCount} comment{review.commentCount !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Client comments */}
+      {comments.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="size-3.5 text-muted-foreground" />
+            <span className="text-[11px] font-mono font-medium text-muted-foreground">
+              Client Comments ({comments.length})
+            </span>
+          </div>
+          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+            {comments.map((c) => (
+              <div key={c.id} className="border border-border/40 rounded px-3 py-2 text-xs font-mono">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="font-medium text-foreground/90">{c.authorName}</span>
+                  {c.assetId != null && (
+                    <Badge
+                      variant="outline"
+                      className="text-[9px] px-1 h-4 border-border/50 font-mono text-muted-foreground"
+                    >
+                      image #{c.assetId}
+                    </Badge>
+                  )}
+                  <span className="text-muted-foreground ml-auto">
+                    {format(new Date(c.createdAt), "MMM d, HH:mm")}
+                  </span>
+                </div>
+                <p className="text-foreground/80 leading-relaxed whitespace-pre-wrap">{c.comment}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {reviews.length === 0 && !showCreate && (
+        <div className="border border-dashed border-border/40 rounded-lg p-5 flex flex-col items-center gap-2 text-center">
+          <UserCheck className="size-6 text-muted-foreground/40" />
+          <p className="text-xs font-mono text-muted-foreground">No client review links yet.</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowCreate(true)}
+            className="h-7 gap-1.5 font-mono text-[10px] border-border/50"
+          >
+            <Link2 className="size-3" />
+            Create Review Link
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Project Detail ─────────────────────────────────────────────────────────────
 
 function ProjectDetail({ projectId }: { projectId: string }) {
@@ -1054,6 +1371,9 @@ function ProjectDetail({ projectId }: { projectId: string }) {
               )}
             </div>
           )}
+
+          {/* ── Client Review Section ─────────────────────────────────── */}
+          <ClientReviewSection projectId={projectId} />
         </div>
       </ScrollArea>
     </div>

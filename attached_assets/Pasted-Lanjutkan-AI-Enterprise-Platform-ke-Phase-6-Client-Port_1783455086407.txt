@@ -1,0 +1,290 @@
+Lanjutkan AI Enterprise Platform ke Phase 6: Client Portal & Approval Flow.
+
+Status saat ini:
+
+* Phase 5 AI Image Designer MVP selesai
+* Creative AI text workflow berjalan end-to-end
+* Image Concepts sudah tersedia
+* Asset approval internal sudah ada
+* Copy Prompt sudah accessible
+* Image analytics endpoint sudah ada
+* Cost tracking, audit log, guardrails, feedback, dan analytics sudah aktif
+
+Tujuan Phase 6:
+Membuat portal/link approval untuk klien agar hasil Creative AI dan Image Concepts bisa direview, dikomentari, disetujui, ditolak, atau diminta revisi tanpa klien login ke admin platform.
+
+PENTING:
+Jangan merombak arsitektur lama.
+Jangan mengubah API lama.
+Jangan membuat marketplace, payment, video, OCR, voice, atau public SaaS billing dulu.
+Fokus hanya client review dan approval flow.
+
+====================================================================
+BAGIAN 1 — CLIENT REVIEW TOKEN
+==============================
+
+Tambahkan sistem secure public review link.
+
+Buat table:
+
+creative_ai_client_reviews
+
+Field:
+
+* id
+* project_id
+* client_name
+* client_email
+* client_phone
+* review_token_hash
+* token_expires_at
+* status
+* shared_at
+* viewed_at
+* approved_at
+* rejected_at
+* created_at
+* updated_at
+
+Aturan:
+
+* Token asli hanya ditampilkan sekali saat dibuat.
+* Simpan hash token, jangan plaintext token.
+* Token punya expiry.
+* Token bisa di-revoke.
+* Public endpoint hanya bisa akses project melalui token valid.
+
+====================================================================
+BAGIAN 2 — REVIEW API
+=====================
+
+Tambahkan admin API:
+
+POST /api/creative-ai/projects/:id/client-review-link
+GET /api/creative-ai/projects/:id/client-reviews
+PATCH /api/creative-ai/client-reviews/:reviewId/revoke
+
+Tambahkan public API tanpa admin key, tetapi wajib token valid:
+
+GET /api/public/creative-review/:token
+POST /api/public/creative-review/:token/comment
+POST /api/public/creative-review/:token/approve
+POST /api/public/creative-review/:token/reject
+POST /api/public/creative-review/:token/request-revision
+
+====================================================================
+BAGIAN 3 — CLIENT COMMENTS
+==========================
+
+Buat table:
+
+creative_ai_client_comments
+
+Field:
+
+* id
+* review_id
+* project_id
+* asset_id nullable
+* step_id nullable
+* parent_comment_id nullable
+* author_name
+* author_type
+* comment
+* status
+* created_at
+* updated_at
+
+Komentar bisa untuk:
+
+* project secara umum
+* hasil agent step
+* image asset tertentu
+
+Status:
+
+* open
+* resolved
+* archived
+
+====================================================================
+BAGIAN 4 — APPROVAL STATUS
+==========================
+
+Tambahkan status approval:
+
+Project review status:
+
+* not_shared
+* shared
+* viewed
+* approved
+* rejected
+* revision_requested
+* expired
+* revoked
+
+Asset review status:
+
+* pending_client
+* client_approved
+* client_rejected
+* revision_requested
+
+Jika client approve:
+
+* update review approved_at
+* update project review status
+* audit log
+
+Jika client reject/request revision:
+
+* simpan reason/comment
+* update status
+* audit log
+* tampilkan di admin Creative AI page
+
+====================================================================
+BAGIAN 5 — ADMIN UI
+===================
+
+Di halaman Creative AI project detail tambahkan section:
+
+Client Review
+
+Fitur:
+
+* create review link
+* input client name/email/phone
+* expiry date
+* copy public link
+* status review
+* viewed_at
+* approved/rejected/revision_requested status
+* revoke link
+* daftar komentar client
+* komentar per asset/per step
+* badge status di project header
+
+====================================================================
+BAGIAN 6 — PUBLIC CLIENT REVIEW PAGE
+====================================
+
+Buat route public:
+
+/review/creative/:token
+
+Halaman ini tidak membutuhkan admin API key.
+
+Isi halaman:
+
+* nama project
+* brand name
+* business type
+* creative direction summary
+* copy/caption hasil AI
+* image concepts grid
+* prompt tidak perlu ditampilkan ke client secara default
+* tombol approve project
+* tombol request revision
+* tombol reject
+* form komentar umum
+* komentar per gambar
+* status review
+
+Desain UI:
+
+* bersih
+* mobile friendly
+* mudah dipakai klien non-teknis
+* jangan tampilkan metadata teknis seperti token, provider, model, latency, cost
+
+====================================================================
+BAGIAN 7 — SECURITY
+===================
+
+Wajib:
+
+* public token harus random kuat
+* simpan token hash, bukan plaintext
+* expiry dicek di setiap request
+* revoked token tidak bisa dipakai
+* rate limit public comment/action endpoint
+* jangan bocorkan admin metadata
+* jangan tampilkan cost, provider key, internal audit, model config ke client
+* sanitize komentar
+
+====================================================================
+BAGIAN 8 — NOTIFICATION HOOK
+============================
+
+Belum perlu kirim WhatsApp/email nyata.
+
+Tapi siapkan service modular:
+
+clientReviewNotificationService
+
+Method:
+
+* notifyReviewLinkCreated
+* notifyClientViewed
+* notifyClientApproved
+* notifyClientRejected
+* notifyRevisionRequested
+* notifyCommentAdded
+
+Untuk sekarang cukup audit log / console log.
+Nanti bisa dihubungkan ke WhatsApp, email, atau Fonnte.
+
+====================================================================
+BAGIAN 9 — AUDIT & ANALYTICS
+============================
+
+Semua event harus masuk audit log:
+
+* review link created
+* review viewed
+* comment added
+* project approved
+* project rejected
+* revision requested
+* review revoked
+* token expired access attempt
+
+Tambahkan analytics sederhana:
+
+* total shared reviews
+* viewed rate
+* approval rate
+* revision request rate
+* average time to approval
+
+====================================================================
+BAGIAN 10 — VERIFICATION
+========================
+
+Pastikan:
+
+* DB push clean
+* OpenAPI/codegen clean
+* TypeScript clean
+* build clean
+* public route bisa dibuka tanpa admin key
+* admin API tetap butuh admin key
+* invalid token menghasilkan 404/401 yang aman
+* expired token ditolak
+* revoked token ditolak
+* approve/reject/comment berhasil tersimpan
+* Creative AI admin page menampilkan status client review
+
+Jangan implement:
+
+* payment
+* marketplace
+* SaaS billing
+* video generation
+* OCR
+* voice
+* login client penuh
+
+Fokus hanya Client Portal & Approval Flow untuk Creative AI.

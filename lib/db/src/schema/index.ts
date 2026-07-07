@@ -19,3 +19,5 @@ export * from "./ai-client-memory";
 export * from "./ai-cost-records";
 export * from "./ai-feedback";
 export * from "./creative-ai-assets";
+export * from "./creative-ai-client-reviews";
+export * from "./creative-ai-client-comments";

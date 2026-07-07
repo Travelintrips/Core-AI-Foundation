@@ -37,6 +37,10 @@ tags:
     description: Client Long-Term Memory
   - name: feedback
     description: Human Feedback Loop
+  - name: client-review
+    description: Client Review Portal — share project results with clients for approval
+  - name: public
+    description: Public endpoints — token-protected, no admin key required
 
 paths:
   /healthz:
@@ -1596,6 +1600,240 @@ paths:
               schema:
                 $ref: "#/components/schemas/CostAnalyticsResponse"
 
+  # ─── Phase 6: Client Review Portal (Admin) ───────────────────────────────────
+
+  /creative-ai/projects/{id}/client-review-link:
+    post:
+      operationId: createClientReviewLink
+      tags: [client-review]
+      summary: Create a secure client review link for a project
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientReviewLinkInput"
+      responses:
+        "201":
+          description: Review link created (token shown once — save immediately)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientReviewWithToken"
+
+  /creative-ai/projects/{id}/client-reviews:
+    get:
+      operationId: listClientReviews
+      tags: [client-review]
+      summary: List all client review links for a project
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of client reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClientReview"
+
+  /creative-ai/client-reviews/{reviewId}/revoke:
+    patch:
+      operationId: revokeClientReview
+      tags: [client-review]
+      summary: Revoke a client review link
+      parameters:
+        - in: path
+          name: reviewId
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Review revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientReview"
+
+  /creative-ai/projects/{id}/review-comments:
+    get:
+      operationId: listReviewComments
+      tags: [client-review]
+      summary: List all client comments for a project
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of comments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClientComment"
+
+  /creative-ai/analytics/client-reviews:
+    get:
+      operationId: getClientReviewAnalytics
+      tags: [client-review]
+      summary: Client review analytics
+      responses:
+        "200":
+          description: Analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientReviewAnalytics"
+
+  # ─── Phase 6: Public Client Review Endpoints ──────────────────────────────────
+
+  /public/creative-review/{token}:
+    get:
+      operationId: getPublicCreativeReview
+      tags: [public]
+      summary: Get a project for client review via secure token (no admin key needed)
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project review data safe for client consumption
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicProjectReview"
+        "401":
+          description: Invalid, expired, or revoked token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Token not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /public/creative-review/{token}/comment:
+    post:
+      operationId: addClientComment
+      tags: [public]
+      summary: Add a comment to a creative review
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientCommentInput"
+      responses:
+        "201":
+          description: Comment added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientComment"
+
+  /public/creative-review/{token}/approve:
+    post:
+      operationId: approveCreativeReview
+      tags: [public]
+      summary: Client approves the project
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientApprovalInput"
+      responses:
+        "200":
+          description: Project approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientActionResult"
+
+  /public/creative-review/{token}/reject:
+    post:
+      operationId: rejectCreativeReview
+      tags: [public]
+      summary: Client rejects the project
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientApprovalInput"
+      responses:
+        "200":
+          description: Project rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientActionResult"
+
+  /public/creative-review/{token}/request-revision:
+    post:
+      operationId: requestRevisionCreativeReview
+      tags: [public]
+      summary: Client requests revision
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientApprovalInput"
+      responses:
+        "200":
+          description: Revision requested
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientActionResult"
+
 components:
   schemas:
     HealthStatus:
@@ -3081,6 +3319,225 @@ components:
           enum: [approve, reject, needs_revision]
         notes:
           type: ["string", "null"]
+
+    # ─── Phase 6: Client Review ────────────────────────────────────────────────
+
+    ClientReviewLinkInput:
+      type: object
+      required: [clientName]
+      properties:
+        clientName:
+          type: string
+        clientEmail:
+          type: ["string", "null"]
+        clientPhone:
+          type: ["string", "null"]
+        expiresInDays:
+          type: integer
+          minimum: 1
+          maximum: 90
+          default: 7
+
+    ClientReview:
+      type: object
+      required: [id, projectId, clientName, status, tokenExpiresAt, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: string
+        clientName:
+          type: string
+        clientEmail:
+          type: ["string", "null"]
+        clientPhone:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [not_shared, shared, viewed, approved, rejected, revision_requested, expired, revoked]
+        tokenExpiresAt:
+          type: string
+          format: date-time
+        sharedAt:
+          type: ["string", "null"]
+          format: date-time
+        viewedAt:
+          type: ["string", "null"]
+          format: date-time
+        approvedAt:
+          type: ["string", "null"]
+          format: date-time
+        rejectedAt:
+          type: ["string", "null"]
+          format: date-time
+        revisionRequestedAt:
+          type: ["string", "null"]
+          format: date-time
+        revokedAt:
+          type: ["string", "null"]
+          format: date-time
+        commentCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ClientReviewWithToken:
+      allOf:
+        - $ref: "#/components/schemas/ClientReview"
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: Plaintext token — shown once only, save immediately
+
+    ClientComment:
+      type: object
+      required: [id, reviewId, projectId, authorName, authorType, comment, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        reviewId:
+          type: integer
+        projectId:
+          type: string
+        assetId:
+          type: ["integer", "null"]
+        stepId:
+          type: ["integer", "null"]
+        parentCommentId:
+          type: ["integer", "null"]
+        authorName:
+          type: string
+        authorType:
+          type: string
+          enum: [client, admin]
+        comment:
+          type: string
+        status:
+          type: string
+          enum: [open, resolved, archived]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ClientCommentInput:
+      type: object
+      required: [comment, authorName]
+      properties:
+        comment:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        authorName:
+          type: string
+        assetId:
+          type: ["integer", "null"]
+        stepId:
+          type: ["integer", "null"]
+        parentCommentId:
+          type: ["integer", "null"]
+
+    PublicProjectReview:
+      type: object
+      required: [reviewId, projectId, clientName, reviewStatus, brandName, businessType, goal, status, createdAt]
+      properties:
+        reviewId:
+          type: integer
+        projectId:
+          type: string
+        clientName:
+          type: string
+        reviewStatus:
+          type: string
+          enum: [shared, viewed, approved, rejected, revision_requested]
+        brandName:
+          type: string
+        businessType:
+          type: string
+        targetMarket:
+          type: string
+        productOrService:
+          type: string
+        stylePreference:
+          type: ["string", "null"]
+        goal:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        copyOutput:
+          type: ["object", "null"]
+          description: Copy/caption output from the copywriter step
+        creativeDirection:
+          type: ["object", "null"]
+          description: Creative direction summary
+        assets:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicAsset"
+        comments:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientComment"
+        createdAt:
+          type: string
+          format: date-time
+
+    PublicAsset:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: integer
+        imageUrl:
+          type: ["string", "null"]
+        thumbnailUrl:
+          type: ["string", "null"]
+        aspectRatio:
+          type: ["string", "null"]
+        status:
+          type: string
+
+    ClientApprovalInput:
+      type: object
+      properties:
+        notes:
+          type: ["string", "null"]
+
+    ClientActionResult:
+      type: object
+      required: [success, status]
+      properties:
+        success:
+          type: boolean
+        status:
+          type: string
+          enum: [approved, rejected, revision_requested]
+        message:
+          type: string
+
+    ClientReviewAnalytics:
+      type: object
+      required: [totalShared, viewedRate, approvalRate, revisionRate]
+      properties:
+        totalShared:
+          type: integer
+        viewedRate:
+          type: number
+        approvalRate:
+          type: number
+        revisionRate:
+          type: number
+        avgTimeToApprovalHours:
+          type: ["number", "null"]
 
     ErrorResponse:
       type: object
