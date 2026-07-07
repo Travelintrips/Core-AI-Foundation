@@ -1,0 +1,173 @@
+Lanjutkan AI Enterprise Platform ke Phase 5: AI Image Designer MVP.
+
+Status saat ini:
+
+* Phase 4.5 selesai
+* Capability matrix seeded
+* Guardrails aktif
+* Intelligent router sudah mempertimbangkan cost, latency, provider health, context, fallback
+* Creative AI workflow text-based sudah berjalan end-to-end
+* Analytics, cost tracking, feedback, export markdown sudah berjalan
+
+Tujuan Phase 5:
+Menambahkan AI Image Designer MVP secara aman, modular, dan terintegrasi dengan Creative AI yang sudah ada.
+
+PENTING:
+Jangan merombak arsitektur lama.
+Jangan mengubah API lama.
+Jangan membuat video generation, OCR, voice, atau marketplace.
+Fokus hanya AI image generation.
+
+Fitur yang harus dibuat:
+
+1. Tambahkan Image Prompt Generator Agent
+   Tugas:
+
+* Membaca output Brand Strategist
+* Membaca output Creative Director
+* Menghasilkan prompt visual yang detail
+* Menghasilkan negative prompt
+* Menentukan aspect ratio
+* Menentukan style
+* Menentukan jumlah variasi gambar
+
+Capabilities:
+
+* image_prompting
+* visual_direction
+* composition
+* art_direction
+* campaign_visual
+
+2. Tambahkan Image Designer Agent
+   Tugas:
+
+* Memanggil provider image generation
+* Default provider: Replicate
+* Default model: FLUX.1 Schnell atau FLUX.1 Dev
+* Mendukung fallback jika model gagal
+
+Capabilities:
+
+* image_generation
+* poster_concept
+* product_visual
+* social_media_visual
+* brand_visual
+
+3. Tambahkan Image QC Agent
+   Tugas:
+
+* Mengecek apakah gambar sesuai brief
+* Mengecek konsistensi brand
+* Mengecek apakah ada teks yang salah
+* Mengecek apakah visual aman untuk dikirim ke client
+* Memberi skor 1–100
+
+Capabilities:
+
+* image_quality_control
+* brand_consistency_review
+* visual_review
+
+4. Tambahkan database table:
+   creative_ai_assets
+
+Field:
+
+* id
+* project_id
+* step_id
+* agent_id
+* provider
+* model
+* asset_type
+* prompt
+* negative_prompt
+* aspect_ratio
+* image_url
+* storage_path
+* thumbnail_url
+* status
+* qc_score
+* qc_notes
+* cost
+* latency_ms
+* metadata
+* created_at
+
+5. Tambahkan API:
+
+* POST /api/creative-ai/projects/:id/generate-image
+* GET /api/creative-ai/projects/:id/assets
+* PATCH /api/creative-ai/assets/:assetId/status
+* POST /api/creative-ai/assets/:assetId/feedback
+
+6. Integrasi workflow:
+   Pada halaman Creative AI project detail, setelah text workflow selesai, tampilkan tombol:
+   Generate Image Concepts
+
+Ketika diklik:
+
+* Ambil hasil Brand Strategist
+* Ambil hasil Creative Director
+* Jalankan Image Prompt Generator
+* Jalankan Image Designer
+* Jalankan Image QC
+* Simpan asset ke creative_ai_assets
+* Simpan cost record
+* Simpan audit log
+
+7. UI:
+   Di Creative AI project detail tambahkan section:
+   Image Concepts
+
+Berisi:
+
+* grid gambar
+* prompt yang digunakan
+* provider/model
+* cost
+* latency
+* QC score
+* status
+* tombol Approve
+* Needs Revision
+* Reject
+* Copy Prompt
+
+8. Guardrails:
+
+* image generation harus tunduk pada max_cost_per_workflow
+* max image variations default 4
+* timeout provider
+* retry/fallback
+* jika provider key belum ada, tampilkan error jelas
+* jangan crash workflow utama
+
+9. Storage:
+   Jika sistem storage sudah ada, simpan image ke storage.
+   Jika belum ada, simpan image_url dari provider dulu dan metadata lengkap.
+   Jangan blok implementasi hanya karena storage belum tersedia.
+
+10. Analytics:
+    Tambahkan tracking:
+
+* total images generated
+* image generation cost
+* image QC average score
+* approved image rate
+* rejected image rate
+
+11. Jangan generate image otomatis saat brief dibuat.
+    Image generation harus manual lewat tombol Generate Image Concepts agar biaya terkendali.
+
+12. Semua perubahan harus:
+
+* modular
+* backward compatible
+* TypeScript clean
+* build clean
+* audit logged
+* cost tracked
+* guardrail aware

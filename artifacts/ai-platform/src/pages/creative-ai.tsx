@@ -6,11 +6,17 @@ import {
   useGetCreativeProject,
   useListProjectFeedback,
   useSubmitProjectFeedback,
+  useGenerateImageConcepts,
+  useListProjectAssets,
+  useUpdateAssetStatus,
+  useSubmitAssetFeedback,
   getListCreativeProjectsQueryKey,
   getGetCreativeProjectQueryKey,
   getListProjectFeedbackQueryKey,
+  getListProjectAssetsQueryKey,
   type CreativeProject,
   type FeedbackEntry,
+  type CreativeAiAsset,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,6 +52,10 @@ import {
   ChevronDown,
   ChevronUp,
   BanIcon,
+  ImageIcon,
+  ImageOff,
+  Wand2,
+  ExternalLink,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -545,6 +555,181 @@ function ProjectListItem({ project, isActive, onClick }: { project: CreativeProj
   );
 }
 
+// ── Image Concepts Section ─────────────────────────────────────────────────────
+
+function assetStatusColor(status: string) {
+  switch (status) {
+    case "approved":       return "bg-green-500/15 text-green-400 border-green-500/30";
+    case "completed":      return "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
+    case "generating":     return "bg-blue-500/15 text-blue-400 border-blue-500/30";
+    case "failed":         return "bg-red-500/15 text-red-400 border-red-500/30";
+    case "needs_revision": return "bg-yellow-500/15 text-yellow-400 border-yellow-500/30";
+    case "rejected":       return "bg-red-500/15 text-red-500 border-red-500/30";
+    default:               return "bg-muted text-muted-foreground border-border";
+  }
+}
+
+interface AssetCardProps {
+  asset: CreativeAiAsset;
+  onApprove: (id: number) => void;
+  onRevision: (id: number) => void;
+  onReject: (id: number) => void;
+  isUpdating: boolean;
+}
+
+function AssetCard({ asset, onApprove, onRevision, onReject, isUpdating }: AssetCardProps) {
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyPrompt = () => {
+    navigator.clipboard.writeText(asset.prompt);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  };
+
+  const qcColor = asset.qcScore == null ? "text-muted-foreground"
+    : asset.qcScore >= 80 ? "text-green-400"
+    : asset.qcScore >= 60 ? "text-yellow-400"
+    : "text-red-400";
+
+  return (
+    <div className="border border-border/50 rounded-lg bg-card/40 overflow-hidden">
+      {/* Image area */}
+      <div className="relative aspect-square bg-muted/20 flex items-center justify-center min-h-[160px]">
+        {asset.imageUrl ? (
+          <img
+            src={asset.imageUrl}
+            alt={`Generated visual — ${asset.prompt.slice(0, 60)}…`}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+        ) : asset.status === "generating" ? (
+          <div className="flex flex-col items-center gap-2 text-muted-foreground">
+            <Loader2 className="size-8 animate-spin text-primary" />
+            <span className="text-[10px] font-mono">Generating…</span>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-muted-foreground">
+            <ImageOff className="size-8 opacity-40" />
+            <span className="text-[10px] font-mono text-center px-3 leading-relaxed">
+              {asset.qcNotes?.includes("REPLICATE_API_TOKEN")
+                ? "Set REPLICATE_API_TOKEN to generate images"
+                : "Generation failed"}
+            </span>
+          </div>
+        )}
+        {/* Status overlay badge */}
+        <div className="absolute top-2 right-2">
+          <Badge className={cn("text-[9px] border font-mono px-1.5 py-0", assetStatusColor(asset.status))}>
+            {asset.status.replace(/_/g, " ")}
+          </Badge>
+        </div>
+        {/* Open full size */}
+        {asset.imageUrl && (
+          <a
+            href={asset.imageUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute top-2 left-2 size-6 flex items-center justify-center rounded bg-black/50 hover:bg-black/70 transition-colors"
+          >
+            <ExternalLink className="size-3 text-white" />
+          </a>
+        )}
+      </div>
+
+      {/* Meta */}
+      <div className="p-3 space-y-2">
+        {/* Provider / model / cost / latency */}
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-mono text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <Cpu className="size-2.5" />{asset.provider}/{asset.model.split("/").pop()}
+          </span>
+          {asset.cost != null && (
+            <span>${Number(asset.cost).toFixed(4)}</span>
+          )}
+          {asset.latencyMs != null && asset.latencyMs > 0 && (
+            <span><Clock className="size-2.5 inline" /> {(asset.latencyMs / 1000).toFixed(1)}s</span>
+          )}
+          {asset.aspectRatio && (
+            <span>{asset.aspectRatio}</span>
+          )}
+        </div>
+
+        {/* QC score */}
+        {asset.qcScore != null && (
+          <div className="flex items-center justify-between text-[10px] font-mono">
+            <span className="text-muted-foreground">QC Score</span>
+            <span className={cn("font-semibold", qcColor)}>{asset.qcScore}/100</span>
+          </div>
+        )}
+
+        {/* QC notes (collapsible) */}
+        {asset.qcNotes && (
+          <button
+            onClick={() => setShowPrompt((v) => !v)}
+            className="w-full flex items-center justify-between text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <span>Notes / Prompt</span>
+            {showPrompt ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+          </button>
+        )}
+        {showPrompt && (
+          <div className="space-y-1.5">
+            {asset.qcNotes && (
+              <p className="text-[10px] font-mono text-muted-foreground leading-relaxed bg-muted/30 rounded p-2">
+                {asset.qcNotes}
+              </p>
+            )}
+            <div className="relative">
+              <p className="text-[10px] font-mono text-foreground/70 leading-relaxed bg-muted/20 rounded p-2 pr-7 line-clamp-3">
+                {asset.prompt}
+              </p>
+              <button
+                onClick={handleCopyPrompt}
+                className="absolute top-1.5 right-1.5 size-5 flex items-center justify-center rounded hover:bg-muted/50"
+                title="Copy prompt"
+              >
+                {copied ? <Check className="size-3 text-green-400" /> : <Copy className="size-3 text-muted-foreground" />}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex gap-1 pt-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={isUpdating || asset.status === "approved"}
+            onClick={() => onApprove(asset.id)}
+            className="flex-1 h-7 gap-1 text-[10px] font-mono text-green-400 hover:text-green-300 hover:bg-green-500/10"
+          >
+            <ThumbsUp className="size-3" />Approve
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={isUpdating || asset.status === "needs_revision"}
+            onClick={() => onRevision(asset.id)}
+            className="flex-1 h-7 gap-1 text-[10px] font-mono text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10"
+          >
+            <RotateCcw className="size-3" />Revise
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={isUpdating || asset.status === "rejected"}
+            onClick={() => onReject(asset.id)}
+            className="flex-1 h-7 gap-1 text-[10px] font-mono text-red-400 hover:text-red-300 hover:bg-red-500/10"
+          >
+            <ThumbsDown className="size-3" />Reject
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Project Detail ─────────────────────────────────────────────────────────────
 
 function ProjectDetail({ projectId }: { projectId: string }) {
@@ -566,6 +751,40 @@ function ProjectDetail({ projectId }: { projectId: string }) {
     query: { queryKey: getListProjectFeedbackQueryKey(projectId) },
   });
 
+  // Phase 5: Image assets
+  const { data: assets = [], refetch: refetchAssets } = useListProjectAssets(projectId, {
+    query: {
+      queryKey: getListProjectAssetsQueryKey(projectId),
+      refetchInterval: (query) => {
+        const list = query.state.data ?? [];
+        const hasGenerating = list.some((a) => a.status === "generating" || a.status === "pending");
+        return hasGenerating ? 3000 : false;
+      },
+    },
+  });
+
+  const generateImages = useGenerateImageConcepts({
+    mutation: {
+      onSuccess: (data) => {
+        toast({ title: `Image generation started — ${data.variations} variation${data.variations > 1 ? "s" : ""} in progress` });
+        setTimeout(() => refetchAssets(), 1500);
+      },
+      onError: (err: unknown) => {
+        const msg = (err as { message?: string })?.message ?? "Image generation failed";
+        toast({ title: msg.includes("409") ? "Generation already in progress" : msg, variant: "destructive" });
+      },
+    },
+  });
+
+  const updateAssetStatus = useUpdateAssetStatus({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListProjectAssetsQueryKey(projectId) });
+      },
+      onError: () => toast({ title: "Failed to update asset", variant: "destructive" }),
+    },
+  });
+
   const submitFeedback = useSubmitProjectFeedback({
     mutation: {
       onSuccess: () => {
@@ -575,6 +794,20 @@ function ProjectDetail({ projectId }: { projectId: string }) {
       onError: () => toast({ title: "Failed to record feedback", variant: "destructive" }),
     },
   });
+
+  const handleGenerateImages = () => {
+    generateImages.mutate({ id: projectId, data: { variations: 2 } });
+  };
+
+  const handleAssetApprove = (assetId: number) => {
+    updateAssetStatus.mutate({ assetId, data: { status: "approved" } });
+  };
+  const handleAssetRevision = (assetId: number) => {
+    updateAssetStatus.mutate({ assetId, data: { status: "needs_revision" } });
+  };
+  const handleAssetReject = (assetId: number) => {
+    updateAssetStatus.mutate({ assetId, data: { status: "rejected" } });
+  };
 
   const handleFeedback = async (data: Parameters<FeedbackBarProps["onSubmit"]>[0]) => {
     await submitFeedback.mutateAsync({
@@ -631,7 +864,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   }
 
   const isCompleted = project.status === "completed";
-  const hasBudgetBlocked = (project.steps ?? []).some((s) => s.status === "blocked_by_budget");
+  const hasBudgetBlocked = (project.steps ?? []).some((s) => (s.status as string) === "blocked_by_budget");
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -654,6 +887,21 @@ function ProjectDetail({ projectId }: { projectId: string }) {
         </div>
         <div className="flex flex-col items-end gap-1.5 shrink-0">
           <div className="flex items-center gap-2">
+            {isCompleted && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGenerateImages}
+                disabled={generateImages.isPending}
+                className="h-7 gap-1.5 text-[10px] font-mono border-primary/30 text-primary hover:bg-primary/10"
+                title="Run Image Prompt Generator → FLUX.1 → Image QC in background"
+              >
+                {generateImages.isPending
+                  ? <Loader2 className="size-3 animate-spin" />
+                  : <Wand2 className="size-3" />}
+                Generate Images
+              </Button>
+            )}
             {isCompleted && (
               <Button
                 variant="outline"
@@ -712,6 +960,100 @@ function ProjectDetail({ projectId }: { projectId: string }) {
               />
             );
           })}
+
+          {/* ── Image Concepts Section ────────────────────────────────── */}
+          {(isCompleted || assets.length > 0) && (
+            <div className="mt-2 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="size-4 text-primary" />
+                  <span className="font-mono text-sm font-semibold">Image Concepts</span>
+                  {assets.length > 0 && (
+                    <Badge variant="outline" className="text-[10px] font-mono h-5 px-1.5 border-border/50 text-muted-foreground">
+                      {assets.length}
+                    </Badge>
+                  )}
+                </div>
+                {isCompleted && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleGenerateImages}
+                    disabled={generateImages.isPending}
+                    className="h-6 gap-1.5 text-[10px] font-mono text-muted-foreground hover:text-primary"
+                  >
+                    {generateImages.isPending
+                      ? <Loader2 className="size-3 animate-spin" />
+                      : <Wand2 className="size-3" />}
+                    {assets.length > 0 ? "Regenerate" : "Generate Image Concepts"}
+                  </Button>
+                )}
+              </div>
+
+              {assets.length === 0 && isCompleted && !generateImages.isPending && (
+                <div className="border border-dashed border-border/40 rounded-lg p-8 flex flex-col items-center gap-3 text-center">
+                  <div className="size-10 rounded-lg border border-border/40 bg-muted/20 flex items-center justify-center">
+                    <Wand2 className="size-5 text-muted-foreground" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-mono font-medium">No image concepts yet</p>
+                    <p className="text-[11px] text-muted-foreground font-mono">
+                      Click "Generate Images" to run the Image Prompt Generator → FLUX.1 → QC pipeline.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleGenerateImages}
+                    disabled={generateImages.isPending}
+                    className="gap-1.5 font-mono text-xs"
+                  >
+                    <Wand2 className="size-3.5" />
+                    Generate Image Concepts
+                  </Button>
+                </div>
+              )}
+
+              {generateImages.isPending && assets.length === 0 && (
+                <div className="flex items-center gap-2 text-xs text-blue-400 font-mono bg-blue-500/10 border border-blue-500/20 rounded px-3 py-2">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Image Prompt Generator running… FLUX.1 image generation will start shortly.
+                </div>
+              )}
+
+              {assets.length > 0 && (
+                <>
+                  {/* Stats row */}
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { label: "Generated", value: assets.filter(a => a.status === "completed" || a.imageUrl).length },
+                      { label: "Approved", value: assets.filter(a => a.status === "approved").length },
+                      { label: "Avg QC", value: (() => { const s = assets.filter(a => a.qcScore != null); return s.length ? Math.round(s.reduce((acc, a) => acc + (a.qcScore ?? 0), 0) / s.length) : "—"; })() },
+                      { label: "Total Cost", value: `${assets.reduce((acc, a) => acc + Number(a.cost ?? 0), 0).toFixed(4)}` },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="bg-muted/20 border border-border/30 rounded p-2 text-center">
+                        <p className="text-sm font-bold font-mono">{value}</p>
+                        <p className="text-[9px] font-mono text-muted-foreground mt-0.5">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Asset grid */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {assets.map((asset) => (
+                      <AssetCard
+                        key={asset.id}
+                        asset={asset}
+                        onApprove={handleAssetApprove}
+                        onRevision={handleAssetRevision}
+                        onReject={handleAssetReject}
+                        isUpdating={updateAssetStatus.isPending}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </ScrollArea>
     </div>

@@ -46,16 +46,22 @@ import type {
   AiWorkflowInput,
   AiWorkflowUpdate,
   AnalyticsOverview,
+  AssetFeedbackInput,
+  AssetStatusUpdate,
   AuditLogPage,
   ClientMemoryInput,
   ClientMemoryResponse,
   CostAnalyticsResponse,
+  CreativeAiAsset,
   CreativeBriefInput,
   CreativeProject,
   CreativeProjectDetail,
   CreativeProjectStatusUpdate,
+  ErrorResponse,
   FeedbackEntry,
   FeedbackInput,
+  GenerateImageBody,
+  GenerateImageResponse,
   GetAgentStatsParams,
   GetAnalyticsUsageParams,
   GetCostAnalyticsParams,
@@ -4644,6 +4650,297 @@ export const useUpdateCreativeProjectStatus = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateCreativeProjectStatusMutationOptions(options));
+    }
+
+export const getGenerateImageConceptsUrl = (id: string,) => {
+
+
+
+
+  return `/api/creative-ai/projects/${id}/generate-image`
+}
+
+/**
+ * Runs Image Prompt Generator → Image Designer (Replicate) → Image QC in the background. Returns immediately. Poll /assets to get results.
+ * @summary Start image generation pipeline for a creative project
+ */
+export const generateImageConcepts = async (id: string,
+    generateImageBody?: GenerateImageBody, options?: RequestInit): Promise<GenerateImageResponse> => {
+
+  return customFetch<GenerateImageResponse>(getGenerateImageConceptsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(generateImageBody)
+  }
+);}
+
+
+
+
+export const getGenerateImageConceptsMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateImageConcepts>>, TError,{id: string;data?: BodyType<GenerateImageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateImageConcepts>>, TError,{id: string;data?: BodyType<GenerateImageBody>}, TContext> => {
+
+const mutationKey = ['generateImageConcepts'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateImageConcepts>>, {id: string;data?: BodyType<GenerateImageBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  generateImageConcepts(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateImageConceptsMutationResult = NonNullable<Awaited<ReturnType<typeof generateImageConcepts>>>
+    export type GenerateImageConceptsMutationBody = BodyType<GenerateImageBody> | undefined
+    export type GenerateImageConceptsMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Start image generation pipeline for a creative project
+ */
+export const useGenerateImageConcepts = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateImageConcepts>>, TError,{id: string;data?: BodyType<GenerateImageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateImageConcepts>>,
+        TError,
+        {id: string;data?: BodyType<GenerateImageBody>},
+        TContext
+      > => {
+      return useMutation(getGenerateImageConceptsMutationOptions(options));
+    }
+
+export const getListProjectAssetsUrl = (id: string,) => {
+
+
+
+
+  return `/api/creative-ai/projects/${id}/assets`
+}
+
+/**
+ * @summary List all image assets for a creative project
+ */
+export const listProjectAssets = async (id: string, options?: RequestInit): Promise<CreativeAiAsset[]> => {
+
+  return customFetch<CreativeAiAsset[]>(getListProjectAssetsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProjectAssetsQueryKey = (id: string,) => {
+    return [
+    `/api/creative-ai/projects/${id}/assets`
+    ] as const;
+    }
+
+
+export const getListProjectAssetsQueryOptions = <TData = Awaited<ReturnType<typeof listProjectAssets>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectAssets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProjectAssetsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProjectAssets>>> = ({ signal }) => listProjectAssets(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProjectAssets>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListProjectAssetsQueryResult = NonNullable<Awaited<ReturnType<typeof listProjectAssets>>>
+export type ListProjectAssetsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all image assets for a creative project
+ */
+
+export function useListProjectAssets<TData = Awaited<ReturnType<typeof listProjectAssets>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectAssets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListProjectAssetsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateAssetStatusUrl = (assetId: number,) => {
+
+
+
+
+  return `/api/creative-ai/assets/${assetId}/status`
+}
+
+/**
+ * @summary Update an image asset status (approve / needs_revision / reject)
+ */
+export const updateAssetStatus = async (assetId: number,
+    assetStatusUpdate: AssetStatusUpdate, options?: RequestInit): Promise<CreativeAiAsset> => {
+
+  return customFetch<CreativeAiAsset>(getUpdateAssetStatusUrl(assetId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(assetStatusUpdate)
+  }
+);}
+
+
+
+
+export const getUpdateAssetStatusMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAssetStatus>>, TError,{assetId: number;data: BodyType<AssetStatusUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAssetStatus>>, TError,{assetId: number;data: BodyType<AssetStatusUpdate>}, TContext> => {
+
+const mutationKey = ['updateAssetStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAssetStatus>>, {assetId: number;data: BodyType<AssetStatusUpdate>}> = (props) => {
+          const {assetId,data} = props ?? {};
+
+          return  updateAssetStatus(assetId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAssetStatusMutationResult = NonNullable<Awaited<ReturnType<typeof updateAssetStatus>>>
+    export type UpdateAssetStatusMutationBody = BodyType<AssetStatusUpdate>
+    export type UpdateAssetStatusMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Update an image asset status (approve / needs_revision / reject)
+ */
+export const useUpdateAssetStatus = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAssetStatus>>, TError,{assetId: number;data: BodyType<AssetStatusUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAssetStatus>>,
+        TError,
+        {assetId: number;data: BodyType<AssetStatusUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateAssetStatusMutationOptions(options));
+    }
+
+export const getSubmitAssetFeedbackUrl = (assetId: number,) => {
+
+
+
+
+  return `/api/creative-ai/assets/${assetId}/feedback`
+}
+
+/**
+ * @summary Submit human feedback on an image asset
+ */
+export const submitAssetFeedback = async (assetId: number,
+    assetFeedbackInput: AssetFeedbackInput, options?: RequestInit): Promise<CreativeAiAsset> => {
+
+  return customFetch<CreativeAiAsset>(getSubmitAssetFeedbackUrl(assetId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(assetFeedbackInput)
+  }
+);}
+
+
+
+
+export const getSubmitAssetFeedbackMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitAssetFeedback>>, TError,{assetId: number;data: BodyType<AssetFeedbackInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitAssetFeedback>>, TError,{assetId: number;data: BodyType<AssetFeedbackInput>}, TContext> => {
+
+const mutationKey = ['submitAssetFeedback'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitAssetFeedback>>, {assetId: number;data: BodyType<AssetFeedbackInput>}> = (props) => {
+          const {assetId,data} = props ?? {};
+
+          return  submitAssetFeedback(assetId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitAssetFeedbackMutationResult = NonNullable<Awaited<ReturnType<typeof submitAssetFeedback>>>
+    export type SubmitAssetFeedbackMutationBody = BodyType<AssetFeedbackInput>
+    export type SubmitAssetFeedbackMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Submit human feedback on an image asset
+ */
+export const useSubmitAssetFeedback = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitAssetFeedback>>, TError,{assetId: number;data: BodyType<AssetFeedbackInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitAssetFeedback>>,
+        TError,
+        {assetId: number;data: BodyType<AssetFeedbackInput>},
+        TContext
+      > => {
+      return useMutation(getSubmitAssetFeedbackMutationOptions(options));
     }
 
 export const getListCapabilitiesUrl = () => {

@@ -1512,6 +1512,139 @@ export const UpdateCreativeProjectStatusResponse = zod.object({
 
 
 /**
+ * Runs Image Prompt Generator → Image Designer (Replicate) → Image QC in the background. Returns immediately. Poll /assets to get results.
+ * @summary Start image generation pipeline for a creative project
+ */
+export const GenerateImageConceptsParams = zod.object({
+  "id": zod.coerce.string().describe('Project UUID')
+})
+
+export const generateImageConceptsBodyVariationsDefault = 2;
+export const generateImageConceptsBodyVariationsMax = 4;
+
+
+
+export const GenerateImageConceptsBody = zod.object({
+  "variations": zod.number().min(1).max(generateImageConceptsBodyVariationsMax).default(generateImageConceptsBodyVariationsDefault).describe('Number of image variations to generate (max 4)')
+})
+
+export const GenerateImageConceptsResponse = zod.object({
+  "message": zod.string(),
+  "variations": zod.number().describe('Number of variations being generated')
+})
+
+
+/**
+ * @summary List all image assets for a creative project
+ */
+export const ListProjectAssetsParams = zod.object({
+  "id": zod.coerce.string().describe('Project UUID')
+})
+
+export const ListProjectAssetsResponseItem = zod.object({
+  "id": zod.number(),
+  "projectId": zod.string().describe('UUID of the parent creative project'),
+  "stepId": zod.number().nullish(),
+  "agentId": zod.number().nullish(),
+  "provider": zod.string().describe('Provider slug, e.g. replicate'),
+  "model": zod.string().describe('Model ID, e.g. black-forest-labs\/flux-schnell'),
+  "assetType": zod.string().describe('e.g. image'),
+  "prompt": zod.string(),
+  "negativePrompt": zod.string().nullish(),
+  "aspectRatio": zod.string().nullish().describe('e.g. 1:1, 16:9, 9:16'),
+  "imageUrl": zod.string().nullish(),
+  "storagePath": zod.string().nullish(),
+  "thumbnailUrl": zod.string().nullish(),
+  "status": zod.enum(['pending', 'generating', 'completed', 'failed', 'approved', 'needs_revision', 'rejected']),
+  "qcScore": zod.number().nullish().describe('QC score 1–100'),
+  "qcNotes": zod.string().nullish(),
+  "cost": zod.number().nullish().describe('USD cost for this asset'),
+  "latencyMs": zod.number().nullish(),
+  "metadata": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListProjectAssetsResponse = zod.array(ListProjectAssetsResponseItem)
+
+
+/**
+ * @summary Update an image asset status (approve / needs_revision / reject)
+ */
+export const UpdateAssetStatusParams = zod.object({
+  "assetId": zod.coerce.number()
+})
+
+export const UpdateAssetStatusBody = zod.object({
+  "status": zod.enum(['approved', 'needs_revision', 'rejected']),
+  "notes": zod.string().nullish()
+})
+
+export const UpdateAssetStatusResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.string().describe('UUID of the parent creative project'),
+  "stepId": zod.number().nullish(),
+  "agentId": zod.number().nullish(),
+  "provider": zod.string().describe('Provider slug, e.g. replicate'),
+  "model": zod.string().describe('Model ID, e.g. black-forest-labs\/flux-schnell'),
+  "assetType": zod.string().describe('e.g. image'),
+  "prompt": zod.string(),
+  "negativePrompt": zod.string().nullish(),
+  "aspectRatio": zod.string().nullish().describe('e.g. 1:1, 16:9, 9:16'),
+  "imageUrl": zod.string().nullish(),
+  "storagePath": zod.string().nullish(),
+  "thumbnailUrl": zod.string().nullish(),
+  "status": zod.enum(['pending', 'generating', 'completed', 'failed', 'approved', 'needs_revision', 'rejected']),
+  "qcScore": zod.number().nullish().describe('QC score 1–100'),
+  "qcNotes": zod.string().nullish(),
+  "cost": zod.number().nullish().describe('USD cost for this asset'),
+  "latencyMs": zod.number().nullish(),
+  "metadata": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Submit human feedback on an image asset
+ */
+export const SubmitAssetFeedbackParams = zod.object({
+  "assetId": zod.coerce.number()
+})
+
+export const SubmitAssetFeedbackBody = zod.object({
+  "action": zod.enum(['approve', 'reject', 'needs_revision']),
+  "notes": zod.string().nullish()
+})
+
+export const SubmitAssetFeedbackResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.string().describe('UUID of the parent creative project'),
+  "stepId": zod.number().nullish(),
+  "agentId": zod.number().nullish(),
+  "provider": zod.string().describe('Provider slug, e.g. replicate'),
+  "model": zod.string().describe('Model ID, e.g. black-forest-labs\/flux-schnell'),
+  "assetType": zod.string().describe('e.g. image'),
+  "prompt": zod.string(),
+  "negativePrompt": zod.string().nullish(),
+  "aspectRatio": zod.string().nullish().describe('e.g. 1:1, 16:9, 9:16'),
+  "imageUrl": zod.string().nullish(),
+  "storagePath": zod.string().nullish(),
+  "thumbnailUrl": zod.string().nullish(),
+  "status": zod.enum(['pending', 'generating', 'completed', 'failed', 'approved', 'needs_revision', 'rejected']),
+  "qcScore": zod.number().nullish().describe('QC score 1–100'),
+  "qcNotes": zod.string().nullish(),
+  "cost": zod.number().nullish().describe('USD cost for this asset'),
+  "latencyMs": zod.number().nullish(),
+  "metadata": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary List all capability matrix entries
  */
 export const ListCapabilitiesResponseItem = zod.object({
