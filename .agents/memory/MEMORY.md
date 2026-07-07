@@ -1,3 +1,6 @@
 - [react-icons-v5-provider-icons](react-icons-v5-provider-icons.md) — SiOpenai/SiAnthropic/SiGoogle don't exist in react-icons v5.4.0; use Cpu+color or SiReplicate/SiMistralai
 - [ai-platform-workflow-env-vars](ai-platform-workflow-env-vars.md) — Both workflows require PORT and BASE_PATH injected; hardcoded ports cause EADDRINUSE on restart
 - [api-server-zod-import-rule](api-server-zod-import-rule.md) — Never import zod/v4 directly in api-server routes; use @workspace/api-zod schemas only
+- [ai-platform-auth-design](ai-platform-auth-design.md) — ADMIN_API_KEY (backend secret) + VITE_ADMIN_API_KEY (same value, Replit Secret); frontend uses setAuthTokenGetter from @workspace/api-client-react; middleware in adminAuth.ts
+- [ai-platform-services-arch](ai-platform-services-arch.md) — Modular services in artifacts/api-server/src/services/; agentId from API schema is string|null but DB column is number — always parseInt(agentId,10) before querying
+- [ai-platform-seed](ai-platform-seed.md) — Seed script at artifacts/api-server/src/seed.ts, run via pnpm seed; seeds 4 providers, 9 models, Brand Strategist agent; idempotent
