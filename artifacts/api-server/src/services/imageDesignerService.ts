@@ -1,0 +1,618 @@
+/**
+ * imageDesignerService — Phase 5 AI Image Designer pipeline.
+ *
+ * Pipeline: Image Prompt Generator (LLM) → Image Designer (Replicate FLUX.1) → Image QC (LLM)
+ * Runs fire-and-forget after the HTTP response is sent.
+ *
+ * Guardrails respected:
+ *   - maxCostPerWorkflow: blocks pipeline if project budget already exceeded
+ *   - maxRetryPerProvider: retries Replicate on transient errors (capped at 2)
+ *   - providerTimeoutMs: Replicate poll timeout
+ *   - fallbackEnabled: falls back to FLUX.1 Dev on Schnell failure
+ *
+ * If REPLICATE_API_TOKEN is not set, the assets are saved with status "failed"
+ * and a clear error note — the main workflow is never crashed.
+ */
+
+import { eq } from "drizzle-orm";
+import {
+  db,
+  creativeProjectsTable,
+  creativeProjectStepsTable,
+  aiAgentsTable,
+  aiModelsTable,
+  aiProvidersTable,
+  creativeAiAssetsTable,
+} from "@workspace/db";
+import { executeAI } from "./aiExecutionService.js";
+import { getProviderApiKey } from "./aiSecretService.js";
+import { logAudit } from "./aiAuditService.js";
+import { recordCost, getProjectCosts } from "./costService.js";
+import { readGuardrails } from "./guardrailService.js";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface ImagePromptResult {
+  prompt: string;
+  negativePrompt: string;
+  aspectRatio: string;
+  style: string;
+}
+
+// ── DB helpers ────────────────────────────────────────────────────────────────
+
+async function getAgentBySlug(slug: string) {
+  const [agent] = await db
+    .select()
+    .from(aiAgentsTable)
+    .where(eq(aiAgentsTable.slug, slug));
+  return agent ?? null;
+}
+
+async function getModelById(id: number) {
+  const [model] = await db.select().from(aiModelsTable).where(eq(aiModelsTable.id, id));
+  return model ?? null;
+}
+
+async function getProviderById(id: number) {
+  const [provider] = await db.select().from(aiProvidersTable).where(eq(aiProvidersTable.id, id));
+  return provider ?? null;
+}
+
+// ── Step 1: Image Prompt Generator ───────────────────────────────────────────
+
+async function generateImagePrompts(
+  brief: Record<string, unknown>,
+  brandStrategy: Record<string, unknown>,
+  creativeDirection: Record<string, unknown>,
+  numVariations: number,
+): Promise<{ prompts: ImagePromptResult[]; latencyMs: number; tokensUsed: number }> {
+  const agent = await getAgentBySlug("image-prompt-generator");
+  if (!agent || !agent.modelId || !agent.providerId) {
+    throw new Error("image-prompt-generator agent not found. Run `pnpm seed` first.");
+  }
+
+  const [model, provider] = await Promise.all([
+    getModelById(agent.modelId),
+    getProviderById(agent.providerId),
+  ]);
+
+  if (!model || !provider) {
+    throw new Error("Model or provider not found for image-prompt-generator");
+  }
+
+  const systemPrompt =
+    (agent.metadata as { systemPrompt?: string } | null)?.systemPrompt ?? "";
+
+  const conceptName =
+    (creativeDirection as { creative_concept?: { name?: string } } | null)
+      ?.creative_concept?.name ?? "";
+  const visualStyle =
+    (creativeDirection as { visual_style?: { approach?: string } } | null)
+      ?.visual_style?.approach ?? "photographic";
+  const colorDirection =
+    (creativeDirection as { color_direction?: { primary?: string; rationale?: string } } | null)
+      ?.color_direction ?? {};
+
+  const userPrompt = `Generate ${numVariations} distinct image generation prompts for a brand campaign.
+
+BRAND BRIEF:
+${JSON.stringify(brief, null, 2)}
+
+BRAND STRATEGY (summary):
+${JSON.stringify(brandStrategy, null, 2)}
+
+CREATIVE DIRECTION:
+- Concept: ${conceptName}
+- Visual Style: ${visualStyle}
+- Color Direction: ${JSON.stringify(colorDirection)}
+
+Return a JSON array with EXACTLY ${numVariations} objects. Each object must have:
+{
+  "prompt": "detailed positive prompt 60-150 words — describe lighting, composition, mood, color, subject, environment",
+  "negativePrompt": "comma-separated list of things to avoid: e.g. text, watermark, low quality, blurry, distorted, nsfw",
+  "aspectRatio": "1:1",
+  "style": "photographic"
+}
+
+Valid aspectRatio values: "1:1", "16:9", "9:16", "3:2"
+Valid style values: "photographic", "illustration", "3d", "abstract"
+
+Make each variation distinct — different composition, angle, or focus while staying on brand.
+
+CRITICAL: Respond with ONLY the JSON array. No markdown fences. No explanation.`;
+
+  const startTime = Date.now();
+  const output = await executeAI({
+    prompt: userPrompt,
+    systemPrompt,
+    model,
+    provider,
+    temperature: agent.temperature ? parseFloat(String(agent.temperature)) : 0.8,
+    maxTokens: agent.maxTokens ?? 2048,
+  });
+  const latencyMs = Date.now() - startTime;
+
+  // Parse JSON — strip any accidental markdown fences first
+  const raw = output.content.trim().replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "");
+  const jsonStart = raw.indexOf("[");
+  const jsonEnd = raw.lastIndexOf("]") + 1;
+  const jsonStr = jsonStart >= 0 && jsonEnd > jsonStart ? raw.slice(jsonStart, jsonEnd) : raw;
+
+  let prompts: ImagePromptResult[];
+  try {
+    const parsed = JSON.parse(jsonStr);
+    const arr: ImagePromptResult[] = Array.isArray(parsed) ? parsed : [parsed];
+    prompts = arr.slice(0, numVariations).map((p) => ({
+      prompt: String(p.prompt ?? "brand visual campaign image"),
+      negativePrompt: String(p.negativePrompt ?? "text, watermark, low quality, blurry, distorted"),
+      aspectRatio: String(p.aspectRatio ?? "1:1"),
+      style: String(p.style ?? "photographic"),
+    }));
+  } catch {
+    // Fallback prompts derived from creative direction
+    prompts = Array.from({ length: numVariations }, (_, i) => ({
+      prompt: `Professional brand campaign visual for ${
+        (brief as { brandName?: string }).brandName ?? "brand"
+      }, variation ${i + 1}, ${visualStyle} style, ${conceptName ? `concept: ${conceptName}, ` : ""}clean composition, modern aesthetic`,
+      negativePrompt: "text, watermark, low quality, blurry, distorted, oversaturated",
+      aspectRatio: "1:1",
+      style: visualStyle,
+    }));
+  }
+
+  return { prompts, latencyMs, tokensUsed: output.tokensUsed };
+}
+
+// ── Step 2: Replicate Image Generation ───────────────────────────────────────
+
+async function generateReplicateImage(
+  modelId: string,
+  input: {
+    prompt: string;
+    negativePrompt?: string;
+    aspectRatio?: string;
+  },
+  apiKey: string,
+  timeoutMs: number,
+): Promise<{ imageUrl: string; latencyMs: number }> {
+  const startTime = Date.now();
+
+  const createRes = await fetch(
+    `https://api.replicate.com/v1/models/${modelId}/predictions`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        Prefer: "wait", // use sync mode if supported (waits up to 60s)
+      },
+      body: JSON.stringify({
+        input: {
+          prompt: input.prompt,
+          aspect_ratio: input.aspectRatio ?? "1:1",
+          output_format: "webp",
+          output_quality: 80,
+          num_outputs: 1,
+          // FLUX Schnell/Dev parameter for negative prompt
+          ...(input.negativePrompt ? { negative_prompt: input.negativePrompt } : {}),
+        },
+      }),
+    },
+  );
+
+  if (!createRes.ok) {
+    const errText = await createRes.text();
+    throw new Error(`Replicate create error ${createRes.status}: ${errText}`);
+  }
+
+  const prediction = (await createRes.json()) as {
+    id: string;
+    status: string;
+    output?: string[];
+    error?: string;
+    urls?: { get?: string };
+  };
+
+  // If prediction already succeeded (Prefer: wait)
+  if (prediction.status === "succeeded" && Array.isArray(prediction.output)) {
+    const url = prediction.output[0];
+    if (url) return { imageUrl: url, latencyMs: Date.now() - startTime };
+  }
+
+  if (prediction.status === "failed") {
+    throw new Error(`Replicate prediction failed immediately: ${prediction.error ?? "unknown"}`);
+  }
+
+  // Poll until done
+  const pollUrl =
+    prediction.urls?.get ?? `https://api.replicate.com/v1/predictions/${prediction.id}`;
+
+  while (Date.now() - startTime < timeoutMs) {
+    await new Promise((r) => setTimeout(r, 2500));
+
+    const pollRes = await fetch(pollUrl, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!pollRes.ok) continue;
+
+    const result = (await pollRes.json()) as {
+      status: string;
+      output?: string[];
+      error?: string;
+    };
+
+    if (result.status === "succeeded") {
+      const url = Array.isArray(result.output) ? result.output[0] : undefined;
+      if (!url) throw new Error("Replicate returned no image URLs");
+      return { imageUrl: url, latencyMs: Date.now() - startTime };
+    }
+
+    if (result.status === "failed") {
+      throw new Error(`Replicate prediction failed: ${result.error ?? "unknown"}`);
+    }
+  }
+
+  throw new Error(`Replicate timed out after ${timeoutMs}ms`);
+}
+
+// ── Step 3: Image QC ──────────────────────────────────────────────────────────
+
+async function reviewImage(
+  brief: Record<string, unknown>,
+  prompt: string,
+  imageUrl: string,
+): Promise<{ score: number; notes: string; latencyMs: number; tokensUsed: number }> {
+  const agent = await getAgentBySlug("image-qc");
+  if (!agent || !agent.modelId || !agent.providerId) {
+    return { score: 70, notes: "image-qc agent not found; skipping QC review.", latencyMs: 0, tokensUsed: 0 };
+  }
+
+  const [model, provider] = await Promise.all([
+    getModelById(agent.modelId),
+    getProviderById(agent.providerId),
+  ]);
+
+  if (!model || !provider) {
+    return { score: 70, notes: "Model/provider missing for image-qc; skipping.", latencyMs: 0, tokensUsed: 0 };
+  }
+
+  const systemPrompt =
+    (agent.metadata as { systemPrompt?: string } | null)?.systemPrompt ?? "";
+
+  const userPrompt = `Review this AI-generated image for a brand campaign.
+
+BRAND BRIEF:
+Brand: ${(brief as { brandName?: string }).brandName ?? "Unknown"}
+Business: ${(brief as { businessType?: string }).businessType ?? ""}
+Target Market: ${(brief as { targetMarket?: string }).targetMarket ?? ""}
+Goal: ${(brief as { goal?: string }).goal ?? ""}
+
+PROMPT USED TO GENERATE THE IMAGE:
+${prompt}
+
+IMAGE URL: ${imageUrl}
+
+Note: Evaluate based on how well the prompt aligns with the brief (you cannot see the actual image pixel-by-pixel, but judge the prompt's quality as a brand visual directive).
+
+Scoring:
+- Brand Alignment (0–40 pts): Does the prompt match positioning, tone, and target market?
+- Prompt Effectiveness (0–30 pts): Is the visual direction clear, specific, and actionable?
+- Brand Safety (0–30 pts): Is the content appropriate for professional client presentation?
+
+Respond with ONLY valid JSON:
+{
+  "score": <integer 1-100>,
+  "notes": "<2-3 sentences: what works, what could be improved>",
+  "brand_alignment": "<pass|warning|fail>",
+  "visual_clarity": "<pass|warning|fail>",
+  "brand_safety": "<pass|warning|fail>"
+}`;
+
+  const startTime = Date.now();
+  let output;
+  try {
+    output = await executeAI({
+      prompt: userPrompt,
+      systemPrompt,
+      model,
+      provider,
+      temperature: agent.temperature ? parseFloat(String(agent.temperature)) : 0.3,
+      maxTokens: agent.maxTokens ?? 1024,
+    });
+  } catch {
+    return { score: 70, notes: "QC agent call failed; defaulting to 70.", latencyMs: 0, tokensUsed: 0 };
+  }
+  const latencyMs = Date.now() - startTime;
+
+  const raw = output.content.trim().replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "");
+  const jsonStart = raw.indexOf("{");
+  const jsonEnd = raw.lastIndexOf("}") + 1;
+  const jsonStr = jsonStart >= 0 && jsonEnd > jsonStart ? raw.slice(jsonStart, jsonEnd) : raw;
+
+  let score = 70;
+  let notes = "Image reviewed by QC agent.";
+  try {
+    const parsed = JSON.parse(jsonStr);
+    score = Math.min(100, Math.max(1, parseInt(String(parsed.score ?? 70), 10)));
+    notes = String(parsed.notes || notes);
+  } catch {
+    // keep defaults
+  }
+
+  return { score, notes, latencyMs, tokensUsed: output.tokensUsed };
+}
+
+// ── Main Pipeline ─────────────────────────────────────────────────────────────
+
+const FLUX_SCHNELL = "black-forest-labs/flux-schnell";
+const FLUX_DEV = "black-forest-labs/flux-dev";
+const IMAGE_COST_SCHNELL = 0.003; // ~$0.003/image for FLUX.1 Schnell
+
+export async function runImageDesignerPipeline(
+  projectDbId: number,
+  projectUuid: string,
+  requestedVariations = 2,
+): Promise<void> {
+  const guardrails = await readGuardrails();
+  const maxVariations = Math.min(Math.max(1, requestedVariations), 4);
+
+  // ── Budget pre-check ──────────────────────────────────────────────────────
+  if (guardrails.maxCostPerWorkflow > 0) {
+    const existing = await getProjectCosts(projectUuid);
+    if (existing.totalEstimatedCostUsd >= guardrails.maxCostPerWorkflow) {
+      await logAudit(
+        "creative-ai",
+        "image_pipeline_blocked_by_budget",
+        projectUuid,
+        "creative_project",
+        "failure",
+        { totalCost: existing.totalEstimatedCostUsd, cap: guardrails.maxCostPerWorkflow },
+      );
+      throw new Error(
+        `Budget cap reached: $${existing.totalEstimatedCostUsd.toFixed(4)} of $${guardrails.maxCostPerWorkflow}. ` +
+          `Adjust the guardrail.max_cost_per_workflow setting to continue.`,
+      );
+    }
+  }
+
+  // ── Load project + steps ──────────────────────────────────────────────────
+  const [project] = await db
+    .select()
+    .from(creativeProjectsTable)
+    .where(eq(creativeProjectsTable.id, projectDbId));
+
+  if (!project) throw new Error(`Project ${projectDbId} not found`);
+
+  const steps = await db
+    .select()
+    .from(creativeProjectStepsTable)
+    .where(eq(creativeProjectStepsTable.projectId, projectDbId));
+
+  const brandStrategy =
+    (steps.find((s) => s.stepName === "Brand Strategy")?.output as Record<string, unknown>) ?? {};
+  const creativeDirection =
+    (steps.find((s) => s.stepName === "Creative Direction")?.output as Record<string, unknown>) ?? {};
+
+  const brief: Record<string, unknown> = {
+    brandName: project.brandName,
+    businessType: project.businessType,
+    targetMarket: project.targetMarket,
+    productOrService: project.productOrService,
+    stylePreference: project.stylePreference,
+    goal: project.goal,
+  };
+
+  await logAudit("creative-ai", "image_pipeline_started", projectUuid, "creative_project", "success", {
+    variations: maxVariations,
+  });
+
+  // ── Step 1: Generate image prompts ────────────────────────────────────────
+  let imagePrompts: ImagePromptResult[];
+  let promptGenLatency: number;
+  let promptGenTokens: number;
+
+  try {
+    const result = await generateImagePrompts(brief, brandStrategy, creativeDirection, maxVariations);
+    imagePrompts = result.prompts;
+    promptGenLatency = result.latencyMs;
+    promptGenTokens = result.tokensUsed;
+
+    await recordCost({
+      projectId: projectUuid,
+      agentSlug: "image-prompt-generator",
+      provider: "openai",
+      model: "gpt-4o",
+      inputTokens: Math.floor(promptGenTokens * 0.65),
+      outputTokens: Math.floor(promptGenTokens * 0.35),
+      latencyMs: promptGenLatency,
+      status: "success",
+    });
+
+    await logAudit("creative-ai", "image_prompts_generated", projectUuid, "creative_project", "success", {
+      count: imagePrompts.length,
+    });
+  } catch (err) {
+    await logAudit("creative-ai", "image_prompt_generation_failed", projectUuid, "creative_project", "failure", {
+      error: String(err),
+    });
+    throw err;
+  }
+
+  // ── Step 2+3: Generate images and QC each one ─────────────────────────────
+  const replicateKey = getProviderApiKey("replicate");
+  const imageDesignerAgent = await getAgentBySlug("image-designer");
+
+  // Insert all asset rows upfront as "generating" so:
+  //   (a) the UI can poll and show progress immediately
+  //   (b) the concurrency guard in the route sees these rows and blocks duplicate runs
+  const assetIds: number[] = [];
+  for (let i = 0; i < imagePrompts.length; i++) {
+    const p = imagePrompts[i];
+    const [row] = await db.insert(creativeAiAssetsTable).values({
+      projectId: projectUuid,
+      agentId: imageDesignerAgent?.id ?? null,
+      provider: "replicate",
+      model: FLUX_SCHNELL,
+      assetType: "image",
+      prompt: p.prompt,
+      negativePrompt: p.negativePrompt,
+      aspectRatio: p.aspectRatio,
+      imageUrl: null,
+      status: replicateKey ? "generating" : "failed",
+      qcScore: null,
+      qcNotes: replicateKey
+        ? null
+        : "Image generation requires REPLICATE_API_TOKEN. Set this environment variable in Replit Secrets to enable actual image generation.",
+      cost: "0",
+      latencyMs: 0,
+      metadata: { style: p.style, variationIndex: i + 1 },
+    }).returning({ id: creativeAiAssetsTable.id });
+    assetIds.push(row.id);
+  }
+
+  if (!replicateKey) {
+    await logAudit("creative-ai", "image_generation_skipped", projectUuid, "creative_project", "failure", {
+      reason: "REPLICATE_API_TOKEN not set",
+    });
+    return;
+  }
+
+  const maxRetries = Math.min(guardrails.maxRetryPerProvider, 2);
+  const timeoutMs = Math.min(guardrails.providerTimeoutMs, 120000);
+
+  for (let i = 0; i < imagePrompts.length; i++) {
+    const p = imagePrompts[i];
+    const assetId = assetIds[i];
+
+    // Per-image budget check
+    if (guardrails.maxCostPerWorkflow > 0) {
+      const runningCost = await getProjectCosts(projectUuid);
+      if (runningCost.totalEstimatedCostUsd >= guardrails.maxCostPerWorkflow) {
+        await logAudit("creative-ai", "image_budget_cap_reached", projectUuid, "creative_project", "failure", {
+          imageIndex: i,
+          totalCost: runningCost.totalEstimatedCostUsd,
+        });
+        // Mark remaining generating assets as failed
+        for (let j = i; j < assetIds.length; j++) {
+          await db
+            .update(creativeAiAssetsTable)
+            .set({ status: "failed", qcNotes: "Skipped: project budget cap reached" })
+            .where(eq(creativeAiAssetsTable.id, assetIds[j]));
+        }
+        break;
+      }
+    }
+
+    let imageUrl: string | null = null;
+    let imageLatency = 0;
+    let imageStatus = "failed";
+    let qcScore: number | null = null;
+    let qcNotes: string | null = null;
+    let generationError: string | null = null;
+    let usedModel = FLUX_SCHNELL;
+
+    // Try primary model (FLUX.1 Schnell), then fallback to FLUX.1 Dev if enabled
+    const modelCandidates = guardrails.fallbackEnabled
+      ? [FLUX_SCHNELL, FLUX_DEV]
+      : [FLUX_SCHNELL];
+
+    outerLoop: for (const modelId of modelCandidates) {
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const result = await generateReplicateImage(
+            modelId,
+            { prompt: p.prompt, negativePrompt: p.negativePrompt, aspectRatio: p.aspectRatio },
+            replicateKey,
+            timeoutMs,
+          );
+          imageUrl = result.imageUrl;
+          imageLatency = result.latencyMs;
+          imageStatus = "completed";
+          usedModel = modelId;
+          generationError = null;
+
+          await recordCost({
+            projectId: projectUuid,
+            agentSlug: "image-designer",
+            provider: "replicate",
+            model: modelId,
+            inputTokens: 0,
+            outputTokens: 0,
+            latencyMs: imageLatency,
+            status: "success",
+          });
+
+          break outerLoop;
+        } catch (err) {
+          generationError = String(err);
+          if (attempt < maxRetries) {
+            await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+          }
+        }
+      }
+    }
+
+    if (imageStatus === "failed") {
+      await recordCost({
+        projectId: projectUuid,
+        agentSlug: "image-designer",
+        provider: "replicate",
+        model: FLUX_SCHNELL,
+        inputTokens: 0,
+        outputTokens: 0,
+        latencyMs: 0,
+        status: "failed",
+      });
+    }
+
+    // QC review (runs even if image failed — scores the prompt quality)
+    try {
+      const qc = await reviewImage(brief, p.prompt, imageUrl ?? "not generated");
+      qcScore = qc.score;
+      qcNotes = qc.notes;
+
+      if (qc.tokensUsed > 0) {
+        await recordCost({
+          projectId: projectUuid,
+          agentSlug: "image-qc",
+          provider: "openai",
+          model: "gpt-4o",
+          inputTokens: Math.floor(qc.tokensUsed * 0.65),
+          outputTokens: Math.floor(qc.tokensUsed * 0.35),
+          latencyMs: qc.latencyMs,
+          status: "success",
+        });
+      }
+    } catch (err) {
+      qcNotes = `QC review error: ${String(err)}`;
+    }
+
+    // Update the placeholder row with final state
+    await db
+      .update(creativeAiAssetsTable)
+      .set({
+        model: usedModel,
+        imageUrl,
+        status: imageStatus,
+        qcScore,
+        qcNotes: qcNotes ?? (generationError ? `Generation failed: ${generationError}` : null),
+        cost: String(imageStatus === "completed" ? IMAGE_COST_SCHNELL.toFixed(6) : "0"),
+        latencyMs: imageLatency,
+      })
+      .where(eq(creativeAiAssetsTable.id, assetId));
+
+    await logAudit(
+      "creative-ai",
+      "image_asset_saved",
+      projectUuid,
+      "creative_project",
+      imageStatus === "completed" ? "success" : "failure",
+      { variationIndex: i + 1, status: imageStatus, qcScore },
+    );
+  }
+
+  await logAudit("creative-ai", "image_pipeline_completed", projectUuid, "creative_project", "success", {
+    variations: imagePrompts.length,
+  });
+}

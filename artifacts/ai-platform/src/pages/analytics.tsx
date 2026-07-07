@@ -1,13 +1,15 @@
 /**
- * Analytics — Phase 4 real-data dashboard.
+ * Analytics — Phase 4.5 real-data dashboard.
  *
- * Sections:
- *   1. KPI overview strip (requests, tokens, cost, latency)
- *   2. Daily cost + requests trend (AreaChart)
- *   3. Provider breakdown table
- *   4. Agent performance table (with approval rate, avg rating)
+ * Phase 4.5 additions:
+ *   - Date range filter (7 / 14 / 30 / 90 days)
+ *   - Provider filter (client-side from cost data)
+ *   - Agent filter (client-side from agent stats)
+ *   - Empty state: explains when data appears + "Run Test Data" admin button
+ *   - Export CSV button
  */
 
+import { useState } from "react";
 import {
   useGetAnalyticsOverview,
   useGetAgentStats,
@@ -31,12 +33,22 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Activity,
   BarChart2,
   Cpu,
   DollarSign,
+  Download,
   Loader2,
+  Play,
   Star,
   TrendingUp,
   Zap,
@@ -44,6 +56,7 @@ import {
   Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 // ── Colour palette for charts ──────────────────────────────────────────────────
 
@@ -140,30 +153,99 @@ function StarDisplay({ value }: { value: number | null | undefined }) {
   );
 }
 
+// ── Date range options ────────────────────────────────────────────────────────
+
+const DAY_OPTIONS = [
+  { label: "7d",  value: 7 },
+  { label: "14d", value: 14 },
+  { label: "30d", value: 30 },
+  { label: "90d", value: 90 },
+];
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function Analytics() {
+  const { toast } = useToast();
+  const [days, setDays] = useState(14);
+  const [providerFilter, setProviderFilter] = useState<string>("all");
+  const [agentFilter, setAgentFilter] = useState<string>("all");
+  const [runningTestData, setRunningTestData] = useState(false);
+
   const { data: overview, isLoading: overviewLoading } = useGetAnalyticsOverview();
-  const { data: costData, isLoading: costLoading } = useGetCostAnalytics({ days: 14 });
-  const { data: agentStats = [], isLoading: agentLoading } = useGetAgentStats({ days: 30 });
+  const { data: costData, isLoading: costLoading } = useGetCostAnalytics({ days });
+  const { data: rawAgentStats = [], isLoading: agentLoading } = useGetAgentStats({ days });
   const { data: providerBreakdown = [] } = useGetProviderBreakdown();
 
   const isLoading = overviewLoading || costLoading || agentLoading;
 
-  // Merge daily cost trend with usage (cost + requests per day)
+  // ── Client-side filters ─────────────────────────────────────────────────────
+
+  const allProviders = [
+    ...new Set([
+      ...(costData?.byProvider ?? []).map((p) => p.provider),
+      ...providerBreakdown.map((p) => p.providerName),
+    ]),
+  ].filter(Boolean);
+
+  const allAgents = rawAgentStats.map((a) => a.agentSlug);
+
+  const agentStats = agentFilter === "all"
+    ? rawAgentStats
+    : rawAgentStats.filter((a) => a.agentSlug === agentFilter);
+
+  const filteredProviderBreakdown = (costData?.byProvider ?? providerBreakdown.map((p) => ({
+    provider: p.providerName,
+    totalRequests: p.executions ?? 0,
+    totalTokens: p.tokensUsed ?? 0,
+    totalEstimatedCostUsd: 0,
+    avgLatencyMs: p.avgLatencyMs ?? null,
+  }))).filter((p) => providerFilter === "all" || p.provider === providerFilter);
+
   const dailyData = (costData?.daily ?? []).map((d) => ({
-    date: d.date.slice(5), // "MM-DD"
+    date: d.date.slice(5),
     cost: d.totalEstimatedCostUsd,
     requests: d.totalRequests,
     tokens: d.totalTokens,
     latency: d.avgLatencyMs ?? 0,
   }));
 
-  // Provider pie data from cost records (or fallback to provider breakdown)
   const pieData =
-    costData && (costData.byProvider?.length ?? 0) > 0
-      ? costData.byProvider.map((p) => ({ name: p.provider, value: p.totalRequests }))
+    filteredProviderBreakdown.length > 0
+      ? filteredProviderBreakdown.map((p) => ({ name: p.provider, value: p.totalRequests }))
       : providerBreakdown.map((p) => ({ name: p.providerName, value: p.executions ?? 0 }));
+
+  const hasData = agentStats.length > 0 || dailyData.length > 0 || filteredProviderBreakdown.some((p) => p.totalRequests > 0);
+
+  // ── Actions ─────────────────────────────────────────────────────────────────
+
+  const handleRunTestData = async () => {
+    setRunningTestData(true);
+    try {
+      const res = await fetch("/api/ai/test-runs/creative", { method: "POST" });
+      const json = await res.json() as { created?: string[]; errors?: string[] };
+      if (res.ok) {
+        toast({
+          title: "Test data created",
+          description: `${json.created?.length ?? 0} synthetic projects added. Refresh to see analytics.`,
+        });
+        // Reload page after short delay so queries refetch
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        toast({ title: "Failed to create test data", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Network error", variant: "destructive" });
+    } finally {
+      setRunningTestData(false);
+    }
+  };
+
+  const handleExportCsv = () => {
+    const params = new URLSearchParams({ days: String(days) });
+    if (providerFilter !== "all") params.set("provider", providerFilter);
+    if (agentFilter !== "all") params.set("agent", agentFilter);
+    window.open(`/api/ai/analytics/export/csv?${params}`, "_blank");
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -172,10 +254,63 @@ export default function Analytics() {
         <BarChart2 className="size-4 text-primary" />
         <span className="font-mono text-sm font-semibold">Analytics</span>
         {isLoading && <Loader2 className="size-3.5 text-muted-foreground animate-spin ml-1" />}
-        <div className="ml-auto">
-          <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground border-border/50">
-            Last 30 days
-          </Badge>
+
+        <div className="ml-auto flex items-center gap-2">
+          {/* Date range */}
+          <div className="flex items-center gap-1 border border-border/50 rounded-md p-0.5">
+            {DAY_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setDays(opt.value)}
+                className={cn(
+                  "px-2.5 py-1 rounded text-[10px] font-mono transition-colors",
+                  days === opt.value
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Provider filter */}
+          {allProviders.length > 1 && (
+            <Select value={providerFilter} onValueChange={setProviderFilter}>
+              <SelectTrigger className="h-7 w-32 text-[10px] font-mono border-border/50">
+                <SelectValue placeholder="Provider" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs font-mono">All providers</SelectItem>
+                {allProviders.map((p) => (
+                  <SelectItem key={p} value={p} className="text-xs font-mono capitalize">{p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Agent filter */}
+          {allAgents.length > 1 && (
+            <Select value={agentFilter} onValueChange={setAgentFilter}>
+              <SelectTrigger className="h-7 w-36 text-[10px] font-mono border-border/50">
+                <SelectValue placeholder="Agent" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs font-mono">All agents</SelectItem>
+                {allAgents.map((a) => (
+                  <SelectItem key={a} value={a} className="text-xs font-mono">{a}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Export CSV */}
+          {hasData && (
+            <Button variant="outline" size="sm" onClick={handleExportCsv} className="h-7 gap-1.5 text-[10px] font-mono border-border/50">
+              <Download className="size-3" />
+              CSV
+            </Button>
+          )}
         </div>
       </div>
 
@@ -259,7 +394,7 @@ export default function Analytics() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Provider breakdown pie */}
-            {pieData.length > 0 && (
+            {pieData.some((d) => d.value > 0) && (
               <Card className="border-border/50">
                 <CardHeader className="pb-2 pt-4 px-5">
                   <CardTitle className="text-sm font-mono font-semibold text-foreground/80">Provider Requests</CardTitle>
@@ -289,20 +424,20 @@ export default function Analytics() {
             )}
 
             {/* Cost by provider bar chart */}
-            {(costData?.byProvider?.length ?? 0) > 0 && (
+            {filteredProviderBreakdown.some((p) => p.totalEstimatedCostUsd > 0) && (
               <Card className="border-border/50">
                 <CardHeader className="pb-2 pt-4 px-5">
                   <CardTitle className="text-sm font-mono font-semibold text-foreground/80">Cost by Provider</CardTitle>
                 </CardHeader>
                 <CardContent className="px-2 pb-4">
                   <ResponsiveContainer width="100%" height={140}>
-                    <BarChart data={costData!.byProvider} margin={{ top: 5, right: 20, left: 0, bottom: 0 }}>
+                    <BarChart data={filteredProviderBreakdown} margin={{ top: 5, right: 20, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                       <XAxis dataKey="provider" tick={{ fontSize: 10, fontFamily: "monospace", fill: "rgba(255,255,255,0.4)" }} />
                       <YAxis tick={{ fontSize: 10, fontFamily: "monospace", fill: "rgba(255,255,255,0.4)" }} />
                       <Tooltip content={<ChartTooltip />} />
                       <Bar dataKey="totalEstimatedCostUsd" name="Cost (USD)" fill="#6366f1" radius={[3, 3, 0, 0]}>
-                        {costData!.byProvider.map((_, i) => (
+                        {filteredProviderBreakdown.map((_, i) => (
                           <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                         ))}
                       </Bar>
@@ -358,14 +493,34 @@ export default function Analytics() {
             </Card>
           )}
 
-          {/* Empty state when no data yet */}
-          {!isLoading && agentStats.length === 0 && dailyData.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
-              <div className="size-12 rounded-xl border border-border/50 bg-muted/20 flex items-center justify-center">
-                <BarChart2 className="size-6 text-muted-foreground/40" />
+          {/* Empty state */}
+          {!isLoading && !hasData && (
+            <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
+              <div className="size-14 rounded-xl border border-border/50 bg-muted/20 flex items-center justify-center">
+                <BarChart2 className="size-7 text-muted-foreground/40" />
               </div>
-              <p className="font-mono text-sm font-semibold text-foreground">No analytics data yet</p>
-              <p className="text-xs text-muted-foreground font-mono max-w-xs">Run some Creative AI workflows to start collecting performance and cost data.</p>
+              <div className="space-y-1.5">
+                <p className="font-mono text-sm font-semibold text-foreground">No analytics data yet</p>
+                <p className="text-xs text-muted-foreground font-mono max-w-sm">
+                  Analytics data appears after Creative AI workflows run. Each completed workflow step records tokens, cost, and latency automatically.
+                </p>
+              </div>
+              <div className="flex flex-col items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRunTestData}
+                  disabled={runningTestData}
+                  className="gap-2 font-mono border-primary/30 text-primary hover:bg-primary/10"
+                >
+                  {runningTestData
+                    ? <><Loader2 className="size-3.5 animate-spin" /> Creating test data…</>
+                    : <><Play className="size-3.5" /> Run Test Data</>}
+                </Button>
+                <p className="text-[10px] text-muted-foreground font-mono">
+                  Creates 5 synthetic projects to populate charts and agent stats.
+                </p>
+              </div>
             </div>
           )}
         </div>

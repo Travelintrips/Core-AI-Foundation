@@ -1201,6 +1201,157 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreativeProject"
 
+  # ─── CREATIVE AI: Image Designer (Phase 5) ──────────────────────────────────
+
+  /creative-ai/projects/{id}/generate-image:
+    post:
+      operationId: generateImageConcepts
+      tags: [creative-ai]
+      summary: Start image generation pipeline for a creative project
+      description: Runs Image Prompt Generator → Image Designer (Replicate) → Image QC in the background. Returns immediately. Poll /assets to get results.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project UUID
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateImageBody"
+      responses:
+        "202":
+          description: Image generation started in background
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateImageResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Image generation already in progress for this project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /creative-ai/projects/{id}/assets:
+    get:
+      operationId: listProjectAssets
+      tags: [creative-ai]
+      summary: List all image assets for a creative project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project UUID
+      responses:
+        "200":
+          description: List of image assets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CreativeAiAsset"
+
+  /creative-ai/assets/{assetId}/status:
+    patch:
+      operationId: updateAssetStatus
+      tags: [creative-ai]
+      summary: Update an image asset status (approve / needs_revision / reject)
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssetStatusUpdate"
+      responses:
+        "200":
+          description: Updated asset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreativeAiAsset"
+        "404":
+          description: Asset not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /creative-ai/assets/{assetId}/feedback:
+    post:
+      operationId: submitAssetFeedback
+      tags: [creative-ai]
+      summary: Submit human feedback on an image asset
+      parameters:
+        - name: assetId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssetFeedbackInput"
+      responses:
+        "200":
+          description: Feedback recorded, asset status updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreativeAiAsset"
+        "404":
+          description: Asset not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /creative-ai/analytics/images:
+    get:
+      operationId: getCreativeImageAnalytics
+      tags: [creative-ai]
+      summary: Aggregate image generation analytics across all projects
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+            description: Number of days to look back (1–365)
+      responses:
+        "200":
+          description: Image analytics summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreativeAiImageAnalytics"
+
   # ─── CAPABILITIES ────────────────────────────────────────────────────────────
 
   /capabilities:
@@ -2854,3 +3005,129 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AgentCostStats"
+
+    # ─── Phase 5: Image Designer ────────────────────────────────────────────────
+
+    CreativeAiAsset:
+      type: object
+      required: [id, projectId, provider, model, assetType, prompt, status, createdAt]
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: string
+          description: UUID of the parent creative project
+        stepId:
+          type: ["integer", "null"]
+        agentId:
+          type: ["integer", "null"]
+        provider:
+          type: string
+          description: Provider slug, e.g. replicate
+        model:
+          type: string
+          description: Model ID, e.g. black-forest-labs/flux-schnell
+        assetType:
+          type: string
+          description: e.g. image
+        prompt:
+          type: string
+        negativePrompt:
+          type: ["string", "null"]
+        aspectRatio:
+          type: ["string", "null"]
+          description: e.g. 1:1, 16:9, 9:16
+        imageUrl:
+          type: ["string", "null"]
+        storagePath:
+          type: ["string", "null"]
+        thumbnailUrl:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, generating, completed, failed, approved, needs_revision, rejected]
+        qcScore:
+          type: ["integer", "null"]
+          description: QC score 1–100
+        qcNotes:
+          type: ["string", "null"]
+        cost:
+          type: ["number", "null"]
+          description: USD cost for this asset
+        latencyMs:
+          type: ["integer", "null"]
+        metadata:
+          type: ["object", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    GenerateImageBody:
+      type: object
+      properties:
+        variations:
+          type: integer
+          minimum: 1
+          maximum: 4
+          default: 2
+          description: Number of image variations to generate (max 4)
+
+    GenerateImageResponse:
+      type: object
+      required: [message, variations]
+      properties:
+        message:
+          type: string
+        variations:
+          type: integer
+          description: Number of variations being generated
+
+    AssetStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [approved, needs_revision, rejected]
+        notes:
+          type: ["string", "null"]
+
+    AssetFeedbackInput:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [approve, reject, needs_revision]
+        notes:
+          type: ["string", "null"]
+
+    CreativeAiImageAnalytics:
+      type: object
+      required: [totalImages, totalCostUsd, approvedRate, rejectedRate, pendingCount]
+      properties:
+        totalImages:
+          type: integer
+          description: Total image assets in the window
+        totalCostUsd:
+          type: number
+          description: Total cost of image generation in USD
+        avgQcScore:
+          type: ["number", "null"]
+          description: Average QC score across all images (1–100)
+        approvedRate:
+          type: ["number", "null"]
+          description: Fraction of images that were approved (0–1)
+        rejectedRate:
+          type: ["number", "null"]
+          description: Fraction of images that were rejected (0–1)
+        pendingCount:
+          type: integer
+          description: Images currently pending or generating
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

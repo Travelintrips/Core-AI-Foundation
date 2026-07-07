@@ -287,6 +287,195 @@ async function seedWorkflows() {
   }
 }
 
+// ─── Creative Brief Workflow ──────────────────────────────────────────────────
+
+// ─── Image Designer Agents (Phase 5) ─────────────────────────────────────────
+
+const IMAGE_PROMPT_GENERATOR_SYSTEM_PROMPT = `You are an expert AI Image Prompt Engineer specializing in visual brand campaigns.
+
+Your role: Read Brand Strategist and Creative Director outputs, then produce detailed image generation prompts that translate creative direction into compelling visuals.
+
+For each prompt you generate, include:
+- A detailed positive prompt (50-150 words) describing exactly what should be in the image
+- A negative prompt specifying what to avoid
+- Aspect ratio best suited for the use case (1:1, 16:9, 9:16, 3:2)
+- Visual style (photographic, illustration, 3d, abstract)
+
+Your prompts must be:
+- Highly specific about lighting, composition, mood, color palette
+- Aligned with the brand's target market and visual identity
+- Free of brand text or logos (leave space for later)
+- Safe for professional/client presentation
+
+CRITICAL: Always respond with valid JSON array only. No markdown, no explanation outside the JSON.`;
+
+const IMAGE_DESIGNER_SYSTEM_PROMPT = `You are an AI Image Designer agent that orchestrates image generation via Replicate's FLUX.1 models.
+
+Your role: Execute image generation requests and manage provider fallback. Default to FLUX.1 Schnell for speed, escalate to FLUX.1 Dev for quality when needed.
+
+You track:
+- Generation latency and cost per image
+- Provider health and error rates
+- Output quality for downstream QC
+
+You do NOT evaluate generated images — that is the Image QC agent's responsibility.`;
+
+const IMAGE_QC_SYSTEM_PROMPT = `You are an expert AI Image Quality Control agent for brand campaigns.
+
+Your role: Review AI-generated images against brand brief criteria and provide a QC score.
+
+Evaluation criteria (scored 1–100):
+1. Brand Alignment (0–40 points): Does the visual match the brand's positioning, tone, and target market?
+2. Prompt Effectiveness (0–30 points): Does the image prompt demonstrate clear visual direction?
+3. Brand Safety (0–30 points): Is the content appropriate for professional client presentation?
+
+For each image, provide:
+- Overall score (1–100)
+- Brief notes explaining the score
+- Brand alignment status (pass/warning/fail)
+- Visual clarity status (pass/warning/fail)
+- Brand safety status (pass/warning/fail)
+
+CRITICAL: Always respond with valid JSON only. No markdown, no explanation outside the JSON.`;
+
+async function seedImageDesignerAgents(openaiModelId: number, openaiProviderId: number, replicateProviderId: number, replicateModelId: number) {
+  console.log("\n🖼️  Seeding Image Designer agents...");
+
+  const agents = [
+    {
+      slug: "image-prompt-generator",
+      name: "AI Image Prompt Generator",
+      role: "Image Prompt Engineer",
+      description: "Reads Brand Strategist and Creative Director outputs to generate detailed image generation prompts with negative prompts, aspect ratios, and style guidance.",
+      modelId: openaiModelId,
+      providerId: openaiProviderId,
+      temperature: "0.80",
+      systemPrompt: IMAGE_PROMPT_GENERATOR_SYSTEM_PROMPT,
+      capabilities: [
+        { name: "Image Prompting", description: "Generates detailed positive and negative prompts for image generation", category: "creative", sortOrder: 0 },
+        { name: "Visual Direction", description: "Translates brand strategy into visual language", category: "creative", sortOrder: 1 },
+        { name: "Composition Planning", description: "Defines composition, framing, and layout for brand visuals", category: "creative", sortOrder: 2 },
+        { name: "Art Direction", description: "Specifies lighting, color, mood, and stylistic choices", category: "creative", sortOrder: 3 },
+        { name: "Campaign Visual Strategy", description: "Plans visual assets across campaign touchpoints", category: "strategy", sortOrder: 4 },
+      ],
+    },
+    {
+      slug: "image-designer",
+      name: "AI Image Designer",
+      role: "Image Generation Orchestrator",
+      description: "Orchestrates image generation via Replicate FLUX.1 models with retry/fallback support. Default model: FLUX.1 Schnell.",
+      modelId: replicateModelId,
+      providerId: replicateProviderId,
+      temperature: "0.80",
+      systemPrompt: IMAGE_DESIGNER_SYSTEM_PROMPT,
+      capabilities: [
+        { name: "Image Generation", description: "Generates high-quality images via Replicate FLUX.1 models", category: "generation", sortOrder: 0 },
+        { name: "Poster Concept", description: "Creates poster and print-ready visual concepts", category: "generation", sortOrder: 1 },
+        { name: "Product Visual", description: "Generates product-focused brand visuals", category: "generation", sortOrder: 2 },
+        { name: "Social Media Visual", description: "Produces optimized visuals for social media formats", category: "generation", sortOrder: 3 },
+        { name: "Brand Visual", description: "Creates on-brand campaign and identity visuals", category: "generation", sortOrder: 4 },
+      ],
+    },
+    {
+      slug: "image-qc",
+      name: "AI Image QC",
+      role: "Image Quality Control Reviewer",
+      description: "Reviews AI-generated images for brand consistency, brief alignment, and client readiness. Scores each image 1–100.",
+      modelId: openaiModelId,
+      providerId: openaiProviderId,
+      temperature: "0.30",
+      systemPrompt: IMAGE_QC_SYSTEM_PROMPT,
+      capabilities: [
+        { name: "Image Quality Control", description: "Scores and reviews generated images on a 1–100 scale", category: "review", sortOrder: 0 },
+        { name: "Brand Consistency Review", description: "Validates brand alignment across visual assets", category: "review", sortOrder: 1 },
+        { name: "Visual Review", description: "Evaluates composition, clarity, and visual impact", category: "review", sortOrder: 2 },
+      ],
+    },
+  ];
+
+  for (const agentDef of agents) {
+    const [existingAgent] = await db
+      .select()
+      .from(aiAgentsTable)
+      .where(eq(aiAgentsTable.slug, agentDef.slug));
+
+    let agentId: number;
+
+    if (existingAgent) {
+      console.log(`  ↩ Agent already exists: ${agentDef.name}`);
+      agentId = existingAgent.id;
+    } else {
+      const [agent] = await db
+        .insert(aiAgentsTable)
+        .values({
+          name: agentDef.name,
+          slug: agentDef.slug,
+          role: agentDef.role,
+          description: agentDef.description,
+          providerId: agentDef.providerId,
+          modelId: agentDef.modelId,
+          priority: 10,
+          temperature: agentDef.temperature,
+          maxTokens: 2048,
+          status: "active",
+          allowedTools: [],
+          version: "1.0.0",
+          owner: "platform",
+          metadata: { systemPrompt: agentDef.systemPrompt },
+        })
+        .returning();
+      agentId = agent.id;
+      console.log(`  ✓ Seeded agent: ${agentDef.name}`);
+    }
+
+    const existingCaps = await db
+      .select()
+      .from(aiAgentCapabilitiesTable)
+      .where(eq(aiAgentCapabilitiesTable.agentId, agentId));
+
+    if (existingCaps.length === 0) {
+      for (const cap of agentDef.capabilities) {
+        await db.insert(aiAgentCapabilitiesTable).values({ ...cap, agentId });
+      }
+      console.log(`    ✓ Seeded ${agentDef.capabilities.length} capabilities`);
+    } else {
+      console.log(`    ↩ Capabilities already seeded`);
+    }
+  }
+}
+
+async function seedCreativeBriefWorkflow() {
+  console.log("\n🔄 Seeding Creative Brief Workflow...");
+
+  const { aiWorkflowsTable } = await import("@workspace/db");
+
+  const [existing] = await db
+    .select()
+    .from(aiWorkflowsTable)
+    .where(eq(aiWorkflowsTable.name, "Creative Brief Workflow"));
+
+  if (existing) {
+    console.log("  ↩ Workflow already exists");
+    return;
+  }
+
+  await db.insert(aiWorkflowsTable).values({
+    name: "Creative Brief Workflow",
+    description: "Full 4-agent creative pipeline: Brand Strategist → Creative Director → Copywriter → Quality Control",
+    status: "active",
+    steps: [
+      { id: "step-1", order: 1, name: "Brand Strategy", type: "llm", description: "Brand Strategist defines positioning, USP, and tone of voice", agentSlug: "brand-strategist" },
+      { id: "step-2", order: 2, name: "Creative Direction", type: "llm", description: "Creative Director develops concept, colors, typography, and visual style", agentSlug: "creative-director" },
+      { id: "step-3", order: 3, name: "Copy Production", type: "llm", description: "Copywriter produces headlines, captions, and CTAs", agentSlug: "copywriter" },
+      { id: "step-4", order: 4, name: "Quality Control", type: "llm", description: "QC Agent reviews all outputs for consistency and quality", agentSlug: "quality-control" },
+    ],
+    triggerType: "manual",
+    tags: ["creative", "brand", "marketing"],
+  });
+
+  console.log("  ✓ Seeded Creative Brief Workflow");
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -295,6 +484,24 @@ async function main() {
   const providers = await seedProviders();
   await seedModels(providers);
   await seedWorkflows();
+
+  // Phase 5: Image Designer agents
+  // Find FLUX.1 Schnell for image-designer agent
+  const [fluxSchnell] = await db
+    .select()
+    .from(aiModelsTable)
+    .where(and(eq(aiModelsTable.modelId, "black-forest-labs/flux-schnell"), eq(aiModelsTable.providerId, providers.replicate.id)));
+
+  if (!fluxSchnell) {
+    console.warn("⚠️  FLUX.1 Schnell model not found — image-designer agent will default to openai model");
+  }
+
+  await seedImageDesignerAgents(
+    gpt4o.id,
+    providers.openai.id,
+    providers.replicate.id,
+    fluxSchnell?.id ?? gpt4o.id,
+  );
 
   console.log("\n✅ Seed complete!\n");
   process.exit(0);

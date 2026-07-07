@@ -1216,6 +1216,121 @@ export interface CostAnalyticsResponse {
   byAgent: AgentCostStats[];
 }
 
+export type CreativeAiAssetStatus = typeof CreativeAiAssetStatus[keyof typeof CreativeAiAssetStatus];
+
+
+export const CreativeAiAssetStatus = {
+  pending: 'pending',
+  generating: 'generating',
+  completed: 'completed',
+  failed: 'failed',
+  approved: 'approved',
+  needs_revision: 'needs_revision',
+  rejected: 'rejected',
+} as const;
+
+/**
+ * @nullable
+ */
+export type CreativeAiAssetMetadata = { [key: string]: unknown } | null;
+
+export interface CreativeAiAsset {
+  id: number;
+  /** UUID of the parent creative project */
+  projectId: string;
+  /** @nullable */
+  stepId?: number | null;
+  /** @nullable */
+  agentId?: number | null;
+  /** Provider slug, e.g. replicate */
+  provider: string;
+  /** Model ID, e.g. black-forest-labs/flux-schnell */
+  model: string;
+  /** e.g. image */
+  assetType: string;
+  prompt: string;
+  /** @nullable */
+  negativePrompt?: string | null;
+  /**
+     * e.g. 1:1, 16:9, 9:16
+     * @nullable
+     */
+  aspectRatio?: string | null;
+  /** @nullable */
+  imageUrl?: string | null;
+  /** @nullable */
+  storagePath?: string | null;
+  /** @nullable */
+  thumbnailUrl?: string | null;
+  status: CreativeAiAssetStatus;
+  /**
+     * QC score 1–100
+     * @nullable
+     */
+  qcScore?: number | null;
+  /** @nullable */
+  qcNotes?: string | null;
+  /**
+     * USD cost for this asset
+     * @nullable
+     */
+  cost?: number | null;
+  /** @nullable */
+  latencyMs?: number | null;
+  /** @nullable */
+  metadata?: CreativeAiAssetMetadata;
+  createdAt: string;
+}
+
+export interface GenerateImageBody {
+  /**
+     * Number of image variations to generate (max 4)
+     * @minimum 1
+     * @maximum 4
+     */
+  variations?: number;
+}
+
+export interface GenerateImageResponse {
+  message: string;
+  /** Number of variations being generated */
+  variations: number;
+}
+
+export type AssetStatusUpdateStatus = typeof AssetStatusUpdateStatus[keyof typeof AssetStatusUpdateStatus];
+
+
+export const AssetStatusUpdateStatus = {
+  approved: 'approved',
+  needs_revision: 'needs_revision',
+  rejected: 'rejected',
+} as const;
+
+export interface AssetStatusUpdate {
+  status: AssetStatusUpdateStatus;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export type AssetFeedbackInputAction = typeof AssetFeedbackInputAction[keyof typeof AssetFeedbackInputAction];
+
+
+export const AssetFeedbackInputAction = {
+  approve: 'approve',
+  reject: 'reject',
+  needs_revision: 'needs_revision',
+} as const;
+
+export interface AssetFeedbackInput {
+  action: AssetFeedbackInputAction;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface ErrorResponse {
+  error: string;
+}
+
 export type ListModelsParams = {
 /**
  * @nullable
@@ -1286,3 +1401,16 @@ export type GetCostAnalyticsParams = {
 days?: number;
 };
 
+
+export type GetCreativeImageAnalyticsParams = {
+  days?: number | null;
+};
+
+export interface CreativeAiImageAnalytics {
+  totalImages: number;
+  totalCostUsd: number;
+  avgQcScore?: number | null;
+  approvedRate: number | null;
+  rejectedRate: number | null;
+  pendingCount: number;
+}
