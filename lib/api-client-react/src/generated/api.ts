@@ -43,6 +43,10 @@ import type {
   AiWorkflowUpdate,
   AnalyticsOverview,
   AuditLogPage,
+  CreativeBriefInput,
+  CreativeProject,
+  CreativeProjectDetail,
+  CreativeProjectStatusUpdate,
   GetAnalyticsUsageParams,
   HealthStatus,
   KnowledgeBase,
@@ -4334,5 +4338,300 @@ export const useDeleteSetting = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteSettingMutationOptions(options));
+    }
+
+export const getCreateCreativeBriefUrl = () => {
+
+
+
+
+  return `/api/creative-ai/brief`
+}
+
+/**
+ * @summary Submit a creative brief and start the 4-agent AI workflow
+ */
+export const createCreativeBrief = async (creativeBriefInput: CreativeBriefInput, options?: RequestInit): Promise<CreativeProject> => {
+
+  return customFetch<CreativeProject>(getCreateCreativeBriefUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(creativeBriefInput)
+  }
+);}
+
+
+
+
+export const getCreateCreativeBriefMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCreativeBrief>>, TError,{data: BodyType<CreativeBriefInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCreativeBrief>>, TError,{data: BodyType<CreativeBriefInput>}, TContext> => {
+
+const mutationKey = ['createCreativeBrief'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCreativeBrief>>, {data: BodyType<CreativeBriefInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createCreativeBrief(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCreativeBriefMutationResult = NonNullable<Awaited<ReturnType<typeof createCreativeBrief>>>
+    export type CreateCreativeBriefMutationBody = BodyType<CreativeBriefInput>
+    export type CreateCreativeBriefMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Submit a creative brief and start the 4-agent AI workflow
+ */
+export const useCreateCreativeBrief = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCreativeBrief>>, TError,{data: BodyType<CreativeBriefInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createCreativeBrief>>,
+        TError,
+        {data: BodyType<CreativeBriefInput>},
+        TContext
+      > => {
+      return useMutation(getCreateCreativeBriefMutationOptions(options));
+    }
+
+export const getListCreativeProjectsUrl = () => {
+
+
+
+
+  return `/api/creative-ai/projects`
+}
+
+/**
+ * @summary List all creative projects
+ */
+export const listCreativeProjects = async ( options?: RequestInit): Promise<CreativeProject[]> => {
+
+  return customFetch<CreativeProject[]>(getListCreativeProjectsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCreativeProjectsQueryKey = () => {
+    return [
+    `/api/creative-ai/projects`
+    ] as const;
+    }
+
+
+export const getListCreativeProjectsQueryOptions = <TData = Awaited<ReturnType<typeof listCreativeProjects>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCreativeProjects>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCreativeProjectsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCreativeProjects>>> = ({ signal }) => listCreativeProjects({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCreativeProjects>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCreativeProjectsQueryResult = NonNullable<Awaited<ReturnType<typeof listCreativeProjects>>>
+export type ListCreativeProjectsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all creative projects
+ */
+
+export function useListCreativeProjects<TData = Awaited<ReturnType<typeof listCreativeProjects>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCreativeProjects>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCreativeProjectsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCreativeProjectUrl = (id: string,) => {
+
+
+
+
+  return `/api/creative-ai/projects/${id}`
+}
+
+/**
+ * @summary Get a creative project with all step results
+ */
+export const getCreativeProject = async (id: string, options?: RequestInit): Promise<CreativeProjectDetail> => {
+
+  return customFetch<CreativeProjectDetail>(getGetCreativeProjectUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCreativeProjectQueryKey = (id: string,) => {
+    return [
+    `/api/creative-ai/projects/${id}`
+    ] as const;
+    }
+
+
+export const getGetCreativeProjectQueryOptions = <TData = Awaited<ReturnType<typeof getCreativeProject>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreativeProject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCreativeProjectQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCreativeProject>>> = ({ signal }) => getCreativeProject(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCreativeProject>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCreativeProjectQueryResult = NonNullable<Awaited<ReturnType<typeof getCreativeProject>>>
+export type GetCreativeProjectQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get a creative project with all step results
+ */
+
+export function useGetCreativeProject<TData = Awaited<ReturnType<typeof getCreativeProject>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreativeProject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCreativeProjectQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateCreativeProjectStatusUrl = (id: string,) => {
+
+
+
+
+  return `/api/creative-ai/projects/${id}/status`
+}
+
+/**
+ * @summary Update project status
+ */
+export const updateCreativeProjectStatus = async (id: string,
+    creativeProjectStatusUpdate: CreativeProjectStatusUpdate, options?: RequestInit): Promise<CreativeProject> => {
+
+  return customFetch<CreativeProject>(getUpdateCreativeProjectStatusUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(creativeProjectStatusUpdate)
+  }
+);}
+
+
+
+
+export const getUpdateCreativeProjectStatusMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCreativeProjectStatus>>, TError,{id: string;data: BodyType<CreativeProjectStatusUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCreativeProjectStatus>>, TError,{id: string;data: BodyType<CreativeProjectStatusUpdate>}, TContext> => {
+
+const mutationKey = ['updateCreativeProjectStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCreativeProjectStatus>>, {id: string;data: BodyType<CreativeProjectStatusUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateCreativeProjectStatus(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCreativeProjectStatusMutationResult = NonNullable<Awaited<ReturnType<typeof updateCreativeProjectStatus>>>
+    export type UpdateCreativeProjectStatusMutationBody = BodyType<CreativeProjectStatusUpdate>
+    export type UpdateCreativeProjectStatusMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update project status
+ */
+export const useUpdateCreativeProjectStatus = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCreativeProjectStatus>>, TError,{id: string;data: BodyType<CreativeProjectStatusUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCreativeProjectStatus>>,
+        TError,
+        {id: string;data: BodyType<CreativeProjectStatusUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateCreativeProjectStatusMutationOptions(options));
     }
 

@@ -1380,3 +1380,134 @@ export const DeleteSettingParams = zod.object({
 export const DeleteSettingResponse = zod.void()
 
 
+/**
+ * @summary Submit a creative brief and start the 4-agent AI workflow
+ */
+export const CreateCreativeBriefBody = zod.object({
+  "brandName": zod.string(),
+  "businessType": zod.string(),
+  "targetMarket": zod.string(),
+  "productOrService": zod.string(),
+  "stylePreference": zod.string().nullish(),
+  "goal": zod.string(),
+  "notes": zod.string().nullish()
+})
+
+export const CreateCreativeBriefResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.string().describe('UUID string — use this as the client-facing ID'),
+  "brandName": zod.string(),
+  "businessType": zod.string(),
+  "targetMarket": zod.string(),
+  "productOrService": zod.string(),
+  "stylePreference": zod.string().nullish(),
+  "goal": zod.string(),
+  "notes": zod.string().nullish(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed']),
+  "result": zod.object({
+
+}).passthrough().nullish().describe('Aggregated final output from all agents'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List all creative projects
+ */
+export const ListCreativeProjectsResponseItem = zod.object({
+  "id": zod.number(),
+  "projectId": zod.string().describe('UUID string — use this as the client-facing ID'),
+  "brandName": zod.string(),
+  "businessType": zod.string(),
+  "targetMarket": zod.string(),
+  "productOrService": zod.string(),
+  "stylePreference": zod.string().nullish(),
+  "goal": zod.string(),
+  "notes": zod.string().nullish(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed']),
+  "result": zod.object({
+
+}).passthrough().nullish().describe('Aggregated final output from all agents'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListCreativeProjectsResponse = zod.array(ListCreativeProjectsResponseItem)
+
+
+/**
+ * @summary Get a creative project with all step results
+ */
+export const GetCreativeProjectParams = zod.object({
+  "id": zod.coerce.string().describe('Project UUID (projectId field)')
+})
+
+export const GetCreativeProjectResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.string(),
+  "brandName": zod.string(),
+  "businessType": zod.string(),
+  "targetMarket": zod.string(),
+  "productOrService": zod.string(),
+  "stylePreference": zod.string().nullish(),
+  "goal": zod.string(),
+  "notes": zod.string().nullish(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed']),
+  "result": zod.object({
+
+}).passthrough().nullish(),
+  "steps": zod.array(zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "agentId": zod.number().nullish(),
+  "stepName": zod.string(),
+  "input": zod.object({
+
+}).passthrough().nullish(),
+  "output": zod.object({
+
+}).passthrough().nullish(),
+  "provider": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "tokenUsage": zod.number(),
+  "latencyMs": zod.number().nullish(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed']),
+  "errorMessage": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().optional()
+})),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update project status
+ */
+export const UpdateCreativeProjectStatusParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateCreativeProjectStatusBody = zod.object({
+  "status": zod.enum(['pending', 'running', 'completed', 'failed'])
+})
+
+export const UpdateCreativeProjectStatusResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.string().describe('UUID string — use this as the client-facing ID'),
+  "brandName": zod.string(),
+  "businessType": zod.string(),
+  "targetMarket": zod.string(),
+  "productOrService": zod.string(),
+  "stylePreference": zod.string().nullish(),
+  "goal": zod.string(),
+  "notes": zod.string().nullish(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed']),
+  "result": zod.object({
+
+}).passthrough().nullish().describe('Aggregated final output from all agents'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+

@@ -770,6 +770,150 @@ export interface AiSettingInput {
   isSecret?: boolean;
 }
 
+export interface CreativeBriefInput {
+  brandName: string;
+  businessType: string;
+  targetMarket: string;
+  productOrService: string;
+  /** @nullable */
+  stylePreference?: string | null;
+  goal: string;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export type CreativeProjectStatus = typeof CreativeProjectStatus[keyof typeof CreativeProjectStatus];
+
+
+export const CreativeProjectStatus = {
+  pending: 'pending',
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+/**
+ * Aggregated final output from all agents
+ * @nullable
+ */
+export type CreativeProjectResult = { [key: string]: unknown } | null;
+
+export interface CreativeProject {
+  id: number;
+  /** UUID string — use this as the client-facing ID */
+  projectId: string;
+  brandName: string;
+  businessType: string;
+  targetMarket: string;
+  productOrService: string;
+  /** @nullable */
+  stylePreference?: string | null;
+  goal: string;
+  /** @nullable */
+  notes?: string | null;
+  status: CreativeProjectStatus;
+  /**
+     * Aggregated final output from all agents
+     * @nullable
+     */
+  result?: CreativeProjectResult;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * @nullable
+ */
+export type CreativeProjectStepInput = { [key: string]: unknown } | null;
+
+/**
+ * @nullable
+ */
+export type CreativeProjectStepOutput = { [key: string]: unknown } | null;
+
+export type CreativeProjectStepStatus = typeof CreativeProjectStepStatus[keyof typeof CreativeProjectStepStatus];
+
+
+export const CreativeProjectStepStatus = {
+  pending: 'pending',
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export interface CreativeProjectStep {
+  id: number;
+  projectId: number;
+  /** @nullable */
+  agentId?: number | null;
+  stepName: string;
+  /** @nullable */
+  input?: CreativeProjectStepInput;
+  /** @nullable */
+  output?: CreativeProjectStepOutput;
+  /** @nullable */
+  provider?: string | null;
+  /** @nullable */
+  model?: string | null;
+  tokenUsage: number;
+  /** @nullable */
+  latencyMs?: number | null;
+  status: CreativeProjectStepStatus;
+  /** @nullable */
+  errorMessage?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type CreativeProjectDetailStatus = typeof CreativeProjectDetailStatus[keyof typeof CreativeProjectDetailStatus];
+
+
+export const CreativeProjectDetailStatus = {
+  pending: 'pending',
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+/**
+ * @nullable
+ */
+export type CreativeProjectDetailResult = { [key: string]: unknown } | null;
+
+export interface CreativeProjectDetail {
+  id: number;
+  projectId: string;
+  brandName: string;
+  businessType: string;
+  targetMarket: string;
+  productOrService: string;
+  /** @nullable */
+  stylePreference?: string | null;
+  goal: string;
+  /** @nullable */
+  notes?: string | null;
+  status: CreativeProjectDetailStatus;
+  /** @nullable */
+  result?: CreativeProjectDetailResult;
+  steps: CreativeProjectStep[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreativeProjectStatusUpdateStatus = typeof CreativeProjectStatusUpdateStatus[keyof typeof CreativeProjectStatusUpdateStatus];
+
+
+export const CreativeProjectStatusUpdateStatus = {
+  pending: 'pending',
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+} as const;
+
+export interface CreativeProjectStatusUpdate {
+  status: CreativeProjectStatusUpdateStatus;
+}
+
 export type ListModelsParams = {
 /**
  * @nullable

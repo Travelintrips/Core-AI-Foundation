@@ -29,6 +29,7 @@ tags:
   - name: settings
     description: AI Settings
   - name: agents
+  - name: creative-ai
     description: AI Agent Registry
 
 paths:
@@ -1113,6 +1114,87 @@ paths:
         "204":
           description: Deleted
 
+  # ─── CREATIVE AI ───────────────────────────────────────────────────────────
+
+  /creative-ai/brief:
+    post:
+      operationId: createCreativeBrief
+      tags: [creative-ai]
+      summary: Submit a creative brief and start the 4-agent AI workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreativeBriefInput"
+      responses:
+        "201":
+          description: Project created and workflow started in background
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreativeProject"
+
+  /creative-ai/projects:
+    get:
+      operationId: listCreativeProjects
+      tags: [creative-ai]
+      summary: List all creative projects
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CreativeProject"
+
+  /creative-ai/projects/{id}:
+    get:
+      operationId: getCreativeProject
+      tags: [creative-ai]
+      summary: Get a creative project with all step results
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project UUID (projectId field)
+      responses:
+        "200":
+          description: Project detail with steps
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreativeProjectDetail"
+
+  /creative-ai/projects/{id}/status:
+    patch:
+      operationId: updateCreativeProjectStatus
+      tags: [creative-ai]
+      summary: Update project status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreativeProjectStatusUpdate"
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreativeProject"
+
 components:
   schemas:
     HealthStatus:
@@ -2047,3 +2129,142 @@ components:
           type: string
         isSecret:
           type: boolean
+
+    # ── Creative AI ────────────────────────────────────────────────────────
+
+    CreativeBriefInput:
+      type: object
+      required: [brandName, businessType, targetMarket, productOrService, goal]
+      properties:
+        brandName:
+          type: string
+        businessType:
+          type: string
+        targetMarket:
+          type: string
+        productOrService:
+          type: string
+        stylePreference:
+          type: ["string", "null"]
+        goal:
+          type: string
+        notes:
+          type: ["string", "null"]
+
+    CreativeProject:
+      type: object
+      required: [id, projectId, brandName, businessType, targetMarket, productOrService, goal, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: string
+          description: UUID string — use this as the client-facing ID
+        brandName:
+          type: string
+        businessType:
+          type: string
+        targetMarket:
+          type: string
+        productOrService:
+          type: string
+        stylePreference:
+          type: ["string", "null"]
+        goal:
+          type: string
+        notes:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        result:
+          type: ["object", "null"]
+          description: Aggregated final output from all agents
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreativeProjectStep:
+      type: object
+      required: [id, projectId, stepName, status, tokenUsage, createdAt]
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        agentId:
+          type: ["integer", "null"]
+        stepName:
+          type: string
+        input:
+          type: ["object", "null"]
+        output:
+          type: ["object", "null"]
+        provider:
+          type: ["string", "null"]
+        model:
+          type: ["string", "null"]
+        tokenUsage:
+          type: integer
+        latencyMs:
+          type: ["integer", "null"]
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        errorMessage:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreativeProjectDetail:
+      type: object
+      required: [id, projectId, brandName, businessType, targetMarket, productOrService, goal, status, steps, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: string
+        brandName:
+          type: string
+        businessType:
+          type: string
+        targetMarket:
+          type: string
+        productOrService:
+          type: string
+        stylePreference:
+          type: ["string", "null"]
+        goal:
+          type: string
+        notes:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        result:
+          type: ["object", "null"]
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreativeProjectStep"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreativeProjectStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, running, completed, failed]

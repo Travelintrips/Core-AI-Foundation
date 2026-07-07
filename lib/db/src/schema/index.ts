@@ -12,3 +12,5 @@ export * from "./ai-audit-logs";
 export * from "./ai-settings";
 export * from "./ai-agents";
 export * from "./ai-agent-capabilities";
+export * from "./creative-projects";
+export * from "./creative-project-steps";

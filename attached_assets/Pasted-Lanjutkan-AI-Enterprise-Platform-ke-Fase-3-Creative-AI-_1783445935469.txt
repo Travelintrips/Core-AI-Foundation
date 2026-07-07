@@ -1,0 +1,111 @@
+Lanjutkan AI Enterprise Platform ke Fase 3: Creative AI MVP.
+
+Fondasi sudah ada:
+
+* Auth admin API key
+* Provider/model seed
+* Real AI orchestrator
+* aiModelRouter
+* aiExecutionService
+* aiAuditService
+* aiSecretService
+* Brand Strategist Agent
+
+Tolong buat Creative AI MVP tanpa merombak struktur yang sudah ada.
+
+Fitur yang harus dibuat:
+
+1. Tambahkan agent:
+
+* Creative Director Agent
+* Copywriter Agent
+* Quality Control Agent
+
+2. Setiap agent harus punya:
+
+* system_prompt
+* capabilities
+* default provider/model
+* status active
+* temperature sesuai peran
+* output_format JSON atau markdown yang konsisten
+
+3. Buat workflow baru:
+   Nama: Creative Brief Workflow
+
+Urutan:
+
+* Brand Strategist Agent
+* Creative Director Agent
+* Copywriter Agent
+* Quality Control Agent
+
+Input:
+
+* brand_name
+* business_type
+* target_market
+* product_or_service
+* style_preference
+* goal
+* notes
+
+Output:
+
+* brand positioning
+* target audience
+* USP
+* tone of voice
+* creative concept
+* color direction
+* typography direction
+* visual style
+* headline options
+* caption options
+* CTA options
+* QC checklist
+
+4. Buat service:
+
+* creativeAiService
+* creativeWorkflowRunner
+
+5. Buat API:
+
+* POST /api/creative-ai/brief
+* GET /api/creative-ai/projects
+* GET /api/creative-ai/projects/:id
+* PATCH /api/creative-ai/projects/:id/status
+
+6. Simpan hasil setiap step ke database:
+
+* project_id
+* agent_id
+* step_name
+* input
+* output
+* provider
+* model
+* token_usage
+* latency
+* status
+* error_message
+
+7. Tambahkan UI halaman:
+   Route: /creative-ai
+
+Fitur UI:
+
+* form input brief
+* tombol generate
+* loading per step
+* tampilan hasil per agent
+* metadata model/latency/token
+* tombol copy hasil
+* status project
+
+8. Semua API tetap menggunakan auth middleware yang sudah ada.
+9. Semua execution harus masuk audit log.
+10. Jika salah satu agent gagal, workflow tidak crash. Simpan status failed dan tampilkan error jelas di UI.
+
+Jangan membuat image generation dulu. Fokus hanya text-based Creative AI workflow agar MVP stabil.

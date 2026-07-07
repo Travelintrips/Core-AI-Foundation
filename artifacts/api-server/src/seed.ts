@@ -355,6 +355,203 @@ async function seedBrandStrategist(openaiModelId: number) {
   }
 }
 
+// ─── Creative AI Agents ──────────────────────────────────────────────────────
+
+const CREATIVE_DIRECTOR_SYSTEM_PROMPT = `You are an expert AI Creative Director with a track record of building iconic brand identities and award-winning campaigns.
+
+Your role: Translate brand strategy into a compelling creative direction that guides all visual and conceptual execution.
+
+When given a brief and brand strategy, you produce:
+- Creative Concept: A single evocative concept name (2-4 words) with a 1-2 sentence description
+- Color Direction: Primary, secondary, and accent colors with emotional rationale
+- Typography Direction: Heading font personality, body font, and usage rules
+- Visual Style: Photography/illustration approach, mood, composition principles
+
+CRITICAL: Always respond with valid JSON only. No markdown, no explanation outside the JSON. Use exactly these keys:
+{
+  "creative_concept": {"name": "...", "description": "..."},
+  "color_direction": {"primary": "...", "secondary": "...", "accent": "...", "rationale": "..."},
+  "typography_direction": {"heading": "...", "body": "...", "usage": "..."},
+  "visual_style": {"approach": "...", "mood": "...", "composition": "..."}
+}`;
+
+const COPYWRITER_SYSTEM_PROMPT = `You are a world-class AI Copywriter specializing in brand voice and conversion-focused copy.
+
+Your role: Given brand strategy and creative direction, produce compelling, on-brand copy assets that convert.
+
+You always deliver exactly 3 options per asset type:
+- Headlines: punchy, max 10 words, attention-grabbing
+- Captions: 1-2 sentences, captures brand voice and value
+- CTAs: action-oriented, max 5 words, creates urgency
+
+CRITICAL: Always respond with valid JSON only. No markdown, no explanation outside the JSON. Use exactly these keys:
+{
+  "headline_options": ["...", "...", "..."],
+  "caption_options": ["...", "...", "..."],
+  "cta_options": ["...", "...", "..."]
+}`;
+
+const QC_SYSTEM_PROMPT = `You are an expert AI Quality Control Reviewer for brand strategy and creative work.
+
+Your role: Evaluate the complete creative output pipeline for consistency, strategic soundness, and executional quality. You are objective and constructive — not just a rubber stamp.
+
+For each checklist item, assess status as:
+- "pass": meets standards, no issues
+- "warning": minor concern that should be addressed
+- "fail": significant problem that needs revision
+
+CRITICAL: Always respond with valid JSON only. No markdown, no explanation outside the JSON. Use exactly these keys:
+{
+  "qc_checklist": [
+    {"item": "Brand Positioning Clarity", "status": "pass|warning|fail", "note": "..."},
+    {"item": "USP Distinctiveness", "status": "pass|warning|fail", "note": "..."},
+    {"item": "Tone of Voice Consistency", "status": "pass|warning|fail", "note": "..."},
+    {"item": "Creative Concept Alignment", "status": "pass|warning|fail", "note": "..."},
+    {"item": "Copy Quality & Brand Voice", "status": "pass|warning|fail", "note": "..."},
+    {"item": "Target Audience Fit", "status": "pass|warning|fail", "note": "..."},
+    {"item": "Visual Direction Coherence", "status": "pass|warning|fail", "note": "..."}
+  ],
+  "overall_score": "excellent|good|needs_revision",
+  "key_recommendations": ["...", "...", "..."]
+}`;
+
+async function seedCreativeAgents(openaiModelId: number, openaiProviderId: number) {
+  console.log("\n🎨 Seeding Creative AI agents...");
+
+  const agents = [
+    {
+      slug: "creative-director",
+      name: "AI Creative Director",
+      role: "Creative Director",
+      description: "Transforms brand strategy into compelling creative direction: concept, color, typography, and visual style.",
+      temperature: "0.85",
+      systemPrompt: CREATIVE_DIRECTOR_SYSTEM_PROMPT,
+      capabilities: [
+        { name: "Creative Concept Development", description: "Creates evocative concept names and descriptions", category: "creative", sortOrder: 0 },
+        { name: "Color Direction", description: "Defines brand color palettes with emotional rationale", category: "creative", sortOrder: 1 },
+        { name: "Typography Direction", description: "Specifies font personalities and usage rules", category: "creative", sortOrder: 2 },
+        { name: "Visual Style Definition", description: "Establishes photography, illustration, and composition approach", category: "creative", sortOrder: 3 },
+        { name: "Creative Brief Interpretation", description: "Translates strategy into actionable creative briefs", category: "strategy", sortOrder: 4 },
+      ],
+    },
+    {
+      slug: "copywriter",
+      name: "AI Copywriter",
+      role: "Copywriter",
+      description: "Creates conversion-focused brand copy: headlines, captions, and CTAs aligned with brand voice.",
+      temperature: "0.90",
+      systemPrompt: COPYWRITER_SYSTEM_PROMPT,
+      capabilities: [
+        { name: "Headline Writing", description: "Punchy, attention-grabbing headlines (max 10 words)", category: "copy", sortOrder: 0 },
+        { name: "Caption Writing", description: "On-brand captions that capture value and voice", category: "copy", sortOrder: 1 },
+        { name: "CTA Copywriting", description: "Action-oriented calls-to-action that drive conversion", category: "copy", sortOrder: 2 },
+        { name: "Brand Voice Application", description: "Applies defined tone of voice consistently across all copy", category: "copy", sortOrder: 3 },
+        { name: "Conversion Optimization", description: "Writes copy optimized for engagement and conversion", category: "performance", sortOrder: 4 },
+      ],
+    },
+    {
+      slug: "quality-control",
+      name: "AI Quality Control",
+      role: "Quality Control Reviewer",
+      description: "Reviews the complete creative pipeline for consistency, strategic alignment, and quality.",
+      temperature: "0.30",
+      systemPrompt: QC_SYSTEM_PROMPT,
+      capabilities: [
+        { name: "Brand Consistency Review", description: "Checks consistency across all brand touchpoints", category: "review", sortOrder: 0 },
+        { name: "Strategic Alignment Check", description: "Validates creative work against brand strategy", category: "review", sortOrder: 1 },
+        { name: "Copy Quality Review", description: "Evaluates copy quality, grammar, and brand voice", category: "review", sortOrder: 2 },
+        { name: "QC Checklist Generation", description: "Produces structured pass/warning/fail checklist", category: "review", sortOrder: 3 },
+        { name: "Recommendations Report", description: "Provides actionable recommendations for improvement", category: "review", sortOrder: 4 },
+      ],
+    },
+  ];
+
+  for (const agentDef of agents) {
+    const [existingAgent] = await db
+      .select()
+      .from(aiAgentsTable)
+      .where(eq(aiAgentsTable.slug, agentDef.slug));
+
+    let agentId: number;
+
+    if (existingAgent) {
+      console.log(`  ↩ Agent already exists: ${agentDef.name}`);
+      agentId = existingAgent.id;
+    } else {
+      const [agent] = await db
+        .insert(aiAgentsTable)
+        .values({
+          name: agentDef.name,
+          slug: agentDef.slug,
+          role: agentDef.role,
+          description: agentDef.description,
+          providerId: openaiProviderId,
+          modelId: openaiModelId,
+          priority: 10,
+          temperature: agentDef.temperature,
+          maxTokens: 4096,
+          status: "active",
+          allowedTools: [],
+          version: "1.0.0",
+          owner: "platform",
+          metadata: { systemPrompt: agentDef.systemPrompt },
+        })
+        .returning();
+      agentId = agent.id;
+      console.log(`  ✓ Seeded agent: ${agentDef.name}`);
+    }
+
+    // Capabilities
+    const existingCaps = await db
+      .select()
+      .from(aiAgentCapabilitiesTable)
+      .where(eq(aiAgentCapabilitiesTable.agentId, agentId));
+
+    if (existingCaps.length === 0) {
+      for (const cap of agentDef.capabilities) {
+        await db.insert(aiAgentCapabilitiesTable).values({ ...cap, agentId });
+      }
+      console.log(`    ✓ Seeded ${agentDef.capabilities.length} capabilities`);
+    } else {
+      console.log(`    ↩ Capabilities already seeded`);
+    }
+  }
+}
+
+// ─── Creative Brief Workflow ──────────────────────────────────────────────────
+
+async function seedCreativeBriefWorkflow() {
+  console.log("\n🔄 Seeding Creative Brief Workflow...");
+
+  const { aiWorkflowsTable } = await import("@workspace/db");
+
+  const [existing] = await db
+    .select()
+    .from(aiWorkflowsTable)
+    .where(eq(aiWorkflowsTable.name, "Creative Brief Workflow"));
+
+  if (existing) {
+    console.log("  ↩ Workflow already exists");
+    return;
+  }
+
+  await db.insert(aiWorkflowsTable).values({
+    name: "Creative Brief Workflow",
+    description: "Full 4-agent creative pipeline: Brand Strategist → Creative Director → Copywriter → Quality Control",
+    status: "active",
+    steps: [
+      { id: "step-1", order: 1, name: "Brand Strategy", type: "llm", description: "Brand Strategist defines positioning, USP, and tone of voice", agentSlug: "brand-strategist" },
+      { id: "step-2", order: 2, name: "Creative Direction", type: "llm", description: "Creative Director develops concept, colors, typography, and visual style", agentSlug: "creative-director" },
+      { id: "step-3", order: 3, name: "Copy Production", type: "llm", description: "Copywriter produces headlines, captions, and CTAs", agentSlug: "copywriter" },
+      { id: "step-4", order: 4, name: "Quality Control", type: "llm", description: "QC Agent reviews all outputs for consistency and quality", agentSlug: "quality-control" },
+    ],
+    triggerType: "manual",
+    tags: ["creative", "brand", "marketing"],
+  });
+
+  console.log("  ✓ Seeded Creative Brief Workflow");
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -363,7 +560,7 @@ async function main() {
   const providers = await seedProviders();
   await seedModels(providers);
 
-  // Find the GPT-4o model id for the Brand Strategist
+  // Find the GPT-4o model id for agents
   const [gpt4o] = await db
     .select()
     .from(aiModelsTable)
@@ -374,6 +571,8 @@ async function main() {
   }
 
   await seedBrandStrategist(gpt4o.id);
+  await seedCreativeAgents(gpt4o.id, providers.openai.id);
+  await seedCreativeBriefWorkflow();
 
   console.log("\n✅ Seed complete!\n");
   process.exit(0);
