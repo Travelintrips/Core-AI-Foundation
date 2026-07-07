@@ -1,37 +1,5 @@
 # AI Platform Enterprise
 
-A full-stack AI management platform with a React dashboard frontend and Express API backend, connected to a PostgreSQL database.
-
-## Stack
-
-- **Frontend**: React + Vite + TypeScript, Tailwind CSS, shadcn/ui components (`artifacts/ai-platform`)
-- **Backend**: Express 5 + TypeScript, built with esbuild (`artifacts/api-server`)
-- **Database**: PostgreSQL via Drizzle ORM (`lib/db`)
-- **API Contract**: OpenAPI spec + Zod schemas + generated React Query client (`lib/api-spec`, `lib/api-zod`, `lib/api-client-react`)
-- **Package manager**: pnpm workspace
-
-## How to run
-
-Both services start automatically via their configured workflows:
-
-- **Frontend** (`artifacts/ai-platform: web`): `PORT=20785 BASE_PATH=/ pnpm --filter @workspace/ai-platform run dev`
-- **API Server** (`artifacts/api-server: API Server`): `PORT=8080 pnpm --filter @workspace/api-server run dev`
-
-The API server builds with esbuild then starts from `dist/index.mjs`. The frontend is a Vite dev server.
-
-## Database
-
-Uses Replit's built-in PostgreSQL. Schema is managed with Drizzle Kit.
-
-To push schema changes to the database:
-```
-pnpm --filter @workspace/db exec drizzle-kit push
-```
-
-## Environment variables
-
-- `DATABASE_URL` — PostgreSQL connection string (auto-provided by Replit)
-- `SESSION_SECRET` — Secret for session signing
 An enterprise-grade control plane for managing AI infrastructure — providers, models, workflows, prompts, knowledge, memory, tokens, and executions. Built contract-first with a database-driven architecture.
 
 ## Stack
@@ -78,6 +46,7 @@ pnpm run build
 artifacts/
   api-server/      # Express backend
   ai-platform/     # React frontend
+  mockup-sandbox/  # Component preview (canvas/design tool)
 lib/
   api-spec/        # OpenAPI definition (source of truth)
   api-client-react/ # Generated React Query hooks
@@ -86,10 +55,17 @@ lib/
 scripts/           # Dev automation scripts
 ```
 
+## Environment variables
+
+- `DATABASE_URL` — PostgreSQL connection string (auto-provided by Replit)
+- `SESSION_SECRET` — Secret for session signing (set as Replit Secret)
+- `ADMIN_API_KEY` — Admin API authentication key (optional; omitting fails-open in dev)
+- `VITE_ADMIN_API_KEY` — Same value as ADMIN_API_KEY, exposed to frontend (see security note below)
+
 ## Notes
 
 - AI execution (orchestrator/workflows) and analytics are currently simulated — no external AI API keys required
-- `SESSION_SECRET` env var is pre-configured
 - pnpm-workspace.yaml enforces a 1-day `minimumReleaseAge` for npm packages (supply-chain safety)
+- **Security note:** `VITE_ADMIN_API_KEY` embeds the admin credential in the browser bundle — this is a known issue to address before production deployment
 
 ## User preferences
