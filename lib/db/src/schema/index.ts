@@ -14,3 +14,7 @@ export * from "./ai-agents";
 export * from "./ai-agent-capabilities";
 export * from "./creative-projects";
 export * from "./creative-project-steps";
+export * from "./ai-capabilities";
+export * from "./ai-client-memory";
+export * from "./ai-cost-records";
+export * from "./ai-feedback";

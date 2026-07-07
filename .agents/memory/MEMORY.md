@@ -4,3 +4,4 @@
 - [ai-platform-auth-design](ai-platform-auth-design.md) — ADMIN_API_KEY (backend secret) + VITE_ADMIN_API_KEY (same value, Replit Secret); frontend uses setAuthTokenGetter from @workspace/api-client-react; middleware in adminAuth.ts
 - [ai-platform-services-arch](ai-platform-services-arch.md) — Modular services in artifacts/api-server/src/services/; agentId from API schema is string|null but DB column is number — always parseInt(agentId,10) before querying
 - [ai-platform-seed](ai-platform-seed.md) — Seed script at artifacts/api-server/src/seed.ts, run via pnpm seed; seeds 4 providers, 9 models, Brand Strategist agent; idempotent
+- [phase4-services](phase4-services.md) — Phase 4 tables (ai_capabilities, ai_client_memory, ai_cost_records, ai_feedback), services (memoryService, intelligentRouter, costService), and routes added

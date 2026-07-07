@@ -11,6 +11,9 @@ import auditRouter from "./audit";
 import analyticsRouter from "./analytics";
 import settingsRouter from "./settings";
 import creativeAiRouter from "./creative-ai";
+import capabilitiesRouter from "./capabilities";
+import feedbackRouter from "./feedback";
+import clientMemoryRouter from "./client-memory";
 
 const router: IRouter = Router();
 
@@ -26,5 +29,8 @@ router.use(auditRouter);
 router.use(analyticsRouter);
 router.use(settingsRouter);
 router.use(creativeAiRouter);
+router.use(capabilitiesRouter);
+router.use(feedbackRouter);
+router.use(clientMemoryRouter);
 
 export default router;

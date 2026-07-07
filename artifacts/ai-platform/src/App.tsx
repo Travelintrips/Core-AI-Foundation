@@ -7,6 +7,7 @@ import { Layout } from "@/components/layout";
 import NotFound from "@/pages/not-found";
 
 import Dashboard from "@/pages/dashboard";
+import Analytics from "@/pages/analytics";
 import Registry from "@/pages/registry";
 import Agents from "@/pages/agents";
 import Orchestrator from "@/pages/orchestrator";
@@ -26,6 +27,7 @@ function Router() {
     <Layout>
       <Switch>
         <Route path="/" component={Dashboard} />
+        <Route path="/analytics" component={Analytics} />
         <Route path="/registry" component={Registry} />
         <Route path="/agents" component={Agents} />
         <Route path="/orchestrator" component={Orchestrator} />

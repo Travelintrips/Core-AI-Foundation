@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { 
   Activity, 
+  BarChart2,
   Box, 
   Cpu, 
   Database, 
@@ -22,6 +23,7 @@ interface LayoutProps {
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/analytics", label: "Analytics", icon: BarChart2 },
   { href: "/registry", label: "Registry", icon: Box },
   { href: "/agents", label: "Agents", icon: Users },
   { href: "/orchestrator", label: "Orchestrator", icon: Play },

@@ -30,7 +30,13 @@ tags:
     description: AI Settings
   - name: agents
   - name: creative-ai
-    description: AI Agent Registry
+    description: Creative AI Workflow Engine
+  - name: capabilities
+    description: AI Capability Matrix
+  - name: client-memory
+    description: Client Long-Term Memory
+  - name: feedback
+    description: Human Feedback Loop
 
 paths:
   /healthz:
@@ -1195,6 +1201,270 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreativeProject"
 
+  # ─── CAPABILITIES ────────────────────────────────────────────────────────────
+
+  /capabilities:
+    get:
+      operationId: listCapabilities
+      tags: [capabilities]
+      summary: List all capability matrix entries
+      responses:
+        "200":
+          description: List of capabilities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiCapability"
+    post:
+      operationId: createCapability
+      tags: [capabilities]
+      summary: Create a new capability entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiCapabilityInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiCapability"
+
+  /capabilities/skill/{skill}:
+    get:
+      operationId: listCapabilitiesForSkill
+      tags: [capabilities]
+      summary: List capabilities for a specific skill
+      parameters:
+        - in: path
+          name: skill
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Capabilities for skill
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiCapability"
+
+  /capabilities/{id}:
+    get:
+      operationId: getCapability
+      tags: [capabilities]
+      summary: Get a single capability entry
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Capability entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiCapability"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateCapability
+      tags: [capabilities]
+      summary: Update a capability entry
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiCapabilityUpdate"
+      responses:
+        "200":
+          description: Updated capability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiCapability"
+    delete:
+      operationId: deleteCapability
+      tags: [capabilities]
+      summary: Delete a capability entry
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── CLIENT MEMORY ────────────────────────────────────────────────────────────
+
+  /client-memory/{clientId}:
+    get:
+      operationId: getClientMemory
+      tags: [client-memory]
+      summary: Get all memory entries for a client
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Client memory entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientMemoryResponse"
+    post:
+      operationId: upsertClientMemory
+      tags: [client-memory]
+      summary: Upsert a key-value memory entry for a client
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientMemoryInput"
+      responses:
+        "200":
+          description: Updated client memory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientMemoryResponse"
+
+  /client-memory/{clientId}/{key}:
+    delete:
+      operationId: deleteClientMemoryKey
+      tags: [client-memory]
+      summary: Delete a specific memory key for a client
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: key
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── FEEDBACK ────────────────────────────────────────────────────────────────
+
+  /creative-ai/projects/{id}/feedback:
+    get:
+      operationId: listProjectFeedback
+      tags: [feedback]
+      summary: List all human feedback for a creative project
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of feedback entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeedbackEntry"
+    post:
+      operationId: submitProjectFeedback
+      tags: [feedback]
+      summary: Submit human feedback on a creative project step
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedbackInput"
+      responses:
+        "201":
+          description: Feedback recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackEntry"
+
+  # ─── ANALYTICS (Phase 4) ────────────────────────────────────────────────────
+
+  /ai/analytics/agent-stats:
+    get:
+      operationId: getAgentStats
+      tags: [analytics]
+      summary: Agent performance statistics
+      parameters:
+        - in: query
+          name: days
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: Agent performance stats
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentStats"
+
+  /ai/analytics/costs:
+    get:
+      operationId: getCostAnalytics
+      tags: [analytics]
+      summary: Cost analytics — daily trend, by provider, by agent
+      parameters:
+        - in: query
+          name: days
+          schema:
+            type: integer
+            default: 14
+      responses:
+        "200":
+          description: Cost analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CostAnalyticsResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -2268,3 +2538,319 @@ components:
         status:
           type: string
           enum: [pending, running, completed, failed]
+
+    # ─── Phase 4: Capabilities ──────────────────────────────────────────────────
+
+    AiCapability:
+      type: object
+      required: [id, skill, status, priority, supportsImage, supportsJson, supportsTool, supportsStream, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        providerId:
+          type: ["integer", "null"]
+        modelId:
+          type: ["integer", "null"]
+        agentSlug:
+          type: ["string", "null"]
+        skill:
+          type: string
+        accuracyScore:
+          type: ["number", "null"]
+        speedScore:
+          type: ["number", "null"]
+        costScore:
+          type: ["number", "null"]
+        maxContext:
+          type: ["integer", "null"]
+        supportsImage:
+          type: boolean
+        supportsJson:
+          type: boolean
+        supportsTool:
+          type: boolean
+        supportsStream:
+          type: boolean
+        priority:
+          type: integer
+        status:
+          type: string
+          enum: [active, inactive]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AiCapabilityInput:
+      type: object
+      required: [skill]
+      properties:
+        providerId:
+          type: ["integer", "null"]
+        modelId:
+          type: ["integer", "null"]
+        agentSlug:
+          type: ["string", "null"]
+        skill:
+          type: string
+        accuracyScore:
+          type: ["number", "null"]
+        speedScore:
+          type: ["number", "null"]
+        costScore:
+          type: ["number", "null"]
+        maxContext:
+          type: ["integer", "null"]
+        supportsImage:
+          type: boolean
+        supportsJson:
+          type: boolean
+        supportsTool:
+          type: boolean
+        supportsStream:
+          type: boolean
+        priority:
+          type: integer
+        status:
+          type: string
+          enum: [active, inactive]
+        notes:
+          type: ["string", "null"]
+
+    AiCapabilityUpdate:
+      type: object
+      properties:
+        providerId:
+          type: ["integer", "null"]
+        modelId:
+          type: ["integer", "null"]
+        agentSlug:
+          type: ["string", "null"]
+        skill:
+          type: string
+        accuracyScore:
+          type: ["number", "null"]
+        speedScore:
+          type: ["number", "null"]
+        costScore:
+          type: ["number", "null"]
+        maxContext:
+          type: ["integer", "null"]
+        supportsImage:
+          type: boolean
+        supportsJson:
+          type: boolean
+        supportsTool:
+          type: boolean
+        supportsStream:
+          type: boolean
+        priority:
+          type: integer
+        status:
+          type: string
+          enum: [active, inactive]
+        notes:
+          type: ["string", "null"]
+
+    # ─── Phase 4: Client Memory ─────────────────────────────────────────────────
+
+    ClientMemoryEntry:
+      type: object
+      required: [key, value, valueType, source]
+      properties:
+        key:
+          type: string
+        value:
+          type: string
+        valueType:
+          type: string
+          enum: [string, json, array, number]
+        category:
+          type: ["string", "null"]
+        source:
+          type: string
+          enum: [manual, inferred, approved_project]
+        confidence:
+          type: ["number", "null"]
+
+    ClientMemoryInput:
+      type: object
+      required: [key, value]
+      properties:
+        key:
+          type: string
+        value:
+          type: string
+        valueType:
+          type: string
+          enum: [string, json, array, number]
+        category:
+          type: ["string", "null"]
+        source:
+          type: string
+          enum: [manual, inferred, approved_project]
+        confidence:
+          type: ["number", "null"]
+
+    ClientMemoryResponse:
+      type: object
+      required: [clientId, entries]
+      properties:
+        clientId:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientMemoryEntry"
+
+    # ─── Phase 4: Feedback ──────────────────────────────────────────────────────
+
+    FeedbackEntry:
+      type: object
+      required: [id, projectId, action, reviewer, createdAt]
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: string
+        stepId:
+          type: ["integer", "null"]
+        stepName:
+          type: ["string", "null"]
+        action:
+          type: string
+          enum: [approve, reject, needs_revision, human_edit]
+        rating:
+          type: ["integer", "null"]
+        feedbackText:
+          type: ["string", "null"]
+        originalOutput:
+          type: ["object", "null"]
+        editedOutput:
+          type: ["object", "null"]
+        diff:
+          type: ["string", "null"]
+        reviewer:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    FeedbackInput:
+      type: object
+      required: [action]
+      properties:
+        stepId:
+          type: ["integer", "null"]
+        stepName:
+          type: ["string", "null"]
+        action:
+          type: string
+          enum: [approve, reject, needs_revision, human_edit]
+        rating:
+          type: ["integer", "null"]
+        feedbackText:
+          type: ["string", "null"]
+        originalOutput:
+          type: ["object", "null"]
+        editedOutput:
+          type: ["object", "null"]
+        diff:
+          type: ["string", "null"]
+        reviewer:
+          type: string
+
+    # ─── Phase 4: Analytics ─────────────────────────────────────────────────────
+
+    AgentStats:
+      type: object
+      required: [agentSlug, agentName, totalRequests, totalTokens, totalEstimatedCostUsd, successRate]
+      properties:
+        agentSlug:
+          type: string
+        agentName:
+          type: string
+        totalRequests:
+          type: integer
+        totalTokens:
+          type: integer
+        totalEstimatedCostUsd:
+          type: number
+        avgLatencyMs:
+          type: ["number", "null"]
+        successRate:
+          type: number
+        approvalRate:
+          type: ["number", "null"]
+        revisionRate:
+          type: ["number", "null"]
+        avgRating:
+          type: ["number", "null"]
+
+    DailyCostPoint:
+      type: object
+      required: [date, totalRequests, totalTokens, totalEstimatedCostUsd]
+      properties:
+        date:
+          type: string
+        totalRequests:
+          type: integer
+        totalTokens:
+          type: integer
+        totalEstimatedCostUsd:
+          type: number
+        avgLatencyMs:
+          type: ["number", "null"]
+
+    ProviderCostStats:
+      type: object
+      required: [provider, totalRequests, totalTokens, totalEstimatedCostUsd]
+      properties:
+        provider:
+          type: string
+        totalRequests:
+          type: integer
+        totalTokens:
+          type: integer
+        totalEstimatedCostUsd:
+          type: number
+        avgLatencyMs:
+          type: ["number", "null"]
+
+    AgentCostStats:
+      type: object
+      required: [agentSlug, totalRequests, totalTokens, totalEstimatedCostUsd, successRate]
+      properties:
+        agentSlug:
+          type: string
+        totalRequests:
+          type: integer
+        totalTokens:
+          type: integer
+        totalEstimatedCostUsd:
+          type: number
+        avgLatencyMs:
+          type: ["number", "null"]
+        successRate:
+          type: number
+
+    CostAnalyticsResponse:
+      type: object
+      required: [daily, byProvider, byAgent]
+      properties:
+        daily:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyCostPoint"
+        byProvider:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderCostStats"
+        byAgent:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentCostStats"

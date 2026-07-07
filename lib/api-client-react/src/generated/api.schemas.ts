@@ -914,6 +914,308 @@ export interface CreativeProjectStatusUpdate {
   status: CreativeProjectStatusUpdateStatus;
 }
 
+export type AiCapabilityStatus = typeof AiCapabilityStatus[keyof typeof AiCapabilityStatus];
+
+
+export const AiCapabilityStatus = {
+  active: 'active',
+  inactive: 'inactive',
+} as const;
+
+export interface AiCapability {
+  id: number;
+  /** @nullable */
+  providerId?: number | null;
+  /** @nullable */
+  modelId?: number | null;
+  /** @nullable */
+  agentSlug?: string | null;
+  skill: string;
+  /** @nullable */
+  accuracyScore?: number | null;
+  /** @nullable */
+  speedScore?: number | null;
+  /** @nullable */
+  costScore?: number | null;
+  /** @nullable */
+  maxContext?: number | null;
+  supportsImage: boolean;
+  supportsJson: boolean;
+  supportsTool: boolean;
+  supportsStream: boolean;
+  priority: number;
+  status: AiCapabilityStatus;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AiCapabilityInputStatus = typeof AiCapabilityInputStatus[keyof typeof AiCapabilityInputStatus];
+
+
+export const AiCapabilityInputStatus = {
+  active: 'active',
+  inactive: 'inactive',
+} as const;
+
+export interface AiCapabilityInput {
+  /** @nullable */
+  providerId?: number | null;
+  /** @nullable */
+  modelId?: number | null;
+  /** @nullable */
+  agentSlug?: string | null;
+  skill: string;
+  /** @nullable */
+  accuracyScore?: number | null;
+  /** @nullable */
+  speedScore?: number | null;
+  /** @nullable */
+  costScore?: number | null;
+  /** @nullable */
+  maxContext?: number | null;
+  supportsImage?: boolean;
+  supportsJson?: boolean;
+  supportsTool?: boolean;
+  supportsStream?: boolean;
+  priority?: number;
+  status?: AiCapabilityInputStatus;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export type AiCapabilityUpdateStatus = typeof AiCapabilityUpdateStatus[keyof typeof AiCapabilityUpdateStatus];
+
+
+export const AiCapabilityUpdateStatus = {
+  active: 'active',
+  inactive: 'inactive',
+} as const;
+
+export interface AiCapabilityUpdate {
+  /** @nullable */
+  providerId?: number | null;
+  /** @nullable */
+  modelId?: number | null;
+  /** @nullable */
+  agentSlug?: string | null;
+  skill?: string;
+  /** @nullable */
+  accuracyScore?: number | null;
+  /** @nullable */
+  speedScore?: number | null;
+  /** @nullable */
+  costScore?: number | null;
+  /** @nullable */
+  maxContext?: number | null;
+  supportsImage?: boolean;
+  supportsJson?: boolean;
+  supportsTool?: boolean;
+  supportsStream?: boolean;
+  priority?: number;
+  status?: AiCapabilityUpdateStatus;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export type ClientMemoryEntryValueType = typeof ClientMemoryEntryValueType[keyof typeof ClientMemoryEntryValueType];
+
+
+export const ClientMemoryEntryValueType = {
+  string: 'string',
+  json: 'json',
+  array: 'array',
+  number: 'number',
+} as const;
+
+export type ClientMemoryEntrySource = typeof ClientMemoryEntrySource[keyof typeof ClientMemoryEntrySource];
+
+
+export const ClientMemoryEntrySource = {
+  manual: 'manual',
+  inferred: 'inferred',
+  approved_project: 'approved_project',
+} as const;
+
+export interface ClientMemoryEntry {
+  key: string;
+  value: string;
+  valueType: ClientMemoryEntryValueType;
+  /** @nullable */
+  category?: string | null;
+  source: ClientMemoryEntrySource;
+  /** @nullable */
+  confidence?: number | null;
+}
+
+export type ClientMemoryInputValueType = typeof ClientMemoryInputValueType[keyof typeof ClientMemoryInputValueType];
+
+
+export const ClientMemoryInputValueType = {
+  string: 'string',
+  json: 'json',
+  array: 'array',
+  number: 'number',
+} as const;
+
+export type ClientMemoryInputSource = typeof ClientMemoryInputSource[keyof typeof ClientMemoryInputSource];
+
+
+export const ClientMemoryInputSource = {
+  manual: 'manual',
+  inferred: 'inferred',
+  approved_project: 'approved_project',
+} as const;
+
+export interface ClientMemoryInput {
+  key: string;
+  value: string;
+  valueType?: ClientMemoryInputValueType;
+  /** @nullable */
+  category?: string | null;
+  source?: ClientMemoryInputSource;
+  /** @nullable */
+  confidence?: number | null;
+}
+
+export interface ClientMemoryResponse {
+  clientId: string;
+  entries: ClientMemoryEntry[];
+}
+
+export type FeedbackEntryAction = typeof FeedbackEntryAction[keyof typeof FeedbackEntryAction];
+
+
+export const FeedbackEntryAction = {
+  approve: 'approve',
+  reject: 'reject',
+  needs_revision: 'needs_revision',
+  human_edit: 'human_edit',
+} as const;
+
+/**
+ * @nullable
+ */
+export type FeedbackEntryOriginalOutput = { [key: string]: unknown } | null;
+
+/**
+ * @nullable
+ */
+export type FeedbackEntryEditedOutput = { [key: string]: unknown } | null;
+
+export interface FeedbackEntry {
+  id: number;
+  projectId: string;
+  /** @nullable */
+  stepId?: number | null;
+  /** @nullable */
+  stepName?: string | null;
+  action: FeedbackEntryAction;
+  /** @nullable */
+  rating?: number | null;
+  /** @nullable */
+  feedbackText?: string | null;
+  /** @nullable */
+  originalOutput?: FeedbackEntryOriginalOutput;
+  /** @nullable */
+  editedOutput?: FeedbackEntryEditedOutput;
+  /** @nullable */
+  diff?: string | null;
+  reviewer: string;
+  createdAt: string;
+}
+
+export type FeedbackInputAction = typeof FeedbackInputAction[keyof typeof FeedbackInputAction];
+
+
+export const FeedbackInputAction = {
+  approve: 'approve',
+  reject: 'reject',
+  needs_revision: 'needs_revision',
+  human_edit: 'human_edit',
+} as const;
+
+/**
+ * @nullable
+ */
+export type FeedbackInputOriginalOutput = { [key: string]: unknown } | null;
+
+/**
+ * @nullable
+ */
+export type FeedbackInputEditedOutput = { [key: string]: unknown } | null;
+
+export interface FeedbackInput {
+  /** @nullable */
+  stepId?: number | null;
+  /** @nullable */
+  stepName?: string | null;
+  action: FeedbackInputAction;
+  /** @nullable */
+  rating?: number | null;
+  /** @nullable */
+  feedbackText?: string | null;
+  /** @nullable */
+  originalOutput?: FeedbackInputOriginalOutput;
+  /** @nullable */
+  editedOutput?: FeedbackInputEditedOutput;
+  /** @nullable */
+  diff?: string | null;
+  reviewer?: string;
+}
+
+export interface AgentStats {
+  agentSlug: string;
+  agentName: string;
+  totalRequests: number;
+  totalTokens: number;
+  totalEstimatedCostUsd: number;
+  /** @nullable */
+  avgLatencyMs?: number | null;
+  successRate: number;
+  /** @nullable */
+  approvalRate?: number | null;
+  /** @nullable */
+  revisionRate?: number | null;
+  /** @nullable */
+  avgRating?: number | null;
+}
+
+export interface DailyCostPoint {
+  date: string;
+  totalRequests: number;
+  totalTokens: number;
+  totalEstimatedCostUsd: number;
+  /** @nullable */
+  avgLatencyMs?: number | null;
+}
+
+export interface ProviderCostStats {
+  provider: string;
+  totalRequests: number;
+  totalTokens: number;
+  totalEstimatedCostUsd: number;
+  /** @nullable */
+  avgLatencyMs?: number | null;
+}
+
+export interface AgentCostStats {
+  agentSlug: string;
+  totalRequests: number;
+  totalTokens: number;
+  totalEstimatedCostUsd: number;
+  /** @nullable */
+  avgLatencyMs?: number | null;
+  successRate: number;
+}
+
+export interface CostAnalyticsResponse {
+  daily: DailyCostPoint[];
+  byProvider: ProviderCostStats[];
+  byAgent: AgentCostStats[];
+}
+
 export type ListModelsParams = {
 /**
  * @nullable
@@ -974,5 +1276,13 @@ export type GetAnalyticsUsageParams = {
  * @nullable
  */
 days?: number | null;
+};
+
+export type GetAgentStatsParams = {
+days?: number;
+};
+
+export type GetCostAnalyticsParams = {
+days?: number;
 };
 

@@ -1511,3 +1511,378 @@ export const UpdateCreativeProjectStatusResponse = zod.object({
 })
 
 
+/**
+ * @summary List all capability matrix entries
+ */
+export const ListCapabilitiesResponseItem = zod.object({
+  "id": zod.number(),
+  "providerId": zod.number().nullish(),
+  "modelId": zod.number().nullish(),
+  "agentSlug": zod.string().nullish(),
+  "skill": zod.string(),
+  "accuracyScore": zod.number().nullish(),
+  "speedScore": zod.number().nullish(),
+  "costScore": zod.number().nullish(),
+  "maxContext": zod.number().nullish(),
+  "supportsImage": zod.boolean(),
+  "supportsJson": zod.boolean(),
+  "supportsTool": zod.boolean(),
+  "supportsStream": zod.boolean(),
+  "priority": zod.number(),
+  "status": zod.enum(['active', 'inactive']),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListCapabilitiesResponse = zod.array(ListCapabilitiesResponseItem)
+
+
+/**
+ * @summary Create a new capability entry
+ */
+export const CreateCapabilityBody = zod.object({
+  "providerId": zod.number().nullish(),
+  "modelId": zod.number().nullish(),
+  "agentSlug": zod.string().nullish(),
+  "skill": zod.string(),
+  "accuracyScore": zod.number().nullish(),
+  "speedScore": zod.number().nullish(),
+  "costScore": zod.number().nullish(),
+  "maxContext": zod.number().nullish(),
+  "supportsImage": zod.boolean().optional(),
+  "supportsJson": zod.boolean().optional(),
+  "supportsTool": zod.boolean().optional(),
+  "supportsStream": zod.boolean().optional(),
+  "priority": zod.number().optional(),
+  "status": zod.enum(['active', 'inactive']).optional(),
+  "notes": zod.string().nullish()
+})
+
+export const CreateCapabilityResponse = zod.object({
+  "id": zod.number(),
+  "providerId": zod.number().nullish(),
+  "modelId": zod.number().nullish(),
+  "agentSlug": zod.string().nullish(),
+  "skill": zod.string(),
+  "accuracyScore": zod.number().nullish(),
+  "speedScore": zod.number().nullish(),
+  "costScore": zod.number().nullish(),
+  "maxContext": zod.number().nullish(),
+  "supportsImage": zod.boolean(),
+  "supportsJson": zod.boolean(),
+  "supportsTool": zod.boolean(),
+  "supportsStream": zod.boolean(),
+  "priority": zod.number(),
+  "status": zod.enum(['active', 'inactive']),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List capabilities for a specific skill
+ */
+export const ListCapabilitiesForSkillParams = zod.object({
+  "skill": zod.coerce.string()
+})
+
+export const ListCapabilitiesForSkillResponseItem = zod.object({
+  "id": zod.number(),
+  "providerId": zod.number().nullish(),
+  "modelId": zod.number().nullish(),
+  "agentSlug": zod.string().nullish(),
+  "skill": zod.string(),
+  "accuracyScore": zod.number().nullish(),
+  "speedScore": zod.number().nullish(),
+  "costScore": zod.number().nullish(),
+  "maxContext": zod.number().nullish(),
+  "supportsImage": zod.boolean(),
+  "supportsJson": zod.boolean(),
+  "supportsTool": zod.boolean(),
+  "supportsStream": zod.boolean(),
+  "priority": zod.number(),
+  "status": zod.enum(['active', 'inactive']),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListCapabilitiesForSkillResponse = zod.array(ListCapabilitiesForSkillResponseItem)
+
+
+/**
+ * @summary Get a single capability entry
+ */
+export const GetCapabilityParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCapabilityResponse = zod.object({
+  "id": zod.number(),
+  "providerId": zod.number().nullish(),
+  "modelId": zod.number().nullish(),
+  "agentSlug": zod.string().nullish(),
+  "skill": zod.string(),
+  "accuracyScore": zod.number().nullish(),
+  "speedScore": zod.number().nullish(),
+  "costScore": zod.number().nullish(),
+  "maxContext": zod.number().nullish(),
+  "supportsImage": zod.boolean(),
+  "supportsJson": zod.boolean(),
+  "supportsTool": zod.boolean(),
+  "supportsStream": zod.boolean(),
+  "priority": zod.number(),
+  "status": zod.enum(['active', 'inactive']),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a capability entry
+ */
+export const UpdateCapabilityParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateCapabilityBody = zod.object({
+  "providerId": zod.number().nullish(),
+  "modelId": zod.number().nullish(),
+  "agentSlug": zod.string().nullish(),
+  "skill": zod.string().optional(),
+  "accuracyScore": zod.number().nullish(),
+  "speedScore": zod.number().nullish(),
+  "costScore": zod.number().nullish(),
+  "maxContext": zod.number().nullish(),
+  "supportsImage": zod.boolean().optional(),
+  "supportsJson": zod.boolean().optional(),
+  "supportsTool": zod.boolean().optional(),
+  "supportsStream": zod.boolean().optional(),
+  "priority": zod.number().optional(),
+  "status": zod.enum(['active', 'inactive']).optional(),
+  "notes": zod.string().nullish()
+})
+
+export const UpdateCapabilityResponse = zod.object({
+  "id": zod.number(),
+  "providerId": zod.number().nullish(),
+  "modelId": zod.number().nullish(),
+  "agentSlug": zod.string().nullish(),
+  "skill": zod.string(),
+  "accuracyScore": zod.number().nullish(),
+  "speedScore": zod.number().nullish(),
+  "costScore": zod.number().nullish(),
+  "maxContext": zod.number().nullish(),
+  "supportsImage": zod.boolean(),
+  "supportsJson": zod.boolean(),
+  "supportsTool": zod.boolean(),
+  "supportsStream": zod.boolean(),
+  "priority": zod.number(),
+  "status": zod.enum(['active', 'inactive']),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a capability entry
+ */
+export const DeleteCapabilityParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteCapabilityResponse = zod.void()
+
+
+/**
+ * @summary Get all memory entries for a client
+ */
+export const GetClientMemoryParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const GetClientMemoryResponse = zod.object({
+  "clientId": zod.string(),
+  "entries": zod.array(zod.object({
+  "key": zod.string(),
+  "value": zod.string(),
+  "valueType": zod.enum(['string', 'json', 'array', 'number']),
+  "category": zod.string().nullish(),
+  "source": zod.enum(['manual', 'inferred', 'approved_project']),
+  "confidence": zod.number().nullish()
+}))
+})
+
+
+/**
+ * @summary Upsert a key-value memory entry for a client
+ */
+export const UpsertClientMemoryParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const UpsertClientMemoryBody = zod.object({
+  "key": zod.string(),
+  "value": zod.string(),
+  "valueType": zod.enum(['string', 'json', 'array', 'number']).optional(),
+  "category": zod.string().nullish(),
+  "source": zod.enum(['manual', 'inferred', 'approved_project']).optional(),
+  "confidence": zod.number().nullish()
+})
+
+export const UpsertClientMemoryResponse = zod.object({
+  "clientId": zod.string(),
+  "entries": zod.array(zod.object({
+  "key": zod.string(),
+  "value": zod.string(),
+  "valueType": zod.enum(['string', 'json', 'array', 'number']),
+  "category": zod.string().nullish(),
+  "source": zod.enum(['manual', 'inferred', 'approved_project']),
+  "confidence": zod.number().nullish()
+}))
+})
+
+
+/**
+ * @summary Delete a specific memory key for a client
+ */
+export const DeleteClientMemoryKeyParams = zod.object({
+  "clientId": zod.coerce.string(),
+  "key": zod.coerce.string()
+})
+
+export const DeleteClientMemoryKeyResponse = zod.void()
+
+
+/**
+ * @summary List all human feedback for a creative project
+ */
+export const ListProjectFeedbackParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ListProjectFeedbackResponseItem = zod.object({
+  "id": zod.number(),
+  "projectId": zod.string(),
+  "stepId": zod.number().nullish(),
+  "stepName": zod.string().nullish(),
+  "action": zod.enum(['approve', 'reject', 'needs_revision', 'human_edit']),
+  "rating": zod.number().nullish(),
+  "feedbackText": zod.string().nullish(),
+  "originalOutput": zod.object({
+
+}).passthrough().nullish(),
+  "editedOutput": zod.object({
+
+}).passthrough().nullish(),
+  "diff": zod.string().nullish(),
+  "reviewer": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListProjectFeedbackResponse = zod.array(ListProjectFeedbackResponseItem)
+
+
+/**
+ * @summary Submit human feedback on a creative project step
+ */
+export const SubmitProjectFeedbackParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const SubmitProjectFeedbackBody = zod.object({
+  "stepId": zod.number().nullish(),
+  "stepName": zod.string().nullish(),
+  "action": zod.enum(['approve', 'reject', 'needs_revision', 'human_edit']),
+  "rating": zod.number().nullish(),
+  "feedbackText": zod.string().nullish(),
+  "originalOutput": zod.object({
+
+}).passthrough().nullish(),
+  "editedOutput": zod.object({
+
+}).passthrough().nullish(),
+  "diff": zod.string().nullish(),
+  "reviewer": zod.string().optional()
+})
+
+export const SubmitProjectFeedbackResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.string(),
+  "stepId": zod.number().nullish(),
+  "stepName": zod.string().nullish(),
+  "action": zod.enum(['approve', 'reject', 'needs_revision', 'human_edit']),
+  "rating": zod.number().nullish(),
+  "feedbackText": zod.string().nullish(),
+  "originalOutput": zod.object({
+
+}).passthrough().nullish(),
+  "editedOutput": zod.object({
+
+}).passthrough().nullish(),
+  "diff": zod.string().nullish(),
+  "reviewer": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Agent performance statistics
+ */
+export const getAgentStatsQueryDaysDefault = 30;
+
+export const GetAgentStatsQueryParams = zod.object({
+  "days": zod.coerce.number().default(getAgentStatsQueryDaysDefault)
+})
+
+export const GetAgentStatsResponseItem = zod.object({
+  "agentSlug": zod.string(),
+  "agentName": zod.string(),
+  "totalRequests": zod.number(),
+  "totalTokens": zod.number(),
+  "totalEstimatedCostUsd": zod.number(),
+  "avgLatencyMs": zod.number().nullish(),
+  "successRate": zod.number(),
+  "approvalRate": zod.number().nullish(),
+  "revisionRate": zod.number().nullish(),
+  "avgRating": zod.number().nullish()
+})
+export const GetAgentStatsResponse = zod.array(GetAgentStatsResponseItem)
+
+
+/**
+ * @summary Cost analytics — daily trend, by provider, by agent
+ */
+export const getCostAnalyticsQueryDaysDefault = 14;
+
+export const GetCostAnalyticsQueryParams = zod.object({
+  "days": zod.coerce.number().default(getCostAnalyticsQueryDaysDefault)
+})
+
+export const GetCostAnalyticsResponse = zod.object({
+  "daily": zod.array(zod.object({
+  "date": zod.string(),
+  "totalRequests": zod.number(),
+  "totalTokens": zod.number(),
+  "totalEstimatedCostUsd": zod.number(),
+  "avgLatencyMs": zod.number().nullish()
+})),
+  "byProvider": zod.array(zod.object({
+  "provider": zod.string(),
+  "totalRequests": zod.number(),
+  "totalTokens": zod.number(),
+  "totalEstimatedCostUsd": zod.number(),
+  "avgLatencyMs": zod.number().nullish()
+})),
+  "byAgent": zod.array(zod.object({
+  "agentSlug": zod.string(),
+  "totalRequests": zod.number(),
+  "totalTokens": zod.number(),
+  "totalEstimatedCostUsd": zod.number(),
+  "avgLatencyMs": zod.number().nullish(),
+  "successRate": zod.number()
+}))
+})
+
+

@@ -1,0 +1,462 @@
+Lanjutkan AI Enterprise Platform ke Fase 4.
+
+PENTING:
+Jangan mengubah arsitektur yang sudah ada.
+Jangan menghapus atau me-rewrite service, route, workflow, schema, maupun frontend yang sudah berjalan.
+Lakukan hanya penambahan modular (additive changes) agar tetap backward compatible.
+
+====================================================================
+TUJUAN
+======
+
+Meningkatkan AI Platform dari sekadar workflow sequential menjadi Enterprise Multi-Agent Intelligence.
+
+Fokus implementasi:
+
+1. Agent Collaboration
+2. Long-Term Memory
+3. Capability Intelligence
+4. Cost Intelligence
+5. Performance Intelligence
+
+====================================================================
+BAGIAN 1
+AGENT COLLABORATION
+===================
+
+Saat ini workflow masih linear:
+
+Brand
+↓
+
+Creative
+↓
+
+Copy
+↓
+
+QC
+
+Saya ingin setiap agent dapat membaca hasil agent sebelumnya.
+
+Contoh:
+
+Brand menghasilkan:
+
+* Positioning
+* Persona
+* Tone
+* Brand Values
+
+Creative Director harus menerima seluruh output Brand sebagai context.
+
+Copywriter harus menerima:
+
+* Brand output
+* Creative output
+
+QC harus menerima seluruh output semua agent.
+
+Tambahkan:
+
+agent_execution_context
+
+yang berisi:
+
+* previousAgentOutput
+* previousMetadata
+* projectMemory
+* clientMemory
+* workflowState
+
+Semua context harus otomatis diteruskan oleh Workflow Runner.
+
+====================================================================
+BAGIAN 2
+LONG TERM MEMORY
+================
+
+Tambahkan Client Memory.
+
+Setiap client memiliki memory sendiri.
+
+Contoh data:
+
+Brand Preference
+
+Preferred Color
+
+Preferred Font
+
+Writing Style
+
+Approved Projects
+
+Rejected Concepts
+
+Frequently Used CTA
+
+Target Audience
+
+Business Category
+
+Visual Style
+
+Memory harus dipisahkan:
+
+Global Memory
+
+Client Memory
+
+Project Memory
+
+Agent Memory
+
+Tambahkan:
+
+memoryService
+
+memoryRepository
+
+memoryResolver
+
+Memory dipanggil otomatis sebelum agent dijalankan.
+
+====================================================================
+BAGIAN 3
+CAPABILITY MATRIX
+=================
+
+Tambahkan tabel:
+
+ai_capabilities
+
+Field:
+
+id
+
+provider
+
+model
+
+agent
+
+skill
+
+accuracy_score
+
+speed_score
+
+cost_score
+
+max_context
+
+supports_image
+
+supports_json
+
+supports_tool
+
+supports_stream
+
+priority
+
+status
+
+Contoh:
+
+Brand Strategy
+
+OpenAI GPT
+
+Accuracy 98
+
+Speed 90
+
+Cost 75
+
+Copywriting
+
+Claude
+
+Accuracy 99
+
+Speed 82
+
+Cost 70
+
+Image Generation
+
+FLUX
+
+Accuracy 96
+
+Speed 85
+
+Cost 80
+
+====================================================================
+BAGIAN 4
+INTELLIGENT MODEL ROUTER
+========================
+
+Saat Auto Route aktif,
+
+jangan hanya membaca capability.
+
+Gunakan scoring:
+
+Capability Match
+
+Priority
+
+Historical Success Rate
+
+Latency
+
+Cost
+
+Provider Health
+
+Model Status
+
+Context Length
+
+Project Requirement
+
+Hitung Final Score.
+
+Model dengan score tertinggi dipilih.
+
+Jika gagal,
+
+gunakan fallback model berikutnya.
+
+====================================================================
+BAGIAN 5
+COST INTELLIGENCE
+=================
+
+Tambahkan pencatatan:
+
+per request
+
+per workflow
+
+per project
+
+per client
+
+per agent
+
+per provider
+
+Hitung:
+
+Input Token
+
+Output Token
+
+Estimated Cost
+
+Actual Cost
+
+Latency
+
+Retry Count
+
+Fallback Count
+
+Simpan semuanya.
+
+====================================================================
+BAGIAN 6
+PERFORMANCE ANALYTICS
+=====================
+
+Tambahkan dashboard analytics.
+
+KPI:
+
+Total Requests
+
+Success Rate
+
+Failure Rate
+
+Average Latency
+
+Average Cost
+
+Top Agent
+
+Top Provider
+
+Top Model
+
+Top Workflow
+
+Most Expensive Client
+
+Most Active Client
+
+Charts:
+
+Requests per Day
+
+Latency Trend
+
+Cost Trend
+
+Provider Usage
+
+Workflow Usage
+
+====================================================================
+BAGIAN 7
+AGENT PERFORMANCE
+=================
+
+Setiap agent mempunyai statistik:
+
+Success
+
+Failure
+
+Average Token
+
+Average Cost
+
+Average Latency
+
+Average Rating
+
+Human Revision Rate
+
+Client Approval Rate
+
+QC Pass Rate
+
+====================================================================
+BAGIAN 8
+HUMAN FEEDBACK LOOP
+===================
+
+Tambahkan:
+
+Approve
+
+Reject
+
+Needs Revision
+
+Human Edit
+
+Feedback
+
+Rating
+
+Jika manusia mengubah output AI,
+
+perubahan disimpan.
+
+Jangan overwrite output AI.
+
+Simpan:
+
+Original
+
+Edited
+
+Diff
+
+Reviewer
+
+Timestamp
+
+====================================================================
+BAGIAN 9
+ORCHESTRATOR UPGRADE
+====================
+
+Upgrade Orchestrator menjadi Enterprise AI Manager.
+
+Tugas:
+
+Intent Detection
+
+Task Decomposition
+
+Workflow Selection
+
+Agent Selection
+
+Capability Matching
+
+Memory Resolution
+
+Context Injection
+
+Model Routing
+
+Fallback Routing
+
+Cost Optimization
+
+Audit Logging
+
+Analytics
+
+====================================================================
+BAGIAN 10
+JANGAN DIKERJAKAN DULU
+======================
+
+Jangan implementasi:
+
+Image Generation
+
+Video Generation
+
+Voice
+
+OCR
+
+RAG Vector Search
+
+MCP
+
+Plugin Marketplace
+
+Fokus hanya pada Enterprise Intelligence Layer.
+
+====================================================================
+OUTPUT
+======
+
+Semua implementasi harus:
+
+100% modular
+
+TypeScript clean
+
+Tidak memutus API lama
+
+Tidak mengubah workflow lama
+
+Tidak merusak frontend yang sudah selesai
+
+Tambahkan migration bila diperlukan.
+
+Pastikan seluruh fitur baru terintegrasi dengan:
+
+* AI Registry
+* AI Agents
+* AI Workflow
+* AI Orchestrator
+* Audit
+* Knowledge
+* Memory
+* Creative AI
+
+Target akhir adalah AI Enterprise Platform yang scalable, multi-provider, multi-agent, dan siap menjadi fondasi untuk Creative AI, Finance AI, HR AI, Logistics AI, Tax AI, Legal AI, dan modul enterprise lainnya.
