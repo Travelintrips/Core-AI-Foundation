@@ -65,6 +65,8 @@ import type {
   GetAgentStatsParams,
   GetAnalyticsUsageParams,
   GetCostAnalyticsParams,
+  GetCreativeImageAnalyticsParams,
+  CreativeAiImageAnalytics,
   HealthStatus,
   KnowledgeBase,
   KnowledgeBaseInput,
@@ -5921,3 +5923,46 @@ export function useGetCostAnalytics<TData = Awaited<ReturnType<typeof getCostAna
 
 
 
+
+export const getGetCreativeImageAnalyticsUrl = (params?: GetCreativeImageAnalyticsParams) => {
+  const normalizedParams = new URLSearchParams();
+  if (params?.days !== undefined && params.days !== null) {
+    normalizedParams.append('days', params.days.toString());
+  }
+  return `/api/creative-ai/analytics/images${normalizedParams.toString() ? `?${normalizedParams.toString()}` : ''}`;
+}
+
+/**
+ * @summary Aggregate image generation analytics across all projects
+ */
+export const getCreativeImageAnalytics = async (params?: GetCreativeImageAnalyticsParams, options?: RequestInit): Promise<CreativeAiImageAnalytics> => {
+  return customFetch<CreativeAiImageAnalytics>(getGetCreativeImageAnalyticsUrl(params), {
+    ...options,
+    method: 'GET',
+  });
+}
+
+export const getGetCreativeImageAnalyticsQueryKey = (params?: GetCreativeImageAnalyticsParams) => {
+  return [`/api/creative-ai/analytics/images`, ...(params ? [params] : [])] as const;
+}
+
+export const getGetCreativeImageAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getCreativeImageAnalytics>>, TError = ErrorType<unknown>>(params?: GetCreativeImageAnalyticsParams, options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof getCreativeImageAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch> }) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetCreativeImageAnalyticsQueryKey(params);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCreativeImageAnalytics>>> = ({ signal }) => getCreativeImageAnalytics(params, { signal, ...requestOptions });
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof getCreativeImageAnalytics>>, TError, TData> & { queryKey: QueryKey };
+}
+
+export type GetCreativeImageAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getCreativeImageAnalytics>>>
+export type GetCreativeImageAnalyticsQueryError = ErrorType<unknown>
+
+/**
+ * @summary Aggregate image generation analytics across all projects
+ */
+export function useGetCreativeImageAnalytics<TData = Awaited<ReturnType<typeof getCreativeImageAnalytics>>, TError = ErrorType<unknown>>(
+  params?: GetCreativeImageAnalyticsParams, options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof getCreativeImageAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch> }
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCreativeImageAnalyticsQueryOptions(params, options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return withQueryKey(query, queryOptions.queryKey);
+}

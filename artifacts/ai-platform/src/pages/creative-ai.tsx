@@ -10,6 +10,7 @@ import {
   useListProjectAssets,
   useUpdateAssetStatus,
   useSubmitAssetFeedback,
+  useGetCreativeImageAnalytics,
   getListCreativeProjectsQueryKey,
   getGetCreativeProjectQueryKey,
   getListProjectFeedbackQueryKey,
@@ -664,15 +665,13 @@ function AssetCard({ asset, onApprove, onRevision, onReject, isUpdating }: Asset
         )}
 
         {/* QC notes (collapsible) */}
-        {asset.qcNotes && (
-          <button
-            onClick={() => setShowPrompt((v) => !v)}
-            className="w-full flex items-center justify-between text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <span>Notes / Prompt</span>
-            {showPrompt ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-          </button>
-        )}
+        <button
+          onClick={() => setShowPrompt((v) => !v)}
+          className="w-full flex items-center justify-between text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <span>{asset.qcNotes ? "Notes / Prompt" : "View Prompt"}</span>
+          {showPrompt ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+        </button>
         {showPrompt && (
           <div className="space-y-1.5">
             {asset.qcNotes && (
@@ -762,6 +761,8 @@ function ProjectDetail({ projectId }: { projectId: string }) {
       },
     },
   });
+
+  const { data: imageAnalytics } = useGetCreativeImageAnalytics();
 
   const generateImages = useGenerateImageConcepts({
     mutation: {
@@ -974,20 +975,39 @@ function ProjectDetail({ projectId }: { projectId: string }) {
                     </Badge>
                   )}
                 </div>
-                {isCompleted && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleGenerateImages}
-                    disabled={generateImages.isPending}
-                    className="h-6 gap-1.5 text-[10px] font-mono text-muted-foreground hover:text-primary"
-                  >
-                    {generateImages.isPending
-                      ? <Loader2 className="size-3 animate-spin" />
-                      : <Wand2 className="size-3" />}
-                    {assets.length > 0 ? "Regenerate" : "Generate Image Concepts"}
-                  </Button>
-                )}
+                <div className="flex items-center gap-3">
+                  {imageAnalytics && imageAnalytics.totalImages > 0 && (
+                    <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground">
+                      <span title="Total images generated across all projects">
+                        {imageAnalytics.totalImages} total
+                      </span>
+                      {imageAnalytics.approvedRate != null && (
+                        <span className="text-green-400" title="Approved rate across all projects">
+                          {Math.round(imageAnalytics.approvedRate * 100)}% approved
+                        </span>
+                      )}
+                      {imageAnalytics.avgQcScore != null && (
+                        <span title="Average QC score across all projects">
+                          QC {Math.round(imageAnalytics.avgQcScore)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {isCompleted && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleGenerateImages}
+                      disabled={generateImages.isPending}
+                      className="h-6 gap-1.5 text-[10px] font-mono text-muted-foreground hover:text-primary"
+                    >
+                      {generateImages.isPending
+                        ? <Loader2 className="size-3 animate-spin" />
+                        : <Wand2 className="size-3" />}
+                      {assets.length > 0 ? "Regenerate" : "Generate Image Concepts"}
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {assets.length === 0 && isCompleted && !generateImages.isPending && (

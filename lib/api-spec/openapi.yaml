@@ -1332,6 +1332,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /creative-ai/analytics/images:
+    get:
+      operationId: getCreativeImageAnalytics
+      tags: [creative-ai]
+      summary: Aggregate image generation analytics across all projects
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+            description: Number of days to look back (1–365)
+      responses:
+        "200":
+          description: Image analytics summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreativeAiImageAnalytics"
+
   # ─── CAPABILITIES ────────────────────────────────────────────────────────────
 
   /capabilities:
@@ -3081,6 +3101,29 @@ components:
           enum: [approve, reject, needs_revision]
         notes:
           type: ["string", "null"]
+
+    CreativeAiImageAnalytics:
+      type: object
+      required: [totalImages, totalCostUsd, approvedRate, rejectedRate, pendingCount]
+      properties:
+        totalImages:
+          type: integer
+          description: Total image assets in the window
+        totalCostUsd:
+          type: number
+          description: Total cost of image generation in USD
+        avgQcScore:
+          type: ["number", "null"]
+          description: Average QC score across all images (1–100)
+        approvedRate:
+          type: ["number", "null"]
+          description: Fraction of images that were approved (0–1)
+        rejectedRate:
+          type: ["number", "null"]
+          description: Fraction of images that were rejected (0–1)
+        pendingCount:
+          type: integer
+          description: Images currently pending or generating
 
     ErrorResponse:
       type: object

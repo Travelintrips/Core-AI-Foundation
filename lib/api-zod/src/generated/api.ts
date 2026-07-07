@@ -2019,3 +2019,19 @@ export const GetCostAnalyticsResponse = zod.object({
 })
 
 
+
+/**
+ * @summary Aggregate image generation analytics across all projects
+ */
+export const GetCreativeImageAnalyticsQueryParams = zod.object({
+  "days": zod.coerce.number().nullish()
+})
+
+export const GetCreativeImageAnalyticsResponse = zod.object({
+  "totalImages": zod.number().int(),
+  "totalCostUsd": zod.number(),
+  "avgQcScore": zod.number().nullish(),
+  "approvedRate": zod.number().nullable(),
+  "rejectedRate": zod.number().nullable(),
+  "pendingCount": zod.number().int()
+})
