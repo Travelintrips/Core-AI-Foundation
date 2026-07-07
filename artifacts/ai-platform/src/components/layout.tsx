@@ -10,6 +10,7 @@ import {
   Play, 
   Settings, 
   ShieldAlert,
+  Sparkles,
   Users
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { href: "/registry", label: "Registry", icon: Box },
   { href: "/agents", label: "Agents", icon: Users },
   { href: "/orchestrator", label: "Orchestrator", icon: Play },
+  { href: "/creative-ai", label: "Creative AI", icon: Sparkles },
   { href: "/workflows", label: "Workflows", icon: GitMerge },
   { href: "/workflow-executions", label: "Executions", icon: Activity },
   { href: "/prompts", label: "Prompts", icon: FileText },

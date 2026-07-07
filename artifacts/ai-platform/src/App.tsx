@@ -10,6 +10,7 @@ import Dashboard from "@/pages/dashboard";
 import Registry from "@/pages/registry";
 import Agents from "@/pages/agents";
 import Orchestrator from "@/pages/orchestrator";
+import CreativeAI from "@/pages/creative-ai";
 import Workflows from "@/pages/workflows";
 import WorkflowExecutions from "@/pages/workflow-executions";
 import Prompts from "@/pages/prompts";
@@ -28,6 +29,7 @@ function Router() {
         <Route path="/registry" component={Registry} />
         <Route path="/agents" component={Agents} />
         <Route path="/orchestrator" component={Orchestrator} />
+        <Route path="/creative-ai" component={CreativeAI} />
         <Route path="/workflows" component={Workflows} />
         <Route path="/workflow-executions" component={WorkflowExecutions} />
         <Route path="/prompts" component={Prompts} />
