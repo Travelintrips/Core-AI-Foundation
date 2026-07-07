@@ -27,6 +27,7 @@ import {
   Cpu,
   Copy,
   Check,
+  Download,
   Loader2,
   Zap,
   FileText,
@@ -44,6 +45,7 @@ import {
   MessageSquare,
   ChevronDown,
   ChevronUp,
+  BanIcon,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -69,20 +71,22 @@ const STEP_NAME_MAP: Record<string, string> = {
 
 function statusColor(status: string) {
   switch (status) {
-    case "completed": return "bg-green-500/15 text-green-400 border-green-500/30";
-    case "running":   return "bg-blue-500/15 text-blue-400 border-blue-500/30";
-    case "failed":    return "bg-red-500/15 text-red-400 border-red-500/30";
-    default:          return "bg-muted text-muted-foreground border-border";
+    case "completed":        return "bg-green-500/15 text-green-400 border-green-500/30";
+    case "running":          return "bg-blue-500/15 text-blue-400 border-blue-500/30";
+    case "failed":           return "bg-red-500/15 text-red-400 border-red-500/30";
+    case "blocked_by_budget": return "bg-orange-500/15 text-orange-400 border-orange-500/30";
+    default:                 return "bg-muted text-muted-foreground border-border";
   }
 }
 
 function StatusIcon({ status, className }: { status: string; className?: string }) {
   const cls = cn("size-4 shrink-0", className);
   switch (status) {
-    case "completed": return <CheckCircle2 className={cn(cls, "text-green-400")} />;
-    case "running":   return <Loader2 className={cn(cls, "text-blue-400 animate-spin")} />;
-    case "failed":    return <XCircle className={cn(cls, "text-red-400")} />;
-    default:          return <CircleDot className={cn(cls, "text-muted-foreground")} />;
+    case "completed":        return <CheckCircle2 className={cn(cls, "text-green-400")} />;
+    case "running":          return <Loader2 className={cn(cls, "text-blue-400 animate-spin")} />;
+    case "failed":           return <XCircle className={cn(cls, "text-red-400")} />;
+    case "blocked_by_budget": return <BanIcon className={cn(cls, "text-orange-400")} />;
+    default:                 return <CircleDot className={cn(cls, "text-muted-foreground")} />;
   }
 }
 
@@ -256,13 +260,12 @@ interface FeedbackBarProps {
   }) => Promise<void>;
 }
 
-function FeedbackBar({ projectId, stepId, stepName, stepOutput, existingFeedback, onSubmit }: FeedbackBarProps) {
+function FeedbackBar({ projectId: _projectId, stepId, stepName, stepOutput, existingFeedback, onSubmit }: FeedbackBarProps) {
   const [expanded, setExpanded] = useState(false);
   const [rating, setRating] = useState<number | null>(null);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Show last feedback action if exists
   const lastFeedback = existingFeedback.at(0);
   const actionColor: Record<string, string> = {
     approve: "text-green-400",
@@ -292,7 +295,6 @@ function FeedbackBar({ projectId, stepId, stepName, stepOutput, existingFeedback
 
   return (
     <div className="border-t border-border/30 bg-background/30">
-      {/* Summary row */}
       <div className="flex items-center justify-between px-4 py-2">
         <div className="flex items-center gap-3">
           {lastFeedback ? (
@@ -322,7 +324,6 @@ function FeedbackBar({ projectId, stepId, stepName, stepOutput, existingFeedback
         </button>
       </div>
 
-      {/* Expanded feedback panel */}
       {expanded && (
         <div className="px-4 pb-3 space-y-3 border-t border-border/20">
           <div className="flex items-center gap-2 pt-2">
@@ -393,37 +394,43 @@ interface StepCardProps {
   onFeedback: (data: Parameters<FeedbackBarProps["onSubmit"]>[0]) => Promise<void>;
 }
 
-function StepCard({ stepDef, step, projectStatus, index, projectId, stepFeedback, onFeedback }: StepCardProps) {
+function StepCard({ stepDef, step, projectStatus, index, projectId: _projectId, stepFeedback, onFeedback }: StepCardProps) {
   const Icon = stepDef.icon;
   const effectiveStatus = step?.status ?? "pending";
   const isRunning = effectiveStatus === "running" || (projectStatus === "running" && !step);
+  const isBudgetBlocked = effectiveStatus === "blocked_by_budget";
   const outputStr = step?.output ? JSON.stringify(step.output, null, 2) : "";
   const showFeedback = effectiveStatus === "completed";
 
+  const borderClass =
+    effectiveStatus === "completed"      ? "border-green-500/20 bg-green-500/5" :
+    isRunning                            ? "border-blue-500/20 bg-blue-500/5" :
+    effectiveStatus === "failed"         ? "border-red-500/20 bg-red-500/5" :
+    isBudgetBlocked                      ? "border-orange-500/20 bg-orange-500/5" :
+    "border-border/50 bg-muted/10";
+
+  const iconBorderClass =
+    effectiveStatus === "completed"      ? "border-green-500/30 bg-green-500/10" :
+    isRunning                            ? "border-blue-500/30 bg-blue-500/10" :
+    effectiveStatus === "failed"         ? "border-red-500/30 bg-red-500/10" :
+    isBudgetBlocked                      ? "border-orange-500/30 bg-orange-500/10" :
+    "border-border bg-muted/30";
+
+  const iconClass =
+    effectiveStatus === "completed"  ? "text-green-400" :
+    effectiveStatus === "failed"     ? "text-red-400" :
+    isBudgetBlocked                  ? "text-orange-400" :
+    "text-muted-foreground";
+
   return (
-    <div className={cn(
-      "border rounded-lg transition-colors overflow-hidden",
-      effectiveStatus === "completed" ? "border-green-500/20 bg-green-500/5" :
-      isRunning ? "border-blue-500/20 bg-blue-500/5" :
-      effectiveStatus === "failed" ? "border-red-500/20 bg-red-500/5" :
-      "border-border/50 bg-muted/10",
-    )}>
+    <div className={cn("border rounded-lg transition-colors overflow-hidden", borderClass)}>
       {/* Step header */}
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className={cn(
-            "size-7 rounded border flex items-center justify-center shrink-0",
-            effectiveStatus === "completed" ? "border-green-500/30 bg-green-500/10" :
-            isRunning ? "border-blue-500/30 bg-blue-500/10" :
-            effectiveStatus === "failed" ? "border-red-500/30 bg-red-500/10" :
-            "border-border bg-muted/30",
-          )}>
+          <div className={cn("size-7 rounded border flex items-center justify-center shrink-0", iconBorderClass)}>
             {isRunning
               ? <Loader2 className="size-3.5 text-blue-400 animate-spin" />
-              : <Icon className={cn("size-3.5",
-                  effectiveStatus === "completed" ? "text-green-400" :
-                  effectiveStatus === "failed" ? "text-red-400" : "text-muted-foreground"
-                )} />
+              : <Icon className={cn("size-3.5", iconClass)} />
             }
           </div>
           <div>
@@ -447,7 +454,6 @@ function StepCard({ stepDef, step, projectStatus, index, projectId, stepFeedback
               <Hash className="size-2.5" />{step.tokenUsage}
             </Badge>
           )}
-          {/* Feedback status dot */}
           {stepFeedback.length > 0 && (
             <div className={cn("size-1.5 rounded-full",
               stepFeedback[0].action === "approve" ? "bg-green-500" :
@@ -459,8 +465,24 @@ function StepCard({ stepDef, step, projectStatus, index, projectId, stepFeedback
         </div>
       </div>
 
+      {/* Budget blocked banner */}
+      {isBudgetBlocked && (
+        <>
+          <Separator className="opacity-30" />
+          <div className="px-4 py-3 flex items-start gap-2 bg-orange-500/5">
+            <BanIcon className="size-3.5 text-orange-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs font-mono text-orange-400 font-semibold">Budget Limit Reached</p>
+              {step?.errorMessage && (
+                <p className="text-[11px] font-mono text-orange-300/80 mt-0.5">{step.errorMessage}</p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Output */}
-      {step?.output && Object.keys(step.output).length > 0 && (
+      {step?.output && Object.keys(step.output).length > 0 && !("_blocked" in (step.output ?? {})) && (
         <>
           <Separator className="opacity-30" />
           <div className="px-4 py-3 relative">
@@ -472,8 +494,8 @@ function StepCard({ stepDef, step, projectStatus, index, projectId, stepFeedback
         </>
       )}
 
-      {/* Error */}
-      {step?.errorMessage && (
+      {/* Error (non-budget) */}
+      {step?.errorMessage && !isBudgetBlocked && (
         <>
           <Separator className="opacity-30" />
           <div className="px-4 py-3 flex items-start gap-2">
@@ -483,10 +505,10 @@ function StepCard({ stepDef, step, projectStatus, index, projectId, stepFeedback
         </>
       )}
 
-      {/* Human Feedback Bar (Phase 4) */}
+      {/* Human Feedback Bar */}
       {showFeedback && (
         <FeedbackBar
-          projectId={projectId}
+          projectId={_projectId}
           stepId={step?.id}
           stepName={stepDef.label}
           stepOutput={step?.output}
@@ -528,6 +550,7 @@ function ProjectListItem({ project, isActive, onClick }: { project: CreativeProj
 function ProjectDetail({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [exporting, setExporting] = useState(false);
 
   const { data: project, isLoading } = useGetCreativeProject(projectId, {
     query: {
@@ -569,6 +592,28 @@ function ProjectDetail({ projectId }: { projectId: string }) {
     });
   };
 
+  const handleExportMarkdown = async () => {
+    if (!project) return;
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/creative-ai/projects/${projectId}/export/markdown`);
+      if (!res.ok) throw new Error("Export failed");
+      const text = await res.text();
+      const blob = new Blob([text], { type: "text/markdown" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${project.brandName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-creative-brief.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Markdown exported" });
+    } catch {
+      toast({ title: "Export failed", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (isLoading) {
     return <div className="flex-1 flex items-center justify-center"><Loader2 className="size-6 text-primary animate-spin" /></div>;
   }
@@ -578,13 +623,15 @@ function ProjectDetail({ projectId }: { projectId: string }) {
 
   const stepsByName = Object.fromEntries((project.steps ?? []).map((s) => [s.stepName, s]));
 
-  // Group feedback by step name
   const feedbackByStep: Record<string, FeedbackEntry[]> = {};
   for (const fb of allFeedback) {
     if (!fb.stepName) continue;
     feedbackByStep[fb.stepName] = feedbackByStep[fb.stepName] ?? [];
     feedbackByStep[fb.stepName].push(fb);
   }
+
+  const isCompleted = project.status === "completed";
+  const hasBudgetBlocked = (project.steps ?? []).some((s) => s.status === "blocked_by_budget");
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -594,13 +641,34 @@ function ProjectDetail({ projectId }: { projectId: string }) {
           <div className="flex items-center gap-2 mb-1">
             <h2 className="font-bold text-lg font-mono">{project.brandName}</h2>
             <Badge className={cn("text-[10px] border font-mono px-1.5", statusColor(project.status))}>
-              {project.status}
+              {project.status.replace(/_/g, " ")}
             </Badge>
+            {hasBudgetBlocked && (
+              <Badge className="text-[10px] border font-mono px-1.5 bg-orange-500/10 text-orange-400 border-orange-500/30">
+                budget capped
+              </Badge>
+            )}
           </div>
           <p className="text-xs text-muted-foreground font-mono">{project.businessType} · {project.productOrService}</p>
           <p className="text-xs text-muted-foreground font-mono mt-0.5">{project.targetMarket} · Goal: {project.goal}</p>
         </div>
         <div className="flex flex-col items-end gap-1.5 shrink-0">
+          <div className="flex items-center gap-2">
+            {isCompleted && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportMarkdown}
+                disabled={exporting}
+                className="h-7 gap-1.5 text-[10px] font-mono border-border/50"
+              >
+                {exporting
+                  ? <Loader2 className="size-3 animate-spin" />
+                  : <Download className="size-3" />}
+                Export MD
+              </Button>
+            )}
+          </div>
           <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono">
             <Clock className="size-3" />
             {format(new Date(project.createdAt), "MMM d, HH:mm")}
@@ -620,6 +688,12 @@ function ProjectDetail({ projectId }: { projectId: string }) {
             <div className="flex items-center gap-2 mb-4 text-xs text-blue-400 font-mono bg-blue-500/10 border border-blue-500/20 rounded px-3 py-2">
               <Loader2 className="size-3.5 animate-spin" />
               {project.status === "pending" ? "Workflow queued — agents will start shortly…" : "Agents are generating your creative assets…"}
+            </div>
+          )}
+          {hasBudgetBlocked && (
+            <div className="flex items-center gap-2 mb-2 text-xs text-orange-400 font-mono bg-orange-500/10 border border-orange-500/20 rounded px-3 py-2">
+              <BanIcon className="size-3.5" />
+              Workflow paused — per-workflow budget limit reached. Adjust guardrail settings to increase the limit.
             </div>
           )}
           {PIPELINE_STEPS.map((def, i) => {
@@ -752,12 +826,13 @@ export default function CreativeAI() {
             <div className="size-12 rounded-xl border border-primary/20 bg-primary/5 flex items-center justify-center">
               <Sparkles className="size-6 text-primary" />
             </div>
-            <div>
-              <p className="font-mono font-semibold text-foreground mb-1">Creative AI MVP</p>
-              <p className="text-sm text-muted-foreground font-mono max-w-xs">Select a project or create a new brief to run the 4-agent creative pipeline.</p>
+            <div className="space-y-1">
+              <p className="font-mono text-sm font-semibold">Select a project</p>
+              <p className="text-xs text-muted-foreground font-mono">Choose a project from the left panel or create a new brief.</p>
             </div>
-            <Button className="gap-2 font-mono" onClick={() => setShowForm(true)}>
-              <Plus className="size-4" />New Brief
+            <Button variant="outline" size="sm" className="gap-2 font-mono" onClick={() => setShowForm(true)}>
+              <Plus className="size-4" />
+              New Brief
             </Button>
           </div>
         )}

@@ -1,0 +1,115 @@
+Lanjutkan AI Enterprise Platform ke Phase 4.5: Stabilization & Production Hardening.
+
+Jangan membuat fitur besar baru. Jangan implement image/video/OCR dulu. Fokus membuat Phase 4 stabil, teruji, dan siap production.
+
+Tugas:
+
+1. Seed Capability Matrix
+   Tambahkan seed data awal untuk ai_capabilities:
+
+* OpenAI GPT-4o
+* OpenAI GPT-4o Mini
+* OpenAI o4-mini
+* Claude 3.5 Sonnet
+* Claude 3 Haiku
+* Gemini 1.5 Pro
+* Gemini 1.5 Flash
+* FLUX.1 Schnell
+* FLUX.1 Dev
+
+Skills:
+
+* orchestrator
+* branding
+* positioning
+* copywriting
+* creative_direction
+* quality_control
+* summarization
+* document_review
+* image_generation
+
+Isi accuracy_score, speed_score, cost_score, max_context, supports_json, supports_image, supports_tool, supports_stream, priority, status.
+
+2. Add Provider Guardrails
+   Tambahkan konfigurasi:
+
+* max_cost_per_workflow
+* max_cost_per_request
+* max_retry_per_provider
+* provider_timeout_ms
+* disable_provider_on_error_rate
+* fallback_enabled
+
+3. Upgrade intelligentRouter
+   Router harus mempertimbangkan:
+
+* capability matrix
+* historical success
+* average latency
+* average cost
+* provider health
+* guardrail settings
+* max context
+* workflow budget
+
+4. Add Execution Safety
+   Jika estimated cost melewati budget:
+
+* stop execution
+* mark step as blocked_by_budget
+* tampilkan error jelas di UI
+* audit log harus tersimpan
+
+Jika provider timeout:
+
+* retry sesuai limit
+* fallback jika enabled
+* simpan retry_count dan fallback_count
+
+5. Add Synthetic Test Runner
+   Buat endpoint admin:
+   POST /api/ai/test-runs/creative
+
+Endpoint ini membuat beberapa sample Creative AI projects untuk testing:
+
+* coffee shop premium
+* skincare local brand
+* logistics company profile
+* sport center social media campaign
+* export-import trading brand
+
+Tujuan:
+
+* mengisi analytics
+* menguji cost records
+* menguji agent stats
+* menguji feedback workflow
+
+6. Add Export
+   Tambahkan export:
+
+* Creative AI project result ke Markdown
+* Creative AI project result ke PDF jika library PDF sudah tersedia
+* Analytics cost report ke CSV
+
+7. UI Improvements
+   Tambahkan di Analytics page:
+
+* empty state yang menjelaskan data akan muncul setelah workflow dijalankan
+* tombol Run Test Data jika admin
+* filter date range
+* filter provider
+* filter agent
+
+Tambahkan di Creative AI project detail:
+
+* tombol Export Markdown
+* tombol Export PDF jika tersedia
+* tampilkan budget/status step jika blocked_by_budget
+
+8. Typecheck dan build harus clean.
+
+Jangan merombak arsitektur lama.
+Jangan mengubah API lama yang sudah dipakai frontend.
+Semua perubahan harus additive dan backward compatible.

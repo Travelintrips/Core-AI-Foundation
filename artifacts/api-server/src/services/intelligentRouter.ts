@@ -6,28 +6,34 @@
  *   2. Priority           — from capability.priority + model priority in DB
  *   3. Historical Latency — average latency_ms from ai_cost_records
  *   4. Historical Cost    — average estimated_cost_usd from ai_cost_records
- *   5. Provider Health    — provider.isActive
+ *   5. Provider Health    — error rate check + provider.isActive guard
  *   6. Model Status       — model.isActive
  *   7. Context Length     — model.contextWindow vs required context size
  *   8. Project Requirement — agent slug → skill mapping
  *
+ * Phase 4.5 additions:
+ *   - readGuardrails()         → guardrail-aware provider filtering
+ *   - getProviderErrorRate()   → health check from recent cost records
+ *   - fallbackEnabled flag     → exposed in RoutingResult
+ *
  * Falls back to the existing aiModelRouter for agents with no capability matrix entry.
  */
 
-import { eq, and, avg, sql } from "drizzle-orm";
+import { eq, and, avg, sql, count } from "drizzle-orm";
 import { db, aiCostRecordsTable } from "@workspace/db";
 import { getAllActiveModels, type ModelWithProvider } from "./aiModelService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
 import { getCapabilitiesForSkill, computeCapabilityScore } from "./capabilityService.js";
 import { routeToModel, getFallbackModels } from "./aiModelRouter.js";
+import { readGuardrails } from "./guardrailService.js";
 
 // ── Agent slug → capability skill mapping ─────────────────────────────────────
 
 const AGENT_SKILL_MAP: Record<string, string> = {
-  "brand-strategist":  "brand-strategy",
-  "creative-director": "creative-direction",
+  "brand-strategist":  "branding",
+  "creative-director": "creative_direction",
   "copywriter":        "copywriting",
-  "quality-control":   "quality-control",
+  "quality-control":   "quality_control",
 };
 
 // ── Scoring weights ───────────────────────────────────────────────────────────
@@ -72,6 +78,31 @@ async function getHistoricalStats(
     };
   } catch {
     return { avgLatencyMs: null, avgCostUsd: null };
+  }
+}
+
+// ── Provider health: error rate over last 24 hours ────────────────────────────
+
+async function getProviderErrorRate(providerSlug: string): Promise<number> {
+  try {
+    const [row] = await db
+      .select({
+        total: count(),
+        failed: sql<number>`count(*) filter (where status = 'failed')::int`,
+      })
+      .from(aiCostRecordsTable)
+      .where(
+        and(
+          eq(aiCostRecordsTable.provider, providerSlug),
+          sql`created_at >= now() - interval '1 day'`,
+        ),
+      );
+
+    const total = Number(row?.total ?? 0);
+    if (total < 5) return 0; // insufficient data — assume healthy
+    return Number(row?.failed ?? 0) / total;
+  } catch {
+    return 0;
   }
 }
 
@@ -147,11 +178,13 @@ export interface RoutingResult {
   fallbacks: ModelWithProvider[];
   score: number;
   usedCapabilityMatrix: boolean;
+  fallbackEnabled: boolean;
 }
 
 /**
  * Route to the best model for a given agent slug.
  * Uses capability matrix scoring when available; falls back to keyword heuristics.
+ * Respects guardrail settings: disabled providers are filtered out.
  */
 export async function routeForAgent(
   agentSlug: string,
@@ -159,9 +192,36 @@ export async function routeForAgent(
 ): Promise<RoutingResult | null> {
   const skill = AGENT_SKILL_MAP[agentSlug];
 
+  // Load guardrail config (non-blocking on error)
+  const guardrails = await readGuardrails().catch(() => ({
+    disableOnErrorRate: 0.5,
+    fallbackEnabled: true,
+    maxCostPerRequest: 0,
+  }));
+
   // Get all models with configured API keys
   const allModels = await getAllActiveModels();
-  const available = allModels.filter(({ provider }) => !!getProviderApiKey(provider.slug));
+  let available = allModels.filter(({ provider }) => !!getProviderApiKey(provider.slug));
+
+  // Phase 4.5: Filter providers above error rate threshold
+  if (guardrails.disableOnErrorRate > 0 && available.length > 1) {
+    const healthChecks = await Promise.all(
+      [...new Set(available.map((m) => m.provider.slug))].map(async (slug) => ({
+        slug,
+        errorRate: await getProviderErrorRate(slug),
+      })),
+    );
+    const healthyProviders = new Set(
+      healthChecks
+        .filter((h) => h.errorRate < guardrails.disableOnErrorRate)
+        .map((h) => h.slug),
+    );
+    // Only filter if we'd still have candidates left
+    const filtered = available.filter((m) => healthyProviders.has(m.provider.slug));
+    if (filtered.length > 0) {
+      available = filtered;
+    }
+  }
 
   if (available.length === 0) return null;
 
@@ -193,8 +253,9 @@ export async function routeForAgent(
     selected,
     fallbacks: fallbacks.slice(0, 3), // keep up to 3 fallbacks
     score: usedCapabilityMatrix
-      ? (await scoreModel(selected, skill ?? "text", opts.requiredContextTokens ?? 0)).finalScore
+      ? (await scoreModel(selected, skill ?? "branding", opts.requiredContextTokens ?? 0)).finalScore
       : 0,
     usedCapabilityMatrix,
+    fallbackEnabled: guardrails.fallbackEnabled,
   };
 }

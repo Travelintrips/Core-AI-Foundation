@@ -1,11 +1,17 @@
 /**
  * creativeWorkflowRunner — executes the 4-agent Creative Brief workflow.
  *
- * Phase 4 upgrades:
+ * Phase 4 features (existing):
  *   - resolveAgentContext()   → injects memory tiers into each agent step
  *   - routeForAgent()         → multi-factor intelligent model selection
  *   - recordCost()            → per-step cost tracking in ai_cost_records
  *   - formatContextForPrompt() → appends memory context to system prompt
+ *
+ * Phase 4.5 additions:
+ *   - readGuardrails()            → reads guardrail config from ai_settings
+ *   - Budget check per step       → blocks step with status "blocked_by_budget"
+ *   - executeWithRetryAndTimeout() → retry loop with configurable timeout
+ *   - Fallback on failure         → tries fallback models when primary fails
  *
  * Runs in the background (fire-and-forget after HTTP response).
  * Each step result is persisted to DB as it completes.
@@ -19,7 +25,7 @@ import {
   creativeProjectStepsTable,
   aiAgentsTable,
 } from "@workspace/db";
-import { executeAI } from "./aiExecutionService.js";
+import { executeAI, type ExecutionInput, type ExecutionOutput } from "./aiExecutionService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
 import { logAudit } from "./aiAuditService.js";
 import {
@@ -32,7 +38,9 @@ import {
 } from "./creativeAiService.js";
 import { resolveAgentContext, formatContextForPrompt, type StepMetadata } from "./memoryResolver.js";
 import { routeForAgent } from "./intelligentRouter.js";
-import { recordCost } from "./costService.js";
+import { recordCost, getProjectCosts } from "./costService.js";
+import { readGuardrails } from "./guardrailService.js";
+import { getActiveModel } from "./aiModelService.js";
 
 type StepOutput = Record<string, unknown>;
 
@@ -72,6 +80,80 @@ function buildPromptForStep(
   }
 }
 
+// ── Execution safety: retry + timeout ─────────────────────────────────────────
+
+interface ExecResult {
+  output: ExecutionOutput;
+  retryCount: number;
+  fallbackCount: number;
+  usedModel: ExecutionInput["model"];
+  usedProvider: ExecutionInput["provider"];
+}
+
+async function executeWithRetryAndTimeout(
+  primaryInput: ExecutionInput,
+  fallbackInputs: ExecutionInput[],
+  maxRetries: number,
+  timeoutMs: number,
+): Promise<ExecResult> {
+  const candidates: ExecutionInput[] = [primaryInput, ...fallbackInputs];
+  let overallRetryCount = 0;
+  let fallbackCount = 0;
+
+  for (let candidateIdx = 0; candidateIdx < candidates.length; candidateIdx++) {
+    const input = candidates[candidateIdx];
+    const isFallback = candidateIdx > 0;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const output = await Promise.race([
+          executeAI(input),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`AI request timed out after ${timeoutMs}ms`)),
+              timeoutMs,
+            ),
+          ),
+        ]);
+        if (isFallback) fallbackCount++;
+        return { output, retryCount: overallRetryCount, fallbackCount, usedModel: input.model, usedProvider: input.provider };
+      } catch (err) {
+        overallRetryCount++;
+        if (attempt < maxRetries) {
+          // Exponential back-off: 1s, 2s, 4s
+          await new Promise<void>((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
+        } else if (isFallback || candidateIdx === candidates.length - 1) {
+          // Last candidate exhausted
+          throw err;
+        }
+        // else: move to next candidate
+      }
+    }
+  }
+
+  throw new Error("All providers exhausted");
+}
+
+// ── Budget check ──────────────────────────────────────────────────────────────
+
+async function checkProjectBudget(
+  projectId: string,
+  maxCostUsd: number,
+): Promise<{ exceeded: boolean; currentCostUsd: number }> {
+  if (maxCostUsd <= 0) return { exceeded: false, currentCostUsd: 0 };
+  try {
+    const costs = await getProjectCosts(projectId);
+    return {
+      exceeded: costs.totalEstimatedCostUsd >= maxCostUsd,
+      currentCostUsd: costs.totalEstimatedCostUsd,
+    };
+  } catch {
+    return { exceeded: false, currentCostUsd: 0 };
+  }
+}
+
+// ── Main workflow ─────────────────────────────────────────────────────────────
+
 export async function runCreativeBriefWorkflow(projectDbId: number): Promise<void> {
   // Load project
   const [project] = await db
@@ -91,6 +173,9 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
     notes: project.notes,
   };
 
+  // Phase 4.5: Read guardrails once at start
+  const guardrails = await readGuardrails();
+
   // Mark project as running
   await db
     .update(creativeProjectsTable)
@@ -104,6 +189,43 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
 
   for (let stepIndex = 0; stepIndex < PIPELINE.length; stepIndex++) {
     const step = PIPELINE[stepIndex];
+
+    // ── Phase 4.5: Budget check before each step ──────────────────────────────
+    const budgetCheck = await checkProjectBudget(project.projectId, guardrails.maxCostPerWorkflow);
+    if (budgetCheck.exceeded) {
+      const errorMessage =
+        `Budget limit exceeded: $${budgetCheck.currentCostUsd.toFixed(4)} ` +
+        `/ $${guardrails.maxCostPerWorkflow.toFixed(2)} max per workflow. ` +
+        `Step blocked.`;
+
+      // Create step record as blocked
+      await db.insert(creativeProjectStepsTable).values({
+        projectId: projectDbId,
+        agentId: null,
+        stepName: step.label,
+        input: { _blocked: true, _reason: "budget_exceeded" } as unknown as Record<string, unknown>,
+        status: "blocked_by_budget",
+        errorMessage,
+      });
+
+      await logAudit(
+        "creative-ai",
+        `step_blocked:${step.slug}`,
+        String(projectDbId),
+        "creative_project",
+        "failure",
+        {
+          step: step.label,
+          reason: "budget_exceeded",
+          currentCostUsd: budgetCheck.currentCostUsd,
+          maxCostUsd: guardrails.maxCostPerWorkflow,
+        },
+      );
+
+      anyFailed = true;
+      // Continue loop — remaining steps will also be blocked
+      continue;
+    }
 
     // Load agent from DB
     const [agent] = await db
@@ -151,11 +273,10 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
         requiredContextTokens: 2000,
       });
 
-      // If intelligent router found nothing, fall back to agent's configured model
+      // Determine primary model
       let selectedModel = routing?.selected ?? null;
 
       if (!selectedModel && agent?.modelId) {
-        const { getActiveModel } = await import("./aiModelService.js");
         selectedModel = await getActiveModel(parseInt(String(agent.modelId), 10));
       }
 
@@ -165,6 +286,14 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
         );
       }
 
+      // Build fallback input list (Phase 4.5)
+      const fallbackModels = (routing?.fallbackEnabled !== false && routing?.fallbacks)
+        ? routing.fallbacks.filter((m) => !!getProviderApiKey(m.provider.slug))
+        : [];
+
+      const temperature = agent?.temperature ? parseFloat(agent.temperature) : 0.7;
+      const maxTokens = agent?.maxTokens ?? 4096;
+
       // ── Build prompt with memory context injected ─────────────────────────
       const { systemPrompt: baseSystemPrompt, userPrompt } = buildPromptForStep(
         step.slug,
@@ -172,22 +301,35 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
         stepOutputs,
       );
 
-      // Append memory context to system prompt
       const memoryContext = formatContextForPrompt(executionContext);
       const systemPrompt = baseSystemPrompt + memoryContext;
 
-      const temperature = agent?.temperature ? parseFloat(agent.temperature) : 0.7;
-      const maxTokens = agent?.maxTokens ?? 4096;
-
-      // ── Execute AI ────────────────────────────────────────────────────────
-      const result = await executeAI({
+      const primaryInput: ExecutionInput = {
         prompt: userPrompt,
         systemPrompt,
         model: selectedModel.model,
         provider: selectedModel.provider,
         temperature,
         maxTokens,
-      });
+      };
+
+      const fallbackInputs: ExecutionInput[] = fallbackModels.map((m) => ({
+        prompt: userPrompt,
+        systemPrompt,
+        model: m.model,
+        provider: m.provider,
+        temperature,
+        maxTokens,
+      }));
+
+      // ── Execute AI with retry + timeout (Phase 4.5) ───────────────────────
+      const execResult = await executeWithRetryAndTimeout(
+        primaryInput,
+        fallbackInputs,
+        guardrails.maxRetryPerProvider,
+        guardrails.providerTimeoutMs,
+      );
+      const { output: result, retryCount, fallbackCount } = execResult;
 
       // ── Record cost (Phase 4: cost intelligence) ──────────────────────────
       await recordCost({
@@ -195,13 +337,13 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
         stepId: stepRecord.id,
         clientId: project.brandName,
         agentSlug: step.slug,
-        provider: selectedModel.provider.slug,
-        model: selectedModel.model.modelId,
+        provider: String(execResult.usedProvider.slug),
+        model: String(execResult.usedModel.modelId),
         inputTokens: result.promptTokens,
         outputTokens: result.completionTokens,
         latencyMs: result.latencyMs,
-        retryCount: 0,
-        fallbackCount: routing?.usedCapabilityMatrix ? 0 : 0,
+        retryCount,
+        fallbackCount,
         status: "success",
         modelRecord: selectedModel.model,
       }).catch((err) => {
@@ -220,8 +362,8 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
       completedStepNames.push(step.label);
       previousMetadata.push({
         stepName: step.label,
-        model: selectedModel.model.modelId,
-        provider: selectedModel.provider.slug,
+        model: String(execResult.usedModel.modelId),
+        provider: String(execResult.usedProvider.slug),
         tokens: result.tokensUsed,
         latencyMs: result.latencyMs,
       });
@@ -231,8 +373,8 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
         .update(creativeProjectStepsTable)
         .set({
           output: parsedOutput,
-          provider: selectedModel.provider.slug,
-          model: selectedModel.model.modelId,
+          provider: String(execResult.usedProvider.slug),
+          model: String(execResult.usedModel.modelId),
           tokenUsage: result.tokensUsed,
           latencyMs: result.latencyMs,
           status: "completed",
@@ -247,9 +389,11 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
         "success",
         {
           step: step.label,
-          model: selectedModel.model.modelId,
+          model: String(execResult.usedModel.modelId),
           tokensUsed: result.tokensUsed,
           latencyMs: result.latencyMs,
+          retryCount,
+          fallbackCount,
           usedCapabilityMatrix: routing?.usedCapabilityMatrix ?? false,
         },
       );
@@ -291,13 +435,13 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
 
   // Aggregate all outputs into project.result
   const aggregatedResult = {
-    brandStrategy:    stepOutputs["brand-strategist"] ?? null,
+    brandStrategy:     stepOutputs["brand-strategist"] ?? null,
     creativeDirection: stepOutputs["creative-director"] ?? null,
-    copy:             stepOutputs["copywriter"] ?? null,
-    qcReview:         stepOutputs["quality-control"] ?? null,
+    copy:              stepOutputs["copywriter"] ?? null,
+    qcReview:          stepOutputs["quality-control"] ?? null,
   };
 
-  // Reflect true outcome — if any step failed, mark the project as failed
+  // Reflect true outcome
   const finalStatus = anyFailed ? "failed" : "completed";
 
   await db

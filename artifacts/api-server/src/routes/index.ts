@@ -14,6 +14,9 @@ import creativeAiRouter from "./creative-ai";
 import capabilitiesRouter from "./capabilities";
 import feedbackRouter from "./feedback";
 import clientMemoryRouter from "./client-memory";
+import seedRouter from "./seed";
+import testRunsRouter from "./test-runs";
+import exportRouter from "./export-routes";
 
 const router: IRouter = Router();
 
@@ -32,5 +35,8 @@ router.use(creativeAiRouter);
 router.use(capabilitiesRouter);
 router.use(feedbackRouter);
 router.use(clientMemoryRouter);
+router.use(seedRouter);
+router.use(testRunsRouter);
+router.use(exportRouter);
 
 export default router;
