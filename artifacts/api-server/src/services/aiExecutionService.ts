@@ -1,4 +1,3 @@
-import OpenAI from "openai";
 import { getProviderApiKey } from "./aiSecretService.js";
 
 export interface ExecutionInput {
@@ -31,34 +30,47 @@ export interface ExecutionOutput {
 async function executeOpenAI(input: ExecutionInput, apiKey: string): Promise<ExecutionOutput> {
   const startTime = Date.now();
 
-  const client = new OpenAI({
-    apiKey,
-    baseURL: (input.provider.baseUrl as string | undefined) || undefined,
-  });
+  const modelId = input.model.modelId;
+  const isOSeries = /^o\d/i.test(modelId);
+  const baseURL = (input.provider.baseUrl as string | undefined) || "https://api.openai.com/v1";
 
-  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
-  if (input.systemPrompt) {
+  const messages: Array<{ role: string; content: string }> = [];
+  if (input.systemPrompt && !isOSeries) {
     messages.push({ role: "system", content: input.systemPrompt });
   }
   messages.push({ role: "user", content: input.prompt });
 
-  const modelId = input.model.modelId;
-  // o-series models don't support temperature or system role in the same way
-  const isOSeries = /^o\d/i.test(modelId);
-
-  const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+  const body: Record<string, unknown> = {
     model: modelId,
     messages,
     max_completion_tokens: input.maxTokens ?? (input.model.maxOutputTokens as number | null) ?? 4096,
-    ...(isOSeries ? {} : { temperature: input.temperature ?? 0.7 }),
   };
+  if (!isOSeries) body.temperature = input.temperature ?? 0.7;
 
-  const completion = await client.chat.completions.create(params);
+  const response = await fetch(`${baseURL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
   const latencyMs = Date.now() - startTime;
 
-  const content = completion.choices[0]?.message.content ?? "";
-  const promptTokens = completion.usage?.prompt_tokens ?? 0;
-  const completionTokens = completion.usage?.completion_tokens ?? 0;
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`OpenAI API error ${response.status}: ${errText}`);
+  }
+
+  const data = (await response.json()) as {
+    choices: Array<{ message: { content: string | null } }>;
+    usage?: { prompt_tokens: number; completion_tokens: number };
+  };
+
+  const content = data.choices[0]?.message.content ?? "";
+  const promptTokens = data.usage?.prompt_tokens ?? 0;
+  const completionTokens = data.usage?.completion_tokens ?? 0;
 
   return {
     content,
