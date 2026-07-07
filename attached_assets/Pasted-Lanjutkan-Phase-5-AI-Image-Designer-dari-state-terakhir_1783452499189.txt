@@ -1,0 +1,57 @@
+Lanjutkan Phase 5 AI Image Designer dari state terakhir. Jangan ulang dari awal.
+
+Status terakhir:
+
+* Backend build clean
+* Frontend build clean
+* OpenAPI/codegen clean
+* DB push clean
+* creative_ai_assets sudah ada
+* Image Prompt Generator Agent, Image Designer Agent, Image QC Agent sudah ditambahkan
+* Routes image generation sudah dibuat
+* Frontend Image Concepts section sudah ditambahkan
+* Asset lifecycle sudah diperbaiki dengan status generating
+* Endpoint validation sudah benar:
+
+  * missing project menghasilkan 404
+  * variations > 4 menghasilkan 400
+* API server dan frontend service sehat
+* Quota habis sebelum final end-to-end UI test
+
+Tugas sekarang:
+
+1. Jangan rewrite kode yang sudah clean.
+2. Jalankan seed untuk memastikan 3 image agents benar-benar ada.
+3. Jalankan typecheck dan build sekali lagi.
+4. Test API:
+
+   * GET /api/creative-ai/projects/:id/assets
+   * POST /api/creative-ai/projects/:id/generate-image
+   * PATCH /api/creative-ai/assets/:assetId/status
+   * POST /api/creative-ai/assets/:assetId/feedback
+5. Test UI:
+
+   * buka /creative-ai
+   * pilih project yang sudah completed
+   * pastikan tombol Generate Image Concepts muncul
+   * klik Generate Image Concepts
+   * pastikan asset status generating → completed/failed muncul di grid
+   * pastikan Copy Prompt, Approve, Needs Revision, Reject bekerja
+6. Pastikan semua image generation:
+
+   * masuk audit log
+   * masuk cost_records
+   * tunduk pada guardrails
+   * tidak crash jika REPLICATE_API_TOKEN belum ada
+   * menampilkan error jelas jika provider key belum dikonfigurasi
+7. Jika Replit preview screenshot/proxy bermasalah tapi curl service sehat, jangan ubah kode hanya karena preview proxy.
+8. Berikan final report:
+
+   * file yang berubah
+   * routes yang tersedia
+   * cara test
+   * env var yang dibutuhkan
+   * known limitation jika storage image belum permanen
+
+Jangan implement video, OCR, voice, atau marketplace.
+Fokus hanya verifikasi dan finalisasi Phase 5 AI Image Designer.
