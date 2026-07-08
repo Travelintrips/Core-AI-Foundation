@@ -1,71 +1,74 @@
-# AI Platform Enterprise
+# AI Enterprise Platform
 
-An enterprise-grade control plane for managing AI infrastructure — providers, models, workflows, prompts, knowledge, memory, tokens, and executions. Built contract-first with a database-driven architecture.
+A full-stack AI operations platform for managing AI providers, models, agents, workflows, and a digital workforce across departments.
 
 ## Stack
 
-- **Monorepo:** pnpm workspaces
-- **Runtime:** Node.js 24, TypeScript 5.9
-- **Backend:** Express 5 (`artifacts/api-server`)
-- **Frontend:** React + Vite + shadcn/ui + Tailwind CSS (`artifacts/ai-platform`)
-- **Database:** PostgreSQL (Replit built-in) + Drizzle ORM
-- **API contract:** OpenAPI (`lib/api-spec/openapi.yaml`) → Zod schemas + React Query hooks via Orval codegen
+- **Frontend**: React + Vite + TailwindCSS v4 + Wouter (routing) + TanStack Query
+- **Backend**: Express (Node.js) + Drizzle ORM + PostgreSQL
+- **Monorepo**: pnpm workspaces
 
-## How to run
+## Project Structure
 
-Both services start automatically via their managed workflows:
+```
+artifacts/
+  ai-platform/   — React frontend (served at /)
+  api-server/    — Express API backend (served at /api)
+  mockup-sandbox/ — Design mockup sandbox (internal)
+lib/
+  db/            — Drizzle schema + migration config
+  api-spec/      — OpenAPI spec + codegen (orval)
+  api-zod/       — Zod schemas (shared between frontend & backend)
+  api-client-react/ — Generated React Query hooks
+```
 
-- **Frontend** (`artifacts/ai-platform: web`) — React/Vite dev server on `$PORT`, served at `/`
-- **API server** (`artifacts/api-server: API Server`) — Express on `$PORT`, served at `/api`
+## Running the Project
 
-### Database
+Both services start automatically via the **Project** run button:
 
-Schema is managed by Drizzle. To push schema changes to the dev database:
+| Service | Command | Port |
+|---------|---------|------|
+| API Server | `pnpm --filter @workspace/api-server run dev` | 8080 |
+| Frontend | `pnpm --filter @workspace/ai-platform run dev` | 20785 |
 
+## Database
+
+Uses Replit's built-in PostgreSQL (DATABASE_URL is pre-configured).
+
+**Push schema changes:**
 ```bash
 pnpm --filter @workspace/db run push
 ```
 
-### Codegen
-
-After modifying `lib/api-spec/openapi.yaml`, regenerate the React Query hooks and Zod schemas:
-
+**Seed initial data** (providers, models, workflows, AI workforce):
 ```bash
-pnpm --filter @workspace/api-spec run codegen
+pnpm --filter @workspace/api-server run seed
 ```
 
-### Build
+The seed is idempotent — safe to run multiple times.
 
-```bash
-pnpm run build
-```
+## Environment / Secrets
 
-## Project structure
+| Secret | Where used | Purpose |
+|--------|-----------|---------|
+| `DATABASE_URL` | Auto-injected | PostgreSQL connection |
+| `SESSION_SECRET` | api-server | Session signing |
+| `ADMIN_API_KEY` | api-server | Protects all `/api/*` routes |
+| `VITE_ADMIN_API_KEY` | ai-platform (Vite) | Frontend sends this as Bearer token |
 
-```
-artifacts/
-  api-server/      # Express backend
-  ai-platform/     # React frontend
-  mockup-sandbox/  # Component preview (canvas/design tool)
-lib/
-  api-spec/        # OpenAPI definition (source of truth)
-  api-client-react/ # Generated React Query hooks
-  api-zod/         # Generated Zod schemas
-  db/              # Drizzle schema + DB client
-scripts/           # Dev automation scripts
-```
+> Auth middleware is **fail-open** when `ADMIN_API_KEY` is not set (development convenience).
 
-## Environment variables
+## Key Features (Phases)
 
-- `DATABASE_URL` — PostgreSQL connection string (auto-provided by Replit)
-- `SESSION_SECRET` — Secret for session signing (set as Replit Secret)
-- `ADMIN_API_KEY` — Admin API authentication key (optional; omitting fails-open in dev)
-- `VITE_ADMIN_API_KEY` — Same value as ADMIN_API_KEY, exposed to frontend (see security note below)
+- **Phase 1–2**: Providers, models, agents, prompts, knowledge bases
+- **Phase 3**: Creative AI (image designer, project pipeline, client review)
+- **Phase 4**: AI capabilities, memory, cost tracking, intelligent routing
+- **Phase 4.8**: Digital Workforce — AI employees across 8 departments with CEO
+- **Phase 5**: Image Designer pipeline (prompt generation → design → QC)
+- **Phase 6**: Client portal with project review and approval flows
 
-## Notes
+## User Preferences
 
-- AI execution (orchestrator/workflows) and analytics are currently simulated — no external AI API keys required
-- pnpm-workspace.yaml enforces a 1-day `minimumReleaseAge` for npm packages (supply-chain safety)
-- **Security note:** `VITE_ADMIN_API_KEY` embeds the admin credential in the browser bundle — this is a known issue to address before production deployment
-
-## User preferences
+- Keep existing monorepo structure — do not restructure or migrate
+- Use `@workspace/api-zod` schemas in api-server routes; never import `zod/v4` directly
+- All `/api/*` routes are protected by adminAuth middleware (except `/api/healthz`, `/api/health`)
