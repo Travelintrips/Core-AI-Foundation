@@ -1,0 +1,439 @@
+Lanjutkan AI Enterprise Platform ke Phase 5.1: Worker Dispatcher Runtime.
+
+PENTING:
+Jangan mengubah implementasi Job Engine yang sudah stabil.
+Jangan rewrite service atau endpoint yang sudah ada.
+Semua perubahan harus additive, modular, backward compatible, OpenAPI-first, TypeScript clean, dan production-ready.
+
+====================================================================
+TUJUAN
+======
+
+Saat ini Job Engine sudah lengkap tetapi masih bersifat manual.
+
+Known limitation:
+
+* claimJob() hanya berjalan jika dipanggil.
+* Belum ada background dispatcher.
+* Belum ada worker runtime.
+* Queue belum memproses job secara otomatis.
+
+Target Phase 5.1:
+
+Mengubah AI Job Engine menjadi Automatic Worker Runtime.
+
+====================================================================
+BAGIAN 1
+WORKER DISPATCHER
+=================
+
+Buat service:
+
+jobDispatcherService
+
+Method:
+
+start()
+
+stop()
+
+tick()
+
+dispatch()
+
+recover()
+
+shutdown()
+
+Dispatcher berjalan menggunakan polling interval yang dapat dikonfigurasi.
+
+Default:
+
+5000 ms
+
+Dispatcher tidak boleh dijalankan dua kali.
+
+====================================================================
+BAGIAN 2
+AUTO DISPATCH
+=============
+
+Dispatcher setiap tick harus:
+
+1.
+
+cek queue paused?
+
+↓
+
+ya
+
+↓
+
+skip
+
+2.
+
+ambil worker idle
+
+3.
+
+claim job
+
+menggunakan claimJob()
+
+4.
+
+jalankan executeJob()
+
+5.
+
+completeJob()
+
+atau
+
+retryJob()
+
+atau
+
+failed
+
+====================================================================
+BAGIAN 3
+WORKER RUNTIME
+==============
+
+Tambahkan runtime worker.
+
+Saat startup:
+
+register worker
+
+heartbeat
+
+status idle
+
+Saat processing:
+
+status busy
+
+running_jobs++
+
+Saat selesai:
+
+running_jobs--
+
+status idle
+
+Saat shutdown:
+
+status offline
+
+====================================================================
+BAGIAN 4
+STALE WORKER RECOVERY
+=====================
+
+Tambahkan recovery.
+
+Jika worker:
+
+heartbeat timeout
+
+↓
+
+offline
+
+Jika worker masih punya running job
+
+↓
+
+release lock
+
+↓
+
+retry
+
+atau
+
+failed
+
+Audit log wajib dibuat.
+
+====================================================================
+BAGIAN 5
+STUCK JOB DETECTOR
+==================
+
+Tambahkan monitor.
+
+Jika job:
+
+running
+
+lebih lama dari timeout
+
+↓
+
+retry
+
+atau
+
+failed
+
+↓
+
+release worker
+
+↓
+
+audit
+
+====================================================================
+BAGIAN 6
+QUEUE SETTINGS
+==============
+
+Tambahkan setting:
+
+dispatcher_enabled
+
+worker_poll_interval_ms
+
+worker_heartbeat_interval_ms
+
+worker_timeout_ms
+
+job_timeout_ms
+
+max_concurrent_jobs
+
+Semua dapat diubah melalui Settings.
+
+====================================================================
+BAGIAN 7
+DISPATCHER API
+==============
+
+Tambahkan endpoint:
+
+GET /api/ai/dispatcher/status
+
+POST /api/ai/dispatcher/start
+
+POST /api/ai/dispatcher/stop
+
+POST /api/ai/dispatcher/tick
+
+Response:
+
+enabled
+
+running
+
+workerCount
+
+idleWorkers
+
+busyWorkers
+
+queueLength
+
+runningJobs
+
+lastTick
+
+lastHeartbeat
+
+processedToday
+
+failedToday
+
+====================================================================
+BAGIAN 8
+QUEUE UI
+========
+
+Pada halaman Queue Center tambahkan panel baru:
+
+Dispatcher Runtime
+
+Menampilkan:
+
+Status
+
+Running / Stopped
+
+Polling Interval
+
+Current Tick
+
+Idle Workers
+
+Busy Workers
+
+Queue Length
+
+Current Throughput
+
+Buttons:
+
+Start
+
+Stop
+
+Tick Once
+
+Restart
+
+====================================================================
+BAGIAN 9
+AUTO START
+==========
+
+Tambahkan konfigurasi.
+
+Development:
+
+dispatcher auto start.
+
+Production:
+
+dispatcher mengikuti env:
+
+AI_DISPATCHER_ENABLED
+
+false sebagai default.
+
+====================================================================
+BAGIAN 10
+SAFETY
+======
+
+Pastikan:
+
+Dispatcher tidak crash jika satu job gagal.
+
+Semua exception harus:
+
+retry sesuai policy
+
+audit log
+
+worker release
+
+Dispatcher tetap hidup.
+
+====================================================================
+BAGIAN 11
+TEST
+====
+
+Verifikasi:
+
+1.
+
+buat 10 job
+
+↓
+
+dispatcher otomatis mengambil
+
+↓
+
+worker menjalankan
+
+↓
+
+completed
+
+2.
+
+pause queue
+
+↓
+
+dispatcher berhenti claim
+
+3.
+
+resume
+
+↓
+
+dispatcher lanjut
+
+4.
+
+worker timeout
+
+↓
+
+offline
+
+↓
+
+job retry
+
+5.
+
+stuck job
+
+↓
+
+retry
+
+↓
+
+failed
+
+↓
+
+audit
+
+====================================================================
+BAGIAN 12
+OUTPUT
+======
+
+Semua implementasi harus:
+
+TypeScript clean
+
+OpenAPI updated
+
+Codegen clean
+
+Build clean
+
+DB migration bila diperlukan
+
+Audit log lengkap
+
+Tidak mengubah endpoint lama
+
+Creative AI otomatis memakai dispatcher tanpa perubahan UI.
+
+====================================================================
+JANGAN IMPLEMENTASI DULU
+========================
+
+Event Bus
+
+Scheduler
+
+Marketplace
+
+Billing
+
+Voice
+
+Video
+
+OCR
+
+Plugin
+
+Target akhir:
+
+AI Enterprise Platform memiliki Worker Dispatcher Runtime yang memproses seluruh queue secara otomatis, stabil, fault-tolerant, dan siap menjadi fondasi Event Bus pada fase berikutnya.
