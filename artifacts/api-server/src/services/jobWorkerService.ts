@@ -11,6 +11,7 @@
  */
 
 import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, or, sql } from "drizzle-orm";
 import { db, aiJobsTable, aiWorkersTable } from "@workspace/db";
 import type { AiJob, AiWorker } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
@@ -69,7 +70,32 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
       )
       .returning();
 
-    if (!claimed) return null; // race condition — another worker got it
+    if (!claimed) {
+      // Retrying job was found but UPDATE expected 'queued' — retry with retrying status
+      const [claimed2] = await tx
+        .update(aiJobsTable)
+        .set({ status: "running", startedAt: new Date(), updatedAt: new Date() })
+        .where(
+          and(
+            eq(aiJobsTable.id, jobRow.id),
+            eq(aiJobsTable.status, "retrying"),
+          ),
+        )
+        .returning();
+      if (!claimed2) return null; // genuine race condition
+      // Update worker
+      await tx
+        .update(aiWorkersTable)
+        .set({
+          status:        "busy",
+          currentJob:    claimed2.id,
+          runningJobs:   sql`running_jobs + 1`,
+          lastHeartbeat: new Date(),
+          updatedAt:     new Date(),
+        })
+        .where(eq(aiWorkersTable.id, workerId));
+      return claimed2;
+    }
 
     // Update worker status
     await tx

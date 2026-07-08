@@ -14,6 +14,10 @@ import {
   getListJobsQueryKey,
   getListWorkersQueryKey,
   getGetDispatcherStatusQueryKey,
+  useGetDispatcherStatus,
+  useStartDispatcher,
+  useStopDispatcher,
+  useTickDispatcher,
   type AiJob,
   type AiWorker,
   type JobStats,
@@ -34,6 +38,7 @@ import {
   Activity,
   AlertCircle,
   Ban,
+  Bot,
   CheckCircle2,
   CircleDot,
   Clock,
@@ -44,8 +49,11 @@ import {
   Play,
   RefreshCw,
   RotateCcw,
+  RotateCw,
+  SkipForward,
   Square,
   Timer,
+  Wifi,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -242,6 +250,35 @@ function DispatcherPanel({
 }) {
   const running = status?.running ?? false;
 
+// ── Dispatcher Runtime Panel ──────────────────────────────────────────────────
+
+function DispatcherPanel() {
+  const { toast } = useToast();
+  const { data: status, isLoading } = useGetDispatcherStatus();
+
+  const start   = useStartDispatcher({
+    onSuccess: () => toast({ title: "Dispatcher started" }),
+    onError:   (e: unknown) => toast({ title: (e as { message?: string })?.message ?? "Failed", variant: "destructive" }),
+  });
+  const stop    = useStopDispatcher({
+    onSuccess: () => toast({ title: "Dispatcher stopped" }),
+    onError:   (e: unknown) => toast({ title: (e as { message?: string })?.message ?? "Failed", variant: "destructive" }),
+  });
+  const tick    = useTickDispatcher({
+    onSuccess: (d) => toast({ title: `Tick: claimed ${d.tick.claimed}, completed ${d.tick.completed}` }),
+    onError:   (e: unknown) => toast({ title: (e as { message?: string })?.message ?? "Failed", variant: "destructive" }),
+  });
+
+  const isMutating = start.isPending || stop.isPending || tick.isPending;
+
+  const running = status?.running ?? false;
+
+  function fmt(iso: string | null | undefined): string {
+    if (!iso) return "—";
+    try { return formatDistanceToNow(new Date(iso), { addSuffix: true }); }
+    catch { return "—"; }
+  }
+
   return (
     <div className="border border-border/50 rounded-lg bg-card/40 p-4 space-y-3">
       {/* Header */}
@@ -347,6 +384,106 @@ function DispatcherPanel({
           className="h-7 flex-1 text-[11px] font-mono gap-1.5"
         >
           <Zap className="size-3" /> Tick Now
+          <Bot className="size-4 text-primary" />
+          <span className="font-mono text-sm font-semibold">Dispatcher Runtime</span>
+          <span className="text-[10px] font-mono text-muted-foreground">Phase 5.1</span>
+        </div>
+        {isLoading ? (
+          <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+        ) : (
+          <Badge className={cn(
+            "text-[10px] font-mono border px-1.5 py-0 h-4",
+            running
+              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+              : "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
+          )}>
+            {running ? "Running" : "Stopped"}
+          </Badge>
+        )}
+      </div>
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+        {[
+          { label: "Workers",    value: status?.workerCount ?? 0,    icon: Cpu,      accent: "text-blue-400"    },
+          { label: "Idle",       value: status?.idleWorkers ?? 0,    icon: Activity, accent: "text-green-400"   },
+          { label: "Busy",       value: status?.busyWorkers ?? 0,    icon: Zap,      accent: "text-yellow-400"  },
+          { label: "Queued",     value: status?.queueLength ?? 0,    icon: ListOrdered, accent: "text-blue-400" },
+          { label: "Done Today", value: status?.processedToday ?? 0, icon: CheckCircle2, accent: "text-emerald-400" },
+          { label: "Failed",     value: status?.failedToday ?? 0,    icon: XCircle,  accent: "text-red-400"     },
+        ].map(({ label, value, icon: Icon, accent }) => (
+          <div key={label} className="bg-muted/20 rounded px-2 py-1.5 flex flex-col gap-0.5">
+            <div className="flex items-center gap-1">
+              <Icon className={cn("size-2.5", accent)} />
+              <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-wide">{label}</span>
+            </div>
+            <span className="text-sm font-bold font-mono">{value}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Heartbeat / last tick */}
+      <div className="flex items-center gap-4 text-[10px] font-mono text-muted-foreground">
+        <div className="flex items-center gap-1">
+          <Wifi className="size-2.5" />
+          <span>Heartbeat: {fmt(status?.lastHeartbeat)}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <RotateCw className="size-2.5" />
+          <span>Last Tick: {fmt(status?.lastTick)}</span>
+        </div>
+        {status && (
+          <div className="flex items-center gap-1 ml-auto">
+            <Clock className="size-2.5" />
+            <span>Poll: {(status as DispatcherStatus & { running: boolean }) && typeof (status as any).workerPollIntervalMs === "number" ? `${(status as any).workerPollIntervalMs / 1000}s` : "5s"}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Control buttons */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button
+          size="sm"
+          variant={running ? "ghost" : "default"}
+          className="h-7 gap-1.5 text-xs font-mono"
+          disabled={running || isMutating}
+          onClick={() => start.mutate()}
+        >
+          {start.isPending ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
+          Start
+        </Button>
+        <Button
+          size="sm"
+          variant={running ? "default" : "ghost"}
+          className="h-7 gap-1.5 text-xs font-mono"
+          disabled={!running || isMutating}
+          onClick={() => stop.mutate()}
+        >
+          {stop.isPending ? <Loader2 className="size-3 animate-spin" /> : <Square className="size-3" />}
+          Stop
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1.5 text-xs font-mono"
+          disabled={isMutating}
+          onClick={() => tick.mutate()}
+        >
+          {tick.isPending ? <Loader2 className="size-3 animate-spin" /> : <SkipForward className="size-3" />}
+          Tick Once
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1.5 text-xs font-mono"
+          disabled={isMutating}
+          onClick={async () => {
+            await stop.mutateAsync();
+            await start.mutateAsync();
+          }}
+        >
+          <RotateCw className="size-3" />
+          Restart
         </Button>
       </div>
     </div>
@@ -537,6 +674,7 @@ export default function QueuePage() {
             onTick={() => runTick.mutate()}
             isMutating={isDispatcherMutating}
           />
+          <DispatcherPanel />
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Worker Panel */}

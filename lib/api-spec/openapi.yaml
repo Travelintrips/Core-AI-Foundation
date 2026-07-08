@@ -1656,6 +1656,11 @@ paths:
       responses:
         "200":
           description: Dispatcher status snapshot
+      tags: [dispatcher]
+      summary: Get dispatcher runtime status
+      responses:
+        "200":
+          description: Dispatcher status
           content:
             application/json:
               schema:
@@ -1669,6 +1674,11 @@ paths:
       responses:
         "200":
           description: Dispatcher started — returns updated status
+      tags: [dispatcher]
+      summary: Start the dispatcher polling loop
+      responses:
+        "200":
+          description: Dispatcher status after start
           content:
             application/json:
               schema:
@@ -1688,6 +1698,11 @@ paths:
       responses:
         "200":
           description: Dispatcher stopped — returns updated status
+      tags: [dispatcher]
+      summary: Stop the dispatcher polling loop
+      responses:
+        "200":
+          description: Dispatcher status after stop
           content:
             application/json:
               schema:
@@ -1707,6 +1722,58 @@ paths:
                 $ref: "#/components/schemas/DispatcherStatus"
         "500":
           description: Tick failed
+      operationId: tickDispatcher
+      tags: [dispatcher]
+      summary: Execute one dispatch cycle immediately
+      responses:
+        "200":
+          description: Dispatcher status plus tick result
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DispatcherStatus"
+                  - type: object
+                    required: [tick]
+                    properties:
+                      tick:
+                        type: object
+                        required: [claimed, completed, failed]
+                        properties:
+                          claimed:   { type: integer }
+                          completed: { type: integer }
+                          failed:    { type: integer }
+
+  /ai/dispatcher/settings:
+    get:
+      operationId: getDispatcherSettings
+      tags: [dispatcher]
+      summary: Get dispatcher configuration
+      responses:
+        "200":
+          description: Current dispatcher settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DispatcherSettings"
+    patch:
+      operationId: updateDispatcherSettings
+      tags: [dispatcher]
+      summary: Update dispatcher configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DispatcherSettings"
+      responses:
+        "200":
+          description: Updated dispatcher settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DispatcherSettings"
+        "400":
+          description: Validation error
           content:
             application/json:
               schema:
@@ -4193,6 +4260,31 @@ components:
         failedToday:
           type: integer
           description: Jobs that failed (and were retried/marked failed) since startup
+      required: [enabled, running, workerCount, idleWorkers, busyWorkers, queueLength, runningJobs, processedToday, failedToday]
+      properties:
+        enabled:        { type: boolean }
+        running:        { type: boolean }
+        workerCount:    { type: integer }
+        idleWorkers:    { type: integer }
+        busyWorkers:    { type: integer }
+        queueLength:    { type: integer }
+        runningJobs:    { type: integer }
+        lastTick:       { type: ["string", "null"] }
+        lastHeartbeat:  { type: ["string", "null"] }
+        processedToday: { type: integer }
+        failedToday:    { type: integer }
+
+    DispatcherSettings:
+      type: object
+      required: [dispatcherEnabled, workerPollIntervalMs, workerHeartbeatIntervalMs, workerTimeoutMs, jobTimeoutMs, maxConcurrentJobs]
+      properties:
+        dispatcherEnabled:         { type: boolean }
+        workerPollIntervalMs:      { type: integer, minimum: 100 }
+        workerHeartbeatIntervalMs: { type: integer, minimum: 100 }
+        workerTimeoutMs:           { type: integer, minimum: 1000 }
+        jobTimeoutMs:              { type: integer, minimum: 1000 }
+        maxConcurrentJobs:         { type: integer, minimum: 1, maximum: 50 }
+
 
     ErrorResponse:
       type: object
