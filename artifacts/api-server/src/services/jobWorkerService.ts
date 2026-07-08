@@ -30,19 +30,27 @@ function exponentialBackoffMs(retryCount: number): number {
  */
 export async function claimJob(workerId: number): Promise<AiJob | null> {
   return db.transaction(async (tx) => {
-    // Find the highest-priority available job and lock it
-    const [job] = await tx.execute(sql`
+    // Find the highest-priority available job and lock it.
+    // Also promotes due 'retrying' jobs (next_retry_at has elapsed) so they
+    // are not lost after exponential/immediate back-off.
+    const rawResult = await tx.execute(sql`
       SELECT * FROM ai_jobs
-      WHERE status = 'queued'
-        AND (scheduled_at IS NULL OR scheduled_at <= NOW())
+      WHERE (
+        (status = 'queued' AND (scheduled_at IS NULL OR scheduled_at <= NOW()))
+        OR
+        (status = 'retrying' AND next_retry_at IS NOT NULL AND next_retry_at <= NOW())
+      )
       ORDER BY priority_score DESC, created_at ASC
       LIMIT 1
       FOR UPDATE SKIP LOCKED
     `);
+    // drizzle-orm node-postgres returns QueryResult; rows is the iterable array
+    const rows = (rawResult as unknown as { rows: Record<string, unknown>[] }).rows ?? [];
+    const [job] = rows;
 
     if (!job) return null;
 
-    const jobRow = job as AiJob;
+    const jobRow = job as unknown as AiJob;
 
     // Claim the job
     const [claimed] = await tx
@@ -250,6 +258,8 @@ export async function retryJob(
 
 /**
  * Cancel a job (regardless of status, unless completed).
+ * When cancelling a running job, atomically releases the assigned worker so
+ * its capacity metrics stay accurate.
  */
 export async function cancelJob(jobId: number, reason?: string): Promise<AiJob> {
   const [job] = await db
@@ -260,17 +270,33 @@ export async function cancelJob(jobId: number, reason?: string): Promise<AiJob> 
   if (!job) throw new Error(`Job ${jobId} not found`);
   if (job.status === "completed") throw new Error("Cannot cancel a completed job");
 
+  const now = new Date();
+
   const [updated] = await db
     .update(aiJobsTable)
     .set({
       status:       "cancelled",
       errorMessage: reason ?? null,
-      updatedAt:    new Date(),
+      updatedAt:    now,
     })
     .where(eq(aiJobsTable.id, jobId))
     .returning();
 
-  await logAudit("job-engine", "job_cancelled", String(jobId), "ai_job", "success", { reason });
+  // If the job was running, release the worker that held it
+  if (job.status === "running") {
+    await db
+      .update(aiWorkersTable)
+      .set({
+        status:       "idle",
+        currentJob:   null,
+        runningJobs:  sql`GREATEST(running_jobs - 1, 0)`,
+        lastHeartbeat: now,
+        updatedAt:    now,
+      })
+      .where(eq(aiWorkersTable.currentJob, jobId));
+  }
+
+  await logAudit("job-engine", "job_cancelled", String(jobId), "ai_job", "success", { reason, wasRunning: job.status === "running" });
 
   return updated;
 }

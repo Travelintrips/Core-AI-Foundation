@@ -209,7 +209,7 @@ router.patch("/ai/jobs/:id/cancel", async (req, res): Promise<void> => {
   const id = parseInt(req.params["id"]!, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid job id" }); return; }
 
-  const { reason } = req.body as { reason?: string };
+  const { reason } = (req.body ?? {}) as { reason?: string };
 
   try {
     const job = await cancelJob(id, reason);
@@ -334,7 +334,7 @@ router.patch("/ai/workers/:id/status", async (req, res): Promise<void> => {
   const id = parseInt(req.params["id"]!, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid worker id" }); return; }
 
-  const { status } = req.body as { status?: string };
+  const { status } = (req.body ?? {}) as { status?: string };
   if (!status || !WORKER_STATUSES.includes(status as typeof WORKER_STATUSES[number])) {
     res.status(400).json({ error: `status must be one of: ${WORKER_STATUSES.join(", ")}` });
     return;
@@ -353,7 +353,7 @@ router.patch("/ai/workers/:id/status", async (req, res): Promise<void> => {
 // ── Queue Management ──────────────────────────────────────────────────────────
 
 router.post("/ai/queue/pause", async (req, res): Promise<void> => {
-  const body = QueueFilterBody.safeParse(req.body);
+  const body = QueueFilterBody.safeParse(req.body ?? {});
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
 
   const count = await pauseQueue({
@@ -364,7 +364,7 @@ router.post("/ai/queue/pause", async (req, res): Promise<void> => {
 });
 
 router.post("/ai/queue/resume", async (req, res): Promise<void> => {
-  const body = QueueFilterBody.safeParse(req.body);
+  const body = QueueFilterBody.safeParse(req.body ?? {});
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
 
   const count = await resumeQueue({
