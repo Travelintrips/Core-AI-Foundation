@@ -32,7 +32,7 @@ router.use(memoryRouter);
 router.use(auditRouter);
 router.use(analyticsRouter);
 router.use(settingsRouter);
-router.use(creativeiRouter);
+router.use(creativeAiRouter);
 router.use(capabilitiesRouter);
 router.use(feedbackRouter);
 router.use(clientMemoryRouter);
