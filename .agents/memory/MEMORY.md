@@ -6,5 +6,6 @@
 - [ai-platform-seed](ai-platform-seed.md) — Seed script at artifacts/api-server/src/seed.ts, run via pnpm seed; seeds 4 providers, 9 models, Brand Strategist agent; idempotent
 - [phase4-services](phase4-services.md) — Phase 4 tables (ai_capabilities, ai_client_memory, ai_cost_records, ai_feedback), services (memoryService, intelligentRouter, costService), and routes added
 - [phase5-image-designer](phase5-image-designer.md) — Phase 5 image pipeline design rules: orval naming collision, logAudit status literals, lifecycle state ordering
+- [phase5-job-engine-complete](phase5-job-engine-complete.md) — Fix checklist: stale dist/ rebuilds, api-zod directory export, QueryResult rows, claimJob retrying, cancelJob worker release
 - [phase6-client-review](phase6-client-review.md) — Phase 6 client portal: no zod in api-server, terminal state guards, GET-view downgrade protection, Wouter public-route pattern
 - [phase48-digital-workforce](phase48-digital-workforce.md) — Phase 4.8 workforce: 7 new tables, seed via POST /api/ai/seed/all, workforce at /ai/workforce/* routes, frontend at /workforce
