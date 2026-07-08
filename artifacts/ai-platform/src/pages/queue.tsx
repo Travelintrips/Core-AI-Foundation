@@ -254,6 +254,23 @@ function DispatcherPanel() {
 
   const isMutating = start.isPending || stop.isPending || tick.isPending;
 
+// ── Dispatcher Panel ──────────────────────────────────────────────────────────
+
+function DispatcherPanel({
+  status,
+  isLoading,
+  onStart,
+  onStop,
+  onTick,
+  isMutating,
+}: {
+  status: DispatcherStatus | undefined;
+  isLoading: boolean;
+  onStart: () => void;
+  onStop: () => void;
+  onTick: () => void;
+  isMutating: boolean;
+}) {
   const running = status?.running ?? false;
 
   function fmt(iso: string | null | undefined): string {
@@ -263,7 +280,7 @@ function DispatcherPanel() {
   }
 
   return (
-    <div className="border border-border/50 rounded-lg bg-card/40 p-4 space-y-3">
+    <div className="border border-border/50 rounded-lg bg-card/40 p-4 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -282,17 +299,33 @@ function DispatcherPanel() {
             {running ? "Running" : "Stopped"}
           </span>
         </div>
+          <Bot className="size-4 text-primary" />
+          <span className="font-mono text-sm font-semibold">Dispatcher Runtime</span>
+          <span className="text-[10px] font-mono text-muted-foreground">Phase 5.1</span>
+        </div>
+        {isLoading ? (
+          <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+        ) : (
+          <Badge className={cn(
+            "text-[10px] font-mono border px-1.5 py-0 h-4",
+            running
+              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+              : "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
+          )}>
+            {running ? "Running" : "Stopped"}
+          </Badge>
+        )}
       </div>
 
       {/* Stats grid */}
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
         {[
-          { label: "Workers",    value: status?.workerCount ?? 0,    icon: Cpu,      accent: "text-blue-400"    },
-          { label: "Idle",       value: status?.idleWorkers ?? 0,    icon: Activity, accent: "text-green-400"   },
-          { label: "Busy",       value: status?.busyWorkers ?? 0,    icon: Zap,      accent: "text-yellow-400"  },
-          { label: "Queued",     value: status?.queueLength ?? 0,    icon: ListOrdered, accent: "text-blue-400" },
-          { label: "Done Today", value: status?.processedToday ?? 0, icon: CheckCircle2, accent: "text-emerald-400" },
-          { label: "Failed",     value: status?.failedToday ?? 0,    icon: XCircle,  accent: "text-red-400"     },
+          { label: "Workers",    value: status?.workerCount ?? 0,    icon: Cpu,         accent: "text-blue-400"    },
+          { label: "Idle",       value: status?.idleWorkers ?? 0,    icon: Activity,    accent: "text-green-400"   },
+          { label: "Busy",       value: status?.busyWorkers ?? 0,    icon: Zap,         accent: "text-yellow-400"  },
+          { label: "Queued",     value: status?.queueLength ?? 0,    icon: ListOrdered, accent: "text-blue-400"    },
+          { label: "Done Today", value: status?.processedToday ?? 0, icon: CheckCircle2,accent: "text-emerald-400" },
+          { label: "Failed",     value: status?.failedToday ?? 0,    icon: XCircle,     accent: "text-red-400"     },
         ].map(({ label, value, icon: Icon, accent }) => (
           <div key={label} className="bg-muted/20 rounded px-2 py-1.5 flex flex-col gap-0.5">
             <div className="flex items-center gap-1">
@@ -314,12 +347,6 @@ function DispatcherPanel() {
           <RotateCw className="size-2.5" />
           <span>Last Tick: {fmt(status?.lastTick)}</span>
         </div>
-        {status && (
-          <div className="flex items-center gap-1 ml-auto">
-            <Clock className="size-2.5" />
-            <span>Poll: {(status as DispatcherStatus & { running: boolean }) && typeof (status as any).workerPollIntervalMs === "number" ? `${(status as any).workerPollIntervalMs / 1000}s` : "5s"}</span>
-          </div>
-        )}
       </div>
 
       {/* Control buttons */}
@@ -329,9 +356,9 @@ function DispatcherPanel() {
           variant={running ? "ghost" : "default"}
           className="h-7 gap-1.5 text-xs font-mono"
           disabled={running || isMutating}
-          onClick={() => start.mutate()}
+          onClick={onStart}
         >
-          {start.isPending ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
+          <Play className="size-3" />
           Start
         </Button>
         <Button
@@ -339,9 +366,9 @@ function DispatcherPanel() {
           variant={running ? "default" : "ghost"}
           className="h-7 gap-1.5 text-xs font-mono"
           disabled={!running || isMutating}
-          onClick={() => stop.mutate()}
+          onClick={onStop}
         >
-          {stop.isPending ? <Loader2 className="size-3 animate-spin" /> : <Square className="size-3" />}
+          <Square className="size-3" />
           Stop
         </Button>
         <Button
@@ -349,28 +376,16 @@ function DispatcherPanel() {
           variant="outline"
           className="h-7 gap-1.5 text-xs font-mono"
           disabled={isMutating}
-          onClick={() => tick.mutate()}
+          onClick={onTick}
         >
-          {tick.isPending ? <Loader2 className="size-3 animate-spin" /> : <SkipForward className="size-3" />}
+          <SkipForward className="size-3" />
           Tick Once
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 gap-1.5 text-xs font-mono"
-          disabled={isMutating}
-          onClick={async () => {
-            await stop.mutateAsync();
-            await start.mutateAsync();
-          }}
-        >
-          <RotateCw className="size-3" />
-          Restart
         </Button>
       </div>
     </div>
   );
 }
+
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
@@ -549,6 +564,14 @@ export default function QueuePage() {
 
           {/* Dispatcher Runtime Panel */}
           <DispatcherPanel />
+          <DispatcherPanel
+            status={dispatcherStatus}
+            isLoading={dispatcherLoading}
+            onStart={() => startDispatcher.mutate()}
+            onStop={() => stopDispatcher.mutate()}
+            onTick={() => runTick.mutate()}
+            isMutating={isDispatcherMutating}
+          />
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Worker Panel */}

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useListAuditLogs } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ShieldAlert, Filter } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
@@ -84,5 +85,3 @@ export default function Audit() {
   );
 }
 
-// Fallback for button if missing
-import { Button } from "@/components/ui/button";

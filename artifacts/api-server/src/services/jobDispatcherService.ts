@@ -14,6 +14,14 @@
  * handleStuckJobs()       — release / retry jobs running beyond timeout
  * getDispatcherStatus()   — return current runtime status snapshot
  * isDispatcherEnabled()   — read env/settings to decide whether to auto-start
+ * Automatic polling dispatcher that claims and executes queued jobs.
+ *
+ * start()    — begin polling loop
+ * stop()     — halt polling loop
+ * tick()     — one full dispatch cycle (recover → claim → execute → complete/retry)
+ * dispatch() — claim + execute one job on a given worker
+ * recover()  — detect stale workers and stuck jobs, recover them
+ * shutdown() — graceful shutdown (stop polling, mark workers offline)
  */
 
 import { eq, and, or, inArray, sql } from "drizzle-orm";

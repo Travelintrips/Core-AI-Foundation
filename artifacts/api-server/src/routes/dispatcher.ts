@@ -5,6 +5,14 @@
  * POST /ai/dispatcher/start   — start background dispatcher
  * POST /ai/dispatcher/stop    — stop background dispatcher
  * POST /ai/dispatcher/tick    — manually run one poll cycle
+ * Dispatcher Routes — Phase 5.1 Worker Dispatcher Runtime
+ *
+ * GET  /api/ai/dispatcher/status   — current runtime status
+ * POST /api/ai/dispatcher/start    — start the dispatcher
+ * POST /api/ai/dispatcher/stop     — stop the dispatcher
+ * POST /api/ai/dispatcher/tick     — run one dispatch cycle immediately
+ * GET  /api/ai/dispatcher/settings — current dispatcher settings
+ * PATCH /api/ai/dispatcher/settings — update dispatcher settings
  */
 
 import { Router } from "express";
