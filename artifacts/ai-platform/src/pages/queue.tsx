@@ -9,7 +9,7 @@ import {
   useGetDispatcherStatus,
   useStartDispatcher,
   useStopDispatcher,
-  useRunDispatcherTick,
+  useTickDispatcher as useRunDispatcherTick,
   getGetJobStatsQueryKey,
   getListJobsQueryKey,
   getListWorkersQueryKey,
@@ -229,31 +229,6 @@ function JobRow({
 
 // ── Dispatcher Runtime Panel ──────────────────────────────────────────────────
 
-function DispatcherPanel() {
-  const { toast } = useToast();
-  const { data: status, isLoading } = useGetDispatcherStatus();
-
-  const start   = useStartDispatcher({
-    mutation: {
-      onSuccess: () => toast({ title: "Dispatcher started" }),
-      onError:   (e: unknown) => toast({ title: (e as { message?: string })?.message ?? "Failed", variant: "destructive" }),
-    },
-  });
-  const stop    = useStopDispatcher({
-    mutation: {
-      onSuccess: () => toast({ title: "Dispatcher stopped" }),
-      onError:   (e: unknown) => toast({ title: (e as { message?: string })?.message ?? "Failed", variant: "destructive" }),
-    },
-  });
-  const tick    = useRunDispatcherTick({
-    mutation: {
-      onSuccess: () => toast({ title: "Tick dispatched" }),
-      onError:   (e: unknown) => toast({ title: (e as { message?: string })?.message ?? "Failed", variant: "destructive" }),
-    },
-  });
-
-  const isMutating = start.isPending || stop.isPending || tick.isPending;
-
 // ── Dispatcher Panel ──────────────────────────────────────────────────────────
 
 function DispatcherPanel({
@@ -299,22 +274,6 @@ function DispatcherPanel({
             {running ? "Running" : "Stopped"}
           </span>
         </div>
-          <Bot className="size-4 text-primary" />
-          <span className="font-mono text-sm font-semibold">Dispatcher Runtime</span>
-          <span className="text-[10px] font-mono text-muted-foreground">Phase 5.1</span>
-        </div>
-        {isLoading ? (
-          <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-        ) : (
-          <Badge className={cn(
-            "text-[10px] font-mono border px-1.5 py-0 h-4",
-            running
-              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-              : "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
-          )}>
-            {running ? "Running" : "Stopped"}
-          </Badge>
-        )}
       </div>
 
       {/* Stats grid */}
@@ -563,7 +522,6 @@ export default function QueuePage() {
           </div>
 
           {/* Dispatcher Runtime Panel */}
-          <DispatcherPanel />
           <DispatcherPanel
             status={dispatcherStatus}
             isLoading={dispatcherLoading}

@@ -19,11 +19,11 @@
 import { Router } from "express";
 import { eq, and, inArray, desc, sql, gte } from "drizzle-orm";
 import {
-  CreateJobBodySchema,
+  CreateJobBody as CreateJobBodySchema,
   ListJobsQueryParams,
-  ReprioritizeJobBodySchema,
-  RegisterWorkerBodySchema,
-  QueueFilterBodySchema,
+  ReprioritizeJobBody as ReprioritizeJobBodySchema,
+  RegisterWorkerBody as RegisterWorkerBodySchema,
+  PauseQueueBody as QueueFilterBodySchema,
 } from "@workspace/api-zod";
 import { db, aiJobsTable, aiWorkersTable } from "@workspace/db";
 import {

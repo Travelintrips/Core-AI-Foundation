@@ -1,6 +1,5 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
   description: AI Platform Enterprise API
@@ -41,12 +40,12 @@ tags:
     description: Client Review Portal — share project results with clients for approval
   - name: public
     description: Public endpoints — token-protected, no admin key required
-
 paths:
   /healthz:
     get:
       operationId: healthCheck
-      tags: [health]
+      tags:
+        - health
       summary: Health check
       responses:
         "200":
@@ -55,13 +54,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
-
-  # ─── REGISTRY: Providers ───────────────────────────────────────────────────
-
   /ai/providers:
     get:
       operationId: listProviders
-      tags: [registry]
+      tags:
+        - registry
       summary: List all AI providers
       responses:
         "200":
@@ -74,7 +71,8 @@ paths:
                   $ref: "#/components/schemas/AiProvider"
     post:
       operationId: createProvider
-      tags: [registry]
+      tags:
+        - registry
       summary: Register a new AI provider
       requestBody:
         required: true
@@ -89,11 +87,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiProvider"
-
   /ai/providers/{id}:
     get:
       operationId: getProvider
-      tags: [registry]
+      tags:
+        - registry
       summary: Get an AI provider
       parameters:
         - name: id
@@ -110,7 +108,8 @@ paths:
                 $ref: "#/components/schemas/AiProvider"
     patch:
       operationId: updateProvider
-      tags: [registry]
+      tags:
+        - registry
       summary: Update an AI provider
       parameters:
         - name: id
@@ -133,7 +132,8 @@ paths:
                 $ref: "#/components/schemas/AiProvider"
     delete:
       operationId: deleteProvider
-      tags: [registry]
+      tags:
+        - registry
       summary: Delete an AI provider
       parameters:
         - name: id
@@ -144,19 +144,19 @@ paths:
       responses:
         "204":
           description: Deleted
-
-  # ─── REGISTRY: Models ──────────────────────────────────────────────────────
-
   /ai/models:
     get:
       operationId: listModels
-      tags: [registry]
+      tags:
+        - registry
       summary: List all AI models
       parameters:
         - name: providerId
           in: query
           schema:
-            type: ["integer", "null"]
+            type:
+              - integer
+              - "null"
       responses:
         "200":
           description: List of models
@@ -168,7 +168,8 @@ paths:
                   $ref: "#/components/schemas/AiModel"
     post:
       operationId: createModel
-      tags: [registry]
+      tags:
+        - registry
       summary: Register a new AI model
       requestBody:
         required: true
@@ -183,11 +184,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiModel"
-
   /ai/models/{id}:
     get:
       operationId: getModel
-      tags: [registry]
+      tags:
+        - registry
       summary: Get an AI model
       parameters:
         - name: id
@@ -204,7 +205,8 @@ paths:
                 $ref: "#/components/schemas/AiModel"
     patch:
       operationId: updateModel
-      tags: [registry]
+      tags:
+        - registry
       summary: Update an AI model
       parameters:
         - name: id
@@ -227,7 +229,8 @@ paths:
                 $ref: "#/components/schemas/AiModel"
     delete:
       operationId: deleteModel
-      tags: [registry]
+      tags:
+        - registry
       summary: Delete an AI model
       parameters:
         - name: id
@@ -238,13 +241,11 @@ paths:
       responses:
         "204":
           description: Deleted
-
-  # ─── AGENTS ────────────────────────────────────────────────────────────────
-
   /ai/agents:
     get:
       operationId: listAgents
-      tags: [agents]
+      tags:
+        - agents
       summary: List all AI agents
       responses:
         "200":
@@ -257,7 +258,8 @@ paths:
                   $ref: "#/components/schemas/AiAgent"
     post:
       operationId: createAgent
-      tags: [agents]
+      tags:
+        - agents
       summary: Register a new AI agent
       requestBody:
         required: true
@@ -272,11 +274,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiAgent"
-
   /ai/agents/{id}:
     get:
       operationId: getAgent
-      tags: [agents]
+      tags:
+        - agents
       summary: Get an AI agent
       parameters:
         - name: id
@@ -293,7 +295,8 @@ paths:
                 $ref: "#/components/schemas/AiAgent"
     patch:
       operationId: updateAgent
-      tags: [agents]
+      tags:
+        - agents
       summary: Update an AI agent
       parameters:
         - name: id
@@ -316,7 +319,8 @@ paths:
                 $ref: "#/components/schemas/AiAgent"
     delete:
       operationId: deleteAgent
-      tags: [agents]
+      tags:
+        - agents
       summary: Delete an AI agent
       parameters:
         - name: id
@@ -327,11 +331,11 @@ paths:
       responses:
         "204":
           description: Deleted
-
   /ai/agents/{id}/capabilities:
     get:
       operationId: listAgentCapabilities
-      tags: [agents]
+      tags:
+        - agents
       summary: List capabilities for an agent
       parameters:
         - name: id
@@ -350,7 +354,8 @@ paths:
                   $ref: "#/components/schemas/AiAgentCapability"
     post:
       operationId: addAgentCapability
-      tags: [agents]
+      tags:
+        - agents
       summary: Add a capability to an agent
       parameters:
         - name: id
@@ -371,11 +376,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiAgentCapability"
-
   /ai/agents/{id}/capabilities/{capId}:
     delete:
       operationId: deleteAgentCapability
-      tags: [agents]
+      tags:
+        - agents
       summary: Remove a capability from an agent
       parameters:
         - name: id
@@ -391,13 +396,11 @@ paths:
       responses:
         "204":
           description: Deleted
-
-  # ─── ORCHESTRATOR ──────────────────────────────────────────────────────────
-
   /ai/orchestrator/execute:
     post:
       operationId: orchestratorExecute
-      tags: [orchestrator]
+      tags:
+        - orchestrator
       summary: Execute an AI request through the orchestrator
       requestBody:
         required: true
@@ -412,11 +415,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OrchestratorResult"
-
   /ai/orchestrator/sessions:
     get:
       operationId: listOrchestratorSessions
-      tags: [orchestrator]
+      tags:
+        - orchestrator
       summary: List orchestrator sessions
       responses:
         "200":
@@ -427,11 +430,11 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/OrchestratorSession"
-
   /ai/orchestrator/sessions/{id}:
     get:
       operationId: getOrchestratorSession
-      tags: [orchestrator]
+      tags:
+        - orchestrator
       summary: Get an orchestrator session
       parameters:
         - name: id
@@ -446,13 +449,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OrchestratorSession"
-
-  # ─── WORKFLOWS ─────────────────────────────────────────────────────────────
-
   /ai/workflows:
     get:
       operationId: listWorkflows
-      tags: [workflows]
+      tags:
+        - workflows
       summary: List all AI workflows
       responses:
         "200":
@@ -465,7 +466,8 @@ paths:
                   $ref: "#/components/schemas/AiWorkflow"
     post:
       operationId: createWorkflow
-      tags: [workflows]
+      tags:
+        - workflows
       summary: Create a new workflow
       requestBody:
         required: true
@@ -480,11 +482,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiWorkflow"
-
   /ai/workflows/{id}:
     get:
       operationId: getWorkflow
-      tags: [workflows]
+      tags:
+        - workflows
       summary: Get a workflow
       parameters:
         - name: id
@@ -501,7 +503,8 @@ paths:
                 $ref: "#/components/schemas/AiWorkflow"
     patch:
       operationId: updateWorkflow
-      tags: [workflows]
+      tags:
+        - workflows
       summary: Update a workflow
       parameters:
         - name: id
@@ -524,7 +527,8 @@ paths:
                 $ref: "#/components/schemas/AiWorkflow"
     delete:
       operationId: deleteWorkflow
-      tags: [workflows]
+      tags:
+        - workflows
       summary: Delete a workflow
       parameters:
         - name: id
@@ -535,11 +539,11 @@ paths:
       responses:
         "204":
           description: Deleted
-
   /ai/workflows/{id}/execute:
     post:
       operationId: executeWorkflow
-      tags: [workflows]
+      tags:
+        - workflows
       summary: Execute a workflow
       parameters:
         - name: id
@@ -560,21 +564,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WorkflowExecution"
-
   /ai/workflow-executions:
     get:
       operationId: listWorkflowExecutions
-      tags: [workflows]
+      tags:
+        - workflows
       summary: List workflow executions
       parameters:
         - name: workflowId
           in: query
           schema:
-            type: ["integer", "null"]
+            type:
+              - integer
+              - "null"
         - name: status
           in: query
           schema:
-            type: ["string", "null"]
+            type:
+              - string
+              - "null"
       responses:
         "200":
           description: List of executions
@@ -584,11 +592,11 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/WorkflowExecution"
-
   /ai/workflow-executions/{id}:
     get:
       operationId: getWorkflowExecution
-      tags: [workflows]
+      tags:
+        - workflows
       summary: Get a workflow execution
       parameters:
         - name: id
@@ -603,19 +611,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WorkflowExecution"
-
-  # ─── PROMPTS ───────────────────────────────────────────────────────────────
-
   /ai/prompts:
     get:
       operationId: listPrompts
-      tags: [prompts]
+      tags:
+        - prompts
       summary: List all prompts
       parameters:
         - name: category
           in: query
           schema:
-            type: ["string", "null"]
+            type:
+              - string
+              - "null"
       responses:
         "200":
           description: List of prompts
@@ -627,7 +635,8 @@ paths:
                   $ref: "#/components/schemas/AiPrompt"
     post:
       operationId: createPrompt
-      tags: [prompts]
+      tags:
+        - prompts
       summary: Create a new prompt
       requestBody:
         required: true
@@ -642,11 +651,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiPrompt"
-
   /ai/prompts/{id}:
     get:
       operationId: getPrompt
-      tags: [prompts]
+      tags:
+        - prompts
       summary: Get a prompt
       parameters:
         - name: id
@@ -663,7 +672,8 @@ paths:
                 $ref: "#/components/schemas/AiPrompt"
     patch:
       operationId: updatePrompt
-      tags: [prompts]
+      tags:
+        - prompts
       summary: Update a prompt
       parameters:
         - name: id
@@ -686,7 +696,8 @@ paths:
                 $ref: "#/components/schemas/AiPrompt"
     delete:
       operationId: deletePrompt
-      tags: [prompts]
+      tags:
+        - prompts
       summary: Delete a prompt
       parameters:
         - name: id
@@ -697,11 +708,11 @@ paths:
       responses:
         "204":
           description: Deleted
-
   /ai/prompts/{id}/versions:
     get:
       operationId: listPromptVersions
-      tags: [prompts]
+      tags:
+        - prompts
       summary: List prompt versions
       parameters:
         - name: id
@@ -720,7 +731,8 @@ paths:
                   $ref: "#/components/schemas/AiPromptVersion"
     post:
       operationId: createPromptVersion
-      tags: [prompts]
+      tags:
+        - prompts
       summary: Create a new version of a prompt
       parameters:
         - name: id
@@ -741,13 +753,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiPromptVersion"
-
-  # ─── KNOWLEDGE BASE ────────────────────────────────────────────────────────
-
   /ai/knowledge-bases:
     get:
       operationId: listKnowledgeBases
-      tags: [knowledge]
+      tags:
+        - knowledge
       summary: List all knowledge bases
       responses:
         "200":
@@ -760,7 +770,8 @@ paths:
                   $ref: "#/components/schemas/KnowledgeBase"
     post:
       operationId: createKnowledgeBase
-      tags: [knowledge]
+      tags:
+        - knowledge
       summary: Create a knowledge base
       requestBody:
         required: true
@@ -775,11 +786,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/KnowledgeBase"
-
   /ai/knowledge-bases/{id}:
     get:
       operationId: getKnowledgeBase
-      tags: [knowledge]
+      tags:
+        - knowledge
       summary: Get a knowledge base
       parameters:
         - name: id
@@ -796,7 +807,8 @@ paths:
                 $ref: "#/components/schemas/KnowledgeBase"
     patch:
       operationId: updateKnowledgeBase
-      tags: [knowledge]
+      tags:
+        - knowledge
       summary: Update a knowledge base
       parameters:
         - name: id
@@ -819,7 +831,8 @@ paths:
                 $ref: "#/components/schemas/KnowledgeBase"
     delete:
       operationId: deleteKnowledgeBase
-      tags: [knowledge]
+      tags:
+        - knowledge
       summary: Delete a knowledge base
       parameters:
         - name: id
@@ -830,11 +843,11 @@ paths:
       responses:
         "204":
           description: Deleted
-
   /ai/knowledge-bases/{id}/documents:
     get:
       operationId: listKnowledgeDocuments
-      tags: [knowledge]
+      tags:
+        - knowledge
       summary: List documents in a knowledge base
       parameters:
         - name: id
@@ -853,7 +866,8 @@ paths:
                   $ref: "#/components/schemas/KnowledgeDocument"
     post:
       operationId: addKnowledgeDocument
-      tags: [knowledge]
+      tags:
+        - knowledge
       summary: Add a document to a knowledge base
       parameters:
         - name: id
@@ -874,11 +888,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/KnowledgeDocument"
-
   /ai/knowledge-bases/{kbId}/documents/{docId}:
     delete:
       operationId: deleteKnowledgeDocument
-      tags: [knowledge]
+      tags:
+        - knowledge
       summary: Delete a document from a knowledge base
       parameters:
         - name: kbId
@@ -894,23 +908,25 @@ paths:
       responses:
         "204":
           description: Deleted
-
-  # ─── MEMORY ────────────────────────────────────────────────────────────────
-
   /ai/memory:
     get:
       operationId: listMemoryEntries
-      tags: [memory]
+      tags:
+        - memory
       summary: List memory entries
       parameters:
         - name: agentId
           in: query
           schema:
-            type: ["string", "null"]
+            type:
+              - string
+              - "null"
         - name: sessionId
           in: query
           schema:
-            type: ["string", "null"]
+            type:
+              - string
+              - "null"
       responses:
         "200":
           description: List of memory entries
@@ -922,7 +938,8 @@ paths:
                   $ref: "#/components/schemas/MemoryEntry"
     post:
       operationId: createMemoryEntry
-      tags: [memory]
+      tags:
+        - memory
       summary: Create a memory entry
       requestBody:
         required: true
@@ -937,11 +954,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MemoryEntry"
-
   /ai/memory/{id}:
     get:
       operationId: getMemoryEntry
-      tags: [memory]
+      tags:
+        - memory
       summary: Get a memory entry
       parameters:
         - name: id
@@ -958,7 +975,8 @@ paths:
                 $ref: "#/components/schemas/MemoryEntry"
     delete:
       operationId: deleteMemoryEntry
-      tags: [memory]
+      tags:
+        - memory
       summary: Delete a memory entry
       parameters:
         - name: id
@@ -969,31 +987,37 @@ paths:
       responses:
         "204":
           description: Deleted
-
-  # ─── AUDIT LOG ─────────────────────────────────────────────────────────────
-
   /ai/audit-logs:
     get:
       operationId: listAuditLogs
-      tags: [audit]
+      tags:
+        - audit
       summary: List audit logs
       parameters:
         - name: module
           in: query
           schema:
-            type: ["string", "null"]
+            type:
+              - string
+              - "null"
         - name: action
           in: query
           schema:
-            type: ["string", "null"]
+            type:
+              - string
+              - "null"
         - name: limit
           in: query
           schema:
-            type: ["integer", "null"]
+            type:
+              - integer
+              - "null"
         - name: offset
           in: query
           schema:
-            type: ["integer", "null"]
+            type:
+              - integer
+              - "null"
       responses:
         "200":
           description: List of audit logs
@@ -1001,13 +1025,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuditLogPage"
-
-  # ─── ANALYTICS ─────────────────────────────────────────────────────────────
-
   /ai/analytics/overview:
     get:
       operationId: getAnalyticsOverview
-      tags: [analytics]
+      tags:
+        - analytics
       summary: Get platform-level analytics overview
       responses:
         "200":
@@ -1016,17 +1038,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AnalyticsOverview"
-
   /ai/analytics/usage:
     get:
       operationId: getAnalyticsUsage
-      tags: [analytics]
+      tags:
+        - analytics
       summary: Get usage statistics over time
       parameters:
         - name: days
           in: query
           schema:
-            type: ["integer", "null"]
+            type:
+              - integer
+              - "null"
       responses:
         "200":
           description: Usage data
@@ -1036,11 +1060,11 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/UsageDataPoint"
-
   /ai/analytics/provider-breakdown:
     get:
       operationId: getProviderBreakdown
-      tags: [analytics]
+      tags:
+        - analytics
       summary: Get token usage breakdown by provider
       responses:
         "200":
@@ -1051,13 +1075,11 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ProviderBreakdown"
-
-  # ─── SETTINGS ──────────────────────────────────────────────────────────────
-
   /ai/settings:
     get:
       operationId: listSettings
-      tags: [settings]
+      tags:
+        - settings
       summary: List all platform settings
       responses:
         "200":
@@ -1068,11 +1090,11 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/AiSetting"
-
   /ai/settings/{key}:
     get:
       operationId: getSetting
-      tags: [settings]
+      tags:
+        - settings
       summary: Get a specific setting
       parameters:
         - name: key
@@ -1089,7 +1111,8 @@ paths:
                 $ref: "#/components/schemas/AiSetting"
     put:
       operationId: upsertSetting
-      tags: [settings]
+      tags:
+        - settings
       summary: Create or update a setting
       parameters:
         - name: key
@@ -1112,7 +1135,8 @@ paths:
                 $ref: "#/components/schemas/AiSetting"
     delete:
       operationId: deleteSetting
-      tags: [settings]
+      tags:
+        - settings
       summary: Delete a setting
       parameters:
         - name: key
@@ -1123,13 +1147,11 @@ paths:
       responses:
         "204":
           description: Deleted
-
-  # ─── CREATIVE AI ───────────────────────────────────────────────────────────
-
   /creative-ai/brief:
     post:
       operationId: createCreativeBrief
-      tags: [creative-ai]
+      tags:
+        - creative-ai
       summary: Submit a creative brief and start the 4-agent AI workflow
       requestBody:
         required: true
@@ -1144,11 +1166,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreativeProject"
-
   /creative-ai/projects:
     get:
       operationId: listCreativeProjects
-      tags: [creative-ai]
+      tags:
+        - creative-ai
       summary: List all creative projects
       responses:
         "200":
@@ -1159,11 +1181,11 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/CreativeProject"
-
   /creative-ai/projects/{id}:
     get:
       operationId: getCreativeProject
-      tags: [creative-ai]
+      tags:
+        - creative-ai
       summary: Get a creative project with all step results
       parameters:
         - name: id
@@ -1179,11 +1201,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreativeProjectDetail"
-
   /creative-ai/projects/{id}/status:
     patch:
       operationId: updateCreativeProjectStatus
-      tags: [creative-ai]
+      tags:
+        - creative-ai
       summary: Update project status
       parameters:
         - name: id
@@ -1204,13 +1226,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreativeProject"
-
-  # ─── CREATIVE AI: Image Designer (Phase 5) ──────────────────────────────────
-
   /creative-ai/projects/{id}/generate-image:
     post:
       operationId: generateImageConcepts
-      tags: [creative-ai]
+      tags:
+        - creative-ai
       summary: Start image generation pipeline for a creative project
       description: Runs Image Prompt Generator → Image Designer (Replicate) → Image QC in the background. Returns immediately. Poll /assets to get results.
       parameters:
@@ -1251,11 +1271,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
   /creative-ai/projects/{id}/assets:
     get:
       operationId: listProjectAssets
-      tags: [creative-ai]
+      tags:
+        - creative-ai
       summary: List all image assets for a creative project
       parameters:
         - name: id
@@ -1273,11 +1293,11 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/CreativeAiAsset"
-
   /creative-ai/assets/{assetId}/status:
     patch:
       operationId: updateAssetStatus
-      tags: [creative-ai]
+      tags:
+        - creative-ai
       summary: Update an image asset status (approve / needs_revision / reject)
       parameters:
         - name: assetId
@@ -1304,11 +1324,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
   /creative-ai/assets/{assetId}/feedback:
     post:
       operationId: submitAssetFeedback
-      tags: [creative-ai]
+      tags:
+        - creative-ai
       summary: Submit human feedback on an image asset
       parameters:
         - name: assetId
@@ -1335,11 +1355,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
   /creative-ai/analytics/images:
     get:
       operationId: getCreativeImageAnalytics
-      tags: [creative-ai]
+      tags:
+        - creative-ai
       summary: Aggregate image generation analytics across all projects
       parameters:
         - name: days
@@ -1355,13 +1375,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreativeAiImageAnalytics"
-
-  # ─── JOB ENGINE ──────────────────────────────────────────────────────────────
-
   /ai/jobs:
     get:
       operationId: listJobs
-      tags: [job-engine]
+      tags:
+        - job-engine
       summary: List jobs with optional filters
       parameters:
         - name: status
@@ -1396,7 +1414,8 @@ paths:
                 $ref: "#/components/schemas/JobPage"
     post:
       operationId: createJob
-      tags: [job-engine]
+      tags:
+        - job-engine
       summary: Enqueue a new job
       requestBody:
         required: true
@@ -1417,11 +1436,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
   /ai/jobs/stats:
     get:
       operationId: getJobStats
-      tags: [job-engine]
+      tags:
+        - job-engine
       summary: Queue statistics for the dashboard
       responses:
         "200":
@@ -1430,11 +1449,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/JobStats"
-
   /ai/jobs/{id}:
     get:
       operationId: getJob
-      tags: [job-engine]
+      tags:
+        - job-engine
       summary: Get a single job by ID
       parameters:
         - name: id
@@ -1455,11 +1474,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
   /ai/jobs/{id}/cancel:
     patch:
       operationId: cancelJob
-      tags: [job-engine]
+      tags:
+        - job-engine
       summary: Cancel a job
       parameters:
         - name: id
@@ -1488,11 +1507,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
   /ai/jobs/{id}/retry:
     patch:
       operationId: retryJob
-      tags: [job-engine]
+      tags:
+        - job-engine
       summary: Manually retry a failed/blocked job
       parameters:
         - name: id
@@ -1513,11 +1532,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
   /ai/jobs/{id}/priority:
     patch:
       operationId: reprioritizeJob
-      tags: [job-engine]
+      tags:
+        - job-engine
       summary: Update job priority and recompute score
       parameters:
         - name: id
@@ -1544,11 +1563,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
   /ai/workers:
     get:
       operationId: listWorkers
-      tags: [job-engine]
+      tags:
+        - job-engine
       summary: List all workers
       responses:
         "200":
@@ -1561,7 +1580,8 @@ paths:
                   $ref: "#/components/schemas/AiWorker"
     post:
       operationId: registerWorker
-      tags: [job-engine]
+      tags:
+        - job-engine
       summary: Register or upsert a worker
       requestBody:
         required: true
@@ -1576,11 +1596,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiWorker"
-
   /ai/workers/{id}/heartbeat:
     patch:
       operationId: workerHeartbeat
-      tags: [job-engine]
+      tags:
+        - job-engine
       summary: Send worker heartbeat
       parameters:
         - name: id
@@ -1601,11 +1621,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
   /ai/queue/pause:
     post:
       operationId: pauseQueue
-      tags: [job-engine]
+      tags:
+        - job-engine
       summary: Pause queued jobs (queued → waiting)
       requestBody:
         content:
@@ -1619,15 +1639,16 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [paused]
+                required:
+                  - paused
                 properties:
                   paused:
                     type: integer
-
   /ai/queue/resume:
     post:
       operationId: resumeQueue
-      tags: [job-engine]
+      tags:
+        - job-engine
       summary: Resume paused jobs (waiting → queued)
       requestBody:
         content:
@@ -1641,22 +1662,16 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [resumed]
+                required:
+                  - resumed
                 properties:
                   resumed:
                     type: integer
-
-  # ─── DISPATCHER ──────────────────────────────────────────────────────────────
-
   /ai/dispatcher/status:
     get:
       operationId: getDispatcherStatus
-      tags: [job-engine]
-      summary: Get background worker dispatcher runtime status
-      responses:
-        "200":
-          description: Dispatcher status snapshot
-      tags: [dispatcher]
+      tags:
+        - dispatcher
       summary: Get dispatcher runtime status
       responses:
         "200":
@@ -1665,16 +1680,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DispatcherStatus"
-
   /ai/dispatcher/start:
     post:
       operationId: startDispatcher
-      tags: [job-engine]
-      summary: Start the background worker dispatcher
-      responses:
-        "200":
-          description: Dispatcher started — returns updated status
-      tags: [dispatcher]
+      tags:
+        - dispatcher
       summary: Start the dispatcher polling loop
       responses:
         "200":
@@ -1689,16 +1699,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
   /ai/dispatcher/stop:
     post:
       operationId: stopDispatcher
-      tags: [job-engine]
-      summary: Stop the background worker dispatcher
-      responses:
-        "200":
-          description: Dispatcher stopped — returns updated status
-      tags: [dispatcher]
+      tags:
+        - dispatcher
       summary: Stop the dispatcher polling loop
       responses:
         "200":
@@ -1707,23 +1712,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DispatcherStatus"
-
   /ai/dispatcher/tick:
     post:
-      operationId: runDispatcherTick
-      tags: [job-engine]
-      summary: Manually trigger one dispatcher poll cycle
-      responses:
-        "200":
-          description: Tick completed — returns updated status
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DispatcherStatus"
-        "500":
-          description: Tick failed
       operationId: tickDispatcher
-      tags: [dispatcher]
+      tags:
+        - dispatcher
       summary: Execute one dispatch cycle immediately
       responses:
         "200":
@@ -1734,20 +1727,27 @@ paths:
                 allOf:
                   - $ref: "#/components/schemas/DispatcherStatus"
                   - type: object
-                    required: [tick]
+                    required:
+                      - tick
                     properties:
                       tick:
                         type: object
-                        required: [claimed, completed, failed]
+                        required:
+                          - claimed
+                          - completed
+                          - failed
                         properties:
-                          claimed:   { type: integer }
-                          completed: { type: integer }
-                          failed:    { type: integer }
-
+                          claimed:
+                            type: integer
+                          completed:
+                            type: integer
+                          failed:
+                            type: integer
   /ai/dispatcher/settings:
     get:
       operationId: getDispatcherSettings
-      tags: [dispatcher]
+      tags:
+        - dispatcher
       summary: Get dispatcher configuration
       responses:
         "200":
@@ -1758,7 +1758,8 @@ paths:
                 $ref: "#/components/schemas/DispatcherSettings"
     patch:
       operationId: updateDispatcherSettings
-      tags: [dispatcher]
+      tags:
+        - dispatcher
       summary: Update dispatcher configuration
       requestBody:
         content:
@@ -1778,13 +1779,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
-  # ─── CAPABILITIES ────────────────────────────────────────────────────────────
-
   /capabilities:
     get:
       operationId: listCapabilities
-      tags: [capabilities]
+      tags:
+        - capabilities
       summary: List all capability matrix entries
       responses:
         "200":
@@ -1797,7 +1796,8 @@ paths:
                   $ref: "#/components/schemas/AiCapability"
     post:
       operationId: createCapability
-      tags: [capabilities]
+      tags:
+        - capabilities
       summary: Create a new capability entry
       requestBody:
         required: true
@@ -1812,11 +1812,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiCapability"
-
   /capabilities/skill/{skill}:
     get:
       operationId: listCapabilitiesForSkill
-      tags: [capabilities]
+      tags:
+        - capabilities
       summary: List capabilities for a specific skill
       parameters:
         - in: path
@@ -1833,11 +1833,11 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/AiCapability"
-
   /capabilities/{id}:
     get:
       operationId: getCapability
-      tags: [capabilities]
+      tags:
+        - capabilities
       summary: Get a single capability entry
       parameters:
         - in: path
@@ -1856,7 +1856,8 @@ paths:
           description: Not found
     patch:
       operationId: updateCapability
-      tags: [capabilities]
+      tags:
+        - capabilities
       summary: Update a capability entry
       parameters:
         - in: path
@@ -1879,7 +1880,8 @@ paths:
                 $ref: "#/components/schemas/AiCapability"
     delete:
       operationId: deleteCapability
-      tags: [capabilities]
+      tags:
+        - capabilities
       summary: Delete a capability entry
       parameters:
         - in: path
@@ -1890,13 +1892,11 @@ paths:
       responses:
         "204":
           description: Deleted
-
-  # ─── CLIENT MEMORY ────────────────────────────────────────────────────────────
-
   /client-memory/{clientId}:
     get:
       operationId: getClientMemory
-      tags: [client-memory]
+      tags:
+        - client-memory
       summary: Get all memory entries for a client
       parameters:
         - in: path
@@ -1913,7 +1913,8 @@ paths:
                 $ref: "#/components/schemas/ClientMemoryResponse"
     post:
       operationId: upsertClientMemory
-      tags: [client-memory]
+      tags:
+        - client-memory
       summary: Upsert a key-value memory entry for a client
       parameters:
         - in: path
@@ -1934,11 +1935,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientMemoryResponse"
-
   /client-memory/{clientId}/{key}:
     delete:
       operationId: deleteClientMemoryKey
-      tags: [client-memory]
+      tags:
+        - client-memory
       summary: Delete a specific memory key for a client
       parameters:
         - in: path
@@ -1954,13 +1955,11 @@ paths:
       responses:
         "204":
           description: Deleted
-
-  # ─── FEEDBACK ────────────────────────────────────────────────────────────────
-
   /creative-ai/projects/{id}/feedback:
     get:
       operationId: listProjectFeedback
-      tags: [feedback]
+      tags:
+        - feedback
       summary: List all human feedback for a creative project
       parameters:
         - in: path
@@ -1979,7 +1978,8 @@ paths:
                   $ref: "#/components/schemas/FeedbackEntry"
     post:
       operationId: submitProjectFeedback
-      tags: [feedback]
+      tags:
+        - feedback
       summary: Submit human feedback on a creative project step
       parameters:
         - in: path
@@ -2000,13 +2000,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FeedbackEntry"
-
-  # ─── ANALYTICS (Phase 4) ────────────────────────────────────────────────────
-
   /ai/analytics/agent-stats:
     get:
       operationId: getAgentStats
-      tags: [analytics]
+      tags:
+        - analytics
       summary: Agent performance statistics
       parameters:
         - in: query
@@ -2023,11 +2021,11 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/AgentStats"
-
   /ai/analytics/costs:
     get:
       operationId: getCostAnalytics
-      tags: [analytics]
+      tags:
+        - analytics
       summary: Cost analytics — daily trend, by provider, by agent
       parameters:
         - in: query
@@ -2042,13 +2040,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CostAnalyticsResponse"
-
-  # ─── Phase 6: Client Review Portal (Admin) ───────────────────────────────────
-
   /creative-ai/projects/{id}/client-review-link:
     post:
       operationId: createClientReviewLink
-      tags: [client-review]
+      tags:
+        - client-review
       summary: Create a secure client review link for a project
       parameters:
         - in: path
@@ -2069,11 +2065,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientReviewWithToken"
-
   /creative-ai/projects/{id}/client-reviews:
     get:
       operationId: listClientReviews
-      tags: [client-review]
+      tags:
+        - client-review
       summary: List all client review links for a project
       parameters:
         - in: path
@@ -2090,11 +2086,11 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ClientReview"
-
   /creative-ai/client-reviews/{reviewId}/revoke:
     patch:
       operationId: revokeClientReview
-      tags: [client-review]
+      tags:
+        - client-review
       summary: Revoke a client review link
       parameters:
         - in: path
@@ -2109,11 +2105,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientReview"
-
   /creative-ai/projects/{id}/review-comments:
     get:
       operationId: listReviewComments
-      tags: [client-review]
+      tags:
+        - client-review
       summary: List all client comments for a project
       parameters:
         - in: path
@@ -2130,11 +2126,11 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ClientComment"
-
   /creative-ai/analytics/client-reviews:
     get:
       operationId: getClientReviewAnalytics
-      tags: [client-review]
+      tags:
+        - client-review
       summary: Client review analytics
       responses:
         "200":
@@ -2143,13 +2139,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientReviewAnalytics"
-
-  # ─── Phase 6: Public Client Review Endpoints ──────────────────────────────────
-
   /public/creative-review/{token}:
     get:
       operationId: getPublicCreativeReview
-      tags: [public]
+      tags:
+        - public
       summary: Get a project for client review via secure token (no admin key needed)
       parameters:
         - in: path
@@ -2176,11 +2170,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
   /public/creative-review/{token}/comment:
     post:
       operationId: addClientComment
-      tags: [public]
+      tags:
+        - public
       summary: Add a comment to a creative review
       parameters:
         - in: path
@@ -2201,11 +2195,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientComment"
-
   /public/creative-review/{token}/approve:
     post:
       operationId: approveCreativeReview
-      tags: [public]
+      tags:
+        - public
       summary: Client approves the project
       parameters:
         - in: path
@@ -2226,11 +2220,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientActionResult"
-
   /public/creative-review/{token}/reject:
     post:
       operationId: rejectCreativeReview
-      tags: [public]
+      tags:
+        - public
       summary: Client rejects the project
       parameters:
         - in: path
@@ -2251,11 +2245,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientActionResult"
-
   /public/creative-review/{token}/request-revision:
     post:
       operationId: requestRevisionCreativeReview
-      tags: [public]
+      tags:
+        - public
       summary: Client requests revision
       parameters:
         - in: path
@@ -2276,7 +2270,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientActionResult"
-
 components:
   schemas:
     HealthStatus:
@@ -2286,12 +2279,16 @@ components:
           type: string
       required:
         - status
-
-    # ── Providers ──────────────────────────────────────────────────────────
-
     AiProvider:
       type: object
-      required: [id, name, slug, baseUrl, isActive, createdAt, updatedAt]
+      required:
+        - id
+        - name
+        - slug
+        - baseUrl
+        - isActive
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: integer
@@ -2299,16 +2296,20 @@ components:
           type: string
         slug:
           type: string
-          description: "e.g. openai, anthropic, gemini, replicate"
+          description: e.g. openai, anthropic, gemini, replicate
         baseUrl:
           type: string
         apiKeyEnvVar:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           description: Name of env var holding the API key
         isActive:
           type: boolean
         metadata:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
           description: Extra provider config (JSON)
         createdAt:
           type: string
@@ -2316,10 +2317,12 @@ components:
         updatedAt:
           type: string
           format: date-time
-
     AiProviderInput:
       type: object
-      required: [name, slug, baseUrl]
+      required:
+        - name
+        - slug
+        - baseUrl
       properties:
         name:
           type: string
@@ -2333,7 +2336,6 @@ components:
           type: boolean
         metadata:
           type: object
-
     AiProviderUpdate:
       type: object
       properties:
@@ -2347,19 +2349,26 @@ components:
           type: boolean
         metadata:
           type: object
-
-    # ── Models ─────────────────────────────────────────────────────────────
-
     AiModel:
       type: object
-      required: [id, providerId, name, modelId, capabilities, isActive, createdAt, updatedAt]
+      required:
+        - id
+        - providerId
+        - name
+        - modelId
+        - capabilities
+        - isActive
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: integer
         providerId:
           type: integer
         providerName:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         name:
           type: string
           description: Human-friendly name
@@ -2370,29 +2379,42 @@ components:
           type: array
           items:
             type: string
-          description: "e.g. [text, vision, code, embeddings]"
+          description: e.g. [text, vision, code, embeddings]
         contextWindow:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         maxOutputTokens:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         costPerInputToken:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         costPerOutputToken:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         isActive:
           type: boolean
         metadata:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
-
     AiModelInput:
       type: object
-      required: [providerId, name, modelId, capabilities]
+      required:
+        - providerId
+        - name
+        - modelId
+        - capabilities
       properties:
         providerId:
           type: integer
@@ -2416,7 +2438,6 @@ components:
           type: boolean
         metadata:
           type: object
-
     AiModelUpdate:
       type: object
       properties:
@@ -2438,12 +2459,19 @@ components:
           type: boolean
         metadata:
           type: object
-
-    # ── Agents ─────────────────────────────────────────────────────────────
-
     AiAgent:
       type: object
-      required: [id, name, slug, role, status, priority, allowedTools, version, createdAt, updatedAt]
+      required:
+        - id
+        - name
+        - slug
+        - role
+        - status
+        - priority
+        - allowedTools
+        - version
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: integer
@@ -2454,48 +2482,73 @@ components:
         role:
           type: string
         description:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         providerId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         providerName:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         modelId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         modelName:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         priority:
           type: integer
           description: Higher = higher priority. 100 is default.
         temperature:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
           description: Sampling temperature (0–2)
         maxTokens:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         status:
           type: string
-          enum: [active, inactive, draft]
+          enum:
+            - active
+            - inactive
+            - draft
         allowedTools:
           type: array
           items:
             type: string
         knowledgeBaseId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         version:
           type: string
         owner:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         metadata:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
-
     AiAgentInput:
       type: object
-      required: [name, slug, role]
+      required:
+        - name
+        - slug
+        - role
       properties:
         name:
           type: string
@@ -2517,7 +2570,10 @@ components:
           type: integer
         status:
           type: string
-          enum: [active, inactive, draft]
+          enum:
+            - active
+            - inactive
+            - draft
         allowedTools:
           type: array
           items:
@@ -2530,7 +2586,6 @@ components:
           type: string
         metadata:
           type: object
-
     AiAgentUpdate:
       type: object
       properties:
@@ -2554,7 +2609,10 @@ components:
           type: integer
         status:
           type: string
-          enum: [active, inactive, draft]
+          enum:
+            - active
+            - inactive
+            - draft
         allowedTools:
           type: array
           items:
@@ -2567,10 +2625,14 @@ components:
           type: string
         metadata:
           type: object
-
     AiAgentCapability:
       type: object
-      required: [id, agentId, name, sortOrder, createdAt]
+      required:
+        - id
+        - agentId
+        - name
+        - sortOrder
+        - createdAt
       properties:
         id:
           type: integer
@@ -2579,18 +2641,22 @@ components:
         name:
           type: string
         description:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         category:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         sortOrder:
           type: integer
         createdAt:
           type: string
           format: date-time
-
     AiAgentCapabilityInput:
       type: object
-      required: [name]
+      required:
+        - name
       properties:
         name:
           type: string
@@ -2600,31 +2666,44 @@ components:
           type: string
         sortOrder:
           type: integer
-
-    # ── Orchestrator ───────────────────────────────────────────────────────
-
     OrchestratorExecuteInput:
       type: object
-      required: [prompt]
+      required:
+        - prompt
       properties:
         prompt:
           type: string
         modelId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
           description: Specific model to use; if null, orchestrator routes automatically
         systemPrompt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         sessionId:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         agentId:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         parameters:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
           description: Extra model parameters (temperature, max_tokens, etc.)
-
     OrchestratorResult:
       type: object
-      required: [sessionId, content, modelUsed, providerId, tokensUsed, createdAt]
+      required:
+        - sessionId
+        - content
+        - modelUsed
+        - providerId
+        - tokensUsed
+        - createdAt
       properties:
         sessionId:
           type: string
@@ -2645,57 +2724,79 @@ components:
         createdAt:
           type: string
           format: date-time
-
     OrchestratorSession:
       type: object
-      required: [id, sessionId, agentId, createdAt]
+      required:
+        - id
+        - sessionId
+        - agentId
+        - createdAt
       properties:
         id:
           type: integer
         sessionId:
           type: string
         agentId:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         totalTokens:
           type: integer
         totalRequests:
           type: integer
         lastModelUsed:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
-
-    # ── Workflows ──────────────────────────────────────────────────────────
-
     AiWorkflow:
       type: object
-      required: [id, name, status, steps, createdAt, updatedAt]
+      required:
+        - id
+        - name
+        - status
+        - steps
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: integer
         name:
           type: string
         description:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         status:
           type: string
-          enum: [draft, active, paused, archived]
+          enum:
+            - draft
+            - active
+            - paused
+            - archived
         steps:
           type: array
           items:
             type: object
           description: JSON array of workflow step definitions
         triggerType:
-          type: ["string", "null"]
-          description: "e.g. manual, schedule, webhook"
+          type:
+            - string
+            - "null"
+          description: e.g. manual, schedule, webhook
         triggerConfig:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         defaultModelId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         tags:
           type: array
           items:
@@ -2708,10 +2809,11 @@ components:
         updatedAt:
           type: string
           format: date-time
-
     AiWorkflowInput:
       type: object
-      required: [name, steps]
+      required:
+        - name
+        - steps
       properties:
         name:
           type: string
@@ -2733,8 +2835,11 @@ components:
             type: string
         status:
           type: string
-          enum: [draft, active, paused, archived]
-
+          enum:
+            - draft
+            - active
+            - paused
+            - archived
     AiWorkflowUpdate:
       type: object
       properties:
@@ -2758,59 +2863,93 @@ components:
             type: string
         status:
           type: string
-          enum: [draft, active, paused, archived]
-
+          enum:
+            - draft
+            - active
+            - paused
+            - archived
     WorkflowExecuteInput:
       type: object
       properties:
         inputs:
           type: object
           description: Runtime input variables for the workflow
-
     WorkflowExecution:
       type: object
-      required: [id, workflowId, status, createdAt]
+      required:
+        - id
+        - workflowId
+        - status
+        - createdAt
       properties:
         id:
           type: integer
         workflowId:
           type: integer
         workflowName:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         status:
           type: string
-          enum: [pending, running, completed, failed, cancelled]
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - cancelled
         inputs:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         outputs:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         stepResults:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         errorMessage:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         tokensUsed:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         durationMs:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         createdAt:
           type: string
           format: date-time
         completedAt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           format: date-time
-
-    # ── Prompts ────────────────────────────────────────────────────────────
-
     AiPrompt:
       type: object
-      required: [id, name, content, category, version, isActive, createdAt, updatedAt]
+      required:
+        - id
+        - name
+        - content
+        - category
+        - version
+        - isActive
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: integer
         name:
           type: string
         description:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         content:
           type: string
         category:
@@ -2836,10 +2975,12 @@ components:
         updatedAt:
           type: string
           format: date-time
-
     AiPromptInput:
       type: object
-      required: [name, content, category]
+      required:
+        - name
+        - content
+        - category
       properties:
         name:
           type: string
@@ -2859,7 +3000,6 @@ components:
             type: string
         isActive:
           type: boolean
-
     AiPromptUpdate:
       type: object
       properties:
@@ -2881,10 +3021,14 @@ components:
             type: string
         isActive:
           type: boolean
-
     AiPromptVersion:
       type: object
-      required: [id, promptId, version, content, createdAt]
+      required:
+        - id
+        - promptId
+        - version
+        - content
+        - createdAt
       properties:
         id:
           type: integer
@@ -2895,32 +3039,39 @@ components:
         content:
           type: string
         changeNote:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         createdAt:
           type: string
           format: date-time
-
     AiPromptVersionInput:
       type: object
-      required: [content]
+      required:
+        - content
       properties:
         content:
           type: string
         changeNote:
           type: string
-
-    # ── Knowledge Base ─────────────────────────────────────────────────────
-
     KnowledgeBase:
       type: object
-      required: [id, name, embeddingModel, documentCount, createdAt, updatedAt]
+      required:
+        - id
+        - name
+        - embeddingModel
+        - documentCount
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: integer
         name:
           type: string
         description:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         embeddingModel:
           type: string
         documentCount:
@@ -2928,17 +3079,20 @@ components:
         isActive:
           type: boolean
         metadata:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
-
     KnowledgeBaseInput:
       type: object
-      required: [name, embeddingModel]
+      required:
+        - name
+        - embeddingModel
       properties:
         name:
           type: string
@@ -2950,7 +3104,6 @@ components:
           type: boolean
         metadata:
           type: object
-
     KnowledgeBaseUpdate:
       type: object
       properties:
@@ -2964,10 +3117,15 @@ components:
           type: boolean
         metadata:
           type: object
-
     KnowledgeDocument:
       type: object
-      required: [id, knowledgeBaseId, title, contentType, status, createdAt]
+      required:
+        - id
+        - knowledgeBaseId
+        - title
+        - contentType
+        - status
+        - createdAt
       properties:
         id:
           type: integer
@@ -2976,29 +3134,47 @@ components:
         title:
           type: string
         content:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         contentType:
           type: string
-          enum: [text, url, file, markdown]
+          enum:
+            - text
+            - url
+            - file
+            - markdown
         sourceUrl:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         status:
           type: string
-          enum: [pending, indexed, failed]
+          enum:
+            - pending
+            - indexed
+            - failed
         chunkCount:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         metadata:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         createdAt:
           type: string
           format: date-time
         updatedAt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           format: date-time
-
     KnowledgeDocumentInput:
       type: object
-      required: [title, contentType]
+      required:
+        - title
+        - contentType
       properties:
         title:
           type: string
@@ -3006,45 +3182,67 @@ components:
           type: string
         contentType:
           type: string
-          enum: [text, url, file, markdown]
+          enum:
+            - text
+            - url
+            - file
+            - markdown
         sourceUrl:
           type: string
         metadata:
           type: object
-
-    # ── Memory ─────────────────────────────────────────────────────────────
-
     MemoryEntry:
       type: object
-      required: [id, agentId, memoryType, content, createdAt]
+      required:
+        - id
+        - agentId
+        - memoryType
+        - content
+        - createdAt
       properties:
         id:
           type: integer
         agentId:
           type: string
         sessionId:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         memoryType:
           type: string
-          enum: [short_term, long_term, episodic, semantic]
+          enum:
+            - short_term
+            - long_term
+            - episodic
+            - semantic
         content:
           type: string
         key:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         importance:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         expiresAt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           format: date-time
         metadata:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         createdAt:
           type: string
           format: date-time
-
     MemoryEntryInput:
       type: object
-      required: [agentId, memoryType, content]
+      required:
+        - agentId
+        - memoryType
+        - content
       properties:
         agentId:
           type: string
@@ -3052,7 +3250,11 @@ components:
           type: string
         memoryType:
           type: string
-          enum: [short_term, long_term, episodic, semantic]
+          enum:
+            - short_term
+            - long_term
+            - episodic
+            - semantic
         content:
           type: string
         key:
@@ -3064,43 +3266,62 @@ components:
           format: date-time
         metadata:
           type: object
-
-    # ── Audit Log ──────────────────────────────────────────────────────────
-
     AuditLog:
       type: object
-      required: [id, module, action, createdAt]
+      required:
+        - id
+        - module
+        - action
+        - createdAt
       properties:
         id:
           type: integer
         module:
           type: string
-          description: "e.g. registry, orchestrator, workflow, prompt, knowledge, memory"
+          description: e.g. registry, orchestrator, workflow, prompt, knowledge, memory
         action:
           type: string
-          description: "e.g. create, update, delete, execute"
+          description: e.g. create, update, delete, execute
         resourceId:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         resourceType:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         actorId:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         details:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         status:
           type: string
-          enum: [success, failure, warning]
+          enum:
+            - success
+            - failure
+            - warning
         ipAddress:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         duration:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         createdAt:
           type: string
           format: date-time
-
     AuditLogPage:
       type: object
-      required: [items, total, limit, offset]
+      required:
+        - items
+        - total
+        - limit
+        - offset
       properties:
         items:
           type: array
@@ -3112,12 +3333,18 @@ components:
           type: integer
         offset:
           type: integer
-
-    # ── Analytics ──────────────────────────────────────────────────────────
-
     AnalyticsOverview:
       type: object
-      required: [totalProviders, totalModels, totalWorkflows, totalPrompts, totalKnowledgeBases, totalMemoryEntries, totalTokensUsed, totalExecutions, activeWorkflows]
+      required:
+        - totalProviders
+        - totalModels
+        - totalWorkflows
+        - totalPrompts
+        - totalKnowledgeBases
+        - totalMemoryEntries
+        - totalTokensUsed
+        - totalExecutions
+        - activeWorkflows
       properties:
         totalProviders:
           type: integer
@@ -3138,13 +3365,19 @@ components:
         activeWorkflows:
           type: integer
         avgLatencyMs:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         successRate:
-          type: ["number", "null"]
-
+          type:
+            - number
+            - "null"
     UsageDataPoint:
       type: object
-      required: [date, executions, tokensUsed]
+      required:
+        - date
+        - executions
+        - tokensUsed
       properties:
         date:
           type: string
@@ -3154,11 +3387,16 @@ components:
         tokensUsed:
           type: integer
         avgLatencyMs:
-          type: ["number", "null"]
-
+          type:
+            - number
+            - "null"
     ProviderBreakdown:
       type: object
-      required: [providerId, providerName, tokensUsed, executions]
+      required:
+        - providerId
+        - providerName
+        - tokensUsed
+        - executions
       properties:
         providerId:
           type: integer
@@ -3169,13 +3407,18 @@ components:
         executions:
           type: integer
         avgLatencyMs:
-          type: ["number", "null"]
-
-    # ── Settings ───────────────────────────────────────────────────────────
-
+          type:
+            - number
+            - "null"
     AiSetting:
       type: object
-      required: [id, key, value, valueType, category, updatedAt]
+      required:
+        - id
+        - key
+        - value
+        - valueType
+        - category
+        - updatedAt
       properties:
         id:
           type: integer
@@ -3185,38 +3428,50 @@ components:
           type: string
         valueType:
           type: string
-          enum: [string, number, boolean, json]
+          enum:
+            - string
+            - number
+            - boolean
+            - json
         category:
           type: string
         description:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         isSecret:
           type: boolean
         updatedAt:
           type: string
           format: date-time
-
     AiSettingInput:
       type: object
-      required: [value]
+      required:
+        - value
       properties:
         value:
           type: string
         valueType:
           type: string
-          enum: [string, number, boolean, json]
+          enum:
+            - string
+            - number
+            - boolean
+            - json
         category:
           type: string
         description:
           type: string
         isSecret:
           type: boolean
-
-    # ── Creative AI ────────────────────────────────────────────────────────
-
     CreativeBriefInput:
       type: object
-      required: [brandName, businessType, targetMarket, productOrService, goal]
+      required:
+        - brandName
+        - businessType
+        - targetMarket
+        - productOrService
+        - goal
       properties:
         brandName:
           type: string
@@ -3227,15 +3482,28 @@ components:
         productOrService:
           type: string
         stylePreference:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         goal:
           type: string
         notes:
-          type: ["string", "null"]
-
+          type:
+            - string
+            - "null"
     CreativeProject:
       type: object
-      required: [id, projectId, brandName, businessType, targetMarket, productOrService, goal, status, createdAt, updatedAt]
+      required:
+        - id
+        - projectId
+        - brandName
+        - businessType
+        - targetMarket
+        - productOrService
+        - goal
+        - status
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: integer
@@ -3251,16 +3519,26 @@ components:
         productOrService:
           type: string
         stylePreference:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         goal:
           type: string
         notes:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         status:
           type: string
-          enum: [pending, running, completed, failed]
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
         result:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
           description: Aggregated final output from all agents
         createdAt:
           type: string
@@ -3268,46 +3546,79 @@ components:
         updatedAt:
           type: string
           format: date-time
-
     CreativeProjectStep:
       type: object
-      required: [id, projectId, stepName, status, tokenUsage, createdAt]
+      required:
+        - id
+        - projectId
+        - stepName
+        - status
+        - tokenUsage
+        - createdAt
       properties:
         id:
           type: integer
         projectId:
           type: integer
         agentId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         stepName:
           type: string
         input:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         output:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         provider:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         model:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         tokenUsage:
           type: integer
         latencyMs:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         status:
           type: string
-          enum: [pending, running, completed, failed]
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
         errorMessage:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
-
     CreativeProjectDetail:
       type: object
-      required: [id, projectId, brandName, businessType, targetMarket, productOrService, goal, status, steps, createdAt, updatedAt]
+      required:
+        - id
+        - projectId
+        - brandName
+        - businessType
+        - targetMarket
+        - productOrService
+        - goal
+        - status
+        - steps
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: integer
@@ -3322,16 +3633,26 @@ components:
         productOrService:
           type: string
         stylePreference:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         goal:
           type: string
         notes:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         status:
           type: string
-          enum: [pending, running, completed, failed]
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
         result:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         steps:
           type: array
           items:
@@ -3342,39 +3663,64 @@ components:
         updatedAt:
           type: string
           format: date-time
-
     CreativeProjectStatusUpdate:
       type: object
-      required: [status]
+      required:
+        - status
       properties:
         status:
           type: string
-          enum: [pending, running, completed, failed]
-
-    # ─── Phase 4: Capabilities ──────────────────────────────────────────────────
-
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
     AiCapability:
       type: object
-      required: [id, skill, status, priority, supportsImage, supportsJson, supportsTool, supportsStream, createdAt, updatedAt]
+      required:
+        - id
+        - skill
+        - status
+        - priority
+        - supportsImage
+        - supportsJson
+        - supportsTool
+        - supportsStream
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: integer
         providerId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         modelId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         agentSlug:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         skill:
           type: string
         accuracyScore:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         speedScore:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         costScore:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         maxContext:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         supportsImage:
           type: boolean
         supportsJson:
@@ -3387,36 +3733,54 @@ components:
           type: integer
         status:
           type: string
-          enum: [active, inactive]
+          enum:
+            - active
+            - inactive
         notes:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
-
     AiCapabilityInput:
       type: object
-      required: [skill]
+      required:
+        - skill
       properties:
         providerId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         modelId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         agentSlug:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         skill:
           type: string
         accuracyScore:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         speedScore:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         costScore:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         maxContext:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         supportsImage:
           type: boolean
         supportsJson:
@@ -3429,29 +3793,46 @@ components:
           type: integer
         status:
           type: string
-          enum: [active, inactive]
+          enum:
+            - active
+            - inactive
         notes:
-          type: ["string", "null"]
-
+          type:
+            - string
+            - "null"
     AiCapabilityUpdate:
       type: object
       properties:
         providerId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         modelId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         agentSlug:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         skill:
           type: string
         accuracyScore:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         speedScore:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         costScore:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         maxContext:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         supportsImage:
           type: boolean
         supportsJson:
@@ -3464,15 +3845,20 @@ components:
           type: integer
         status:
           type: string
-          enum: [active, inactive]
+          enum:
+            - active
+            - inactive
         notes:
-          type: ["string", "null"]
-
-    # ─── Phase 4: Client Memory ─────────────────────────────────────────────────
-
+          type:
+            - string
+            - "null"
     ClientMemoryEntry:
       type: object
-      required: [key, value, valueType, source]
+      required:
+        - key
+        - value
+        - valueType
+        - source
       properties:
         key:
           type: string
@@ -3480,18 +3866,30 @@ components:
           type: string
         valueType:
           type: string
-          enum: [string, json, array, number]
+          enum:
+            - string
+            - json
+            - array
+            - number
         category:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         source:
           type: string
-          enum: [manual, inferred, approved_project]
+          enum:
+            - manual
+            - inferred
+            - approved_project
         confidence:
-          type: ["number", "null"]
-
+          type:
+            - number
+            - "null"
     ClientMemoryInput:
       type: object
-      required: [key, value]
+      required:
+        - key
+        - value
       properties:
         key:
           type: string
@@ -3499,18 +3897,30 @@ components:
           type: string
         valueType:
           type: string
-          enum: [string, json, array, number]
+          enum:
+            - string
+            - json
+            - array
+            - number
         category:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         source:
           type: string
-          enum: [manual, inferred, approved_project]
+          enum:
+            - manual
+            - inferred
+            - approved_project
         confidence:
-          type: ["number", "null"]
-
+          type:
+            - number
+            - "null"
     ClientMemoryResponse:
       type: object
-      required: [clientId, entries]
+      required:
+        - clientId
+        - entries
       properties:
         clientId:
           type: string
@@ -3518,69 +3928,110 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ClientMemoryEntry"
-
-    # ─── Phase 4: Feedback ──────────────────────────────────────────────────────
-
     FeedbackEntry:
       type: object
-      required: [id, projectId, action, reviewer, createdAt]
+      required:
+        - id
+        - projectId
+        - action
+        - reviewer
+        - createdAt
       properties:
         id:
           type: integer
         projectId:
           type: string
         stepId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         stepName:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         action:
           type: string
-          enum: [approve, reject, needs_revision, human_edit]
+          enum:
+            - approve
+            - reject
+            - needs_revision
+            - human_edit
         rating:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         feedbackText:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         originalOutput:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         editedOutput:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         diff:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         reviewer:
           type: string
         createdAt:
           type: string
           format: date-time
-
     FeedbackInput:
       type: object
-      required: [action]
+      required:
+        - action
       properties:
         stepId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         stepName:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         action:
           type: string
-          enum: [approve, reject, needs_revision, human_edit]
+          enum:
+            - approve
+            - reject
+            - needs_revision
+            - human_edit
         rating:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         feedbackText:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         originalOutput:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         editedOutput:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         diff:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         reviewer:
           type: string
-
-    # ─── Phase 4: Analytics ─────────────────────────────────────────────────────
-
     AgentStats:
       type: object
-      required: [agentSlug, agentName, totalRequests, totalTokens, totalEstimatedCostUsd, successRate]
+      required:
+        - agentSlug
+        - agentName
+        - totalRequests
+        - totalTokens
+        - totalEstimatedCostUsd
+        - successRate
       properties:
         agentSlug:
           type: string
@@ -3593,19 +4044,30 @@ components:
         totalEstimatedCostUsd:
           type: number
         avgLatencyMs:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         successRate:
           type: number
         approvalRate:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         revisionRate:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         avgRating:
-          type: ["number", "null"]
-
+          type:
+            - number
+            - "null"
     DailyCostPoint:
       type: object
-      required: [date, totalRequests, totalTokens, totalEstimatedCostUsd]
+      required:
+        - date
+        - totalRequests
+        - totalTokens
+        - totalEstimatedCostUsd
       properties:
         date:
           type: string
@@ -3616,11 +4078,16 @@ components:
         totalEstimatedCostUsd:
           type: number
         avgLatencyMs:
-          type: ["number", "null"]
-
+          type:
+            - number
+            - "null"
     ProviderCostStats:
       type: object
-      required: [provider, totalRequests, totalTokens, totalEstimatedCostUsd]
+      required:
+        - provider
+        - totalRequests
+        - totalTokens
+        - totalEstimatedCostUsd
       properties:
         provider:
           type: string
@@ -3631,11 +4098,17 @@ components:
         totalEstimatedCostUsd:
           type: number
         avgLatencyMs:
-          type: ["number", "null"]
-
+          type:
+            - number
+            - "null"
     AgentCostStats:
       type: object
-      required: [agentSlug, totalRequests, totalTokens, totalEstimatedCostUsd, successRate]
+      required:
+        - agentSlug
+        - totalRequests
+        - totalTokens
+        - totalEstimatedCostUsd
+        - successRate
       properties:
         agentSlug:
           type: string
@@ -3646,13 +4119,17 @@ components:
         totalEstimatedCostUsd:
           type: number
         avgLatencyMs:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         successRate:
           type: number
-
     CostAnalyticsResponse:
       type: object
-      required: [daily, byProvider, byAgent]
+      required:
+        - daily
+        - byProvider
+        - byAgent
       properties:
         daily:
           type: array
@@ -3666,12 +4143,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AgentCostStats"
-
-    # ─── Phase 5: Image Designer ────────────────────────────────────────────────
-
     CreativeAiAsset:
       type: object
-      required: [id, projectId, provider, model, assetType, prompt, status, createdAt]
+      required:
+        - id
+        - projectId
+        - provider
+        - model
+        - assetType
+        - prompt
+        - status
+        - createdAt
       properties:
         id:
           type: integer
@@ -3679,9 +4161,13 @@ components:
           type: string
           description: UUID of the parent creative project
         stepId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         agentId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         provider:
           type: string
           description: Provider slug, e.g. replicate
@@ -3694,35 +4180,61 @@ components:
         prompt:
           type: string
         negativePrompt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         aspectRatio:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           description: e.g. 1:1, 16:9, 9:16
         imageUrl:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         storagePath:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         thumbnailUrl:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         status:
           type: string
-          enum: [pending, generating, completed, failed, approved, needs_revision, rejected]
+          enum:
+            - pending
+            - generating
+            - completed
+            - failed
+            - approved
+            - needs_revision
+            - rejected
         qcScore:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
           description: QC score 1–100
         qcNotes:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         cost:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
           description: USD cost for this asset
         latencyMs:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         metadata:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
         createdAt:
           type: string
           format: date-time
-
     GenerateImageBody:
       type: object
       properties:
@@ -3732,58 +4244,77 @@ components:
           maximum: 4
           default: 2
           description: Number of image variations to generate (max 4)
-
     GenerateImageResponse:
       type: object
-      required: [message, variations]
+      required:
+        - message
+        - variations
       properties:
         message:
           type: string
         variations:
           type: integer
           description: Number of variations being generated
-
     AssetStatusUpdate:
       type: object
-      required: [status]
+      required:
+        - status
       properties:
         status:
           type: string
-          enum: [approved, needs_revision, rejected]
+          enum:
+            - approved
+            - needs_revision
+            - rejected
         notes:
-          type: ["string", "null"]
-
+          type:
+            - string
+            - "null"
     AssetFeedbackInput:
       type: object
-      required: [action]
+      required:
+        - action
       properties:
         action:
           type: string
-          enum: [approve, reject, needs_revision]
+          enum:
+            - approve
+            - reject
+            - needs_revision
         notes:
-          type: ["string", "null"]
-
-    # ─── Phase 6: Client Review ────────────────────────────────────────────────
-
+          type:
+            - string
+            - "null"
     ClientReviewLinkInput:
       type: object
-      required: [clientName]
+      required:
+        - clientName
       properties:
         clientName:
           type: string
         clientEmail:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         clientPhone:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         expiresInDays:
           type: integer
           minimum: 1
           maximum: 90
           default: 7
-
     ClientReview:
       type: object
-      required: [id, projectId, clientName, status, tokenExpiresAt, createdAt, updatedAt]
+      required:
+        - id
+        - projectId
+        - clientName
+        - status
+        - tokenExpiresAt
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: integer
@@ -3792,32 +4323,56 @@ components:
         clientName:
           type: string
         clientEmail:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         clientPhone:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         status:
           type: string
-          enum: [not_shared, shared, viewed, approved, rejected, revision_requested, expired, revoked]
+          enum:
+            - not_shared
+            - shared
+            - viewed
+            - approved
+            - rejected
+            - revision_requested
+            - expired
+            - revoked
         tokenExpiresAt:
           type: string
           format: date-time
         sharedAt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           format: date-time
         viewedAt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           format: date-time
         approvedAt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           format: date-time
         rejectedAt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           format: date-time
         revisionRequestedAt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           format: date-time
         revokedAt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           format: date-time
         commentCount:
           type: integer
@@ -3827,20 +4382,28 @@ components:
         updatedAt:
           type: string
           format: date-time
-
     ClientReviewWithToken:
       allOf:
         - $ref: "#/components/schemas/ClientReview"
         - type: object
-          required: [token]
+          required:
+            - token
           properties:
             token:
               type: string
               description: Plaintext token — shown once only, save immediately
-
     ClientComment:
       type: object
-      required: [id, reviewId, projectId, authorName, authorType, comment, status, createdAt, updatedAt]
+      required:
+        - id
+        - reviewId
+        - projectId
+        - authorName
+        - authorType
+        - comment
+        - status
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: integer
@@ -3849,31 +4412,43 @@ components:
         projectId:
           type: string
         assetId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         stepId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         parentCommentId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         authorName:
           type: string
         authorType:
           type: string
-          enum: [client, admin]
+          enum:
+            - client
+            - admin
         comment:
           type: string
         status:
           type: string
-          enum: [open, resolved, archived]
+          enum:
+            - open
+            - resolved
+            - archived
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
-
     ClientCommentInput:
       type: object
-      required: [comment, authorName]
+      required:
+        - comment
+        - authorName
       properties:
         comment:
           type: string
@@ -3882,15 +4457,29 @@ components:
         authorName:
           type: string
         assetId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         stepId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         parentCommentId:
-          type: ["integer", "null"]
-
+          type:
+            - integer
+            - "null"
     PublicProjectReview:
       type: object
-      required: [reviewId, projectId, clientName, reviewStatus, brandName, businessType, goal, status, createdAt]
+      required:
+        - reviewId
+        - projectId
+        - clientName
+        - reviewStatus
+        - brandName
+        - businessType
+        - goal
+        - status
+        - createdAt
       properties:
         reviewId:
           type: integer
@@ -3900,7 +4489,12 @@ components:
           type: string
         reviewStatus:
           type: string
-          enum: [shared, viewed, approved, rejected, revision_requested]
+          enum:
+            - shared
+            - viewed
+            - approved
+            - rejected
+            - revision_requested
         brandName:
           type: string
         businessType:
@@ -3910,17 +4504,27 @@ components:
         productOrService:
           type: string
         stylePreference:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         goal:
           type: string
         status:
           type: string
-          enum: [pending, running, completed, failed]
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
         copyOutput:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
           description: Copy/caption output from the copywriter step
         creativeDirection:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
           description: Creative direction summary
         assets:
           type: array
@@ -3933,43 +4537,58 @@ components:
         createdAt:
           type: string
           format: date-time
-
     PublicAsset:
       type: object
-      required: [id, status]
+      required:
+        - id
+        - status
       properties:
         id:
           type: integer
         imageUrl:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         thumbnailUrl:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         aspectRatio:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         status:
           type: string
-
     ClientApprovalInput:
       type: object
       properties:
         notes:
-          type: ["string", "null"]
-
+          type:
+            - string
+            - "null"
     ClientActionResult:
       type: object
-      required: [success, status]
+      required:
+        - success
+        - status
       properties:
         success:
           type: boolean
         status:
           type: string
-          enum: [approved, rejected, revision_requested]
+          enum:
+            - approved
+            - rejected
+            - revision_requested
         message:
           type: string
-
     ClientReviewAnalytics:
       type: object
-      required: [totalShared, viewedRate, approvalRate, revisionRate]
+      required:
+        - totalShared
+        - viewedRate
+        - approvalRate
+        - revisionRate
       properties:
         totalShared:
           type: integer
@@ -3980,21 +4599,40 @@ components:
         revisionRate:
           type: number
         avgTimeToApprovalHours:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
     AiJob:
       type: object
-      required: [id, jobCode, jobType, priority, status, payloadJson, retryCount, maxRetry, retryStrategy, createdAt, updatedAt]
+      required:
+        - id
+        - jobCode
+        - jobType
+        - priority
+        - status
+        - payloadJson
+        - retryCount
+        - maxRetry
+        - retryStrategy
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: integer
         jobCode:
           type: string
         executionPlanId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         departmentId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         employeeId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         jobType:
           type: string
         priority:
@@ -4002,24 +4640,42 @@ components:
           minimum: 0
           maximum: 100
         priorityScore:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         status:
           type: string
-          enum: [queued, waiting, running, retrying, completed, failed, cancelled, blocked]
+          enum:
+            - queued
+            - waiting
+            - running
+            - retrying
+            - completed
+            - failed
+            - cancelled
+            - blocked
         payloadJson:
           type: object
           additionalProperties: true
         resultJson:
-          type: ["object", "null"]
+          type:
+            - object
+            - "null"
           additionalProperties: true
         scheduledAt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           format: date-time
         startedAt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           format: date-time
         completedAt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           format: date-time
         retryCount:
           type: integer
@@ -4027,32 +4683,58 @@ components:
           type: integer
         retryStrategy:
           type: string
-          enum: [immediate, exponential, manual]
+          enum:
+            - immediate
+            - exponential
+            - manual
         nextRetryAt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           format: date-time
         errorMessage:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
         estimatedCost:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         actualCost:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         estimatedDuration:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         actualDuration:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         managerOverride:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
-
     AiWorker:
       type: object
-      required: [id, workerName, status, lastHeartbeat, runningJobs, completedToday, failedToday, version, createdAt, updatedAt]
+      required:
+        - id
+        - workerName
+        - status
+        - lastHeartbeat
+        - runningJobs
+        - completedToday
+        - failedToday
+        - version
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: integer
@@ -4060,9 +4742,16 @@ components:
           type: string
         status:
           type: string
-          enum: [online, offline, maintenance, busy, idle]
+          enum:
+            - online
+            - offline
+            - maintenance
+            - busy
+            - idle
         currentJob:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         lastHeartbeat:
           type: string
           format: date-time
@@ -4073,7 +4762,9 @@ components:
         failedToday:
           type: integer
         averageLatency:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
           description: Rolling average latency in ms
         version:
           type: string
@@ -4083,10 +4774,13 @@ components:
         updatedAt:
           type: string
           format: date-time
-
     JobPage:
       type: object
-      required: [items, total, limit, offset]
+      required:
+        - items
+        - total
+        - limit
+        - offset
       properties:
         items:
           type: array
@@ -4098,10 +4792,16 @@ components:
           type: integer
         offset:
           type: integer
-
     JobStats:
       type: object
-      required: [jobs, totalQueued, totalActive, totalBlocked, totalFailed, completedToday, workers]
+      required:
+        - jobs
+        - totalQueued
+        - totalActive
+        - totalBlocked
+        - totalFailed
+        - completedToday
+        - workers
       properties:
         jobs:
           type: object
@@ -4124,13 +4824,17 @@ components:
             type: integer
           description: Worker count per status
         avgWaitMs:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         avgExecutionMs:
-          type: ["number", "null"]
-
+          type:
+            - number
+            - "null"
     CreateJobBody:
       type: object
-      required: [jobType]
+      required:
+        - jobType
       properties:
         jobType:
           type: string
@@ -4143,13 +4847,21 @@ components:
           maximum: 100
           default: 50
         executionPlanId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         departmentId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         employeeId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         scheduledAt:
-          type: ["string", "null"]
+          type:
+            - string
+            - "null"
           format: date-time
         maxRetry:
           type: integer
@@ -4158,51 +4870,69 @@ components:
           default: 3
         retryStrategy:
           type: string
-          enum: [immediate, exponential, manual]
+          enum:
+            - immediate
+            - exponential
+            - manual
           default: exponential
         estimatedCost:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
         estimatedDuration:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         managerOverride:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
           minimum: 0
           maximum: 100
-
     ReprioritizeJobBody:
       type: object
-      required: [priority]
+      required:
+        - priority
       properties:
         priority:
           type: integer
           minimum: 0
           maximum: 100
         managerOverride:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
           minimum: 0
           maximum: 100
-
     RegisterWorkerBody:
       type: object
-      required: [workerName]
+      required:
+        - workerName
       properties:
         workerName:
           type: string
         version:
           type: string
-          default: "1.0.0"
-
+          default: 1.0.0
     QueueFilterBody:
       type: object
       properties:
         departmentId:
-          type: ["integer", "null"]
+          type:
+            - integer
+            - "null"
         jobType:
-          type: ["string", "null"]
-
+          type:
+            - string
+            - "null"
     CreativeAiImageAnalytics:
       type: object
-      required: [totalImages, totalCostUsd, approvedRate, rejectedRate, pendingCount]
+      required:
+        - totalImages
+        - totalCostUsd
+        - approvedRate
+        - rejectedRate
+        - pendingCount
       properties:
         totalImages:
           type: integer
@@ -4211,84 +4941,94 @@ components:
           type: number
           description: Total cost of image generation in USD
         avgQcScore:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
           description: Average QC score across all images (1–100)
         approvedRate:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
           description: Fraction of images that were approved (0–1)
         rejectedRate:
-          type: ["number", "null"]
+          type:
+            - number
+            - "null"
           description: Fraction of images that were rejected (0–1)
         pendingCount:
           type: integer
           description: Images currently pending or generating
-
     DispatcherStatus:
       type: object
-      required: [enabled, running, workerName, pollIntervalMs, heartbeatIntervalMs, maxConcurrentJobs, currentJobs, lastTickAt, lastHeartbeatAt, processedToday, failedToday]
+      required:
+        - enabled
+        - running
+        - workerCount
+        - idleWorkers
+        - busyWorkers
+        - queueLength
+        - runningJobs
+        - processedToday
+        - failedToday
       properties:
         enabled:
           type: boolean
-          description: Whether dispatcher is configured to auto-start
         running:
           type: boolean
-          description: Whether the dispatcher interval is currently active
-        workerName:
-          type: string
-          description: Registered worker name for this dispatcher process
-        pollIntervalMs:
+        workerCount:
           type: integer
-          description: Poll interval in milliseconds
-        heartbeatIntervalMs:
+        idleWorkers:
           type: integer
-          description: Heartbeat interval in milliseconds
-        maxConcurrentJobs:
+        busyWorkers:
           type: integer
-          description: Maximum jobs processed simultaneously
-        currentJobs:
+        queueLength:
           type: integer
-          description: Number of jobs currently being processed
-        lastTickAt:
-          type: ["string", "null"]
-          description: ISO timestamp of the last tick, or null if never ticked
-        lastHeartbeatAt:
-          type: ["string", "null"]
-          description: ISO timestamp of the last heartbeat, or null
+        runningJobs:
+          type: integer
+        lastTick:
+          type:
+            - string
+            - "null"
+        lastHeartbeat:
+          type:
+            - string
+            - "null"
         processedToday:
           type: integer
-          description: Jobs successfully completed by this dispatcher since startup
         failedToday:
           type: integer
-          description: Jobs that failed (and were retried/marked failed) since startup
-      required: [enabled, running, workerCount, idleWorkers, busyWorkers, queueLength, runningJobs, processedToday, failedToday]
-      properties:
-        enabled:        { type: boolean }
-        running:        { type: boolean }
-        workerCount:    { type: integer }
-        idleWorkers:    { type: integer }
-        busyWorkers:    { type: integer }
-        queueLength:    { type: integer }
-        runningJobs:    { type: integer }
-        lastTick:       { type: ["string", "null"] }
-        lastHeartbeat:  { type: ["string", "null"] }
-        processedToday: { type: integer }
-        failedToday:    { type: integer }
-
     DispatcherSettings:
       type: object
-      required: [dispatcherEnabled, workerPollIntervalMs, workerHeartbeatIntervalMs, workerTimeoutMs, jobTimeoutMs, maxConcurrentJobs]
+      required:
+        - dispatcherEnabled
+        - workerPollIntervalMs
+        - workerHeartbeatIntervalMs
+        - workerTimeoutMs
+        - jobTimeoutMs
+        - maxConcurrentJobs
       properties:
-        dispatcherEnabled:         { type: boolean }
-        workerPollIntervalMs:      { type: integer, minimum: 100 }
-        workerHeartbeatIntervalMs: { type: integer, minimum: 100 }
-        workerTimeoutMs:           { type: integer, minimum: 1000 }
-        jobTimeoutMs:              { type: integer, minimum: 1000 }
-        maxConcurrentJobs:         { type: integer, minimum: 1, maximum: 50 }
-
-
+        dispatcherEnabled:
+          type: boolean
+        workerPollIntervalMs:
+          type: integer
+          minimum: 100
+        workerHeartbeatIntervalMs:
+          type: integer
+          minimum: 100
+        workerTimeoutMs:
+          type: integer
+          minimum: 1000
+        jobTimeoutMs:
+          type: integer
+          minimum: 1000
+        maxConcurrentJobs:
+          type: integer
+          minimum: 1
+          maximum: 50
     ErrorResponse:
       type: object
-      required: [error]
+      required:
+        - error
       properties:
         error:
           type: string
