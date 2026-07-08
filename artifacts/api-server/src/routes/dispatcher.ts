@@ -8,52 +8,8 @@
  */
 
 import { Router } from "express";
-import {
-  startDispatcher,
-  stopDispatcher,
-  tick,
-  getDispatcherStatus,
-} from "../services/jobDispatcherService.js";
-
-const router = Router();
-
-router.get("/ai/dispatcher/status", (_req, res): void => {
-  res.json(getDispatcherStatus());
-});
-
-router.post("/ai/dispatcher/start", async (_req, res): Promise<void> => {
-  try {
-    await startDispatcher();
-    res.json(getDispatcherStatus());
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "Start failed" });
-  }
-});
-
-router.post("/ai/dispatcher/stop", async (_req, res): Promise<void> => {
-  await stopDispatcher();
-  res.json(getDispatcherStatus());
-});
-
-router.post("/ai/dispatcher/tick", async (_req, res): Promise<void> => {
-  try {
-    await tick();
-    res.json(getDispatcherStatus());
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "Tick failed" });
-  }
- * Dispatcher Routes — Phase 5.1 Worker Dispatcher Runtime
- *
- * GET  /api/ai/dispatcher/status   — current runtime status
- * POST /api/ai/dispatcher/start    — start the dispatcher
- * POST /api/ai/dispatcher/stop     — stop the dispatcher
- * POST /api/ai/dispatcher/tick     — run one dispatch cycle immediately
- * GET  /api/ai/dispatcher/settings — current dispatcher settings
- * PATCH /api/ai/dispatcher/settings — update dispatcher settings
- */
-
-import { Router } from "express";
 import * as dispatcher from "../services/jobDispatcherService.js";
+
 
 const router = Router();
 

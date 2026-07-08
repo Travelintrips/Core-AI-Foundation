@@ -14,10 +14,6 @@ import {
   getListJobsQueryKey,
   getListWorkersQueryKey,
   getGetDispatcherStatusQueryKey,
-  useGetDispatcherStatus,
-  useStartDispatcher,
-  useStopDispatcher,
-  useTickDispatcher,
   type AiJob,
   type AiWorker,
   type JobStats,
@@ -231,25 +227,6 @@ function JobRow({
   );
 }
 
-// ── Dispatcher Panel ──────────────────────────────────────────────────────────
-
-function DispatcherPanel({
-  status,
-  isLoading,
-  onStart,
-  onStop,
-  onTick,
-  isMutating,
-}: {
-  status: DispatcherStatus | undefined;
-  isLoading: boolean;
-  onStart: () => void;
-  onStop: () => void;
-  onTick: () => void;
-  isMutating: boolean;
-}) {
-  const running = status?.running ?? false;
-
 // ── Dispatcher Runtime Panel ──────────────────────────────────────────────────
 
 function DispatcherPanel() {
@@ -257,16 +234,22 @@ function DispatcherPanel() {
   const { data: status, isLoading } = useGetDispatcherStatus();
 
   const start   = useStartDispatcher({
-    onSuccess: () => toast({ title: "Dispatcher started" }),
-    onError:   (e: unknown) => toast({ title: (e as { message?: string })?.message ?? "Failed", variant: "destructive" }),
+    mutation: {
+      onSuccess: () => toast({ title: "Dispatcher started" }),
+      onError:   (e: unknown) => toast({ title: (e as { message?: string })?.message ?? "Failed", variant: "destructive" }),
+    },
   });
   const stop    = useStopDispatcher({
-    onSuccess: () => toast({ title: "Dispatcher stopped" }),
-    onError:   (e: unknown) => toast({ title: (e as { message?: string })?.message ?? "Failed", variant: "destructive" }),
+    mutation: {
+      onSuccess: () => toast({ title: "Dispatcher stopped" }),
+      onError:   (e: unknown) => toast({ title: (e as { message?: string })?.message ?? "Failed", variant: "destructive" }),
+    },
   });
-  const tick    = useTickDispatcher({
-    onSuccess: (d) => toast({ title: `Tick: claimed ${d.tick.claimed}, completed ${d.tick.completed}` }),
-    onError:   (e: unknown) => toast({ title: (e as { message?: string })?.message ?? "Failed", variant: "destructive" }),
+  const tick    = useRunDispatcherTick({
+    mutation: {
+      onSuccess: () => toast({ title: "Tick dispatched" }),
+      onError:   (e: unknown) => toast({ title: (e as { message?: string })?.message ?? "Failed", variant: "destructive" }),
+    },
   });
 
   const isMutating = start.isPending || stop.isPending || tick.isPending;
@@ -299,107 +282,6 @@ function DispatcherPanel() {
             {running ? "Running" : "Stopped"}
           </span>
         </div>
-      </div>
-
-      {isLoading ? (
-        <div className="flex items-center justify-center py-4">
-          <Loader2 className="size-4 animate-spin text-muted-foreground" />
-        </div>
-      ) : status ? (
-        <>
-          {/* Stats grid */}
-          <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
-            <div className="bg-muted/20 rounded px-2 py-1.5 space-y-0.5">
-              <p className="text-muted-foreground">Worker</p>
-              <p className="font-semibold truncate" title={status.workerName}>{status.workerName}</p>
-            </div>
-            <div className="bg-muted/20 rounded px-2 py-1.5 space-y-0.5">
-              <p className="text-muted-foreground">Concurrency</p>
-              <p className="font-semibold">{status.currentJobs}/{status.maxConcurrentJobs}</p>
-            </div>
-            <div className="bg-muted/20 rounded px-2 py-1.5 space-y-0.5">
-              <p className="text-muted-foreground">Poll Interval</p>
-              <p className="font-semibold">{(status.pollIntervalMs / 1000).toFixed(0)}s</p>
-            </div>
-            <div className="bg-muted/20 rounded px-2 py-1.5 space-y-0.5">
-              <p className="text-muted-foreground">Heartbeat</p>
-              <p className="font-semibold">{(status.heartbeatIntervalMs / 1000).toFixed(0)}s</p>
-            </div>
-            <div className="bg-muted/20 rounded px-2 py-1.5 space-y-0.5">
-              <p className="text-muted-foreground">Done Today</p>
-              <p className="font-semibold text-green-400">{status.processedToday}</p>
-            </div>
-            <div className="bg-muted/20 rounded px-2 py-1.5 space-y-0.5">
-              <p className="text-muted-foreground">Failed Today</p>
-              <p className={cn("font-semibold", status.failedToday > 0 ? "text-red-400" : "")}>
-                {status.failedToday}
-              </p>
-            </div>
-          </div>
-
-          {/* Timing */}
-          <div className="space-y-1 text-[9px] font-mono text-muted-foreground/70">
-            <p>Last tick: {status.lastTickAt
-              ? formatDistanceToNow(new Date(status.lastTickAt), { addSuffix: true })
-              : "—"
-            }</p>
-            <p>Last heartbeat: {status.lastHeartbeatAt
-              ? formatDistanceToNow(new Date(status.lastHeartbeatAt), { addSuffix: true })
-              : "—"
-            }</p>
-          </div>
-        </>
-      ) : (
-        <p className="text-xs text-muted-foreground font-mono py-2">Unable to load status</p>
-      )}
-
-      {/* Controls */}
-      <div className="flex gap-2 pt-1">
-        {running ? (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={isMutating}
-            onClick={onStop}
-            className="h-7 flex-1 text-[11px] font-mono gap-1.5 text-red-400 border-red-500/30 hover:bg-red-500/10"
-          >
-            <Square className="size-3" /> Stop
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={isMutating}
-            onClick={onStart}
-            className="h-7 flex-1 text-[11px] font-mono gap-1.5 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
-          >
-            <Play className="size-3" /> Start
-          </Button>
-        )}
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={isMutating || !running}
-          onClick={onTick}
-          className="h-7 flex-1 text-[11px] font-mono gap-1.5"
-        >
-          <Zap className="size-3" /> Tick Now
-          <Bot className="size-4 text-primary" />
-          <span className="font-mono text-sm font-semibold">Dispatcher Runtime</span>
-          <span className="text-[10px] font-mono text-muted-foreground">Phase 5.1</span>
-        </div>
-        {isLoading ? (
-          <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-        ) : (
-          <Badge className={cn(
-            "text-[10px] font-mono border px-1.5 py-0 h-4",
-            running
-              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-              : "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
-          )}>
-            {running ? "Running" : "Stopped"}
-          </Badge>
-        )}
       </div>
 
       {/* Stats grid */}
@@ -666,14 +548,6 @@ export default function QueuePage() {
           </div>
 
           {/* Dispatcher Runtime Panel */}
-          <DispatcherPanel
-            status={dispatcherStatus}
-            isLoading={dispatcherLoading}
-            onStart={() => startDispatcher.mutate()}
-            onStop={() => stopDispatcher.mutate()}
-            onTick={() => runTick.mutate()}
-            isMutating={isDispatcherMutating}
-          />
           <DispatcherPanel />
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
