@@ -22,6 +22,8 @@ import {
   SubmitAssetFeedbackParams,
   SubmitAssetFeedbackBody,
   SubmitAssetFeedbackResponse,
+  GetCreativeImageAnalyticsQueryParams,
+  GetCreativeImageAnalyticsResponse,
 } from "@workspace/api-zod";
 import { logAudit } from "../services/aiAuditService.js";
 import { runCreativeBriefWorkflow } from "../services/creativeWorkflowRunner.js";
@@ -360,6 +362,43 @@ router.post("/creative-ai/assets/:assetId/feedback", async (req, res): Promise<v
       ...asset,
       cost: asset.cost != null ? parseFloat(String(asset.cost)) : null,
       createdAt: asset.createdAt.toISOString(),
+    }),
+  );
+});
+
+// ── Image Analytics ───────────────────────────────────────────────────────────
+
+router.get("/creative-ai/analytics/images", async (req, res): Promise<void> => {
+  const queryParse = GetCreativeImageAnalyticsQueryParams.safeParse(req.query);
+  if (!queryParse.success) {
+    res.status(400).json({ error: queryParse.error.message });
+    return;
+  }
+  const days = Math.min(Math.max(queryParse.data.days ?? 30, 1), 365);
+
+  const [row] = await db
+    .select({
+      totalImages: sql<number>`count(*)::int`,
+      totalCostUsd: sql<number>`coalesce(sum(cost::numeric), 0)::float`,
+      avgQcScore: sql<number | null>`avg(qc_score)`,
+      approvedCount: sql<number>`count(*) filter (where status = 'approved')::int`,
+      rejectedCount: sql<number>`count(*) filter (where status = 'rejected')::int`,
+      pendingCount: sql<number>`count(*) filter (where status in ('pending', 'generating'))::int`,
+      reviewedCount: sql<number>`count(*) filter (where status in ('approved', 'rejected', 'needs_revision'))::int`,
+    })
+    .from(creativeAiAssetsTable)
+    .where(sql`created_at >= now() - (${days} * interval '1 day')`);
+
+  const reviewedTotal = row?.reviewedCount ?? 0;
+
+  res.json(
+    GetCreativeImageAnalyticsResponse.parse({
+      totalImages: row?.totalImages ?? 0,
+      totalCostUsd: row?.totalCostUsd ?? 0,
+      avgQcScore: row?.avgQcScore != null ? Number(row.avgQcScore) : null,
+      approvedRate: reviewedTotal > 0 ? (row?.approvedCount ?? 0) / reviewedTotal : null,
+      rejectedRate: reviewedTotal > 0 ? (row?.rejectedCount ?? 0) / reviewedTotal : null,
+      pendingCount: row?.pendingCount ?? 0,
     }),
   );
 });

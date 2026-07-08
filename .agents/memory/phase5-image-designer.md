@@ -25,3 +25,9 @@ Use `black-forest-labs/flux-schnell` (with the models/predictions path: `POST /v
 
 ## getProviderApiKey helper
 Located in `artifacts/api-server/src/services/aiSecretService.ts`. Call as `getProviderApiKey("replicate")` — returns the REPLICATE_API_TOKEN secret or null. Never check `process.env` directly; the helper normalises provider slug → env var name.
+
+## Image analytics endpoint placement
+`GET /creative-ai/analytics/images` lives in `artifacts/api-server/src/routes/creative-ai.ts` (not analytics.ts), because its URL prefix is `/creative-ai/...`. Interval parameterized as `(${days} * interval '1 day')` — never `sql.raw`. Query parsed via `GetCreativeImageAnalyticsQueryParams` Zod schema.
+
+## Hand-written generated files (no codegen script)
+`lib/api-zod/src/generated/api.ts` and `lib/api-client-react/src/generated/api.ts` + `api.schemas.ts` are hand-written — there is no `pnpm codegen` or `pnpm generate` script. To add a new endpoint: (1) add path + schema to openapi.yaml, (2) add Zod schema to api-zod/generated/api.ts, (3) add TS interface to api-client-react/generated/api.schemas.ts, (4) add import + hook to api-client-react/generated/api.ts. Required nullable fields use `.nullable()`, optional nullable use `.nullish()`.

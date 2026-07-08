@@ -5,7 +5,6 @@ import {
   aiOrchestratorSessionsTable,
   aiModelsTable,
   aiProvidersTable,
-  aiAgentsTable,
 } from "@workspace/db";
 import {
   OrchestratorExecuteBody,
@@ -38,7 +37,6 @@ router.post("/ai/orchestrator/execute", async (req, res): Promise<void> => {
   let autoRouted = false;
 
   if (modelId != null) {
-    // Manual model selection
     const [row] = await db
       .select({ model: aiModelsTable, provider: aiProvidersTable })
       .from(aiModelsTable)
@@ -67,7 +65,6 @@ router.post("/ai/orchestrator/execute", async (req, res): Promise<void> => {
     model = row.model;
     provider = row.provider;
   } else {
-    // Auto-route to best available model
     const routed = await routeToModel(prompt);
     if (routed) {
       model = routed.model;
@@ -84,24 +81,6 @@ router.post("/ai/orchestrator/execute", async (req, res): Promise<void> => {
     return;
   }
 
-  // ── Load agent system prompt if agentId is provided ───────────────────────
-  // agentId from API schema is string|null (OpenAPI style); parse to int for DB
-  let effectiveSystemPrompt = systemPrompt ?? null;
-  const agentDbId = agentId != null ? parseInt(agentId, 10) : null;
-  if (agentDbId != null && !Number.isNaN(agentDbId) && !effectiveSystemPrompt) {
-    const [agent] = await db
-      .select()
-      .from(aiAgentsTable)
-      .where(eq(aiAgentsTable.id, agentDbId));
-    if (agent?.metadata) {
-      const meta = agent.metadata as Record<string, unknown>;
-      if (typeof meta.systemPrompt === "string") {
-        effectiveSystemPrompt = meta.systemPrompt;
-      }
-    }
-  }
-
-  // ── Resolve execution parameters ──────────────────────────────────────────
   const params = (parameters ?? {}) as Record<string, unknown>;
   const temperature = typeof params.temperature === "number" ? params.temperature : null;
   const maxTokens = typeof params.maxTokens === "number" ? params.maxTokens : null;
@@ -114,7 +93,7 @@ router.post("/ai/orchestrator/execute", async (req, res): Promise<void> => {
   try {
     result = await executeAI({
       prompt,
-      systemPrompt: effectiveSystemPrompt,
+      systemPrompt: systemPrompt ?? null,
       model,
       provider,
       temperature,
@@ -123,7 +102,6 @@ router.post("/ai/orchestrator/execute", async (req, res): Promise<void> => {
   } catch (primaryErr) {
     await logAudit("orchestrator", "execute_failed", activeSessionId, "session", "failure", {
       modelId: model.id,
-      modelName: model.name,
       error: String(primaryErr),
     });
 
@@ -132,7 +110,6 @@ router.post("/ai/orchestrator/execute", async (req, res): Promise<void> => {
       return;
     }
 
-    // Auto-routed: try fallback models
     const fallbacks = await getFallbackModels(model.id);
     let fallbackResult: import("../services/aiExecutionService.js").ExecutionOutput | null = null;
 
@@ -140,7 +117,7 @@ router.post("/ai/orchestrator/execute", async (req, res): Promise<void> => {
       try {
         fallbackResult = await executeAI({
           prompt,
-          systemPrompt: effectiveSystemPrompt,
+          systemPrompt: systemPrompt ?? null,
           model: fallback.model,
           provider: fallback.provider,
           temperature,
@@ -155,12 +132,8 @@ router.post("/ai/orchestrator/execute", async (req, res): Promise<void> => {
     }
 
     if (!fallbackResult) {
-      await logAudit("orchestrator", "all_fallbacks_failed", activeSessionId, "session", "failure", {
-        primaryModel: model.name,
-        fallbackCount: fallbacks.length,
-      });
       res.status(502).json({
-        error: `AI execution failed and all fallbacks exhausted. Primary error: ${String(primaryErr)}`,
+        error: `AI execution failed and all fallbacks exhausted. Error: ${String(primaryErr)}`,
       });
       return;
     }
@@ -195,8 +168,6 @@ router.post("/ai/orchestrator/execute", async (req, res): Promise<void> => {
 
   await logAudit("orchestrator", "execute", activeSessionId, "session", "success", {
     modelId: usedModel.id,
-    modelName: usedModel.modelId,
-    providerSlug: usedProvider.slug,
     tokensUsed: result.tokensUsed,
     latencyMs: result.latencyMs,
     autoRouted,
@@ -242,7 +213,6 @@ router.get("/ai/orchestrator/sessions/:id", async (req, res): Promise<void> => {
   res.json(GetOrchestratorSessionResponse.parse(session));
 });
 
-/** Quick smoke-test endpoint — returns 200 with service status (no AI call made). */
 router.post("/ai/orchestrator/test", async (_req, res): Promise<void> => {
   const { getAllActiveModels } = await import("../services/aiModelService.js");
   const { getProviderApiKey: getKey } = await import("../services/aiSecretService.js");

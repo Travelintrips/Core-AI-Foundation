@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import registryRouter from "./registry";
-import agentsRouter from "./agents";
 import orchestratorRouter from "./orchestrator";
 import workflowsRouter from "./workflows";
 import promptsRouter from "./prompts";
@@ -25,7 +24,6 @@ const router: IRouter = Router();
 router.use(publicRouter);    // public endpoints (bypass admin key via adminAuthWithExceptions)
 router.use(healthRouter);
 router.use(registryRouter);
-router.use(agentsRouter);
 router.use(orchestratorRouter);
 router.use(workflowsRouter);
 router.use(promptsRouter);
@@ -34,7 +32,7 @@ router.use(memoryRouter);
 router.use(auditRouter);
 router.use(analyticsRouter);
 router.use(settingsRouter);
-router.use(creativeAiRouter);
+router.use(creativeiRouter);
 router.use(capabilitiesRouter);
 router.use(feedbackRouter);
 router.use(clientMemoryRouter);

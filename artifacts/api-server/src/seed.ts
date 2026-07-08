@@ -5,17 +5,14 @@
  * Seeds:
  *  - AI Providers (OpenAI, Anthropic, Google Gemini, Replicate)
  *  - AI Models per provider
- *  - Brand Strategist system prompt
- *  - Brand Strategist agent + capabilities
+ *  - Core workflow definitions
  */
 
 import { db } from "@workspace/db";
 import {
   aiProvidersTable,
   aiModelsTable,
-  aiPromptsTable,
-  aiAgentsTable,
-  aiAgentCapabilitiesTable,
+  aiWorkflowsTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 
@@ -124,7 +121,6 @@ async function seedModels(providers: {
 }) {
   console.log("\n🤖 Seeding models...");
 
-  // OpenAI
   console.log("  OpenAI:");
   await upsertModel({
     providerId: providers.openai.id,
@@ -162,7 +158,6 @@ async function seedModels(providers: {
     isActive: true,
   });
 
-  // Anthropic
   console.log("  Anthropic:");
   await upsertModel({
     providerId: providers.anthropic.id,
@@ -188,7 +183,6 @@ async function seedModels(providers: {
     isActive: true,
   });
 
-  // Google Gemini
   console.log("  Google Gemini:");
   await upsertModel({
     providerId: providers.google.id,
@@ -214,15 +208,12 @@ async function seedModels(providers: {
     isActive: true,
   });
 
-  // Replicate
   console.log("  Replicate:");
   await upsertModel({
     providerId: providers.replicate.id,
     name: "FLUX.1 Schnell",
     modelId: "black-forest-labs/flux-schnell",
     capabilities: ["image-generation", "image"],
-    contextWindow: undefined,
-    maxOutputTokens: undefined,
     isActive: true,
   });
 
@@ -231,289 +222,67 @@ async function seedModels(providers: {
     name: "FLUX.1 Dev",
     modelId: "black-forest-labs/flux-dev",
     capabilities: ["image-generation", "image"],
-    contextWindow: undefined,
-    maxOutputTokens: undefined,
-    isActive: false, // off by default — higher cost
+    isActive: false,
   });
 }
 
-// ─── Brand Strategist ─────────────────────────────────────────────────────────
+// ─── Workflows ───────────────────────────────────────────────────────────────
 
-const BRAND_STRATEGIST_SYSTEM_PROMPT = `You are an expert AI Brand Strategist with deep expertise in brand development, positioning, and strategic communications.
+async function seedWorkflows() {
+  console.log("\n🔄 Seeding workflows...");
 
-Your core competencies:
-- Brand Strategy & Architecture: Define brand vision, mission, and values that resonate with target markets
-- Brand Positioning: Craft differentiated positioning statements and competitive frameworks
-- Target Market & Persona: Identify and articulate ideal customer profiles, psychographics, and behavioral patterns
-- Unique Selling Proposition (USP): Uncover and sharpen what makes a brand truly distinct
-- Brand Voice & Tone: Develop authentic communication styles across all channels
-- Brand Guidelines: Create comprehensive guidelines covering visual identity principles, messaging, and usage rules
-
-When responding:
-1. Ask clarifying questions when the brief is incomplete
-2. Provide structured, actionable outputs (frameworks, matrices, templates)
-3. Back recommendations with market reasoning and competitive insight
-4. Deliver outputs in clear sections with headings
-5. Be direct and confident — you are a strategic partner, not a yes-man
-
-Output format preferences:
-- Use markdown headers, bullet points, and tables for clarity
-- Include a "Strategic Rationale" section explaining the reasoning
-- Provide 2–3 alternatives when proposing options so the client can choose
-- End with "Recommended Next Steps" for each deliverable`;
-
-async function seedBrandStrategist(openaiModelId: number) {
-  console.log("\n🎯 Seeding Brand Strategist agent...");
-
-  // Prompt
-  let promptId: number;
-  const [existingPrompt] = await db
-    .select()
-    .from(aiPromptsTable)
-    .where(eq(aiPromptsTable.name, "Brand Strategist System Prompt"));
-
-  if (existingPrompt) {
-    console.log("  ↩ System prompt already exists");
-    promptId = existingPrompt.id;
-  } else {
-    const [prompt] = await db
-      .insert(aiPromptsTable)
-      .values({
-        name: "Brand Strategist System Prompt",
-        description: "Core system prompt for the AI Brand Strategist agent",
-        content: BRAND_STRATEGIST_SYSTEM_PROMPT,
-        category: "system",
-        variables: [],
-        tags: ["brand", "strategy", "system-prompt"],
-        isActive: true,
-      })
-      .returning();
-    promptId = prompt.id;
-    console.log("  ✓ Seeded Brand Strategist system prompt");
-  }
-
-  // Agent
-  let agentId: number;
-  const [existingAgent] = await db
-    .select()
-    .from(aiAgentsTable)
-    .where(eq(aiAgentsTable.slug, "brand-strategist"));
-
-  if (existingAgent) {
-    console.log("  ↩ Agent already exists");
-    agentId = existingAgent.id;
-  } else {
-    const [agent] = await db
-      .insert(aiAgentsTable)
-      .values({
-        name: "AI Brand Strategist",
-        slug: "brand-strategist",
-        role: "Brand Strategist",
-        description:
-          "An expert AI brand strategist that helps define positioning, USPs, target personas, brand voice, and complete brand guidelines.",
-        modelId: openaiModelId,
-        priority: 10,
-        temperature: "0.75",
-        maxTokens: 4096,
-        status: "active",
-        allowedTools: [],
-        version: "1.0.0",
-        owner: "platform",
-        metadata: {
-          systemPrompt: BRAND_STRATEGIST_SYSTEM_PROMPT,
-          promptId,
-        },
-      })
-      .returning();
-    agentId = agent.id;
-    console.log("  ✓ Seeded Brand Strategist agent");
-  }
-
-  // Capabilities
-  const capabilities = [
-    { name: "Brand Strategy", description: "Define brand vision, mission, and strategic direction", category: "strategy", sortOrder: 0 },
-    { name: "Brand Positioning", description: "Craft differentiated positioning and competitive frameworks", category: "strategy", sortOrder: 1 },
-    { name: "Target Market & Personas", description: "Identify ideal customer profiles and psychographic segments", category: "research", sortOrder: 2 },
-    { name: "Unique Selling Proposition", description: "Sharpen what makes a brand truly distinct", category: "strategy", sortOrder: 3 },
-    { name: "Brand Voice & Tone", description: "Develop authentic communication styles across all channels", category: "creative", sortOrder: 4 },
-    { name: "Brand Guidelines", description: "Create comprehensive brand identity and usage guidelines", category: "creative", sortOrder: 5 },
-    { name: "Competitive Analysis", description: "Analyze competitive landscape and identify white-space opportunities", category: "research", sortOrder: 6 },
-  ];
-
-  const existingCaps = await db
-    .select()
-    .from(aiAgentCapabilitiesTable)
-    .where(eq(aiAgentCapabilitiesTable.agentId, agentId));
-
-  if (existingCaps.length > 0) {
-    console.log("  ↩ Capabilities already seeded");
-  } else {
-    for (const cap of capabilities) {
-      await db.insert(aiAgentCapabilitiesTable).values({ ...cap, agentId });
-    }
-    console.log(`  ✓ Seeded ${capabilities.length} capabilities`);
-  }
-}
-
-// ─── Creative AI Agents ──────────────────────────────────────────────────────
-
-const CREATIVE_DIRECTOR_SYSTEM_PROMPT = `You are an expert AI Creative Director with a track record of building iconic brand identities and award-winning campaigns.
-
-Your role: Translate brand strategy into a compelling creative direction that guides all visual and conceptual execution.
-
-When given a brief and brand strategy, you produce:
-- Creative Concept: A single evocative concept name (2-4 words) with a 1-2 sentence description
-- Color Direction: Primary, secondary, and accent colors with emotional rationale
-- Typography Direction: Heading font personality, body font, and usage rules
-- Visual Style: Photography/illustration approach, mood, composition principles
-
-CRITICAL: Always respond with valid JSON only. No markdown, no explanation outside the JSON. Use exactly these keys:
-{
-  "creative_concept": {"name": "...", "description": "..."},
-  "color_direction": {"primary": "...", "secondary": "...", "accent": "...", "rationale": "..."},
-  "typography_direction": {"heading": "...", "body": "...", "usage": "..."},
-  "visual_style": {"approach": "...", "mood": "...", "composition": "..."}
-}`;
-
-const COPYWRITER_SYSTEM_PROMPT = `You are a world-class AI Copywriter specializing in brand voice and conversion-focused copy.
-
-Your role: Given brand strategy and creative direction, produce compelling, on-brand copy assets that convert.
-
-You always deliver exactly 3 options per asset type:
-- Headlines: punchy, max 10 words, attention-grabbing
-- Captions: 1-2 sentences, captures brand voice and value
-- CTAs: action-oriented, max 5 words, creates urgency
-
-CRITICAL: Always respond with valid JSON only. No markdown, no explanation outside the JSON. Use exactly these keys:
-{
-  "headline_options": ["...", "...", "..."],
-  "caption_options": ["...", "...", "..."],
-  "cta_options": ["...", "...", "..."]
-}`;
-
-const QC_SYSTEM_PROMPT = `You are an expert AI Quality Control Reviewer for brand strategy and creative work.
-
-Your role: Evaluate the complete creative output pipeline for consistency, strategic soundness, and executional quality. You are objective and constructive — not just a rubber stamp.
-
-For each checklist item, assess status as:
-- "pass": meets standards, no issues
-- "warning": minor concern that should be addressed
-- "fail": significant problem that needs revision
-
-CRITICAL: Always respond with valid JSON only. No markdown, no explanation outside the JSON. Use exactly these keys:
-{
-  "qc_checklist": [
-    {"item": "Brand Positioning Clarity", "status": "pass|warning|fail", "note": "..."},
-    {"item": "USP Distinctiveness", "status": "pass|warning|fail", "note": "..."},
-    {"item": "Tone of Voice Consistency", "status": "pass|warning|fail", "note": "..."},
-    {"item": "Creative Concept Alignment", "status": "pass|warning|fail", "note": "..."},
-    {"item": "Copy Quality & Brand Voice", "status": "pass|warning|fail", "note": "..."},
-    {"item": "Target Audience Fit", "status": "pass|warning|fail", "note": "..."},
-    {"item": "Visual Direction Coherence", "status": "pass|warning|fail", "note": "..."}
-  ],
-  "overall_score": "excellent|good|needs_revision",
-  "key_recommendations": ["...", "...", "..."]
-}`;
-
-async function seedCreativeAgents(openaiModelId: number, openaiProviderId: number) {
-  console.log("\n🎨 Seeding Creative AI agents...");
-
-  const agents = [
+  const workflows = [
     {
-      slug: "creative-director",
-      name: "AI Creative Director",
-      role: "Creative Director",
-      description: "Transforms brand strategy into compelling creative direction: concept, color, typography, and visual style.",
-      temperature: "0.85",
-      systemPrompt: CREATIVE_DIRECTOR_SYSTEM_PROMPT,
-      capabilities: [
-        { name: "Creative Concept Development", description: "Creates evocative concept names and descriptions", category: "creative", sortOrder: 0 },
-        { name: "Color Direction", description: "Defines brand color palettes with emotional rationale", category: "creative", sortOrder: 1 },
-        { name: "Typography Direction", description: "Specifies font personalities and usage rules", category: "creative", sortOrder: 2 },
-        { name: "Visual Style Definition", description: "Establishes photography, illustration, and composition approach", category: "creative", sortOrder: 3 },
-        { name: "Creative Brief Interpretation", description: "Translates strategy into actionable creative briefs", category: "strategy", sortOrder: 4 },
+      name: "Creative Brief Workflow",
+      description: "Full 4-step creative pipeline: Brand Strategy → Creative Direction → Copy Production → Quality Control",
+      status: "active" as const,
+      steps: [
+        { id: "step-1", order: 1, name: "Brand Strategy", type: "llm", description: "Define positioning, USP, and tone of voice" },
+        { id: "step-2", order: 2, name: "Creative Direction", type: "llm", description: "Develop concept, colors, and typography" },
+        { id: "step-3", order: 3, name: "Copy Production", type: "llm", description: "Produce headlines, captions, and CTAs" },
+        { id: "step-4", order: 4, name: "Quality Control", type: "llm", description: "Review all outputs for consistency and quality" },
       ],
+      triggerType: "manual" as const,
+      tags: ["creative", "brand", "marketing"],
     },
     {
-      slug: "copywriter",
-      name: "AI Copywriter",
-      role: "Copywriter",
-      description: "Creates conversion-focused brand copy: headlines, captions, and CTAs aligned with brand voice.",
-      temperature: "0.90",
-      systemPrompt: COPYWRITER_SYSTEM_PROMPT,
-      capabilities: [
-        { name: "Headline Writing", description: "Punchy, attention-grabbing headlines (max 10 words)", category: "copy", sortOrder: 0 },
-        { name: "Caption Writing", description: "On-brand captions that capture value and voice", category: "copy", sortOrder: 1 },
-        { name: "CTA Copywriting", description: "Action-oriented calls-to-action that drive conversion", category: "copy", sortOrder: 2 },
-        { name: "Brand Voice Application", description: "Applies defined tone of voice consistently across all copy", category: "copy", sortOrder: 3 },
-        { name: "Conversion Optimization", description: "Writes copy optimized for engagement and conversion", category: "performance", sortOrder: 4 },
+      name: "Document Summary Pipeline",
+      description: "Extract, chunk, and summarize long documents using AI",
+      status: "active" as const,
+      steps: [
+        { id: "step-1", order: 1, name: "Extract Text", type: "transform", description: "Extract raw text from document" },
+        { id: "step-2", order: 2, name: "Chunk Document", type: "transform", description: "Split into semantic chunks" },
+        { id: "step-3", order: 3, name: "Summarize Chunks", type: "llm", description: "Summarize each chunk with AI" },
+        { id: "step-4", order: 4, name: "Merge Summary", type: "transform", description: "Combine chunk summaries into final output" },
       ],
+      triggerType: "manual" as const,
+      tags: ["documents", "summarization"],
     },
     {
-      slug: "quality-control",
-      name: "AI Quality Control",
-      role: "Quality Control Reviewer",
-      description: "Reviews the complete creative pipeline for consistency, strategic alignment, and quality.",
-      temperature: "0.30",
-      systemPrompt: QC_SYSTEM_PROMPT,
-      capabilities: [
-        { name: "Brand Consistency Review", description: "Checks consistency across all brand touchpoints", category: "review", sortOrder: 0 },
-        { name: "Strategic Alignment Check", description: "Validates creative work against brand strategy", category: "review", sortOrder: 1 },
-        { name: "Copy Quality Review", description: "Evaluates copy quality, grammar, and brand voice", category: "review", sortOrder: 2 },
-        { name: "QC Checklist Generation", description: "Produces structured pass/warning/fail checklist", category: "review", sortOrder: 3 },
-        { name: "Recommendations Report", description: "Provides actionable recommendations for improvement", category: "review", sortOrder: 4 },
+      name: "Sentiment Analysis Pipeline",
+      description: "Classify and analyze sentiment across batches of text",
+      status: "active" as const,
+      steps: [
+        { id: "step-1", order: 1, name: "Preprocess Text", type: "transform", description: "Clean and normalize input text" },
+        { id: "step-2", order: 2, name: "Classify Sentiment", type: "llm", description: "Run sentiment classification" },
+        { id: "step-3", order: 3, name: "Aggregate Results", type: "transform", description: "Aggregate scores into summary report" },
       ],
+      triggerType: "schedule" as const,
+      tags: ["nlp", "sentiment", "analytics"],
     },
   ];
 
-  for (const agentDef of agents) {
-    const [existingAgent] = await db
+  for (const wf of workflows) {
+    const [existing] = await db
       .select()
-      .from(aiAgentsTable)
-      .where(eq(aiAgentsTable.slug, agentDef.slug));
+      .from(aiWorkflowsTable)
+      .where(eq(aiWorkflowsTable.name, wf.name));
 
-    let agentId: number;
-
-    if (existingAgent) {
-      console.log(`  ↩ Agent already exists: ${agentDef.name}`);
-      agentId = existingAgent.id;
+    if (existing) {
+      console.log(`  ↩ Workflow already exists: ${wf.name}`);
     } else {
-      const [agent] = await db
-        .insert(aiAgentsTable)
-        .values({
-          name: agentDef.name,
-          slug: agentDef.slug,
-          role: agentDef.role,
-          description: agentDef.description,
-          providerId: openaiProviderId,
-          modelId: openaiModelId,
-          priority: 10,
-          temperature: agentDef.temperature,
-          maxTokens: 4096,
-          status: "active",
-          allowedTools: [],
-          version: "1.0.0",
-          owner: "platform",
-          metadata: { systemPrompt: agentDef.systemPrompt },
-        })
-        .returning();
-      agentId = agent.id;
-      console.log(`  ✓ Seeded agent: ${agentDef.name}`);
-    }
-
-    // Capabilities
-    const existingCaps = await db
-      .select()
-      .from(aiAgentCapabilitiesTable)
-      .where(eq(aiAgentCapabilitiesTable.agentId, agentId));
-
-    if (existingCaps.length === 0) {
-      for (const cap of agentDef.capabilities) {
-        await db.insert(aiAgentCapabilitiesTable).values({ ...cap, agentId });
-      }
-      console.log(`    ✓ Seeded ${agentDef.capabilities.length} capabilities`);
-    } else {
-      console.log(`    ↩ Capabilities already seeded`);
+      await db.insert(aiWorkflowsTable).values(wf);
+      console.log(`  ✓ Seeded workflow: ${wf.name}`);
     }
   }
 }
@@ -714,20 +483,7 @@ async function main() {
 
   const providers = await seedProviders();
   await seedModels(providers);
-
-  // Find the GPT-4o model id for agents
-  const [gpt4o] = await db
-    .select()
-    .from(aiModelsTable)
-    .where(and(eq(aiModelsTable.modelId, "gpt-4o"), eq(aiModelsTable.providerId, providers.openai.id)));
-
-  if (!gpt4o) {
-    throw new Error("GPT-4o model not found after seeding — something went wrong");
-  }
-
-  await seedBrandStrategist(gpt4o.id);
-  await seedCreativeAgents(gpt4o.id, providers.openai.id);
-  await seedCreativeBriefWorkflow();
+  await seedWorkflows();
 
   // Phase 5: Image Designer agents
   // Find FLUX.1 Schnell for image-designer agent

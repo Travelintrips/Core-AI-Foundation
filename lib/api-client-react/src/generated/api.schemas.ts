@@ -1611,3 +1611,16 @@ export type GetCostAnalyticsParams = {
 days?: number;
 };
 
+
+export type GetCreativeImageAnalyticsParams = {
+  days?: number | null;
+};
+
+export interface CreativeAiImageAnalytics {
+  totalImages: number;
+  totalCostUsd: number;
+  avgQcScore?: number | null;
+  approvedRate: number | null;
+  rejectedRate: number | null;
+  pendingCount: number;
+}

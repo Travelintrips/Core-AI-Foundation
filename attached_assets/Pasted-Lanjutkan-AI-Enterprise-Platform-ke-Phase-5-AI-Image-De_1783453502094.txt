@@ -1,0 +1,126 @@
+Lanjutkan AI Enterprise Platform ke Phase 5: AI Image Designer MVP.
+
+Status saat ini:
+
+* Phase 4.5 selesai dan verified
+* Capability matrix seeded
+* Guardrails aktif
+* Intelligent router sudah guardrail-aware
+* Creative AI text workflow berjalan end-to-end
+* Analytics, cost tracking, feedback, export markdown, dan export CSV sudah berjalan
+
+Tujuan Phase 5:
+Tambahkan AI Image Designer MVP yang terintegrasi dengan Creative AI.
+
+PENTING:
+Jangan rombak arsitektur lama.
+Jangan ubah API lama.
+Jangan membuat video, OCR, voice, atau marketplace.
+Fokus hanya image generation.
+
+Tugas:
+
+1. Tambahkan agent:
+
+* Image Prompt Generator Agent
+* Image Designer Agent
+* Image QC Agent
+
+2. Tambahkan table:
+   creative_ai_assets
+
+Field:
+
+* id
+* project_id
+* step_id
+* agent_id
+* provider
+* model
+* asset_type
+* prompt
+* negative_prompt
+* aspect_ratio
+* image_url
+* storage_path
+* thumbnail_url
+* status
+* qc_score
+* qc_notes
+* cost
+* latency_ms
+* metadata
+* created_at
+
+3. Tambahkan API:
+
+* POST /api/creative-ai/projects/:id/generate-image
+* GET /api/creative-ai/projects/:id/assets
+* PATCH /api/creative-ai/assets/:assetId/status
+* POST /api/creative-ai/assets/:assetId/feedback
+
+4. Tambahkan UI di halaman Creative AI project detail:
+   Section: Image Concepts
+
+Fitur:
+
+* tombol Generate Image Concepts
+* grid gambar
+* prompt yang digunakan
+* provider/model
+* cost
+* latency
+* QC score
+* status
+* tombol Approve
+* Needs Revision
+* Reject
+* Copy Prompt
+
+5. Integrasi workflow:
+   Saat tombol Generate Image Concepts diklik:
+
+* Ambil hasil Brand Strategist
+* Ambil hasil Creative Director
+* Jalankan Image Prompt Generator
+* Jalankan Image Designer
+* Jalankan Image QC
+* Simpan asset ke creative_ai_assets
+* Simpan cost record
+* Simpan audit log
+
+6. Guardrails:
+
+* max image variations default 4
+* image generation tunduk pada max_cost_per_workflow
+* timeout provider
+* retry/fallback
+* jika REPLICATE_API_TOKEN belum ada, tampilkan error jelas
+* workflow utama tidak boleh crash
+
+7. Analytics:
+   Tambahkan tracking:
+
+* total images generated
+* image generation cost
+* average image QC score
+* approved image rate
+* rejected image rate
+
+8. Storage:
+   Jika storage sudah tersedia, simpan image ke storage.
+   Jika belum tersedia, simpan image_url dari provider dulu.
+   Jangan blok implementasi karena storage belum ada.
+
+9. Verification:
+
+* DB push clean
+* codegen clean
+* typecheck clean
+* build clean
+* seed image agents berhasil
+* test 404 untuk project missing
+* test 400 untuk variations > 4
+* test UI Generate Image Concepts
+
+Semua perubahan harus additive, modular, backward compatible, audit logged, cost tracked, dan guardrail-aware.
