@@ -10,7 +10,7 @@
  * releaseJob()  — release without completing (requeue)
  */
 
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { db, aiJobsTable, aiWorkersTable } from "@workspace/db";
 import type { AiJob, AiWorker } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
@@ -52,7 +52,8 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
 
     const jobRow = job as unknown as AiJob;
 
-    // Claim the job
+    // Claim the job — accept both 'queued' and 'retrying' (due retrying jobs
+    // are selected above; without this OR the update would silently match nothing)
     const [claimed] = await tx
       .update(aiJobsTable)
       .set({
@@ -63,7 +64,7 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
       .where(
         and(
           eq(aiJobsTable.id, jobRow.id),
-          eq(aiJobsTable.status, "queued"),
+          inArray(aiJobsTable.status, ["queued", "retrying"]),
         ),
       )
       .returning();

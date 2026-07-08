@@ -1645,6 +1645,514 @@ export const SubmitAssetFeedbackResponse = zod.object({
 
 
 /**
+ * @summary Aggregate image generation analytics across all projects
+ */
+export const getCreativeImageAnalyticsQueryDaysDefault = 30;
+
+export const GetCreativeImageAnalyticsQueryParams = zod.object({
+  "days": zod.coerce.number().default(getCreativeImageAnalyticsQueryDaysDefault)
+})
+
+export const GetCreativeImageAnalyticsResponse = zod.object({
+  "totalImages": zod.number().describe('Total image assets in the window'),
+  "totalCostUsd": zod.number().describe('Total cost of image generation in USD'),
+  "avgQcScore": zod.number().nullish().describe('Average QC score across all images (1–100)'),
+  "approvedRate": zod.number().nullable().describe('Fraction of images that were approved (0–1)'),
+  "rejectedRate": zod.number().nullable().describe('Fraction of images that were rejected (0–1)'),
+  "pendingCount": zod.number().describe('Images currently pending or generating')
+})
+
+
+/**
+ * @summary List jobs with optional filters
+ */
+export const listJobsQueryLimitDefault = 50;
+export const listJobsQueryOffsetDefault = 0;
+
+export const ListJobsQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "jobType": zod.coerce.string().optional(),
+  "departmentId": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().default(listJobsQueryLimitDefault),
+  "offset": zod.coerce.number().default(listJobsQueryOffsetDefault)
+})
+
+export const listJobsResponseItemsItemPriorityMin = 0;
+export const listJobsResponseItemsItemPriorityMax = 100;
+
+
+
+export const ListJobsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "jobCode": zod.string(),
+  "executionPlanId": zod.number().nullish(),
+  "departmentId": zod.number().nullish(),
+  "employeeId": zod.number().nullish(),
+  "jobType": zod.string(),
+  "priority": zod.number().min(listJobsResponseItemsItemPriorityMin).max(listJobsResponseItemsItemPriorityMax),
+  "priorityScore": zod.number().nullish(),
+  "status": zod.enum(['queued', 'waiting', 'running', 'retrying', 'completed', 'failed', 'cancelled', 'blocked']),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "resultJson": zod.record(zod.string(), zod.unknown()).nullish(),
+  "scheduledAt": zod.coerce.date().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "retryCount": zod.number(),
+  "maxRetry": zod.number(),
+  "retryStrategy": zod.enum(['immediate', 'exponential', 'manual']),
+  "nextRetryAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "estimatedCost": zod.number().nullish(),
+  "actualCost": zod.number().nullish(),
+  "estimatedDuration": zod.number().nullish(),
+  "actualDuration": zod.number().nullish(),
+  "managerOverride": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number()
+})
+
+
+/**
+ * @summary Enqueue a new job
+ */
+export const createJobBodyPriorityDefault = 50;
+export const createJobBodyPriorityMin = 0;
+export const createJobBodyPriorityMax = 100;
+
+export const createJobBodyMaxRetryDefault = 3;
+export const createJobBodyMaxRetryMin = 0;
+export const createJobBodyMaxRetryMax = 10;
+
+export const createJobBodyRetryStrategyDefault = `exponential`;
+export const createJobBodyManagerOverrideMin = 0;
+export const createJobBodyManagerOverrideMax = 100;
+
+
+
+export const CreateJobBody = zod.object({
+  "jobType": zod.string(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()).optional(),
+  "priority": zod.number().min(createJobBodyPriorityMin).max(createJobBodyPriorityMax).default(createJobBodyPriorityDefault),
+  "executionPlanId": zod.number().nullish(),
+  "departmentId": zod.number().nullish(),
+  "employeeId": zod.number().nullish(),
+  "scheduledAt": zod.coerce.date().nullish(),
+  "maxRetry": zod.number().min(createJobBodyMaxRetryMin).max(createJobBodyMaxRetryMax).default(createJobBodyMaxRetryDefault),
+  "retryStrategy": zod.enum(['immediate', 'exponential', 'manual']).default(createJobBodyRetryStrategyDefault),
+  "estimatedCost": zod.number().nullish(),
+  "estimatedDuration": zod.number().nullish(),
+  "managerOverride": zod.number().min(createJobBodyManagerOverrideMin).max(createJobBodyManagerOverrideMax).nullish()
+})
+
+export const createJobResponsePriorityMin = 0;
+export const createJobResponsePriorityMax = 100;
+
+
+
+export const CreateJobResponse = zod.object({
+  "id": zod.number(),
+  "jobCode": zod.string(),
+  "executionPlanId": zod.number().nullish(),
+  "departmentId": zod.number().nullish(),
+  "employeeId": zod.number().nullish(),
+  "jobType": zod.string(),
+  "priority": zod.number().min(createJobResponsePriorityMin).max(createJobResponsePriorityMax),
+  "priorityScore": zod.number().nullish(),
+  "status": zod.enum(['queued', 'waiting', 'running', 'retrying', 'completed', 'failed', 'cancelled', 'blocked']),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "resultJson": zod.record(zod.string(), zod.unknown()).nullish(),
+  "scheduledAt": zod.coerce.date().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "retryCount": zod.number(),
+  "maxRetry": zod.number(),
+  "retryStrategy": zod.enum(['immediate', 'exponential', 'manual']),
+  "nextRetryAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "estimatedCost": zod.number().nullish(),
+  "actualCost": zod.number().nullish(),
+  "estimatedDuration": zod.number().nullish(),
+  "actualDuration": zod.number().nullish(),
+  "managerOverride": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Queue statistics for the dashboard
+ */
+export const GetJobStatsResponse = zod.object({
+  "jobs": zod.record(zod.string(), zod.number()).describe('Count per status'),
+  "totalQueued": zod.number(),
+  "totalActive": zod.number(),
+  "totalBlocked": zod.number(),
+  "totalFailed": zod.number(),
+  "completedToday": zod.number(),
+  "workers": zod.record(zod.string(), zod.number()).describe('Worker count per status'),
+  "avgWaitMs": zod.number().nullish(),
+  "avgExecutionMs": zod.number().nullish()
+})
+
+
+/**
+ * @summary Get a single job by ID
+ */
+export const GetJobParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const getJobResponsePriorityMin = 0;
+export const getJobResponsePriorityMax = 100;
+
+
+
+export const GetJobResponse = zod.object({
+  "id": zod.number(),
+  "jobCode": zod.string(),
+  "executionPlanId": zod.number().nullish(),
+  "departmentId": zod.number().nullish(),
+  "employeeId": zod.number().nullish(),
+  "jobType": zod.string(),
+  "priority": zod.number().min(getJobResponsePriorityMin).max(getJobResponsePriorityMax),
+  "priorityScore": zod.number().nullish(),
+  "status": zod.enum(['queued', 'waiting', 'running', 'retrying', 'completed', 'failed', 'cancelled', 'blocked']),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "resultJson": zod.record(zod.string(), zod.unknown()).nullish(),
+  "scheduledAt": zod.coerce.date().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "retryCount": zod.number(),
+  "maxRetry": zod.number(),
+  "retryStrategy": zod.enum(['immediate', 'exponential', 'manual']),
+  "nextRetryAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "estimatedCost": zod.number().nullish(),
+  "actualCost": zod.number().nullish(),
+  "estimatedDuration": zod.number().nullish(),
+  "actualDuration": zod.number().nullish(),
+  "managerOverride": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Cancel a job
+ */
+export const CancelJobParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CancelJobBody = zod.object({
+  "reason": zod.string().optional()
+})
+
+export const cancelJobResponsePriorityMin = 0;
+export const cancelJobResponsePriorityMax = 100;
+
+
+
+export const CancelJobResponse = zod.object({
+  "id": zod.number(),
+  "jobCode": zod.string(),
+  "executionPlanId": zod.number().nullish(),
+  "departmentId": zod.number().nullish(),
+  "employeeId": zod.number().nullish(),
+  "jobType": zod.string(),
+  "priority": zod.number().min(cancelJobResponsePriorityMin).max(cancelJobResponsePriorityMax),
+  "priorityScore": zod.number().nullish(),
+  "status": zod.enum(['queued', 'waiting', 'running', 'retrying', 'completed', 'failed', 'cancelled', 'blocked']),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "resultJson": zod.record(zod.string(), zod.unknown()).nullish(),
+  "scheduledAt": zod.coerce.date().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "retryCount": zod.number(),
+  "maxRetry": zod.number(),
+  "retryStrategy": zod.enum(['immediate', 'exponential', 'manual']),
+  "nextRetryAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "estimatedCost": zod.number().nullish(),
+  "actualCost": zod.number().nullish(),
+  "estimatedDuration": zod.number().nullish(),
+  "actualDuration": zod.number().nullish(),
+  "managerOverride": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Manually retry a failed/blocked job
+ */
+export const RetryJobParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const retryJobResponsePriorityMin = 0;
+export const retryJobResponsePriorityMax = 100;
+
+
+
+export const RetryJobResponse = zod.object({
+  "id": zod.number(),
+  "jobCode": zod.string(),
+  "executionPlanId": zod.number().nullish(),
+  "departmentId": zod.number().nullish(),
+  "employeeId": zod.number().nullish(),
+  "jobType": zod.string(),
+  "priority": zod.number().min(retryJobResponsePriorityMin).max(retryJobResponsePriorityMax),
+  "priorityScore": zod.number().nullish(),
+  "status": zod.enum(['queued', 'waiting', 'running', 'retrying', 'completed', 'failed', 'cancelled', 'blocked']),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "resultJson": zod.record(zod.string(), zod.unknown()).nullish(),
+  "scheduledAt": zod.coerce.date().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "retryCount": zod.number(),
+  "maxRetry": zod.number(),
+  "retryStrategy": zod.enum(['immediate', 'exponential', 'manual']),
+  "nextRetryAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "estimatedCost": zod.number().nullish(),
+  "actualCost": zod.number().nullish(),
+  "estimatedDuration": zod.number().nullish(),
+  "actualDuration": zod.number().nullish(),
+  "managerOverride": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update job priority and recompute score
+ */
+export const ReprioritizeJobParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const reprioritizeJobBodyPriorityMin = 0;
+export const reprioritizeJobBodyPriorityMax = 100;
+
+export const reprioritizeJobBodyManagerOverrideMin = 0;
+export const reprioritizeJobBodyManagerOverrideMax = 100;
+
+
+
+export const ReprioritizeJobBody = zod.object({
+  "priority": zod.number().min(reprioritizeJobBodyPriorityMin).max(reprioritizeJobBodyPriorityMax),
+  "managerOverride": zod.number().min(reprioritizeJobBodyManagerOverrideMin).max(reprioritizeJobBodyManagerOverrideMax).nullish()
+})
+
+export const reprioritizeJobResponsePriorityMin = 0;
+export const reprioritizeJobResponsePriorityMax = 100;
+
+
+
+export const ReprioritizeJobResponse = zod.object({
+  "id": zod.number(),
+  "jobCode": zod.string(),
+  "executionPlanId": zod.number().nullish(),
+  "departmentId": zod.number().nullish(),
+  "employeeId": zod.number().nullish(),
+  "jobType": zod.string(),
+  "priority": zod.number().min(reprioritizeJobResponsePriorityMin).max(reprioritizeJobResponsePriorityMax),
+  "priorityScore": zod.number().nullish(),
+  "status": zod.enum(['queued', 'waiting', 'running', 'retrying', 'completed', 'failed', 'cancelled', 'blocked']),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "resultJson": zod.record(zod.string(), zod.unknown()).nullish(),
+  "scheduledAt": zod.coerce.date().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "retryCount": zod.number(),
+  "maxRetry": zod.number(),
+  "retryStrategy": zod.enum(['immediate', 'exponential', 'manual']),
+  "nextRetryAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "estimatedCost": zod.number().nullish(),
+  "actualCost": zod.number().nullish(),
+  "estimatedDuration": zod.number().nullish(),
+  "actualDuration": zod.number().nullish(),
+  "managerOverride": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List all workers
+ */
+export const ListWorkersResponseItem = zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "status": zod.enum(['online', 'offline', 'maintenance', 'busy', 'idle']),
+  "currentJob": zod.number().nullish(),
+  "lastHeartbeat": zod.coerce.date(),
+  "runningJobs": zod.number(),
+  "completedToday": zod.number(),
+  "failedToday": zod.number(),
+  "averageLatency": zod.number().nullish().describe('Rolling average latency in ms'),
+  "version": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListWorkersResponse = zod.array(ListWorkersResponseItem)
+
+
+/**
+ * @summary Register or upsert a worker
+ */
+export const registerWorkerBodyVersionDefault = `1.0.0`;
+
+export const RegisterWorkerBody = zod.object({
+  "workerName": zod.string(),
+  "version": zod.string().default(registerWorkerBodyVersionDefault)
+})
+
+export const RegisterWorkerResponse = zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "status": zod.enum(['online', 'offline', 'maintenance', 'busy', 'idle']),
+  "currentJob": zod.number().nullish(),
+  "lastHeartbeat": zod.coerce.date(),
+  "runningJobs": zod.number(),
+  "completedToday": zod.number(),
+  "failedToday": zod.number(),
+  "averageLatency": zod.number().nullish().describe('Rolling average latency in ms'),
+  "version": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Send worker heartbeat
+ */
+export const WorkerHeartbeatParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const WorkerHeartbeatResponse = zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "status": zod.enum(['online', 'offline', 'maintenance', 'busy', 'idle']),
+  "currentJob": zod.number().nullish(),
+  "lastHeartbeat": zod.coerce.date(),
+  "runningJobs": zod.number(),
+  "completedToday": zod.number(),
+  "failedToday": zod.number(),
+  "averageLatency": zod.number().nullish().describe('Rolling average latency in ms'),
+  "version": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Pause queued jobs (queued → waiting)
+ */
+export const PauseQueueBody = zod.object({
+  "departmentId": zod.number().nullish(),
+  "jobType": zod.string().nullish()
+})
+
+export const PauseQueueResponse = zod.object({
+  "paused": zod.number()
+})
+
+
+/**
+ * @summary Resume paused jobs (waiting → queued)
+ */
+export const ResumeQueueBody = zod.object({
+  "departmentId": zod.number().nullish(),
+  "jobType": zod.string().nullish()
+})
+
+export const ResumeQueueResponse = zod.object({
+  "resumed": zod.number()
+})
+
+
+/**
+ * @summary Get background worker dispatcher runtime status
+ */
+export const GetDispatcherStatusResponse = zod.object({
+  "enabled": zod.boolean().describe('Whether dispatcher is configured to auto-start'),
+  "running": zod.boolean().describe('Whether the dispatcher interval is currently active'),
+  "workerName": zod.string().describe('Registered worker name for this dispatcher process'),
+  "pollIntervalMs": zod.number().describe('Poll interval in milliseconds'),
+  "heartbeatIntervalMs": zod.number().describe('Heartbeat interval in milliseconds'),
+  "maxConcurrentJobs": zod.number().describe('Maximum jobs processed simultaneously'),
+  "currentJobs": zod.number().describe('Number of jobs currently being processed'),
+  "lastTickAt": zod.string().nullable().describe('ISO timestamp of the last tick, or null if never ticked'),
+  "lastHeartbeatAt": zod.string().nullable().describe('ISO timestamp of the last heartbeat, or null'),
+  "processedToday": zod.number().describe('Jobs successfully completed by this dispatcher since startup'),
+  "failedToday": zod.number().describe('Jobs that failed (and were retried\/marked failed) since startup')
+})
+
+
+/**
+ * @summary Start the background worker dispatcher
+ */
+export const StartDispatcherResponse = zod.object({
+  "enabled": zod.boolean().describe('Whether dispatcher is configured to auto-start'),
+  "running": zod.boolean().describe('Whether the dispatcher interval is currently active'),
+  "workerName": zod.string().describe('Registered worker name for this dispatcher process'),
+  "pollIntervalMs": zod.number().describe('Poll interval in milliseconds'),
+  "heartbeatIntervalMs": zod.number().describe('Heartbeat interval in milliseconds'),
+  "maxConcurrentJobs": zod.number().describe('Maximum jobs processed simultaneously'),
+  "currentJobs": zod.number().describe('Number of jobs currently being processed'),
+  "lastTickAt": zod.string().nullable().describe('ISO timestamp of the last tick, or null if never ticked'),
+  "lastHeartbeatAt": zod.string().nullable().describe('ISO timestamp of the last heartbeat, or null'),
+  "processedToday": zod.number().describe('Jobs successfully completed by this dispatcher since startup'),
+  "failedToday": zod.number().describe('Jobs that failed (and were retried\/marked failed) since startup')
+})
+
+
+/**
+ * @summary Stop the background worker dispatcher
+ */
+export const StopDispatcherResponse = zod.object({
+  "enabled": zod.boolean().describe('Whether dispatcher is configured to auto-start'),
+  "running": zod.boolean().describe('Whether the dispatcher interval is currently active'),
+  "workerName": zod.string().describe('Registered worker name for this dispatcher process'),
+  "pollIntervalMs": zod.number().describe('Poll interval in milliseconds'),
+  "heartbeatIntervalMs": zod.number().describe('Heartbeat interval in milliseconds'),
+  "maxConcurrentJobs": zod.number().describe('Maximum jobs processed simultaneously'),
+  "currentJobs": zod.number().describe('Number of jobs currently being processed'),
+  "lastTickAt": zod.string().nullable().describe('ISO timestamp of the last tick, or null if never ticked'),
+  "lastHeartbeatAt": zod.string().nullable().describe('ISO timestamp of the last heartbeat, or null'),
+  "processedToday": zod.number().describe('Jobs successfully completed by this dispatcher since startup'),
+  "failedToday": zod.number().describe('Jobs that failed (and were retried\/marked failed) since startup')
+})
+
+
+/**
+ * @summary Manually trigger one dispatcher poll cycle
+ */
+export const RunDispatcherTickResponse = zod.object({
+  "enabled": zod.boolean().describe('Whether dispatcher is configured to auto-start'),
+  "running": zod.boolean().describe('Whether the dispatcher interval is currently active'),
+  "workerName": zod.string().describe('Registered worker name for this dispatcher process'),
+  "pollIntervalMs": zod.number().describe('Poll interval in milliseconds'),
+  "heartbeatIntervalMs": zod.number().describe('Heartbeat interval in milliseconds'),
+  "maxConcurrentJobs": zod.number().describe('Maximum jobs processed simultaneously'),
+  "currentJobs": zod.number().describe('Number of jobs currently being processed'),
+  "lastTickAt": zod.string().nullable().describe('ISO timestamp of the last tick, or null if never ticked'),
+  "lastHeartbeatAt": zod.string().nullable().describe('ISO timestamp of the last heartbeat, or null'),
+  "processedToday": zod.number().describe('Jobs successfully completed by this dispatcher since startup'),
+  "failedToday": zod.number().describe('Jobs that failed (and were retried\/marked failed) since startup')
+})
+
+
+/**
  * @summary List all capability matrix entries
  */
 export const ListCapabilitiesResponseItem = zod.object({
@@ -2261,6 +2769,14 @@ export const RejectCreativeReviewParams = zod.object({
   "token": zod.coerce.string()
 })
 
+// ── Aliases — routes import these names (Schema suffix) ──────────────────────
+// These aliases preserve backward compatibility after codegen regeneration.
+export const CreateJobBodySchema        = CreateJobBody;
+export const ReprioritizeJobBodySchema  = ReprioritizeJobBody;
+export const RegisterWorkerBodySchema   = RegisterWorkerBody;
+// QueueFilter shares the same shape as PauseQueue/ResumeQueue bodies
+export const QueueFilterBodySchema = PauseQueueBody;
+
 export const RejectCreativeReviewBody = zod.object({
   "notes": zod.string().nullish()
 })
@@ -2290,131 +2806,3 @@ export const RequestRevisionCreativeReviewResponse = zod.object({
 })
 
 
-
-/**
- * @summary Aggregate image generation analytics across all projects
- */
-export const GetCreativeImageAnalyticsQueryParams = zod.object({
-  "days": zod.coerce.number().nullish()
-})
-
-export const GetCreativeImageAnalyticsResponse = zod.object({
-  "totalImages": zod.number().int(),
-  "totalCostUsd": zod.number(),
-  "avgQcScore": zod.number().nullish(),
-  "approvedRate": zod.number().nullable(),
-  "rejectedRate": zod.number().nullable(),
-  "pendingCount": zod.number().int()
-})
-
-/**
- * @summary Job Engine — Phase 5
- */
-
-export const AiJobStatus = zod.enum([
-  "queued", "waiting", "running", "retrying",
-  "completed", "failed", "cancelled", "blocked",
-])
-
-export const AiJobSchema = zod.object({
-  "id":                zod.number().int(),
-  "jobCode":           zod.string(),
-  "executionPlanId":   zod.number().int().nullish(),
-  "departmentId":      zod.number().int().nullish(),
-  "employeeId":        zod.number().int().nullish(),
-  "jobType":           zod.string(),
-  "priority":          zod.number().int(),
-  "priorityScore":     zod.number().nullish(),
-  "status":            AiJobStatus,
-  "payloadJson":       zod.record(zod.unknown()),
-  "resultJson":        zod.record(zod.unknown()).nullish(),
-  "scheduledAt":       zod.string().nullish(),
-  "startedAt":         zod.string().nullish(),
-  "completedAt":       zod.string().nullish(),
-  "retryCount":        zod.number().int(),
-  "maxRetry":          zod.number().int(),
-  "retryStrategy":     zod.enum(["immediate", "exponential", "manual"]),
-  "nextRetryAt":       zod.string().nullish(),
-  "errorMessage":      zod.string().nullish(),
-  "estimatedCost":     zod.number().nullish(),
-  "actualCost":        zod.number().nullish(),
-  "estimatedDuration": zod.number().int().nullish(),
-  "actualDuration":    zod.number().int().nullish(),
-  "managerOverride":   zod.number().int().nullish(),
-  "createdAt":         zod.string(),
-  "updatedAt":         zod.string(),
-})
-
-export const JobPageSchema = zod.object({
-  "items":  zod.array(AiJobSchema),
-  "total":  zod.number().int(),
-  "limit":  zod.number().int(),
-  "offset": zod.number().int(),
-})
-
-export const JobStatsSchema = zod.object({
-  "jobs":            zod.record(zod.number()),
-  "totalQueued":     zod.number().int(),
-  "totalActive":     zod.number().int(),
-  "totalBlocked":    zod.number().int(),
-  "totalFailed":     zod.number().int(),
-  "completedToday":  zod.number().int(),
-  "workers":         zod.record(zod.number()),
-  "avgWaitMs":       zod.number().nullish(),
-  "avgExecutionMs":  zod.number().nullish(),
-})
-
-export const AiWorkerStatus = zod.enum(["online", "offline", "maintenance", "busy", "idle"])
-
-export const AiWorkerSchema = zod.object({
-  "id":             zod.number().int(),
-  "workerName":     zod.string(),
-  "status":         AiWorkerStatus,
-  "currentJob":     zod.number().int().nullish(),
-  "lastHeartbeat":  zod.string(),
-  "runningJobs":    zod.number().int(),
-  "completedToday": zod.number().int(),
-  "failedToday":    zod.number().int(),
-  "averageLatency": zod.number().nullish(),
-  "version":        zod.string(),
-  "createdAt":      zod.string(),
-  "updatedAt":      zod.string(),
-})
-
-export const CreateJobBodySchema = zod.object({
-  "jobType":           zod.string().min(1),
-  "payloadJson":       zod.record(zod.unknown()).optional(),
-  "priority":          zod.number().int().min(0).max(100).optional(),
-  "executionPlanId":   zod.number().int().nullish(),
-  "departmentId":      zod.number().int().nullish(),
-  "employeeId":        zod.number().int().nullish(),
-  "scheduledAt":       zod.string().nullish(),
-  "maxRetry":          zod.number().int().min(0).max(10).optional(),
-  "retryStrategy":     zod.enum(["immediate", "exponential", "manual"]).optional(),
-  "estimatedCost":     zod.number().min(0).nullish(),
-  "estimatedDuration": zod.number().int().min(0).nullish(),
-  "managerOverride":   zod.number().int().min(0).max(100).nullish(),
-})
-
-export const ListJobsQueryParams = zod.object({
-  "status":       zod.string().optional(),
-  "jobType":      zod.string().optional(),
-  "departmentId": zod.coerce.number().int().optional(),
-  "limit":        zod.coerce.number().int().default(50),
-  "offset":       zod.coerce.number().int().default(0),
-})
-
-export const ReprioritizeJobBodySchema = zod.object({
-  "priority":        zod.number().int().min(0).max(100),
-  "managerOverride": zod.number().int().min(0).max(100).nullish(),
-})
-
-export const RegisterWorkerBodySchema = zod.object({
-  "workerName": zod.string().min(1),
-  "version":    zod.string().default("1.0.0"),
-})
-
-export const QueueFilterBodySchema = zod.object({
-  "departmentId": zod.number().int().nullish(),
-  "jobType":      zod.string().nullish(),
-})

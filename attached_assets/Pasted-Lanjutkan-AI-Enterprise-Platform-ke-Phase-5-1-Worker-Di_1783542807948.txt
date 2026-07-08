@@ -1,0 +1,178 @@
+Lanjutkan AI Enterprise Platform ke Phase 5.1: Worker Dispatcher Runtime.
+
+Status saat ini:
+
+* Phase 5 AI Job Engine selesai
+* ai_jobs dan ai_workers sudah ada
+* claimJob() sudah memakai SELECT FOR UPDATE SKIP LOCKED
+* retrying job dengan nextRetryAt sudah bisa diclaim
+* cancel running job sudah release worker
+* /queue UI sudah berjalan
+* enqueue, retry, cancel, pause, resume sudah tersedia
+* Known limitation: belum ada dispatcher otomatis; worker masih harus polling/manual
+
+Tujuan Phase 5.1:
+Membuat background worker dispatcher agar job queue benar-benar berjalan otomatis tanpa harus dipanggil manual.
+
+PENTING:
+Jangan rewrite Job Engine yang sudah berjalan.
+Jangan ubah API lama.
+Semua perubahan harus additive, modular, backward compatible, dan TypeScript clean.
+Jangan implement Event Bus, Scheduler, Marketplace, Billing, Video, Voice, atau OCR.
+
+Tugas:
+
+1. Buat Worker Dispatcher Service
+   File:
+   jobDispatcherService.ts
+
+Fungsi:
+
+* startDispatcher()
+* stopDispatcher()
+* tick()
+* dispatchAvailableJobs()
+* processClaimedJob()
+* handleWorkerHeartbeat()
+* handleStaleWorkers()
+* handleStuckJobs()
+
+Dispatcher harus:
+
+* berjalan interval polling configurable
+* default interval 5 detik
+* menghormati queue pause/resume
+* hanya mengambil job queued/retrying yang ready
+* tidak mengambil job waiting/blocked/cancelled
+* memakai claimJob() yang sudah ada
+* menjalankan executeJob()
+* completeJob() jika sukses
+* retryJob() jika gagal dan retry masih tersedia
+* mark failed jika retry habis
+
+2. Worker Runtime
+   Tambahkan worker runtime sederhana di API server startup.
+
+Config via env/settings:
+
+* AI_WORKER_ENABLED=true/false
+* AI_WORKER_NAME
+* AI_WORKER_POLL_INTERVAL_MS
+* AI_WORKER_MAX_CONCURRENT_JOBS
+* AI_WORKER_HEARTBEAT_INTERVAL_MS
+
+Default:
+
+* enabled false di production jika env tidak diset
+* enabled true untuk dev jika aman
+* max concurrent jobs 1
+
+3. Worker Registration
+   Saat worker runtime start:
+
+* register/upsert worker
+* set status idle
+* heartbeat berkala
+* status busy saat memproses job
+* status idle setelah selesai
+* status offline saat shutdown jika memungkinkan
+
+4. Stale Worker Handling
+   Jika worker tidak heartbeat lebih dari threshold:
+
+* mark worker offline
+* jika punya running job terlalu lama:
+
+  * mark job retrying jika masih bisa retry
+  * atau failed jika retry habis
+* audit log
+
+5. Stuck Job Handling
+   Tambahkan guard untuk job running terlalu lama:
+
+* timeout berdasarkan provider_timeout_ms atau job timeout setting
+* mark retrying/failed sesuai retry policy
+* release worker
+* audit log
+
+6. Queue Settings
+   Tambahkan settings:
+
+* worker_poll_interval_ms
+* worker_heartbeat_timeout_ms
+* job_stuck_timeout_ms
+* max_concurrent_jobs_per_worker
+* dispatcher_enabled
+
+7. API tambahan
+   Tambahkan admin endpoints:
+
+* GET /api/ai/dispatcher/status
+* POST /api/ai/dispatcher/start
+* POST /api/ai/dispatcher/stop
+* POST /api/ai/dispatcher/tick
+
+Status response:
+
+* enabled
+* running
+* workerName
+* currentJobs
+* lastTickAt
+* lastHeartbeatAt
+* processedToday
+* failedToday
+
+8. UI /queue update
+   Tambahkan panel:
+   Dispatcher Runtime
+
+Menampilkan:
+
+* running/stopped
+* worker name
+* poll interval
+* current jobs
+* last tick
+* last heartbeat
+* processed today
+* failed today
+
+Tombol:
+
+* Start
+* Stop
+* Run Tick Now
+
+9. Safety
+   Pastikan:
+
+* dispatcher tidak double-start
+* graceful shutdown aman
+* interval dibersihkan saat stop
+* error dalam satu job tidak mematikan dispatcher
+* semua error masuk audit log
+
+10. Verification
+    Pastikan:
+
+* DB push clean jika ada perubahan
+* OpenAPI/codegen clean
+* TypeScript clean
+* build clean
+
+Test:
+
+* create job
+* dispatcher auto-claim
+* job berubah queued → running → completed
+* failed job retry sesuai policy
+* manual strategy menjadi blocked
+* pause queue membuat dispatcher tidak mengambil job
+* resume queue berjalan lagi
+* stale worker ditandai offline
+* stuck job dilepas/retry
+
+Jangan implement Event Bus dulu.
+Target akhir:
+AI Job Engine berubah dari manual polling menjadi automatic Worker Dispatcher Runtime yang benar-benar memproses queue secara otomatis.

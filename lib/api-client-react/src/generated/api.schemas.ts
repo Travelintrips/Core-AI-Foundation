@@ -1537,6 +1537,274 @@ export interface ClientReviewAnalytics {
   avgTimeToApprovalHours?: number | null;
 }
 
+export type AiJobStatus = typeof AiJobStatus[keyof typeof AiJobStatus];
+
+
+export const AiJobStatus = {
+  queued: 'queued',
+  waiting: 'waiting',
+  running: 'running',
+  retrying: 'retrying',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+  blocked: 'blocked',
+} as const;
+
+export type AiJobPayloadJson = { [key: string]: unknown };
+
+/**
+ * @nullable
+ */
+export type AiJobResultJson = { [key: string]: unknown } | null;
+
+export type AiJobRetryStrategy = typeof AiJobRetryStrategy[keyof typeof AiJobRetryStrategy];
+
+
+export const AiJobRetryStrategy = {
+  immediate: 'immediate',
+  exponential: 'exponential',
+  manual: 'manual',
+} as const;
+
+export interface AiJob {
+  id: number;
+  jobCode: string;
+  /** @nullable */
+  executionPlanId?: number | null;
+  /** @nullable */
+  departmentId?: number | null;
+  /** @nullable */
+  employeeId?: number | null;
+  jobType: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  priority: number;
+  /** @nullable */
+  priorityScore?: number | null;
+  status: AiJobStatus;
+  payloadJson: AiJobPayloadJson;
+  /** @nullable */
+  resultJson?: AiJobResultJson;
+  /** @nullable */
+  scheduledAt?: string | null;
+  /** @nullable */
+  startedAt?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+  retryCount: number;
+  maxRetry: number;
+  retryStrategy: AiJobRetryStrategy;
+  /** @nullable */
+  nextRetryAt?: string | null;
+  /** @nullable */
+  errorMessage?: string | null;
+  /** @nullable */
+  estimatedCost?: number | null;
+  /** @nullable */
+  actualCost?: number | null;
+  /** @nullable */
+  estimatedDuration?: number | null;
+  /** @nullable */
+  actualDuration?: number | null;
+  /** @nullable */
+  managerOverride?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AiWorkerStatus = typeof AiWorkerStatus[keyof typeof AiWorkerStatus];
+
+
+export const AiWorkerStatus = {
+  online: 'online',
+  offline: 'offline',
+  maintenance: 'maintenance',
+  busy: 'busy',
+  idle: 'idle',
+} as const;
+
+export interface AiWorker {
+  id: number;
+  workerName: string;
+  status: AiWorkerStatus;
+  /** @nullable */
+  currentJob?: number | null;
+  lastHeartbeat: string;
+  runningJobs: number;
+  completedToday: number;
+  failedToday: number;
+  /**
+     * Rolling average latency in ms
+     * @nullable
+     */
+  averageLatency?: number | null;
+  version: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface JobPage {
+  items: AiJob[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Count per status
+ */
+export type JobStatsJobs = {[key: string]: number};
+
+/**
+ * Worker count per status
+ */
+export type JobStatsWorkers = {[key: string]: number};
+
+export interface JobStats {
+  /** Count per status */
+  jobs: JobStatsJobs;
+  totalQueued: number;
+  totalActive: number;
+  totalBlocked: number;
+  totalFailed: number;
+  completedToday: number;
+  /** Worker count per status */
+  workers: JobStatsWorkers;
+  /** @nullable */
+  avgWaitMs?: number | null;
+  /** @nullable */
+  avgExecutionMs?: number | null;
+}
+
+export type CreateJobBodyPayloadJson = { [key: string]: unknown };
+
+export type CreateJobBodyRetryStrategy = typeof CreateJobBodyRetryStrategy[keyof typeof CreateJobBodyRetryStrategy];
+
+
+export const CreateJobBodyRetryStrategy = {
+  immediate: 'immediate',
+  exponential: 'exponential',
+  manual: 'manual',
+} as const;
+
+export interface CreateJobBody {
+  jobType: string;
+  payloadJson?: CreateJobBodyPayloadJson;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  priority?: number;
+  /** @nullable */
+  executionPlanId?: number | null;
+  /** @nullable */
+  departmentId?: number | null;
+  /** @nullable */
+  employeeId?: number | null;
+  /** @nullable */
+  scheduledAt?: string | null;
+  /**
+     * @minimum 0
+     * @maximum 10
+     */
+  maxRetry?: number;
+  retryStrategy?: CreateJobBodyRetryStrategy;
+  /** @nullable */
+  estimatedCost?: number | null;
+  /** @nullable */
+  estimatedDuration?: number | null;
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  managerOverride?: number | null;
+}
+
+export interface ReprioritizeJobBody {
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  priority: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  managerOverride?: number | null;
+}
+
+export interface RegisterWorkerBody {
+  workerName: string;
+  version?: string;
+}
+
+export interface QueueFilterBody {
+  /** @nullable */
+  departmentId?: number | null;
+  /** @nullable */
+  jobType?: string | null;
+}
+
+export interface CreativeAiImageAnalytics {
+  /** Total image assets in the window */
+  totalImages: number;
+  /** Total cost of image generation in USD */
+  totalCostUsd: number;
+  /**
+     * Average QC score across all images (1–100)
+     * @nullable
+     */
+  avgQcScore?: number | null;
+  /**
+     * Fraction of images that were approved (0–1)
+     * @nullable
+     */
+  approvedRate: number | null;
+  /**
+     * Fraction of images that were rejected (0–1)
+     * @nullable
+     */
+  rejectedRate: number | null;
+  /** Images currently pending or generating */
+  pendingCount: number;
+}
+
+export interface DispatcherStatus {
+  /** Whether dispatcher is configured to auto-start */
+  enabled: boolean;
+  /** Whether the dispatcher interval is currently active */
+  running: boolean;
+  /** Registered worker name for this dispatcher process */
+  workerName: string;
+  /** Poll interval in milliseconds */
+  pollIntervalMs: number;
+  /** Heartbeat interval in milliseconds */
+  heartbeatIntervalMs: number;
+  /** Maximum jobs processed simultaneously */
+  maxConcurrentJobs: number;
+  /** Number of jobs currently being processed */
+  currentJobs: number;
+  /**
+     * ISO timestamp of the last tick, or null if never ticked
+     * @nullable
+     */
+  lastTickAt: string | null;
+  /**
+     * ISO timestamp of the last heartbeat, or null
+     * @nullable
+     */
+  lastHeartbeatAt: string | null;
+  /** Jobs successfully completed by this dispatcher since startup */
+  processedToday: number;
+  /** Jobs that failed (and were retried/marked failed) since startup */
+  failedToday: number;
+}
+
 export interface ErrorResponse {
   error: string;
 }
@@ -1603,6 +1871,36 @@ export type GetAnalyticsUsageParams = {
 days?: number | null;
 };
 
+export type GetCreativeImageAnalyticsParams = {
+/**
+ * Number of days to look back (1–365)
+ */
+days?: number;
+};
+
+export type ListJobsParams = {
+/**
+ * Comma-separated statuses
+ */
+status?: string;
+jobType?: string;
+departmentId?: number;
+limit?: number;
+offset?: number;
+};
+
+export type CancelJobBody = {
+  reason?: string;
+};
+
+export type PauseQueue200 = {
+  paused: number;
+};
+
+export type ResumeQueue200 = {
+  resumed: number;
+};
+
 export type GetAgentStatsParams = {
 days?: number;
 };
@@ -1611,110 +1909,3 @@ export type GetCostAnalyticsParams = {
 days?: number;
 };
 
-
-export type GetCreativeImageAnalyticsParams = {
-  days?: number | null;
-};
-
-export interface CreativeAiImageAnalytics {
-  totalImages: number;
-  totalCostUsd: number;
-  avgQcScore?: number | null;
-  approvedRate: number | null;
-  rejectedRate: number | null;
-  pendingCount: number;
-}
-
-// ── Job Engine (Phase 5) ──────────────────────────────────────────────────────
-
-export type AiJobStatus =
-  | "queued" | "waiting" | "running" | "retrying"
-  | "completed" | "failed" | "cancelled" | "blocked";
-
-export interface AiJob {
-  id: number;
-  jobCode: string;
-  executionPlanId?: number | null;
-  departmentId?: number | null;
-  employeeId?: number | null;
-  jobType: string;
-  priority: number;
-  priorityScore?: number | null;
-  status: AiJobStatus;
-  payloadJson: Record<string, unknown>;
-  resultJson?: Record<string, unknown> | null;
-  scheduledAt?: string | null;
-  startedAt?: string | null;
-  completedAt?: string | null;
-  retryCount: number;
-  maxRetry: number;
-  retryStrategy: "immediate" | "exponential" | "manual";
-  nextRetryAt?: string | null;
-  errorMessage?: string | null;
-  estimatedCost?: number | null;
-  actualCost?: number | null;
-  estimatedDuration?: number | null;
-  actualDuration?: number | null;
-  managerOverride?: number | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface JobPage {
-  items: AiJob[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
-export interface JobStats {
-  jobs: Record<string, number>;
-  totalQueued: number;
-  totalActive: number;
-  totalBlocked: number;
-  totalFailed: number;
-  completedToday: number;
-  workers: Record<string, number>;
-  avgWaitMs?: number | null;
-  avgExecutionMs?: number | null;
-}
-
-export type AiWorkerStatus = "online" | "offline" | "maintenance" | "busy" | "idle";
-
-export interface AiWorker {
-  id: number;
-  workerName: string;
-  status: AiWorkerStatus;
-  currentJob?: number | null;
-  lastHeartbeat: string;
-  runningJobs: number;
-  completedToday: number;
-  failedToday: number;
-  averageLatency?: number | null;
-  version: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateJobBody {
-  jobType: string;
-  payloadJson?: Record<string, unknown>;
-  priority?: number;
-  executionPlanId?: number | null;
-  departmentId?: number | null;
-  employeeId?: number | null;
-  scheduledAt?: string | null;
-  maxRetry?: number;
-  retryStrategy?: "immediate" | "exponential" | "manual";
-  estimatedCost?: number | null;
-  estimatedDuration?: number | null;
-  managerOverride?: number | null;
-}
-
-export type ListJobsParams = {
-  status?: string;
-  jobType?: string;
-  departmentId?: number;
-  limit?: number;
-  offset?: number;
-};

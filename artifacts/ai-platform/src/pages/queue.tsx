@@ -6,12 +6,18 @@ import {
   useListWorkers,
   useCancelJob,
   useRetryJob,
+  useGetDispatcherStatus,
+  useStartDispatcher,
+  useStopDispatcher,
+  useRunDispatcherTick,
   getGetJobStatsQueryKey,
   getListJobsQueryKey,
   getListWorkersQueryKey,
+  getGetDispatcherStatusQueryKey,
   type AiJob,
   type AiWorker,
   type JobStats,
+  type DispatcherStatus,
 } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Activity,
   AlertCircle,
   Ban,
   CheckCircle2,
@@ -34,8 +41,10 @@ import {
   Layers,
   ListOrdered,
   Loader2,
+  Play,
   RefreshCw,
   RotateCcw,
+  Square,
   Timer,
   XCircle,
   Zap,
@@ -214,6 +223,136 @@ function JobRow({
   );
 }
 
+// ── Dispatcher Panel ──────────────────────────────────────────────────────────
+
+function DispatcherPanel({
+  status,
+  isLoading,
+  onStart,
+  onStop,
+  onTick,
+  isMutating,
+}: {
+  status: DispatcherStatus | undefined;
+  isLoading: boolean;
+  onStart: () => void;
+  onStop: () => void;
+  onTick: () => void;
+  isMutating: boolean;
+}) {
+  const running = status?.running ?? false;
+
+  return (
+    <div className="border border-border/50 rounded-lg bg-card/40 p-4 space-y-3">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Activity className="size-4 text-primary" />
+          <span className="font-mono text-sm font-semibold">Dispatcher Runtime</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className={cn(
+            "size-2 rounded-full inline-block",
+            running ? "bg-emerald-400 animate-pulse" : "bg-zinc-500",
+          )} />
+          <span className={cn(
+            "text-[10px] font-mono",
+            running ? "text-emerald-400" : "text-zinc-500",
+          )}>
+            {running ? "Running" : "Stopped"}
+          </span>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-4">
+          <Loader2 className="size-4 animate-spin text-muted-foreground" />
+        </div>
+      ) : status ? (
+        <>
+          {/* Stats grid */}
+          <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
+            <div className="bg-muted/20 rounded px-2 py-1.5 space-y-0.5">
+              <p className="text-muted-foreground">Worker</p>
+              <p className="font-semibold truncate" title={status.workerName}>{status.workerName}</p>
+            </div>
+            <div className="bg-muted/20 rounded px-2 py-1.5 space-y-0.5">
+              <p className="text-muted-foreground">Concurrency</p>
+              <p className="font-semibold">{status.currentJobs}/{status.maxConcurrentJobs}</p>
+            </div>
+            <div className="bg-muted/20 rounded px-2 py-1.5 space-y-0.5">
+              <p className="text-muted-foreground">Poll Interval</p>
+              <p className="font-semibold">{(status.pollIntervalMs / 1000).toFixed(0)}s</p>
+            </div>
+            <div className="bg-muted/20 rounded px-2 py-1.5 space-y-0.5">
+              <p className="text-muted-foreground">Heartbeat</p>
+              <p className="font-semibold">{(status.heartbeatIntervalMs / 1000).toFixed(0)}s</p>
+            </div>
+            <div className="bg-muted/20 rounded px-2 py-1.5 space-y-0.5">
+              <p className="text-muted-foreground">Done Today</p>
+              <p className="font-semibold text-green-400">{status.processedToday}</p>
+            </div>
+            <div className="bg-muted/20 rounded px-2 py-1.5 space-y-0.5">
+              <p className="text-muted-foreground">Failed Today</p>
+              <p className={cn("font-semibold", status.failedToday > 0 ? "text-red-400" : "")}>
+                {status.failedToday}
+              </p>
+            </div>
+          </div>
+
+          {/* Timing */}
+          <div className="space-y-1 text-[9px] font-mono text-muted-foreground/70">
+            <p>Last tick: {status.lastTickAt
+              ? formatDistanceToNow(new Date(status.lastTickAt), { addSuffix: true })
+              : "—"
+            }</p>
+            <p>Last heartbeat: {status.lastHeartbeatAt
+              ? formatDistanceToNow(new Date(status.lastHeartbeatAt), { addSuffix: true })
+              : "—"
+            }</p>
+          </div>
+        </>
+      ) : (
+        <p className="text-xs text-muted-foreground font-mono py-2">Unable to load status</p>
+      )}
+
+      {/* Controls */}
+      <div className="flex gap-2 pt-1">
+        {running ? (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isMutating}
+            onClick={onStop}
+            className="h-7 flex-1 text-[11px] font-mono gap-1.5 text-red-400 border-red-500/30 hover:bg-red-500/10"
+          >
+            <Square className="size-3" /> Stop
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isMutating}
+            onClick={onStart}
+            className="h-7 flex-1 text-[11px] font-mono gap-1.5 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+          >
+            <Play className="size-3" /> Start
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={isMutating || !running}
+          onClick={onTick}
+          className="h-7 flex-1 text-[11px] font-mono gap-1.5"
+        >
+          <Zap className="size-3" /> Tick Now
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 const ALL_STATUSES = ["queued","waiting","running","retrying","completed","failed","cancelled","blocked"];
@@ -240,6 +379,51 @@ export default function QueuePage() {
     limit:    LIMIT,
     offset,
   };
+
+  const { data: dispatcherStatus, isLoading: dispatcherLoading } = useGetDispatcherStatus({
+    query: { queryKey: getGetDispatcherStatusQueryKey(), refetchInterval: 3000 },
+  });
+
+  const startDispatcher = useStartDispatcher({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetDispatcherStatusQueryKey() });
+        toast({ title: "Dispatcher started" });
+      },
+      onError: (e: unknown) => toast({
+        title: (e as { message?: string })?.message ?? "Start failed",
+        variant: "destructive",
+      }),
+    },
+  });
+
+  const stopDispatcher = useStopDispatcher({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetDispatcherStatusQueryKey() });
+        toast({ title: "Dispatcher stopped" });
+      },
+      onError: (e: unknown) => toast({
+        title: (e as { message?: string })?.message ?? "Stop failed",
+        variant: "destructive",
+      }),
+    },
+  });
+
+  const runTick = useRunDispatcherTick({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetDispatcherStatusQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListJobsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetJobStatsQueryKey() });
+        toast({ title: "Tick completed" });
+      },
+      onError: (e: unknown) => toast({
+        title: (e as { message?: string })?.message ?? "Tick failed",
+        variant: "destructive",
+      }),
+    },
+  });
 
   const { data: stats, isLoading: statsLoading } = useGetJobStats({
     query: { queryKey: getGetJobStatsQueryKey(), refetchInterval: 5000 },
@@ -282,6 +466,7 @@ export default function QueuePage() {
     },
   });
 
+  const isDispatcherMutating = startDispatcher.isPending || stopDispatcher.isPending || runTick.isPending;
   const isMutating = cancelJob.isPending || retryJob.isPending;
 
   const jobs = jobPage?.items ?? [];
@@ -342,6 +527,16 @@ export default function QueuePage() {
               </>
             ) : null}
           </div>
+
+          {/* Dispatcher Runtime Panel */}
+          <DispatcherPanel
+            status={dispatcherStatus}
+            isLoading={dispatcherLoading}
+            onStart={() => startDispatcher.mutate()}
+            onStop={() => stopDispatcher.mutate()}
+            onTick={() => runTick.mutate()}
+            isMutating={isDispatcherMutating}
+          />
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Worker Panel */}

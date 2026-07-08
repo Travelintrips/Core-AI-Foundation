@@ -1646,6 +1646,72 @@ paths:
                   resumed:
                     type: integer
 
+  # ─── DISPATCHER ──────────────────────────────────────────────────────────────
+
+  /ai/dispatcher/status:
+    get:
+      operationId: getDispatcherStatus
+      tags: [job-engine]
+      summary: Get background worker dispatcher runtime status
+      responses:
+        "200":
+          description: Dispatcher status snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DispatcherStatus"
+
+  /ai/dispatcher/start:
+    post:
+      operationId: startDispatcher
+      tags: [job-engine]
+      summary: Start the background worker dispatcher
+      responses:
+        "200":
+          description: Dispatcher started — returns updated status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DispatcherStatus"
+        "500":
+          description: Start failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ai/dispatcher/stop:
+    post:
+      operationId: stopDispatcher
+      tags: [job-engine]
+      summary: Stop the background worker dispatcher
+      responses:
+        "200":
+          description: Dispatcher stopped — returns updated status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DispatcherStatus"
+
+  /ai/dispatcher/tick:
+    post:
+      operationId: runDispatcherTick
+      tags: [job-engine]
+      summary: Manually trigger one dispatcher poll cycle
+      responses:
+        "200":
+          description: Tick completed — returns updated status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DispatcherStatus"
+        "500":
+          description: Tick failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ─── CAPABILITIES ────────────────────────────────────────────────────────────
 
   /capabilities:
@@ -4089,6 +4155,44 @@ components:
         pendingCount:
           type: integer
           description: Images currently pending or generating
+
+    DispatcherStatus:
+      type: object
+      required: [enabled, running, workerName, pollIntervalMs, heartbeatIntervalMs, maxConcurrentJobs, currentJobs, lastTickAt, lastHeartbeatAt, processedToday, failedToday]
+      properties:
+        enabled:
+          type: boolean
+          description: Whether dispatcher is configured to auto-start
+        running:
+          type: boolean
+          description: Whether the dispatcher interval is currently active
+        workerName:
+          type: string
+          description: Registered worker name for this dispatcher process
+        pollIntervalMs:
+          type: integer
+          description: Poll interval in milliseconds
+        heartbeatIntervalMs:
+          type: integer
+          description: Heartbeat interval in milliseconds
+        maxConcurrentJobs:
+          type: integer
+          description: Maximum jobs processed simultaneously
+        currentJobs:
+          type: integer
+          description: Number of jobs currently being processed
+        lastTickAt:
+          type: ["string", "null"]
+          description: ISO timestamp of the last tick, or null if never ticked
+        lastHeartbeatAt:
+          type: ["string", "null"]
+          description: ISO timestamp of the last heartbeat, or null
+        processedToday:
+          type: integer
+          description: Jobs successfully completed by this dispatcher since startup
+        failedToday:
+          type: integer
+          description: Jobs that failed (and were retried/marked failed) since startup
 
     ErrorResponse:
       type: object

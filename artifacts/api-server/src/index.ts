@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { isDispatcherEnabled, startDispatcher } from "./services/jobDispatcherService";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,13 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Auto-start the background worker dispatcher if enabled
+  if (isDispatcherEnabled()) {
+    startDispatcher().catch((dispErr) => {
+      logger.error({ err: dispErr }, "Dispatcher: failed to auto-start");
+    });
+  } else {
+    logger.info("Dispatcher: disabled (set AI_WORKER_ENABLED=true to enable)");
+  }
 });
