@@ -32,3 +32,5 @@ export * from "./ai-execution-plans";
 export * from "./ai-task-assignments";
 export * from "./ai-employee-performance";
 export * from "./ai-decision-logs";
+export * from "./ai-jobs";
+export * from "./ai-workers";

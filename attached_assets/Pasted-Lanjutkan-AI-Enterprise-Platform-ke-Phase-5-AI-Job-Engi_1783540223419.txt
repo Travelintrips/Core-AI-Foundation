@@ -1,0 +1,394 @@
+Lanjutkan AI Enterprise Platform ke Phase 5: AI Job Engine (Queue & Worker System).
+
+PENTING:
+Jangan mengubah arsitektur yang sudah ada.
+Jangan rewrite fitur yang sudah stabil.
+Semua implementasi harus additive, modular, backward compatible, OpenAPI-first, TypeScript clean, dan enterprise-grade.
+
+====================================================================
+VISI
+====
+
+Saat ini AI Operating Core sudah memiliki:
+
+* AI CEO
+* Department Manager
+* Digital Employees
+* Execution Plans
+* Task Assignments
+* Capacity Planning
+* Performance Engine
+* Decision Logs
+* Operations Center
+
+Mulai Phase 5, semua pekerjaan AI harus diproses melalui Job Engine.
+
+Tidak boleh ada lagi workflow yang langsung memanggil AI.
+
+Semua request harus menjadi Job.
+
+====================================================================
+BAGIAN 1
+JOB QUEUE
+=========
+
+Buat tabel:
+
+ai_jobs
+
+Field:
+
+id
+
+job_code
+
+execution_plan_id
+
+department_id
+
+employee_id nullable
+
+job_type
+
+priority
+
+status
+
+payload_json
+
+result_json
+
+scheduled_at
+
+started_at
+
+completed_at
+
+retry_count
+
+max_retry
+
+error_message
+
+estimated_cost
+
+actual_cost
+
+estimated_duration
+
+actual_duration
+
+created_at
+
+updated_at
+
+Status:
+
+queued
+
+waiting
+
+running
+
+retrying
+
+completed
+
+failed
+
+cancelled
+
+blocked
+
+====================================================================
+BAGIAN 2
+WORKER POOL
+===========
+
+Buat Worker Engine.
+
+Service:
+
+jobWorkerService
+
+Method:
+
+claimJob()
+
+executeJob()
+
+completeJob()
+
+retryJob()
+
+cancelJob()
+
+heartbeat()
+
+releaseJob()
+
+Setiap worker hanya boleh mengambil satu job dalam satu waktu.
+
+====================================================================
+BAGIAN 3
+QUEUE MANAGER
+=============
+
+Service:
+
+queueManager
+
+Method:
+
+enqueue()
+
+dequeue()
+
+peek()
+
+pauseQueue()
+
+resumeQueue()
+
+cancelQueue()
+
+reprioritize()
+
+====================================================================
+BAGIAN 4
+PRIORITY ENGINE
+===============
+
+Hitung priority berdasarkan:
+
+Execution Priority
+
+Department Priority
+
+Client Priority
+
+Estimated Cost
+
+Deadline
+
+Queue Age
+
+Retry Count
+
+Manager Override
+
+Final Score
+
+Job dengan score tertinggi diproses lebih dahulu.
+
+====================================================================
+BAGIAN 5
+WORKER HEARTBEAT
+================
+
+Tambahkan tabel:
+
+ai_workers
+
+Field:
+
+id
+
+worker_name
+
+status
+
+current_job
+
+last_heartbeat
+
+running_jobs
+
+completed_today
+
+failed_today
+
+average_latency
+
+version
+
+Status:
+
+online
+
+offline
+
+maintenance
+
+busy
+
+idle
+
+====================================================================
+BAGIAN 6
+JOB LOCKING
+===========
+
+Pastikan satu job tidak bisa diambil dua worker.
+
+Gunakan row-level locking / optimistic locking sesuai arsitektur yang ada.
+
+====================================================================
+BAGIAN 7
+RETRY POLICY
+============
+
+Tambahkan retry strategy:
+
+Immediate
+
+Exponential Backoff
+
+Manual Retry
+
+Retry Limit
+
+Fallback Provider
+
+Semua retry masuk audit.
+
+====================================================================
+BAGIAN 8
+QUEUE DASHBOARD
+===============
+
+Tambahkan halaman:
+
+AI Queue Center
+
+Dashboard:
+
+Queued Jobs
+
+Running Jobs
+
+Retry Jobs
+
+Failed Jobs
+
+Blocked Jobs
+
+Completed Today
+
+Worker Status
+
+Queue Length
+
+Average Wait Time
+
+Average Execution Time
+
+Filter:
+
+Department
+
+Priority
+
+Worker
+
+Status
+
+Job Type
+
+Date
+
+====================================================================
+BAGIAN 9
+ORCHESTRATOR UPDATE
+===================
+
+Alur baru:
+
+User Request
+
+↓
+
+AI CEO
+
+↓
+
+Execution Plan
+
+↓
+
+Task Assignment
+
+↓
+
+Create Job
+
+↓
+
+Queue
+
+↓
+
+Worker
+
+↓
+
+Employee
+
+↓
+
+QC
+
+↓
+
+Result
+
+Creative AI harus otomatis menggunakan Job Engine tanpa mengubah endpoint lama.
+
+====================================================================
+BAGIAN 10
+VERIFICATION
+============
+
+Pastikan:
+
+DB push clean
+
+OpenAPI updated
+
+Codegen clean
+
+TypeScript clean
+
+Build clean
+
+Seed:
+
+3 worker default
+
+sample queued jobs
+
+sample retry jobs
+
+sample completed jobs
+
+Semua perubahan harus additive.
+
+Jangan implementasi dulu:
+
+Event Bus
+
+Scheduler
+
+Plugin Marketplace
+
+Billing
+
+Video
+
+Voice
+
+OCR
+
+Target akhir:
+
+Seluruh AI Platform berubah menjadi asynchronous Job-Based Enterprise AI Operating System yang mampu menangani ribuan request secara stabil.

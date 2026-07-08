@@ -1356,6 +1356,296 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreativeAiImageAnalytics"
 
+  # ─── JOB ENGINE ──────────────────────────────────────────────────────────────
+
+  /ai/jobs:
+    get:
+      operationId: listJobs
+      tags: [job-engine]
+      summary: List jobs with optional filters
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            description: Comma-separated statuses
+        - name: jobType
+          in: query
+          schema:
+            type: string
+        - name: departmentId
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Paginated job list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobPage"
+    post:
+      operationId: createJob
+      tags: [job-engine]
+      summary: Enqueue a new job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJobBody"
+      responses:
+        "201":
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiJob"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ai/jobs/stats:
+    get:
+      operationId: getJobStats
+      tags: [job-engine]
+      summary: Queue statistics for the dashboard
+      responses:
+        "200":
+          description: Queue stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobStats"
+
+  /ai/jobs/{id}:
+    get:
+      operationId: getJob
+      tags: [job-engine]
+      summary: Get a single job by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Job detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiJob"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ai/jobs/{id}/cancel:
+    patch:
+      operationId: cancelJob
+      tags: [job-engine]
+      summary: Cancel a job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Cancelled job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiJob"
+        "400":
+          description: Cannot cancel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ai/jobs/{id}/retry:
+    patch:
+      operationId: retryJob
+      tags: [job-engine]
+      summary: Manually retry a failed/blocked job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Requeued job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiJob"
+        "400":
+          description: Cannot retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ai/jobs/{id}/priority:
+    patch:
+      operationId: reprioritizeJob
+      tags: [job-engine]
+      summary: Update job priority and recompute score
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReprioritizeJobBody"
+      responses:
+        "200":
+          description: Updated job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiJob"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ai/workers:
+    get:
+      operationId: listWorkers
+      tags: [job-engine]
+      summary: List all workers
+      responses:
+        "200":
+          description: Worker list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiWorker"
+    post:
+      operationId: registerWorker
+      tags: [job-engine]
+      summary: Register or upsert a worker
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterWorkerBody"
+      responses:
+        "201":
+          description: Worker registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiWorker"
+
+  /ai/workers/{id}/heartbeat:
+    patch:
+      operationId: workerHeartbeat
+      tags: [job-engine]
+      summary: Send worker heartbeat
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated worker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiWorker"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ai/queue/pause:
+    post:
+      operationId: pauseQueue
+      tags: [job-engine]
+      summary: Pause queued jobs (queued → waiting)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueueFilterBody"
+      responses:
+        "200":
+          description: Count of paused jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [paused]
+                properties:
+                  paused:
+                    type: integer
+
+  /ai/queue/resume:
+    post:
+      operationId: resumeQueue
+      tags: [job-engine]
+      summary: Resume paused jobs (waiting → queued)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueueFilterBody"
+      responses:
+        "200":
+          description: Count of resumed jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [resumed]
+                properties:
+                  resumed:
+                    type: integer
+
   # ─── CAPABILITIES ────────────────────────────────────────────────────────────
 
   /capabilities:
@@ -3558,6 +3848,225 @@ components:
           type: number
         avgTimeToApprovalHours:
           type: ["number", "null"]
+    AiJob:
+      type: object
+      required: [id, jobCode, jobType, priority, status, payloadJson, retryCount, maxRetry, retryStrategy, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        jobCode:
+          type: string
+        executionPlanId:
+          type: ["integer", "null"]
+        departmentId:
+          type: ["integer", "null"]
+        employeeId:
+          type: ["integer", "null"]
+        jobType:
+          type: string
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100
+        priorityScore:
+          type: ["number", "null"]
+        status:
+          type: string
+          enum: [queued, waiting, running, retrying, completed, failed, cancelled, blocked]
+        payloadJson:
+          type: object
+          additionalProperties: true
+        resultJson:
+          type: ["object", "null"]
+          additionalProperties: true
+        scheduledAt:
+          type: ["string", "null"]
+          format: date-time
+        startedAt:
+          type: ["string", "null"]
+          format: date-time
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+        retryCount:
+          type: integer
+        maxRetry:
+          type: integer
+        retryStrategy:
+          type: string
+          enum: [immediate, exponential, manual]
+        nextRetryAt:
+          type: ["string", "null"]
+          format: date-time
+        errorMessage:
+          type: ["string", "null"]
+        estimatedCost:
+          type: ["number", "null"]
+        actualCost:
+          type: ["number", "null"]
+        estimatedDuration:
+          type: ["integer", "null"]
+        actualDuration:
+          type: ["integer", "null"]
+        managerOverride:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AiWorker:
+      type: object
+      required: [id, workerName, status, lastHeartbeat, runningJobs, completedToday, failedToday, version, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        workerName:
+          type: string
+        status:
+          type: string
+          enum: [online, offline, maintenance, busy, idle]
+        currentJob:
+          type: ["integer", "null"]
+        lastHeartbeat:
+          type: string
+          format: date-time
+        runningJobs:
+          type: integer
+        completedToday:
+          type: integer
+        failedToday:
+          type: integer
+        averageLatency:
+          type: ["number", "null"]
+          description: Rolling average latency in ms
+        version:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    JobPage:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiJob"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    JobStats:
+      type: object
+      required: [jobs, totalQueued, totalActive, totalBlocked, totalFailed, completedToday, workers]
+      properties:
+        jobs:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Count per status
+        totalQueued:
+          type: integer
+        totalActive:
+          type: integer
+        totalBlocked:
+          type: integer
+        totalFailed:
+          type: integer
+        completedToday:
+          type: integer
+        workers:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Worker count per status
+        avgWaitMs:
+          type: ["number", "null"]
+        avgExecutionMs:
+          type: ["number", "null"]
+
+    CreateJobBody:
+      type: object
+      required: [jobType]
+      properties:
+        jobType:
+          type: string
+        payloadJson:
+          type: object
+          additionalProperties: true
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 50
+        executionPlanId:
+          type: ["integer", "null"]
+        departmentId:
+          type: ["integer", "null"]
+        employeeId:
+          type: ["integer", "null"]
+        scheduledAt:
+          type: ["string", "null"]
+          format: date-time
+        maxRetry:
+          type: integer
+          minimum: 0
+          maximum: 10
+          default: 3
+        retryStrategy:
+          type: string
+          enum: [immediate, exponential, manual]
+          default: exponential
+        estimatedCost:
+          type: ["number", "null"]
+        estimatedDuration:
+          type: ["integer", "null"]
+        managerOverride:
+          type: ["integer", "null"]
+          minimum: 0
+          maximum: 100
+
+    ReprioritizeJobBody:
+      type: object
+      required: [priority]
+      properties:
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100
+        managerOverride:
+          type: ["integer", "null"]
+          minimum: 0
+          maximum: 100
+
+    RegisterWorkerBody:
+      type: object
+      required: [workerName]
+      properties:
+        workerName:
+          type: string
+        version:
+          type: string
+          default: "1.0.0"
+
+    QueueFilterBody:
+      type: object
+      properties:
+        departmentId:
+          type: ["integer", "null"]
+        jobType:
+          type: ["string", "null"]
+
     CreativeAiImageAnalytics:
       type: object
       required: [totalImages, totalCostUsd, approvedRate, rejectedRate, pendingCount]

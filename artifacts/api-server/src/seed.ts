@@ -20,8 +20,12 @@ import {
   aiDecisionLogsTable,
   aiAgentsTable,
   aiAgentCapabilitiesTable,
+  aiWorkersTable,
+  aiJobsTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
+import { randomUUID } from "crypto";
+import { computePriorityScore } from "./services/priorityEngine.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -650,6 +654,150 @@ async function seedWorkforce(defaultProviderId: number, defaultModelId: number) 
   console.log("\n✅ Workforce seed complete!");
 }
 
+// ─── Job Engine Seed ──────────────────────────────────────────────────────────
+
+async function seedJobEngine() {
+  console.log("\n🔧 Seeding Job Engine (Phase 5)...");
+
+  // 1. Workers
+  const workerDefs = [
+    { workerName: "worker-alpha",   version: "1.0.0", status: "idle"    },
+    { workerName: "worker-beta",    version: "1.0.0", status: "idle"    },
+    { workerName: "worker-gamma",   version: "1.0.0", status: "offline" },
+  ];
+
+  const workers: Record<string, { id: number }> = {};
+  for (const w of workerDefs) {
+    const [existing] = await db
+      .select()
+      .from(aiWorkersTable)
+      .where(eq(aiWorkersTable.workerName, w.workerName));
+
+    if (existing) {
+      console.log(`  ↩ Worker already exists: ${w.workerName}`);
+      workers[w.workerName] = existing;
+    } else {
+      const [row] = await db.insert(aiWorkersTable).values(w).returning();
+      console.log(`  ✓ Seeded worker: ${w.workerName}`);
+      workers[w.workerName] = row!;
+    }
+  }
+
+  // 2. Sample jobs — idempotent via unique jobCode check
+  const sampleJobs = [
+    {
+      jobCode:       "JOB-SEED0001",
+      jobType:       "creative_brief",
+      status:        "queued",
+      priority:      80,
+      payloadJson:   { brief: "Q4 product launch campaign strategy", clientId: "c-001" },
+      estimatedCost: 0.05,
+      estimatedDuration: 30000,
+    },
+    {
+      jobCode:       "JOB-SEED0002",
+      jobType:       "llm_inference",
+      status:        "queued",
+      priority:      60,
+      payloadJson:   { prompt: "Write a product description for NebulaPhone X", model: "gpt-4o" },
+      estimatedCost: 0.02,
+      estimatedDuration: 5000,
+    },
+    {
+      jobCode:       "JOB-SEED0003",
+      jobType:       "image_generation",
+      status:        "running",
+      priority:      70,
+      payloadJson:   { prompt: "Cinematic product photo of a smartphone on a dark surface", width: 1024, height: 1024 },
+      estimatedCost: 0.03,
+      startedAt:     new Date(Date.now() - 15_000),
+    },
+    {
+      jobCode:       "JOB-SEED0004",
+      jobType:       "qc_review",
+      status:        "retrying",
+      priority:      50,
+      payloadJson:   { assetId: "asset-42", checkType: "brand_alignment" },
+      retryCount:    1,
+      maxRetry:      3,
+      errorMessage:  "QC provider timeout after 30s",
+      nextRetryAt:   new Date(Date.now() + 60_000),
+    },
+    {
+      jobCode:       "JOB-SEED0005",
+      jobType:       "llm_inference",
+      status:        "completed",
+      priority:      40,
+      payloadJson:   { prompt: "Summarise market research for Q3", model: "gpt-4o-mini" },
+      resultJson:    { summary: "Market shows 18% YoY growth in the mid-range segment…" },
+      actualCost:    0.008,
+      actualDuration: 3200,
+      startedAt:     new Date(Date.now() - 120_000),
+      completedAt:   new Date(Date.now() - 116_800),
+    },
+    {
+      jobCode:       "JOB-SEED0006",
+      jobType:       "creative_brief",
+      status:        "failed",
+      priority:      75,
+      payloadJson:   { brief: "Holiday season email sequence — 6 variations" },
+      retryCount:    3,
+      maxRetry:      3,
+      errorMessage:  "Max retries exhausted — provider returned 503 on all attempts",
+    },
+    {
+      jobCode:       "JOB-SEED0007",
+      jobType:       "noop",
+      status:        "waiting",
+      priority:      30,
+      payloadJson:   { reason: "Waiting for creative director approval" },
+    },
+  ] as const;
+
+  const now = new Date();
+  for (const job of sampleJobs) {
+    const [existing] = await db
+      .select()
+      .from(aiJobsTable)
+      .where(eq(aiJobsTable.jobCode, job.jobCode));
+
+    if (existing) {
+      console.log(`  ↩ Job already exists: ${job.jobCode}`);
+      continue;
+    }
+
+    const score = computePriorityScore({
+      basePriority: job.priority,
+      createdAt:    now,
+      retryCount:   ("retryCount" in job ? job.retryCount : 0) as number,
+    });
+
+    await db.insert(aiJobsTable).values({
+      jobCode:           job.jobCode,
+      jobType:           job.jobType,
+      status:            job.status,
+      priority:          job.priority,
+      priorityScore:     String(score),
+      payloadJson:       job.payloadJson as Record<string, unknown>,
+      resultJson:        ("resultJson" in job ? job.resultJson : null) as Record<string, unknown> | null,
+      estimatedCost:     ("estimatedCost" in job ? String(job.estimatedCost) : null),
+      actualCost:        ("actualCost" in job ? String(job.actualCost) : null),
+      estimatedDuration: ("estimatedDuration" in job ? job.estimatedDuration : null) as number | null,
+      actualDuration:    ("actualDuration" in job ? job.actualDuration : null) as number | null,
+      retryCount:        ("retryCount" in job ? job.retryCount : 0) as number,
+      maxRetry:          ("maxRetry" in job ? job.maxRetry : 3) as number,
+      retryStrategy:     "exponential",
+      errorMessage:      ("errorMessage" in job ? job.errorMessage : null) as string | null,
+      nextRetryAt:       ("nextRetryAt" in job ? job.nextRetryAt : null) as Date | null,
+      startedAt:         ("startedAt" in job ? job.startedAt : null) as Date | null,
+      completedAt:       ("completedAt" in job ? job.completedAt : null) as Date | null,
+    });
+    console.log(`  ✓ Seeded job: ${job.jobCode} (${job.jobType} / ${job.status})`);
+  }
+
+  console.log("\n✅ Job Engine seed complete!");
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -688,6 +836,9 @@ async function main() {
 
   // Phase 4.9: AI Operating Core — Digital Workforce
   await seedWorkforce(providers.openai.id, gpt4o.id);
+
+  // Phase 5: Job Engine
+  await seedJobEngine();
 
   console.log("\n✅ Seed complete!\n");
   process.exit(0);

@@ -20,6 +20,7 @@ import clientReviewRouter from "./client-review";
 import workforceRouter from "./workforce";
 import publicRouter from "./public";
 import operationsRouter from "./operations";
+import jobsRouter from "./jobs";
 
 const router: IRouter = Router();
 
@@ -44,5 +45,6 @@ router.use(exportRouter);
 router.use(clientReviewRouter);
 router.use(workforceRouter);
 router.use(operationsRouter);
+router.use(jobsRouter);
 
 export default router;

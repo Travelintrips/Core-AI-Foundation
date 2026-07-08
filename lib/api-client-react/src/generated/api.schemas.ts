@@ -1624,3 +1624,97 @@ export interface CreativeAiImageAnalytics {
   rejectedRate: number | null;
   pendingCount: number;
 }
+
+// ── Job Engine (Phase 5) ──────────────────────────────────────────────────────
+
+export type AiJobStatus =
+  | "queued" | "waiting" | "running" | "retrying"
+  | "completed" | "failed" | "cancelled" | "blocked";
+
+export interface AiJob {
+  id: number;
+  jobCode: string;
+  executionPlanId?: number | null;
+  departmentId?: number | null;
+  employeeId?: number | null;
+  jobType: string;
+  priority: number;
+  priorityScore?: number | null;
+  status: AiJobStatus;
+  payloadJson: Record<string, unknown>;
+  resultJson?: Record<string, unknown> | null;
+  scheduledAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  retryCount: number;
+  maxRetry: number;
+  retryStrategy: "immediate" | "exponential" | "manual";
+  nextRetryAt?: string | null;
+  errorMessage?: string | null;
+  estimatedCost?: number | null;
+  actualCost?: number | null;
+  estimatedDuration?: number | null;
+  actualDuration?: number | null;
+  managerOverride?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface JobPage {
+  items: AiJob[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface JobStats {
+  jobs: Record<string, number>;
+  totalQueued: number;
+  totalActive: number;
+  totalBlocked: number;
+  totalFailed: number;
+  completedToday: number;
+  workers: Record<string, number>;
+  avgWaitMs?: number | null;
+  avgExecutionMs?: number | null;
+}
+
+export type AiWorkerStatus = "online" | "offline" | "maintenance" | "busy" | "idle";
+
+export interface AiWorker {
+  id: number;
+  workerName: string;
+  status: AiWorkerStatus;
+  currentJob?: number | null;
+  lastHeartbeat: string;
+  runningJobs: number;
+  completedToday: number;
+  failedToday: number;
+  averageLatency?: number | null;
+  version: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateJobBody {
+  jobType: string;
+  payloadJson?: Record<string, unknown>;
+  priority?: number;
+  executionPlanId?: number | null;
+  departmentId?: number | null;
+  employeeId?: number | null;
+  scheduledAt?: string | null;
+  maxRetry?: number;
+  retryStrategy?: "immediate" | "exponential" | "manual";
+  estimatedCost?: number | null;
+  estimatedDuration?: number | null;
+  managerOverride?: number | null;
+}
+
+export type ListJobsParams = {
+  status?: string;
+  jobType?: string;
+  departmentId?: number;
+  limit?: number;
+  offset?: number;
+};
