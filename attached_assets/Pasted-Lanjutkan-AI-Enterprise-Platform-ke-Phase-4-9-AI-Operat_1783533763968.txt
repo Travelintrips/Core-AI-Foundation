@@ -1,0 +1,457 @@
+Lanjutkan AI Enterprise Platform ke Phase 4.9: AI Operating Core — Digital Workforce Management.
+
+PENTING:
+Jangan mengubah arsitektur yang sudah ada.
+Jangan rewrite fitur yang sudah stabil.
+Semua implementasi harus additive, modular, backward compatible, enterprise-grade, OpenAPI-first, dan TypeScript clean.
+
+====================================================================
+VISI
+====
+
+Saat ini platform sudah memiliki:
+
+* AI Departments
+* AI Employees
+* AI Skills
+* AI Tools
+* AI Workload
+* AI Registry
+* AI Workflow
+* AI Orchestrator
+
+Mulai Phase 4.9, AI Platform harus berubah menjadi AI Operating Core.
+
+Artinya AI tidak lagi hanya menjalankan workflow, tetapi bekerja seperti organisasi perusahaan.
+
+Tambahkan layer baru:
+
+AI CEO
+↓
+
+Department Manager
+↓
+
+Digital Employee
+↓
+
+Supervisor Review
+↓
+
+Quality Control
+
+Creative AI yang sudah berjalan harus otomatis memakai struktur ini tanpa mengubah user experience.
+
+====================================================================
+BAGIAN 1
+AI CEO
+======
+
+Tambahkan AI CEO sebagai root orchestrator.
+
+AI CEO bertugas:
+
+* membaca user intent
+* menentukan objective
+* menentukan priority
+* memilih department
+* memilih manager
+* menentukan workflow
+* memonitor progress
+* menerima final report
+
+Buat service:
+
+aiCeoService
+
+Method:
+
+analyzeRequest()
+
+selectDepartment()
+
+selectManager()
+
+createExecutionPlan()
+
+monitorExecution()
+
+finalizeProject()
+
+====================================================================
+BAGIAN 2
+DEPARTMENT MANAGER
+==================
+
+Tambahkan manager virtual.
+
+Contoh:
+
+Creative Director
+
+Marketing Director
+
+Finance Manager
+
+HR Manager
+
+Legal Manager
+
+Tax Manager
+
+Logistics Manager
+
+Trading Manager
+
+Manager memiliki kemampuan:
+
+assignTask()
+
+reviewTask()
+
+approveTask()
+
+rejectTask()
+
+requestRevision()
+
+rebalanceWorkload()
+
+====================================================================
+BAGIAN 3
+EXECUTION PLAN
+==============
+
+Buat tabel:
+
+ai_execution_plans
+
+Field:
+
+id
+
+project_id
+
+objective
+
+department
+
+manager_employee_id
+
+priority
+
+status
+
+estimated_cost
+
+estimated_duration
+
+actual_cost
+
+actual_duration
+
+started_at
+
+completed_at
+
+created_at
+
+Setiap project harus mempunyai execution plan.
+
+====================================================================
+BAGIAN 4
+TASK ASSIGNMENT
+===============
+
+Buat tabel:
+
+ai_task_assignments
+
+Field:
+
+execution_plan_id
+
+employee_id
+
+task_name
+
+priority
+
+status
+
+assigned_at
+
+started_at
+
+completed_at
+
+retry_count
+
+revision_count
+
+Supervisor dapat memindahkan assignment.
+
+====================================================================
+BAGIAN 5
+CAPACITY PLANNING
+=================
+
+Tambahkan Capacity Engine.
+
+Per employee:
+
+running_jobs
+
+max_parallel_jobs
+
+queue_length
+
+availability
+
+load_percentage
+
+Jika employee overload:
+
+Manager harus memilih employee lain.
+
+====================================================================
+BAGIAN 6
+PERFORMANCE ENGINE
+==================
+
+Tambahkan tabel:
+
+ai_employee_performance
+
+Field:
+
+employee_id
+
+completed_projects
+
+success_rate
+
+average_latency
+
+average_cost
+
+approval_rate
+
+revision_rate
+
+failure_rate
+
+quality_score
+
+customer_rating
+
+last_updated
+
+Data ini dipakai manager saat memilih employee.
+
+====================================================================
+BAGIAN 7
+LEARNING ENGINE
+===============
+
+Tambahkan:
+
+training_required
+
+promotion_score
+
+experience_points
+
+last_training
+
+learning_notes
+
+Contoh:
+
+Accuracy turun
+
+↓
+
+Training Required
+
+Accuracy naik
+
+↓
+
+Promotion Candidate
+
+====================================================================
+BAGIAN 8
+AI DECISION LOG
+===============
+
+Semua keputusan AI CEO dan Manager harus dicatat.
+
+Buat tabel:
+
+ai_decision_logs
+
+Field:
+
+execution_plan_id
+
+decision_by
+
+decision_type
+
+reason
+
+selected_employee
+
+selected_department
+
+selected_provider
+
+selected_model
+
+score
+
+created_at
+
+====================================================================
+BAGIAN 9
+WORKFORCE DASHBOARD
+===================
+
+Tambahkan halaman:
+
+AI Operations Center
+
+Dashboard berisi:
+
+Organization Summary
+
+CEO Status
+
+Department Status
+
+Running Plans
+
+Task Assignments
+
+Employee Capacity
+
+Performance Leaderboard
+
+Training Candidates
+
+Promotion Candidates
+
+Decision Logs
+
+Filter:
+
+Department
+
+Employee
+
+Status
+
+Priority
+
+Date
+
+====================================================================
+BAGIAN 10
+ORCHESTRATOR UPGRADE
+====================
+
+Upgrade orchestrator.
+
+Alur baru:
+
+User Request
+
+↓
+
+AI CEO
+
+↓
+
+Department Selection
+
+↓
+
+Manager Selection
+
+↓
+
+Execution Plan
+
+↓
+
+Task Assignment
+
+↓
+
+Employee Execution
+
+↓
+
+Supervisor Review
+
+↓
+
+QC
+
+↓
+
+Response
+
+Workflow lama tetap didukung.
+
+====================================================================
+BAGIAN 11
+BACKWARD COMPATIBILITY
+======================
+
+Creative AI yang sudah berjalan:
+
+* tetap bisa dipakai
+* tetap memakai endpoint lama
+* otomatis mendapatkan execution plan dan assignment baru di belakang layar
+* UI lama tidak berubah
+
+====================================================================
+BAGIAN 12
+VERIFICATION
+============
+
+Pastikan:
+
+* migration clean
+* DB push clean
+* OpenAPI updated
+* codegen clean
+* TypeScript clean
+* build clean
+
+Seed data:
+
+* AI CEO
+* seluruh Department Manager
+* Performance awal
+* Capacity awal
+* Decision Log contoh
+
+Semua perubahan harus additive.
+
+Jangan implementasi dulu:
+
+* Queue Engine
+* Event Bus
+* Scheduler
+* Plugin Marketplace
+* Billing
+* Video
+* Voice
+* OCR
+
+Target akhir:
+
+AI Enterprise Platform berubah menjadi AI Operating Core, di mana AI CEO mengelola Department Manager dan Digital Employees secara dinamis. Creative AI menjadi implementasi pertama yang berjalan di atas AI Operating Core tanpa mengubah pengalaman pengguna yang sudah ada.

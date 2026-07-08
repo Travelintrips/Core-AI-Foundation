@@ -41,6 +41,7 @@ import { routeForAgent } from "./intelligentRouter.js";
 import { recordCost, getProjectCosts } from "./costService.js";
 import { readGuardrails } from "./guardrailService.js";
 import { getActiveModel } from "./aiModelService.js";
+import { createExecutionPlanForCreativeProject } from "./aiCeoService.js";
 
 type StepOutput = Record<string, unknown>;
 
@@ -181,6 +182,13 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
     .update(creativeProjectsTable)
     .set({ status: "running" })
     .where(eq(creativeProjectsTable.id, projectDbId));
+
+  // Phase 4.9: Create execution plan behind the scenes (AI Operating Core).
+  // Non-blocking — never break the creative workflow if this fails.
+  createExecutionPlanForCreativeProject(
+    project.projectId,
+    `${project.goal} — ${project.brandName} (${project.businessType})`,
+  ).catch(() => {});
 
   const stepOutputs: Record<string, StepOutput> = {};
   const completedStepNames: string[] = [];

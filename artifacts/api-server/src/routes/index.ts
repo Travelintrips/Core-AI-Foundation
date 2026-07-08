@@ -19,6 +19,7 @@ import exportRouter from "./export-routes";
 import clientReviewRouter from "./client-review";
 import workforceRouter from "./workforce";
 import publicRouter from "./public";
+import operationsRouter from "./operations";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use(testRunsRouter);
 router.use(exportRouter);
 router.use(clientReviewRouter);
 router.use(workforceRouter);
+router.use(operationsRouter);
 
 export default router;

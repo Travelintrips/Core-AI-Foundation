@@ -21,6 +21,7 @@ import Audit from "@/pages/audit";
 import Settings from "@/pages/settings";
 import ClientReviewPage from "@/pages/client-review";
 import Workforce from "@/pages/workforce";
+import Operations from "@/pages/operations";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ function AdminRouter() {
         <Route path="/audit" component={Audit} />
         <Route path="/settings" component={Settings} />
         <Route path="/workforce" component={Workforce} />
+        <Route path="/operations" component={Operations} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

@@ -28,3 +28,7 @@ export * from "./ai-employees";
 export * from "./ai-employee-skills";
 export * from "./ai-workload";
 export * from "./employee-tool-permissions";
+export * from "./ai-execution-plans";
+export * from "./ai-task-assignments";
+export * from "./ai-employee-performance";
+export * from "./ai-decision-logs";

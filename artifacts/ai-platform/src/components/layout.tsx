@@ -14,6 +14,7 @@ import {
   Sparkles,
   Users,
   Building2,
+  Crown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/analytics", label: "Analytics", icon: BarChart2 },
   { href: "/workforce", label: "AI Workforce", icon: Building2 },
+  { href: "/operations", label: "Operations Center", icon: Crown },
   { href: "/registry", label: "Registry", icon: Box },
   { href: "/agents", label: "Agents", icon: Users },
   { href: "/orchestrator", label: "Orchestrator", icon: Play },

@@ -13,6 +13,13 @@ import {
   aiProvidersTable,
   aiModelsTable,
   aiWorkflowsTable,
+  aiDepartmentsTable,
+  aiEmployeesTable,
+  aiWorkloadTable,
+  aiEmployeePerformanceTable,
+  aiDecisionLogsTable,
+  aiAgentsTable,
+  aiAgentCapabilitiesTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 
@@ -476,6 +483,173 @@ async function seedCreativeBriefWorkflow() {
   console.log("  ✓ Seeded Creative Brief Workflow");
 }
 
+// ─── Phase 4.9: AI Operating Core — Digital Workforce ──────────────────────────
+
+const DEPARTMENTS = [
+  { departmentCode: "CREATIVE",  departmentName: "Creative",  description: "Brand strategy, design, and creative production" },
+  { departmentCode: "MARKETING", departmentName: "Marketing", description: "Campaigns, social media, and growth marketing" },
+  { departmentCode: "FINANCE",   departmentName: "Finance",   description: "Budgeting, invoicing, and financial planning" },
+  { departmentCode: "HR",        departmentName: "Human Resources", description: "Recruiting, onboarding, and employee relations" },
+  { departmentCode: "LEGAL",     departmentName: "Legal",     description: "Contracts, compliance, and legal review" },
+  { departmentCode: "TAX",       departmentName: "Tax",       description: "Tax accounting and regulatory filings" },
+  { departmentCode: "LOGISTICS", departmentName: "Logistics", description: "Shipping, supply chain, and fulfillment" },
+  { departmentCode: "TRADING",   departmentName: "Trading",   description: "Market analysis and trading operations" },
+];
+
+const MANAGERS = [
+  { code: "MGR-CREATIVE",  name: "Creative Director",  position: "Creative Director",  dept: "CREATIVE" },
+  { code: "MGR-MARKETING", name: "Marketing Director",  position: "Marketing Director", dept: "MARKETING" },
+  { code: "MGR-FINANCE",   name: "Finance Manager",     position: "Finance Manager",    dept: "FINANCE" },
+  { code: "MGR-HR",        name: "HR Manager",          position: "HR Manager",         dept: "HR" },
+  { code: "MGR-LEGAL",     name: "Legal Manager",       position: "Legal Manager",      dept: "LEGAL" },
+  { code: "MGR-TAX",       name: "Tax Manager",         position: "Tax Manager",        dept: "TAX" },
+  { code: "MGR-LOGISTICS", name: "Logistics Manager",   position: "Logistics Manager",  dept: "LOGISTICS" },
+  { code: "MGR-TRADING",   name: "Trading Manager",     position: "Trading Manager",    dept: "TRADING" },
+];
+
+async function upsertDepartment(data: typeof DEPARTMENTS[number]) {
+  const [existing] = await db
+    .select()
+    .from(aiDepartmentsTable)
+    .where(eq(aiDepartmentsTable.departmentCode, data.departmentCode));
+
+  if (existing) {
+    console.log(`  ↩ Department already exists: ${data.departmentName}`);
+    return existing;
+  }
+  const [row] = await db.insert(aiDepartmentsTable).values({ ...data, status: "active" }).returning();
+  console.log(`  ✓ Seeded department: ${data.departmentName}`);
+  return row;
+}
+
+async function upsertEmployee(data: {
+  employeeCode: string;
+  employeeName: string;
+  position: string;
+  role: string;
+  level: string;
+  departmentId: number | null;
+  providerId: number;
+  modelId: number;
+  maxParallelJobs?: number;
+  priority?: number;
+}) {
+  const [existing] = await db
+    .select()
+    .from(aiEmployeesTable)
+    .where(eq(aiEmployeesTable.employeeCode, data.employeeCode));
+
+  if (existing) {
+    console.log(`    ↩ Employee already exists: ${data.employeeName}`);
+    return existing;
+  }
+
+  const [row] = await db
+    .insert(aiEmployeesTable)
+    .values({
+      employeeCode: data.employeeCode,
+      employeeName: data.employeeName,
+      position: data.position,
+      role: data.role,
+      level: data.level,
+      departmentId: data.departmentId,
+      providerId: data.providerId,
+      modelId: data.modelId,
+      maxParallelJobs: data.maxParallelJobs ?? 3,
+      priority: data.priority ?? 50,
+      status: "active",
+    })
+    .returning();
+
+  console.log(`    ✓ Seeded employee: ${data.employeeName} (${data.position})`);
+  return row;
+}
+
+async function ensureCapacityAndPerformance(employeeId: number) {
+  const [existingWorkload] = await db.select().from(aiWorkloadTable).where(eq(aiWorkloadTable.employeeId, employeeId));
+  if (!existingWorkload) {
+    await db.insert(aiWorkloadTable).values({ employeeId, availability: 100, status: "idle" });
+  }
+
+  const [existingPerf] = await db.select().from(aiEmployeePerformanceTable).where(eq(aiEmployeePerformanceTable.employeeId, employeeId));
+  if (!existingPerf) {
+    await db.insert(aiEmployeePerformanceTable).values({
+      employeeId,
+      completedProjects: 0,
+      successRate: "95.00",
+      approvalRate: "90.00",
+      qualityScore: "88.00",
+      customerRating: "4.5",
+      experiencePoints: 100,
+      promotionScore: "60.00",
+    });
+  }
+}
+
+async function seedWorkforce(defaultProviderId: number, defaultModelId: number) {
+  console.log("\n🏢 Seeding departments...");
+  const deptRows: Record<string, { id: number }> = {};
+  for (const dept of DEPARTMENTS) {
+    const row = await upsertDepartment(dept);
+    deptRows[dept.departmentCode] = row;
+  }
+
+  console.log("\n👔 Seeding AI CEO...");
+  const ceo = await upsertEmployee({
+    employeeCode: "AI-CEO",
+    employeeName: "AI CEO",
+    position: "Chief Executive Officer",
+    role: "director",
+    level: "director",
+    departmentId: null,
+    providerId: defaultProviderId,
+    modelId: defaultModelId,
+    maxParallelJobs: 50,
+    priority: 100,
+  });
+  await ensureCapacityAndPerformance(ceo.id);
+
+  console.log("\n🧑‍💼 Seeding department managers...");
+  for (const mgr of MANAGERS) {
+    const dept = deptRows[mgr.dept];
+    const employee = await upsertEmployee({
+      employeeCode: mgr.code,
+      employeeName: mgr.name,
+      position: mgr.position,
+      role: "manager",
+      level: "lead",
+      departmentId: dept.id,
+      providerId: defaultProviderId,
+      modelId: defaultModelId,
+      maxParallelJobs: 10,
+      priority: 80,
+    });
+    await ensureCapacityAndPerformance(employee.id);
+
+    // Link department → manager
+    await db
+      .update(aiDepartmentsTable)
+      .set({ managerAgentId: employee.id })
+      .where(eq(aiDepartmentsTable.id, dept.id));
+  }
+
+  // Example decision log — CEO routing decision
+  const [existingLog] = await db.select().from(aiDecisionLogsTable).limit(1);
+  if (!existingLog) {
+    await db.insert(aiDecisionLogsTable).values({
+      decisionBy: "ai_ceo",
+      decisionType: "department_selection",
+      reason: "Initial workforce seed — example CEO routing decision for a creative brief request",
+      selectedDepartment: "CREATIVE",
+      selectedEmployee: "Creative Director",
+      score: "92.00",
+    });
+    console.log("  ✓ Seeded example decision log");
+  }
+
+  console.log("\n✅ Workforce seed complete!");
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -486,7 +660,16 @@ async function main() {
   await seedWorkflows();
 
   // Phase 5: Image Designer agents
-  // Find FLUX.1 Schnell for image-designer agent
+  // Find GPT-4o (default text model) and FLUX.1 Schnell (default image model)
+  const [gpt4o] = await db
+    .select()
+    .from(aiModelsTable)
+    .where(and(eq(aiModelsTable.modelId, "gpt-4o"), eq(aiModelsTable.providerId, providers.openai.id)));
+
+  if (!gpt4o) {
+    throw new Error("GPT-4o model not found after seedModels — cannot continue seed");
+  }
+
   const [fluxSchnell] = await db
     .select()
     .from(aiModelsTable)
@@ -502,6 +685,9 @@ async function main() {
     providers.replicate.id,
     fluxSchnell?.id ?? gpt4o.id,
   );
+
+  // Phase 4.9: AI Operating Core — Digital Workforce
+  await seedWorkforce(providers.openai.id, gpt4o.id);
 
   console.log("\n✅ Seed complete!\n");
   process.exit(0);
