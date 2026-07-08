@@ -1,0 +1,59 @@
+Final Report — Phase 5 AI Job Engine
+Cosa è stato fixato in questa sessione
+Issue	File	Fix
+api-zod esportava una directory invece di ./generated/types/index	lib/api-zod/src/index.ts	Corretto il path
+Pacchetti lib/ con dist/ stale — tutti gli import fallivano	lib/db, lib/api-zod, lib/api-client-react	tsc -b --force su tutti e tre
+tx.execute() ritorna QueryResult, non array iterabile	jobWorkerService.ts	Uso di .rows con cast
+claimJob() ignorava job retrying con nextRetryAt scaduto	jobWorkerService.ts	WHERE esteso a retrying AND next_retry_at <= NOW()
+cancelJob() non rilasciava il worker quando il job era running	jobWorkerService.ts	Update atomico su aiWorkersTable dopo il cancel
+req.body non protetto in cancel, worker-status, pause, resume	routes/jobs.ts	(req.body ?? {}) ovunque
+DB — Tabelle Phase 5
+Tabella	Scopo
+ai_jobs	Job con status lifecycle, priority score, retry policy, scheduling, costi
+ai_workers	Worker pool con heartbeat, metriche giornaliere, stato corrente
+Services nuovi
+Service	Funzione
+jobWorkerService.ts	claimJob (SELECT FOR UPDATE SKIP LOCKED), executeJob, completeJob, retryJob, cancelJob, heartbeat, releaseJob
+queueManagerService.ts	enqueue (con priority scoring), reprioritize, pauseQueue, resumeQueue
+priorityEngine.ts	Calcolo priorityScore da priority base, department, manager override
+API nuovi
+Endpoint	Funzione
+GET /api/ai/jobs	Lista job con filtri (status, jobType, departmentId)
+POST /api/ai/jobs	Enqueue job nuovo
+GET /api/ai/jobs/stats	Stats aggregate (per status, per worker)
+GET /api/ai/jobs/:id	Dettaglio singolo job
+PATCH /api/ai/jobs/:id/cancel	Cancel (rilascia worker se running)
+PATCH /api/ai/jobs/:id/retry	Re-queue manuale (da cancelled/failed/blocked)
+PATCH /api/ai/jobs/:id/priority	Reprioritize con manager override
+GET /api/ai/workers	Lista workers
+POST /api/ai/workers	Register/upsert worker
+PATCH /api/ai/workers/:id/heartbeat	Heartbeat worker
+PATCH /api/ai/workers/:id/status	Update status worker
+POST /api/ai/queue/pause	Pausa queue (queued → waiting)
+POST /api/ai/queue/resume	Resume queue (waiting → queued)
+UI — /queue
+Stats cards: QUEUED / WAITING / RUNNING / RETRYING / FAILED / BLOCKED / DONE TODAY / AVG WAIT
+Workers panel: status, heartbeat, jobs completati/falliti oggi, latenza media
+Job table: ordinata per priority score decrescente, con status badge colorato, retry counter, età, azioni cancel/retry
+Filtri: per status (Active/All/Completed) e per job type
+Come testare
+# Registra un worker
+curl -X POST http://localhost:8080/api/ai/workers \
+  -H "Content-Type: application/json" \
+  -d '{"workerName":"my-worker"}'
+# Crea un job
+curl -X POST http://localhost:8080/api/ai/jobs \
+  -H "Content-Type: application/json" \
+  -d '{"jobType":"llm_inference","priority":80}'
+# Stats
+curl http://localhost:8080/api/ai/jobs/stats
+# UI: apri /queue nel preview
+
+TypeScript
+Frontend (ai-platform): zero errori ✅
+Backend (api-server): zero errori Phase 5 ✅ — 7 errori pre-esistenti in workforce.ts, creativeWorkflowRunner.ts, imageDesignerService.ts (non toccati per policy)
+Known Limitations
+Nessun dispatcher automatico — claimJob() è chiamato su richiesta HTTP; non c'è un loop background che assegna job ai worker automaticamente. Va implementato lato worker con polling.
+Job retrying con manual strategy → diventano blocked e richiedono retry manuale via API.
+avgWaitMs / avgExecutionMs nelle stats sono null finché non ci sono job completati con timestamp reali.
+AI provider keys non configurate → executeJob() ritorna risposte simulate per tutti i tipi.
