@@ -1,0 +1,32 @@
+---
+name: Concatenated file fix pattern
+description: Files in this project were imported from GitHub with two versions concatenated together — how to identify and fix them.
+---
+
+# Concatenated file fix pattern
+
+**Why:** The GitHub import merged an older and newer version of several files end-to-end, resulting in parse errors ("Unexpected *", duplicate declarations, conflicting star exports).
+
+## How to identify
+
+- esbuild reports `Unexpected "*"` at a line that is mid-file — orphaned JSDoc comment missing `/**`
+- TypeScript/Babel reports duplicate identifier declarations in a single import block
+- A file has two `export default function X` or two function definitions with the same name
+- Runtime error: "conflicting star exports for name '...'" from a library index
+
+## Fix pattern
+
+1. **Concatenated TS/TSX files**: The second version is always more complete. Use `{ echo "/**"; tail -n +<LINE> file.ts; } > /tmp/fixed.ts && mv /tmp/fixed.ts file.ts` to keep only the second version.
+2. **Duplicate imports in TSX**: Use `node` to slice line arrays — skip the duplicate range, reassemble.
+3. **Library conflicting star exports**: Remove `export * from "./hand-written-module"` from the library index when a generated file covers the same names.
+4. **index.ts with dual auto-start blocks**: Remove the old block that references now-deleted exports; keep the new one.
+
+## Files that were fixed
+
+- `artifacts/api-server/src/services/jobDispatcherService.ts` — kept v2 (lines 392–865 of original)
+- `artifacts/api-server/src/routes/dispatcher.ts` — kept v2 (lines 45–119 of original)
+- `artifacts/api-server/src/index.ts` — removed old import + old auto-start block
+- `artifacts/ai-platform/src/pages/queue.tsx` — deduped imports, single DispatcherPanel, single JSX usage
+- `lib/api-client-react/src/index.ts` — removed `export * from "./dispatcher"` (conflicts with generated)
+
+**Why (durable lesson):** If more files show similar parse errors after future imports, check for the concatenation pattern first — it's the root cause, not a code bug.
