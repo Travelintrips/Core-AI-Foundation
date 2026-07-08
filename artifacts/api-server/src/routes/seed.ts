@@ -15,6 +15,13 @@ import {
   aiModelsTable,
   aiCapabilitiesTable,
   aiSettingsTable,
+  aiDepartmentsTable,
+  aiSkillsTable,
+  aiToolsTable,
+  aiEmployeesTable,
+  aiEmployeeSkillsTable,
+  aiWorkloadTable,
+  employeeToolPermissionsTable,
 } from "@workspace/db";
 import { logAudit } from "../services/aiAuditService.js";
 
@@ -266,6 +273,270 @@ async function seedGuardrails(): Promise<{ inserted: number; skipped: number }> 
   return { inserted, skipped };
 }
 
+// ── Workforce seed data ───────────────────────────────────────────────────────
+
+const DEPARTMENTS_SEED = [
+  { departmentCode: "CREATIVE",    departmentName: "Creative",     description: "Brand strategy, copywriting, and creative production" },
+  { departmentCode: "MARKETING",   departmentName: "Marketing",    description: "Digital marketing, SEO, social media, and campaigns" },
+  { departmentCode: "FINANCE",     departmentName: "Finance",      description: "Accounting, financial analysis, and reporting" },
+  { departmentCode: "HR",          departmentName: "HR",           description: "Recruitment, talent management, and people operations" },
+  { departmentCode: "TAX",         departmentName: "Tax",          description: "Tax planning, compliance, and filing" },
+  { departmentCode: "LEGAL",       departmentName: "Legal",        description: "Contracts, compliance, and legal drafting" },
+  { departmentCode: "SALES",       departmentName: "Sales",        description: "Lead generation, outreach, and deal closing" },
+  { departmentCode: "LOGISTICS",   departmentName: "Logistics",    description: "Supply chain, shipping, and inventory management" },
+  { departmentCode: "CUSTOMS",     departmentName: "Customs",      description: "Import/export, HS classification, and customs clearance" },
+  { departmentCode: "TRADING",     departmentName: "Trading",      description: "Trading analysis, market intelligence, and orders" },
+  { departmentCode: "PROCUREMENT", departmentName: "Procurement",  description: "Vendor sourcing, negotiation, and purchasing" },
+  { departmentCode: "ANALYTICS",   departmentName: "Analytics",    description: "Data analysis, forecasting, and business intelligence" },
+] as const;
+
+const SKILLS_SEED = [
+  { skillCode: "brand_strategy",    skillName: "Brand Strategy",       category: "creative" },
+  { skillCode: "copywriting",       skillName: "Copywriting",          category: "creative" },
+  { skillCode: "creative_direction",skillName: "Creative Direction",   category: "creative" },
+  { skillCode: "quality_control",   skillName: "Quality Control",      category: "creative" },
+  { skillCode: "image_generation",  skillName: "Image Generation",     category: "creative" },
+  { skillCode: "social_media",      skillName: "Social Media",         category: "marketing" },
+  { skillCode: "seo",               skillName: "SEO",                  category: "marketing" },
+  { skillCode: "accounting",        skillName: "Accounting",           category: "finance" },
+  { skillCode: "tax_analysis",      skillName: "Tax Analysis",         category: "tax" },
+  { skillCode: "hs_classification", skillName: "HS Classification",    category: "customs" },
+  { skillCode: "customs_clearance", skillName: "Customs Clearance",    category: "customs" },
+  { skillCode: "procurement",       skillName: "Procurement",          category: "procurement" },
+  { skillCode: "negotiation",       skillName: "Negotiation",          category: "procurement" },
+  { skillCode: "legal_drafting",    skillName: "Legal Drafting",       category: "legal" },
+  { skillCode: "workflow_design",   skillName: "Workflow Design",      category: "analytics" },
+  { skillCode: "forecasting",       skillName: "Forecasting",          category: "analytics" },
+  { skillCode: "dashboard_analysis",skillName: "Dashboard Analysis",   category: "analytics" },
+] as const;
+
+const TOOLS_SEED = [
+  { toolCode: "openai",        toolName: "OpenAI",        category: "ai_model",       description: "GPT-4o, GPT-4o Mini, o4-mini language models" },
+  { toolCode: "claude",        toolName: "Claude",        category: "ai_model",       description: "Anthropic Claude 3.5 Sonnet and Haiku models" },
+  { toolCode: "gemini",        toolName: "Gemini",        category: "ai_model",       description: "Google Gemini 1.5 Pro and Flash models" },
+  { toolCode: "replicate",     toolName: "Replicate",     category: "ai_model",       description: "FLUX image generation models" },
+  { toolCode: "knowledge_base",toolName: "Knowledge Base",category: "knowledge",      description: "Internal structured knowledge retrieval" },
+  { toolCode: "memory",        toolName: "Memory",        category: "memory",         description: "Persistent client and session memory store" },
+  { toolCode: "analytics",     toolName: "Analytics",     category: "analytics",      description: "Cost, usage, and performance analytics" },
+  { toolCode: "pdf",           toolName: "PDF",           category: "document",       description: "PDF generation and parsing" },
+  { toolCode: "storage",       toolName: "Storage",       category: "storage",        description: "File and asset object storage" },
+  { toolCode: "email",         toolName: "Email",         category: "communication",  description: "Email sending and inbox integration" },
+  { toolCode: "whatsapp",      toolName: "WhatsApp",      category: "communication",  description: "WhatsApp messaging integration" },
+] as const;
+
+async function seedWorkforce(): Promise<{ departments: number; skills: number; tools: number; employees: number }> {
+  let deptCount = 0;
+  let skillCount = 0;
+  let toolCount = 0;
+  let empCount = 0;
+
+  // 1. Departments
+  for (const dept of DEPARTMENTS_SEED) {
+    const [existing] = await db.select({ id: aiDepartmentsTable.id }).from(aiDepartmentsTable)
+      .where(eq(aiDepartmentsTable.departmentCode, dept.departmentCode));
+    if (!existing) {
+      await db.insert(aiDepartmentsTable).values({ ...dept, status: "active" });
+      deptCount++;
+    }
+  }
+
+  // 2. Skills
+  for (const skill of SKILLS_SEED) {
+    const [existing] = await db.select({ id: aiSkillsTable.id }).from(aiSkillsTable)
+      .where(eq(aiSkillsTable.skillCode, skill.skillCode));
+    if (!existing) {
+      await db.insert(aiSkillsTable).values({ ...skill, status: "active" });
+      skillCount++;
+    }
+  }
+
+  // 3. Tools
+  for (const tool of TOOLS_SEED) {
+    const [existing] = await db.select({ id: aiToolsTable.id }).from(aiToolsTable)
+      .where(eq(aiToolsTable.toolCode, tool.toolCode));
+    if (!existing) {
+      await db.insert(aiToolsTable).values({ ...tool, isActive: true });
+      toolCount++;
+    }
+  }
+
+  // 4. Creative Department employees (backward-compatible with existing agents)
+  const [creativeDept] = await db.select({ id: aiDepartmentsTable.id }).from(aiDepartmentsTable)
+    .where(eq(aiDepartmentsTable.departmentCode, "CREATIVE"));
+  if (!creativeDept) return { departments: deptCount, skills: skillCount, tools: toolCount, employees: 0 };
+
+  // Resolve providers + models for mapping
+  const providers = await db.select().from(aiProvidersTable);
+  const models    = await db.select().from(aiModelsTable);
+  const providerBySlug = Object.fromEntries(providers.map((p) => [p.slug, p.id]));
+  const modelByModelId = Object.fromEntries(models.map((m) => [m.modelId, m.id]));
+
+  const CREATIVE_EMPLOYEES = [
+    {
+      employeeCode: "CREATIVE-001",
+      employeeName: "Creative Director",
+      position:     "Creative Director",
+      role:         "director",
+      level:        "director",
+      agentSlug:    "creative-director",
+      providerSlug: "anthropic",
+      modelKey:     "claude-3-5-sonnet-20241022",
+      costCenter:   "CREATIVE",
+      salaryVirtual:"5000",
+      hourlyCost:   "0.0300",
+      priority:     10,
+      maxParallelJobs: 2,
+      bio:          "Strategic creative lead overseeing all brand and campaign output.",
+      skillCodes:   ["creative_direction", "brand_strategy", "quality_control"],
+      toolCodes:    ["claude", "knowledge_base", "memory", "analytics"],
+    },
+    {
+      employeeCode: "CREATIVE-002",
+      employeeName: "Brand Strategist",
+      position:     "Brand Strategist",
+      role:         "specialist",
+      level:        "senior",
+      agentSlug:    "brand-strategist",
+      providerSlug: "anthropic",
+      modelKey:     "claude-3-5-sonnet-20241022",
+      costCenter:   "CREATIVE",
+      salaryVirtual:"3500",
+      hourlyCost:   "0.0150",
+      priority:     20,
+      maxParallelJobs: 3,
+      bio:          "Expert in brand positioning, tone of voice, and market research.",
+      skillCodes:   ["brand_strategy", "social_media", "workflow_design"],
+      toolCodes:    ["claude", "knowledge_base", "memory"],
+    },
+    {
+      employeeCode: "CREATIVE-003",
+      employeeName: "Copywriter",
+      position:     "Senior Copywriter",
+      role:         "specialist",
+      level:        "senior",
+      agentSlug:    "copywriter",
+      providerSlug: "openai",
+      modelKey:     "gpt-4o",
+      costCenter:   "CREATIVE",
+      salaryVirtual:"3000",
+      hourlyCost:   "0.0100",
+      priority:     30,
+      maxParallelJobs: 5,
+      bio:          "Creates persuasive copy across all formats — ads, web, email, and social.",
+      skillCodes:   ["copywriting", "social_media", "brand_strategy"],
+      toolCodes:    ["openai", "knowledge_base", "memory"],
+    },
+    {
+      employeeCode: "CREATIVE-004",
+      employeeName: "Quality Control Specialist",
+      position:     "QC Specialist",
+      role:         "specialist",
+      level:        "mid",
+      agentSlug:    "quality-control",
+      providerSlug: "openai",
+      modelKey:     "gpt-4o",
+      costCenter:   "CREATIVE",
+      salaryVirtual:"2500",
+      hourlyCost:   "0.0100",
+      priority:     40,
+      maxParallelJobs: 4,
+      bio:          "Ensures all output meets brand guidelines, grammar, and quality standards.",
+      skillCodes:   ["quality_control", "copywriting"],
+      toolCodes:    ["openai", "analytics"],
+    },
+  ] as const;
+
+  // Get skill and tool id maps
+  const allSkills = await db.select().from(aiSkillsTable);
+  const allTools  = await db.select().from(aiToolsTable);
+  const skillByCode = Object.fromEntries(allSkills.map((s) => [s.skillCode, s.id]));
+  const toolByCode  = Object.fromEntries(allTools.map((t) => [t.toolCode, t.id]));
+
+  let prevEmployeeId: number | null = null;
+
+  for (const emp of CREATIVE_EMPLOYEES) {
+    const [existing] = await db.select({ id: aiEmployeesTable.id }).from(aiEmployeesTable)
+      .where(eq(aiEmployeesTable.employeeCode, emp.employeeCode));
+
+    let employeeId: number;
+
+    if (!existing) {
+      const [inserted] = await db.insert(aiEmployeesTable).values({
+        employeeCode:    emp.employeeCode,
+        employeeName:    emp.employeeName,
+        position:        emp.position,
+        role:            emp.role,
+        level:           emp.level,
+        agentSlug:       emp.agentSlug,
+        departmentId:    creativeDept.id,
+        providerId:      providerBySlug[emp.providerSlug] ?? null,
+        modelId:         modelByModelId[emp.modelKey] ?? null,
+        costCenter:      emp.costCenter,
+        salaryVirtual:   emp.salaryVirtual,
+        hourlyCost:      emp.hourlyCost,
+        priority:        emp.priority,
+        maxParallelJobs: emp.maxParallelJobs,
+        supervisorId:    prevEmployeeId,
+        bio:             emp.bio,
+        status:          "active",
+      }).returning({ id: aiEmployeesTable.id });
+      employeeId = inserted.id;
+      empCount++;
+
+      // Workload record
+      await db.insert(aiWorkloadTable).values({
+        employeeId,
+        runningJobs:    0,
+        queuedJobs:     0,
+        completedToday: 0,
+        failedToday:    0,
+        availability:   100,
+        status:         "idle",
+      }).onConflictDoNothing();
+
+      // Skills
+      for (const skillCode of emp.skillCodes) {
+        const skillId = skillByCode[skillCode];
+        if (skillId) {
+          await db.insert(aiEmployeeSkillsTable).values({
+            employeeId,
+            skillId,
+            proficiency:      emp.level === "director" ? 5 : emp.level === "senior" ? 4 : 3,
+            experienceScore:  "85",
+            accuracyScore:    "88",
+            speedScore:       "80",
+            costScore:        "82",
+          }).onConflictDoNothing();
+        }
+      }
+
+      // Tool permissions
+      for (const toolCode of emp.toolCodes) {
+        const toolId = toolByCode[toolCode];
+        if (toolId) {
+          await db.insert(employeeToolPermissionsTable).values({
+            employeeId,
+            toolId,
+            canRead:    true,
+            canWrite:   true,
+            canExecute: true,
+            grantedBy:  "system-seed",
+          }).onConflictDoNothing();
+        }
+      }
+    } else {
+      employeeId = existing.id;
+    }
+
+    // Creative Director is the supervisor of all others; use first ID as supervisor for subsequent
+    if (emp.employeeCode === "CREATIVE-001") {
+      prevEmployeeId = employeeId;
+    }
+  }
+
+  return { departments: deptCount, skills: skillCount, tools: toolCount, employees: empCount };
+}
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 router.post("/ai/seed/guardrails", async (_req, res): Promise<void> => {
@@ -283,18 +554,26 @@ router.post("/ai/seed/capabilities", async (req, res): Promise<void> => {
   res.json({ ok: true, capabilities: caps, providers: providerIdMap.size, models: modelIdMap.size });
 });
 
+router.post("/ai/seed/workforce", async (_req, res): Promise<void> => {
+  const result = await seedWorkforce();
+  await logAudit("seed", "workforce", "system", "ai_departments", "success", result);
+  res.json({ ok: true, workforce: result });
+});
+
 router.post("/ai/seed/all", async (req, res): Promise<void> => {
   const reset = req.query.reset === "true";
   const providerIdMap = await seedProviders();
   const modelIdMap = await seedModels(providerIdMap);
   const caps = await seedCapabilities(modelIdMap, reset);
   const guardrails = await seedGuardrails();
+  const workforce = await seedWorkforce();
 
   await logAudit("seed", "all", "system", "system", "success", {
     providers: providerIdMap.size,
     models: modelIdMap.size,
     capabilities: caps,
     guardrails,
+    workforce,
   });
 
   res.json({
@@ -303,6 +582,7 @@ router.post("/ai/seed/all", async (req, res): Promise<void> => {
     models: modelIdMap.size,
     capabilities: caps,
     guardrails,
+    workforce,
   });
 });
 

@@ -12,7 +12,8 @@ import {
   Settings, 
   ShieldAlert,
   Sparkles,
-  Users
+  Users,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -24,6 +25,7 @@ interface LayoutProps {
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/analytics", label: "Analytics", icon: BarChart2 },
+  { href: "/workforce", label: "AI Workforce", icon: Building2 },
   { href: "/registry", label: "Registry", icon: Box },
   { href: "/agents", label: "Agents", icon: Users },
   { href: "/orchestrator", label: "Orchestrator", icon: Play },

@@ -20,6 +20,7 @@ import Memory from "@/pages/memory";
 import Audit from "@/pages/audit";
 import Settings from "@/pages/settings";
 import ClientReviewPage from "@/pages/client-review";
+import Workforce from "@/pages/workforce";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,7 @@ function AdminRouter() {
         <Route path="/memory" component={Memory} />
         <Route path="/audit" component={Audit} />
         <Route path="/settings" component={Settings} />
+        <Route path="/workforce" component={Workforce} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

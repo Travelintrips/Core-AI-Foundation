@@ -17,6 +17,7 @@ import seedRouter from "./seed";
 import testRunsRouter from "./test-runs";
 import exportRouter from "./export-routes";
 import clientReviewRouter from "./client-review";
+import workforceRouter from "./workforce";
 import publicRouter from "./public";
 
 const router: IRouter = Router();
@@ -40,5 +41,6 @@ router.use(seedRouter);
 router.use(testRunsRouter);
 router.use(exportRouter);
 router.use(clientReviewRouter);
+router.use(workforceRouter);
 
 export default router;

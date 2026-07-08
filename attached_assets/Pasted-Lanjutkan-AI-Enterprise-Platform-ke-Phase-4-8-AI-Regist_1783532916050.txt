@@ -1,0 +1,563 @@
+Lanjutkan AI Enterprise Platform ke Phase 4.8: AI Registry Enterprise & Digital Workforce Foundation.
+
+PENTING:
+Jangan mengubah arsitektur yang sudah ada.
+Jangan rewrite fitur yang sudah stabil.
+Semua implementasi harus additive, modular, backward compatible, dan enterprise-grade.
+
+====================================================================
+VISI
+====
+
+AI Platform ini tidak lagi diposisikan sebagai sekumpulan AI Agent.
+
+Mulai Phase 4.8 seluruh AI diperlakukan sebagai Digital Workforce.
+
+Artinya setiap AI memiliki:
+
+* Department
+* Position
+* Skills
+* Capability
+* Supervisor
+* Performance
+* Cost Center
+* Working Hours
+* Status
+* Permissions
+* Tool Access
+
+Creative AI hanyalah Department pertama.
+
+Di masa depan akan ada:
+
+Creative Department
+Marketing Department
+Finance Department
+HR Department
+Tax Department
+Legal Department
+Sales Department
+Logistics Department
+Customs Department
+Trading Department
+Procurement Department
+Analytics Department
+
+====================================================================
+BAGIAN 1
+DEPARTMENT MANAGEMENT
+=====================
+
+Buat tabel:
+
+ai_departments
+
+Field:
+
+id
+department_code
+department_name
+description
+manager_agent_id nullable
+status
+created_at
+updated_at
+
+Seed data:
+
+Creative
+Marketing
+Finance
+HR
+Tax
+Legal
+Sales
+Logistics
+Customs
+Trading
+Procurement
+Analytics
+
+====================================================================
+BAGIAN 2
+DIGITAL EMPLOYEES
+=================
+
+Ganti konsep AI Agent menjadi AI Employee.
+
+Tambahkan tabel:
+
+ai_employees
+
+Field:
+
+id
+employee_code
+employee_name
+department_id
+position
+role
+level
+
+provider_id
+
+model_id
+
+system_prompt_id
+
+memory_profile_id
+
+knowledge_profile_id
+
+cost_center
+
+salary_virtual
+
+hourly_cost
+
+priority
+
+max_parallel_jobs
+
+status
+
+created_at
+
+updated_at
+
+Catatan:
+
+salary_virtual bukan uang sungguhan.
+
+Ini dipakai untuk simulasi costing AI.
+
+====================================================================
+BAGIAN 3
+SKILL MANAGEMENT
+================
+
+Buat tabel:
+
+ai_skills
+
+Contoh:
+
+Brand Strategy
+
+Copywriting
+
+Accounting
+
+Tax
+
+HS Classification
+
+Customs Clearance
+
+Procurement
+
+Negotiation
+
+Legal Drafting
+
+Image Generation
+
+Social Media
+
+Workflow Design
+
+OCR Analysis
+
+Forecasting
+
+Dashboard Analysis
+
+====================================================================
+BAGIAN 4
+EMPLOYEE SKILL MATRIX
+=====================
+
+Buat tabel:
+
+ai_employee_skills
+
+Field:
+
+employee_id
+
+skill_id
+
+proficiency
+
+experience_score
+
+accuracy_score
+
+speed_score
+
+cost_score
+
+last_trained_at
+
+====================================================================
+BAGIAN 5
+SUPERVISOR HIERARCHY
+====================
+
+Tambahkan struktur organisasi.
+
+Contoh:
+
+Creative Director
+
+↓
+
+Brand Strategist
+
+↓
+
+Copywriter
+
+↓
+
+Image Designer
+
+↓
+
+QC
+
+Finance Manager
+
+↓
+
+Accounting AI
+
+↓
+
+Tax AI
+
+↓
+
+Audit AI
+
+Supervisor dapat:
+
+review output
+
+approve
+
+delegate task
+
+request revision
+
+====================================================================
+BAGIAN 6
+WORKLOAD MANAGEMENT
+===================
+
+Tambahkan tabel:
+
+ai_workload
+
+Field:
+
+employee_id
+
+running_jobs
+
+queued_jobs
+
+completed_today
+
+failed_today
+
+average_latency
+
+average_cost
+
+availability
+
+status
+
+Status:
+
+Idle
+
+Busy
+
+Offline
+
+Maintenance
+
+====================================================================
+BAGIAN 7
+COST CENTER
+===========
+
+Setiap employee mempunyai:
+
+Cost Center
+
+Contoh:
+
+Creative
+
+Marketing
+
+Finance
+
+HR
+
+Tracking:
+
+token
+
+latency
+
+cost
+
+project
+
+department
+
+client
+
+====================================================================
+BAGIAN 8
+TOOL ACCESS
+===========
+
+Tambahkan tabel:
+
+ai_tools
+
+Contoh:
+
+OpenAI
+
+Claude
+
+Gemini
+
+Replicate
+
+Supabase
+
+Email
+
+WhatsApp
+
+PDF
+
+Storage
+
+Knowledge Base
+
+Memory
+
+Analytics
+
+Kemudian buat:
+
+employee_tool_permissions
+
+Agar setiap AI hanya boleh memakai tool tertentu.
+
+====================================================================
+BAGIAN 9
+DIGITAL IDENTITY
+================
+
+Setiap AI memiliki profil.
+
+Misalnya:
+
+Nama
+
+Foto Avatar
+
+Department
+
+Position
+
+Bio
+
+Skills
+
+Performance
+
+Experience
+
+Success Rate
+
+Cost Rating
+
+Speed Rating
+
+Current Status
+
+Last Active
+
+Version
+
+Owner
+
+====================================================================
+BAGIAN 10
+EMPLOYEE DIRECTORY
+==================
+
+Buat halaman:
+
+AI Workforce
+
+Tampilan:
+
+Card View
+
+Table View
+
+Organization Chart
+
+Filter:
+
+Department
+
+Status
+
+Provider
+
+Model
+
+Skill
+
+Position
+
+Search
+
+Klik employee menampilkan:
+
+Profile
+
+Performance
+
+Memory
+
+Knowledge
+
+Prompt
+
+Workflow
+
+Skills
+
+Capability
+
+Cost
+
+Analytics
+
+Audit
+
+====================================================================
+BAGIAN 11
+ORCHESTRATOR UPDATE
+===================
+
+Upgrade Orchestrator.
+
+Sekarang Orchestrator tidak lagi memilih Agent.
+
+Tetapi memilih Employee.
+
+Contoh:
+
+Task:
+
+Brand Strategy
+
+↓
+
+Cari Department
+
+↓
+
+Creative
+
+↓
+
+Cari Employee terbaik
+
+↓
+
+Brand Strategist
+
+↓
+
+Pilih Provider
+
+↓
+
+Pilih Model
+
+↓
+
+Execute
+
+====================================================================
+BAGIAN 12
+JANGAN IMPLEMENTASI DULU
+========================
+
+Jangan membuat:
+
+Queue
+
+Scheduler
+
+Event Bus
+
+Marketplace
+
+Billing
+
+Video
+
+Voice
+
+OCR
+
+Plugin
+
+Semua itu akan dibuat pada Phase berikutnya.
+
+====================================================================
+OUTPUT
+======
+
+Semua implementasi harus:
+
+100% modular
+
+OpenAPI updated
+
+Codegen clean
+
+TypeScript clean
+
+Build clean
+
+Migration otomatis
+
+Seed data lengkap
+
+Backward compatible
+
+Tidak mengubah Creative AI yang sudah berjalan.
+
+Creative AI harus otomatis menggunakan Digital Workforce yang baru tanpa perubahan pada user experience.
+
+Target akhir:
+
+AI Enterprise Platform berubah menjadi AI Operating System Foundation, sehingga modul berikutnya (Finance AI, HR AI, Logistics AI, Customs AI, Tax AI, Legal AI, Marketing AI, Procurement AI, Trading AI) dapat langsung menggunakan Digital Workforce yang sama tanpa perlu membuat arsitektur baru.
