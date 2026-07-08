@@ -26,7 +26,10 @@ description: Files in this project were imported from GitHub with two versions c
 - `artifacts/api-server/src/services/jobDispatcherService.ts` — kept v2 (lines 392–865 of original)
 - `artifacts/api-server/src/routes/dispatcher.ts` — kept v2 (lines 45–119 of original)
 - `artifacts/api-server/src/index.ts` — removed old import + old auto-start block
-- `artifacts/ai-platform/src/pages/queue.tsx` — deduped imports, single DispatcherPanel, single JSX usage
+- `artifacts/ai-platform/src/pages/queue.tsx` — removed concatenated v1 DispatcherPanel function + stale no-props call site + leftover JSX elements in header (Bot, duplicate spans that caused premature `</div>`)
 - `lib/api-client-react/src/index.ts` — removed `export * from "./dispatcher"` (conflicts with generated)
+- `lib/api-spec/openapi.yaml` — removed duplicate YAML keys in 4 dispatcher paths + DispatcherStatus schema (yaml parser throws "Map keys must be unique")
 
-**Why (durable lesson):** If more files show similar parse errors after future imports, check for the concatenation pattern first — it's the root cause, not a code bug.
+**Orval codegen note:** `orval.config.ts` could not be loaded by jiti in this environment; replaced with `orval.config.mjs` (ESM with `import.meta.url`). Codegen script in `lib/api-spec/package.json` now points to `.mjs`.
+
+**Why (durable lesson):** If more files show similar parse errors after future imports, check for the concatenation pattern first — it's the root cause, not a code bug. YAML files are also susceptible — use the yaml parser to detect duplicate-key errors.
