@@ -299,7 +299,7 @@ router.get("/public/customer/dashboard/:dashboardToken", async (req, res): Promi
     sourceModule: "customer-portal",
     sourceId: session.clientEmail,
     payload: { clientEmail: session.clientEmail, clientName: session.clientName },
-  }).catch(() => {});
+  });
 
   // Fetch all client review records for this email
   const reviews = await db
