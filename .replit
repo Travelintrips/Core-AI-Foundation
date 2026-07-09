@@ -58,3 +58,11 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+OPENAI_API_KEY = "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"
+ANTHROPIC_API_KEY = "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"
+GEMINI_API_KEY = "AIzaSyCQb_9MaKUgjpNqfpgBZJbezh6yXQD-crQ"
+REPLICATE_API_TOKEN = "r8_2M5hdgcApmnh8zvYqUGlmRGvpsnczR54HmnOT"
