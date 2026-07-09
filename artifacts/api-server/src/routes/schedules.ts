@@ -226,7 +226,12 @@ router.post("/ai/schedules/:id/run-now", async (req, res): Promise<void> => {
     res.json(schedule);
   } catch (err) {
     const msg = String(err);
-    res.status(msg.includes("not found") ? 404 : 500).json({ error: msg });
+    const status = msg.includes("not found")
+      ? 404
+      : msg.includes("currently being executed") || msg.includes("is not active")
+        ? 409
+        : 500;
+    res.status(status).json({ error: msg });
   }
 });
 

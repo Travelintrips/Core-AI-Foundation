@@ -822,47 +822,47 @@ async function seedSchedules() {
   console.log("\n🌱 Seeding AI Scheduler sample schedules...");
 
   await upsertSchedule({
-    scheduleName: "hourly-audit-heartbeat",
-    description: "Writes an audit log entry every hour to confirm the scheduler is alive.",
-    triggerType: "cron",
-    cronExpression: "0 * * * *",
-    timezone: "UTC",
-    targetType: "audit_log",
-    targetConfigJson: { action: "scheduler.heartbeat" },
-    payloadJson: { note: "Hourly heartbeat" },
-  });
-
-  await upsertSchedule({
-    scheduleName: "daily-cost-report-event",
-    description: "Publishes a daily cost report event at the start of each day (UTC).",
+    scheduleName: "daily-analytics-snapshot",
+    description: "Creates a daily analytics_snapshot job at midnight UTC to capture platform usage metrics.",
     triggerType: "cron",
     cronExpression: "0 0 * * *",
     timezone: "UTC",
-    targetType: "publish_event",
-    targetConfigJson: { eventType: "report.cost.daily", sourceModule: "scheduler" },
-    payloadJson: { reportType: "daily-cost-summary" },
-  });
-
-  await upsertSchedule({
-    scheduleName: "five-minute-queue-sweep",
-    description: "Creates a lightweight queue-sweep job every 5 minutes.",
-    triggerType: "interval",
-    intervalSeconds: 300,
-    timezone: "UTC",
     targetType: "create_job",
-    targetConfigJson: { jobType: "queue_sweep", priority: 30 },
+    targetConfigJson: { jobType: "analytics_snapshot", priority: 40 },
     payloadJson: { source: "scheduler-sample" },
   });
 
   await upsertSchedule({
-    scheduleName: "job-completed-followup-webhook",
-    description: "Audit-only webhook follow-up triggered after job.completed events (webhook delivery is audit-logged only, not dispatched).",
-    triggerType: "event_followup",
-    eventType: "job.completed",
+    scheduleName: "client-review-followup",
+    description: "Creates a client_review_reminder job every 6 hours to follow up on pending client reviews.",
+    triggerType: "interval",
+    intervalSeconds: 6 * 60 * 60,
     timezone: "UTC",
-    targetType: "webhook",
-    targetConfigJson: { url: "https://example.com/webhooks/job-completed", method: "POST" },
-    payloadJson: { note: "Sample event follow-up webhook (audit-only)" },
+    targetType: "create_job",
+    targetConfigJson: { jobType: "client_review_reminder", priority: 35 },
+    payloadJson: { source: "scheduler-sample" },
+  });
+
+  await upsertSchedule({
+    scheduleName: "failed-job-cleanup",
+    description: "Creates a failed_job_cleanup job every 30 minutes to sweep and archive terminally failed jobs.",
+    triggerType: "interval",
+    intervalSeconds: 30 * 60,
+    timezone: "UTC",
+    targetType: "create_job",
+    targetConfigJson: { jobType: "failed_job_cleanup", priority: 20 },
+    payloadJson: { source: "scheduler-sample" },
+  });
+
+  await upsertSchedule({
+    scheduleName: "weekly-performance-report",
+    description: "Creates a workforce_performance_report job every Monday at 06:00 UTC.",
+    triggerType: "cron",
+    cronExpression: "0 6 * * 1",
+    timezone: "UTC",
+    targetType: "create_job",
+    targetConfigJson: { jobType: "workforce_performance_report", priority: 30 },
+    payloadJson: { source: "scheduler-sample" },
   });
 
   console.log("✅ Scheduler seed complete!");

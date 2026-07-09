@@ -5,6 +5,7 @@ import {
   integer,
   timestamp,
   jsonb,
+  boolean,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -35,6 +36,14 @@ export const aiSchedulesTable = pgTable("ai_schedules", {
 
   status: text("status").notNull().default("active"),
   // active | paused | completed | failed | cancelled
+
+  // Persistent execution guard: true for the entire duration of a run, from
+  // claim (tick's SKIP LOCKED select or run-now) through executeDueSchedules()
+  // completing — not just the brief claim transaction. This is what stops a
+  // second run-now (or tick) from claiming the same schedule again while the
+  // first execution is still in flight, after the claim transaction itself
+  // has already committed and released its row lock.
+  isRunning: boolean("is_running").notNull().default(false),
 
   lastRunAt: timestamp("last_run_at", { withTimezone: true }),
   nextRunAt: timestamp("next_run_at", { withTimezone: true }),

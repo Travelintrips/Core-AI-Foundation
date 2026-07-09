@@ -95,6 +95,12 @@ let _pollTimer: NodeJS.Timeout | null = null;
 let _lastTick: Date | null = null;
 let _processedToday = 0;
 let _failedToday = 0;
+// In-process reentrancy guard: prevents an overlapping setInterval tick,
+// a concurrent manual POST /scheduler/tick, and a concurrent run-now from
+// executing schedule side-effects at the same time within this process.
+let _ticking = false;
+// Tracks the in-flight tick promise so shutdown() can await it draining.
+let _tickInFlight: Promise<TickResult> | null = null;
 
 // ── Next-run calculation ──────────────────────────────────────────────────────
 
@@ -336,6 +342,19 @@ async function finishRun(
 
 // ── Targets ───────────────────────────────────────────────────────────────────
 
+/** Coerce a JSON config value to a finite number, or fall back to `fallback` if it isn't one. */
+function coerceNumber(value: unknown, fallback: number): number {
+  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** Coerce a JSON config value to a finite number, or null if absent/invalid. */
+function coerceNullableNumber(value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
 export async function createJobFromSchedule(schedule: AiSchedule): Promise<{ jobId: number }> {
   const config = (schedule.targetConfigJson ?? {}) as Record<string, unknown>;
   const jobType = (config["jobType"] as string) ?? "scheduled_task";
@@ -347,10 +366,10 @@ export async function createJobFromSchedule(schedule: AiSchedule): Promise<{ job
       scheduleId: schedule.id,
       scheduleCode: schedule.scheduleCode,
     },
-    priority: (config["priority"] as number) ?? 50,
-    departmentId: (config["departmentId"] as number) ?? null,
-    employeeId: (config["employeeId"] as number) ?? null,
-    maxRetry: (config["maxRetry"] as number) ?? 3,
+    priority: coerceNumber(config["priority"], 50),
+    departmentId: coerceNullableNumber(config["departmentId"]),
+    employeeId: coerceNullableNumber(config["employeeId"]),
+    maxRetry: coerceNumber(config["maxRetry"], 3),
   });
 
   return { jobId: job.id };
@@ -410,6 +429,24 @@ async function executeTarget(schedule: AiSchedule): Promise<{ createdJobId?: num
  * Execute a single schedule immediately (used by both tick() and run-now API).
  */
 export async function executeDueSchedules(schedule: AiSchedule): Promise<"completed" | "failed" | "skipped"> {
+  try {
+    return await _executeDueSchedulesInner(schedule);
+  } finally {
+    // Defensive release: the success/failure branches below already clear
+    // is_running as part of their normal completion update. This catches
+    // the unexpected case — recordRun() itself throwing, or a completion
+    // update failing — where neither branch runs to clear it, which would
+    // otherwise leave the schedule permanently stuck as "running" and
+    // unclaimable by tick() or run-now.
+    await db
+      .update(aiSchedulesTable)
+      .set({ isRunning: false })
+      .where(and(eq(aiSchedulesTable.id, schedule.id), eq(aiSchedulesTable.isRunning, true)))
+      .catch((err) => logger.error({ err, scheduleId: schedule.id }, "[scheduler] Failed to release is_running guard"));
+  }
+}
+
+async function _executeDueSchedulesInner(schedule: AiSchedule): Promise<"completed" | "failed" | "skipped"> {
   const runNumber = schedule.runCount + 1;
   const run = await recordRun({
     scheduleId: schedule.id,
@@ -441,6 +478,7 @@ export async function executeDueSchedules(schedule: AiSchedule): Promise<"comple
         nextRunAt,
         runCount: newRunCount,
         status: reachedMax ? "completed" : schedule.status,
+        isRunning: false,
         updatedAt: new Date(),
       })
       .where(eq(aiSchedulesTable.id, schedule.id));
@@ -466,9 +504,23 @@ export async function executeDueSchedules(schedule: AiSchedule): Promise<"comple
 
     _failedToday++;
 
+    // Advance nextRunAt on failure too — otherwise a due-but-broken schedule
+    // (e.g. bad cron config, downstream error) gets retried every poll cycle
+    // with no backoff. Recurring triggers move to their next natural slot;
+    // one-shot triggers (one_time / event_followup without interval) are
+    // marked failed so they stop being picked up by tick().
+    const nextRunAt = calculateNextRun({ ...schedule, lastRunAt: new Date() });
+    const isOneShot = nextRunAt === null && schedule.maxRuns == null;
+
     await db
       .update(aiSchedulesTable)
-      .set({ lastRunAt: new Date(), updatedAt: new Date() })
+      .set({
+        lastRunAt: new Date(),
+        nextRunAt,
+        status: isOneShot ? "failed" : schedule.status,
+        isRunning: false,
+        updatedAt: new Date(),
+      })
       .where(eq(aiSchedulesTable.id, schedule.id));
 
     await logAudit("scheduler", "schedule_run_failed", String(schedule.id), "ai_schedule", "failure", { error: errMsg });
@@ -484,12 +536,52 @@ export async function executeDueSchedules(schedule: AiSchedule): Promise<"comple
 
 /**
  * Manually trigger a schedule to run right now, regardless of nextRunAt.
+ *
+ * Uses the same row-lock claim as tick(): `FOR UPDATE SKIP LOCKED` inside a
+ * transaction means run-now and a concurrent tick() can never both grab the
+ * same schedule row at once. If tick() already holds the lock, this call
+ * finds no row to claim (SKIP LOCKED) and reports the schedule as busy
+ * rather than racing to execute it a second time.
  */
 export async function runNow(id: number): Promise<AiSchedule> {
-  const [schedule] = await db.select().from(aiSchedulesTable).where(eq(aiSchedulesTable.id, id));
-  if (!schedule) throw new Error(`Schedule ${id} not found`);
+  const claimed = await db.transaction(async (tx) => {
+    const rows = await tx
+      .select()
+      .from(aiSchedulesTable)
+      .where(eq(aiSchedulesTable.id, id))
+      .for("update", { skipLocked: true });
+    const [schedule] = rows;
+    // Row-locked by a concurrent tick()/run-now claim transaction right now.
+    if (!schedule) return "locked" as const;
+    // Only active schedules are eligible to run — paused/cancelled/completed/
+    // failed schedules should never be executed by run-now.
+    if (schedule.status !== "active") return "inactive" as const;
+    // isRunning persists across the *entire* execution (not just this claim
+    // transaction) — it's what catches a second run-now/tick fired while the
+    // first execution is still in flight, after this transaction has
+    // already committed and released the row lock.
+    if (schedule.isRunning) return "locked" as const;
 
-  await executeDueSchedules(schedule);
+    const placeholderNextRun = new Date(Date.now() + Math.max(_settings.pollIntervalMs, 1000));
+    await tx
+      .update(aiSchedulesTable)
+      .set({ nextRunAt: placeholderNextRun, isRunning: true, updatedAt: new Date() })
+      .where(eq(aiSchedulesTable.id, id));
+
+    return { ...schedule, isRunning: true, nextRunAt: placeholderNextRun };
+  });
+
+  if (claimed === "locked") {
+    const [existing] = await db.select().from(aiSchedulesTable).where(eq(aiSchedulesTable.id, id));
+    if (!existing) throw new Error(`Schedule ${id} not found`);
+    throw new Error(`Schedule ${id} is currently being executed by the scheduler — try again shortly`);
+  }
+  if (claimed === "inactive") {
+    const [existing] = await db.select().from(aiSchedulesTable).where(eq(aiSchedulesTable.id, id));
+    throw new Error(`Schedule ${id} is not active (status: ${existing?.status ?? "unknown"}) — only active schedules can be run now`);
+  }
+
+  await executeDueSchedules(claimed);
 
   const [updated] = await db.select().from(aiSchedulesTable).where(eq(aiSchedulesTable.id, id));
   return updated!;
@@ -560,29 +652,84 @@ export async function stop(): Promise<void> {
   _running = false;
   _clearTimer();
 
+  // Let any in-flight tick (and the schedule executions it kicked off)
+  // finish before we report "stopped" — otherwise a run started just before
+  // stop() can be cut off mid-way with no record of completion.
+  if (_tickInFlight) {
+    await _tickInFlight.catch((err) => logger.error({ err }, "[scheduler] Error draining in-flight tick during stop()"));
+  }
+
   logger.info("[scheduler] Stopped");
   await logAudit("scheduler", "scheduler_stopped", "scheduler", "system", "success", {});
   publishSafe({ eventType: "scheduler.stopped", sourceModule: "scheduler", sourceId: "scheduler", payload: {} });
 }
 
+/**
+ * One poll cycle: atomically claim due schedules (DB-level `FOR UPDATE SKIP
+ * LOCKED` + a provisional nextRunAt bump) so overlapping ticks — whether from
+ * the setInterval poller, a manual POST /scheduler/tick, or (in a
+ * multi-instance deployment) another process — can never execute the same
+ * schedule twice. An in-process mutex additionally short-circuits overlap
+ * within this process without even hitting the DB.
+ */
 export async function tick(): Promise<TickResult> {
+  if (_ticking) {
+    logger.warn("[scheduler] tick() already in progress — skipping overlapping tick");
+    return { executed: 0, completed: 0, failed: 0, skipped: 0 };
+  }
+  _ticking = true;
+  const runPromise = _tickInner();
+  _tickInFlight = runPromise;
+  try {
+    return await runPromise;
+  } finally {
+    _ticking = false;
+    _tickInFlight = null;
+  }
+}
+
+async function _tickInner(): Promise<TickResult> {
   _lastTick = new Date();
   const result: TickResult = { executed: 0, completed: 0, failed: 0, skipped: 0 };
 
   try {
-    const due = await db
-      .select()
-      .from(aiSchedulesTable)
-      .where(
-        and(
-          eq(aiSchedulesTable.status, "active"),
-          lte(aiSchedulesTable.nextRunAt, new Date()),
-        ),
-      )
-      .orderBy(aiSchedulesTable.nextRunAt)
-      .limit(25);
+    // Claim due schedules atomically: lock the candidate rows, then push
+    // their nextRunAt out by a placeholder window (the poll interval) before
+    // releasing the lock. This reserves them against any other claimant —
+    // including another process on a different DB connection — for the
+    // duration of the claim. executeDueSchedules() overwrites nextRunAt with
+    // the real calculated value once it actually runs the schedule.
+    const claimed = await db.transaction(async (tx) => {
+      const rows = await tx
+        .select()
+        .from(aiSchedulesTable)
+        .where(
+          and(
+            eq(aiSchedulesTable.status, "active"),
+            eq(aiSchedulesTable.isRunning, false),
+            lte(aiSchedulesTable.nextRunAt, new Date()),
+          ),
+        )
+        .orderBy(aiSchedulesTable.nextRunAt)
+        .limit(25)
+        .for("update", { skipLocked: true });
+      if (rows.length === 0) return [];
 
-    for (const schedule of due) {
+      const placeholderNextRun = new Date(Date.now() + Math.max(_settings.pollIntervalMs, 1000));
+      for (const row of rows) {
+        await tx
+          .update(aiSchedulesTable)
+          .set({ nextRunAt: placeholderNextRun, isRunning: true, updatedAt: new Date() })
+          .where(eq(aiSchedulesTable.id, row.id));
+      }
+      // isRunning is now persisted true on each row — return the claimed
+      // rows with that flag set so downstream code (and any future re-read)
+      // reflects the claim, even though the in-memory `rows` snapshot
+      // predates the update.
+      return rows.map((row) => ({ ...row, isRunning: true, nextRunAt: placeholderNextRun }));
+    });
+
+    for (const schedule of claimed) {
       result.executed++;
       const outcome = await executeDueSchedules(schedule);
       if (outcome === "completed") result.completed++;
@@ -606,9 +753,16 @@ function _clearTimer(): void {
   if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
 }
 
-export function shutdown(): void {
+export async function shutdown(): Promise<void> {
   _running = false;
   _clearTimer();
+
+  // Drain any in-flight tick before the process exits (SIGTERM/SIGINT) so an
+  // active schedule execution isn't cut off mid-run.
+  if (_tickInFlight) {
+    await _tickInFlight.catch((err) => logger.error({ err }, "[scheduler] Error draining in-flight tick during shutdown()"));
+  }
+
   logger.info("[scheduler] Shutdown complete");
 }
 

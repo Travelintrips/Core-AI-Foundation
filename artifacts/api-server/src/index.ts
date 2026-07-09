@@ -68,16 +68,14 @@ app.listen(port, (err) => {
 // ── Graceful shutdown ──────────────────────────────────────────────────────
 process.on("SIGTERM", () => {
   logger.info("SIGTERM received — shutting down dispatcher and scheduler");
-  scheduler.shutdown();
-  jobDispatcher.shutdown()
+  Promise.all([scheduler.shutdown(), jobDispatcher.shutdown()])
     .then(() => process.exit(0))
     .catch(() => process.exit(1));
 });
 
 process.on("SIGINT", () => {
   logger.info("SIGINT received — shutting down dispatcher and scheduler");
-  scheduler.shutdown();
-  jobDispatcher.shutdown()
+  Promise.all([scheduler.shutdown(), jobDispatcher.shutdown()])
     .then(() => process.exit(0))
     .catch(() => process.exit(1));
 });
