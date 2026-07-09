@@ -1,11 +1,10 @@
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { CheckCircle2, ArrowRight, Copy, Check } from "lucide-react";
 import { useState } from "react";
 
 export default function SuccessPage() {
-  const [location] = useLocation();
-  const searchParams = new URLSearchParams(location.split('?')[1] || "");
+  const searchParams = new URLSearchParams(window.location.search);
   const reviewToken = searchParams.get('review') || "";
   const dashboardToken = searchParams.get('dashboard') || "";
 
