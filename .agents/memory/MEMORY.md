@@ -14,3 +14,4 @@
 - [phase52-cluster](phase52-cluster.md) — Phase 5.2 worker cluster: lock_version table-prefix fix, route path prefix rule, types/ dir must stay deleted, cluster hooks are manual not generated
 - [phase55-event-bus](phase55-event-bus.md) — Event bus: publishSafe rule, dispatch outcome semantics, create_job idempotency, orval collision fix pattern, static route ordering
 - [phase6-ai-scheduler](phase6-ai-scheduler.md) — Scheduler target_types (create_job/publish_event/webhook-audit-only/audit_log); create_job priority must be numeric, not a string label
+- [phase65-human-task-center](phase65-human-task-center.md) — Phase 6.5 rules: ALLOWED_TRANSITIONS map, slaStatus vs status for overdue metric, SSRF guard on notificationHookUrl, orval date() on format:date-time query params

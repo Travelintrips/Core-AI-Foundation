@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AcceptHumanTaskBody,
   AgentStats,
   AiAgent,
   AiAgentCapability,
@@ -53,6 +54,7 @@ import type {
   AnalyticsOverview,
   AssetFeedbackInput,
   AssetStatusUpdate,
+  AssignHumanTaskBody,
   AuditLogPage,
   CancelJobBody,
   ClientActionResult,
@@ -66,7 +68,9 @@ import type {
   ClientReviewLinkInput,
   ClientReviewWithToken,
   ClusterStatus,
+  CompleteHumanTaskBody,
   CostAnalyticsResponse,
+  CreateHumanTaskBody,
   CreateJobBody,
   CreateScheduleBody,
   CreateSubscriptionBody,
@@ -91,6 +95,10 @@ import type {
   GetCostAnalyticsParams,
   GetCreativeImageAnalyticsParams,
   HealthStatus,
+  HumanTask,
+  HumanTaskDetail,
+  HumanTaskPage,
+  HumanTaskStats,
   JobPage,
   JobStats,
   KnowledgeBase,
@@ -100,6 +108,7 @@ import type {
   KnowledgeDocumentInput,
   ListAuditLogsParams,
   ListEventsParams,
+  ListHumanTasksParams,
   ListJobsParams,
   ListMemoryEntriesParams,
   ListModelsParams,
@@ -118,10 +127,12 @@ import type {
   PublicProjectReview,
   PublishEventBody,
   QueueFilterBody,
+  ReassignHumanTaskBody,
   RebalanceCluster200,
   RecoverStaleWorkers200,
   RegisterClusterWorkerBody,
   RegisterWorkerBody,
+  RejectHumanTaskBody,
   RenewLeaseBody,
   ReprioritizeJobBody,
   ResumeQueue200,
@@ -10389,5 +10400,668 @@ export const useUpdateSchedulerSettings = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateSchedulerSettingsMutationOptions(options));
+    }
+
+export const getListHumanTasksUrl = (params?: ListHumanTasksParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/ai/human-tasks?${stringifiedParams}` : `/api/ai/human-tasks`
+}
+
+/**
+ * @summary List human tasks (paginated + filtered)
+ */
+export const listHumanTasks = async (params?: ListHumanTasksParams, options?: RequestInit): Promise<HumanTaskPage> => {
+
+  return customFetch<HumanTaskPage>(getListHumanTasksUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListHumanTasksQueryKey = (params?: ListHumanTasksParams,) => {
+    return [
+    `/api/ai/human-tasks`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListHumanTasksQueryOptions = <TData = Awaited<ReturnType<typeof listHumanTasks>>, TError = ErrorType<unknown>>(params?: ListHumanTasksParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHumanTasks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListHumanTasksQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listHumanTasks>>> = ({ signal }) => listHumanTasks(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listHumanTasks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListHumanTasksQueryResult = NonNullable<Awaited<ReturnType<typeof listHumanTasks>>>
+export type ListHumanTasksQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List human tasks (paginated + filtered)
+ */
+
+export function useListHumanTasks<TData = Awaited<ReturnType<typeof listHumanTasks>>, TError = ErrorType<unknown>>(
+ params?: ListHumanTasksParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listHumanTasks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListHumanTasksQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateHumanTaskUrl = () => {
+
+
+
+
+  return `/api/ai/human-tasks`
+}
+
+/**
+ * @summary Create a human task (AI handoff)
+ */
+export const createHumanTask = async (createHumanTaskBody: CreateHumanTaskBody, options?: RequestInit): Promise<HumanTask> => {
+
+  return customFetch<HumanTask>(getCreateHumanTaskUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createHumanTaskBody)
+  }
+);}
+
+
+
+
+export const getCreateHumanTaskMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createHumanTask>>, TError,{data: BodyType<CreateHumanTaskBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createHumanTask>>, TError,{data: BodyType<CreateHumanTaskBody>}, TContext> => {
+
+const mutationKey = ['createHumanTask'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createHumanTask>>, {data: BodyType<CreateHumanTaskBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createHumanTask(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateHumanTaskMutationResult = NonNullable<Awaited<ReturnType<typeof createHumanTask>>>
+    export type CreateHumanTaskMutationBody = BodyType<CreateHumanTaskBody>
+    export type CreateHumanTaskMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a human task (AI handoff)
+ */
+export const useCreateHumanTask = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createHumanTask>>, TError,{data: BodyType<CreateHumanTaskBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createHumanTask>>,
+        TError,
+        {data: BodyType<CreateHumanTaskBody>},
+        TContext
+      > => {
+      return useMutation(getCreateHumanTaskMutationOptions(options));
+    }
+
+export const getGetHumanTaskStatsUrl = () => {
+
+
+
+
+  return `/api/ai/human-tasks/stats`
+}
+
+/**
+ * @summary Human Task Center analytics
+ */
+export const getHumanTaskStats = async ( options?: RequestInit): Promise<HumanTaskStats> => {
+
+  return customFetch<HumanTaskStats>(getGetHumanTaskStatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetHumanTaskStatsQueryKey = () => {
+    return [
+    `/api/ai/human-tasks/stats`
+    ] as const;
+    }
+
+
+export const getGetHumanTaskStatsQueryOptions = <TData = Awaited<ReturnType<typeof getHumanTaskStats>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHumanTaskStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetHumanTaskStatsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getHumanTaskStats>>> = ({ signal }) => getHumanTaskStats({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getHumanTaskStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetHumanTaskStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getHumanTaskStats>>>
+export type GetHumanTaskStatsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Human Task Center analytics
+ */
+
+export function useGetHumanTaskStats<TData = Awaited<ReturnType<typeof getHumanTaskStats>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHumanTaskStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetHumanTaskStatsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetHumanTaskUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/human-tasks/${id}`
+}
+
+/**
+ * @summary Get a single task with history
+ */
+export const getHumanTask = async (id: number, options?: RequestInit): Promise<HumanTaskDetail> => {
+
+  return customFetch<HumanTaskDetail>(getGetHumanTaskUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetHumanTaskQueryKey = (id: number,) => {
+    return [
+    `/api/ai/human-tasks/${id}`
+    ] as const;
+    }
+
+
+export const getGetHumanTaskQueryOptions = <TData = Awaited<ReturnType<typeof getHumanTask>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHumanTask>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetHumanTaskQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getHumanTask>>> = ({ signal }) => getHumanTask(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getHumanTask>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetHumanTaskQueryResult = NonNullable<Awaited<ReturnType<typeof getHumanTask>>>
+export type GetHumanTaskQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a single task with history
+ */
+
+export function useGetHumanTask<TData = Awaited<ReturnType<typeof getHumanTask>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getHumanTask>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetHumanTaskQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAssignHumanTaskUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/human-tasks/${id}/assign`
+}
+
+/**
+ * @summary Assign task to a user/role
+ */
+export const assignHumanTask = async (id: number,
+    assignHumanTaskBody: AssignHumanTaskBody, options?: RequestInit): Promise<HumanTask> => {
+
+  return customFetch<HumanTask>(getAssignHumanTaskUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(assignHumanTaskBody)
+  }
+);}
+
+
+
+
+export const getAssignHumanTaskMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignHumanTask>>, TError,{id: number;data: BodyType<AssignHumanTaskBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof assignHumanTask>>, TError,{id: number;data: BodyType<AssignHumanTaskBody>}, TContext> => {
+
+const mutationKey = ['assignHumanTask'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof assignHumanTask>>, {id: number;data: BodyType<AssignHumanTaskBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  assignHumanTask(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AssignHumanTaskMutationResult = NonNullable<Awaited<ReturnType<typeof assignHumanTask>>>
+    export type AssignHumanTaskMutationBody = BodyType<AssignHumanTaskBody>
+    export type AssignHumanTaskMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Assign task to a user/role
+ */
+export const useAssignHumanTask = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignHumanTask>>, TError,{id: number;data: BodyType<AssignHumanTaskBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof assignHumanTask>>,
+        TError,
+        {id: number;data: BodyType<AssignHumanTaskBody>},
+        TContext
+      > => {
+      return useMutation(getAssignHumanTaskMutationOptions(options));
+    }
+
+export const getAcceptHumanTaskUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/human-tasks/${id}/accept`
+}
+
+/**
+ * @summary Human accepts the task
+ */
+export const acceptHumanTask = async (id: number,
+    acceptHumanTaskBody: AcceptHumanTaskBody, options?: RequestInit): Promise<HumanTask> => {
+
+  return customFetch<HumanTask>(getAcceptHumanTaskUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(acceptHumanTaskBody)
+  }
+);}
+
+
+
+
+export const getAcceptHumanTaskMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptHumanTask>>, TError,{id: number;data: BodyType<AcceptHumanTaskBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acceptHumanTask>>, TError,{id: number;data: BodyType<AcceptHumanTaskBody>}, TContext> => {
+
+const mutationKey = ['acceptHumanTask'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptHumanTask>>, {id: number;data: BodyType<AcceptHumanTaskBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  acceptHumanTask(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcceptHumanTaskMutationResult = NonNullable<Awaited<ReturnType<typeof acceptHumanTask>>>
+    export type AcceptHumanTaskMutationBody = BodyType<AcceptHumanTaskBody>
+    export type AcceptHumanTaskMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Human accepts the task
+ */
+export const useAcceptHumanTask = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptHumanTask>>, TError,{id: number;data: BodyType<AcceptHumanTaskBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof acceptHumanTask>>,
+        TError,
+        {id: number;data: BodyType<AcceptHumanTaskBody>},
+        TContext
+      > => {
+      return useMutation(getAcceptHumanTaskMutationOptions(options));
+    }
+
+export const getRejectHumanTaskUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/human-tasks/${id}/reject`
+}
+
+/**
+ * @summary Human rejects the task
+ */
+export const rejectHumanTask = async (id: number,
+    rejectHumanTaskBody: RejectHumanTaskBody, options?: RequestInit): Promise<HumanTask> => {
+
+  return customFetch<HumanTask>(getRejectHumanTaskUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(rejectHumanTaskBody)
+  }
+);}
+
+
+
+
+export const getRejectHumanTaskMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectHumanTask>>, TError,{id: number;data: BodyType<RejectHumanTaskBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rejectHumanTask>>, TError,{id: number;data: BodyType<RejectHumanTaskBody>}, TContext> => {
+
+const mutationKey = ['rejectHumanTask'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rejectHumanTask>>, {id: number;data: BodyType<RejectHumanTaskBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  rejectHumanTask(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RejectHumanTaskMutationResult = NonNullable<Awaited<ReturnType<typeof rejectHumanTask>>>
+    export type RejectHumanTaskMutationBody = BodyType<RejectHumanTaskBody>
+    export type RejectHumanTaskMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Human rejects the task
+ */
+export const useRejectHumanTask = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectHumanTask>>, TError,{id: number;data: BodyType<RejectHumanTaskBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rejectHumanTask>>,
+        TError,
+        {id: number;data: BodyType<RejectHumanTaskBody>},
+        TContext
+      > => {
+      return useMutation(getRejectHumanTaskMutationOptions(options));
+    }
+
+export const getCompleteHumanTaskUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/human-tasks/${id}/complete`
+}
+
+/**
+ * @summary Human marks task complete
+ */
+export const completeHumanTask = async (id: number,
+    completeHumanTaskBody: CompleteHumanTaskBody, options?: RequestInit): Promise<HumanTask> => {
+
+  return customFetch<HumanTask>(getCompleteHumanTaskUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(completeHumanTaskBody)
+  }
+);}
+
+
+
+
+export const getCompleteHumanTaskMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeHumanTask>>, TError,{id: number;data: BodyType<CompleteHumanTaskBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeHumanTask>>, TError,{id: number;data: BodyType<CompleteHumanTaskBody>}, TContext> => {
+
+const mutationKey = ['completeHumanTask'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeHumanTask>>, {id: number;data: BodyType<CompleteHumanTaskBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  completeHumanTask(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteHumanTaskMutationResult = NonNullable<Awaited<ReturnType<typeof completeHumanTask>>>
+    export type CompleteHumanTaskMutationBody = BodyType<CompleteHumanTaskBody>
+    export type CompleteHumanTaskMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Human marks task complete
+ */
+export const useCompleteHumanTask = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeHumanTask>>, TError,{id: number;data: BodyType<CompleteHumanTaskBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completeHumanTask>>,
+        TError,
+        {id: number;data: BodyType<CompleteHumanTaskBody>},
+        TContext
+      > => {
+      return useMutation(getCompleteHumanTaskMutationOptions(options));
+    }
+
+export const getReassignHumanTaskUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/human-tasks/${id}/reassign`
+}
+
+/**
+ * @summary Reassign task to a different user/role
+ */
+export const reassignHumanTask = async (id: number,
+    reassignHumanTaskBody: ReassignHumanTaskBody, options?: RequestInit): Promise<HumanTask> => {
+
+  return customFetch<HumanTask>(getReassignHumanTaskUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(reassignHumanTaskBody)
+  }
+);}
+
+
+
+
+export const getReassignHumanTaskMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reassignHumanTask>>, TError,{id: number;data: BodyType<ReassignHumanTaskBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reassignHumanTask>>, TError,{id: number;data: BodyType<ReassignHumanTaskBody>}, TContext> => {
+
+const mutationKey = ['reassignHumanTask'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reassignHumanTask>>, {id: number;data: BodyType<ReassignHumanTaskBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  reassignHumanTask(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReassignHumanTaskMutationResult = NonNullable<Awaited<ReturnType<typeof reassignHumanTask>>>
+    export type ReassignHumanTaskMutationBody = BodyType<ReassignHumanTaskBody>
+    export type ReassignHumanTaskMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Reassign task to a different user/role
+ */
+export const useReassignHumanTask = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reassignHumanTask>>, TError,{id: number;data: BodyType<ReassignHumanTaskBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reassignHumanTask>>,
+        TError,
+        {id: number;data: BodyType<ReassignHumanTaskBody>},
+        TContext
+      > => {
+      return useMutation(getReassignHumanTaskMutationOptions(options));
     }
 

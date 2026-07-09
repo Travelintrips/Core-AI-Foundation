@@ -2283,6 +2283,177 @@ export interface UpdateScheduleBody {
   maxRuns?: number;
 }
 
+export type HumanTaskStatus = typeof HumanTaskStatus[keyof typeof HumanTaskStatus];
+
+
+export const HumanTaskStatus = {
+  pending: 'pending',
+  assigned: 'assigned',
+  accepted: 'accepted',
+  in_progress: 'in_progress',
+  completed: 'completed',
+  rejected: 'rejected',
+  cancelled: 'cancelled',
+  expired: 'expired',
+} as const;
+
+export type HumanTaskPayloadJson = { [key: string]: unknown };
+
+export type HumanTaskSlaStatus = typeof HumanTaskSlaStatus[keyof typeof HumanTaskSlaStatus];
+
+
+export const HumanTaskSlaStatus = {
+  on_time: 'on_time',
+  warning: 'warning',
+  overdue: 'overdue',
+  expired: 'expired',
+} as const;
+
+export interface HumanTask {
+  id: number;
+  taskCode: string;
+  sourceModule: string;
+  sourceType: string;
+  /** @nullable */
+  sourceId?: string | null;
+  /** @nullable */
+  executionPlanId?: number | null;
+  /** @nullable */
+  assignedDepartment?: string | null;
+  /** @nullable */
+  assignedUser?: string | null;
+  /** @nullable */
+  assignedRole?: string | null;
+  priority: number;
+  status: HumanTaskStatus;
+  /** @nullable */
+  reason?: string | null;
+  /** @nullable */
+  instructions?: string | null;
+  payloadJson: HumanTaskPayloadJson;
+  /** @nullable */
+  dueAt?: string | null;
+  slaStatus: HumanTaskSlaStatus;
+  /** @nullable */
+  notificationHookUrl?: string | null;
+  /** @nullable */
+  acceptedAt?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HumanTaskHistory {
+  id: number;
+  taskId: number;
+  action: string;
+  /** @nullable */
+  performedBy?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  oldStatus?: string | null;
+  /** @nullable */
+  newStatus?: string | null;
+  createdAt: string;
+}
+
+export interface HumanTaskDetail {
+  task: HumanTask;
+  history: HumanTaskHistory[];
+}
+
+export interface HumanTaskPage {
+  items: HumanTask[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export type HumanTaskStatsByDepartmentItem = {
+  department: string;
+  count: number;
+};
+
+export type HumanTaskStatsBySourceModuleItem = {
+  sourceModule: string;
+  count: number;
+};
+
+export interface HumanTaskStats {
+  total: number;
+  pending: number;
+  assigned: number;
+  inProgress: number;
+  completed: number;
+  rejected: number;
+  overdue: number;
+  expired: number;
+  /** @nullable */
+  averageCompletionTimeMs?: number | null;
+  overdueRate: number;
+  byDepartment: HumanTaskStatsByDepartmentItem[];
+  bySourceModule: HumanTaskStatsBySourceModuleItem[];
+}
+
+export type CreateHumanTaskBodyPayloadJson = { [key: string]: unknown };
+
+export interface CreateHumanTaskBody {
+  sourceModule: string;
+  sourceType: string;
+  sourceId?: string;
+  executionPlanId?: number;
+  assignedDepartment?: string;
+  assignedUser?: string;
+  assignedRole?: string;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  priority?: number;
+  reason?: string;
+  instructions?: string;
+  payloadJson?: CreateHumanTaskBodyPayloadJson;
+  dueAt?: string;
+  notificationHookUrl?: string;
+}
+
+export interface AssignHumanTaskBody {
+  assignedDepartment?: string;
+  assignedUser?: string;
+  assignedRole?: string;
+  performedBy?: string;
+  notes?: string;
+}
+
+export interface AcceptHumanTaskBody {
+  performedBy?: string;
+  notes?: string;
+}
+
+export interface RejectHumanTaskBody {
+  performedBy?: string;
+  notes?: string;
+  reason?: string;
+}
+
+export type CompleteHumanTaskBodyResultPayload = { [key: string]: unknown };
+
+export interface CompleteHumanTaskBody {
+  performedBy?: string;
+  notes?: string;
+  resultPayload?: CompleteHumanTaskBodyResultPayload;
+}
+
+export interface ReassignHumanTaskBody {
+  assignedDepartment?: string;
+  assignedUser?: string;
+  assignedRole?: string;
+  performedBy?: string;
+  notes?: string;
+}
+
 export type ListModelsParams = {
 /**
  * @nullable
@@ -2431,6 +2602,26 @@ export type ListScheduleRunsParams = {
 scheduleId?: number;
 status?: string;
 limit?: number;
+offset?: number;
+};
+
+export type ListHumanTasksParams = {
+status?: string;
+department?: string;
+priority?: number;
+assignedUser?: string;
+sourceModule?: string;
+slaStatus?: string;
+dateFrom?: string;
+dateTo?: string;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
 offset?: number;
 };
 

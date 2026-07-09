@@ -38,3 +38,5 @@ export * from "./ai-events";
 export * from "./ai-event-subscriptions";
 export * from "./ai-schedules";
 export * from "./ai-schedule-runs";
+export * from "./ai-human-tasks";
+export * from "./ai-human-task-history";

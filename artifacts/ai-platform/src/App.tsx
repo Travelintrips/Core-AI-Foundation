@@ -25,6 +25,7 @@ import Operations from "@/pages/operations";
 import Queue from "@/pages/queue";
 import Events from "@/pages/events";
 import Scheduler from "@/pages/scheduler";
+import HumanTasks from "@/pages/human-tasks";
 
 const queryClient = new QueryClient();
 
@@ -49,6 +50,7 @@ function AdminRouter() {
         <Route path="/operations" component={Operations} />
         <Route path="/queue" component={Queue} />
         <Route path="/events" component={Events} />
+        <Route path="/human-tasks" component={HumanTasks} />
         <Route path="/scheduler" component={Scheduler} />
         <Route component={NotFound} />
       </Switch>

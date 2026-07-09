@@ -3730,3 +3730,366 @@ export const UpdateSchedulerSettingsResponse = zod.object({
 })
 
 
+/**
+ * @summary List human tasks (paginated + filtered)
+ */
+export const listHumanTasksQueryLimitMax = 200;
+
+export const listHumanTasksQueryOffsetMin = 0;
+
+
+
+export const ListHumanTasksQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "department": zod.coerce.string().optional(),
+  "priority": zod.coerce.number().optional(),
+  "assignedUser": zod.coerce.string().optional(),
+  "sourceModule": zod.coerce.string().optional(),
+  "slaStatus": zod.coerce.string().optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().min(1).max(listHumanTasksQueryLimitMax).optional(),
+  "offset": zod.coerce.number().min(listHumanTasksQueryOffsetMin).optional()
+})
+
+export const ListHumanTasksResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number()
+})
+
+
+/**
+ * @summary Create a human task (AI handoff)
+ */
+export const createHumanTaskBodyPriorityMin = 0;
+export const createHumanTaskBodyPriorityMax = 100;
+
+
+
+export const CreateHumanTaskBody = zod.object({
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().optional(),
+  "executionPlanId": zod.number().optional(),
+  "assignedDepartment": zod.string().optional(),
+  "assignedUser": zod.string().optional(),
+  "assignedRole": zod.string().optional(),
+  "priority": zod.number().min(createHumanTaskBodyPriorityMin).max(createHumanTaskBodyPriorityMax).optional(),
+  "reason": zod.string().optional(),
+  "instructions": zod.string().optional(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()).optional(),
+  "dueAt": zod.coerce.date().optional(),
+  "notificationHookUrl": zod.string().optional()
+})
+
+export const CreateHumanTaskResponse = zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Human Task Center analytics
+ */
+export const GetHumanTaskStatsResponse = zod.object({
+  "total": zod.number(),
+  "pending": zod.number(),
+  "assigned": zod.number(),
+  "inProgress": zod.number(),
+  "completed": zod.number(),
+  "rejected": zod.number(),
+  "overdue": zod.number(),
+  "expired": zod.number(),
+  "averageCompletionTimeMs": zod.number().nullish(),
+  "overdueRate": zod.number(),
+  "byDepartment": zod.array(zod.object({
+  "department": zod.string(),
+  "count": zod.number()
+})),
+  "bySourceModule": zod.array(zod.object({
+  "sourceModule": zod.string(),
+  "count": zod.number()
+}))
+})
+
+
+/**
+ * @summary Get a single task with history
+ */
+export const GetHumanTaskParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetHumanTaskResponse = zod.object({
+  "task": zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "history": zod.array(zod.object({
+  "id": zod.number(),
+  "taskId": zod.number(),
+  "action": zod.string(),
+  "performedBy": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "oldStatus": zod.string().nullish(),
+  "newStatus": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Assign task to a user/role
+ */
+export const AssignHumanTaskParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AssignHumanTaskBody = zod.object({
+  "assignedDepartment": zod.string().optional(),
+  "assignedUser": zod.string().optional(),
+  "assignedRole": zod.string().optional(),
+  "performedBy": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const AssignHumanTaskResponse = zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Human accepts the task
+ */
+export const AcceptHumanTaskParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AcceptHumanTaskBody = zod.object({
+  "performedBy": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const AcceptHumanTaskResponse = zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Human rejects the task
+ */
+export const RejectHumanTaskParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RejectHumanTaskBody = zod.object({
+  "performedBy": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "reason": zod.string().optional()
+})
+
+export const RejectHumanTaskResponse = zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Human marks task complete
+ */
+export const CompleteHumanTaskParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CompleteHumanTaskBody = zod.object({
+  "performedBy": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "resultPayload": zod.record(zod.string(), zod.unknown()).optional()
+})
+
+export const CompleteHumanTaskResponse = zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Reassign task to a different user/role
+ */
+export const ReassignHumanTaskParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ReassignHumanTaskBody = zod.object({
+  "assignedDepartment": zod.string().optional(),
+  "assignedUser": zod.string().optional(),
+  "assignedRole": zod.string().optional(),
+  "performedBy": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const ReassignHumanTaskResponse = zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
