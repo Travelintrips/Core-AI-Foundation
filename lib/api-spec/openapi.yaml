@@ -2612,6 +2612,344 @@ paths:
       responses:
         "204":
           description: Deleted
+  /ai/schedules:
+    get:
+      operationId: listSchedules
+      tags:
+        - scheduler
+      summary: List schedules with optional filters
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: triggerType
+          in: query
+          schema:
+            type: string
+        - name: targetType
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Paginated schedule list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulePage"
+    post:
+      operationId: createSchedule
+      tags:
+        - scheduler
+      summary: Create a new schedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateScheduleBody"
+      responses:
+        "201":
+          description: Schedule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiSchedule"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /ai/schedules/{id}:
+    get:
+      operationId: getSchedule
+      tags:
+        - scheduler
+      summary: Get a single schedule by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Schedule detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiSchedule"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateSchedule
+      tags:
+        - scheduler
+      summary: Update a schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateScheduleBody"
+      responses:
+        "200":
+          description: Updated schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiSchedule"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /ai/schedules/{id}/pause:
+    post:
+      operationId: pauseSchedule
+      tags:
+        - scheduler
+      summary: Pause a schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Paused schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiSchedule"
+  /ai/schedules/{id}/resume:
+    post:
+      operationId: resumeSchedule
+      tags:
+        - scheduler
+      summary: Resume a schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Resumed schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiSchedule"
+  /ai/schedules/{id}/cancel:
+    post:
+      operationId: cancelSchedule
+      tags:
+        - scheduler
+      summary: Cancel a schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Cancelled schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiSchedule"
+  /ai/schedules/{id}/run-now:
+    post:
+      operationId: runScheduleNow
+      tags:
+        - scheduler
+      summary: Execute a schedule immediately
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Schedule after execution
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiSchedule"
+  /ai/schedules/{id}/runs:
+    get:
+      operationId: listRunsForSchedule
+      tags:
+        - scheduler
+      summary: List runs for a schedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Paginated run list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleRunPage"
+  /ai/schedule-runs:
+    get:
+      operationId: listScheduleRuns
+      tags:
+        - scheduler
+      summary: List runs across all schedules
+      parameters:
+        - name: scheduleId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Paginated run list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleRunPage"
+  /ai/scheduler/status:
+    get:
+      operationId: getSchedulerStatus
+      tags:
+        - scheduler
+      summary: Runtime status snapshot for the scheduler poller
+      responses:
+        "200":
+          description: Scheduler status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerStatus"
+  /ai/scheduler/start:
+    post:
+      operationId: startScheduler
+      tags:
+        - scheduler
+      summary: Start the background scheduler poller
+      responses:
+        "200":
+          description: Scheduler status after starting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerStatus"
+  /ai/scheduler/stop:
+    post:
+      operationId: stopScheduler
+      tags:
+        - scheduler
+      summary: Stop the background scheduler poller
+      responses:
+        "200":
+          description: Scheduler status after stopping
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerStatus"
+  /ai/scheduler/tick:
+    post:
+      operationId: tickScheduler
+      tags:
+        - scheduler
+      summary: Run one scheduler poll cycle immediately
+      responses:
+        "200":
+          description: Scheduler status with tick result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerStatus"
+  /ai/scheduler/settings:
+    get:
+      operationId: getSchedulerSettings
+      tags:
+        - scheduler
+      summary: Get current scheduler settings
+      responses:
+        "200":
+          description: Scheduler settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerSettings"
+    patch:
+      operationId: updateSchedulerSettings
+      tags:
+        - scheduler
+      summary: Update scheduler settings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SchedulerSettings"
+      responses:
+        "200":
+          description: Updated scheduler settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerSettings"
 components:
   schemas:
     HealthStatus:
@@ -5746,3 +6084,327 @@ components:
                 type: boolean
               error:
                 type: string
+    AiSchedule:
+      type: object
+      required:
+        - id
+        - scheduleCode
+        - scheduleName
+        - triggerType
+        - timezone
+        - targetType
+        - targetConfigJson
+        - payloadJson
+        - status
+        - runCount
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        scheduleCode:
+          type: string
+        scheduleName:
+          type: string
+        description:
+          type:
+            - string
+            - "null"
+        triggerType:
+          type: string
+          enum:
+            - cron
+            - interval
+            - one_time
+            - event_followup
+            - deadline_reminder
+        cronExpression:
+          type:
+            - string
+            - "null"
+        intervalSeconds:
+          type:
+            - integer
+            - "null"
+        runAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        timezone:
+          type: string
+        eventType:
+          type:
+            - string
+            - "null"
+        targetType:
+          type: string
+          enum:
+            - create_job
+            - publish_event
+            - webhook
+            - audit_log
+        targetConfigJson:
+          type: object
+          additionalProperties: true
+        payloadJson:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum:
+            - active
+            - paused
+            - completed
+            - failed
+            - cancelled
+        lastRunAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        nextRunAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        runCount:
+          type: integer
+        maxRuns:
+          type:
+            - integer
+            - "null"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    SchedulePage:
+      type: object
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiSchedule"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+    ScheduleRun:
+      type: object
+      required:
+        - id
+        - scheduleId
+        - runNumber
+        - status
+        - createdAt
+      properties:
+        id:
+          type: integer
+        scheduleId:
+          type: integer
+        runNumber:
+          type: integer
+        scheduledFor:
+          type:
+            - string
+            - "null"
+          format: date-time
+        startedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        completedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - skipped
+        resultJson:
+          type:
+            - object
+            - "null"
+          additionalProperties: true
+        errorMessage:
+          type:
+            - string
+            - "null"
+        createdJobId:
+          type:
+            - integer
+            - "null"
+        createdEventId:
+          type:
+            - string
+            - "null"
+        createdAt:
+          type: string
+          format: date-time
+    ScheduleRunPage:
+      type: object
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduleRun"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+    SchedulerStatus:
+      type: object
+      required:
+        - enabled
+        - running
+        - pollIntervalMs
+        - lastTick
+        - activeSchedules
+        - dueNow
+        - processedToday
+        - failedToday
+      properties:
+        enabled:
+          type: boolean
+        running:
+          type: boolean
+        pollIntervalMs:
+          type: integer
+        lastTick:
+          type:
+            - string
+            - "null"
+          format: date-time
+        activeSchedules:
+          type: integer
+        dueNow:
+          type: integer
+        processedToday:
+          type: integer
+        failedToday:
+          type: integer
+    SchedulerSettings:
+      type: object
+      required:
+        - schedulerEnabled
+        - pollIntervalMs
+        - timezone
+      properties:
+        schedulerEnabled:
+          type: boolean
+        pollIntervalMs:
+          type: integer
+        timezone:
+          type: string
+    CreateScheduleBody:
+      type: object
+      required:
+        - scheduleName
+        - triggerType
+        - targetType
+      properties:
+        scheduleName:
+          type: string
+        description:
+          type: string
+        triggerType:
+          type: string
+          enum:
+            - cron
+            - interval
+            - one_time
+            - event_followup
+            - deadline_reminder
+        cronExpression:
+          type: string
+        intervalSeconds:
+          type: integer
+          minimum: 1
+        runAt:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+        eventType:
+          type: string
+        targetType:
+          type: string
+          enum:
+            - create_job
+            - publish_event
+            - webhook
+            - audit_log
+        targetConfigJson:
+          type: object
+          additionalProperties: true
+        payloadJson:
+          type: object
+          additionalProperties: true
+        maxRuns:
+          type: integer
+          minimum: 1
+    UpdateScheduleBody:
+      type: object
+      properties:
+        scheduleName:
+          type: string
+        description:
+          type: string
+        triggerType:
+          type: string
+          enum:
+            - cron
+            - interval
+            - one_time
+            - event_followup
+            - deadline_reminder
+        cronExpression:
+          type: string
+        intervalSeconds:
+          type: integer
+          minimum: 1
+        runAt:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+        eventType:
+          type: string
+        targetType:
+          type: string
+          enum:
+            - create_job
+            - publish_event
+            - webhook
+            - audit_log
+        targetConfigJson:
+          type: object
+          additionalProperties: true
+        payloadJson:
+          type: object
+          additionalProperties: true
+        maxRuns:
+          type: integer
+          minimum: 1

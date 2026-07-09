@@ -1,0 +1,313 @@
+Lanjutkan AI Enterprise Platform ke Phase 6: AI Scheduler & Automation Engine.
+
+Status saat ini:
+
+* Phase 5 AI Job Engine selesai
+* Phase 5.1 Worker Dispatcher Runtime selesai
+* Phase 5.1.5 Build System Hardening selesai
+* Phase 5.2 Distributed Worker Cluster selesai
+* Phase 5.5 AI Event Bus selesai
+* Event Store, Subscriptions, Event Center, replay, create_job handler, audit hooks, dan event-to-job bridge sudah berjalan
+* pnpm run verify clean
+
+Tujuan Phase 6:
+Membuat Scheduler & Automation Engine agar AI Platform bisa menjalankan pekerjaan berdasarkan waktu, interval, cron, deadline, SLA, atau event follow-up.
+
+PENTING:
+Jangan rombak Job Engine, Dispatcher, Cluster, Event Bus, Creative AI, Workforce, Queue, atau Client Review.
+Jangan membuat Marketplace, Billing, Video, Voice, OCR, atau Plugin.
+Semua perubahan harus additive, modular, backward compatible, OpenAPI-first, dan wajib lolos pnpm run verify.
+
+====================================================================
+BAGIAN 1 — SCHEDULE STORE
+=========================
+
+Buat tabel:
+
+ai_schedules
+
+Field:
+
+* id
+* schedule_code
+* schedule_name
+* description
+* trigger_type
+* cron_expression
+* interval_seconds
+* run_at
+* timezone
+* event_type
+* target_type
+* target_config_json
+* payload_json
+* status
+* last_run_at
+* next_run_at
+* run_count
+* max_runs
+* created_at
+* updated_at
+
+trigger_type:
+
+* cron
+* interval
+* one_time
+* event_followup
+* deadline_reminder
+
+status:
+
+* active
+* paused
+* completed
+* failed
+* cancelled
+
+====================================================================
+BAGIAN 2 — SCHEDULE RUNS
+========================
+
+Buat tabel:
+
+ai_schedule_runs
+
+Field:
+
+* id
+* schedule_id
+* run_number
+* scheduled_for
+* started_at
+* completed_at
+* status
+* result_json
+* error_message
+* created_job_id
+* created_event_id
+* created_at
+
+status:
+
+* pending
+* running
+* completed
+* failed
+* skipped
+
+====================================================================
+BAGIAN 3 — SCHEDULER SERVICE
+============================
+
+Buat service:
+
+aiSchedulerService
+
+Method:
+
+* createSchedule()
+* updateSchedule()
+* pauseSchedule()
+* resumeSchedule()
+* cancelSchedule()
+* calculateNextRun()
+* tick()
+* executeDueSchedules()
+* recordRun()
+* createJobFromSchedule()
+* publishEventFromSchedule()
+
+====================================================================
+BAGIAN 4 — SCHEDULER RUNTIME
+============================
+
+Tambahkan runtime polling seperti Dispatcher.
+
+Config:
+
+* AI_SCHEDULER_ENABLED
+* AI_SCHEDULER_POLL_INTERVAL_MS
+* AI_SCHEDULER_TIMEZONE
+
+Default:
+
+* dev boleh auto-start
+* production default false jika env tidak diset
+
+Pastikan:
+
+* scheduler tidak double-start
+* tick concurrency-safe
+* graceful shutdown
+* error satu schedule tidak mematikan scheduler
+
+====================================================================
+BAGIAN 5 — TARGET TYPES
+=======================
+
+Schedule harus bisa membuat:
+
+1. Job
+   target_type = create_job
+
+2. Event
+   target_type = publish_event
+
+3. Webhook placeholder
+   target_type = webhook
+
+4. Audit only
+   target_type = audit_log
+
+Untuk webhook placeholder cukup audit log dulu.
+
+====================================================================
+BAGIAN 6 — EVENT FOLLOW-UP
+==========================
+
+Integrasikan dengan Event Bus.
+
+Contoh:
+Jika event creative.client.approved terjadi,
+scheduler bisa membuat follow-up job 1 hari kemudian.
+
+Support:
+
+* delay_seconds
+* followup_event_type
+* followup_job_type
+
+====================================================================
+BAGIAN 7 — SLA / DEADLINE REMINDER
+==================================
+
+Tambahkan schedule type deadline_reminder.
+
+Contoh:
+
+* client review link belum dibuka setelah 24 jam
+* project belum approve setelah 3 hari
+* job failed lebih dari 1 jam
+
+Untuk sekarang cukup buat framework dan contoh schedule.
+
+====================================================================
+BAGIAN 8 — API
+==============
+
+Tambahkan endpoint:
+
+GET /api/ai/schedules
+POST /api/ai/schedules
+GET /api/ai/schedules/:id
+PATCH /api/ai/schedules/:id
+POST /api/ai/schedules/:id/pause
+POST /api/ai/schedules/:id/resume
+POST /api/ai/schedules/:id/cancel
+POST /api/ai/schedules/:id/run-now
+
+GET /api/ai/schedule-runs
+GET /api/ai/scheduler/status
+POST /api/ai/scheduler/start
+POST /api/ai/scheduler/stop
+POST /api/ai/scheduler/tick
+
+====================================================================
+BAGIAN 9 — UI SCHEDULER CENTER
+==============================
+
+Tambahkan halaman:
+
+/scheduler
+
+Fitur:
+
+* schedule list
+* status badges
+* next run
+* last run
+* run count
+* create schedule dialog
+* pause/resume/cancel
+* run now
+* schedule run history
+* scheduler runtime panel
+* filters by status, trigger_type, target_type
+
+Tambahkan menu sidebar:
+AI Scheduler
+
+====================================================================
+BAGIAN 10 — EVENT INTEGRATION
+=============================
+
+Publish event otomatis:
+
+* scheduler.started
+* scheduler.stopped
+* schedule.created
+* schedule.updated
+* schedule.paused
+* schedule.resumed
+* schedule.cancelled
+* schedule.run.started
+* schedule.run.completed
+* schedule.run.failed
+
+====================================================================
+BAGIAN 11 — SEED DATA
+=====================
+
+Seed sample schedules:
+
+1. Daily analytics snapshot
+
+* cron atau interval
+* target create_job
+* job_type analytics_snapshot
+
+2. Client review follow-up
+
+* event_followup
+* target create_job
+* job_type client_review_reminder
+
+3. Failed job cleanup
+
+* interval
+* target create_job
+* job_type failed_job_cleanup
+
+4. Weekly performance report
+
+* cron
+* target create_job
+* job_type workforce_performance_report
+
+====================================================================
+BAGIAN 12 — VERIFICATION
+========================
+
+Pastikan:
+
+* DB push clean
+* OpenAPI/codegen clean
+* pnpm run verify clean
+* build clean
+
+Test:
+
+1. create one-time schedule
+2. scheduler tick creates job
+3. interval schedule calculates next_run_at
+4. pause schedule prevents execution
+5. resume schedule works
+6. run-now works
+7. completed max_runs schedule becomes completed
+8. schedule run history appears
+9. event published for schedule.run.completed
+10. UI /scheduler works
+
+Target akhir:
+AI Enterprise Platform memiliki Scheduler & Automation Engine yang mampu menjalankan job/event otomatis berdasarkan waktu, interval, cron, deadline, dan event follow-up.

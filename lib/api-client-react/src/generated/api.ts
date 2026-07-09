@@ -43,6 +43,7 @@ import type {
   AiProvider,
   AiProviderInput,
   AiProviderUpdate,
+  AiSchedule,
   AiSetting,
   AiSettingInput,
   AiWorker,
@@ -67,6 +68,7 @@ import type {
   ClusterStatus,
   CostAnalyticsResponse,
   CreateJobBody,
+  CreateScheduleBody,
   CreateSubscriptionBody,
   CreativeAiAsset,
   CreativeAiImageAnalytics,
@@ -102,6 +104,9 @@ import type {
   ListMemoryEntriesParams,
   ListModelsParams,
   ListPromptsParams,
+  ListRunsForScheduleParams,
+  ListScheduleRunsParams,
+  ListSchedulesParams,
   ListWorkflowExecutionsParams,
   MemoryEntry,
   MemoryEntryInput,
@@ -120,8 +125,13 @@ import type {
   RenewLeaseBody,
   ReprioritizeJobBody,
   ResumeQueue200,
+  SchedulePage,
+  ScheduleRunPage,
+  SchedulerSettings,
+  SchedulerStatus,
   SubscriptionListResponse,
   TickDispatcher200,
+  UpdateScheduleBody,
   UpdateSubscriptionBody,
   UsageDataPoint,
   WorkerCapacityItem,
@@ -9190,5 +9200,1194 @@ export const useDeleteEventSubscription = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteEventSubscriptionMutationOptions(options));
+    }
+
+export const getListSchedulesUrl = (params?: ListSchedulesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/ai/schedules?${stringifiedParams}` : `/api/ai/schedules`
+}
+
+/**
+ * @summary List schedules with optional filters
+ */
+export const listSchedules = async (params?: ListSchedulesParams, options?: RequestInit): Promise<SchedulePage> => {
+
+  return customFetch<SchedulePage>(getListSchedulesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSchedulesQueryKey = (params?: ListSchedulesParams,) => {
+    return [
+    `/api/ai/schedules`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListSchedulesQueryOptions = <TData = Awaited<ReturnType<typeof listSchedules>>, TError = ErrorType<unknown>>(params?: ListSchedulesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSchedules>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSchedulesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSchedules>>> = ({ signal }) => listSchedules(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSchedules>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSchedulesQueryResult = NonNullable<Awaited<ReturnType<typeof listSchedules>>>
+export type ListSchedulesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List schedules with optional filters
+ */
+
+export function useListSchedules<TData = Awaited<ReturnType<typeof listSchedules>>, TError = ErrorType<unknown>>(
+ params?: ListSchedulesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSchedules>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSchedulesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateScheduleUrl = () => {
+
+
+
+
+  return `/api/ai/schedules`
+}
+
+/**
+ * @summary Create a new schedule
+ */
+export const createSchedule = async (createScheduleBody: CreateScheduleBody, options?: RequestInit): Promise<AiSchedule> => {
+
+  return customFetch<AiSchedule>(getCreateScheduleUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createScheduleBody)
+  }
+);}
+
+
+
+
+export const getCreateScheduleMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSchedule>>, TError,{data: BodyType<CreateScheduleBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSchedule>>, TError,{data: BodyType<CreateScheduleBody>}, TContext> => {
+
+const mutationKey = ['createSchedule'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSchedule>>, {data: BodyType<CreateScheduleBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createSchedule(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateScheduleMutationResult = NonNullable<Awaited<ReturnType<typeof createSchedule>>>
+    export type CreateScheduleMutationBody = BodyType<CreateScheduleBody>
+    export type CreateScheduleMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Create a new schedule
+ */
+export const useCreateSchedule = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSchedule>>, TError,{data: BodyType<CreateScheduleBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createSchedule>>,
+        TError,
+        {data: BodyType<CreateScheduleBody>},
+        TContext
+      > => {
+      return useMutation(getCreateScheduleMutationOptions(options));
+    }
+
+export const getGetScheduleUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/schedules/${id}`
+}
+
+/**
+ * @summary Get a single schedule by ID
+ */
+export const getSchedule = async (id: number, options?: RequestInit): Promise<AiSchedule> => {
+
+  return customFetch<AiSchedule>(getGetScheduleUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetScheduleQueryKey = (id: number,) => {
+    return [
+    `/api/ai/schedules/${id}`
+    ] as const;
+    }
+
+
+export const getGetScheduleQueryOptions = <TData = Awaited<ReturnType<typeof getSchedule>>, TError = ErrorType<ErrorResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSchedule>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetScheduleQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSchedule>>> = ({ signal }) => getSchedule(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSchedule>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetScheduleQueryResult = NonNullable<Awaited<ReturnType<typeof getSchedule>>>
+export type GetScheduleQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get a single schedule by ID
+ */
+
+export function useGetSchedule<TData = Awaited<ReturnType<typeof getSchedule>>, TError = ErrorType<ErrorResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSchedule>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetScheduleQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateScheduleUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/schedules/${id}`
+}
+
+/**
+ * @summary Update a schedule
+ */
+export const updateSchedule = async (id: number,
+    updateScheduleBody: UpdateScheduleBody, options?: RequestInit): Promise<AiSchedule> => {
+
+  return customFetch<AiSchedule>(getUpdateScheduleUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateScheduleBody)
+  }
+);}
+
+
+
+
+export const getUpdateScheduleMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSchedule>>, TError,{id: number;data: BodyType<UpdateScheduleBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSchedule>>, TError,{id: number;data: BodyType<UpdateScheduleBody>}, TContext> => {
+
+const mutationKey = ['updateSchedule'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSchedule>>, {id: number;data: BodyType<UpdateScheduleBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateSchedule(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateScheduleMutationResult = NonNullable<Awaited<ReturnType<typeof updateSchedule>>>
+    export type UpdateScheduleMutationBody = BodyType<UpdateScheduleBody>
+    export type UpdateScheduleMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Update a schedule
+ */
+export const useUpdateSchedule = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSchedule>>, TError,{id: number;data: BodyType<UpdateScheduleBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateSchedule>>,
+        TError,
+        {id: number;data: BodyType<UpdateScheduleBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateScheduleMutationOptions(options));
+    }
+
+export const getPauseScheduleUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/schedules/${id}/pause`
+}
+
+/**
+ * @summary Pause a schedule
+ */
+export const pauseSchedule = async (id: number, options?: RequestInit): Promise<AiSchedule> => {
+
+  return customFetch<AiSchedule>(getPauseScheduleUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getPauseScheduleMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pauseSchedule>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof pauseSchedule>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['pauseSchedule'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof pauseSchedule>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  pauseSchedule(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PauseScheduleMutationResult = NonNullable<Awaited<ReturnType<typeof pauseSchedule>>>
+
+    export type PauseScheduleMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Pause a schedule
+ */
+export const usePauseSchedule = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pauseSchedule>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof pauseSchedule>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getPauseScheduleMutationOptions(options));
+    }
+
+export const getResumeScheduleUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/schedules/${id}/resume`
+}
+
+/**
+ * @summary Resume a schedule
+ */
+export const resumeSchedule = async (id: number, options?: RequestInit): Promise<AiSchedule> => {
+
+  return customFetch<AiSchedule>(getResumeScheduleUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getResumeScheduleMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resumeSchedule>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resumeSchedule>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['resumeSchedule'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resumeSchedule>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  resumeSchedule(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResumeScheduleMutationResult = NonNullable<Awaited<ReturnType<typeof resumeSchedule>>>
+
+    export type ResumeScheduleMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Resume a schedule
+ */
+export const useResumeSchedule = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resumeSchedule>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resumeSchedule>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getResumeScheduleMutationOptions(options));
+    }
+
+export const getCancelScheduleUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/schedules/${id}/cancel`
+}
+
+/**
+ * @summary Cancel a schedule
+ */
+export const cancelSchedule = async (id: number, options?: RequestInit): Promise<AiSchedule> => {
+
+  return customFetch<AiSchedule>(getCancelScheduleUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getCancelScheduleMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelSchedule>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelSchedule>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['cancelSchedule'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelSchedule>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  cancelSchedule(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelScheduleMutationResult = NonNullable<Awaited<ReturnType<typeof cancelSchedule>>>
+
+    export type CancelScheduleMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Cancel a schedule
+ */
+export const useCancelSchedule = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelSchedule>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelSchedule>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getCancelScheduleMutationOptions(options));
+    }
+
+export const getRunScheduleNowUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/schedules/${id}/run-now`
+}
+
+/**
+ * @summary Execute a schedule immediately
+ */
+export const runScheduleNow = async (id: number, options?: RequestInit): Promise<AiSchedule> => {
+
+  return customFetch<AiSchedule>(getRunScheduleNowUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRunScheduleNowMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runScheduleNow>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runScheduleNow>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['runScheduleNow'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runScheduleNow>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  runScheduleNow(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunScheduleNowMutationResult = NonNullable<Awaited<ReturnType<typeof runScheduleNow>>>
+
+    export type RunScheduleNowMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Execute a schedule immediately
+ */
+export const useRunScheduleNow = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runScheduleNow>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runScheduleNow>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRunScheduleNowMutationOptions(options));
+    }
+
+export const getListRunsForScheduleUrl = (id: number,
+    params?: ListRunsForScheduleParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/ai/schedules/${id}/runs?${stringifiedParams}` : `/api/ai/schedules/${id}/runs`
+}
+
+/**
+ * @summary List runs for a schedule
+ */
+export const listRunsForSchedule = async (id: number,
+    params?: ListRunsForScheduleParams, options?: RequestInit): Promise<ScheduleRunPage> => {
+
+  return customFetch<ScheduleRunPage>(getListRunsForScheduleUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListRunsForScheduleQueryKey = (id: number,
+    params?: ListRunsForScheduleParams,) => {
+    return [
+    `/api/ai/schedules/${id}/runs`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListRunsForScheduleQueryOptions = <TData = Awaited<ReturnType<typeof listRunsForSchedule>>, TError = ErrorType<unknown>>(id: number,
+    params?: ListRunsForScheduleParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRunsForSchedule>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListRunsForScheduleQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRunsForSchedule>>> = ({ signal }) => listRunsForSchedule(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listRunsForSchedule>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListRunsForScheduleQueryResult = NonNullable<Awaited<ReturnType<typeof listRunsForSchedule>>>
+export type ListRunsForScheduleQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List runs for a schedule
+ */
+
+export function useListRunsForSchedule<TData = Awaited<ReturnType<typeof listRunsForSchedule>>, TError = ErrorType<unknown>>(
+ id: number,
+    params?: ListRunsForScheduleParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRunsForSchedule>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListRunsForScheduleQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListScheduleRunsUrl = (params?: ListScheduleRunsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/ai/schedule-runs?${stringifiedParams}` : `/api/ai/schedule-runs`
+}
+
+/**
+ * @summary List runs across all schedules
+ */
+export const listScheduleRuns = async (params?: ListScheduleRunsParams, options?: RequestInit): Promise<ScheduleRunPage> => {
+
+  return customFetch<ScheduleRunPage>(getListScheduleRunsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListScheduleRunsQueryKey = (params?: ListScheduleRunsParams,) => {
+    return [
+    `/api/ai/schedule-runs`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListScheduleRunsQueryOptions = <TData = Awaited<ReturnType<typeof listScheduleRuns>>, TError = ErrorType<unknown>>(params?: ListScheduleRunsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listScheduleRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListScheduleRunsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listScheduleRuns>>> = ({ signal }) => listScheduleRuns(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listScheduleRuns>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListScheduleRunsQueryResult = NonNullable<Awaited<ReturnType<typeof listScheduleRuns>>>
+export type ListScheduleRunsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List runs across all schedules
+ */
+
+export function useListScheduleRuns<TData = Awaited<ReturnType<typeof listScheduleRuns>>, TError = ErrorType<unknown>>(
+ params?: ListScheduleRunsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listScheduleRuns>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListScheduleRunsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetSchedulerStatusUrl = () => {
+
+
+
+
+  return `/api/ai/scheduler/status`
+}
+
+/**
+ * @summary Runtime status snapshot for the scheduler poller
+ */
+export const getSchedulerStatus = async ( options?: RequestInit): Promise<SchedulerStatus> => {
+
+  return customFetch<SchedulerStatus>(getGetSchedulerStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSchedulerStatusQueryKey = () => {
+    return [
+    `/api/ai/scheduler/status`
+    ] as const;
+    }
+
+
+export const getGetSchedulerStatusQueryOptions = <TData = Awaited<ReturnType<typeof getSchedulerStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSchedulerStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSchedulerStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSchedulerStatus>>> = ({ signal }) => getSchedulerStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSchedulerStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSchedulerStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getSchedulerStatus>>>
+export type GetSchedulerStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Runtime status snapshot for the scheduler poller
+ */
+
+export function useGetSchedulerStatus<TData = Awaited<ReturnType<typeof getSchedulerStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSchedulerStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSchedulerStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getStartSchedulerUrl = () => {
+
+
+
+
+  return `/api/ai/scheduler/start`
+}
+
+/**
+ * @summary Start the background scheduler poller
+ */
+export const startScheduler = async ( options?: RequestInit): Promise<SchedulerStatus> => {
+
+  return customFetch<SchedulerStatus>(getStartSchedulerUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getStartSchedulerMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startScheduler>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startScheduler>>, TError,void, TContext> => {
+
+const mutationKey = ['startScheduler'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startScheduler>>, void> = () => {
+
+
+          return  startScheduler(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartSchedulerMutationResult = NonNullable<Awaited<ReturnType<typeof startScheduler>>>
+
+    export type StartSchedulerMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Start the background scheduler poller
+ */
+export const useStartScheduler = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startScheduler>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startScheduler>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getStartSchedulerMutationOptions(options));
+    }
+
+export const getStopSchedulerUrl = () => {
+
+
+
+
+  return `/api/ai/scheduler/stop`
+}
+
+/**
+ * @summary Stop the background scheduler poller
+ */
+export const stopScheduler = async ( options?: RequestInit): Promise<SchedulerStatus> => {
+
+  return customFetch<SchedulerStatus>(getStopSchedulerUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getStopSchedulerMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof stopScheduler>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof stopScheduler>>, TError,void, TContext> => {
+
+const mutationKey = ['stopScheduler'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof stopScheduler>>, void> = () => {
+
+
+          return  stopScheduler(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StopSchedulerMutationResult = NonNullable<Awaited<ReturnType<typeof stopScheduler>>>
+
+    export type StopSchedulerMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Stop the background scheduler poller
+ */
+export const useStopScheduler = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof stopScheduler>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof stopScheduler>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getStopSchedulerMutationOptions(options));
+    }
+
+export const getTickSchedulerUrl = () => {
+
+
+
+
+  return `/api/ai/scheduler/tick`
+}
+
+/**
+ * @summary Run one scheduler poll cycle immediately
+ */
+export const tickScheduler = async ( options?: RequestInit): Promise<SchedulerStatus> => {
+
+  return customFetch<SchedulerStatus>(getTickSchedulerUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getTickSchedulerMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof tickScheduler>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof tickScheduler>>, TError,void, TContext> => {
+
+const mutationKey = ['tickScheduler'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof tickScheduler>>, void> = () => {
+
+
+          return  tickScheduler(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TickSchedulerMutationResult = NonNullable<Awaited<ReturnType<typeof tickScheduler>>>
+
+    export type TickSchedulerMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Run one scheduler poll cycle immediately
+ */
+export const useTickScheduler = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof tickScheduler>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof tickScheduler>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getTickSchedulerMutationOptions(options));
+    }
+
+export const getGetSchedulerSettingsUrl = () => {
+
+
+
+
+  return `/api/ai/scheduler/settings`
+}
+
+/**
+ * @summary Get current scheduler settings
+ */
+export const getSchedulerSettings = async ( options?: RequestInit): Promise<SchedulerSettings> => {
+
+  return customFetch<SchedulerSettings>(getGetSchedulerSettingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSchedulerSettingsQueryKey = () => {
+    return [
+    `/api/ai/scheduler/settings`
+    ] as const;
+    }
+
+
+export const getGetSchedulerSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getSchedulerSettings>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSchedulerSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSchedulerSettingsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSchedulerSettings>>> = ({ signal }) => getSchedulerSettings({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSchedulerSettings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSchedulerSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getSchedulerSettings>>>
+export type GetSchedulerSettingsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get current scheduler settings
+ */
+
+export function useGetSchedulerSettings<TData = Awaited<ReturnType<typeof getSchedulerSettings>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSchedulerSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSchedulerSettingsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateSchedulerSettingsUrl = () => {
+
+
+
+
+  return `/api/ai/scheduler/settings`
+}
+
+/**
+ * @summary Update scheduler settings
+ */
+export const updateSchedulerSettings = async (schedulerSettings?: SchedulerSettings, options?: RequestInit): Promise<SchedulerSettings> => {
+
+  return customFetch<SchedulerSettings>(getUpdateSchedulerSettingsUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(schedulerSettings)
+  }
+);}
+
+
+
+
+export const getUpdateSchedulerSettingsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSchedulerSettings>>, TError,{data?: BodyType<SchedulerSettings>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSchedulerSettings>>, TError,{data?: BodyType<SchedulerSettings>}, TContext> => {
+
+const mutationKey = ['updateSchedulerSettings'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSchedulerSettings>>, {data?: BodyType<SchedulerSettings>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateSchedulerSettings(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSchedulerSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof updateSchedulerSettings>>>
+    export type UpdateSchedulerSettingsMutationBody = BodyType<SchedulerSettings> | undefined
+    export type UpdateSchedulerSettingsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update scheduler settings
+ */
+export const useUpdateSchedulerSettings = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSchedulerSettings>>, TError,{data?: BodyType<SchedulerSettings>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateSchedulerSettings>>,
+        TError,
+        {data?: BodyType<SchedulerSettings>},
+        TContext
+      > => {
+      return useMutation(getUpdateSchedulerSettingsMutationOptions(options));
     }
 

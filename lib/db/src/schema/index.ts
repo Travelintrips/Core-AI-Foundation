@@ -36,3 +36,5 @@ export * from "./ai-jobs";
 export * from "./ai-workers";
 export * from "./ai-events";
 export * from "./ai-event-subscriptions";
+export * from "./ai-schedules";
+export * from "./ai-schedule-runs";

@@ -25,6 +25,7 @@ import dispatcherRouter from "./dispatcher";
 import clusterRouter from "./cluster";
 import workspaceHealthRouter from "./workspace-health";
 import eventsRouter from "./events";
+import schedulesRouter from "./schedules";
 
 const router: IRouter = Router();
 
@@ -54,5 +55,6 @@ router.use(dispatcherRouter);
 router.use(clusterRouter);
 router.use(workspaceHealthRouter);
 router.use(eventsRouter);
+router.use(schedulesRouter);
 
 export default router;

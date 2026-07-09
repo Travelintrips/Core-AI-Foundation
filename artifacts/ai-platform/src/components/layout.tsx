@@ -3,6 +3,7 @@ import {
   Activity, 
   BarChart2,
   Box, 
+  CalendarClock,
   Cpu, 
   Database, 
   FileText, 
@@ -41,6 +42,7 @@ const NAV_ITEMS = [
   { href: "/knowledge", label: "Knowledge", icon: Database },
   { href: "/memory", label: "Memory", icon: Cpu },
   { href: "/events", label: "AI Events", icon: Zap },
+  { href: "/scheduler", label: "Scheduler", icon: CalendarClock },
   { href: "/audit", label: "Audit Log", icon: ShieldAlert },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

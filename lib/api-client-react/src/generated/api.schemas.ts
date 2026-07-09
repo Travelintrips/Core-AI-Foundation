@@ -2062,6 +2062,227 @@ export interface DispatchResult {
   handlers: DispatchResultHandlersItem[];
 }
 
+export type AiScheduleTriggerType = typeof AiScheduleTriggerType[keyof typeof AiScheduleTriggerType];
+
+
+export const AiScheduleTriggerType = {
+  cron: 'cron',
+  interval: 'interval',
+  one_time: 'one_time',
+  event_followup: 'event_followup',
+  deadline_reminder: 'deadline_reminder',
+} as const;
+
+export type AiScheduleTargetType = typeof AiScheduleTargetType[keyof typeof AiScheduleTargetType];
+
+
+export const AiScheduleTargetType = {
+  create_job: 'create_job',
+  publish_event: 'publish_event',
+  webhook: 'webhook',
+  audit_log: 'audit_log',
+} as const;
+
+export type AiScheduleTargetConfigJson = { [key: string]: unknown };
+
+export type AiSchedulePayloadJson = { [key: string]: unknown };
+
+export type AiScheduleStatus = typeof AiScheduleStatus[keyof typeof AiScheduleStatus];
+
+
+export const AiScheduleStatus = {
+  active: 'active',
+  paused: 'paused',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export interface AiSchedule {
+  id: number;
+  scheduleCode: string;
+  scheduleName: string;
+  /** @nullable */
+  description?: string | null;
+  triggerType: AiScheduleTriggerType;
+  /** @nullable */
+  cronExpression?: string | null;
+  /** @nullable */
+  intervalSeconds?: number | null;
+  /** @nullable */
+  runAt?: string | null;
+  timezone: string;
+  /** @nullable */
+  eventType?: string | null;
+  targetType: AiScheduleTargetType;
+  targetConfigJson: AiScheduleTargetConfigJson;
+  payloadJson: AiSchedulePayloadJson;
+  status: AiScheduleStatus;
+  /** @nullable */
+  lastRunAt?: string | null;
+  /** @nullable */
+  nextRunAt?: string | null;
+  runCount: number;
+  /** @nullable */
+  maxRuns?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SchedulePage {
+  items: AiSchedule[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export type ScheduleRunStatus = typeof ScheduleRunStatus[keyof typeof ScheduleRunStatus];
+
+
+export const ScheduleRunStatus = {
+  pending: 'pending',
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+  skipped: 'skipped',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ScheduleRunResultJson = { [key: string]: unknown } | null;
+
+export interface ScheduleRun {
+  id: number;
+  scheduleId: number;
+  runNumber: number;
+  /** @nullable */
+  scheduledFor?: string | null;
+  /** @nullable */
+  startedAt?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+  status: ScheduleRunStatus;
+  /** @nullable */
+  resultJson?: ScheduleRunResultJson;
+  /** @nullable */
+  errorMessage?: string | null;
+  /** @nullable */
+  createdJobId?: number | null;
+  /** @nullable */
+  createdEventId?: string | null;
+  createdAt: string;
+}
+
+export interface ScheduleRunPage {
+  items: ScheduleRun[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SchedulerStatus {
+  enabled: boolean;
+  running: boolean;
+  pollIntervalMs: number;
+  /** @nullable */
+  lastTick: string | null;
+  activeSchedules: number;
+  dueNow: number;
+  processedToday: number;
+  failedToday: number;
+}
+
+export interface SchedulerSettings {
+  schedulerEnabled: boolean;
+  pollIntervalMs: number;
+  timezone: string;
+}
+
+export type CreateScheduleBodyTriggerType = typeof CreateScheduleBodyTriggerType[keyof typeof CreateScheduleBodyTriggerType];
+
+
+export const CreateScheduleBodyTriggerType = {
+  cron: 'cron',
+  interval: 'interval',
+  one_time: 'one_time',
+  event_followup: 'event_followup',
+  deadline_reminder: 'deadline_reminder',
+} as const;
+
+export type CreateScheduleBodyTargetType = typeof CreateScheduleBodyTargetType[keyof typeof CreateScheduleBodyTargetType];
+
+
+export const CreateScheduleBodyTargetType = {
+  create_job: 'create_job',
+  publish_event: 'publish_event',
+  webhook: 'webhook',
+  audit_log: 'audit_log',
+} as const;
+
+export type CreateScheduleBodyTargetConfigJson = { [key: string]: unknown };
+
+export type CreateScheduleBodyPayloadJson = { [key: string]: unknown };
+
+export interface CreateScheduleBody {
+  scheduleName: string;
+  description?: string;
+  triggerType: CreateScheduleBodyTriggerType;
+  cronExpression?: string;
+  /** @minimum 1 */
+  intervalSeconds?: number;
+  runAt?: string;
+  timezone?: string;
+  eventType?: string;
+  targetType: CreateScheduleBodyTargetType;
+  targetConfigJson?: CreateScheduleBodyTargetConfigJson;
+  payloadJson?: CreateScheduleBodyPayloadJson;
+  /** @minimum 1 */
+  maxRuns?: number;
+}
+
+export type UpdateScheduleBodyTriggerType = typeof UpdateScheduleBodyTriggerType[keyof typeof UpdateScheduleBodyTriggerType];
+
+
+export const UpdateScheduleBodyTriggerType = {
+  cron: 'cron',
+  interval: 'interval',
+  one_time: 'one_time',
+  event_followup: 'event_followup',
+  deadline_reminder: 'deadline_reminder',
+} as const;
+
+export type UpdateScheduleBodyTargetType = typeof UpdateScheduleBodyTargetType[keyof typeof UpdateScheduleBodyTargetType];
+
+
+export const UpdateScheduleBodyTargetType = {
+  create_job: 'create_job',
+  publish_event: 'publish_event',
+  webhook: 'webhook',
+  audit_log: 'audit_log',
+} as const;
+
+export type UpdateScheduleBodyTargetConfigJson = { [key: string]: unknown };
+
+export type UpdateScheduleBodyPayloadJson = { [key: string]: unknown };
+
+export interface UpdateScheduleBody {
+  scheduleName?: string;
+  description?: string;
+  triggerType?: UpdateScheduleBodyTriggerType;
+  cronExpression?: string;
+  /** @minimum 1 */
+  intervalSeconds?: number;
+  runAt?: string;
+  timezone?: string;
+  eventType?: string;
+  targetType?: UpdateScheduleBodyTargetType;
+  targetConfigJson?: UpdateScheduleBodyTargetConfigJson;
+  payloadJson?: UpdateScheduleBodyPayloadJson;
+  /** @minimum 1 */
+  maxRuns?: number;
+}
+
 export type ListModelsParams = {
 /**
  * @nullable
@@ -2188,6 +2409,27 @@ sourceModule?: string;
 status?: string;
 from?: string;
 to?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListSchedulesParams = {
+status?: string;
+triggerType?: string;
+targetType?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListRunsForScheduleParams = {
+status?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListScheduleRunsParams = {
+scheduleId?: number;
+status?: string;
 limit?: number;
 offset?: number;
 };

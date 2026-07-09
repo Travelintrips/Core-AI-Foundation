@@ -3279,3 +3279,454 @@ export const DeleteEventSubscriptionParams = zod.object({
 export const DeleteEventSubscriptionResponse = zod.void()
 
 
+/**
+ * @summary List schedules with optional filters
+ */
+export const listSchedulesQueryLimitDefault = 50;
+export const listSchedulesQueryOffsetDefault = 0;
+
+export const ListSchedulesQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "triggerType": zod.coerce.string().optional(),
+  "targetType": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(listSchedulesQueryLimitDefault),
+  "offset": zod.coerce.number().default(listSchedulesQueryOffsetDefault)
+})
+
+export const ListSchedulesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number()
+})
+
+
+/**
+ * @summary Create a new schedule
+ */
+
+
+
+
+export const CreateScheduleBody = zod.object({
+  "scheduleName": zod.string(),
+  "description": zod.string().optional(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().optional(),
+  "intervalSeconds": zod.number().min(1).optional(),
+  "runAt": zod.coerce.date().optional(),
+  "timezone": zod.string().optional(),
+  "eventType": zod.string().optional(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()).optional(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()).optional(),
+  "maxRuns": zod.number().min(1).optional()
+})
+
+export const CreateScheduleResponse = zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get a single schedule by ID
+ */
+export const GetScheduleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetScheduleResponse = zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a schedule
+ */
+export const UpdateScheduleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+
+export const UpdateScheduleBody = zod.object({
+  "scheduleName": zod.string().optional(),
+  "description": zod.string().optional(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']).optional(),
+  "cronExpression": zod.string().optional(),
+  "intervalSeconds": zod.number().min(1).optional(),
+  "runAt": zod.coerce.date().optional(),
+  "timezone": zod.string().optional(),
+  "eventType": zod.string().optional(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']).optional(),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()).optional(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()).optional(),
+  "maxRuns": zod.number().min(1).optional()
+})
+
+export const UpdateScheduleResponse = zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Pause a schedule
+ */
+export const PauseScheduleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const PauseScheduleResponse = zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Resume a schedule
+ */
+export const ResumeScheduleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ResumeScheduleResponse = zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Cancel a schedule
+ */
+export const CancelScheduleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CancelScheduleResponse = zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Execute a schedule immediately
+ */
+export const RunScheduleNowParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RunScheduleNowResponse = zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List runs for a schedule
+ */
+export const ListRunsForScheduleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const listRunsForScheduleQueryLimitDefault = 50;
+export const listRunsForScheduleQueryOffsetDefault = 0;
+
+export const ListRunsForScheduleQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(listRunsForScheduleQueryLimitDefault),
+  "offset": zod.coerce.number().default(listRunsForScheduleQueryOffsetDefault)
+})
+
+export const ListRunsForScheduleResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "scheduleId": zod.number(),
+  "runNumber": zod.number(),
+  "scheduledFor": zod.coerce.date().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'skipped']),
+  "resultJson": zod.record(zod.string(), zod.unknown()).nullish(),
+  "errorMessage": zod.string().nullish(),
+  "createdJobId": zod.number().nullish(),
+  "createdEventId": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number()
+})
+
+
+/**
+ * @summary List runs across all schedules
+ */
+export const listScheduleRunsQueryLimitDefault = 50;
+export const listScheduleRunsQueryOffsetDefault = 0;
+
+export const ListScheduleRunsQueryParams = zod.object({
+  "scheduleId": zod.coerce.number().optional(),
+  "status": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(listScheduleRunsQueryLimitDefault),
+  "offset": zod.coerce.number().default(listScheduleRunsQueryOffsetDefault)
+})
+
+export const ListScheduleRunsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "scheduleId": zod.number(),
+  "runNumber": zod.number(),
+  "scheduledFor": zod.coerce.date().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'skipped']),
+  "resultJson": zod.record(zod.string(), zod.unknown()).nullish(),
+  "errorMessage": zod.string().nullish(),
+  "createdJobId": zod.number().nullish(),
+  "createdEventId": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number()
+})
+
+
+/**
+ * @summary Runtime status snapshot for the scheduler poller
+ */
+export const GetSchedulerStatusResponse = zod.object({
+  "enabled": zod.boolean(),
+  "running": zod.boolean(),
+  "pollIntervalMs": zod.number(),
+  "lastTick": zod.coerce.date().nullable(),
+  "activeSchedules": zod.number(),
+  "dueNow": zod.number(),
+  "processedToday": zod.number(),
+  "failedToday": zod.number()
+})
+
+
+/**
+ * @summary Start the background scheduler poller
+ */
+export const StartSchedulerResponse = zod.object({
+  "enabled": zod.boolean(),
+  "running": zod.boolean(),
+  "pollIntervalMs": zod.number(),
+  "lastTick": zod.coerce.date().nullable(),
+  "activeSchedules": zod.number(),
+  "dueNow": zod.number(),
+  "processedToday": zod.number(),
+  "failedToday": zod.number()
+})
+
+
+/**
+ * @summary Stop the background scheduler poller
+ */
+export const StopSchedulerResponse = zod.object({
+  "enabled": zod.boolean(),
+  "running": zod.boolean(),
+  "pollIntervalMs": zod.number(),
+  "lastTick": zod.coerce.date().nullable(),
+  "activeSchedules": zod.number(),
+  "dueNow": zod.number(),
+  "processedToday": zod.number(),
+  "failedToday": zod.number()
+})
+
+
+/**
+ * @summary Run one scheduler poll cycle immediately
+ */
+export const TickSchedulerResponse = zod.object({
+  "enabled": zod.boolean(),
+  "running": zod.boolean(),
+  "pollIntervalMs": zod.number(),
+  "lastTick": zod.coerce.date().nullable(),
+  "activeSchedules": zod.number(),
+  "dueNow": zod.number(),
+  "processedToday": zod.number(),
+  "failedToday": zod.number()
+})
+
+
+/**
+ * @summary Get current scheduler settings
+ */
+export const GetSchedulerSettingsResponse = zod.object({
+  "schedulerEnabled": zod.boolean(),
+  "pollIntervalMs": zod.number(),
+  "timezone": zod.string()
+})
+
+
+/**
+ * @summary Update scheduler settings
+ */
+export const UpdateSchedulerSettingsBody = zod.object({
+  "schedulerEnabled": zod.boolean(),
+  "pollIntervalMs": zod.number(),
+  "timezone": zod.string()
+})
+
+export const UpdateSchedulerSettingsResponse = zod.object({
+  "schedulerEnabled": zod.boolean(),
+  "pollIntervalMs": zod.number(),
+  "timezone": zod.string()
+})
+
+

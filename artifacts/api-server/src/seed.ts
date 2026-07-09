@@ -22,10 +22,12 @@ import {
   aiAgentCapabilitiesTable,
   aiWorkersTable,
   aiJobsTable,
+  aiSchedulesTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { computePriorityScore } from "./services/priorityEngine.js";
+import { createSchedule } from "./services/aiSchedulerService.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -798,6 +800,74 @@ async function seedJobEngine() {
   console.log("\n✅ Job Engine seed complete!");
 }
 
+// ─── Phase 6: AI Scheduler sample schedules ───────────────────────────────────
+
+async function upsertSchedule(input: Parameters<typeof createSchedule>[0]) {
+  const [existing] = await db
+    .select()
+    .from(aiSchedulesTable)
+    .where(eq(aiSchedulesTable.scheduleName, input.scheduleName));
+
+  if (existing) {
+    console.log(`  ↳ Schedule already exists: ${input.scheduleName}`);
+    return existing;
+  }
+
+  const schedule = await createSchedule(input);
+  console.log(`  ✓ Seeded schedule: ${schedule.scheduleName} (${schedule.triggerType} → ${schedule.targetType})`);
+  return schedule;
+}
+
+async function seedSchedules() {
+  console.log("\n🌱 Seeding AI Scheduler sample schedules...");
+
+  await upsertSchedule({
+    scheduleName: "hourly-audit-heartbeat",
+    description: "Writes an audit log entry every hour to confirm the scheduler is alive.",
+    triggerType: "cron",
+    cronExpression: "0 * * * *",
+    timezone: "UTC",
+    targetType: "audit_log",
+    targetConfigJson: { action: "scheduler.heartbeat" },
+    payloadJson: { note: "Hourly heartbeat" },
+  });
+
+  await upsertSchedule({
+    scheduleName: "daily-cost-report-event",
+    description: "Publishes a daily cost report event at the start of each day (UTC).",
+    triggerType: "cron",
+    cronExpression: "0 0 * * *",
+    timezone: "UTC",
+    targetType: "publish_event",
+    targetConfigJson: { eventType: "report.cost.daily", sourceModule: "scheduler" },
+    payloadJson: { reportType: "daily-cost-summary" },
+  });
+
+  await upsertSchedule({
+    scheduleName: "five-minute-queue-sweep",
+    description: "Creates a lightweight queue-sweep job every 5 minutes.",
+    triggerType: "interval",
+    intervalSeconds: 300,
+    timezone: "UTC",
+    targetType: "create_job",
+    targetConfigJson: { jobType: "queue_sweep", priority: 30 },
+    payloadJson: { source: "scheduler-sample" },
+  });
+
+  await upsertSchedule({
+    scheduleName: "job-completed-followup-webhook",
+    description: "Audit-only webhook follow-up triggered after job.completed events (webhook delivery is audit-logged only, not dispatched).",
+    triggerType: "event_followup",
+    eventType: "job.completed",
+    timezone: "UTC",
+    targetType: "webhook",
+    targetConfigJson: { url: "https://example.com/webhooks/job-completed", method: "POST" },
+    payloadJson: { note: "Sample event follow-up webhook (audit-only)" },
+  });
+
+  console.log("✅ Scheduler seed complete!");
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -839,6 +909,9 @@ async function main() {
 
   // Phase 5: Job Engine
   await seedJobEngine();
+
+  // Phase 6: AI Scheduler
+  await seedSchedules();
 
   console.log("\n✅ Seed complete!\n");
   process.exit(0);
