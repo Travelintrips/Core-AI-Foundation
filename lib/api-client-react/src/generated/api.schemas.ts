@@ -1807,8 +1807,259 @@ export interface DispatcherSettings {
   maxConcurrentJobs: number;
 }
 
+export interface ClusterStatus {
+  clusterId: string;
+  totalWorkers: number;
+  onlineWorkers: number;
+  idleWorkers: number;
+  busyWorkers: number;
+  staleWorkers: number;
+  offlineWorkers: number;
+  totalCapacity: number;
+  usedCapacity: number;
+  capacityPct: number;
+  nodes: string[];
+}
+
+export interface WorkerCapacityItem {
+  id: number;
+  workerName: string;
+  workerType: string;
+  status: string;
+  clusterId: string;
+  nodeId: string;
+  region: string;
+  capabilities: string[];
+  maxConcurrentJobs: number;
+  runningJobs: number;
+  availableSlots: number;
+  leaseValid: boolean;
+  /** @nullable */
+  leaseExpiresAt?: string | null;
+  lastHeartbeat: string;
+}
+
+export type RegisterClusterWorkerBodyWorkerType = typeof RegisterClusterWorkerBodyWorkerType[keyof typeof RegisterClusterWorkerBodyWorkerType];
+
+
+export const RegisterClusterWorkerBodyWorkerType = {
+  text_worker: 'text_worker',
+  image_worker: 'image_worker',
+  export_worker: 'export_worker',
+  system_worker: 'system_worker',
+} as const;
+
+export interface RegisterClusterWorkerBody {
+  /** @minLength 1 */
+  workerName: string;
+  workerType: RegisterClusterWorkerBodyWorkerType;
+  clusterId?: string;
+  nodeId?: string;
+  region?: string;
+  version?: string;
+  capabilities?: string[];
+  /**
+     * @minimum 1
+     * @maximum 32
+     */
+  maxConcurrentJobs?: number;
+  leaseOwner?: string;
+  /**
+     * @minimum 5000
+     * @maximum 300000
+     */
+  leaseTtlMs?: number;
+}
+
+export interface RenewLeaseBody {
+  /** @minLength 1 */
+  heartbeatToken: string;
+  /**
+     * @minimum 5000
+     * @maximum 300000
+     */
+  leaseTtlMs?: number;
+}
+
 export interface ErrorResponse {
   error: string;
+}
+
+export type AiEventPayloadJson = { [key: string]: unknown };
+
+export type AiEventMetadataJson = { [key: string]: unknown };
+
+export type AiEventStatus = typeof AiEventStatus[keyof typeof AiEventStatus];
+
+
+export const AiEventStatus = {
+  pending: 'pending',
+  published: 'published',
+  processing: 'processing',
+  processed: 'processed',
+  failed: 'failed',
+  ignored: 'ignored',
+} as const;
+
+export interface AiEvent {
+  id: number;
+  eventId: string;
+  eventType: string;
+  sourceModule: string;
+  /** @nullable */
+  sourceId?: string | null;
+  correlationId: string;
+  /** @nullable */
+  causationId?: string | null;
+  payloadJson: AiEventPayloadJson;
+  metadataJson: AiEventMetadataJson;
+  status: AiEventStatus;
+  /** @nullable */
+  publishedAt?: string | null;
+  /** @nullable */
+  processedAt?: string | null;
+  createdAt: string;
+}
+
+export type AiEventSubscriptionHandlerType = typeof AiEventSubscriptionHandlerType[keyof typeof AiEventSubscriptionHandlerType];
+
+
+export const AiEventSubscriptionHandlerType = {
+  create_job: 'create_job',
+  audit_log: 'audit_log',
+  notification_hook: 'notification_hook',
+  update_project_status: 'update_project_status',
+  call_webhook: 'call_webhook',
+} as const;
+
+export type AiEventSubscriptionHandlerConfigJson = { [key: string]: unknown };
+
+export type AiEventSubscriptionStatus = typeof AiEventSubscriptionStatus[keyof typeof AiEventSubscriptionStatus];
+
+
+export const AiEventSubscriptionStatus = {
+  active: 'active',
+  paused: 'paused',
+  disabled: 'disabled',
+} as const;
+
+export type AiEventSubscriptionRetryPolicy = { [key: string]: unknown };
+
+export interface AiEventSubscription {
+  id: number;
+  subscriptionName: string;
+  eventType: string;
+  /** @nullable */
+  targetType?: string | null;
+  /** @nullable */
+  targetId?: string | null;
+  handlerType: AiEventSubscriptionHandlerType;
+  handlerConfigJson?: AiEventSubscriptionHandlerConfigJson;
+  status: AiEventSubscriptionStatus;
+  retryPolicy?: AiEventSubscriptionRetryPolicy;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PublishEventBodyPayload = { [key: string]: unknown };
+
+export type PublishEventBodyMetadata = { [key: string]: unknown };
+
+export interface PublishEventBody {
+  /** @minLength 1 */
+  eventType: string;
+  /** @minLength 1 */
+  sourceModule: string;
+  sourceId?: string;
+  correlationId?: string;
+  causationId?: string;
+  payload?: PublishEventBodyPayload;
+  metadata?: PublishEventBodyMetadata;
+}
+
+export type CreateSubscriptionBodyHandlerType = typeof CreateSubscriptionBodyHandlerType[keyof typeof CreateSubscriptionBodyHandlerType];
+
+
+export const CreateSubscriptionBodyHandlerType = {
+  create_job: 'create_job',
+  audit_log: 'audit_log',
+  notification_hook: 'notification_hook',
+  update_project_status: 'update_project_status',
+  call_webhook: 'call_webhook',
+} as const;
+
+export type CreateSubscriptionBodyHandlerConfig = { [key: string]: unknown };
+
+export type CreateSubscriptionBodyRetryPolicy = { [key: string]: unknown };
+
+export interface CreateSubscriptionBody {
+  /** @minLength 1 */
+  subscriptionName: string;
+  /** @minLength 1 */
+  eventType: string;
+  targetType?: string;
+  targetId?: string;
+  handlerType: CreateSubscriptionBodyHandlerType;
+  handlerConfig?: CreateSubscriptionBodyHandlerConfig;
+  retryPolicy?: CreateSubscriptionBodyRetryPolicy;
+}
+
+export type UpdateSubscriptionBodyStatus = typeof UpdateSubscriptionBodyStatus[keyof typeof UpdateSubscriptionBodyStatus];
+
+
+export const UpdateSubscriptionBodyStatus = {
+  active: 'active',
+  paused: 'paused',
+  disabled: 'disabled',
+} as const;
+
+export type UpdateSubscriptionBodyHandlerType = typeof UpdateSubscriptionBodyHandlerType[keyof typeof UpdateSubscriptionBodyHandlerType];
+
+
+export const UpdateSubscriptionBodyHandlerType = {
+  create_job: 'create_job',
+  audit_log: 'audit_log',
+  notification_hook: 'notification_hook',
+  update_project_status: 'update_project_status',
+  call_webhook: 'call_webhook',
+} as const;
+
+export type UpdateSubscriptionBodyHandlerConfig = { [key: string]: unknown };
+
+export type UpdateSubscriptionBodyRetryPolicy = { [key: string]: unknown };
+
+export interface UpdateSubscriptionBody {
+  status?: UpdateSubscriptionBodyStatus;
+  handlerType?: UpdateSubscriptionBodyHandlerType;
+  handlerConfig?: UpdateSubscriptionBodyHandlerConfig;
+  retryPolicy?: UpdateSubscriptionBodyRetryPolicy;
+}
+
+export interface EventListResponse {
+  events: AiEvent[];
+  total: number;
+}
+
+export interface EventTimelineResponse {
+  correlationId: string;
+  events: AiEvent[];
+  total: number;
+}
+
+export interface SubscriptionListResponse {
+  subscriptions: AiEventSubscription[];
+  total: number;
+}
+
+export type DispatchResultHandlersItem = {
+  subscriptionName: string;
+  ok: boolean;
+  error?: string;
+};
+
+export interface DispatchResult {
+  eventId: string;
+  handlers: DispatchResultHandlersItem[];
 }
 
 export type ListModelsParams = {
@@ -1913,11 +2164,31 @@ export type TickDispatcher200 = DispatcherStatus & {
   tick: TickDispatcher200Tick;
 };
 
+export type RebalanceCluster200 = {
+  staleWorkers: number;
+  recoveredJobs: number;
+};
+
+export type RecoverStaleWorkers200 = {
+  staleWorkers: number[];
+  recoveredJobs: number;
+};
+
 export type GetAgentStatsParams = {
 days?: number;
 };
 
 export type GetCostAnalyticsParams = {
 days?: number;
+};
+
+export type ListEventsParams = {
+eventType?: string;
+sourceModule?: string;
+status?: string;
+from?: string;
+to?: string;
+limit?: number;
+offset?: number;
 };
 

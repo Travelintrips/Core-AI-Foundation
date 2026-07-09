@@ -26,6 +26,7 @@ import {
   GetCreativeImageAnalyticsResponse,
 } from "@workspace/api-zod";
 import { logAudit } from "../services/aiAuditService.js";
+import { publishSafe } from "../services/aiEventBusService.js";
 import { runCreativeBriefWorkflow } from "../services/creativeWorkflowRunner.js";
 import { runImageDesignerPipeline } from "../services/imageDesignerService.js";
 
@@ -61,6 +62,8 @@ router.post("/creative-ai/brief", async (req, res): Promise<void> => {
     .returning();
 
   await logAudit("creative-ai", "create_project", project.projectId, "creative_project", "success", { brandName });
+  publishSafe({ eventType: "creative.project.created", sourceModule: "creative-ai", sourceId: project.projectId,
+    payload: { projectId: project.projectId, brandName, businessType, goal } });
 
   // Start workflow in background — don't await
   runCreativeBriefWorkflow(project.id).catch(async (err) => {
@@ -302,6 +305,14 @@ router.patch("/creative-ai/assets/:assetId/status", async (req, res): Promise<vo
     "success",
     { projectId: asset.projectId, status: body.data.status },
   ).catch(() => {});
+
+  if (body.data.status === "approved") {
+    publishSafe({ eventType: "creative.image.approved", sourceModule: "creative-ai", sourceId: String(asset.id),
+      payload: { assetId: asset.id, projectId: asset.projectId } });
+  } else {
+    publishSafe({ eventType: "creative.image.generated", sourceModule: "creative-ai", sourceId: String(asset.id),
+      payload: { assetId: asset.id, projectId: asset.projectId, status: body.data.status } });
+  }
 
   res.json(
     UpdateAssetStatusResponse.parse({

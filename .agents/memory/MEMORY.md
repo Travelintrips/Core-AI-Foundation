@@ -12,3 +12,4 @@
 - [phase48-digital-workforce](phase48-digital-workforce.md) — Phase 4.8 workforce: 7 new tables, seed via POST /api/ai/seed/all, workforce at /ai/workforce/* routes, frontend at /workforce
 - [orval-codegen-workaround](orval-codegen-workaround.md) — orval 8.18.0 @scalar/json-magic bug; pre-parse YAML as object and pass as input.target to bypass file-loader failure
 - [phase52-cluster](phase52-cluster.md) — Phase 5.2 worker cluster: lock_version table-prefix fix, route path prefix rule, types/ dir must stay deleted, cluster hooks are manual not generated
+- [phase55-event-bus](phase55-event-bus.md) — Event bus: publishSafe rule, dispatch outcome semantics, create_job idempotency, orval collision fix pattern, static route ordering

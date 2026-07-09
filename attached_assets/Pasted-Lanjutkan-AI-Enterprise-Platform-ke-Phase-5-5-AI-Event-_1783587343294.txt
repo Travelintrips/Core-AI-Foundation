@@ -1,0 +1,256 @@
+Lanjutkan AI Enterprise Platform ke Phase 5.5: AI Event Bus.
+
+Status saat ini:
+
+* Phase 5 AI Job Engine selesai
+* Phase 5.1 Worker Dispatcher Runtime selesai
+* Phase 5.1.5 Build System Hardening selesai
+* Phase 5.2 Distributed Worker Cluster selesai
+* Worker lease, cluster_id, node_id, capability routing, stale recovery, rebalance, dan cluster UI sudah berjalan
+* pnpm run verify clean
+
+Tujuan Phase 5.5:
+Membuat AI Event Bus agar seluruh modul AI dapat berkomunikasi secara event-driven, bukan saling memanggil langsung.
+
+PENTING:
+Jangan rombak Job Engine, Dispatcher, Cluster, Creative AI, Workforce, atau Queue.
+Jangan membuat Scheduler, Marketplace, Billing, Video, Voice, OCR, atau Plugin.
+Semua perubahan harus additive, modular, backward compatible, OpenAPI-first, dan wajib lolos pnpm run verify.
+
+====================================================================
+BAGIAN 1 — EVENT STORE
+======================
+
+Buat tabel:
+
+ai_events
+
+Field:
+
+* id
+* event_id
+* event_type
+* source_module
+* source_id
+* correlation_id
+* causation_id
+* payload_json
+* metadata_json
+* status
+* published_at
+* processed_at
+* created_at
+
+Status:
+
+* pending
+* published
+* processing
+* processed
+* failed
+* ignored
+
+====================================================================
+BAGIAN 2 — EVENT SUBSCRIPTIONS
+==============================
+
+Buat tabel:
+
+ai_event_subscriptions
+
+Field:
+
+* id
+* subscription_name
+* event_type
+* target_type
+* target_id
+* handler_type
+* handler_config_json
+* status
+* retry_policy
+* created_at
+* updated_at
+
+Contoh subscription:
+
+* creative.project.completed → create marketing job
+* creative.client.approved → notify admin
+* job.failed → audit alert
+* worker.stale → recovery job
+* image.approved → export asset package
+
+====================================================================
+BAGIAN 3 — EVENT BUS SERVICE
+============================
+
+Buat service:
+
+aiEventBusService
+
+Method:
+
+* publish()
+* subscribe()
+* unsubscribe()
+* dispatch()
+* processEvent()
+* markProcessed()
+* markFailed()
+* replay()
+* getEventTimeline()
+
+====================================================================
+BAGIAN 4 — EVENT HANDLERS
+=========================
+
+Buat handler modular:
+
+eventHandlerRegistry
+
+Handler awal:
+
+* create_job
+* audit_log
+* notification_hook
+* update_project_status
+* call_webhook
+
+Untuk sekarang notification_hook cukup audit log / console log.
+Jangan implement WhatsApp/email nyata dulu.
+
+====================================================================
+BAGIAN 5 — INTEGRASI JOB ENGINE
+===============================
+
+Publish event otomatis saat:
+
+* job.queued
+* job.started
+* job.completed
+* job.failed
+* job.retrying
+* worker.stale
+* worker.recovered
+* dispatcher.started
+* dispatcher.stopped
+
+Event tidak boleh merusak main flow.
+Jika event publish gagal, main flow tetap jalan dan audit log mencatat failure.
+
+====================================================================
+BAGIAN 6 — INTEGRASI CREATIVE AI
+================================
+
+Publish event otomatis saat:
+
+* creative.project.created
+* creative.workflow.completed
+* creative.workflow.failed
+* creative.image.generated
+* creative.image.approved
+* creative.client.review.shared
+* creative.client.approved
+* creative.client.rejected
+* creative.client.revision_requested
+
+====================================================================
+BAGIAN 7 — EVENT TO JOB BRIDGE
+==============================
+
+Tambahkan kemampuan subscription untuk membuat job otomatis.
+
+Contoh:
+Jika event_type = creative.client.approved
+maka handler create_job membuat job:
+
+* job_type: marketing_followup
+* required_capability: copywriting
+* priority: 70
+* payload berisi project_id dan client data
+
+====================================================================
+BAGIAN 8 — API
+==============
+
+Tambahkan endpoint:
+
+GET /api/ai/events
+GET /api/ai/events/:id
+GET /api/ai/events/timeline/:correlationId
+POST /api/ai/events/publish
+POST /api/ai/events/:id/replay
+
+GET /api/ai/event-subscriptions
+POST /api/ai/event-subscriptions
+PATCH /api/ai/event-subscriptions/:id
+DELETE /api/ai/event-subscriptions/:id
+
+====================================================================
+BAGIAN 9 — UI EVENT CENTER
+==========================
+
+Tambahkan halaman:
+
+/events
+
+Fitur:
+
+* event stream table
+* filter by event_type, source_module, status, date
+* timeline by correlation_id
+* subscription list
+* create/edit subscription
+* replay event
+* event payload viewer
+* handler result viewer
+
+Tambahkan menu sidebar:
+AI Events
+
+====================================================================
+BAGIAN 10 — AUDIT & SAFETY
+==========================
+
+Semua event penting harus audit logged:
+
+* event published
+* event processed
+* event failed
+* event replayed
+* subscription created/updated/deleted
+
+Safety:
+
+* event processing idempotent
+* replay aman
+* handler failure tidak crash dispatcher
+* correlation_id wajib dibuat jika kosong
+* causation_id dipakai jika event berasal dari event lain
+
+====================================================================
+BAGIAN 11 — VERIFICATION
+========================
+
+Pastikan:
+
+* DB push clean
+* OpenAPI/codegen clean
+* pnpm run verify clean
+* build clean
+
+Test:
+
+1. publish manual event
+2. lihat event muncul di /events
+3. create subscription create_job
+4. publish event yang match
+5. job otomatis dibuat
+6. replay event tidak membuat duplicate jika handler idempotent
+7. job completed otomatis publish job.completed
+8. worker stale otomatis publish worker.stale
+9. Creative client approved publish creative.client.approved
+10. UI event timeline tampil
+
+Target akhir:
+AI Enterprise Platform menjadi event-driven AI Operating System, di mana Job Engine, Worker Cluster, Creative AI, Client Review, dan modul future seperti Finance AI/HR AI/Tax AI dapat berkomunikasi melalui Event Bus yang aman, audit-able, dan scalable.

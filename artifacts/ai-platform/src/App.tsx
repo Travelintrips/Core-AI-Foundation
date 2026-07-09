@@ -23,6 +23,7 @@ import ClientReviewPage from "@/pages/client-review";
 import Workforce from "@/pages/workforce";
 import Operations from "@/pages/operations";
 import Queue from "@/pages/queue";
+import Events from "@/pages/events";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +47,7 @@ function AdminRouter() {
         <Route path="/workforce" component={Workforce} />
         <Route path="/operations" component={Operations} />
         <Route path="/queue" component={Queue} />
+        <Route path="/events" component={Events} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

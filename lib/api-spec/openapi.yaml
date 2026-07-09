@@ -40,6 +40,10 @@ tags:
     description: Client Review Portal — share project results with clients for approval
   - name: public
     description: Public endpoints — token-protected, no admin key required
+  - name: events
+    description: AI Event Bus — publish, query, and replay inter-module events
+  - name: event-subscriptions
+    description: AI Event Subscriptions — route events to handler functions
 paths:
   /healthz:
     get:
@@ -2400,6 +2404,214 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientActionResult"
+  /ai/events:
+    get:
+      operationId: listEvents
+      tags:
+        - events
+      summary: List AI events
+      parameters:
+        - in: query
+          name: eventType
+          schema:
+            type: string
+        - in: query
+          name: sourceModule
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: from
+          schema:
+            type: string
+        - in: query
+          name: to
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of events
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventListResponse"
+  /ai/events/timeline/{correlationId}:
+    get:
+      operationId: getEventTimeline
+      tags:
+        - events
+      summary: Get events by correlationId
+      parameters:
+        - in: path
+          name: correlationId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Event timeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventTimelineResponse"
+  /ai/events/publish:
+    post:
+      operationId: publishEvent
+      tags:
+        - events
+      summary: Manually publish an event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishEventBody"
+      responses:
+        "201":
+          description: Event published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiEvent"
+  /ai/events/{id}:
+    get:
+      operationId: getEvent
+      tags:
+        - events
+      summary: Get a single event
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiEvent"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /ai/events/{id}/replay:
+    post:
+      operationId: replayEvent
+      tags:
+        - events
+      summary: Replay an event through active subscriptions
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Replay result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DispatchResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /ai/event-subscriptions:
+    get:
+      operationId: listEventSubscriptions
+      tags:
+        - event-subscriptions
+      summary: List event subscriptions
+      responses:
+        "200":
+          description: List of subscriptions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionListResponse"
+    post:
+      operationId: createEventSubscription
+      tags:
+        - event-subscriptions
+      summary: Create an event subscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubscriptionBody"
+      responses:
+        "201":
+          description: Subscription created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiEventSubscription"
+  /ai/event-subscriptions/{id}:
+    patch:
+      operationId: updateEventSubscription
+      tags:
+        - event-subscriptions
+      summary: Update a subscription
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSubscriptionBody"
+      responses:
+        "200":
+          description: Updated subscription
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiEventSubscription"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteEventSubscription
+      tags:
+        - event-subscriptions
+      summary: Delete (disable) a subscription
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
 components:
   schemas:
     HealthStatus:
@@ -5300,3 +5512,237 @@ components:
       properties:
         error:
           type: string
+    AiEvent:
+      type: object
+      required:
+        - id
+        - eventId
+        - eventType
+        - sourceModule
+        - correlationId
+        - payloadJson
+        - metadataJson
+        - status
+        - createdAt
+      properties:
+        id:
+          type: integer
+        eventId:
+          type: string
+        eventType:
+          type: string
+        sourceModule:
+          type: string
+        sourceId:
+          type:
+            - string
+            - "null"
+        correlationId:
+          type: string
+        causationId:
+          type:
+            - string
+            - "null"
+        payloadJson:
+          type: object
+        metadataJson:
+          type: object
+        status:
+          type: string
+          enum:
+            - pending
+            - published
+            - processing
+            - processed
+            - failed
+            - ignored
+        publishedAt:
+          type:
+            - string
+            - "null"
+        processedAt:
+          type:
+            - string
+            - "null"
+        createdAt:
+          type: string
+    AiEventSubscription:
+      type: object
+      required:
+        - id
+        - subscriptionName
+        - eventType
+        - handlerType
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        subscriptionName:
+          type: string
+        eventType:
+          type: string
+        targetType:
+          type:
+            - string
+            - "null"
+        targetId:
+          type:
+            - string
+            - "null"
+        handlerType:
+          type: string
+          enum:
+            - create_job
+            - audit_log
+            - notification_hook
+            - update_project_status
+            - call_webhook
+        handlerConfigJson:
+          type: object
+        status:
+          type: string
+          enum:
+            - active
+            - paused
+            - disabled
+        retryPolicy:
+          type: object
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+    PublishEventBody:
+      type: object
+      required:
+        - eventType
+        - sourceModule
+      properties:
+        eventType:
+          type: string
+          minLength: 1
+        sourceModule:
+          type: string
+          minLength: 1
+        sourceId:
+          type: string
+        correlationId:
+          type: string
+        causationId:
+          type: string
+        payload:
+          type: object
+        metadata:
+          type: object
+    CreateSubscriptionBody:
+      type: object
+      required:
+        - subscriptionName
+        - eventType
+        - handlerType
+      properties:
+        subscriptionName:
+          type: string
+          minLength: 1
+        eventType:
+          type: string
+          minLength: 1
+        targetType:
+          type: string
+        targetId:
+          type: string
+        handlerType:
+          type: string
+          enum:
+            - create_job
+            - audit_log
+            - notification_hook
+            - update_project_status
+            - call_webhook
+        handlerConfig:
+          type: object
+        retryPolicy:
+          type: object
+    UpdateSubscriptionBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - active
+            - paused
+            - disabled
+        handlerType:
+          type: string
+          enum:
+            - create_job
+            - audit_log
+            - notification_hook
+            - update_project_status
+            - call_webhook
+        handlerConfig:
+          type: object
+        retryPolicy:
+          type: object
+    EventListResponse:
+      type: object
+      required:
+        - events
+        - total
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiEvent"
+        total:
+          type: integer
+    EventTimelineResponse:
+      type: object
+      required:
+        - correlationId
+        - events
+        - total
+      properties:
+        correlationId:
+          type: string
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiEvent"
+        total:
+          type: integer
+    SubscriptionListResponse:
+      type: object
+      required:
+        - subscriptions
+        - total
+      properties:
+        subscriptions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiEventSubscription"
+        total:
+          type: integer
+    DispatchResult:
+      type: object
+      required:
+        - eventId
+        - handlers
+      properties:
+        eventId:
+          type: string
+        handlers:
+          type: array
+          items:
+            type: object
+            required:
+              - subscriptionName
+              - ok
+            properties:
+              subscriptionName:
+                type: string
+              ok:
+                type: boolean
+              error:
+                type: string

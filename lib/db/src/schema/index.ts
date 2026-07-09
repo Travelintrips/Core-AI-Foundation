@@ -34,3 +34,5 @@ export * from "./ai-employee-performance";
 export * from "./ai-decision-logs";
 export * from "./ai-jobs";
 export * from "./ai-workers";
+export * from "./ai-events";
+export * from "./ai-event-subscriptions";

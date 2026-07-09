@@ -15,6 +15,7 @@ import { eq, and, inArray, sql } from "drizzle-orm";
 import { db, aiJobsTable, aiWorkersTable } from "@workspace/db";
 import type { AiJob, AiWorker } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
+import { publishSafe } from "./aiEventBusService.js";
 
 // ── Retry delay helpers ───────────────────────────────────────────────────────
 
@@ -232,6 +233,13 @@ export async function completeJob(
     workerId,
   });
 
+  publishSafe({
+    eventType:    "job.completed",
+    sourceModule: "job-engine",
+    sourceId:     String(jobId),
+    payload:      { jobId, workerId, jobCode: completed!.jobCode, jobType: completed!.jobType, actualDuration, actualCost },
+  });
+
   return completed!;
 }
 
@@ -312,6 +320,13 @@ export async function retryJob(
     { errorMessage, retryCount: newRetryCount, maxRetry: job.maxRetry, exhausted },
   );
 
+  publishSafe({
+    eventType:    exhausted ? "job.failed" : "job.retrying",
+    sourceModule: "job-engine",
+    sourceId:     String(jobId),
+    payload:      { jobId, workerId, errorMessage, retryCount: newRetryCount, exhausted, jobCode: updated!.jobCode, jobType: updated!.jobType },
+  });
+
   return updated!;
 }
 
@@ -348,6 +363,13 @@ export async function cancelJob(jobId: number, workerId?: number): Promise<AiJob
   }
 
   await logAudit("job-engine", "job_cancelled", String(jobId), "ai_job", "success", { workerId });
+
+  publishSafe({
+    eventType:    "job.failed",
+    sourceModule: "job-engine",
+    sourceId:     String(jobId),
+    payload:      { jobId, workerId, reason: "cancelled", jobCode: cancelled.jobCode, jobType: cancelled.jobType },
+  });
 
   return cancelled;
 }

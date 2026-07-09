@@ -30,6 +30,7 @@ import {
   WORKER_TYPE_CAPABILITIES,
 } from "./workerClusterService.js";
 import { logAudit } from "./aiAuditService.js";
+import { publishSafe } from "./aiEventBusService.js";
 import { logger } from "../lib/logger.js";
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -260,6 +261,9 @@ export async function start(): Promise<void> {
     workerIds,
     settings: _settings,
   });
+
+  publishSafe({ eventType: "dispatcher.started", sourceModule: "job-dispatcher", sourceId: "dispatcher",
+    payload: { workerIds, pid: process.pid } });
 }
 
 /**
@@ -271,6 +275,7 @@ export async function stop(): Promise<void> {
   _clearTimers();
   logger.info("[dispatcher] Stopped");
   await logAudit("job-dispatcher", "dispatcher_stopped", "dispatcher", "system", "success", {});
+  publishSafe({ eventType: "dispatcher.stopped", sourceModule: "job-dispatcher", sourceId: "dispatcher", payload: {} });
 }
 
 /**
@@ -368,8 +373,12 @@ export async function recover(): Promise<void> {
 
   // ── Phase 5.2: lease-based stale detection ──────────────────────────────
   try {
-    await markStaleWorkers();
+    const staleIds = await markStaleWorkers();
     await rebalanceJobs();
+    for (const workerId of staleIds) {
+      publishSafe({ eventType: "worker.stale", sourceModule: "job-dispatcher", sourceId: String(workerId),
+        payload: { workerId } });
+    }
   } catch (err) {
     logger.error({ err }, "[dispatcher] Cluster stale recovery error");
   }

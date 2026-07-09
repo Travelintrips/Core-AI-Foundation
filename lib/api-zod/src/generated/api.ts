@@ -2230,6 +2230,139 @@ export const UpdateDispatcherSettingsResponse = zod.object({
 
 
 /**
+ * @summary Get aggregate cluster health snapshot
+ */
+export const GetClusterStatusResponseItem = zod.object({
+  "clusterId": zod.string(),
+  "totalWorkers": zod.number(),
+  "onlineWorkers": zod.number(),
+  "idleWorkers": zod.number(),
+  "busyWorkers": zod.number(),
+  "staleWorkers": zod.number(),
+  "offlineWorkers": zod.number(),
+  "totalCapacity": zod.number(),
+  "usedCapacity": zod.number(),
+  "capacityPct": zod.number(),
+  "nodes": zod.array(zod.string())
+})
+export const GetClusterStatusResponse = zod.array(GetClusterStatusResponseItem)
+
+
+/**
+ * @summary List all workers with capacity and lease info
+ */
+export const GetClusterWorkersResponseItem = zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "workerType": zod.string(),
+  "status": zod.string(),
+  "clusterId": zod.string(),
+  "nodeId": zod.string(),
+  "region": zod.string(),
+  "capabilities": zod.array(zod.string()),
+  "maxConcurrentJobs": zod.number(),
+  "runningJobs": zod.number(),
+  "availableSlots": zod.number(),
+  "leaseValid": zod.boolean(),
+  "leaseExpiresAt": zod.string().nullish(),
+  "lastHeartbeat": zod.string()
+})
+export const GetClusterWorkersResponse = zod.array(GetClusterWorkersResponseItem)
+
+
+/**
+ * @summary Register a new worker node in the cluster
+ */
+
+export const registerClusterWorkerBodyMaxConcurrentJobsMax = 32;
+
+export const registerClusterWorkerBodyLeaseTtlMsMin = 5000;
+export const registerClusterWorkerBodyLeaseTtlMsMax = 300000;
+
+
+
+export const RegisterClusterWorkerBody = zod.object({
+  "workerName": zod.string().min(1),
+  "workerType": zod.enum(['text_worker', 'image_worker', 'export_worker', 'system_worker']),
+  "clusterId": zod.string().optional(),
+  "nodeId": zod.string().optional(),
+  "region": zod.string().optional(),
+  "version": zod.string().optional(),
+  "capabilities": zod.array(zod.string()).optional(),
+  "maxConcurrentJobs": zod.number().min(1).max(registerClusterWorkerBodyMaxConcurrentJobsMax).optional(),
+  "leaseOwner": zod.string().optional(),
+  "leaseTtlMs": zod.number().min(registerClusterWorkerBodyLeaseTtlMsMin).max(registerClusterWorkerBodyLeaseTtlMsMax).optional()
+})
+
+export const RegisterClusterWorkerResponse = zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "status": zod.enum(['online', 'offline', 'maintenance', 'busy', 'idle']),
+  "currentJob": zod.number().nullish(),
+  "lastHeartbeat": zod.coerce.date(),
+  "runningJobs": zod.number(),
+  "completedToday": zod.number(),
+  "failedToday": zod.number(),
+  "averageLatency": zod.number().nullish().describe('Rolling average latency in ms'),
+  "version": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Renew a worker lease
+ */
+export const RenewWorkerLeaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+export const renewWorkerLeaseBodyLeaseTtlMsMin = 5000;
+export const renewWorkerLeaseBodyLeaseTtlMsMax = 300000;
+
+
+
+export const RenewWorkerLeaseBody = zod.object({
+  "heartbeatToken": zod.string().min(1),
+  "leaseTtlMs": zod.number().min(renewWorkerLeaseBodyLeaseTtlMsMin).max(renewWorkerLeaseBodyLeaseTtlMsMax).optional()
+})
+
+export const RenewWorkerLeaseResponse = zod.object({
+  "id": zod.number(),
+  "workerName": zod.string(),
+  "status": zod.enum(['online', 'offline', 'maintenance', 'busy', 'idle']),
+  "currentJob": zod.number().nullish(),
+  "lastHeartbeat": zod.coerce.date(),
+  "runningJobs": zod.number(),
+  "completedToday": zod.number(),
+  "failedToday": zod.number(),
+  "averageLatency": zod.number().nullish().describe('Rolling average latency in ms'),
+  "version": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Mark stale workers and requeue their running jobs
+ */
+export const RebalanceClusterResponse = zod.object({
+  "staleWorkers": zod.number(),
+  "recoveredJobs": zod.number()
+})
+
+
+/**
+ * @summary Recover jobs from stale workers
+ */
+export const RecoverStaleWorkersResponse = zod.object({
+  "staleWorkers": zod.array(zod.number()),
+  "recoveredJobs": zod.number()
+})
+
+
+/**
  * @summary List all capability matrix entries
  */
 export const ListCapabilitiesResponseItem = zod.object({
@@ -2873,5 +3006,276 @@ export const RequestRevisionCreativeReviewResponse = zod.object({
   "status": zod.enum(['approved', 'rejected', 'revision_requested']),
   "message": zod.string().optional()
 })
+
+
+/**
+ * @summary List AI events
+ */
+export const listEventsQueryLimitDefault = 50;
+export const listEventsQueryOffsetDefault = 0;
+
+export const ListEventsQueryParams = zod.object({
+  "eventType": zod.coerce.string().optional(),
+  "sourceModule": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional(),
+  "from": zod.coerce.string().optional(),
+  "to": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(listEventsQueryLimitDefault),
+  "offset": zod.coerce.number().default(listEventsQueryOffsetDefault)
+})
+
+export const ListEventsResponse = zod.object({
+  "events": zod.array(zod.object({
+  "id": zod.number(),
+  "eventId": zod.string(),
+  "eventType": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "correlationId": zod.string(),
+  "causationId": zod.string().nullish(),
+  "payloadJson": zod.object({
+
+}).passthrough(),
+  "metadataJson": zod.object({
+
+}).passthrough(),
+  "status": zod.enum(['pending', 'published', 'processing', 'processed', 'failed', 'ignored']),
+  "publishedAt": zod.string().nullish(),
+  "processedAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Get events by correlationId
+ */
+export const GetEventTimelineParams = zod.object({
+  "correlationId": zod.coerce.string()
+})
+
+export const GetEventTimelineResponse = zod.object({
+  "correlationId": zod.string(),
+  "events": zod.array(zod.object({
+  "id": zod.number(),
+  "eventId": zod.string(),
+  "eventType": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "correlationId": zod.string(),
+  "causationId": zod.string().nullish(),
+  "payloadJson": zod.object({
+
+}).passthrough(),
+  "metadataJson": zod.object({
+
+}).passthrough(),
+  "status": zod.enum(['pending', 'published', 'processing', 'processed', 'failed', 'ignored']),
+  "publishedAt": zod.string().nullish(),
+  "processedAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Manually publish an event
+ */
+
+
+
+
+export const PublishEventBody = zod.object({
+  "eventType": zod.string().min(1),
+  "sourceModule": zod.string().min(1),
+  "sourceId": zod.string().optional(),
+  "correlationId": zod.string().optional(),
+  "causationId": zod.string().optional(),
+  "payload": zod.object({
+
+}).passthrough().optional(),
+  "metadata": zod.object({
+
+}).passthrough().optional()
+})
+
+export const PublishEventResponse = zod.object({
+  "id": zod.number(),
+  "eventId": zod.string(),
+  "eventType": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "correlationId": zod.string(),
+  "causationId": zod.string().nullish(),
+  "payloadJson": zod.object({
+
+}).passthrough(),
+  "metadataJson": zod.object({
+
+}).passthrough(),
+  "status": zod.enum(['pending', 'published', 'processing', 'processed', 'failed', 'ignored']),
+  "publishedAt": zod.string().nullish(),
+  "processedAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Get a single event
+ */
+export const GetEventParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetEventResponse = zod.object({
+  "id": zod.number(),
+  "eventId": zod.string(),
+  "eventType": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "correlationId": zod.string(),
+  "causationId": zod.string().nullish(),
+  "payloadJson": zod.object({
+
+}).passthrough(),
+  "metadataJson": zod.object({
+
+}).passthrough(),
+  "status": zod.enum(['pending', 'published', 'processing', 'processed', 'failed', 'ignored']),
+  "publishedAt": zod.string().nullish(),
+  "processedAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Replay an event through active subscriptions
+ */
+export const ReplayEventParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ReplayEventResponse = zod.object({
+  "eventId": zod.string(),
+  "handlers": zod.array(zod.object({
+  "subscriptionName": zod.string(),
+  "ok": zod.boolean(),
+  "error": zod.string().optional()
+}))
+})
+
+
+/**
+ * @summary List event subscriptions
+ */
+export const ListEventSubscriptionsResponse = zod.object({
+  "subscriptions": zod.array(zod.object({
+  "id": zod.number(),
+  "subscriptionName": zod.string(),
+  "eventType": zod.string(),
+  "targetType": zod.string().nullish(),
+  "targetId": zod.string().nullish(),
+  "handlerType": zod.enum(['create_job', 'audit_log', 'notification_hook', 'update_project_status', 'call_webhook']),
+  "handlerConfigJson": zod.object({
+
+}).passthrough().optional(),
+  "status": zod.enum(['active', 'paused', 'disabled']),
+  "retryPolicy": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Create an event subscription
+ */
+
+
+
+
+export const CreateEventSubscriptionBody = zod.object({
+  "subscriptionName": zod.string().min(1),
+  "eventType": zod.string().min(1),
+  "targetType": zod.string().optional(),
+  "targetId": zod.string().optional(),
+  "handlerType": zod.enum(['create_job', 'audit_log', 'notification_hook', 'update_project_status', 'call_webhook']),
+  "handlerConfig": zod.object({
+
+}).passthrough().optional(),
+  "retryPolicy": zod.object({
+
+}).passthrough().optional()
+})
+
+export const CreateEventSubscriptionResponse = zod.object({
+  "id": zod.number(),
+  "subscriptionName": zod.string(),
+  "eventType": zod.string(),
+  "targetType": zod.string().nullish(),
+  "targetId": zod.string().nullish(),
+  "handlerType": zod.enum(['create_job', 'audit_log', 'notification_hook', 'update_project_status', 'call_webhook']),
+  "handlerConfigJson": zod.object({
+
+}).passthrough().optional(),
+  "status": zod.enum(['active', 'paused', 'disabled']),
+  "retryPolicy": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Update a subscription
+ */
+export const UpdateEventSubscriptionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateEventSubscriptionBody = zod.object({
+  "status": zod.enum(['active', 'paused', 'disabled']).optional(),
+  "handlerType": zod.enum(['create_job', 'audit_log', 'notification_hook', 'update_project_status', 'call_webhook']).optional(),
+  "handlerConfig": zod.object({
+
+}).passthrough().optional(),
+  "retryPolicy": zod.object({
+
+}).passthrough().optional()
+})
+
+export const UpdateEventSubscriptionResponse = zod.object({
+  "id": zod.number(),
+  "subscriptionName": zod.string(),
+  "eventType": zod.string(),
+  "targetType": zod.string().nullish(),
+  "targetId": zod.string().nullish(),
+  "handlerType": zod.enum(['create_job', 'audit_log', 'notification_hook', 'update_project_status', 'call_webhook']),
+  "handlerConfigJson": zod.object({
+
+}).passthrough().optional(),
+  "status": zod.enum(['active', 'paused', 'disabled']),
+  "retryPolicy": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Delete (disable) a subscription
+ */
+export const DeleteEventSubscriptionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteEventSubscriptionResponse = zod.void()
 
 

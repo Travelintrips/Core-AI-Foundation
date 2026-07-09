@@ -14,6 +14,7 @@ import {
   creativeAiClientCommentsTable,
 } from "@workspace/db";
 import { logAudit } from "../services/aiAuditService.js";
+import { publishSafe } from "../services/aiEventBusService.js";
 import { hashToken, isReviewValid } from "../services/clientReviewService.js";
 import { clientReviewNotificationService } from "../services/clientReviewNotificationService.js";
 
@@ -292,6 +293,9 @@ router.post("/public/creative-review/:token/approve", async (req, res): Promise<
     .notifyClientApproved(review.projectId, review.id, review.clientName, notes)
     .catch(() => {});
 
+  publishSafe({ eventType: "creative.client.approved", sourceModule: "client-review", sourceId: String(review.id),
+    payload: { reviewId: review.id, projectId: review.projectId, clientName: review.clientName, notes } });
+
   res.json({ success: true, status: "approved", message: "Project approved successfully" });
 });
 
@@ -343,6 +347,9 @@ router.post("/public/creative-review/:token/reject", async (req, res): Promise<v
     .notifyClientRejected(review.projectId, review.id, review.clientName, notes)
     .catch(() => {});
 
+  publishSafe({ eventType: "creative.client.rejected", sourceModule: "client-review", sourceId: String(review.id),
+    payload: { reviewId: review.id, projectId: review.projectId, clientName: review.clientName, notes } });
+
   res.json({ success: true, status: "rejected", message: "Project rejected" });
 });
 
@@ -393,6 +400,9 @@ router.post("/public/creative-review/:token/request-revision", async (req, res):
   await clientReviewNotificationService
     .notifyRevisionRequested(review.projectId, review.id, review.clientName, notes)
     .catch(() => {});
+
+  publishSafe({ eventType: "creative.client.revision_requested", sourceModule: "client-review", sourceId: String(review.id),
+    payload: { reviewId: review.id, projectId: review.projectId, clientName: review.clientName, notes } });
 
   res.json({ success: true, status: "revision_requested", message: "Revision request submitted" });
 });

@@ -3,3 +3,4 @@
 // collide with the Zod schema exports that share the same names.
 export * from "./generated/api";
 export * from "./cluster";
+export * from "./events";

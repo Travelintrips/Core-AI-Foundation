@@ -16,6 +16,7 @@ import {
   Users,
   Building2,
   Crown,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -39,6 +40,7 @@ const NAV_ITEMS = [
   { href: "/prompts", label: "Prompts", icon: FileText },
   { href: "/knowledge", label: "Knowledge", icon: Database },
   { href: "/memory", label: "Memory", icon: Cpu },
+  { href: "/events", label: "AI Events", icon: Zap },
   { href: "/audit", label: "Audit Log", icon: ShieldAlert },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
