@@ -9,6 +9,7 @@ export const creativeAiClientReviewsTable = pgTable("creative_ai_client_reviews"
   clientEmail: text("client_email"),
   clientPhone: text("client_phone"),
   reviewTokenHash: text("review_token_hash").notNull().unique(), // SHA-256 hex of plaintext token
+  reviewTokenPlain: text("review_token_plain"), // Stored only for customer-submitted projects so dashboard can surface the link
   tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }).notNull(),
   status: text("status").notNull().default("not_shared"),
   // not_shared | shared | viewed | approved | rejected | revision_requested | expired | revoked

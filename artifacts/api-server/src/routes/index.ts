@@ -30,6 +30,7 @@ import eventsRouter from "./events";
 import schedulesRouter from "./schedules";
 import marketplaceRouter from "./marketplace";
 import humanTasksRouter from "./human-tasks";
+import customerPortalRouter from "./customer-portal";
 
 const router: IRouter = Router();
 
@@ -62,5 +63,6 @@ router.use(eventsRouter);
 router.use(schedulesRouter);
 router.use(marketplaceRouter);
 router.use(humanTasksRouter);
+router.use(customerPortalRouter);
 
 export default router;

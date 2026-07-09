@@ -80,6 +80,11 @@ import type {
   CreativeProject,
   CreativeProjectDetail,
   CreativeProjectStatusUpdate,
+  CustomerAccessRequest,
+  CustomerAccessResult,
+  CustomerDashboard,
+  CustomerProjectSubmission,
+  CustomerSubmissionResult,
   DispatchResult,
   DispatcherSettings,
   DispatcherStatus,
@@ -11064,4 +11069,221 @@ export const useReassignHumanTask = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getReassignHumanTaskMutationOptions(options));
     }
+
+export const getSubmitCustomerProjectUrl = () => {
+
+
+
+
+  return `/api/public/customer/submit`
+}
+
+/**
+ * @summary Submit a new Creative AI project request — no admin key required
+ */
+export const submitCustomerProject = async (customerProjectSubmission: CustomerProjectSubmission, options?: RequestInit): Promise<CustomerSubmissionResult> => {
+
+  return customFetch<CustomerSubmissionResult>(getSubmitCustomerProjectUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(customerProjectSubmission)
+  }
+);}
+
+
+
+
+export const getSubmitCustomerProjectMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitCustomerProject>>, TError,{data: BodyType<CustomerProjectSubmission>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitCustomerProject>>, TError,{data: BodyType<CustomerProjectSubmission>}, TContext> => {
+
+const mutationKey = ['submitCustomerProject'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitCustomerProject>>, {data: BodyType<CustomerProjectSubmission>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  submitCustomerProject(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitCustomerProjectMutationResult = NonNullable<Awaited<ReturnType<typeof submitCustomerProject>>>
+    export type SubmitCustomerProjectMutationBody = BodyType<CustomerProjectSubmission>
+    export type SubmitCustomerProjectMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Submit a new Creative AI project request — no admin key required
+ */
+export const useSubmitCustomerProject = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitCustomerProject>>, TError,{data: BodyType<CustomerProjectSubmission>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitCustomerProject>>,
+        TError,
+        {data: BodyType<CustomerProjectSubmission>},
+        TContext
+      > => {
+      return useMutation(getSubmitCustomerProjectMutationOptions(options));
+    }
+
+export const getRequestCustomerAccessUrl = () => {
+
+
+
+
+  return `/api/public/customer/request-access`
+}
+
+/**
+ * @summary Request a dashboard magic-link for an email address
+ */
+export const requestCustomerAccess = async (customerAccessRequest: CustomerAccessRequest, options?: RequestInit): Promise<CustomerAccessResult> => {
+
+  return customFetch<CustomerAccessResult>(getRequestCustomerAccessUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(customerAccessRequest)
+  }
+);}
+
+
+
+
+export const getRequestCustomerAccessMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestCustomerAccess>>, TError,{data: BodyType<CustomerAccessRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestCustomerAccess>>, TError,{data: BodyType<CustomerAccessRequest>}, TContext> => {
+
+const mutationKey = ['requestCustomerAccess'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestCustomerAccess>>, {data: BodyType<CustomerAccessRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestCustomerAccess(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestCustomerAccessMutationResult = NonNullable<Awaited<ReturnType<typeof requestCustomerAccess>>>
+    export type RequestCustomerAccessMutationBody = BodyType<CustomerAccessRequest>
+    export type RequestCustomerAccessMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Request a dashboard magic-link for an email address
+ */
+export const useRequestCustomerAccess = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestCustomerAccess>>, TError,{data: BodyType<CustomerAccessRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestCustomerAccess>>,
+        TError,
+        {data: BodyType<CustomerAccessRequest>},
+        TContext
+      > => {
+      return useMutation(getRequestCustomerAccessMutationOptions(options));
+    }
+
+export const getGetCustomerDashboardUrl = (dashboardToken: string,) => {
+
+
+
+
+  return `/api/public/customer/dashboard/${dashboardToken}`
+}
+
+/**
+ * @summary Get all projects for a customer via dashboard token
+ */
+export const getCustomerDashboard = async (dashboardToken: string, options?: RequestInit): Promise<CustomerDashboard> => {
+
+  return customFetch<CustomerDashboard>(getGetCustomerDashboardUrl(dashboardToken),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCustomerDashboardQueryKey = (dashboardToken: string,) => {
+    return [
+    `/api/public/customer/dashboard/${dashboardToken}`
+    ] as const;
+    }
+
+
+export const getGetCustomerDashboardQueryOptions = <TData = Awaited<ReturnType<typeof getCustomerDashboard>>, TError = ErrorType<ErrorResponse>>(dashboardToken: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomerDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCustomerDashboardQueryKey(dashboardToken);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCustomerDashboard>>> = ({ signal }) => getCustomerDashboard(dashboardToken, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: dashboardToken !== null && dashboardToken !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCustomerDashboard>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCustomerDashboardQueryResult = NonNullable<Awaited<ReturnType<typeof getCustomerDashboard>>>
+export type GetCustomerDashboardQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get all projects for a customer via dashboard token
+ */
+
+export function useGetCustomerDashboard<TData = Awaited<ReturnType<typeof getCustomerDashboard>>, TError = ErrorType<ErrorResponse>>(
+ dashboardToken: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomerDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCustomerDashboardQueryOptions(dashboardToken,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

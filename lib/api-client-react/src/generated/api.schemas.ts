@@ -2454,6 +2454,92 @@ export interface ReassignHumanTaskBody {
   notes?: string;
 }
 
+export interface CustomerProjectSubmission {
+  /** @minLength 1 */
+  clientName: string;
+  clientEmail: string;
+  /** @nullable */
+  clientPhone?: string | null;
+  /** @minLength 1 */
+  brandName: string;
+  /** @minLength 1 */
+  businessType: string;
+  /** @minLength 1 */
+  productOrService: string;
+  /** @minLength 1 */
+  targetMarket: string;
+  /** @nullable */
+  stylePreference?: string | null;
+  /** @nullable */
+  colorPreference?: string | null;
+  /** @nullable */
+  referenceLinks?: string | null;
+  /** @minLength 1 */
+  goal: string;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  deadline?: string | null;
+  autoGenerate?: boolean;
+}
+
+export interface CustomerSubmissionResult {
+  projectId: string;
+  /** One-time plaintext token — save this, it will not be shown again */
+  reviewToken: string;
+  /** Full URL the customer should bookmark to review their project */
+  reviewUrl: string;
+  /** Token to access the customer dashboard */
+  dashboardToken: string;
+  /** URL to view all projects for this email */
+  dashboardUrl: string;
+  status: string;
+  brandName: string;
+  clientName: string;
+  createdAt?: string;
+}
+
+export interface CustomerDashboardProject {
+  projectId: string;
+  brandName: string;
+  businessType?: string;
+  productOrService?: string;
+  goal?: string;
+  /** Project AI processing status (pending|running|completed|failed) */
+  status: string;
+  /** Client review status (not_shared|shared|viewed|approved|rejected|revision_requested) */
+  reviewStatus: string;
+  reviewToken: string;
+  reviewUrl: string;
+  /** @nullable */
+  deadline?: string | null;
+  hasResult?: boolean;
+  assetCount?: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CustomerDashboard {
+  clientName: string;
+  clientEmail: string;
+  projects: CustomerDashboardProject[];
+  totalProjects: number;
+  pendingReview?: number;
+  approved?: number;
+}
+
+export interface CustomerAccessRequest {
+  email: string;
+}
+
+export interface CustomerAccessResult {
+  dashboardToken: string;
+  dashboardUrl: string;
+  clientEmail: string;
+  projectCount: number;
+  message?: string;
+}
+
 export type ListModelsParams = {
 /**
  * @nullable

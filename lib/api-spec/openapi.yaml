@@ -3186,6 +3186,87 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HumanTask"
+  /public/customer/submit:
+    post:
+      operationId: submitCustomerProject
+      tags:
+        - public
+      summary: Submit a new Creative AI project request — no admin key required
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerProjectSubmission"
+      responses:
+        "201":
+          description: Project created — token shown once, save the reviewUrl
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerSubmissionResult"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /public/customer/request-access:
+    post:
+      operationId: requestCustomerAccess
+      tags:
+        - public
+      summary: Request a dashboard magic-link for an email address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerAccessRequest"
+      responses:
+        "200":
+          description: Dashboard token created (returned directly — no email in this environment)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerAccessResult"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /public/customer/dashboard/{dashboardToken}:
+    get:
+      operationId: getCustomerDashboard
+      tags:
+        - public
+      summary: Get all projects for a customer via dashboard token
+      parameters:
+        - in: path
+          name: dashboardToken
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Customer dashboard with all projects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerDashboard"
+        "401":
+          description: Invalid or expired dashboard token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Dashboard token not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -6953,4 +7034,177 @@ components:
         performedBy:
           type: string
         notes:
+          type: string
+    CustomerProjectSubmission:
+      type: object
+      required:
+        - clientName
+        - clientEmail
+        - brandName
+        - businessType
+        - productOrService
+        - targetMarket
+        - goal
+      properties:
+        clientName:
+          type: string
+          minLength: 1
+        clientEmail:
+          type: string
+          format: email
+        clientPhone:
+          type: ["string", "null"]
+        brandName:
+          type: string
+          minLength: 1
+        businessType:
+          type: string
+          minLength: 1
+        productOrService:
+          type: string
+          minLength: 1
+        targetMarket:
+          type: string
+          minLength: 1
+        stylePreference:
+          type: ["string", "null"]
+        colorPreference:
+          type: ["string", "null"]
+        referenceLinks:
+          type: ["string", "null"]
+        goal:
+          type: string
+          minLength: 1
+        notes:
+          type: ["string", "null"]
+        deadline:
+          type: ["string", "null"]
+        autoGenerate:
+          type: boolean
+          default: false
+    CustomerSubmissionResult:
+      type: object
+      required:
+        - projectId
+        - reviewToken
+        - reviewUrl
+        - dashboardToken
+        - dashboardUrl
+        - status
+        - brandName
+        - clientName
+      properties:
+        projectId:
+          type: string
+        reviewToken:
+          type: string
+          description: One-time plaintext token — save this, it will not be shown again
+        reviewUrl:
+          type: string
+          description: Full URL the customer should bookmark to review their project
+        dashboardToken:
+          type: string
+          description: Token to access the customer dashboard
+        dashboardUrl:
+          type: string
+          description: URL to view all projects for this email
+        status:
+          type: string
+        brandName:
+          type: string
+        clientName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CustomerDashboardProject:
+      type: object
+      required:
+        - projectId
+        - brandName
+        - status
+        - reviewStatus
+        - reviewToken
+        - reviewUrl
+        - createdAt
+      properties:
+        projectId:
+          type: string
+        brandName:
+          type: string
+        businessType:
+          type: string
+        productOrService:
+          type: string
+        goal:
+          type: string
+        status:
+          type: string
+          description: Project AI processing status (pending|running|completed|failed)
+        reviewStatus:
+          type: string
+          description: Client review status (not_shared|shared|viewed|approved|rejected|revision_requested)
+        reviewToken:
+          type: string
+        reviewUrl:
+          type: string
+        deadline:
+          type: ["string", "null"]
+        hasResult:
+          type: boolean
+        assetCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CustomerDashboard:
+      type: object
+      required:
+        - clientName
+        - clientEmail
+        - projects
+        - totalProjects
+      properties:
+        clientName:
+          type: string
+        clientEmail:
+          type: string
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomerDashboardProject"
+        totalProjects:
+          type: integer
+        pendingReview:
+          type: integer
+        approved:
+          type: integer
+    CustomerAccessRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+    CustomerAccessResult:
+      type: object
+      required:
+        - dashboardToken
+        - dashboardUrl
+        - clientEmail
+        - projectCount
+      properties:
+        dashboardToken:
+          type: string
+        dashboardUrl:
+          type: string
+        clientEmail:
+          type: string
+        projectCount:
+          type: integer
+        message:
           type: string

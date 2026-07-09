@@ -10,8 +10,11 @@ export const creativeProjectsTable = pgTable("creative_projects", {
   targetMarket: text("target_market").notNull(),
   productOrService: text("product_or_service").notNull(),
   stylePreference: text("style_preference"),
+  colorPreference: text("color_preference"),
+  referenceLinks: text("reference_links"),
   goal: text("goal").notNull(),
   notes: text("notes"),
+  deadline: text("deadline"),
   status: text("status").notNull().default("pending"), // pending | running | completed | failed
   result: jsonb("result"), // aggregated final output from all agents
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
