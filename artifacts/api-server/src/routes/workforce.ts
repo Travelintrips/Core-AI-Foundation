@@ -207,10 +207,11 @@ router.get("/ai/workforce/employees/:id", async (req, res): Promise<void> => {
   // Cost stats from cost records (linked via agentSlug for backward compat)
   let performance = { totalRequests: 0, totalTokens: 0, totalCostUsd: 0, avgLatencyMs: 0, successRate: 0 };
   if (row.employee.agentSlug) {
-    const [cs] = await db.execute<{
+    type CostStatsRow = {
       total_requests: string; total_tokens: string; total_cost: string;
       avg_latency: string; success_rate: string;
-    }>(sql`
+    };
+    const result = await db.execute<CostStatsRow>(sql`
       SELECT
         count(*)::int               AS total_requests,
         coalesce(sum(total_tokens),0)::int AS total_tokens,
@@ -219,7 +220,9 @@ router.get("/ai/workforce/employees/:id", async (req, res): Promise<void> => {
         coalesce(count(*) FILTER (WHERE status='success')::numeric / nullif(count(*),0), 0) AS success_rate
       FROM ai_cost_records
       WHERE agent_slug = ${row.employee.agentSlug}
-    `).catch(() => [{ total_requests:"0", total_tokens:"0", total_cost:"0", avg_latency:"0", success_rate:"0" }]);
+    `).catch(() => ({ rows: [{ total_requests:"0", total_tokens:"0", total_cost:"0", avg_latency:"0", success_rate:"0" } as CostStatsRow] }));
+    const rows = Array.isArray(result) ? result : (result as { rows: CostStatsRow[] }).rows;
+    const cs = rows[0];
 
     if (cs) {
       performance = {

@@ -1716,6 +1716,8 @@ paths:
                           claimed:   { type: integer }
                           completed: { type: integer }
                           failed:    { type: integer }
+        "500":
+          description: Tick failed
 
   /ai/dispatcher/settings:
     get:

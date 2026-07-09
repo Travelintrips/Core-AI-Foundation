@@ -169,7 +169,7 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
     businessType: project.businessType,
     targetMarket: project.targetMarket,
     productOrService: project.productOrService,
-    stylePreference: project.stylePreference,
+    stylePreference: project.stylePreference ?? "",
     goal: project.goal,
     notes: project.notes,
   };
@@ -370,10 +370,10 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
       completedStepNames.push(step.label);
       previousMetadata.push({
         stepName: step.label,
-        model: String(execResult.usedModel.modelId),
-        provider: String(execResult.usedProvider.slug),
-        tokens: result.tokensUsed,
+        agentSlug: step.slug,
+        status: "success",
         latencyMs: result.latencyMs,
+        tokenCount: result.tokensUsed,
       });
 
       // Update step as completed

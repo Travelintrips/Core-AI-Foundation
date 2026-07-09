@@ -10,3 +10,4 @@
 - [phase5-job-engine-complete](phase5-job-engine-complete.md) — Fix checklist: stale dist/ rebuilds, api-zod directory export, QueryResult rows, claimJob retrying, cancelJob worker release
 - [phase6-client-review](phase6-client-review.md) — Phase 6 client portal: no zod in api-server, terminal state guards, GET-view downgrade protection, Wouter public-route pattern
 - [phase48-digital-workforce](phase48-digital-workforce.md) — Phase 4.8 workforce: 7 new tables, seed via POST /api/ai/seed/all, workforce at /ai/workforce/* routes, frontend at /workforce
+- [orval-openapi-codegen-pipeline](orval-openapi-codegen-pipeline.md) — orval config needs process.cwd() not __dirname; bypass @scalar file-loader by pre-parsing YAML; commit src/generated to git

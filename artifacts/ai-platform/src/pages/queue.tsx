@@ -228,6 +228,7 @@ function JobRow({
 }
 
 // ── Dispatcher Runtime Panel ──────────────────────────────────────────────────
+// ── Dispatcher Panel ──────────────────────────────────────────────────────────
 
 function DispatcherPanel({
   status,
@@ -271,6 +272,9 @@ function DispatcherPanel({
           )}>
             {running ? "Running" : "Stopped"}
           </span>
+          <Bot className="size-4 text-primary" />
+          <span className="font-mono text-sm font-semibold">Dispatcher Runtime</span>
+          <span className="text-[10px] font-mono text-muted-foreground">Phase 5.1</span>
         </div>
         {isLoading ? (
           <Loader2 className="size-3.5 animate-spin text-muted-foreground" />

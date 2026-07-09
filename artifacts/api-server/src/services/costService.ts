@@ -17,8 +17,8 @@ interface ModelPricing {
 
 export interface RecordCostParams {
   projectId: string;
-  stepId: number;
-  clientId: string;
+  stepId?: number;
+  clientId?: string;
   agentSlug: string;
   provider: string;
   model: string;
