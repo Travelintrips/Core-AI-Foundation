@@ -1651,11 +1651,6 @@ paths:
   /ai/dispatcher/status:
     get:
       operationId: getDispatcherStatus
-      tags: [job-engine]
-      summary: Get background worker dispatcher runtime status
-      responses:
-        "200":
-          description: Dispatcher status snapshot
       tags: [dispatcher]
       summary: Get dispatcher runtime status
       responses:
@@ -1669,11 +1664,6 @@ paths:
   /ai/dispatcher/start:
     post:
       operationId: startDispatcher
-      tags: [job-engine]
-      summary: Start the background worker dispatcher
-      responses:
-        "200":
-          description: Dispatcher started — returns updated status
       tags: [dispatcher]
       summary: Start the dispatcher polling loop
       responses:
@@ -1693,11 +1683,6 @@ paths:
   /ai/dispatcher/stop:
     post:
       operationId: stopDispatcher
-      tags: [job-engine]
-      summary: Stop the background worker dispatcher
-      responses:
-        "200":
-          description: Dispatcher stopped — returns updated status
       tags: [dispatcher]
       summary: Stop the dispatcher polling loop
       responses:
@@ -1711,18 +1696,6 @@ paths:
   /ai/dispatcher/tick:
     post:
       operationId: runDispatcherTick
-      tags: [job-engine]
-      summary: Manually trigger one dispatcher poll cycle
-      responses:
-        "200":
-          description: Tick completed — returns updated status
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DispatcherStatus"
-        "500":
-          description: Tick failed
-      operationId: tickDispatcher
       tags: [dispatcher]
       summary: Execute one dispatch cycle immediately
       responses:
@@ -1743,6 +1716,8 @@ paths:
                           claimed:   { type: integer }
                           completed: { type: integer }
                           failed:    { type: integer }
+        "500":
+          description: Tick failed
 
   /ai/dispatcher/settings:
     get:

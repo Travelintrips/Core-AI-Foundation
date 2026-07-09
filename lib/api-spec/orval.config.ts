@@ -1,9 +1,14 @@
 import { defineConfig, InputTransformerFn } from "orval";
 import path from "path";
 
-const root = path.resolve(__dirname, "..", "..");
+// jiti (used by orval to load this config) copies the file to /tmp, so
+// __dirname points to /tmp — not the actual config directory.
+// process.cwd() is reliably set to the api-spec package directory by pnpm.
+const apiSpecDir = process.cwd();
+const root = path.resolve(apiSpecDir, "..", "..");
 const apiClientReactSrc = path.resolve(root, "lib", "api-client-react", "src");
 const apiZodSrc = path.resolve(root, "lib", "api-zod", "src");
+const openapiYaml = path.resolve(apiSpecDir, "openapi.yaml");
 
 // Our exports make assumptions about the title of the API being "Api" (i.e. generated output is `api.ts`).
 const titleTransformer: InputTransformerFn = (config) => {
@@ -16,7 +21,7 @@ const titleTransformer: InputTransformerFn = (config) => {
 export default defineConfig({
   "api-client-react": {
     input: {
-      target: "./openapi.yaml",
+      target: openapiYaml,
       override: {
         transformer: titleTransformer,
       },
@@ -42,7 +47,7 @@ export default defineConfig({
   },
   zod: {
     input: {
-      target: "./openapi.yaml",
+      target: openapiYaml,
       override: {
         transformer: titleTransformer,
       },
