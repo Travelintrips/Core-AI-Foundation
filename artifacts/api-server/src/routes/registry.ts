@@ -32,11 +32,60 @@ async function logAudit(module: string, action: string, resourceId: string, reso
   await db.insert(aiAuditLogsTable).values({ module, action, resourceId, resourceType, status, details: details ?? null });
 }
 
+/**
+ * Ping a provider's API with the configured key.
+ * Returns httpStatus, ok flag, and error string if failed.
+ */
+async function pingProvider(
+  slug: string,
+  baseUrl: string,
+  apiKey: string,
+): Promise<{ ok: boolean; httpStatus: number; error?: string }> {
+  try {
+    let url: string;
+    const headers: Record<string, string> = {};
+
+    if (slug === "anthropic") {
+      url = `${baseUrl}/models`;
+      headers["x-api-key"] = apiKey;
+      headers["anthropic-version"] = "2023-06-01";
+    } else if (slug === "gemini" || slug === "google-gemini") {
+      url = `${baseUrl}/models?key=${encodeURIComponent(apiKey)}`;
+    } else if (slug === "replicate") {
+      url = `${baseUrl}/models`;
+      headers["Authorization"] = `Token ${apiKey}`;
+    } else {
+      // OpenAI, Mistral, and any other Bearer-based provider
+      url = `${baseUrl}/models`;
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+
+    const resp = await fetch(url, {
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    });
+    const ok = resp.status >= 200 && resp.status < 300;
+    let error: string | undefined;
+    if (!ok) {
+      const body = await resp.text().catch(() => "");
+      error = `HTTP ${resp.status}: ${body.slice(0, 200)}`;
+    }
+    return { ok, httpStatus: resp.status, error };
+  } catch (err) {
+    return { ok: false, httpStatus: 0, error: String(err) };
+  }
+}
+
 // ── Providers ──────────────────────────────────────────────────────────────
 
 router.get("/ai/providers", async (_req, res): Promise<void> => {
   const providers = await db.select().from(aiProvidersTable).orderBy(aiProvidersTable.createdAt);
-  res.json(ListProvidersResponse.parse(providers));
+  // Augment each provider with a runtime `keyConfigured` flag (does not touch DB)
+  const result = providers.map((p) => ({
+    ...p,
+    keyConfigured: p.apiKeyEnvVar ? Boolean(process.env[p.apiKeyEnvVar]) : false,
+  }));
+  res.json(result);
 });
 
 router.post("/ai/providers", async (req, res): Promise<void> => {
@@ -90,6 +139,74 @@ router.delete("/ai/providers/:id", async (req, res): Promise<void> => {
   await logAudit("registry", "delete_provider", String(params.data.id), "provider");
   res.sendStatus(204);
   DeleteProviderResponse.parse(undefined);
+});
+
+/**
+ * POST /ai/providers/:id/health-check
+ *
+ * Reads process.env[provider.apiKeyEnvVar], makes a real API call to the
+ * provider's /models endpoint, updates isActive in DB, and returns a
+ * detailed diagnostic report.
+ */
+router.post("/ai/providers/:id/health-check", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id ?? "", 10);
+  if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [provider] = await db
+    .select()
+    .from(aiProvidersTable)
+    .where(eq(aiProvidersTable.id, id))
+    .limit(1);
+
+  if (!provider) { res.status(404).json({ error: "Provider not found" }); return; }
+
+  const envVar   = provider.apiKeyEnvVar ?? "";
+  const apiKey   = envVar ? (process.env[envVar] ?? "") : "";
+  const keyConfigured = Boolean(apiKey);
+
+  if (!keyConfigured) {
+    await db.update(aiProvidersTable)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(aiProvidersTable.id, id));
+
+    res.json({
+      providerId: id,
+      slug: provider.slug,
+      keyConfigured: false,
+      envVar,
+      httpStatus: null,
+      isActive: false,
+      error: `Environment variable "${envVar}" is not set in Replit Secrets.`,
+    });
+    return;
+  }
+
+  const ping = await pingProvider(provider.slug, provider.baseUrl, apiKey);
+
+  const [updated] = await db
+    .update(aiProvidersTable)
+    .set({ isActive: ping.ok, updatedAt: new Date() })
+    .where(eq(aiProvidersTable.id, id))
+    .returning();
+
+  await logAudit(
+    "registry",
+    "provider_health_check",
+    String(id),
+    "provider",
+    ping.ok ? "success" : "failure",
+    { slug: provider.slug, httpStatus: ping.httpStatus, error: ping.error },
+  );
+
+  res.json({
+    providerId: id,
+    slug: provider.slug,
+    keyConfigured: true,
+    envVar,
+    httpStatus: ping.httpStatus,
+    isActive: updated?.isActive ?? ping.ok,
+    error: ping.error ?? null,
+  });
 });
 
 // ── Models ─────────────────────────────────────────────────────────────────

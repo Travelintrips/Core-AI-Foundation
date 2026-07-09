@@ -41,18 +41,23 @@ async function upsertProvider(data: {
   apiKeyEnvVar: string;
   isActive: boolean;
 }) {
-  const [existing] = await db
-    .select()
-    .from(aiProvidersTable)
-    .where(eq(aiProvidersTable.slug, data.slug));
-
-  if (existing) {
-    console.log(`  ↩ Provider already exists: ${data.name}`);
-    return existing;
-  }
-
-  const [row] = await db.insert(aiProvidersTable).values(data).returning();
-  console.log(`  ✓ Seeded provider: ${data.name}`);
+  // True upsert: insert or update all fields on slug conflict.
+  // This ensures re-running seed always reflects the latest config (including isActive).
+  const [row] = await db
+    .insert(aiProvidersTable)
+    .values(data)
+    .onConflictDoUpdate({
+      target: aiProvidersTable.slug,
+      set: {
+        name: data.name,
+        baseUrl: data.baseUrl,
+        apiKeyEnvVar: data.apiKeyEnvVar,
+        isActive: data.isActive,
+        updatedAt: new Date(),
+      },
+    })
+    .returning();
+  console.log(`  ✓ Upserted provider: ${data.name} (isActive=${data.isActive})`);
   return row;
 }
 
