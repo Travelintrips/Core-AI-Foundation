@@ -4200,41 +4200,6 @@ components:
 
     DispatcherStatus:
       type: object
-      required: [enabled, running, workerName, pollIntervalMs, heartbeatIntervalMs, maxConcurrentJobs, currentJobs, lastTickAt, lastHeartbeatAt, processedToday, failedToday]
-      properties:
-        enabled:
-          type: boolean
-          description: Whether dispatcher is configured to auto-start
-        running:
-          type: boolean
-          description: Whether the dispatcher interval is currently active
-        workerName:
-          type: string
-          description: Registered worker name for this dispatcher process
-        pollIntervalMs:
-          type: integer
-          description: Poll interval in milliseconds
-        heartbeatIntervalMs:
-          type: integer
-          description: Heartbeat interval in milliseconds
-        maxConcurrentJobs:
-          type: integer
-          description: Maximum jobs processed simultaneously
-        currentJobs:
-          type: integer
-          description: Number of jobs currently being processed
-        lastTickAt:
-          type: ["string", "null"]
-          description: ISO timestamp of the last tick, or null if never ticked
-        lastHeartbeatAt:
-          type: ["string", "null"]
-          description: ISO timestamp of the last heartbeat, or null
-        processedToday:
-          type: integer
-          description: Jobs successfully completed by this dispatcher since startup
-        failedToday:
-          type: integer
-          description: Jobs that failed (and were retried/marked failed) since startup
       required: [enabled, running, workerCount, idleWorkers, busyWorkers, queueLength, runningJobs, processedToday, failedToday]
       properties:
         enabled:        { type: boolean }
