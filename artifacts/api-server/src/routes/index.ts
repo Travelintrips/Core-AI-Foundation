@@ -27,6 +27,7 @@ import workspaceHealthRouter from "./workspace-health";
 import eventsRouter from "./events";
 import schedulesRouter from "./schedules";
 import marketplaceRouter from "./marketplace";
+import humanTasksRouter from "./human-tasks";
 
 const router: IRouter = Router();
 
@@ -58,5 +59,6 @@ router.use(workspaceHealthRouter);
 router.use(eventsRouter);
 router.use(schedulesRouter);
 router.use(marketplaceRouter);
+router.use(humanTasksRouter);
 
 export default router;

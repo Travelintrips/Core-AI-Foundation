@@ -44,6 +44,8 @@ tags:
     description: AI Event Bus — publish, query, and replay inter-module events
   - name: event-subscriptions
     description: AI Event Subscriptions — route events to handler functions
+  - name: human-tasks
+    description: Human Task Center — AI-to-human handoff, review, approval, and escalation
 paths:
   /healthz:
     get:
@@ -2950,6 +2952,240 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SchedulerSettings"
+  /ai/human-tasks:
+    get:
+      operationId: listHumanTasks
+      tags:
+        - human-tasks
+      summary: List human tasks (paginated + filtered)
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: department
+          in: query
+          schema:
+            type: string
+        - name: priority
+          in: query
+          schema:
+            type: integer
+        - name: assignedUser
+          in: query
+          schema:
+            type: string
+        - name: sourceModule
+          in: query
+          schema:
+            type: string
+        - name: slaStatus
+          in: query
+          schema:
+            type: string
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Paginated human task list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HumanTaskPage"
+    post:
+      operationId: createHumanTask
+      tags:
+        - human-tasks
+      summary: Create a human task (AI handoff)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHumanTaskBody"
+      responses:
+        "201":
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HumanTask"
+  /ai/human-tasks/stats:
+    get:
+      operationId: getHumanTaskStats
+      tags:
+        - human-tasks
+      summary: Human Task Center analytics
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HumanTaskStats"
+  /ai/human-tasks/{id}:
+    get:
+      operationId: getHumanTask
+      tags:
+        - human-tasks
+      summary: Get a single task with history
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Task with history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HumanTaskDetail"
+        "404":
+          description: Not found
+  /ai/human-tasks/{id}/assign:
+    patch:
+      operationId: assignHumanTask
+      tags:
+        - human-tasks
+      summary: Assign task to a user/role
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignHumanTaskBody"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HumanTask"
+  /ai/human-tasks/{id}/accept:
+    patch:
+      operationId: acceptHumanTask
+      tags:
+        - human-tasks
+      summary: Human accepts the task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptHumanTaskBody"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HumanTask"
+  /ai/human-tasks/{id}/reject:
+    patch:
+      operationId: rejectHumanTask
+      tags:
+        - human-tasks
+      summary: Human rejects the task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RejectHumanTaskBody"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HumanTask"
+  /ai/human-tasks/{id}/complete:
+    patch:
+      operationId: completeHumanTask
+      tags:
+        - human-tasks
+      summary: Human marks task complete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteHumanTaskBody"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HumanTask"
+  /ai/human-tasks/{id}/reassign:
+    patch:
+      operationId: reassignHumanTask
+      tags:
+        - human-tasks
+      summary: Reassign task to a different user/role
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReassignHumanTaskBody"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HumanTask"
 components:
   schemas:
     HealthStatus:
@@ -6408,3 +6644,313 @@ components:
         maxRuns:
           type: integer
           minimum: 1
+    HumanTask:
+      type: object
+      required:
+        - id
+        - taskCode
+        - sourceModule
+        - sourceType
+        - priority
+        - status
+        - slaStatus
+        - payloadJson
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        taskCode:
+          type: string
+        sourceModule:
+          type: string
+        sourceType:
+          type: string
+        sourceId:
+          type:
+            - string
+            - "null"
+        executionPlanId:
+          type:
+            - integer
+            - "null"
+        assignedDepartment:
+          type:
+            - string
+            - "null"
+        assignedUser:
+          type:
+            - string
+            - "null"
+        assignedRole:
+          type:
+            - string
+            - "null"
+        priority:
+          type: integer
+        status:
+          type: string
+          enum:
+            - pending
+            - assigned
+            - accepted
+            - in_progress
+            - completed
+            - rejected
+            - cancelled
+            - expired
+        reason:
+          type:
+            - string
+            - "null"
+        instructions:
+          type:
+            - string
+            - "null"
+        payloadJson:
+          type: object
+          additionalProperties: true
+        dueAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        slaStatus:
+          type: string
+          enum:
+            - on_time
+            - warning
+            - overdue
+            - expired
+        notificationHookUrl:
+          type:
+            - string
+            - "null"
+        acceptedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        completedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    HumanTaskHistory:
+      type: object
+      required:
+        - id
+        - taskId
+        - action
+        - createdAt
+      properties:
+        id:
+          type: integer
+        taskId:
+          type: integer
+        action:
+          type: string
+        performedBy:
+          type:
+            - string
+            - "null"
+        notes:
+          type:
+            - string
+            - "null"
+        oldStatus:
+          type:
+            - string
+            - "null"
+        newStatus:
+          type:
+            - string
+            - "null"
+        createdAt:
+          type: string
+          format: date-time
+    HumanTaskDetail:
+      type: object
+      required:
+        - task
+        - history
+      properties:
+        task:
+          $ref: "#/components/schemas/HumanTask"
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/HumanTaskHistory"
+    HumanTaskPage:
+      type: object
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/HumanTask"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+    HumanTaskStats:
+      type: object
+      required:
+        - total
+        - pending
+        - assigned
+        - inProgress
+        - completed
+        - rejected
+        - overdue
+        - expired
+        - overdueRate
+        - byDepartment
+        - bySourceModule
+      properties:
+        total:
+          type: integer
+        pending:
+          type: integer
+        assigned:
+          type: integer
+        inProgress:
+          type: integer
+        completed:
+          type: integer
+        rejected:
+          type: integer
+        overdue:
+          type: integer
+        expired:
+          type: integer
+        averageCompletionTimeMs:
+          type:
+            - number
+            - "null"
+        overdueRate:
+          type: number
+        byDepartment:
+          type: array
+          items:
+            type: object
+            required:
+              - department
+              - count
+            properties:
+              department:
+                type: string
+              count:
+                type: integer
+        bySourceModule:
+          type: array
+          items:
+            type: object
+            required:
+              - sourceModule
+              - count
+            properties:
+              sourceModule:
+                type: string
+              count:
+                type: integer
+    CreateHumanTaskBody:
+      type: object
+      required:
+        - sourceModule
+        - sourceType
+      properties:
+        sourceModule:
+          type: string
+        sourceType:
+          type: string
+        sourceId:
+          type: string
+        executionPlanId:
+          type: integer
+        assignedDepartment:
+          type: string
+        assignedUser:
+          type: string
+        assignedRole:
+          type: string
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100
+        reason:
+          type: string
+        instructions:
+          type: string
+        payloadJson:
+          type: object
+          additionalProperties: true
+        dueAt:
+          type: string
+          format: date-time
+        notificationHookUrl:
+          type: string
+    AssignHumanTaskBody:
+      type: object
+      properties:
+        assignedDepartment:
+          type: string
+        assignedUser:
+          type: string
+        assignedRole:
+          type: string
+        performedBy:
+          type: string
+        notes:
+          type: string
+    AcceptHumanTaskBody:
+      type: object
+      properties:
+        performedBy:
+          type: string
+        notes:
+          type: string
+    RejectHumanTaskBody:
+      type: object
+      properties:
+        performedBy:
+          type: string
+        notes:
+          type: string
+        reason:
+          type: string
+    CompleteHumanTaskBody:
+      type: object
+      properties:
+        performedBy:
+          type: string
+        notes:
+          type: string
+        resultPayload:
+          type: object
+          additionalProperties: true
+    ReassignHumanTaskBody:
+      type: object
+      properties:
+        assignedDepartment:
+          type: string
+        assignedUser:
+          type: string
+        assignedRole:
+          type: string
+        performedBy:
+          type: string
+        notes:
+          type: string

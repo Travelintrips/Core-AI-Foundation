@@ -41,3 +41,5 @@ export * from "./ai-schedule-runs";
 export * from "./ai-skill-packages";
 export * from "./ai-tool-packages";
 export * from "./ai-installed-packages";
+export * from "./ai-human-tasks";
+export * from "./ai-human-task-history";
