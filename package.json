@@ -6,7 +6,28 @@
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+
+    "build:generated": "pnpm --filter @workspace/api-spec run codegen",
+    "build:libs": "pnpm run typecheck:libs",
+    "build:api": "pnpm --filter @workspace/api-server run build",
+    "build:workspace": "pnpm run build:generated && pnpm run build:libs && pnpm run build:api && pnpm --filter @workspace/ai-platform run build",
+
+    "verify:openapi": "pnpm --filter @workspace/scripts run workspace-check",
+    "verify:generated": "pnpm --filter @workspace/scripts run workspace-check",
+    "verify:types": "pnpm run typecheck",
+    "verify": "pnpm run verify:openapi && pnpm run verify:types",
+
+    "clean:generated": "rm -rf lib/api-client-react/src/generated lib/api-zod/src/generated",
+    "clean:workspace": "pnpm run clean:generated && rm -rf artifacts/api-server/dist artifacts/ai-platform/dist artifacts/mockup-sandbox/dist",
+    "rebuild:all": "pnpm run clean:workspace && pnpm run build:workspace && pnpm run verify",
+
+    "workspace-health": "pnpm --filter @workspace/scripts run workspace-health",
+
+    "ci:verify": "pnpm run verify",
+    "ci:build": "pnpm run build:workspace",
+    "ci:test": "pnpm -r --if-present run test",
+    "ci:codegen": "pnpm run build:generated"
   },
   "private": true,
   "dependencies": {

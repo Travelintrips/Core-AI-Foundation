@@ -6172,7 +6172,6 @@ export const runDispatcherTick = async ( options?: RequestInit): Promise<RunDisp
 
 
 
-export const getRunDispatcherTickMutationOptions = <TError = ErrorType<unknown>,
 export const getRunDispatcherTickMutationOptions = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runDispatcherTick>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof runDispatcherTick>>, TError,void, TContext> => {
@@ -6202,13 +6201,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type RunDispatcherTickMutationResult = NonNullable<Awaited<ReturnType<typeof runDispatcherTick>>>
 
-    export type RunDispatcherTickMutationError = ErrorType<unknown>
     export type RunDispatcherTickMutationError = ErrorType<void>
 
     /**
  * @summary Execute one dispatch cycle immediately
  */
-export const useRunDispatcherTick = <TError = ErrorType<unknown>,
 export const useRunDispatcherTick = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runDispatcherTick>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<

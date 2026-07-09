@@ -1,0 +1,301 @@
+Lanjutkan AI Enterprise Platform ke Phase 5.1.5: Developer Platform & Build System Hardening.
+
+PENTING:
+
+Jangan membuat fitur user baru.
+
+Jangan membuat Event Bus.
+
+Jangan membuat Scheduler.
+
+Jangan membuat Marketplace.
+
+Jangan membuat AI baru.
+
+Fokus hanya pada Build System dan Developer Experience.
+
+====================================================================
+TUJUAN
+======
+
+Menghilangkan seluruh sumber konflik build yang muncul pada Phase 5.1.
+
+Target:
+
+OpenAPI
+
+↓
+
+Orval
+
+↓
+
+api-zod
+
+↓
+
+api-client-react
+
+↓
+
+Frontend
+
+↓
+
+Backend
+
+harus menjadi pipeline tunggal tanpa duplicate file.
+
+====================================================================
+BAGIAN 1
+
+CODE GENERATION PIPELINE
+
+====================================================================
+
+Buat satu pipeline resmi.
+
+Jangan boleh ada:
+
+manual generated wrapper
+
+manual dispatcher wrapper
+
+manual index export
+
+manual duplicate types
+
+Semua generated file berasal dari satu source of truth.
+
+====================================================================
+BAGIAN 2
+
+ORVAL HARDENING
+
+====================================================================
+
+Perbaiki konfigurasi orval.
+
+Pastikan:
+
+tidak menghasilkan duplicate schema
+
+tidak menghasilkan duplicate hooks
+
+tidak menghasilkan duplicate exports
+
+tidak menghasilkan conflicting index.ts
+
+Semua package memakai konfigurasi yang sama.
+
+====================================================================
+BAGIAN 3
+
+API-ZOD
+
+====================================================================
+
+Pastikan:
+
+api-zod hanya mengekspor:
+
+Zod schemas
+
+helper
+
+validator
+
+Jangan lagi export TypeScript types yang bentrok dengan generated schema.
+
+====================================================================
+BAGIAN 4
+
+API CLIENT
+
+====================================================================
+
+Hilangkan seluruh wrapper manual yang sudah bisa digenerate.
+
+Semua React hooks harus berasal dari hasil codegen.
+
+Tidak boleh ada:
+
+dispatcher.ts manual
+
+manual re-export
+
+manual duplicate hooks
+
+====================================================================
+BAGIAN 5
+
+BUILD ORCHESTRATOR
+
+====================================================================
+
+Tambahkan script:
+
+build:api
+
+build:libs
+
+build:generated
+
+build:workspace
+
+verify:generated
+
+verify:openapi
+
+verify:types
+
+clean:generated
+
+clean:workspace
+
+rebuild:all
+
+Semua script harus saling bergantung.
+
+====================================================================
+BAGIAN 6
+
+WORKSPACE VALIDATOR
+
+====================================================================
+
+Tambahkan checker.
+
+Sebelum build:
+
+cek duplicate schema
+
+cek duplicate export
+
+cek stale dist
+
+cek stale generated
+
+cek orphan file
+
+cek conflicting package
+
+Jika ditemukan,
+
+build gagal dengan pesan yang jelas.
+
+====================================================================
+BAGIAN 7
+
+GENERATED FILE PROTECTION
+
+====================================================================
+
+Tambahkan protection.
+
+Jika developer mengedit generated file secara manual:
+
+tampilkan warning
+
+atau
+
+build gagal.
+
+Semua perubahan harus dilakukan dari OpenAPI atau template.
+
+====================================================================
+BAGIAN 8
+
+MONOREPO HEALTH
+
+====================================================================
+
+Tambahkan endpoint internal:
+
+Workspace Health
+
+Menampilkan:
+
+Generated Status
+
+OpenAPI Status
+
+Codegen Status
+
+Package Status
+
+Dist Status
+
+Workspace Cache
+
+Type Status
+
+====================================================================
+BAGIAN 9
+
+CI PREPARATION
+
+====================================================================
+
+Tambahkan script yang siap dipakai GitHub Actions:
+
+verify
+
+build
+
+test
+
+codegen
+
+workspace-health
+
+Semua script harus idempotent.
+
+====================================================================
+BAGIAN 10
+
+DOCUMENTATION
+
+====================================================================
+
+Buat dokumentasi:
+
+Developer Build Flow
+
+OpenAPI → Orval → api-zod → api-client-react → Frontend → Backend
+
+Jelaskan:
+
+source of truth
+
+urutan build
+
+cara regenerate
+
+cara rebuild
+
+cara clean
+
+cara debug
+
+====================================================================
+OUTPUT
+======
+
+Target akhir:
+
+Developer tidak perlu lagi memperbaiki duplicate export, duplicate schema, stale dist, stale generated, atau manual wrapper.
+
+Semua proses code generation menjadi deterministic, repeatable, dan production-ready.
+
+Semua perubahan harus:
+
+TypeScript clean
+
+OpenAPI clean
+
+Codegen clean
+
+Backward compatible
+
+Tidak mengubah fitur Creative AI, Workforce, Queue, Dispatcher, atau Job Engine.

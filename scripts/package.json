@@ -5,10 +5,15 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "workspace-check": "tsx ./src/workspace-check.ts",
+    "workspace-health": "tsx ./src/workspace-check.ts --health"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "tsx": "catalog:"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
   }
 }

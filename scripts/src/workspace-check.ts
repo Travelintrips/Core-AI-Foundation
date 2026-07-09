@@ -17,6 +17,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { parse as parseYaml } from "yaml";
 
 const ROOT = path.resolve(import.meta.dirname, "..", "..");
 const GENERATED_DIRS = [
@@ -151,29 +152,65 @@ function checkStaleDistDirs(): CheckResult {
 }
 
 function checkDuplicateExports(): CheckResult {
+  // A name may legitimately appear twice in the same file as a const+type pair
+  // (orval's `export const X = {...} as const` + `export type X = (typeof X)[...]`
+  // enum pattern). Only flag: (a) the same name+kind declared more than once
+  // anywhere, or (b) the same name declared in more than one distinct file.
   const issues: string[] = [];
 
   for (const genDir of GENERATED_DIRS) {
     const full = abs(genDir);
     if (!fs.existsSync(full)) continue;
 
-    const exportNames = new Map<string, string[]>();
+    // name -> kind -> file -> occurrence count (catches same-file same-kind dups)
+    const byNameKind = new Map<string, Map<string, Map<string, number>>>();
+    // name -> Set<file> (any kind), to detect cross-file duplicates
+    const byNameFiles = new Map<string, Set<string>>();
 
     for (const file of walkFiles(full)) {
       if (!file.endsWith(".ts")) continue;
       const content = fs.readFileSync(file, "utf8");
-      const matches = content.matchAll(/^export\s+(?:const|function|class|interface|type|enum)\s+(\w+)/gm);
+      const relFile = path.relative(ROOT, file);
+      const matches = content.matchAll(/^export\s+(const|function|class|interface|type|enum)\s+(\w+)/gm);
       for (const m of matches) {
-        const name = m[1];
-        const relFile = path.relative(ROOT, file);
-        const existing = exportNames.get(name) ?? [];
-        exportNames.set(name, [...existing, relFile]);
+        const kind = m[1];
+        const name = m[2];
+
+        const kindMap = byNameKind.get(name) ?? new Map<string, Map<string, number>>();
+        const fileCounts = kindMap.get(kind) ?? new Map<string, number>();
+        fileCounts.set(relFile, (fileCounts.get(relFile) ?? 0) + 1);
+        kindMap.set(kind, fileCounts);
+        byNameKind.set(name, kindMap);
+
+        const fileSet = byNameFiles.get(name) ?? new Set<string>();
+        fileSet.add(relFile);
+        byNameFiles.set(name, fileSet);
       }
     }
 
-    for (const [name, files] of exportNames) {
-      if (files.length > 1) {
-        issues.push(`'${name}' exported from: ${files.join(", ")}`);
+    // (a) same name+kind declared more than once, either repeated within a
+    // single file or spread across multiple files (real duplicate declaration)
+    for (const [name, kindMap] of byNameKind) {
+      for (const [kind, fileCounts] of kindMap) {
+        const totalOccurrences = [...fileCounts.values()].reduce((a, b) => a + b, 0);
+        const repeatedInSameFile = [...fileCounts.entries()].filter(([, count]) => count > 1);
+        if (repeatedInSameFile.length > 0) {
+          for (const [file, count] of repeatedInSameFile) {
+            issues.push(`'${name}' (${kind}) declared ${count} times in ${file}`);
+          }
+        } else if (totalOccurrences > 1) {
+          issues.push(`'${name}' (${kind}) declared in multiple files: ${[...fileCounts.keys()].join(", ")}`);
+        }
+      }
+    }
+
+    // (b) same name declared across more than one distinct file (any kind mix)
+    for (const [name, files] of byNameFiles) {
+      if (files.size > 1) {
+        const already = issues.some((i) => i.startsWith(`'${name}' `));
+        if (!already) {
+          issues.push(`'${name}' exported from multiple files: ${[...files].join(", ")}`);
+        }
       }
     }
   }
@@ -219,8 +256,30 @@ function checkOpenApiSpec(): CheckResult {
 
   const content = fs.readFileSync(specPath, "utf8");
 
-  // Detect duplicate operationId
-  const operationIds = [...content.matchAll(/operationId:\s*(\w+)/g)].map((m) => m[1]);
+  // Real YAML parse — the `yaml` package throws on duplicate keys within the
+  // same mapping (e.g. two `tags:` in one operation), which is exactly the
+  // GitHub-import concatenation bug this check exists to catch. A regex-based
+  // heuristic here previously false-flagged legitimate repeated `tags:` across
+  // unrelated path blocks — always prefer a real parser for structural checks.
+  let spec: { paths?: Record<string, Record<string, { operationId?: string }>> };
+  try {
+    spec = parseYaml(content, { maxAliasCount: 10000, merge: true });
+  } catch (err) {
+    return {
+      name: "openapi-spec",
+      status: "fail",
+      message: "OpenAPI spec failed to parse as YAML (likely duplicate keys from a concatenated file)",
+      details: [err instanceof Error ? err.message : String(err)],
+    };
+  }
+
+  // Detect duplicate operationId across the whole spec (must be globally unique)
+  const operationIds: string[] = [];
+  for (const methods of Object.values(spec.paths ?? {})) {
+    for (const op of Object.values(methods)) {
+      if (op?.operationId) operationIds.push(op.operationId);
+    }
+  }
   const seen = new Set<string>();
   const duplicates: string[] = [];
   for (const id of operationIds) {
@@ -228,15 +287,12 @@ function checkOpenApiSpec(): CheckResult {
     seen.add(id);
   }
 
-  // Detect duplicate tags/summary within a single path block (simple heuristic)
-  const hasDuplicateTags = /tags:\s*\[.+\]\s*\n(?:.*\n)*?\s*tags:\s*\[/.test(content);
-
-  if (duplicates.length > 0 || hasDuplicateTags) {
+  if (duplicates.length > 0) {
     return {
       name: "openapi-spec",
       status: "fail",
-      message: "OpenAPI spec has duplicate operationIds or duplicate tags within paths",
-      details: duplicates.length > 0 ? [`Duplicate operationIds: ${duplicates.join(", ")}`] : ["Duplicate tags detected"],
+      message: "OpenAPI spec has duplicate operationIds",
+      details: [`Duplicate operationIds: ${duplicates.join(", ")}`],
     };
   }
 
