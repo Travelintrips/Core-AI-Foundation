@@ -14,10 +14,18 @@ import {
   getListJobsQueryKey,
   getListWorkersQueryKey,
   getGetDispatcherStatusQueryKey,
+  useGetClusterStatus,
+  useGetClusterWorkers,
+  useRebalanceCluster,
+  useRecoverStaleWorkers,
+  getClusterStatusQueryKey,
+  getClusterWorkersQueryKey,
   type AiJob,
   type AiWorker,
   type JobStats,
   type DispatcherStatus,
+  type ClusterStatus,
+  type WorkerCapacityItem,
 } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,19 +41,23 @@ import {
 import {
   Activity,
   AlertCircle,
+  AlertTriangle,
   Ban,
   Bot,
   CheckCircle2,
   CircleDot,
   Clock,
   Cpu,
+  DatabaseZap,
   Layers,
   ListOrdered,
   Loader2,
+  Network,
   Play,
   RefreshCw,
   RotateCcw,
   RotateCw,
+  Server,
   SkipForward,
   Square,
   Timer,
@@ -76,6 +88,7 @@ const WORKER_STATUS_CONFIG: Record<string, { color: string; dot: string }> = {
   busy:        { color: "text-yellow-400",  dot: "bg-yellow-400"  },
   maintenance: { color: "text-orange-400",  dot: "bg-orange-400"  },
   offline:     { color: "text-zinc-500",    dot: "bg-zinc-500"    },
+  stale:       { color: "text-red-400",     dot: "bg-red-400"     },
 };
 
 function JobStatusBadge({ status }: { status: string }) {
@@ -346,10 +359,199 @@ function DispatcherPanel({
 }
 
 
+// ── Worker Cluster Panel ──────────────────────────────────────────────────────
+
+function WorkerTypeChip({ type }: { type: string }) {
+  const colors: Record<string, string> = {
+    text_worker:   "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    image_worker:  "bg-purple-500/15 text-purple-400 border-purple-500/30",
+    export_worker: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    system_worker: "bg-slate-500/15 text-slate-400 border-slate-500/30",
+  };
+  return (
+    <Badge className={cn("text-[9px] border font-mono px-1.5 py-0 h-4", colors[type] ?? colors["system_worker"])}>
+      {type.replace("_worker", "")}
+    </Badge>
+  );
+}
+
+function ClusterPanel({
+  statuses,
+  workers,
+  isLoading,
+  onRebalance,
+  onRecover,
+  isMutating,
+}: {
+  statuses: ClusterStatus[];
+  workers: WorkerCapacityItem[];
+  isLoading: boolean;
+  onRebalance: () => void;
+  onRecover: () => void;
+  isMutating: boolean;
+}) {
+  const now = new Date();
+  const cs = statuses[0];
+
+  return (
+    <div className="border border-border/50 rounded-lg bg-card/40 p-4 space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Network className="size-4 text-primary" />
+          <span className="font-mono text-sm font-semibold">Worker Cluster</span>
+          <Badge variant="outline" className="text-[9px] font-mono h-4 px-1.5 border-border/50 text-muted-foreground">
+            Phase 5.2
+          </Badge>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isMutating}
+            onClick={onRecover}
+            className="h-6 gap-1.5 text-[10px] font-mono border-border/50 text-orange-400 hover:text-orange-300 hover:bg-orange-500/10"
+          >
+            <AlertTriangle className="size-3" />
+            Recover Stale
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isMutating}
+            onClick={onRebalance}
+            className="h-6 gap-1.5 text-[10px] font-mono border-border/50 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+          >
+            <DatabaseZap className="size-3" />
+            Rebalance
+          </Button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 className="size-4 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <>
+          {/* Cluster summary */}
+          {cs && (
+            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+              {[
+                { label: "Total",    value: cs.totalWorkers,   accent: "text-foreground" },
+                { label: "Online",   value: cs.onlineWorkers,  accent: "text-blue-400"   },
+                { label: "Idle",     value: cs.idleWorkers,    accent: "text-green-400"  },
+                { label: "Busy",     value: cs.busyWorkers,    accent: "text-yellow-400" },
+                { label: "Stale",    value: cs.staleWorkers,   accent: cs.staleWorkers > 0 ? "text-red-400" : "text-muted-foreground" },
+                { label: "Offline",  value: cs.offlineWorkers, accent: "text-zinc-500"   },
+                { label: "Capacity", value: `${cs.capacityPct}%`, accent: cs.capacityPct > 80 ? "text-red-400" : "text-emerald-400" },
+              ].map(({ label, value, accent }) => (
+                <div key={label} className="border border-border/30 rounded bg-muted/10 p-2 text-center">
+                  <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-wide">{label}</div>
+                  <div className={cn("text-sm font-bold font-mono mt-0.5", accent)}>{value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Capacity bar */}
+          {cs && (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[9px] font-mono text-muted-foreground">
+                <span>{cs.usedCapacity} / {cs.totalCapacity} slots used</span>
+                <span>{cs.nodes.length} node{cs.nodes.length !== 1 ? "s" : ""}</span>
+              </div>
+              <div className="h-1.5 bg-muted/30 rounded-full overflow-hidden">
+                <div
+                  className={cn("h-full rounded-full transition-all", cs.capacityPct > 80 ? "bg-red-500" : "bg-emerald-500")}
+                  style={{ width: `${Math.min(100, cs.capacityPct)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Worker rows */}
+          {workers.length === 0 ? (
+            <p className="text-xs font-mono text-muted-foreground text-center py-2">No workers registered</p>
+          ) : (
+            <div className="space-y-1.5">
+              {workers.map((w) => {
+                const cfg = WORKER_STATUS_CONFIG[w.status] ?? WORKER_STATUS_CONFIG["offline"]!;
+                const leaseExpired = !w.leaseValid && w.leaseExpiresAt !== null;
+                const lastSeen = formatDistanceToNow(new Date(w.lastHeartbeat), { addSuffix: true });
+                const slotPct = w.maxConcurrentJobs > 0
+                  ? Math.round((w.runningJobs / w.maxConcurrentJobs) * 100)
+                  : 0;
+
+                return (
+                  <div key={w.id} className="border border-border/30 rounded-lg bg-muted/5 p-2.5 grid grid-cols-[auto_1fr_auto] gap-x-3 items-center">
+                    {/* Status dot */}
+                    <span className={cn("size-2 rounded-full shrink-0", cfg.dot)} />
+
+                    {/* Main info */}
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono text-xs font-semibold">{w.workerName}</span>
+                        <WorkerTypeChip type={w.workerType} />
+                        {leaseExpired && (
+                          <Badge className="text-[8px] border font-mono px-1 py-0 h-3.5 bg-red-500/10 text-red-400 border-red-500/30">
+                            lease expired
+                          </Badge>
+                        )}
+                        {w.leaseValid && (
+                          <Badge className="text-[8px] border font-mono px-1 py-0 h-3.5 bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                            lease ok
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-[9px] font-mono text-muted-foreground">
+                        <span title="Region">{w.region}</span>
+                        <span>·</span>
+                        <span title="Node">{w.nodeId}</span>
+                        <span>·</span>
+                        <span>{lastSeen}</span>
+                        <span>·</span>
+                        <span>{w.runningJobs}/{w.maxConcurrentJobs} jobs</span>
+                      </div>
+                      {w.capabilities.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {w.capabilities.slice(0, 6).map((cap) => (
+                            <span key={cap} className="text-[8px] font-mono bg-muted/30 px-1 py-0.5 rounded text-muted-foreground">
+                              {cap}
+                            </span>
+                          ))}
+                          {w.capabilities.length > 6 && (
+                            <span className="text-[8px] font-mono text-muted-foreground/60">+{w.capabilities.length - 6}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Slot mini-bar */}
+                    <div className="w-10 flex flex-col items-end gap-0.5 shrink-0">
+                      <span className={cn("text-[9px] font-mono font-semibold", cfg.color)}>{w.availableSlots} free</span>
+                      <div className="w-10 h-1 bg-muted/30 rounded-full overflow-hidden">
+                        <div
+                          className={cn("h-full rounded-full", slotPct > 80 ? "bg-red-500" : "bg-emerald-500")}
+                          style={{ width: `${slotPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 const ALL_STATUSES = ["queued","waiting","running","retrying","completed","failed","cancelled","blocked"];
-const JOB_TYPES = ["llm_inference","creative_brief","image_generation","qc_review","noop","custom"];
+const JOB_TYPES = ["llm_inference","creative_brief","image_generation","qc_review","noop","custom","analytics","cleanup","pdf_export","csv_export"];
 const LIMIT = 50;
 
 export default function QueuePage() {
@@ -459,6 +661,48 @@ export default function QueuePage() {
     },
   });
 
+  // ── Phase 5.2: Cluster hooks ───────────────────────────────────────────────
+  const { data: clusterStatuses = [], isLoading: clusterLoading } = useGetClusterStatus({
+    query: { queryKey: getClusterStatusQueryKey(), refetchInterval: 5000 },
+  });
+
+  const { data: clusterWorkers = [], isLoading: clusterWorkersLoading } = useGetClusterWorkers({
+    query: { queryKey: getClusterWorkersQueryKey(), refetchInterval: 5000 },
+  });
+
+  const rebalance = useRebalanceCluster({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.invalidateQueries({ queryKey: getClusterStatusQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getClusterWorkersQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListJobsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetJobStatsQueryKey() });
+        toast({ title: `Rebalanced — ${data.recoveredJobs} job(s) recovered, ${data.staleWorkers} stale worker(s) cleared` });
+      },
+      onError: (e: unknown) => toast({
+        title: (e as { message?: string })?.message ?? "Rebalance failed",
+        variant: "destructive",
+      }),
+    },
+  });
+
+  const recoverStale = useRecoverStaleWorkers({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.invalidateQueries({ queryKey: getClusterStatusQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getClusterWorkersQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListJobsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetJobStatsQueryKey() });
+        toast({ title: `Recovery complete — ${data.recoveredJobs} job(s) recovered` });
+      },
+      onError: (e: unknown) => toast({
+        title: (e as { message?: string })?.message ?? "Recovery failed",
+        variant: "destructive",
+      }),
+    },
+  });
+
+  const isClusterMutating = rebalance.isPending || recoverStale.isPending;
   const isDispatcherMutating = startDispatcher.isPending || stopDispatcher.isPending || runTick.isPending;
   const isMutating = cancelJob.isPending || retryJob.isPending;
 
@@ -468,6 +712,8 @@ export default function QueuePage() {
   function handleRefresh() {
     queryClient.invalidateQueries({ queryKey: getGetJobStatsQueryKey() });
     queryClient.invalidateQueries({ queryKey: getListJobsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getClusterStatusQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getClusterWorkersQueryKey() });
   }
 
   return (
@@ -529,6 +775,16 @@ export default function QueuePage() {
             onStop={() => stopDispatcher.mutate()}
             onTick={() => runTick.mutate()}
             isMutating={isDispatcherMutating}
+          />
+
+          {/* Worker Cluster Panel — Phase 5.2 */}
+          <ClusterPanel
+            statuses={clusterStatuses}
+            workers={clusterWorkers}
+            isLoading={clusterLoading || clusterWorkersLoading}
+            onRebalance={() => rebalance.mutate()}
+            onRecover={() => recoverStale.mutate()}
+            isMutating={isClusterMutating}
           />
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">

@@ -11,3 +11,4 @@
 - [phase6-client-review](phase6-client-review.md) — Phase 6 client portal: no zod in api-server, terminal state guards, GET-view downgrade protection, Wouter public-route pattern
 - [phase48-digital-workforce](phase48-digital-workforce.md) — Phase 4.8 workforce: 7 new tables, seed via POST /api/ai/seed/all, workforce at /ai/workforce/* routes, frontend at /workforce
 - [orval-codegen-workaround](orval-codegen-workaround.md) — orval 8.18.0 @scalar/json-magic bug; pre-parse YAML as object and pass as input.target to bypass file-loader failure
+- [phase52-cluster](phase52-cluster.md) — Phase 5.2 worker cluster: lock_version table-prefix fix, route path prefix rule, types/ dir must stay deleted, cluster hooks are manual not generated

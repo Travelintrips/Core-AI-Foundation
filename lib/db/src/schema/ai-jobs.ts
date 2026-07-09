@@ -71,6 +71,9 @@ export const aiJobsTable = pgTable("ai_jobs", {
   // Manager priority override (0–100 boost applied on top of base score)
   managerOverride: integer("manager_override"),
 
+  // Capability routing — if set, only workers with this capability can claim
+  requiredCapability: text("required_capability"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

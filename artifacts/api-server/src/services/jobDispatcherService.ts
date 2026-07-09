@@ -1,32 +1,34 @@
 /**
- * Job Dispatcher Service — Phase 5.1 Worker Dispatcher Runtime
+ * Job Dispatcher Service — Phase 5.1 / 5.2 Worker Dispatcher Runtime
  *
- * In-process background worker that polls the job queue and automatically
- * claims + executes jobs without manual HTTP calls.
+ * Phase 5.2 additions:
+ *  - Workers registered via workerClusterService (cluster identity + lease)
+ *  - Heartbeat renews leases for all managed workers
+ *  - Dispatcher workers differentiated by capability (text vs image vs system)
+ *  - Stale detection delegated to workerClusterService.markStaleWorkers()
  *
- * startDispatcher()       — register worker, start poll + heartbeat timers
- * stopDispatcher()        — clear timers, mark worker offline
- * tick()                  — one poll cycle: dispatch + maintenance
- * dispatchAvailableJobs() — claim and process jobs up to concurrency limit
- * processClaimedJob()     — execute a claimed job, complete or retry on failure
- * handleWorkerHeartbeat() — write heartbeat to DB
- * handleStaleWorkers()    — mark workers without recent heartbeat as offline
- * handleStuckJobs()       — release / retry jobs running beyond timeout
- * getDispatcherStatus()   — return current runtime status snapshot
- * isDispatcherEnabled()   — read env/settings to decide whether to auto-start
- * Automatic polling dispatcher that claims and executes queued jobs.
- *
- * start()    — begin polling loop
- * stop()     — halt polling loop
- * tick()     — one full dispatch cycle (recover → claim → execute → complete/retry)
- * dispatch() — claim + execute one job on a given worker
- * recover()  — detect stale workers and stuck jobs, recover them
- * shutdown() — graceful shutdown (stop polling, mark workers offline)
+ * startDispatcher()       — register workers with leases, start poll + heartbeat timers
+ * stopDispatcher()        — clear timers, release worker leases
+ * tick()                  — one poll cycle: recover → claim → execute
+ * dispatch()              — claim and execute one job for a given worker
+ * recover()               — stale workers + stuck jobs recovery
+ * shutdown()              — graceful shutdown with lease release
+ * getStatus()             — runtime snapshot
  */
 
-import { eq, and, or, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
+import { randomUUID } from "crypto";
 import { db, aiJobsTable, aiWorkersTable } from "@workspace/db";
 import { claimJob, executeJob, completeJob, retryJob } from "./jobWorkerService.js";
+import {
+  registerWorker,
+  renewLease,
+  releaseLease,
+  markStaleWorkers,
+  rebalanceJobs,
+  DEFAULT_LEASE_TTL_MS,
+  WORKER_TYPE_CAPABILITIES,
+} from "./workerClusterService.js";
 import { logAudit } from "./aiAuditService.js";
 import { logger } from "../lib/logger.js";
 
@@ -61,30 +63,63 @@ export interface TickResult {
   failed: number;
 }
 
+// ── Dispatcher worker configs (Phase 5.2) ─────────────────────────────────────
+
+interface WorkerConfig {
+  suffix: string;
+  workerType: string;
+  capabilities: string[];
+  maxConcurrentJobs: number;
+}
+
+const DISPATCHER_WORKERS: WorkerConfig[] = [
+  {
+    suffix:            "1",
+    workerType:        "text_worker",
+    capabilities:      WORKER_TYPE_CAPABILITIES["text_worker"]!,
+    maxConcurrentJobs: 3,
+  },
+  {
+    suffix:            "2",
+    workerType:        "image_worker",
+    capabilities:      [
+      ...WORKER_TYPE_CAPABILITIES["image_worker"]!,
+      ...WORKER_TYPE_CAPABILITIES["export_worker"]!,
+      ...WORKER_TYPE_CAPABILITIES["system_worker"]!,
+      "noop",
+      "custom",
+    ],
+    maxConcurrentJobs: 3,
+  },
+];
+
 // ── Module state ──────────────────────────────────────────────────────────────
 
 const _settings: DispatcherSettings = {
-  dispatcherEnabled: true,
-  workerPollIntervalMs:       5_000,
+  dispatcherEnabled:        true,
+  workerPollIntervalMs:     5_000,
   workerHeartbeatIntervalMs: 10_000,
-  workerTimeoutMs:           60_000,
-  jobTimeoutMs:             300_000,
-  maxConcurrentJobs:              5,
+  workerTimeoutMs:          60_000,
+  jobTimeoutMs:            300_000,
+  maxConcurrentJobs:             5,
 };
 
-let _running         = false;   // true once fully started (timers active)
-let _starting        = false;   // mutex: prevents concurrent start() calls
-let _queuePaused     = false;   // mirrors the job-queue pause state
-let _pollTimer: NodeJS.Timeout | null     = null;
+let _running         = false;
+let _starting        = false;
+let _queuePaused     = false;
+let _pollTimer: NodeJS.Timeout | null      = null;
 let _heartbeatTimer: NodeJS.Timeout | null = null;
-let _lastTick:       Date | null = null;
-let _lastHeartbeat:  Date | null = null;
+let _lastTick:        Date | null          = null;
+let _lastHeartbeat:   Date | null          = null;
 let _processedToday  = 0;
 let _failedToday     = 0;
-const _workerIds: number[] = [];
 
-const WORKER_PREFIX = "dispatcher";
-const WORKER_COUNT  = 2;   // virtual workers managed by this dispatcher
+// Phase 5.2: each entry holds worker id + heartbeat token for lease renewal
+interface ManagedWorker { id: number; token: string; }
+const _workers: ManagedWorker[] = [];
+
+const CLUSTER_ID   = "dispatcher";
+const LEASE_OWNER  = `dispatcher-pid-${process.pid}`;
 
 // ── Settings API ──────────────────────────────────────────────────────────────
 
@@ -100,7 +135,6 @@ export function updateSettings(patch: Partial<DispatcherSettings>): DispatcherSe
 
   Object.assign(_settings, patch);
 
-  // Restart timers if intervals changed while running
   if (_running && (intervalChanged || heartbeatChanged)) {
     _clearTimers();
     _startTimers();
@@ -115,13 +149,15 @@ export async function getStatus(): Promise<DispatcherStatus> {
   let idleWorkers = 0;
   let busyWorkers = 0;
 
-  if (_workerIds.length > 0) {
+  const workerIds = _workers.map((w) => w.id);
+
+  if (workerIds.length > 0) {
     const workers = await db
       .select()
       .from(aiWorkersTable)
-      .where(inArray(aiWorkersTable.id, _workerIds));
+      .where(inArray(aiWorkersTable.id, workerIds));
 
-    idleWorkers = workers.filter((w) => w.status === "idle").length;
+    idleWorkers = workers.filter((w) => w.status === "idle" || w.status === "online").length;
     busyWorkers = workers.filter((w) => w.status === "busy").length;
   }
 
@@ -136,7 +172,7 @@ export async function getStatus(): Promise<DispatcherStatus> {
   return {
     enabled:        _settings.dispatcherEnabled,
     running:        _running,
-    workerCount:    _workerIds.length,
+    workerCount:    workerIds.length,
     idleWorkers,
     busyWorkers,
     queueLength:    queueRow?.count ?? 0,
@@ -151,54 +187,46 @@ export async function getStatus(): Promise<DispatcherStatus> {
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 /**
- * Upsert dispatcher-owned workers in DB and cache their IDs.
+ * Register dispatcher-owned workers via the cluster service (Phase 5.2).
+ * Each worker gets cluster identity, capability set, and a fresh lease.
  */
 export async function ensureWorkers(): Promise<void> {
-  _workerIds.length = 0;
+  _workers.length = 0;
 
-  for (let i = 1; i <= WORKER_COUNT; i++) {
-    const name = `${WORKER_PREFIX}-${i}`;
+  const nodeId = `node-${process.pid}`;
 
-    const [existing] = await db
-      .select()
-      .from(aiWorkersTable)
-      .where(eq(aiWorkersTable.workerName, name));
+  for (const cfg of DISPATCHER_WORKERS) {
+    const workerName = `dispatcher-${cfg.suffix}`;
+    const token      = randomUUID();
 
-    if (existing) {
-      const [updated] = await db
-        .update(aiWorkersTable)
-        .set({
-          status:       "idle",
-          currentJob:   null,
-          runningJobs:  0,
-          lastHeartbeat: new Date(),
-          updatedAt:    new Date(),
-        })
-        .where(eq(aiWorkersTable.id, existing.id))
-        .returning();
-      _workerIds.push(updated!.id);
-    } else {
-      const [created] = await db
-        .insert(aiWorkersTable)
-        .values({
-          workerName:    name,
-          status:        "idle",
-          runningJobs:   0,
-          completedToday: 0,
-          failedToday:   0,
-          version:       "1.0.0",
-        })
-        .returning();
-      _workerIds.push(created!.id);
-    }
+    const worker = await registerWorker({
+      workerName,
+      workerType:       cfg.workerType,
+      clusterId:        CLUSTER_ID,
+      nodeId,
+      region:           "local",
+      version:          "5.2.0",
+      capabilities:     cfg.capabilities,
+      maxConcurrentJobs: cfg.maxConcurrentJobs,
+      leaseOwner:       LEASE_OWNER,
+      leaseTtlMs:       DEFAULT_LEASE_TTL_MS,
+    });
+
+    // Overwrite the heartbeat_token with one we control (registerWorker generates its own,
+    // but we need to track it for lease renewal)
+    await db
+      .update(aiWorkersTable)
+      .set({ heartbeatToken: token, status: "idle", currentJob: null, runningJobs: 0 })
+      .where(eq(aiWorkersTable.id, worker.id));
+
+    _workers.push({ id: worker.id, token });
   }
 
-  logger.info({ workerIds: _workerIds }, "[dispatcher] Workers ensured");
+  logger.info({ workers: _workers.map((w) => w.id) }, "[dispatcher] Workers ensured");
 }
 
 /**
  * Notify dispatcher that the job queue has been paused or resumed.
- * Called by the queue pause/resume routes so tick() can skip claiming.
  */
 export function setQueuePaused(paused: boolean): void {
   _queuePaused = paused;
@@ -206,8 +234,7 @@ export function setQueuePaused(paused: boolean): void {
 }
 
 /**
- * Start the dispatcher. Safe to call multiple times — ignored if already running.
- * Uses `_starting` mutex to prevent duplicate timer creation from concurrent calls.
+ * Start the dispatcher. Safe to call multiple times.
  */
 export async function start(): Promise<void> {
   if (_running || _starting) {
@@ -215,7 +242,7 @@ export async function start(): Promise<void> {
     return;
   }
 
-  _starting = true;   // acquire mutex before any await
+  _starting = true;
   try {
     await ensureWorkers();
   } catch (err) {
@@ -227,10 +254,11 @@ export async function start(): Promise<void> {
   _starting = false;
   _startTimers();
 
-  logger.info({ pollIntervalMs: _settings.workerPollIntervalMs, workers: _workerIds }, "[dispatcher] Started");
+  const workerIds = _workers.map((w) => w.id);
+  logger.info({ pollIntervalMs: _settings.workerPollIntervalMs, workers: workerIds }, "[dispatcher] Started");
   await logAudit("job-dispatcher", "dispatcher_started", "dispatcher", "system", "success", {
-    workerIds: _workerIds,
-    settings:  _settings,
+    workerIds,
+    settings: _settings,
   });
 }
 
@@ -239,52 +267,51 @@ export async function start(): Promise<void> {
  */
 export async function stop(): Promise<void> {
   if (!_running) return;
-
   _running = false;
   _clearTimers();
-
   logger.info("[dispatcher] Stopped");
   await logAudit("job-dispatcher", "dispatcher_stopped", "dispatcher", "system", "success", {});
 }
 
 /**
- * Execute one full dispatch cycle regardless of the timer state.
+ * Execute one full dispatch cycle.
  */
 export async function tick(): Promise<TickResult> {
   _lastTick = new Date();
   const result: TickResult = { claimed: 0, completed: 0, failed: 0 };
 
   try {
-    // 1. Recovery first (stale workers + stuck jobs) — always runs, even when paused
+    // 1. Recovery (stale workers + stuck jobs) — always runs
     await recover();
 
-    // 2. Skip claim/dispatch when job queue is paused
+    // 2. Skip claim/dispatch when paused
     if (_queuePaused) {
       logger.debug("[dispatcher] Queue paused — skipping claim phase");
       return result;
     }
 
-    if (_workerIds.length === 0) return result;
+    if (_workers.length === 0) return result;
 
-    // 3. Find idle workers managed by this dispatcher
+    // 3. Find idle managed workers
+    const workerIds = _workers.map((w) => w.id);
     const idleWorkers = await db
       .select()
       .from(aiWorkersTable)
       .where(
         and(
-          inArray(aiWorkersTable.id, _workerIds),
+          inArray(aiWorkersTable.id, workerIds),
           eq(aiWorkersTable.status, "idle"),
         ),
       );
 
     if (idleWorkers.length === 0) return result;
 
-    // 3. Cap by maxConcurrentJobs
-    const currentBusy = _workerIds.length - idleWorkers.length;
+    // 4. Cap by maxConcurrentJobs setting
+    const currentBusy = workerIds.length - idleWorkers.length;
     const slots       = Math.max(0, _settings.maxConcurrentJobs - currentBusy);
     const toDispatch  = idleWorkers.slice(0, slots);
 
-    // 4. Dispatch jobs in parallel
+    // 5. Dispatch in parallel
     const outcomes = await Promise.allSettled(
       toDispatch.map((w) => dispatch(w.id)),
     );
@@ -305,7 +332,6 @@ export async function tick(): Promise<TickResult> {
 
 /**
  * Claim and execute one job for a given worker.
- * Returns "completed" | "failed" | null (if no job available).
  */
 export async function dispatch(workerId: number): Promise<"completed" | "failed" | null> {
   try {
@@ -334,57 +360,18 @@ export async function dispatch(workerId: number): Promise<"completed" | "failed"
 }
 
 /**
- * Detect stale workers (heartbeat timeout) and stuck jobs (running too long).
- * Recover both, emit audit logs.
+ * Detect stale workers and stuck jobs, recover them.
+ * Phase 5.2: delegates stale detection to workerClusterService.
  */
 export async function recover(): Promise<void> {
   const now = new Date();
 
-  // ── Stale worker recovery ────────────────────────────────────────────────
-  if (_workerIds.length > 0) {
-    try {
-      const cutoff    = new Date(now.getTime() - _settings.workerTimeoutMs).toISOString();
-      const idList    = _workerIds.join(",");
-
-      const rawStale = await db.execute(sql`
-        SELECT * FROM ai_workers
-        WHERE id IN (${sql.raw(idList)})
-          AND status != 'offline'
-          AND last_heartbeat < ${cutoff}::timestamptz
-      `);
-      const staleWorkers = (rawStale as unknown as { rows: Record<string, unknown>[] }).rows ?? [];
-
-      for (const row of staleWorkers) {
-        const workerId   = Number(row["id"]);
-        const workerName = String(row["worker_name"] ?? "");
-        const currentJob = row["current_job"] != null ? Number(row["current_job"]) : null;
-
-        logger.warn({ workerId, workerName }, "[dispatcher] Stale worker — heartbeat timeout");
-
-        // Release running job first (retryJob updates worker to idle)
-        if (currentJob != null) {
-          try {
-            await retryJob(currentJob, workerId, "Worker heartbeat timeout");
-          } catch (err) {
-            logger.error({ err, jobId: currentJob }, "[dispatcher] Failed to retry stale job");
-          }
-        }
-
-        // Mark worker offline
-        await db
-          .update(aiWorkersTable)
-          .set({ status: "offline", currentJob: null, runningJobs: 0, updatedAt: now })
-          .where(eq(aiWorkersTable.id, workerId));
-
-        await logAudit("job-dispatcher", "worker_timeout", String(workerId), "ai_worker", "failure", {
-          workerName,
-          lastHeartbeat: row["last_heartbeat"],
-          releasedJob:   currentJob,
-        });
-      }
-    } catch (err) {
-      logger.error({ err }, "[dispatcher] Stale worker recovery error");
-    }
+  // ── Phase 5.2: lease-based stale detection ──────────────────────────────
+  try {
+    await markStaleWorkers();
+    await rebalanceJobs();
+  } catch (err) {
+    logger.error({ err }, "[dispatcher] Cluster stale recovery error");
   }
 
   // ── Stuck job detector ────────────────────────────────────────────────────
@@ -402,7 +389,6 @@ export async function recover(): Promise<void> {
       const jobId = Number(row["id"]);
       logger.warn({ jobId }, "[dispatcher] Stuck job — execution timeout");
 
-      // Find the worker holding this job
       const [holder] = await db
         .select()
         .from(aiWorkersTable)
@@ -415,22 +401,16 @@ export async function recover(): Promise<void> {
           logger.error({ err, jobId }, "[dispatcher] Failed to retry stuck job");
         }
       } else {
-        // Orphaned running job — force back to queued
         await db
           .update(aiJobsTable)
           .set({ status: "queued", startedAt: null, updatedAt: now })
-          .where(
-            and(
-              eq(aiJobsTable.id, jobId),
-              eq(aiJobsTable.status, "running"),
-            ),
-          );
+          .where(and(eq(aiJobsTable.id, jobId), eq(aiJobsTable.status, "running")));
       }
 
       await logAudit("job-dispatcher", "job_timeout", String(jobId), "ai_job", "failure", {
-        startedAt:  row["started_at"],
-        timeoutMs:  _settings.jobTimeoutMs,
-        hadWorker:  !!holder,
+        startedAt: row["started_at"],
+        timeoutMs: _settings.jobTimeoutMs,
+        hadWorker: !!holder,
       });
     }
   } catch (err) {
@@ -439,21 +419,25 @@ export async function recover(): Promise<void> {
 }
 
 /**
- * Graceful shutdown — stop polling and mark dispatcher workers offline.
+ * Graceful shutdown — stop polling, release leases, mark workers offline.
  */
 export async function shutdown(): Promise<void> {
   _running = false;
   _clearTimers();
 
-  if (_workerIds.length > 0) {
-    await db
-      .update(aiWorkersTable)
-      .set({ status: "offline", updatedAt: new Date() })
-      .where(inArray(aiWorkersTable.id, _workerIds));
+  // Release leases for all managed workers
+  for (const w of _workers) {
+    try {
+      await releaseLease(w.id, w.token);
+    } catch (err) {
+      logger.error({ err, workerId: w.id }, "[dispatcher] Failed to release lease on shutdown");
+    }
   }
 
   logger.info("[dispatcher] Shutdown complete");
-  await logAudit("job-dispatcher", "dispatcher_shutdown", "dispatcher", "system", "success", {});
+  await logAudit("job-dispatcher", "dispatcher_shutdown", "dispatcher", "system", "success", {
+    workerIds: _workers.map((w) => w.id),
+  });
 }
 
 // ── Private helpers ───────────────────────────────────────────────────────────
@@ -473,18 +457,18 @@ function _clearTimers(): void {
   if (_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
 }
 
+/**
+ * Write heartbeat to DB and renew leases for all managed workers.
+ */
 async function _heartbeat(): Promise<void> {
-  if (_workerIds.length === 0) return;
-
+  if (_workers.length === 0) return;
   _lastHeartbeat = new Date();
 
-  await db
-    .update(aiWorkersTable)
-    .set({ lastHeartbeat: _lastHeartbeat, updatedAt: _lastHeartbeat })
-    .where(
-      and(
-        inArray(aiWorkersTable.id, _workerIds),
-        sql`status != 'offline'`,
+  await Promise.allSettled(
+    _workers.map((w) =>
+      renewLease(w.id, w.token, DEFAULT_LEASE_TTL_MS).catch((err) =>
+        logger.error({ err, workerId: w.id }, "[dispatcher] Lease renewal failed"),
       ),
-    );
+    ),
+  );
 }

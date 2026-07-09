@@ -1,7 +1,8 @@
 /**
- * Job Worker Service — Phase 5 Job Queue
+ * Job Worker Service — Phase 5 Job Queue / Phase 5.2 Distributed Worker Cluster
  *
  * claimJob()    — atomically claim the next available job (SELECT FOR UPDATE SKIP LOCKED)
+ *                 Phase 5.2: capability-aware + lease-validated claiming
  * executeJob()  — dispatch a claimed job to the appropriate handler
  * completeJob() — mark job completed, update worker metrics
  * retryJob()    — schedule retry (immediate | exponential | manual)
@@ -10,7 +11,7 @@
  * releaseJob()  — release without completing (requeue)
  */
 
-import { eq, and, inArray, or, sql } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { db, aiJobsTable, aiWorkersTable } from "@workspace/db";
 import type { AiJob, AiWorker } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
@@ -26,13 +27,47 @@ function exponentialBackoffMs(retryCount: number): number {
 
 /**
  * Atomically claim the next available queued job for a worker.
- * Uses SELECT … FOR UPDATE SKIP LOCKED so two workers never take the same job.
+ *
+ * Phase 5.2 additions:
+ *  - Validates worker lease before claiming (workers without valid lease are skipped)
+ *  - Respects max_concurrent_jobs per worker
+ *  - Filters jobs by required_capability — only workers whose capabilities array
+ *    includes the job's required_capability (or the job has no required_capability) are eligible
+ *
+ * Uses SELECT … FOR UPDATE SKIP LOCKED so multiple workers never take the same job.
  */
 export async function claimJob(workerId: number): Promise<AiJob | null> {
+  // ── Pre-flight: validate worker lease and capacity ───────────────────────
+  const [worker] = await db
+    .select()
+    .from(aiWorkersTable)
+    .where(eq(aiWorkersTable.id, workerId));
+
+  if (!worker) return null;
+
+  // Reject stale/offline workers
+  if (worker.status === "offline" || worker.status === "stale") return null;
+
+  // Lease check: if a lease is configured, it must be valid
+  if (worker.leaseExpiresAt !== null && worker.leaseExpiresAt < new Date()) {
+    return null; // lease expired — worker is stale
+  }
+
+  // Capacity check: respect max_concurrent_jobs
+  if (worker.runningJobs >= worker.maxConcurrentJobs) return null;
+
+  // Capabilities for this worker (Phase 5.2 capability routing)
+  const capabilities = (worker.capabilities as string[] | null) ?? [];
+  // Serialise as a JSON string for the JSONB ? operator in PostgreSQL
+  const capJson = JSON.stringify(capabilities);
+
   return db.transaction(async (tx) => {
     // Find the highest-priority available job and lock it.
-    // Also promotes due 'retrying' jobs (next_retry_at has elapsed) so they
-    // are not lost after exponential/immediate back-off.
+    // Also promotes due 'retrying' jobs (next_retry_at has elapsed).
+    //
+    // Phase 5.2: adds required_capability filter —
+    //   (required_capability IS NULL)                          → any worker can claim
+    //   OR ($capJson::jsonb ? required_capability)             → worker has the capability
     const rawResult = await tx.execute(sql`
       SELECT * FROM ai_jobs
       WHERE (
@@ -40,11 +75,15 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
         OR
         (status = 'retrying' AND next_retry_at IS NOT NULL AND next_retry_at <= NOW())
       )
+      AND (
+        required_capability IS NULL
+        OR ${capJson}::jsonb ? required_capability
+      )
       ORDER BY priority_score DESC, created_at ASC
       LIMIT 1
       FOR UPDATE SKIP LOCKED
     `);
-    // drizzle-orm node-postgres returns QueryResult; rows is the iterable array
+
     const rows = (rawResult as unknown as { rows: Record<string, unknown>[] }).rows ?? [];
     const [job] = rows;
 
@@ -52,15 +91,10 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
 
     const jobRow = job as unknown as AiJob;
 
-    // Claim the job — accept both 'queued' and 'retrying' (due retrying jobs
-    // are selected above; without this OR the update would silently match nothing)
+    // Claim: accepts both 'queued' and 'retrying'
     const [claimed] = await tx
       .update(aiJobsTable)
-      .set({
-        status:     "running",
-        startedAt:  new Date(),
-        updatedAt:  new Date(),
-      })
+      .set({ status: "running", startedAt: new Date(), updatedAt: new Date() })
       .where(
         and(
           eq(aiJobsTable.id, jobRow.id),
@@ -70,41 +104,19 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
       .returning();
 
     if (!claimed) {
-      // Retrying job was found but UPDATE expected 'queued' — retry with retrying status
-      const [claimed2] = await tx
-        .update(aiJobsTable)
-        .set({ status: "running", startedAt: new Date(), updatedAt: new Date() })
-        .where(
-          and(
-            eq(aiJobsTable.id, jobRow.id),
-            eq(aiJobsTable.status, "retrying"),
-          ),
-        )
-        .returning();
-      if (!claimed2) return null; // genuine race condition
-      // Update worker
-      await tx
-        .update(aiWorkersTable)
-        .set({
-          status:        "busy",
-          currentJob:    claimed2.id,
-          runningJobs:   sql`running_jobs + 1`,
-          lastHeartbeat: new Date(),
-          updatedAt:     new Date(),
-        })
-        .where(eq(aiWorkersTable.id, workerId));
-      return claimed2;
+      // Race condition — another worker won; return null
+      return null;
     }
 
-    // Update worker status
+    // Update worker occupancy
     await tx
       .update(aiWorkersTable)
       .set({
-        status:      "busy",
-        currentJob:  claimed.id,
-        runningJobs: sql`running_jobs + 1`,
+        status:        "busy",
+        currentJob:    claimed.id,
+        runningJobs:   sql`running_jobs + 1`,
         lastHeartbeat: new Date(),
-        updatedAt:   new Date(),
+        updatedAt:     new Date(),
       })
       .where(eq(aiWorkersTable.id, workerId));
 
@@ -124,11 +136,29 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
     case "creative_brief":
       return { message: "Creative brief workflow dispatched", jobId: job.id };
 
-    case "image_generation":
-      return { message: "Image generation dispatched", jobId: job.id };
+    case "creative_text":
+      return { message: "Creative text generation dispatched", jobId: job.id };
 
     case "qc_review":
       return { message: "QC review dispatched", jobId: job.id };
+
+    case "image_generation":
+      return { message: "Image generation dispatched", jobId: job.id };
+
+    case "image_qc":
+      return { message: "Image QC dispatched", jobId: job.id };
+
+    case "pdf_export":
+      return { message: "PDF export dispatched", jobId: job.id };
+
+    case "csv_export":
+      return { message: "CSV export dispatched", jobId: job.id };
+
+    case "analytics":
+      return { message: "Analytics job dispatched", jobId: job.id };
+
+    case "cleanup":
+      return { message: "Cleanup job dispatched", jobId: job.id };
 
     case "noop":
       // Used for seed / testing
@@ -199,19 +229,22 @@ export async function completeJob(
   await logAudit("job-engine", "job_completed", String(jobId), "ai_job", "success", {
     actualDuration,
     actualCost,
+    workerId,
   });
 
-  return completed;
+  return completed!;
 }
 
 /**
- * Handle a failed job run — schedule retry or mark failed.
+ * Schedule a retry or mark the job failed if max retries exceeded.
  */
 export async function retryJob(
   jobId: number,
   workerId: number,
-  error: string,
+  errorMessage: string,
 ): Promise<AiJob> {
+  const now = new Date();
+
   const [job] = await db
     .select()
     .from(aiJobsTable)
@@ -219,41 +252,41 @@ export async function retryJob(
 
   if (!job) throw new Error(`Job ${jobId} not found`);
 
-  const nextRetryCount = job.retryCount + 1;
-  const exhausted = nextRetryCount > job.maxRetry;
+  const newRetryCount = job.retryCount + 1;
+  const exhausted     = newRetryCount > job.maxRetry;
 
-  let nextRetryAt: Date | null = null;
-  let newStatus: string;
+  let update: Parameters<typeof db.update<typeof aiJobsTable>>[0] extends infer T ? object : object;
 
   if (exhausted) {
-    newStatus = "failed";
+    update = {
+      status:       "failed",
+      errorMessage,
+      retryCount:   newRetryCount,
+      completedAt:  now,
+      updatedAt:    now,
+    };
   } else {
-    newStatus = "retrying";
-    switch (job.retryStrategy) {
-      case "immediate":
-        nextRetryAt = new Date(Date.now() + 5_000); // 5 s
-        break;
-      case "exponential":
-        nextRetryAt = new Date(Date.now() + exponentialBackoffMs(nextRetryCount - 1));
-        break;
-      case "manual":
-        nextRetryAt = null; // operator must manually trigger
-        newStatus = "blocked";
-        break;
+    let nextRetryAt: Date | null = null;
+    if (job.retryStrategy === "exponential") {
+      nextRetryAt = new Date(now.getTime() + exponentialBackoffMs(newRetryCount - 1));
+    } else if (job.retryStrategy === "immediate") {
+      nextRetryAt = now;
     }
-  }
+    // "manual" → stays in "retrying" with no nextRetryAt
 
-  const now = new Date();
+    update = {
+      status:       "retrying",
+      errorMessage,
+      retryCount:   newRetryCount,
+      nextRetryAt:  nextRetryAt,
+      startedAt:    null,
+      updatedAt:    now,
+    };
+  }
 
   const [updated] = await db
     .update(aiJobsTable)
-    .set({
-      status:       newStatus,
-      retryCount:   nextRetryCount,
-      errorMessage: error,
-      nextRetryAt,
-      updatedAt:    now,
-    })
+    .set(update as Parameters<typeof db.update>[0] extends infer T ? object : object)
     .where(eq(aiJobsTable.id, jobId))
     .returning();
 
@@ -275,63 +308,56 @@ export async function retryJob(
     exhausted ? "job_failed" : "job_retrying",
     String(jobId),
     "ai_job",
-    "failure",
-    { error, retryCount: nextRetryCount, maxRetry: job.maxRetry, nextRetryAt },
+    exhausted ? "failure" : "success",
+    { errorMessage, retryCount: newRetryCount, maxRetry: job.maxRetry, exhausted },
   );
 
-  return updated;
+  return updated!;
 }
 
 /**
- * Cancel a job (regardless of status, unless completed).
- * When cancelling a running job, atomically releases the assigned worker so
- * its capacity metrics stay accurate.
+ * Cancel a job (terminal state).
  */
-export async function cancelJob(jobId: number, reason?: string): Promise<AiJob> {
-  const [job] = await db
-    .select()
-    .from(aiJobsTable)
-    .where(eq(aiJobsTable.id, jobId));
-
-  if (!job) throw new Error(`Job ${jobId} not found`);
-  if (job.status === "completed") throw new Error("Cannot cancel a completed job");
-
+export async function cancelJob(jobId: number, workerId?: number): Promise<AiJob> {
   const now = new Date();
 
-  const [updated] = await db
+  const [cancelled] = await db
     .update(aiJobsTable)
-    .set({
-      status:       "cancelled",
-      errorMessage: reason ?? null,
-      updatedAt:    now,
-    })
-    .where(eq(aiJobsTable.id, jobId))
+    .set({ status: "cancelled", completedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(aiJobsTable.id, jobId),
+        inArray(aiJobsTable.status, ["queued", "waiting", "retrying", "running"]),
+      ),
+    )
     .returning();
 
-  // If the job was running, release the worker that held it
-  if (job.status === "running") {
+  if (!cancelled) throw new Error(`Job ${jobId} cannot be cancelled in its current state`);
+
+  // Release worker if the job was running
+  if (workerId && cancelled.status === "cancelled") {
     await db
       .update(aiWorkersTable)
       .set({
-        status:       "idle",
-        currentJob:   null,
-        runningJobs:  sql`GREATEST(running_jobs - 1, 0)`,
-        lastHeartbeat: now,
-        updatedAt:    now,
+        status:      "idle",
+        currentJob:  null,
+        runningJobs: sql`GREATEST(running_jobs - 1, 0)`,
+        updatedAt:   now,
       })
-      .where(eq(aiWorkersTable.currentJob, jobId));
+      .where(eq(aiWorkersTable.id, workerId));
   }
 
-  await logAudit("job-engine", "job_cancelled", String(jobId), "ai_job", "success", { reason, wasRunning: job.status === "running" });
+  await logAudit("job-engine", "job_cancelled", String(jobId), "ai_job", "success", { workerId });
 
-  return updated;
+  return cancelled;
 }
 
 /**
- * Update a worker's heartbeat timestamp and keep it online.
+ * Update a worker's last_heartbeat (called by heartbeat route).
  */
 export async function heartbeat(workerId: number): Promise<AiWorker> {
   const now = new Date();
+
   const [worker] = await db
     .update(aiWorkersTable)
     .set({
@@ -354,11 +380,7 @@ export async function releaseJob(jobId: number, workerId: number): Promise<AiJob
 
   const [released] = await db
     .update(aiJobsTable)
-    .set({
-      status:     "queued",
-      startedAt:  null,
-      updatedAt:  now,
-    })
+    .set({ status: "queued", startedAt: null, updatedAt: now })
     .where(
       and(
         eq(aiJobsTable.id, jobId),

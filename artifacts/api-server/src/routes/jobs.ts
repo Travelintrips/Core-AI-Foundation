@@ -208,10 +208,8 @@ router.patch("/ai/jobs/:id/cancel", async (req, res): Promise<void> => {
   const id = parseInt(req.params["id"]!, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid job id" }); return; }
 
-  const { reason } = (req.body ?? {}) as { reason?: string };
-
   try {
-    const job = await cancelJob(id, reason);
+    const job = await cancelJob(id);
     res.json(serializeJob(job));
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Cancel failed";

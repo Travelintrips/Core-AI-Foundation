@@ -1779,6 +1779,136 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /ai/cluster/status:
+    get:
+      operationId: getClusterStatus
+      tags:
+        - cluster
+      summary: Get aggregate cluster health snapshot
+      responses:
+        "200":
+          description: Array of per-cluster status objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClusterStatus"
+  /ai/cluster/workers:
+    get:
+      operationId: getClusterWorkers
+      tags:
+        - cluster
+      summary: List all workers with capacity and lease info
+      responses:
+        "200":
+          description: Worker capacity list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkerCapacityItem"
+  /ai/cluster/workers/register:
+    post:
+      operationId: registerClusterWorker
+      tags:
+        - cluster
+      summary: Register a new worker node in the cluster
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterClusterWorkerBody"
+      responses:
+        "201":
+          description: Registered worker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiWorker"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /ai/cluster/workers/{id}/lease:
+    patch:
+      operationId: renewWorkerLease
+      tags:
+        - cluster
+      summary: Renew a worker lease
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenewLeaseBody"
+      responses:
+        "200":
+          description: Updated worker with new lease expiry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiWorker"
+        "409":
+          description: Token mismatch or worker not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /ai/cluster/rebalance:
+    post:
+      operationId: rebalanceCluster
+      tags:
+        - cluster
+      summary: Mark stale workers and requeue their running jobs
+      responses:
+        "200":
+          description: Rebalance summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - staleWorkers
+                  - recoveredJobs
+                properties:
+                  staleWorkers:
+                    type: integer
+                  recoveredJobs:
+                    type: integer
+  /ai/cluster/recover-stale:
+    post:
+      operationId: recoverStaleWorkers
+      tags:
+        - cluster
+      summary: Recover jobs from stale workers
+      responses:
+        "200":
+          description: Recovery summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - staleWorkers
+                  - recoveredJobs
+                properties:
+                  staleWorkers:
+                    type: array
+                    items:
+                      type: integer
+                  recoveredJobs:
+                    type: integer
   /capabilities:
     get:
       operationId: listCapabilities
@@ -5025,6 +5155,144 @@ components:
           type: integer
           minimum: 1
           maximum: 50
+    ClusterStatus:
+      type: object
+      required:
+        - clusterId
+        - totalWorkers
+        - onlineWorkers
+        - idleWorkers
+        - busyWorkers
+        - staleWorkers
+        - offlineWorkers
+        - totalCapacity
+        - usedCapacity
+        - capacityPct
+        - nodes
+      properties:
+        clusterId:
+          type: string
+        totalWorkers:
+          type: integer
+        onlineWorkers:
+          type: integer
+        idleWorkers:
+          type: integer
+        busyWorkers:
+          type: integer
+        staleWorkers:
+          type: integer
+        offlineWorkers:
+          type: integer
+        totalCapacity:
+          type: integer
+        usedCapacity:
+          type: integer
+        capacityPct:
+          type: integer
+        nodes:
+          type: array
+          items:
+            type: string
+    WorkerCapacityItem:
+      type: object
+      required:
+        - id
+        - workerName
+        - workerType
+        - status
+        - clusterId
+        - nodeId
+        - region
+        - capabilities
+        - maxConcurrentJobs
+        - runningJobs
+        - availableSlots
+        - leaseValid
+        - lastHeartbeat
+      properties:
+        id:
+          type: integer
+        workerName:
+          type: string
+        workerType:
+          type: string
+        status:
+          type: string
+        clusterId:
+          type: string
+        nodeId:
+          type: string
+        region:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        maxConcurrentJobs:
+          type: integer
+        runningJobs:
+          type: integer
+        availableSlots:
+          type: integer
+        leaseValid:
+          type: boolean
+        leaseExpiresAt:
+          type:
+            - string
+            - "null"
+        lastHeartbeat:
+          type: string
+    RegisterClusterWorkerBody:
+      type: object
+      required:
+        - workerName
+        - workerType
+      properties:
+        workerName:
+          type: string
+          minLength: 1
+        workerType:
+          type: string
+          enum:
+            - text_worker
+            - image_worker
+            - export_worker
+            - system_worker
+        clusterId:
+          type: string
+        nodeId:
+          type: string
+        region:
+          type: string
+        version:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        maxConcurrentJobs:
+          type: integer
+          minimum: 1
+          maximum: 32
+        leaseOwner:
+          type: string
+        leaseTtlMs:
+          type: integer
+          minimum: 5000
+          maximum: 300000
+    RenewLeaseBody:
+      type: object
+      required:
+        - heartbeatToken
+      properties:
+        heartbeatToken:
+          type: string
+          minLength: 1
+        leaseTtlMs:
+          type: integer
+          minimum: 5000
+          maximum: 300000
     ErrorResponse:
       type: object
       required:

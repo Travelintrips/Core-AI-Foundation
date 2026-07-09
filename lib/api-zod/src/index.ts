@@ -2,3 +2,4 @@
 // Do NOT re-export ./generated/types/index here; those TypeScript interfaces
 // collide with the Zod schema exports that share the same names.
 export * from "./generated/api";
+export * from "./cluster";

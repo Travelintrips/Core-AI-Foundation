@@ -1,0 +1,168 @@
+Lanjutkan AI Enterprise Platform ke Phase 5.2: Distributed Worker Cluster.
+
+Status saat ini:
+
+* Phase 5 AI Job Engine selesai
+* Phase 5.1 Worker Dispatcher Runtime selesai
+* Phase 5.1.5 Build System Hardening selesai
+* Codegen pipeline deterministic
+* api-zod hanya export Zod schemas
+* api-client-react hooks generated clean
+* workspace validator aktif
+* pnpm run verify clean
+* workflows sehat
+
+Tujuan Phase 5.2:
+Mengubah Worker Dispatcher Runtime dari single-runtime worker menjadi Distributed Worker Cluster yang bisa berjalan pada banyak worker/process/container secara aman.
+
+PENTING:
+Jangan rombak Job Engine lama.
+Jangan ubah API lama.
+Jangan membuat Event Bus, Scheduler, Marketplace, Billing, Video, Voice, OCR, atau Plugin.
+Semua perubahan harus additive, modular, backward compatible, OpenAPI-first, dan lolos pnpm run verify.
+
+Tugas:
+
+1. Worker Cluster Identity
+   Tambahkan konsep:
+
+* cluster_id
+* node_id
+* worker_name
+* worker_type
+* region
+* version
+* capabilities
+* max_concurrent_jobs
+
+Update ai_workers agar mendukung multi-node worker.
+
+2. Worker Lease System
+   Tambahkan lease:
+
+* lease_owner
+* lease_expires_at
+* heartbeat_token
+* lock_version
+
+Aturan:
+
+* hanya worker dengan lease valid yang boleh memproses job
+* lease harus diperpanjang saat heartbeat
+* jika lease expired, worker dianggap stale
+* job running milik worker expired harus direcover
+
+3. Distributed Claiming
+   Pastikan claimJob aman untuk multi-worker:
+
+* gunakan SELECT FOR UPDATE SKIP LOCKED
+* cek worker availability
+* cek lease valid
+* cek max_concurrent_jobs
+* cek queue paused
+* cek retrying job ready
+* atomic update job + worker workload
+
+4. Worker Capability Routing
+   Worker hanya boleh claim job sesuai capability.
+
+Contoh:
+
+* text_worker → llm_inference, creative_text
+* image_worker → image_generation
+* export_worker → pdf_export, csv_export
+* system_worker → analytics, cleanup
+
+5. Cluster Manager Service
+   Buat service:
+   workerClusterService
+
+Method:
+
+* registerNode()
+* registerWorker()
+* renewLease()
+* releaseLease()
+* markStaleWorkers()
+* rebalanceJobs()
+* getClusterStatus()
+* getWorkerCapacity()
+
+6. Dispatcher Upgrade
+   Dispatcher harus mendukung:
+
+* multiple workers
+* per-worker concurrency
+* capability-aware job claim
+* lease renewal
+* cluster health
+* graceful shutdown per worker
+
+7. APIs
+   Tambahkan:
+   GET /api/ai/cluster/status
+   GET /api/ai/cluster/workers
+   POST /api/ai/cluster/workers/register
+   PATCH /api/ai/cluster/workers/:id/lease
+   POST /api/ai/cluster/rebalance
+   POST /api/ai/cluster/recover-stale
+
+8. UI /queue Update
+   Tambahkan section:
+   Worker Cluster
+
+Menampilkan:
+
+* cluster status
+* total nodes
+* online workers
+* stale workers
+* busy workers
+* idle workers
+* capacity used
+* worker capabilities
+* lease status
+* last heartbeat
+
+Tambahkan tombol:
+
+* Recover Stale
+* Rebalance Jobs
+
+9. Audit
+   Audit log untuk:
+
+* worker registered
+* lease renewed
+* lease expired
+* worker stale
+* job rebalanced
+* stale job recovered
+* worker shutdown
+
+10. Verification
+    Pastikan:
+
+* pnpm run verify clean
+* build clean
+* codegen clean
+* OpenAPI clean
+
+Test:
+
+* register 3 workers dengan capability berbeda
+* enqueue text job → hanya text worker claim
+* enqueue image job → hanya image worker claim
+* pause queue → tidak ada claim
+* expired lease → worker stale
+* recover stale → job retry/failed sesuai policy
+* rebalance jobs berhasil
+* UI cluster section tampil
+
+Known limitation boleh:
+
+* belum horizontal deployment sungguhan
+* simulasi multi-worker masih dalam satu API server jika belum ada process/container terpisah
+
+Target akhir:
+AI Job Engine siap diskalakan menjadi distributed worker system yang aman untuk banyak worker, banyak capability, dan high-concurrency workloads.
