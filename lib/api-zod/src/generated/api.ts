@@ -3279,3 +3279,817 @@ export const DeleteEventSubscriptionParams = zod.object({
 export const DeleteEventSubscriptionResponse = zod.void()
 
 
+/**
+ * @summary List schedules with optional filters
+ */
+export const listSchedulesQueryLimitDefault = 50;
+export const listSchedulesQueryOffsetDefault = 0;
+
+export const ListSchedulesQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "triggerType": zod.coerce.string().optional(),
+  "targetType": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(listSchedulesQueryLimitDefault),
+  "offset": zod.coerce.number().default(listSchedulesQueryOffsetDefault)
+})
+
+export const ListSchedulesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number()
+})
+
+
+/**
+ * @summary Create a new schedule
+ */
+
+
+
+
+export const CreateScheduleBody = zod.object({
+  "scheduleName": zod.string(),
+  "description": zod.string().optional(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().optional(),
+  "intervalSeconds": zod.number().min(1).optional(),
+  "runAt": zod.coerce.date().optional(),
+  "timezone": zod.string().optional(),
+  "eventType": zod.string().optional(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()).optional(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()).optional(),
+  "maxRuns": zod.number().min(1).optional()
+})
+
+export const CreateScheduleResponse = zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get a single schedule by ID
+ */
+export const GetScheduleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetScheduleResponse = zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a schedule
+ */
+export const UpdateScheduleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+
+export const UpdateScheduleBody = zod.object({
+  "scheduleName": zod.string().optional(),
+  "description": zod.string().optional(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']).optional(),
+  "cronExpression": zod.string().optional(),
+  "intervalSeconds": zod.number().min(1).optional(),
+  "runAt": zod.coerce.date().optional(),
+  "timezone": zod.string().optional(),
+  "eventType": zod.string().optional(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']).optional(),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()).optional(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()).optional(),
+  "maxRuns": zod.number().min(1).optional()
+})
+
+export const UpdateScheduleResponse = zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Pause a schedule
+ */
+export const PauseScheduleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const PauseScheduleResponse = zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Resume a schedule
+ */
+export const ResumeScheduleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ResumeScheduleResponse = zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Cancel a schedule
+ */
+export const CancelScheduleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CancelScheduleResponse = zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Execute a schedule immediately
+ */
+export const RunScheduleNowParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RunScheduleNowResponse = zod.object({
+  "id": zod.number(),
+  "scheduleCode": zod.string(),
+  "scheduleName": zod.string(),
+  "description": zod.string().nullish(),
+  "triggerType": zod.enum(['cron', 'interval', 'one_time', 'event_followup', 'deadline_reminder']),
+  "cronExpression": zod.string().nullish(),
+  "intervalSeconds": zod.number().nullish(),
+  "runAt": zod.coerce.date().nullish(),
+  "timezone": zod.string(),
+  "eventType": zod.string().nullish(),
+  "targetType": zod.enum(['create_job', 'publish_event', 'webhook', 'audit_log']),
+  "targetConfigJson": zod.record(zod.string(), zod.unknown()),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "status": zod.enum(['active', 'paused', 'completed', 'failed', 'cancelled']),
+  "lastRunAt": zod.coerce.date().nullish(),
+  "nextRunAt": zod.coerce.date().nullish(),
+  "runCount": zod.number(),
+  "maxRuns": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List runs for a schedule
+ */
+export const ListRunsForScheduleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const listRunsForScheduleQueryLimitDefault = 50;
+export const listRunsForScheduleQueryOffsetDefault = 0;
+
+export const ListRunsForScheduleQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(listRunsForScheduleQueryLimitDefault),
+  "offset": zod.coerce.number().default(listRunsForScheduleQueryOffsetDefault)
+})
+
+export const ListRunsForScheduleResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "scheduleId": zod.number(),
+  "runNumber": zod.number(),
+  "scheduledFor": zod.coerce.date().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'skipped']),
+  "resultJson": zod.record(zod.string(), zod.unknown()).nullish(),
+  "errorMessage": zod.string().nullish(),
+  "createdJobId": zod.number().nullish(),
+  "createdEventId": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number()
+})
+
+
+/**
+ * @summary List runs across all schedules
+ */
+export const listScheduleRunsQueryLimitDefault = 50;
+export const listScheduleRunsQueryOffsetDefault = 0;
+
+export const ListScheduleRunsQueryParams = zod.object({
+  "scheduleId": zod.coerce.number().optional(),
+  "status": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(listScheduleRunsQueryLimitDefault),
+  "offset": zod.coerce.number().default(listScheduleRunsQueryOffsetDefault)
+})
+
+export const ListScheduleRunsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "scheduleId": zod.number(),
+  "runNumber": zod.number(),
+  "scheduledFor": zod.coerce.date().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'skipped']),
+  "resultJson": zod.record(zod.string(), zod.unknown()).nullish(),
+  "errorMessage": zod.string().nullish(),
+  "createdJobId": zod.number().nullish(),
+  "createdEventId": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number()
+})
+
+
+/**
+ * @summary Runtime status snapshot for the scheduler poller
+ */
+export const GetSchedulerStatusResponse = zod.object({
+  "enabled": zod.boolean(),
+  "running": zod.boolean(),
+  "pollIntervalMs": zod.number(),
+  "lastTick": zod.coerce.date().nullable(),
+  "activeSchedules": zod.number(),
+  "dueNow": zod.number(),
+  "processedToday": zod.number(),
+  "failedToday": zod.number()
+})
+
+
+/**
+ * @summary Start the background scheduler poller
+ */
+export const StartSchedulerResponse = zod.object({
+  "enabled": zod.boolean(),
+  "running": zod.boolean(),
+  "pollIntervalMs": zod.number(),
+  "lastTick": zod.coerce.date().nullable(),
+  "activeSchedules": zod.number(),
+  "dueNow": zod.number(),
+  "processedToday": zod.number(),
+  "failedToday": zod.number()
+})
+
+
+/**
+ * @summary Stop the background scheduler poller
+ */
+export const StopSchedulerResponse = zod.object({
+  "enabled": zod.boolean(),
+  "running": zod.boolean(),
+  "pollIntervalMs": zod.number(),
+  "lastTick": zod.coerce.date().nullable(),
+  "activeSchedules": zod.number(),
+  "dueNow": zod.number(),
+  "processedToday": zod.number(),
+  "failedToday": zod.number()
+})
+
+
+/**
+ * @summary Run one scheduler poll cycle immediately
+ */
+export const TickSchedulerResponse = zod.object({
+  "enabled": zod.boolean(),
+  "running": zod.boolean(),
+  "pollIntervalMs": zod.number(),
+  "lastTick": zod.coerce.date().nullable(),
+  "activeSchedules": zod.number(),
+  "dueNow": zod.number(),
+  "processedToday": zod.number(),
+  "failedToday": zod.number()
+})
+
+
+/**
+ * @summary Get current scheduler settings
+ */
+export const GetSchedulerSettingsResponse = zod.object({
+  "schedulerEnabled": zod.boolean(),
+  "pollIntervalMs": zod.number(),
+  "timezone": zod.string()
+})
+
+
+/**
+ * @summary Update scheduler settings
+ */
+export const UpdateSchedulerSettingsBody = zod.object({
+  "schedulerEnabled": zod.boolean(),
+  "pollIntervalMs": zod.number(),
+  "timezone": zod.string()
+})
+
+export const UpdateSchedulerSettingsResponse = zod.object({
+  "schedulerEnabled": zod.boolean(),
+  "pollIntervalMs": zod.number(),
+  "timezone": zod.string()
+})
+
+
+/**
+ * @summary List human tasks (paginated + filtered)
+ */
+export const listHumanTasksQueryLimitMax = 200;
+
+export const listHumanTasksQueryOffsetMin = 0;
+
+
+
+export const ListHumanTasksQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "department": zod.coerce.string().optional(),
+  "priority": zod.coerce.number().optional(),
+  "assignedUser": zod.coerce.string().optional(),
+  "sourceModule": zod.coerce.string().optional(),
+  "slaStatus": zod.coerce.string().optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().min(1).max(listHumanTasksQueryLimitMax).optional(),
+  "offset": zod.coerce.number().min(listHumanTasksQueryOffsetMin).optional()
+})
+
+export const ListHumanTasksResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number()
+})
+
+
+/**
+ * @summary Create a human task (AI handoff)
+ */
+export const createHumanTaskBodyPriorityMin = 0;
+export const createHumanTaskBodyPriorityMax = 100;
+
+
+
+export const CreateHumanTaskBody = zod.object({
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().optional(),
+  "executionPlanId": zod.number().optional(),
+  "assignedDepartment": zod.string().optional(),
+  "assignedUser": zod.string().optional(),
+  "assignedRole": zod.string().optional(),
+  "priority": zod.number().min(createHumanTaskBodyPriorityMin).max(createHumanTaskBodyPriorityMax).optional(),
+  "reason": zod.string().optional(),
+  "instructions": zod.string().optional(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()).optional(),
+  "dueAt": zod.coerce.date().optional(),
+  "notificationHookUrl": zod.string().optional()
+})
+
+export const CreateHumanTaskResponse = zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Human Task Center analytics
+ */
+export const GetHumanTaskStatsResponse = zod.object({
+  "total": zod.number(),
+  "pending": zod.number(),
+  "assigned": zod.number(),
+  "inProgress": zod.number(),
+  "completed": zod.number(),
+  "rejected": zod.number(),
+  "overdue": zod.number(),
+  "expired": zod.number(),
+  "averageCompletionTimeMs": zod.number().nullish(),
+  "overdueRate": zod.number(),
+  "byDepartment": zod.array(zod.object({
+  "department": zod.string(),
+  "count": zod.number()
+})),
+  "bySourceModule": zod.array(zod.object({
+  "sourceModule": zod.string(),
+  "count": zod.number()
+}))
+})
+
+
+/**
+ * @summary Get a single task with history
+ */
+export const GetHumanTaskParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetHumanTaskResponse = zod.object({
+  "task": zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "history": zod.array(zod.object({
+  "id": zod.number(),
+  "taskId": zod.number(),
+  "action": zod.string(),
+  "performedBy": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "oldStatus": zod.string().nullish(),
+  "newStatus": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Assign task to a user/role
+ */
+export const AssignHumanTaskParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AssignHumanTaskBody = zod.object({
+  "assignedDepartment": zod.string().optional(),
+  "assignedUser": zod.string().optional(),
+  "assignedRole": zod.string().optional(),
+  "performedBy": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const AssignHumanTaskResponse = zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Human accepts the task
+ */
+export const AcceptHumanTaskParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AcceptHumanTaskBody = zod.object({
+  "performedBy": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const AcceptHumanTaskResponse = zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Human rejects the task
+ */
+export const RejectHumanTaskParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RejectHumanTaskBody = zod.object({
+  "performedBy": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "reason": zod.string().optional()
+})
+
+export const RejectHumanTaskResponse = zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Human marks task complete
+ */
+export const CompleteHumanTaskParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CompleteHumanTaskBody = zod.object({
+  "performedBy": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "resultPayload": zod.record(zod.string(), zod.unknown()).optional()
+})
+
+export const CompleteHumanTaskResponse = zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Reassign task to a different user/role
+ */
+export const ReassignHumanTaskParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ReassignHumanTaskBody = zod.object({
+  "assignedDepartment": zod.string().optional(),
+  "assignedUser": zod.string().optional(),
+  "assignedRole": zod.string().optional(),
+  "performedBy": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const ReassignHumanTaskResponse = zod.object({
+  "id": zod.number(),
+  "taskCode": zod.string(),
+  "sourceModule": zod.string(),
+  "sourceType": zod.string(),
+  "sourceId": zod.string().nullish(),
+  "executionPlanId": zod.number().nullish(),
+  "assignedDepartment": zod.string().nullish(),
+  "assignedUser": zod.string().nullish(),
+  "assignedRole": zod.string().nullish(),
+  "priority": zod.number(),
+  "status": zod.enum(['pending', 'assigned', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled', 'expired']),
+  "reason": zod.string().nullish(),
+  "instructions": zod.string().nullish(),
+  "payloadJson": zod.record(zod.string(), zod.unknown()),
+  "dueAt": zod.coerce.date().nullish(),
+  "slaStatus": zod.enum(['on_time', 'warning', 'overdue', 'expired']),
+  "notificationHookUrl": zod.string().nullish(),
+  "acceptedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+

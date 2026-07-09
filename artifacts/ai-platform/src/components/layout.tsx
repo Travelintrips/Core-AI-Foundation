@@ -3,6 +3,8 @@ import {
   Activity, 
   BarChart2,
   Box, 
+  CalendarClock,
+  ClipboardCheck,
   Cpu, 
   Database, 
   FileText, 
@@ -17,6 +19,7 @@ import {
   Building2,
   Crown,
   Zap,
+  Store,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -40,7 +43,10 @@ const NAV_ITEMS = [
   { href: "/prompts", label: "Prompts", icon: FileText },
   { href: "/knowledge", label: "Knowledge", icon: Database },
   { href: "/memory", label: "Memory", icon: Cpu },
+  { href: "/human-tasks", label: "Human Tasks", icon: ClipboardCheck },
   { href: "/events", label: "AI Events", icon: Zap },
+  { href: "/scheduler", label: "Scheduler", icon: CalendarClock },
+  { href: "/marketplace", label: "Marketplace", icon: Store },
   { href: "/audit", label: "Audit Log", icon: ShieldAlert },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

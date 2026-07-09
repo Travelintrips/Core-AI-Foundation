@@ -1,0 +1,459 @@
+Lanjutkan AI Enterprise Platform ke Phase 8: AI Skills Marketplace & Tool Ecosystem.
+
+PENTING:
+Jangan mengubah AI Operating Core yang sudah ada.
+Jangan rewrite Job Engine, Dispatcher, Cluster, Event Bus, Scheduler, Human Task, Workforce, Multi-Tenant, atau Creative AI.
+Semua implementasi harus additive, modular, backward compatible, OpenAPI-first, TypeScript clean, dan wajib lolos pnpm run verify.
+
+====================================================================
+VISI
+====
+
+AI Enterprise Platform berubah menjadi platform yang dapat diperluas (Extensible AI Platform).
+
+Seluruh kemampuan AI tidak lagi hardcoded.
+
+Setiap kemampuan dipasang sebagai:
+
+* AI Skill
+* AI Tool
+* AI Plugin
+* AI Connector
+* AI Workflow Package
+
+Semua dapat diaktifkan atau dinonaktifkan per tenant.
+
+====================================================================
+BAGIAN 1 — AI SKILLS
+====================
+
+Buat tabel:
+
+ai_skill_packages
+
+Field:
+
+* id
+* skill_code
+* skill_name
+* category
+* description
+* version
+* author
+* icon
+* status
+* required_capabilities
+* required_tools
+* configuration_schema
+* created_at
+* updated_at
+
+Contoh:
+
+Brand Strategy
+
+Copywriting
+
+Financial Analysis
+
+OCR Invoice
+
+HS Code Classification
+
+Tax Calculation
+
+Payroll Review
+
+Contract Review
+
+Forecasting
+
+Image Generation
+
+====================================================================
+BAGIAN 2 — AI TOOL REGISTRY
+===========================
+
+Buat tabel:
+
+ai_tool_packages
+
+Field:
+
+id
+
+tool_code
+
+tool_name
+
+provider
+
+version
+
+category
+
+api_type
+
+authentication_type
+
+status
+
+configuration_schema
+
+health_status
+
+created_at
+
+updated_at
+
+Contoh:
+
+OpenAI
+
+Anthropic
+
+Gemini
+
+Replicate
+
+Supabase
+
+PostgreSQL
+
+WhatsApp
+
+SMTP
+
+Google Drive
+
+Microsoft 365
+
+Slack
+
+GitHub
+
+Dropbox
+
+S3
+
+====================================================================
+BAGIAN 3 — CONNECTOR FRAMEWORK
+==============================
+
+Tambahkan framework connector.
+
+Setiap connector memiliki:
+
+Health Check
+
+Authentication
+
+Configuration
+
+Retry Policy
+
+Rate Limit
+
+Capabilities
+
+Permission
+
+Logging
+
+====================================================================
+BAGIAN 4 — INSTALLATION SYSTEM
+==============================
+
+Buat tabel:
+
+ai_installed_packages
+
+Field:
+
+tenant_id
+
+package_id
+
+package_type
+
+installed_version
+
+enabled
+
+configuration_json
+
+installed_at
+
+updated_at
+
+Setiap tenant dapat:
+
+Install
+
+Upgrade
+
+Disable
+
+Remove
+
+====================================================================
+BAGIAN 5 — VERSIONING
+=====================
+
+Tambahkan:
+
+Semantic Version
+
+Compatibility Matrix
+
+Minimum Platform Version
+
+Migration Script Placeholder
+
+Rollback Version
+
+====================================================================
+BAGIAN 6 — SKILL DEPENDENCY
+===========================
+
+Setiap skill dapat memiliki dependency.
+
+Contoh:
+
+Image Generation
+
+↓
+
+Replicate Connector
+
+↓
+
+Storage Connector
+
+↓
+
+Creative Department
+
+Jika dependency belum ada:
+
+Install ditolak.
+
+====================================================================
+BAGIAN 7 — TOOL PERMISSIONS
+===========================
+
+Integrasikan dengan Workforce.
+
+Employee hanya boleh memakai tool yang diizinkan.
+
+Contoh:
+
+Finance AI
+
+↓
+
+boleh
+
+PostgreSQL
+
+Spreadsheet
+
+PDF
+
+↓
+
+tidak boleh
+
+Replicate
+
+Image Tool
+
+====================================================================
+BAGIAN 8 — MARKETPLACE UI
+=========================
+
+Tambahkan halaman:
+
+/marketplace
+
+Kategori:
+
+AI Skills
+
+Tools
+
+Connectors
+
+Workflow Packs
+
+Template Packs
+
+Tampilan:
+
+Installed
+
+Available
+
+Updates
+
+Dependencies
+
+Compatibility
+
+Version
+
+Health
+
+====================================================================
+BAGIAN 9 — PACKAGE MANAGER
+==========================
+
+Service:
+
+packageManagerService
+
+Method:
+
+install()
+
+upgrade()
+
+disable()
+
+enable()
+
+uninstall()
+
+validateDependencies()
+
+healthCheck()
+
+====================================================================
+BAGIAN 10 — EVENT BUS
+=====================
+
+Publish event:
+
+package.installed
+
+package.updated
+
+package.removed
+
+tool.connected
+
+tool.disconnected
+
+connector.failed
+
+connector.recovered
+
+====================================================================
+BAGIAN 11 — ANALYTICS
+=====================
+
+Dashboard:
+
+Installed Skills
+
+Installed Tools
+
+Connector Health
+
+Package Usage
+
+Skill Usage
+
+Most Used Connector
+
+Most Used Skill
+
+Version Distribution
+
+====================================================================
+BAGIAN 12 — SEED
+================
+
+Seed minimal:
+
+Skills:
+
+Brand Strategy
+
+Copywriting
+
+Creative Review
+
+Financial Analysis
+
+OCR Invoice
+
+Tax Review
+
+HS Code
+
+Legal Draft
+
+Forecast
+
+Image Generation
+
+Tools:
+
+OpenAI
+
+Anthropic
+
+Gemini
+
+Replicate
+
+Supabase
+
+SMTP
+
+WhatsApp
+
+Storage
+
+PDF
+
+GitHub
+
+====================================================================
+BAGIAN 13 — VERIFICATION
+========================
+
+Pastikan:
+
+DB push clean
+
+OpenAPI clean
+
+Codegen clean
+
+pnpm run verify clean
+
+Build clean
+
+Test:
+
+Install skill
+
+Disable skill
+
+Upgrade version
+
+Dependency validation
+
+Health check
+
+Tenant isolation
+
+Worker permission
+
+Marketplace UI
+
+Target akhir:
+
+AI Enterprise Platform berubah menjadi extensible AI Operating System yang mendukung AI Skills, AI Tools, Connectors, Workflow Packs, dan Package Management tanpa perlu mengubah core platform.

@@ -1,0 +1,499 @@
+Lanjutkan AI Enterprise Platform ke Phase 6.5: Human Task Center & Human-in-the-Loop.
+
+PENTING:
+Jangan mengubah arsitektur yang sudah ada.
+Jangan rewrite Job Engine, Worker Cluster, Event Bus, Scheduler, Workforce, Creative AI, atau Client Review.
+Semua implementasi harus additive, modular, backward compatible, OpenAPI-first, TypeScript clean, dan lolos pnpm run verify.
+
+====================================================================
+VISI
+====
+
+AI tidak selalu mengambil keputusan sendiri.
+
+Jika confidence rendah, policy meminta approval, atau customer meminta revisi, pekerjaan harus berpindah ke Human Task Center.
+
+Target:
+
+AI CEO
+
+↓
+
+Department Manager
+
+↓
+
+Digital Employee
+
+↓
+
+Human Review
+
+↓
+
+Approve / Reject / Revision
+
+↓
+
+AI lanjut bekerja
+
+====================================================================
+BAGIAN 1
+TASK CENTER
+===========
+
+Buat tabel:
+
+ai_human_tasks
+
+Field:
+
+id
+
+task_code
+
+source_module
+
+source_type
+
+source_id
+
+execution_plan_id
+
+assigned_department
+
+assigned_user
+
+assigned_role
+
+priority
+
+status
+
+reason
+
+instructions
+
+payload_json
+
+created_at
+
+accepted_at
+
+completed_at
+
+updated_at
+
+Status:
+
+pending
+
+assigned
+
+accepted
+
+in_progress
+
+completed
+
+rejected
+
+cancelled
+
+expired
+
+====================================================================
+BAGIAN 2
+TASK HISTORY
+============
+
+Buat tabel:
+
+ai_human_task_history
+
+Field:
+
+id
+
+task_id
+
+action
+
+performed_by
+
+notes
+
+old_status
+
+new_status
+
+created_at
+
+Semua perubahan task wajib memiliki history.
+
+====================================================================
+BAGIAN 3
+ESCALATION ENGINE
+=================
+
+Tambahkan service:
+
+humanTaskService
+
+Method:
+
+createTask()
+
+assignTask()
+
+acceptTask()
+
+rejectTask()
+
+completeTask()
+
+reassignTask()
+
+expireTask()
+
+escalateTask()
+
+====================================================================
+BAGIAN 4
+AUTO HUMAN HANDOFF
+==================
+
+Task otomatis dibuat jika:
+
+AI confidence rendah
+
+QC gagal
+
+Client request revision
+
+Job retry melebihi limit
+
+Provider error berulang
+
+Manager meminta review
+
+Creative image ditolak client
+
+Tax review wajib manusia
+
+Legal review wajib manusia
+
+====================================================================
+BAGIAN 5
+ROLE BASED ASSIGNMENT
+=====================
+
+Support assignment:
+
+Designer
+
+Marketing
+
+Finance
+
+HR
+
+Tax
+
+Legal
+
+Sales
+
+Supervisor
+
+Manager
+
+Administrator
+
+Default assignment berdasarkan Department.
+
+====================================================================
+BAGIAN 6
+AI ↔ HUMAN LOOP
+===============
+
+Workflow:
+
+AI
+
+↓
+
+Human Task
+
+↓
+
+Human Edit
+
+↓
+
+AI Continue
+
+↓
+
+QC
+
+↓
+
+Done
+
+AI harus membaca hasil revisi manusia sebagai context baru.
+
+====================================================================
+BAGIAN 7
+TASK SLA
+========
+
+Tambahkan SLA.
+
+Field:
+
+due_at
+
+remaining_time
+
+sla_status
+
+Status:
+
+on_time
+
+warning
+
+overdue
+
+expired
+
+Jika overdue:
+
+publish event
+
+buat audit
+
+opsional create escalation task
+
+====================================================================
+BAGIAN 8
+API
+===
+
+Tambahkan endpoint:
+
+GET /api/ai/human-tasks
+
+GET /api/ai/human-tasks/:id
+
+POST /api/ai/human-tasks
+
+PATCH /api/ai/human-tasks/:id/assign
+
+PATCH /api/ai/human-tasks/:id/accept
+
+PATCH /api/ai/human-tasks/:id/reject
+
+PATCH /api/ai/human-tasks/:id/complete
+
+PATCH /api/ai/human-tasks/:id/reassign
+
+GET /api/ai/human-tasks/stats
+
+====================================================================
+BAGIAN 9
+UI
+==
+
+Tambahkan halaman:
+
+/human-tasks
+
+Dashboard:
+
+Pending
+
+Assigned
+
+In Progress
+
+Completed
+
+Rejected
+
+Overdue
+
+Filter:
+
+Department
+
+Priority
+
+Assigned User
+
+Status
+
+Source Module
+
+Date
+
+Task Detail:
+
+Timeline
+
+History
+
+Payload Viewer
+
+AI Recommendation
+
+Human Notes
+
+Approve
+
+Reject
+
+Complete
+
+Reassign
+
+====================================================================
+BAGIAN 10
+INTEGRASI
+=========
+
+Creative AI
+
+↓
+
+Revision
+
+↓
+
+Human Task
+
+Finance AI
+
+↓
+
+Approval
+
+↓
+
+Human Task
+
+Legal AI
+
+↓
+
+Review
+
+↓
+
+Human Task
+
+Tax AI
+
+↓
+
+Verification
+
+↓
+
+Human Task
+
+HR AI
+
+↓
+
+Payroll Approval
+
+↓
+
+Human Task
+
+====================================================================
+BAGIAN 11
+EVENT BUS
+=========
+
+Publish event:
+
+human.task.created
+
+human.task.assigned
+
+human.task.accepted
+
+human.task.completed
+
+human.task.rejected
+
+human.task.overdue
+
+human.task.escalated
+
+====================================================================
+BAGIAN 12
+ANALYTICS
+=========
+
+Dashboard:
+
+Average Completion Time
+
+Average SLA
+
+Overdue Rate
+
+Department Workload
+
+Human vs AI Ratio
+
+Top Reviewer
+
+Most Active Department
+
+====================================================================
+BAGIAN 13
+VERIFICATION
+============
+
+Pastikan:
+
+DB push clean
+
+OpenAPI clean
+
+Codegen clean
+
+pnpm run verify clean
+
+Build clean
+
+Test:
+
+AI membuat Human Task otomatis
+
+Assign berhasil
+
+Accept berhasil
+
+Complete berhasil
+
+Reassign berhasil
+
+Overdue terdeteksi
+
+History tercatat
+
+Event dipublish
+
+Analytics tampil
+
+Target akhir:
+
+AI Enterprise Platform memiliki Human Task Center sehingga seluruh keputusan yang memerlukan campur tangan manusia dapat dikelola dalam satu sistem yang terintegrasi dengan AI CEO, AI Workforce, Job Engine, Event Bus, dan Scheduler.
+
+Jangan implement notifikasi WhatsApp atau email nyata dulu. Siapkan notification hooks agar nanti dapat dihubungkan ke Fonnte, WAHA, SMTP, atau provider lain tanpa mengubah arsitektur.

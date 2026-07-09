@@ -22,10 +22,15 @@ import {
   aiAgentCapabilitiesTable,
   aiWorkersTable,
   aiJobsTable,
+  aiSchedulesTable,
+  aiSkillPackagesTable,
+  aiToolPackagesTable,
+  aiInstalledPackagesTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { computePriorityScore } from "./services/priorityEngine.js";
+import { createSchedule } from "./services/aiSchedulerService.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -798,6 +803,151 @@ async function seedJobEngine() {
   console.log("\n✅ Job Engine seed complete!");
 }
 
+// ─── Phase 6: AI Scheduler sample schedules ───────────────────────────────────
+
+async function upsertSchedule(input: Parameters<typeof createSchedule>[0]) {
+  const [existing] = await db
+    .select()
+    .from(aiSchedulesTable)
+    .where(eq(aiSchedulesTable.scheduleName, input.scheduleName));
+
+  if (existing) {
+    console.log(`  ↳ Schedule already exists: ${input.scheduleName}`);
+    return existing;
+  }
+
+  const schedule = await createSchedule(input);
+  console.log(`  ✓ Seeded schedule: ${schedule.scheduleName} (${schedule.triggerType} → ${schedule.targetType})`);
+  return schedule;
+}
+
+async function seedSchedules() {
+  console.log("\n🌱 Seeding AI Scheduler sample schedules...");
+
+  await upsertSchedule({
+    scheduleName: "daily-analytics-snapshot",
+    description: "Creates a daily analytics_snapshot job at midnight UTC to capture platform usage metrics.",
+    triggerType: "cron",
+    cronExpression: "0 0 * * *",
+    timezone: "UTC",
+    targetType: "create_job",
+    targetConfigJson: { jobType: "analytics_snapshot", priority: 40 },
+    payloadJson: { source: "scheduler-sample" },
+  });
+
+  await upsertSchedule({
+    scheduleName: "client-review-followup",
+    description: "Creates a client_review_reminder job every 6 hours to follow up on pending client reviews.",
+    triggerType: "interval",
+    intervalSeconds: 6 * 60 * 60,
+    timezone: "UTC",
+    targetType: "create_job",
+    targetConfigJson: { jobType: "client_review_reminder", priority: 35 },
+    payloadJson: { source: "scheduler-sample" },
+  });
+
+  await upsertSchedule({
+    scheduleName: "failed-job-cleanup",
+    description: "Creates a failed_job_cleanup job every 30 minutes to sweep and archive terminally failed jobs.",
+    triggerType: "interval",
+    intervalSeconds: 30 * 60,
+    timezone: "UTC",
+    targetType: "create_job",
+    targetConfigJson: { jobType: "failed_job_cleanup", priority: 20 },
+    payloadJson: { source: "scheduler-sample" },
+  });
+
+  await upsertSchedule({
+    scheduleName: "weekly-performance-report",
+    description: "Creates a workforce_performance_report job every Monday at 06:00 UTC.",
+    triggerType: "cron",
+    cronExpression: "0 6 * * 1",
+    timezone: "UTC",
+    targetType: "create_job",
+    targetConfigJson: { jobType: "workforce_performance_report", priority: 30 },
+    payloadJson: { source: "scheduler-sample" },
+  });
+
+  console.log("✅ Scheduler seed complete!");
+}
+
+// ─── Phase 8: AI Skills Marketplace & Tool Ecosystem ───────────────────────────
+
+async function upsertSkillPackage(data: typeof aiSkillPackagesTable.$inferInsert) {
+  const [existing] = await db.select().from(aiSkillPackagesTable).where(eq(aiSkillPackagesTable.skillCode, data.skillCode));
+  if (existing) {
+    console.log(`  ↩ Skill package already exists: ${data.skillName}`);
+    return existing;
+  }
+  const [row] = await db.insert(aiSkillPackagesTable).values(data).returning();
+  console.log(`  ✓ Seeded skill package: ${data.skillName}`);
+  return row!;
+}
+
+async function upsertToolPackage(data: typeof aiToolPackagesTable.$inferInsert) {
+  const [existing] = await db.select().from(aiToolPackagesTable).where(eq(aiToolPackagesTable.toolCode, data.toolCode));
+  if (existing) {
+    console.log(`  ↩ Tool package already exists: ${data.toolName}`);
+    return existing;
+  }
+  const [row] = await db.insert(aiToolPackagesTable).values(data).returning();
+  console.log(`  ✓ Seeded tool package: ${data.toolName}`);
+  return row!;
+}
+
+async function seedMarketplace() {
+  console.log("\n🛒 Seeding AI Skills Marketplace & Tool Ecosystem (Phase 8)...");
+
+  const tools = await Promise.all([
+    upsertToolPackage({ toolCode: "openai", toolName: "OpenAI", provider: "OpenAI", category: "ai_model", apiType: "rest", authenticationType: "api_key", status: "published", healthStatus: "healthy", capabilities: ["llm_inference", "embeddings", "image_generation"] }),
+    upsertToolPackage({ toolCode: "anthropic", toolName: "Anthropic", provider: "Anthropic", category: "ai_model", apiType: "rest", authenticationType: "api_key", status: "published", healthStatus: "healthy", capabilities: ["llm_inference"] }),
+    upsertToolPackage({ toolCode: "gemini", toolName: "Gemini", provider: "Google", category: "ai_model", apiType: "rest", authenticationType: "api_key", status: "published", healthStatus: "healthy", capabilities: ["llm_inference", "multimodal"] }),
+    upsertToolPackage({ toolCode: "replicate", toolName: "Replicate", provider: "Replicate", category: "ai_model", apiType: "rest", authenticationType: "api_key", status: "published", healthStatus: "healthy", capabilities: ["image_generation"] }),
+    upsertToolPackage({ toolCode: "supabase", toolName: "Supabase", provider: "Supabase", category: "database", apiType: "rest", authenticationType: "api_key", status: "published", healthStatus: "unknown", capabilities: ["database", "storage", "auth"] }),
+    upsertToolPackage({ toolCode: "smtp", toolName: "SMTP", provider: "Generic", category: "communication", apiType: "smtp", authenticationType: "basic", status: "published", healthStatus: "unknown", capabilities: ["email"] }),
+    upsertToolPackage({ toolCode: "whatsapp", toolName: "WhatsApp", provider: "Meta", category: "communication", apiType: "rest", authenticationType: "oauth2", status: "published", healthStatus: "unknown", capabilities: ["messaging"] }),
+    upsertToolPackage({ toolCode: "storage", toolName: "Storage (S3-compatible)", provider: "Generic", category: "storage", apiType: "rest", authenticationType: "api_key", status: "published", healthStatus: "healthy", capabilities: ["object_storage"] }),
+    upsertToolPackage({ toolCode: "pdf", toolName: "PDF", provider: "Generic", category: "analytics", apiType: "sdk", authenticationType: "none", status: "published", healthStatus: "healthy", capabilities: ["pdf_generation", "pdf_parsing"] }),
+    upsertToolPackage({ toolCode: "github", toolName: "GitHub", provider: "GitHub", category: "devops", apiType: "rest", authenticationType: "oauth2", status: "published", healthStatus: "unknown", capabilities: ["source_control", "issues"] }),
+  ]);
+  const toolByCode = Object.fromEntries(tools.map((t) => [t.toolCode, t]));
+
+  const skills = await Promise.all([
+    upsertSkillPackage({ skillCode: "brand-strategy", skillName: "Brand Strategy", category: "creative", description: "Develops brand positioning, voice, and messaging strategy.", status: "published", requiredTools: ["openai"], requiredCapabilities: [] }),
+    upsertSkillPackage({ skillCode: "copywriting", skillName: "Copywriting", category: "creative", description: "Generates marketing and product copy.", status: "published", requiredTools: ["openai"], requiredCapabilities: ["brand-strategy"] }),
+    upsertSkillPackage({ skillCode: "creative-review", skillName: "Creative Review", category: "creative", description: "QC review of creative assets against brief.", status: "published", requiredTools: ["openai"], requiredCapabilities: [] }),
+    upsertSkillPackage({ skillCode: "financial-analysis", skillName: "Financial Analysis", category: "finance", description: "Analyzes financial statements and produces insights.", status: "published", requiredTools: ["openai"], requiredCapabilities: [] }),
+    upsertSkillPackage({ skillCode: "ocr-invoice", skillName: "OCR Invoice", category: "finance", description: "Extracts structured data from invoice images/PDFs.", status: "published", requiredTools: ["openai", "pdf"], requiredCapabilities: [] }),
+    upsertSkillPackage({ skillCode: "tax-review", skillName: "Tax Review", category: "tax", description: "Reviews tax filings for accuracy and compliance risk.", status: "published", requiredTools: ["openai"], requiredCapabilities: ["financial-analysis"] }),
+    upsertSkillPackage({ skillCode: "hs-code", skillName: "HS Code Classification", category: "logistics", description: "Classifies goods under Harmonized System codes for customs.", status: "published", requiredTools: ["openai"], requiredCapabilities: [] }),
+    upsertSkillPackage({ skillCode: "legal-draft", skillName: "Legal Draft", category: "legal", description: "Drafts and reviews contracts and legal documents.", status: "published", requiredTools: ["openai"], requiredCapabilities: [] }),
+    upsertSkillPackage({ skillCode: "forecast", skillName: "Forecast", category: "finance", description: "Time-series forecasting for revenue, demand, and costs.", status: "published", requiredTools: ["openai"], requiredCapabilities: ["financial-analysis"] }),
+    upsertSkillPackage({ skillCode: "image-generation", skillName: "Image Generation", category: "creative", description: "Generates on-brand creative imagery from prompts.", status: "published", requiredTools: ["replicate", "storage"], requiredCapabilities: ["brand-strategy"] }),
+  ]);
+
+  // Install a representative starter set for the "default" tenant so the
+  // marketplace dashboard has non-zero data out of the box.
+  async function upsertInstalled(packageType: "skill" | "tool", packageId: number, version: string) {
+    const [existing] = await db
+      .select()
+      .from(aiInstalledPackagesTable)
+      .where(and(eq(aiInstalledPackagesTable.tenantId, "default"), eq(aiInstalledPackagesTable.packageType, packageType), eq(aiInstalledPackagesTable.packageId, packageId)));
+    if (existing) return existing;
+    const [row] = await db.insert(aiInstalledPackagesTable).values({ tenantId: "default", packageType, packageId, installedVersion: version, enabled: true }).returning();
+    return row!;
+  }
+
+  await upsertInstalled("tool", toolByCode.openai!.id, toolByCode.openai!.version);
+  await upsertInstalled("tool", toolByCode.replicate!.id, toolByCode.replicate!.version);
+  await upsertInstalled("tool", toolByCode.storage!.id, toolByCode.storage!.version);
+  const brandStrategy = skills.find((s) => s.skillCode === "brand-strategy")!;
+  const copywriting = skills.find((s) => s.skillCode === "copywriting")!;
+  await upsertInstalled("skill", brandStrategy.id, brandStrategy.version);
+  await upsertInstalled("skill", copywriting.id, copywriting.version);
+
+  console.log("✅ Marketplace seed complete!");
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -839,6 +989,12 @@ async function main() {
 
   // Phase 5: Job Engine
   await seedJobEngine();
+
+  // Phase 6: AI Scheduler
+  await seedSchedules();
+
+  // Phase 8: AI Skills Marketplace & Tool Ecosystem
+  await seedMarketplace();
 
   console.log("\n✅ Seed complete!\n");
   process.exit(0);

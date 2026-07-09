@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import * as jobDispatcher from "./services/jobDispatcherService.js";
+import * as scheduler from "./services/aiSchedulerService.js";
 
 const rawPort = process.env["PORT"];
 
@@ -39,19 +40,42 @@ app.listen(port, (err) => {
   } else {
     logger.info("[dispatcher] Auto-start disabled (set AI_DISPATCHER_ENABLED=true to enable in production)");
   }
+
+  // ── Scheduler auto-start (Phase 6) ──────────────────────────────────────
+  // Dev: always auto-start
+  // Prod: only when AI_SCHEDULER_ENABLED=true
+  const schedulerEnabled = isProduction
+    ? process.env["AI_SCHEDULER_ENABLED"] === "true"
+    : true;
+
+  const pollIntervalMs = Number(process.env["AI_SCHEDULER_POLL_INTERVAL_MS"]);
+  const timezone = process.env["AI_SCHEDULER_TIMEZONE"];
+  scheduler.updateSettings({
+    schedulerEnabled,
+    ...(Number.isFinite(pollIntervalMs) && pollIntervalMs > 0 ? { pollIntervalMs } : {}),
+    ...(timezone ? { timezone } : {}),
+  });
+
+  if (schedulerEnabled) {
+    scheduler.start().catch((startErr) =>
+      logger.error({ err: startErr }, "[scheduler] Failed to auto-start"),
+    );
+  } else {
+    logger.info("[scheduler] Auto-start disabled (set AI_SCHEDULER_ENABLED=true to enable in production)");
+  }
 });
 
 // ── Graceful shutdown ──────────────────────────────────────────────────────
 process.on("SIGTERM", () => {
-  logger.info("SIGTERM received — shutting down dispatcher");
-  jobDispatcher.shutdown()
+  logger.info("SIGTERM received — shutting down dispatcher and scheduler");
+  Promise.all([scheduler.shutdown(), jobDispatcher.shutdown()])
     .then(() => process.exit(0))
     .catch(() => process.exit(1));
 });
 
 process.on("SIGINT", () => {
-  logger.info("SIGINT received — shutting down dispatcher");
-  jobDispatcher.shutdown()
+  logger.info("SIGINT received — shutting down dispatcher and scheduler");
+  Promise.all([scheduler.shutdown(), jobDispatcher.shutdown()])
     .then(() => process.exit(0))
     .catch(() => process.exit(1));
 });

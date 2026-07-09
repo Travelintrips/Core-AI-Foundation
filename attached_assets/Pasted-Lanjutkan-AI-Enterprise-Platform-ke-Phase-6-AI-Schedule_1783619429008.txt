@@ -1,0 +1,179 @@
+Lanjutkan AI Enterprise Platform ke Phase 6: AI Scheduler & Automation Engine.
+
+Status saat ini:
+
+* Phase 5 AI Job Engine selesai
+* Phase 5.1 Worker Dispatcher Runtime selesai
+* Phase 5.1.5 Build System Hardening selesai
+* Phase 5.2 Distributed Worker Cluster selesai
+* Phase 5.5 AI Event Bus selesai
+* Event Store, Subscriptions, Event Center, replay, create_job handler, audit hooks, dan event-to-job bridge sudah berjalan
+* pnpm run verify clean
+
+Tujuan Phase 6:
+Membuat Scheduler & Automation Engine agar AI Platform bisa menjalankan pekerjaan berdasarkan waktu, interval, cron, deadline, SLA, atau event follow-up.
+
+PENTING:
+Jangan rombak Job Engine, Dispatcher, Cluster, Event Bus, Creative AI, Workforce, Queue, atau Client Review.
+Jangan membuat Marketplace, Billing, Video, Voice, OCR, atau Plugin.
+Semua perubahan harus additive, modular, backward compatible, OpenAPI-first, dan wajib lolos pnpm run verify.
+
+Tugas utama:
+
+1. Buat tabel `ai_schedules`
+   Field:
+
+* id
+* schedule_code
+* schedule_name
+* description
+* trigger_type
+* cron_expression
+* interval_seconds
+* run_at
+* timezone
+* event_type
+* target_type
+* target_config_json
+* payload_json
+* status
+* last_run_at
+* next_run_at
+* run_count
+* max_runs
+* created_at
+* updated_at
+
+2. Buat tabel `ai_schedule_runs`
+   Field:
+
+* id
+* schedule_id
+* run_number
+* scheduled_for
+* started_at
+* completed_at
+* status
+* result_json
+* error_message
+* created_job_id
+* created_event_id
+* created_at
+
+3. Buat service `aiSchedulerService`
+   Method:
+
+* createSchedule()
+* updateSchedule()
+* pauseSchedule()
+* resumeSchedule()
+* cancelSchedule()
+* calculateNextRun()
+* tick()
+* executeDueSchedules()
+* recordRun()
+* createJobFromSchedule()
+* publishEventFromSchedule()
+
+4. Buat Scheduler Runtime
+   Config:
+
+* AI_SCHEDULER_ENABLED
+* AI_SCHEDULER_POLL_INTERVAL_MS
+* AI_SCHEDULER_TIMEZONE
+
+Aturan:
+
+* dev boleh auto-start
+* production default false jika env tidak diset
+* tidak boleh double-start
+* tick concurrency-safe
+* graceful shutdown
+* error satu schedule tidak mematikan scheduler
+
+5. Target schedule harus mendukung:
+
+* create_job
+* publish_event
+* webhook placeholder
+* audit_log
+
+Untuk webhook cukup audit log dulu.
+
+6. Integrasi Event Bus
+   Publish event otomatis:
+
+* scheduler.started
+* scheduler.stopped
+* schedule.created
+* schedule.updated
+* schedule.paused
+* schedule.resumed
+* schedule.cancelled
+* schedule.run.started
+* schedule.run.completed
+* schedule.run.failed
+
+7. API baru:
+
+* GET /api/ai/schedules
+* POST /api/ai/schedules
+* GET /api/ai/schedules/:id
+* PATCH /api/ai/schedules/:id
+* POST /api/ai/schedules/:id/pause
+* POST /api/ai/schedules/:id/resume
+* POST /api/ai/schedules/:id/cancel
+* POST /api/ai/schedules/:id/run-now
+* GET /api/ai/schedule-runs
+* GET /api/ai/scheduler/status
+* POST /api/ai/scheduler/start
+* POST /api/ai/scheduler/stop
+* POST /api/ai/scheduler/tick
+
+8. UI baru `/scheduler`
+   Fitur:
+
+* schedule list
+* status badges
+* next run
+* last run
+* run count
+* create schedule dialog
+* pause/resume/cancel
+* run now
+* schedule run history
+* scheduler runtime panel
+* filter by status, trigger_type, target_type
+
+Tambahkan menu sidebar:
+AI Scheduler
+
+9. Seed sample schedules:
+
+* Daily analytics snapshot → create_job analytics_snapshot
+* Client review follow-up → create_job client_review_reminder
+* Failed job cleanup → create_job failed_job_cleanup
+* Weekly performance report → create_job workforce_performance_report
+
+10. Verification wajib:
+
+* DB push clean
+* OpenAPI/codegen clean
+* pnpm run verify clean
+* build clean
+
+Test wajib:
+
+* create one-time schedule
+* scheduler tick creates job
+* interval schedule calculates next_run_at
+* pause schedule prevents execution
+* resume schedule works
+* run-now works
+* max_runs schedule becomes completed
+* schedule run history appears
+* event schedule.run.completed published
+* UI /scheduler works
+
+Target akhir:
+AI Enterprise Platform memiliki Scheduler & Automation Engine yang mampu menjalankan job/event otomatis berdasarkan waktu, interval, cron, deadline, dan event follow-up.

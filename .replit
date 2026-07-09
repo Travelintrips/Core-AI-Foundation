@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "bash"]
+modules = ["nodejs-24"]
 
 [deployment]
 router = "application"
@@ -11,43 +11,6 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
-[[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "artifacts/api-server: API Server"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "artifacts/ai-platform: web"
-
-[[workflows.workflow]]
-name = "artifacts/api-server: API Server"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "PORT=8080 pnpm --filter @workspace/api-server run dev"
-waitForPort = 8080
-
-[[workflows.workflow]]
-name = "artifacts/ai-platform: web"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "PORT=20785 BASE_PATH=/ pnpm --filter @workspace/ai-platform run dev"
-waitForPort = 20785
-
-[workflows.workflow.metadata]
-outputType = "webview"
-
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
@@ -55,14 +18,3 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
-
-[nix]
-channel = "stable-25_05"
-
-[userenv]
-
-[userenv.shared]
-OPENAI_API_KEY = "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"
-ANTHROPIC_API_KEY = "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"
-GEMINI_API_KEY = "AIzaSyCQb_9MaKUgjpNqfpgBZJbezh6yXQD-crQ"
-REPLICATE_API_TOKEN = "r8_2M5hdgcApmnh8zvYqUGlmRGvpsnczR54HmnOT"
