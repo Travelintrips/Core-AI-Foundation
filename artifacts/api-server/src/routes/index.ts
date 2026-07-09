@@ -22,6 +22,7 @@ import publicRouter from "./public";
 import operationsRouter from "./operations";
 import jobsRouter from "./jobs";
 import dispatcherRouter from "./dispatcher";
+import workspaceHealthRouter from "./workspace-health";
 
 const router: IRouter = Router();
 
@@ -48,5 +49,6 @@ router.use(workforceRouter);
 router.use(operationsRouter);
 router.use(jobsRouter);
 router.use(dispatcherRouter);
+router.use(workspaceHealthRouter);
 
 export default router;

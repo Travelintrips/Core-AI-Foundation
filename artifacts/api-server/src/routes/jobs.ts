@@ -19,11 +19,12 @@
 import { Router } from "express";
 import { eq, and, inArray, desc, sql, gte } from "drizzle-orm";
 import {
-  CreateJobBody as CreateJobBodySchema,
+  CreateJobBody,
   ListJobsQueryParams,
-  ReprioritizeJobBody as ReprioritizeJobBodySchema,
-  RegisterWorkerBody as RegisterWorkerBodySchema,
-  PauseQueueBody as QueueFilterBodySchema,
+  ReprioritizeJobBody,
+  RegisterWorkerBody,
+  PauseQueueBody,
+  ResumeQueueBody,
 } from "@workspace/api-zod";
 import { db, aiJobsTable, aiWorkersTable } from "@workspace/db";
 import {
@@ -50,11 +51,9 @@ const JOB_STATUSES = [
 const WORKER_STATUSES = ["online", "offline", "maintenance", "busy", "idle"] as const;
 
 // Aliases matching the original local names for readability
-const EnqueueBody      = CreateJobBodySchema;
+const EnqueueBody      = CreateJobBody;
 const ListJobsQuery    = ListJobsQueryParams;
-const ReprioritizeBody = ReprioritizeJobBodySchema;
-const RegisterWorkerBody = RegisterWorkerBodySchema;
-const QueueFilterBody  = QueueFilterBodySchema;
+const ReprioritizeBody = ReprioritizeJobBody;
 
 // ── List Jobs ─────────────────────────────────────────────────────────────────
 
@@ -353,7 +352,7 @@ router.patch("/ai/workers/:id/status", async (req, res): Promise<void> => {
 // ── Queue Management ──────────────────────────────────────────────────────────
 
 router.post("/ai/queue/pause", async (req, res): Promise<void> => {
-  const body = QueueFilterBody.safeParse(req.body ?? {});
+  const body = PauseQueueBody.safeParse(req.body ?? {});
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
 
   const count = await pauseQueue({
@@ -364,7 +363,7 @@ router.post("/ai/queue/pause", async (req, res): Promise<void> => {
 });
 
 router.post("/ai/queue/resume", async (req, res): Promise<void> => {
-  const body = QueueFilterBody.safeParse(req.body ?? {});
+  const body = ResumeQueueBody.safeParse(req.body ?? {});
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
 
   const count = await resumeQueue({

@@ -10,8 +10,7 @@
  * releaseJob()  — release without completing (requeue)
  */
 
-import { eq, and, inArray, sql } from "drizzle-orm";
-import { eq, and, or, sql } from "drizzle-orm";
+import { eq, and, inArray, or, sql } from "drizzle-orm";
 import { db, aiJobsTable, aiWorkersTable } from "@workspace/db";
 import type { AiJob, AiWorker } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";

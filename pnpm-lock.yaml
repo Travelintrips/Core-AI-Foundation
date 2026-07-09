@@ -608,6 +608,10 @@ importers:
         version: 5.101.0(react@19.1.0)
 
   lib/api-spec:
+    dependencies:
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
     devDependencies:
       orval:
         specifier: ^8.18.0
@@ -645,6 +649,10 @@ importers:
         version: 0.31.10
 
   scripts:
+    dependencies:
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

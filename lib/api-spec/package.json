@@ -3,9 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "codegen": "orval --config ./orval.config.ts && pnpm -w run typecheck:libs"
+    "codegen": "node ./generate.mjs && pnpm -w run typecheck:libs"
   },
   "devDependencies": {
     "orval": "^8.18.0"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
   }
 }

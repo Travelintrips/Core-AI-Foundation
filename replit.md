@@ -24,12 +24,22 @@ lib/
 
 ## Running the Project
 
+**After cloning/importing from GitHub, always run `pnpm install` first** (node_modules are not committed).
+
 Both services start automatically via the **Project** run button:
 
 | Service | Command | Port |
 |---------|---------|------|
 | API Server | `pnpm --filter @workspace/api-server run dev` | 8080 |
 | Frontend | `pnpm --filter @workspace/ai-platform run dev` | 20785 |
+
+## API Codegen
+
+Re-generate React Query hooks and Zod schemas from the OpenAPI spec:
+```bash
+pnpm --filter @workspace/api-spec run codegen
+```
+Config: `lib/api-spec/orval.config.mjs` (ESM). Output: `lib/api-client-react/src/generated/` and `lib/api-zod/src/generated/`.
 
 ## Database
 
