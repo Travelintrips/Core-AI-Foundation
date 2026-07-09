@@ -38,3 +38,6 @@ export * from "./ai-events";
 export * from "./ai-event-subscriptions";
 export * from "./ai-schedules";
 export * from "./ai-schedule-runs";
+export * from "./ai-skill-packages";
+export * from "./ai-tool-packages";
+export * from "./ai-installed-packages";

@@ -76,6 +76,7 @@ The seed is idempotent — safe to run multiple times.
 - **Phase 4.8**: Digital Workforce — AI employees across 8 departments with CEO
 - **Phase 5**: Image Designer pipeline (prompt generation → design → QC)
 - **Phase 6**: Client portal with project review and approval flows
+- **Phase 8**: AI Skills Marketplace & Tool Ecosystem — installable skill/tool packages per tenant (`/marketplace`), dependency validation, connector health checks, package lifecycle events
 
 ## User Preferences
 

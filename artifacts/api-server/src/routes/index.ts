@@ -26,6 +26,7 @@ import clusterRouter from "./cluster";
 import workspaceHealthRouter from "./workspace-health";
 import eventsRouter from "./events";
 import schedulesRouter from "./schedules";
+import marketplaceRouter from "./marketplace";
 
 const router: IRouter = Router();
 
@@ -56,5 +57,6 @@ router.use(clusterRouter);
 router.use(workspaceHealthRouter);
 router.use(eventsRouter);
 router.use(schedulesRouter);
+router.use(marketplaceRouter);
 
 export default router;

@@ -25,6 +25,7 @@ import Operations from "@/pages/operations";
 import Queue from "@/pages/queue";
 import Events from "@/pages/events";
 import Scheduler from "@/pages/scheduler";
+import Marketplace from "@/pages/marketplace";
 
 const queryClient = new QueryClient();
 
@@ -50,6 +51,7 @@ function AdminRouter() {
         <Route path="/queue" component={Queue} />
         <Route path="/events" component={Events} />
         <Route path="/scheduler" component={Scheduler} />
+        <Route path="/marketplace" component={Marketplace} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
