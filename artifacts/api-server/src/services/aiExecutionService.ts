@@ -182,6 +182,48 @@ async function executeGemini(input: ExecutionInput, apiKey: string): Promise<Exe
   };
 }
 
+// ─── Mistral (OpenAI-compatible) ─────────────────────────────────────────────
+
+async function executeMistral(input: ExecutionInput, apiKey: string): Promise<ExecutionOutput> {
+  const startTime = Date.now();
+
+  const messages: Array<{ role: string; content: string }> = [];
+  if (input.systemPrompt) messages.push({ role: "system", content: input.systemPrompt });
+  messages.push({ role: "user", content: input.prompt });
+
+  const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: input.model.modelId,
+      messages,
+      max_tokens: input.maxTokens ?? (input.model.maxOutputTokens as number | null) ?? 4096,
+      ...(input.temperature != null ? { temperature: input.temperature } : {}),
+    }),
+  });
+
+  const latencyMs = Date.now() - startTime;
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Mistral API error ${response.status}: ${errText}`);
+  }
+
+  const data = (await response.json()) as {
+    choices: Array<{ message: { content: string } }>;
+    usage?: { prompt_tokens: number; completion_tokens: number };
+  };
+
+  const content = data.choices?.[0]?.message?.content ?? "";
+  const promptTokens = data.usage?.prompt_tokens ?? 0;
+  const completionTokens = data.usage?.completion_tokens ?? 0;
+
+  return { content, promptTokens, completionTokens, tokensUsed: promptTokens + completionTokens, latencyMs };
+}
+
 // ─── Replicate ───────────────────────────────────────────────────────────────
 
 async function executeReplicate(input: ExecutionInput, apiKey: string): Promise<ExecutionOutput> {
@@ -272,6 +314,8 @@ export async function executeAI(input: ExecutionInput): Promise<ExecutionOutput>
       return executeGemini(input, apiKey);
     case "replicate":
       return executeReplicate(input, apiKey);
+    case "mistral":
+      return executeMistral(input, apiKey);
     default:
       throw new Error(
         `Unsupported provider slug '${input.provider.slug}'. Add a handler in aiExecutionService.`,

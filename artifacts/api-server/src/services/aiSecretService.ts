@@ -11,6 +11,7 @@ const PROVIDER_ENV_VARS: Record<string, string> = {
   "google-gemini": "GEMINI_API_KEY",
   gemini: "GEMINI_API_KEY",
   replicate: "REPLICATE_API_TOKEN",
+  mistral: "MISTRAL_API_KEY",
 };
 
 /**

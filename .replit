@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "postgresql-16"]
 
 [deployment]
 router = "application"
@@ -28,3 +28,6 @@ COHERE_API_KEY = "P0y8GuyPnhJcp780szHaZGgtz80rLiyZHOWeWQMW"
 GEMINI_API_KEY = "AIzaSyCQb_9MaKUgjpNqfpgBZJbezh6yXQD-crQ"
 MISTRAL_API_KEY = "bDsdCOTE5H0BMsAZ7OIccWw0lPgpajyk"
 REPLICATE_API_TOKEN = "r8_bcqzMXfcX9BqlBFiuqxs17hKgjxo3RU1Lgq2w"
+
+[nix]
+channel = "stable-25_05"

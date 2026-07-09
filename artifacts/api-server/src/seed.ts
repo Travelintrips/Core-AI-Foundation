@@ -129,7 +129,15 @@ async function seedProviders() {
     isActive: true,
   });
 
-  return { openai, anthropic, google, replicate };
+  const mistral = await upsertProvider({
+    name: "Mistral AI",
+    slug: "mistral",
+    baseUrl: "https://api.mistral.ai/v1",
+    apiKeyEnvVar: "MISTRAL_API_KEY",
+    isActive: true,
+  });
+
+  return { openai, anthropic, google, replicate, mistral };
 }
 
 // ─── Models ──────────────────────────────────────────────────────────────────
@@ -139,6 +147,7 @@ async function seedModels(providers: {
   anthropic: { id: number };
   google: { id: number };
   replicate: { id: number };
+  mistral: { id: number };
 }) {
   console.log("\n🤖 Seeding models...");
 
@@ -182,50 +191,74 @@ async function seedModels(providers: {
   console.log("  Anthropic:");
   await upsertModel({
     providerId: providers.anthropic.id,
-    name: "Claude 3.5 Sonnet",
-    modelId: "claude-3-5-sonnet-20241022",
-    capabilities: ["text", "document", "review", "analysis", "copywriting"],
+    name: "Claude Sonnet 5",
+    modelId: "claude-sonnet-5",
+    capabilities: ["text", "analysis", "reasoning", "copywriting", "document"],
     contextWindow: 200000,
-    maxOutputTokens: 8192,
-    costPerInputToken: "0.0000030",
-    costPerOutputToken: "0.0000150",
+    maxOutputTokens: 16000,
+    costPerInputToken: "0.000003",
+    costPerOutputToken: "0.000015",
     isActive: true,
   });
 
   await upsertModel({
     providerId: providers.anthropic.id,
-    name: "Claude 3 Haiku",
-    modelId: "claude-3-haiku-20240307",
-    capabilities: ["text", "fast", "cheap", "document"],
+    name: "Claude Opus 4.8",
+    modelId: "claude-opus-4-8",
+    capabilities: ["text", "analysis", "reasoning", "document", "code"],
     contextWindow: 200000,
-    maxOutputTokens: 4096,
-    costPerInputToken: "0.00000025",
-    costPerOutputToken: "0.00000125",
+    maxOutputTokens: 32000,
+    costPerInputToken: "0.000015",
+    costPerOutputToken: "0.000075",
+    isActive: true,
+  });
+
+  await upsertModel({
+    providerId: providers.anthropic.id,
+    name: "Claude Haiku 4.5",
+    modelId: "claude-haiku-4-5-20251001",
+    capabilities: ["text", "fast", "cheap", "copywriting"],
+    contextWindow: 200000,
+    maxOutputTokens: 8192,
+    costPerInputToken: "0.0000008",
+    costPerOutputToken: "0.000004",
     isActive: true,
   });
 
   console.log("  Google Gemini:");
   await upsertModel({
     providerId: providers.google.id,
-    name: "Gemini 1.5 Pro",
-    modelId: "gemini-1.5-pro-latest",
-    capabilities: ["text", "multimodal", "vision", "document", "analysis"],
+    name: "Gemini 2.5 Pro",
+    modelId: "gemini-2.5-pro",
+    capabilities: ["text", "multimodal", "vision", "document", "analysis", "reasoning"],
     contextWindow: 2000000,
     maxOutputTokens: 8192,
-    costPerInputToken: "0.0000035",
-    costPerOutputToken: "0.0000105",
+    costPerInputToken: "0.00000125",
+    costPerOutputToken: "0.00001000",
     isActive: true,
   });
 
   await upsertModel({
     providerId: providers.google.id,
-    name: "Gemini 1.5 Flash",
-    modelId: "gemini-1.5-flash",
+    name: "Gemini 2.5 Flash",
+    modelId: "gemini-2.5-flash",
     capabilities: ["text", "fast", "multimodal", "cheap"],
     contextWindow: 1000000,
     maxOutputTokens: 8192,
-    costPerInputToken: "0.00000075",
-    costPerOutputToken: "0.00000300",
+    costPerInputToken: "0.00000015",
+    costPerOutputToken: "0.00000060",
+    isActive: true,
+  });
+
+  await upsertModel({
+    providerId: providers.google.id,
+    name: "Gemini 2.0 Flash",
+    modelId: "gemini-2.0-flash",
+    capabilities: ["text", "fast", "multimodal"],
+    contextWindow: 1000000,
+    maxOutputTokens: 8192,
+    costPerInputToken: "0.00000010",
+    costPerOutputToken: "0.00000040",
     isActive: true,
   });
 
@@ -244,6 +277,43 @@ async function seedModels(providers: {
     modelId: "black-forest-labs/flux-dev",
     capabilities: ["image-generation", "image"],
     isActive: false,
+  });
+
+  console.log("  Mistral AI:");
+  await upsertModel({
+    providerId: providers.mistral.id,
+    name: "Mistral Small",
+    modelId: "mistral-small-latest",
+    capabilities: ["text", "fast", "cheap", "copywriting"],
+    contextWindow: 32000,
+    maxOutputTokens: 8192,
+    costPerInputToken: "0.000001",
+    costPerOutputToken: "0.000003",
+    isActive: true,
+  });
+
+  await upsertModel({
+    providerId: providers.mistral.id,
+    name: "Mistral Large",
+    modelId: "mistral-large-latest",
+    capabilities: ["text", "analysis", "reasoning", "copywriting", "document"],
+    contextWindow: 128000,
+    maxOutputTokens: 8192,
+    costPerInputToken: "0.000003",
+    costPerOutputToken: "0.000009",
+    isActive: true,
+  });
+
+  await upsertModel({
+    providerId: providers.mistral.id,
+    name: "Codestral",
+    modelId: "codestral-latest",
+    capabilities: ["text", "code", "analysis"],
+    contextWindow: 32000,
+    maxOutputTokens: 8192,
+    costPerInputToken: "0.000001",
+    costPerOutputToken: "0.000003",
+    isActive: true,
   });
 }
 
