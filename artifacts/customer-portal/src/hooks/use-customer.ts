@@ -96,8 +96,23 @@ export type PublicProjectReview = {
   stylePreference?: string;
   goal: string;
   status: string;
-  copyOutput?: string;
-  creativeDirection?: string;
+  copyOutput?: {
+    tagline?: string;
+    headline?: { primary?: string; alternatives?: string[] };
+    body_copy?: { long?: string; short?: string };
+    tone_notes?: string;
+    cta?: { primary?: string; secondary?: string };
+    social_captions?: { platform?: string; caption?: string }[];
+    email_subject_lines?: string[];
+  } | null;
+  creativeDirection?: {
+    creative_concept?: { name?: string; description?: string; rationale?: string };
+    campaign_concept?: string;
+    color_direction?: { primary?: string; secondary?: string; accent?: string; rationale?: string };
+    typography?: { headline_style?: string; body_style?: string; hierarchy?: string };
+    visual_style?: { mood?: string; approach?: string; references?: string[] };
+    imagery_direction?: string;
+  } | null;
   assets: PublicAsset[];
   comments: ClientComment[];
   createdAt: string;
@@ -146,7 +161,9 @@ export const useGetPublicCreativeReview = (token: string) => {
     enabled: !!token,
     refetchInterval: (query) => {
       const data = query.state.data;
-      if (data?.status === 'running' || data?.status === 'pending') {
+      const projectRunning = data?.status === 'running' || data?.status === 'pending';
+      const assetsGenerating = (data?.assets ?? []).some((a) => a.status === 'generating' || a.status === 'pending');
+      if (projectRunning || assetsGenerating) {
         return 3000;
       }
       return false;

@@ -20,6 +20,8 @@ import {
 import { generateReviewToken, hashToken } from "../services/clientReviewService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
 import { logAudit } from "../services/aiAuditService.js";
+import { runCreativeBriefWorkflow } from "../services/creativeWorkflowRunner.js";
+import { runImageDesignerPipeline } from "../services/imageDesignerService.js";
 
 const router = Router();
 
@@ -98,20 +100,28 @@ router.post("/public/customer/submit", async (req, res): Promise<void> => {
   const projectId = randomUUID();
 
   // 1. Create the creative project
-  await db.insert(creativeProjectsTable).values({
-    projectId,
-    brandName,
-    businessType,
-    productOrService,
-    targetMarket,
-    stylePreference: stylePreference ?? null,
-    colorPreference: colorPreference ?? null,
-    referenceLinks: referenceLinks ?? null,
-    goal,
-    notes: notes ?? null,
-    deadline: deadline ?? null,
-    status: "pending",
-  });
+  const [project] = await db
+    .insert(creativeProjectsTable)
+    .values({
+      projectId,
+      brandName,
+      businessType,
+      productOrService,
+      targetMarket,
+      stylePreference: stylePreference ?? null,
+      colorPreference: colorPreference ?? null,
+      referenceLinks: referenceLinks ?? null,
+      goal,
+      notes: notes ?? null,
+      deadline: deadline ?? null,
+      status: "pending",
+    })
+    .returning();
+
+  if (!project) {
+    res.status(500).json({ error: "Failed to create project" });
+    return;
+  }
 
   // 2. Generate review token (60-day expiry)
   const { plaintext: reviewToken, hash: reviewTokenHash } = generateReviewToken();
@@ -160,6 +170,25 @@ router.post("/public/customer/submit", async (req, res): Promise<void> => {
       autoGenerate: autoGenerate ?? false,
     },
   });
+
+  // 5. Kick off AI generation in the background if requested.
+  // Text workflow (brand strategist -> creative director -> copywriter -> QC) first,
+  // then chain into image concept generation so the client's review page has visual
+  // assets ready, not just copy.
+  if (autoGenerate) {
+    runCreativeBriefWorkflow(project.id)
+      .then(() => runImageDesignerPipeline(project.id, projectId, 2))
+      .catch(async (err) => {
+        console.error(`[customer-portal] Workflow failed for project ${projectId}:`, err);
+        await db
+          .update(creativeProjectsTable)
+          .set({ status: "failed" })
+          .where(eq(creativeProjectsTable.id, project.id));
+        await logAudit("customer-portal", "workflow_error", projectId, "creative_project", "failure", {
+          error: String(err),
+        });
+      });
+  }
 
   await logAudit("customer-portal", "project_submitted", projectId, "creative_project", "success", {
     clientName,

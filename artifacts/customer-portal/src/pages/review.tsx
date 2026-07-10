@@ -43,7 +43,10 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
   }
 
   const isTerminal = review.reviewStatus === 'approved' || review.reviewStatus === 'rejected';
-  const isGenerating = review.status === 'pending' || review.status === 'running';
+  const assetsInProgress = (review.assets ?? []).some((a) => a.status === 'generating' || a.status === 'pending');
+  // Still "in production" while the text workflow is running OR the image
+  // pipeline (which is chained after it) hasn't finished producing assets yet.
+  const isGenerating = review.status === 'pending' || review.status === 'running' || assetsInProgress;
 
   const handleApprove = () => {
     approveReview.mutate({ token: params.token, data: {} }, {
@@ -162,8 +165,28 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
                     <FileText className="w-5 h-5 text-secondary" />
                     <h2 className="text-lg font-serif font-medium">Generated Copy</h2>
                   </div>
-                  <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground whitespace-pre-wrap">
-                    {review.copyOutput}
+                  <div className="space-y-4 text-sm">
+                    {review.copyOutput.tagline && (
+                      <p className="text-base font-medium italic text-foreground">"{review.copyOutput.tagline}"</p>
+                    )}
+                    {review.copyOutput.headline?.primary && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Headline</p>
+                        <p className="font-medium">{review.copyOutput.headline.primary}</p>
+                      </div>
+                    )}
+                    {review.copyOutput.body_copy?.short && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Body Copy</p>
+                        <p className="text-muted-foreground whitespace-pre-wrap">{review.copyOutput.body_copy.short}</p>
+                      </div>
+                    )}
+                    {review.copyOutput.cta?.primary && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Call to Action</p>
+                        <p className="font-medium">{review.copyOutput.cta.primary}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -173,8 +196,43 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
                     <MessageSquare className="w-5 h-5 text-orange-500" />
                     <h2 className="text-lg font-serif font-medium">Creative Direction</h2>
                   </div>
-                  <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground whitespace-pre-wrap">
-                    {review.creativeDirection}
+                  <div className="space-y-4 text-sm">
+                    {review.creativeDirection.creative_concept?.name && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Concept</p>
+                        <p className="font-medium">{review.creativeDirection.creative_concept.name}</p>
+                        {review.creativeDirection.creative_concept.description && (
+                          <p className="text-muted-foreground mt-1">{review.creativeDirection.creative_concept.description}</p>
+                        )}
+                      </div>
+                    )}
+                    {review.creativeDirection.visual_style?.mood && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Visual Style</p>
+                        <p className="text-muted-foreground">{review.creativeDirection.visual_style.mood}</p>
+                      </div>
+                    )}
+                    {review.creativeDirection.color_direction && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">Color Direction</p>
+                        <div className="flex items-center gap-2">
+                          {[
+                            review.creativeDirection.color_direction.primary,
+                            review.creativeDirection.color_direction.secondary,
+                            review.creativeDirection.color_direction.accent,
+                          ]
+                            .filter(Boolean)
+                            .map((c) => (
+                              <span
+                                key={c}
+                                className="w-6 h-6 rounded-full border border-border inline-block"
+                                style={{ backgroundColor: c }}
+                                title={c}
+                              />
+                            ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
