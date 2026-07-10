@@ -1,0 +1,1012 @@
+# PROMPT REPLIT AI — FASE 2 MASTER DATA MENU MINGGUAN
+
+Lanjutkan pembangunan aplikasi **Menu Makanan Mingguan** ke **Fase 2 — Master Data**.
+
+Fase 1 dianggap sudah selesai. Jangan mengubah mekanisme autentikasi, role, session, layout utama, atau struktur project yang sudah stabil kecuali benar-benar diperlukan.
+
+Kerjakan secara berurutan:
+
+1. Master Satuan
+2. Kategori Bahan
+3. Bahan Makanan
+4. Kategori Makanan
+5. Daftar Makanan
+6. Resep
+7. Bahan Resep
+8. Seed Data
+9. Pengujian dan Audit
+
+Jangan melompati urutan tersebut karena setiap modul saling berhubungan.
+
+---
+
+# A. AUDIT AWAL
+
+Sebelum coding:
+
+1. Audit schema database yang sudah ada.
+2. Periksa apakah tabel berikut sudah tersedia:
+
+   * units
+   * ingredient_categories
+   * ingredients
+   * food_categories
+   * foods
+   * recipes
+   * recipe_ingredients
+3. Jika sudah ada, jangan membuat tabel duplikat.
+4. Jika nama tabel berbeda tetapi fungsinya sama, gunakan tabel yang sudah ada.
+5. Identifikasi pola:
+
+   * primary key
+   * tenant atau user ownership
+   * soft delete
+   * created_at
+   * updated_at
+   * audit log
+6. Gunakan pola yang konsisten dengan project.
+7. Jangan melakukan destructive migration.
+8. Jangan menghapus atau mereset data lama.
+
+Berikan ringkasan audit sebelum implementasi, lalu lanjutkan tanpa menunggu konfirmasi jika tidak ada konflik kritis.
+
+---
+
+# B. MASTER SATUAN
+
+Buat tabel `units` jika belum tersedia.
+
+Kolom minimal:
+
+* id
+* code
+* name
+* symbol
+* unit_type
+* conversion_factor
+* base_unit_id
+* decimal_precision
+* is_active
+* notes
+* created_at
+* updated_at
+* deleted_at
+
+Contoh unit_type:
+
+* weight
+* volume
+* quantity
+* package
+* kitchen
+* serving
+
+Contoh data:
+
+* kilogram — kg
+* gram — g
+* liter — L
+* mililiter — ml
+* buah — buah
+* butir — butir
+* bungkus — bungkus
+* botol — botol
+* kaleng — kaleng
+* ikat — ikat
+* sendok teh — sdt
+* sendok makan — sdm
+* porsi — porsi
+
+Ketentuan:
+
+* code harus unik.
+* name harus unik jika belum soft deleted.
+* conversion_factor harus lebih dari 0.
+* base_unit_id boleh null untuk satuan dasar.
+* Jangan izinkan satuan menjadi base unit bagi dirinya sendiri.
+* decimal_precision minimal 0 dan maksimal 6.
+* Satuan yang sudah dipakai tidak boleh dihapus permanen.
+* Gunakan soft delete.
+
+Endpoint:
+
+* GET `/api/units`
+* GET `/api/units/:id`
+* POST `/api/units`
+* PATCH `/api/units/:id`
+* DELETE `/api/units/:id`
+
+Fitur UI:
+
+* tabel satuan
+* pencarian
+* filter tipe
+* filter status
+* tambah satuan
+* edit satuan
+* aktifkan/nonaktifkan
+* hapus dengan konfirmasi
+* pagination
+
+---
+
+# C. KATEGORI BAHAN
+
+Buat tabel `ingredient_categories`.
+
+Kolom minimal:
+
+* id
+* code
+* name
+* description
+* sort_order
+* is_active
+* created_at
+* updated_at
+* deleted_at
+
+Kategori awal:
+
+* Beras dan Karbohidrat
+* Daging
+* Ayam
+* Ikan dan Seafood
+* Sayuran
+* Buah
+* Bumbu
+* Minyak
+* Tepung
+* Telur
+* Susu
+* Minuman
+* Bahan Kering
+* Bahan Beku
+* Lainnya
+
+Ketentuan:
+
+* code unik.
+* nama kategori tidak boleh duplikat.
+* kategori yang sudah digunakan tidak boleh dihapus permanen.
+* gunakan soft delete.
+
+Endpoint:
+
+* GET `/api/ingredient-categories`
+* GET `/api/ingredient-categories/:id`
+* POST `/api/ingredient-categories`
+* PATCH `/api/ingredient-categories/:id`
+* DELETE `/api/ingredient-categories/:id`
+
+UI:
+
+* tabel kategori bahan
+* search
+* filter status
+* tambah
+* edit
+* aktif/nonaktif
+* urutan tampil
+* dialog konfirmasi hapus
+
+---
+
+# D. BAHAN MAKANAN
+
+Buat atau lengkapi tabel `ingredients`.
+
+Kolom minimal:
+
+* id
+* code
+* name
+* category_id
+* base_unit_id
+* purchase_unit_id
+* purchase_to_base_factor
+* current_price
+* price_per_base_unit
+* current_stock
+* minimum_stock
+* supplier_name
+* barcode
+* image_url
+* price_updated_at
+* is_active
+* notes
+* created_by
+* updated_by
+* created_at
+* updated_at
+* deleted_at
+
+Relasi:
+
+* category_id → ingredient_categories.id
+* base_unit_id → units.id
+* purchase_unit_id → units.id
+
+Contoh:
+
+Beras dibeli dalam kilogram dan dipakai dalam gram.
+
+* purchase_unit = kilogram
+* base_unit = gram
+* purchase_to_base_factor = 1000
+* current_price = harga per kilogram
+* price_per_base_unit = current_price ÷ 1000
+
+Ketentuan perhitungan:
+
+```text
+price_per_base_unit =
+current_price / purchase_to_base_factor
+```
+
+Validasi:
+
+* code unik.
+* nama wajib.
+* harga tidak boleh negatif.
+* stok tidak boleh negatif kecuali project mendukung negative inventory.
+* minimum_stock tidak boleh negatif.
+* conversion factor harus lebih dari 0.
+* kategori dan satuan harus aktif.
+* price_per_base_unit dihitung di backend.
+* Jangan percaya nilai perhitungan dari frontend.
+* Simpan harga dengan tipe numerik presisi, bukan float biasa.
+
+Endpoint:
+
+* GET `/api/ingredients`
+* GET `/api/ingredients/:id`
+* POST `/api/ingredients`
+* PATCH `/api/ingredients/:id`
+* DELETE `/api/ingredients/:id`
+* PATCH `/api/ingredients/:id/status`
+* PATCH `/api/ingredients/:id/price`
+* PATCH `/api/ingredients/:id/stock`
+
+Filter:
+
+* search
+* category_id
+* is_active
+* low_stock
+* supplier
+* price range
+
+UI halaman Bahan Makanan:
+
+* ringkasan total bahan
+* bahan aktif
+* bahan stok minimum
+* total nilai stok
+* tabel bahan
+* gambar
+* kategori
+* satuan pembelian
+* satuan dasar
+* harga pembelian
+* harga per satuan dasar
+* stok
+* stok minimum
+* pemasok
+* status
+* aksi
+
+Tambahkan badge:
+
+* Aktif
+* Nonaktif
+* Stok Menipis
+* Stok Habis
+
+---
+
+# E. KATEGORI MAKANAN
+
+Buat tabel `food_categories`.
+
+Kolom minimal:
+
+* id
+* code
+* name
+* description
+* icon
+* sort_order
+* is_active
+* created_at
+* updated_at
+* deleted_at
+
+Seed kategori:
+
+* Nasi
+* Lauk Ayam
+* Lauk Daging
+* Lauk Ikan
+* Sayuran
+* Sup
+* Gorengan
+* Makanan Berkuah
+* Makanan Ringan
+* Buah
+* Minuman
+* Dessert
+* Menu Diet
+* Menu Anak
+* Menu Vegetarian
+* Lainnya
+
+Endpoint:
+
+* GET `/api/food-categories`
+* GET `/api/food-categories/:id`
+* POST `/api/food-categories`
+* PATCH `/api/food-categories/:id`
+* DELETE `/api/food-categories/:id`
+
+Ketentuan:
+
+* code unik.
+* nama tidak boleh duplikat.
+* soft delete.
+* kategori yang digunakan makanan tidak boleh dihapus permanen.
+
+---
+
+# F. DAFTAR MAKANAN
+
+Buat atau lengkapi tabel `foods`.
+
+Kolom minimal:
+
+* id
+* code
+* name
+* category_id
+* description
+* image_url
+* default_servings
+* preparation_time_minutes
+* cooking_time_minutes
+* difficulty
+* estimated_cost_per_serving
+* calories_per_serving
+* protein_grams
+* carbohydrate_grams
+* fat_grams
+* fiber_grams
+* is_halal
+* is_vegetarian
+* is_low_sugar
+* is_low_salt
+* is_high_protein
+* is_child_friendly
+* is_favorite
+* is_active
+* notes
+* created_by
+* updated_by
+* created_at
+* updated_at
+* deleted_at
+
+Meal type jangan disimpan sebagai satu string jika satu makanan dapat digunakan di beberapa waktu makan.
+
+Buat tabel penghubung:
+
+`food_meal_types`
+
+Kolom:
+
+* id
+* food_id
+* meal_type
+* created_at
+
+Nilai meal_type:
+
+* breakfast
+* morning_snack
+* lunch
+* afternoon_snack
+* dinner
+
+Gunakan unique constraint:
+
+```text
+food_id + meal_type
+```
+
+Difficulty:
+
+* easy
+* medium
+* hard
+
+Ketentuan:
+
+* code unik.
+* nama wajib.
+* default_servings minimal 1.
+* waktu tidak boleh negatif.
+* nilai gizi tidak boleh negatif.
+* kategori harus aktif.
+* minimal memiliki satu meal type.
+* estimated_cost_per_serving dihitung dari resep jika resep tersedia.
+* Jangan mengandalkan nilai manual jika resep aktif sudah tersedia.
+
+Endpoint:
+
+* GET `/api/foods`
+* GET `/api/foods/:id`
+* POST `/api/foods`
+* PATCH `/api/foods/:id`
+* DELETE `/api/foods/:id`
+* PATCH `/api/foods/:id/status`
+* PATCH `/api/foods/:id/favorite`
+
+Filter:
+
+* search
+* category_id
+* meal_type
+* difficulty
+* halal
+* vegetarian
+* low_sugar
+* low_salt
+* high_protein
+* child_friendly
+* favorite
+* active
+
+UI:
+
+* tampilan grid dan tabel
+* foto
+* nama
+* kategori
+* meal type
+* waktu memasak
+* tingkat kesulitan
+* biaya per porsi
+* kalori
+* status
+* favorit
+* aksi
+
+Form makanan harus mendukung multi-select meal type.
+
+---
+
+# G. RESEP
+
+Buat atau lengkapi tabel `recipes`.
+
+Kolom minimal:
+
+* id
+* food_id
+* name
+* description
+* servings
+* preparation_time_minutes
+* cooking_time_minutes
+* difficulty
+* instructions
+* image_url
+* video_url
+* version
+* is_primary
+* is_active
+* notes
+* created_by
+* updated_by
+* created_at
+* updated_at
+* deleted_at
+
+Ketentuan:
+
+* satu makanan boleh memiliki beberapa versi resep.
+* hanya satu resep aktif yang boleh menjadi resep utama untuk satu makanan.
+* saat resep baru dijadikan primary, resep primary sebelumnya otomatis berubah menjadi false.
+* gunakan transaction.
+* servings minimal 1.
+* instructions wajib diisi.
+* version wajib.
+
+Endpoint:
+
+* GET `/api/recipes`
+* GET `/api/recipes/:id`
+* POST `/api/recipes`
+* PATCH `/api/recipes/:id`
+* DELETE `/api/recipes/:id`
+* PATCH `/api/recipes/:id/status`
+* PATCH `/api/recipes/:id/set-primary`
+
+Filter:
+
+* food_id
+* difficulty
+* is_primary
+* is_active
+* search
+
+UI:
+
+* daftar resep
+* makanan terkait
+* versi
+* porsi
+* durasi
+* difficulty
+* status primary
+* status aktif
+* lihat detail
+* edit
+* duplikat versi
+* set sebagai resep utama
+
+---
+
+# H. BAHAN RESEP
+
+Buat tabel `recipe_ingredients`.
+
+Kolom minimal:
+
+* id
+* recipe_id
+* ingredient_id
+* quantity
+* unit_id
+* quantity_in_base_unit
+* unit_price
+* subtotal
+* sort_order
+* preparation_note
+* is_optional
+* created_at
+* updated_at
+
+Relasi:
+
+* recipe_id → recipes.id
+* ingredient_id → ingredients.id
+* unit_id → units.id
+
+Unique constraint yang disarankan:
+
+```text
+recipe_id + ingredient_id + unit_id
+```
+
+Jika satu bahan harus muncul dua kali untuk proses berbeda, izinkan dengan field group atau preparation_note yang berbeda.
+
+Perhitungan wajib di backend:
+
+```text
+quantity_in_base_unit =
+quantity × conversion factor unit ke base unit bahan
+
+unit_price =
+harga bahan per base unit
+
+subtotal =
+quantity_in_base_unit × unit_price
+```
+
+Total biaya resep:
+
+```text
+recipe_total_cost =
+SUM(recipe_ingredients.subtotal)
+```
+
+Biaya per porsi:
+
+```text
+cost_per_serving =
+recipe_total_cost / recipe.servings
+```
+
+Setelah bahan resep berubah:
+
+1. Hitung ulang subtotal bahan resep.
+2. Hitung ulang total biaya resep.
+3. Hitung ulang biaya per porsi.
+4. Perbarui `foods.estimated_cost_per_serving`.
+5. Jalankan dalam transaction.
+
+Jangan menerima subtotal hasil hitungan frontend sebagai sumber kebenaran.
+
+Endpoint:
+
+* GET `/api/recipes/:recipeId/ingredients`
+* POST `/api/recipes/:recipeId/ingredients`
+* PATCH `/api/recipes/:recipeId/ingredients/:id`
+* DELETE `/api/recipes/:recipeId/ingredients/:id`
+* PUT `/api/recipes/:recipeId/ingredients/bulk`
+
+Endpoint bulk digunakan untuk menyimpan seluruh bahan resep sekaligus dalam satu transaction.
+
+Validasi:
+
+* bahan harus aktif.
+* satuan harus aktif.
+* quantity lebih dari 0.
+* unit harus kompatibel dengan jenis satuan bahan.
+* resep harus aktif saat digunakan untuk kalkulasi biaya.
+* bahan optional tetap dihitung hanya jika ditandai included dalam resep aktif.
+
+---
+
+# I. TAMPILAN DETAIL RESEP
+
+Buat halaman detail resep yang menampilkan:
+
+* foto makanan
+* nama makanan
+* nama resep
+* versi
+* status primary
+* jumlah porsi
+* waktu persiapan
+* waktu memasak
+* tingkat kesulitan
+* daftar bahan
+* jumlah
+* satuan
+* harga per unit
+* subtotal
+* total biaya resep
+* biaya per porsi
+* langkah memasak
+* catatan
+* video tutorial jika ada
+
+Tambahkan tombol:
+
+* Edit Resep
+* Duplikat Resep
+* Set sebagai Utama
+* Cetak Resep
+* Kembali
+
+Cetak dapat menggunakan halaman print-friendly terlebih dahulu. PDF penuh dapat dikerjakan pada fase laporan.
+
+---
+
+# J. AUDIT LOG
+
+Catat aktivitas:
+
+* membuat satuan
+* mengubah satuan
+* menghapus satuan
+* membuat kategori bahan
+* mengubah kategori bahan
+* membuat bahan
+* mengubah harga bahan
+* mengubah stok bahan
+* membuat kategori makanan
+* membuat makanan
+* mengubah makanan
+* menandai favorit
+* membuat resep
+* mengubah resep
+* mengubah bahan resep
+* mengganti resep utama
+
+Simpan:
+
+* actor
+* entity type
+* entity id
+* old data
+* new data
+* timestamp
+
+Jangan menyimpan file binary, token, cookie, atau secret ke audit log.
+
+---
+
+# K. SEED DATA
+
+Buat seed idempotent.
+
+Artinya:
+
+* aman dijalankan lebih dari satu kali
+* tidak membuat data duplikat
+* gunakan upsert atau pengecekan code unik
+
+Seed minimal:
+
+## Satuan
+
+* kg
+* g
+* L
+* ml
+* buah
+* butir
+* bungkus
+* botol
+* kaleng
+* ikat
+* sdt
+* sdm
+* porsi
+
+## Kategori bahan
+
+Gunakan seluruh kategori bahan yang telah ditentukan.
+
+## Bahan makanan minimal 30
+
+Contoh:
+
+* Beras
+* Ayam
+* Daging Sapi
+* Ikan Kembung
+* Telur
+* Tempe
+* Tahu
+* Wortel
+* Kentang
+* Kangkung
+* Bayam
+* Kol
+* Tomat
+* Bawang Merah
+* Bawang Putih
+* Cabai Merah
+* Garam
+* Gula
+* Minyak Goreng
+* Tepung Terigu
+* Santan
+* Kecap Manis
+* Saus Tiram
+* Merica
+* Daun Salam
+* Serai
+* Jeruk Nipis
+* Susu
+* Pisang
+* Apel
+
+## Makanan minimal 20
+
+* Nasi Goreng
+* Bubur Ayam
+* Nasi Uduk
+* Ayam Goreng
+* Ayam Bakar
+* Rendang
+* Ikan Goreng
+* Ikan Bakar
+* Sayur Asem
+* Sop Ayam
+* Capcay
+* Tumis Kangkung
+* Telur Balado
+* Tempe Orek
+* Tahu Goreng
+* Soto Ayam
+* Gado-Gado
+* Bakso
+* Mie Goreng
+* Salad Buah
+
+## Resep lengkap minimal 10
+
+Setiap resep harus memiliki:
+
+* makanan terkait
+* porsi
+* langkah memasak
+* minimal 3 bahan
+* perhitungan biaya
+* resep utama
+
+Gunakan harga contoh yang masuk akal dalam Rupiah.
+
+---
+
+# L. HAK AKSES
+
+Admin:
+
+* CRUD seluruh master data
+* mengubah harga
+* mengubah stok
+* mengaktifkan/nonaktifkan data
+* melihat seluruh audit log
+
+User:
+
+* hanya melihat master data aktif
+* melihat resep aktif
+* tidak boleh mengubah harga
+* tidak boleh mengubah stok
+* tidak boleh menghapus master data
+
+Semua pembatasan wajib diterapkan di backend.
+
+Jangan hanya menyembunyikan tombol frontend.
+
+---
+
+# M. FORMAT ANGKA DAN MATA UANG
+
+Gunakan:
+
+* locale Indonesia
+* mata uang IDR
+* pemisah ribuan Indonesia
+* decimal yang tepat untuk quantity
+
+Contoh:
+
+```text
+Rp25.000
+1.500 gram
+2,5 liter
+```
+
+Di database tetap gunakan numeric/decimal yang presisi.
+
+Jangan menyimpan nilai currency sebagai string berformat.
+
+---
+
+# N. ERROR HANDLING
+
+Gunakan pesan error yang jelas.
+
+Contoh:
+
+```json
+{
+  "success": false,
+  "message": "Bahan tidak dapat dihapus karena sudah digunakan pada resep."
+}
+```
+
+Tangani:
+
+* duplicate code
+* duplicate name
+* foreign key conflict
+* data tidak ditemukan
+* satuan tidak kompatibel
+* bahan tidak aktif
+* kategori tidak aktif
+* quantity invalid
+* harga invalid
+* gagal transaction
+
+Jangan menampilkan raw database error kepada pengguna.
+
+---
+
+# O. PENGUJIAN WAJIB
+
+Lakukan pengujian berikut:
+
+## Database
+
+* migration berhasil
+* seed berhasil
+* seed kedua tidak membuat duplikat
+* relasi foreign key valid
+* soft delete bekerja
+* unique constraint bekerja
+
+## Master Satuan
+
+* tambah
+* edit
+* nonaktifkan
+* hapus
+* tidak dapat hapus jika dipakai
+
+## Bahan
+
+* tambah bahan
+* hitung harga per base unit
+* ubah harga
+* ubah stok
+* filter stok minimum
+* bahan nonaktif tidak dapat digunakan pada resep
+
+## Makanan
+
+* tambah makanan
+* multi meal type
+* filter kategori
+* filter diet
+* favorit
+* soft delete
+
+## Resep
+
+* buat resep
+* tambah bahan
+* hitung subtotal
+* hitung total resep
+* hitung biaya per porsi
+* ubah servings
+* ubah quantity bahan
+* ganti primary recipe
+* transaction rollback saat salah satu bahan gagal
+
+## Hak Akses
+
+* user biasa hanya read-only
+* user biasa mendapat 403 saat mencoba CRUD
+* admin dapat CRUD
+* endpoint tidak membocorkan data sensitif
+
+## Build
+
+Jalankan:
+
+```bash
+pnpm typecheck
+pnpm build
+```
+
+Jika workspace tidak memiliki build global, jalankan build per package.
+
+Perbaiki semua:
+
+* TypeScript error
+* build error
+* runtime error
+* migration error
+* query error
+* UI error
+
+---
+
+# P. LAPORAN HASIL FASE 2
+
+Setelah selesai, laporkan:
+
+1. Hasil audit schema awal.
+2. Tabel baru yang dibuat.
+3. Tabel lama yang digunakan kembali.
+4. Migration yang dibuat.
+5. Daftar endpoint.
+6. Halaman UI yang selesai.
+7. Perhitungan konversi satuan.
+8. Perhitungan biaya resep.
+9. Perlindungan hak akses.
+10. Audit log yang ditambahkan.
+11. Jumlah seed data yang berhasil dibuat.
+12. Hasil seed dijalankan dua kali.
+13. Hasil typecheck.
+14. Hasil build.
+15. Hasil pengujian API.
+16. Risiko atau pekerjaan yang belum selesai.
+
+Jangan masuk ke Fase 3 sebelum:
+
+* seluruh master data berfungsi
+* bahan resep dapat dihitung
+* biaya per porsi otomatis
+* tidak ada tabel duplikat
+* seed idempotent
+* hak akses backend aktif
+* typecheck dan build lulus
