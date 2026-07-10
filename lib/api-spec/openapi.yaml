@@ -3477,6 +3477,152 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiServiceRequest"
+  /ai/catalog/services/{id}/quote:
+    post:
+      operationId: quoteService
+      tags: [service-catalog]
+      summary: Calculate a customer-facing price quote for a service (no internal cost/margin fields)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiServiceQuoteInput"
+      responses:
+        "200":
+          description: Pricing breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiServicePricingBreakdown"
+  /ai/catalog/price-rules:
+    get:
+      operationId: listPriceRules
+      tags: [service-catalog]
+      summary: List pricing rules (admin)
+      parameters:
+        - name: serviceId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of price rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiServicePriceRule"
+    post:
+      operationId: createPriceRule
+      tags: [service-catalog]
+      summary: Create a pricing rule (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiServicePriceRuleInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiServicePriceRule"
+  /ai/catalog/price-rules/{id}:
+    patch:
+      operationId: updatePriceRule
+      tags: [service-catalog]
+      summary: Update a pricing rule (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiServicePriceRuleInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiServicePriceRule"
+    delete:
+      operationId: deletePriceRule
+      tags: [service-catalog]
+      summary: Delete a pricing rule (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+  /ai/catalog/requests/{id}/margin-review:
+    get:
+      operationId: getRequestMarginReview
+      tags: [service-catalog]
+      summary: Internal cost/margin details for a request (admin only — never expose to customers)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Margin review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiServiceMarginReview"
+  /ai/catalog/requests/{id}/approve-margin:
+    post:
+      operationId: approveRequestMargin
+      tags: [service-catalog]
+      summary: Approve a low-margin request so it can proceed (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approvedBy]
+              properties:
+                approvedBy:
+                  type: string
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
   /ai/catalog/packages/{id}:
     patch:
       operationId: updateServicePackage
@@ -7779,8 +7925,44 @@ components:
           type: string
         companyName:
           type: [string, "null"]
+        customerPhone:
+          type: [string, "null"]
         notes:
           type: [string, "null"]
+        briefJson:
+          type: [object, "null"]
+        quantity:
+          type: integer
+        rushSpeed:
+          type: [string, "null"]
+        humanReviewRequested:
+          type: boolean
+        extraRevisions:
+          type: integer
+        bilingual:
+          type: boolean
+        editableSourceFile:
+          type: boolean
+        extendedUsageRights:
+          type: boolean
+        currency:
+          type: string
+        subtotal:
+          type: string
+        rushFee:
+          type: string
+        revisionFee:
+          type: string
+        humanReviewFee:
+          type: string
+        additionalServiceFee:
+          type: string
+        discount:
+          type: string
+        tax:
+          type: string
+        total:
+          type: string
         status:
           type: string
         createdProjectId:
@@ -7806,10 +7988,99 @@ components:
           type: string
         customerEmail:
           type: string
+        customerPhone:
+          type: string
         companyName:
           type: string
         notes:
           type: string
+        briefJson:
+          type: object
+        quantity:
+          type: integer
+        rushSpeed:
+          type: string
+          enum: ["48h", "24h", "same_day"]
+        humanReviewRequested:
+          type: boolean
+        extraRevisions:
+          type: integer
+        bilingual:
+          type: boolean
+        editableSourceFile:
+          type: boolean
+        extendedUsageRights:
+          type: boolean
+    AiServiceQuoteInput:
+      type: object
+      properties:
+        packageId:
+          type: integer
+        pricingModelSelected:
+          type: string
+        quantity:
+          type: integer
+        rushSpeed:
+          type: string
+          enum: ["48h", "24h", "same_day"]
+        humanReviewRequested:
+          type: boolean
+        extraRevisions:
+          type: integer
+        bilingual:
+          type: boolean
+        editableSourceFile:
+          type: boolean
+        extendedUsageRights:
+          type: boolean
+        discount:
+          type: number
+    AiServicePricingBreakdown:
+      type: object
+      required:
+        - currency
+        - basePrice
+        - subtotal
+        - tax
+        - total
+        - lineItems
+      properties:
+        currency:
+          type: string
+        basePrice:
+          type: number
+        quantityAdjustment:
+          type: number
+        rushFee:
+          type: number
+        revisionFee:
+          type: number
+        humanReviewFee:
+          type: number
+        additionalServiceFee:
+          type: number
+        discount:
+          type: number
+        subtotal:
+          type: number
+        taxPercent:
+          type: number
+        tax:
+          type: number
+        total:
+          type: number
+        lineItems:
+          type: array
+          items:
+            type: object
+            required: [code, label, amount]
+            properties:
+              code:
+                type: string
+              label:
+                type: string
+              amount:
+                type: number
     AiServiceRequestStatusUpdate:
       type: object
       required:
@@ -7819,6 +8090,103 @@ components:
           type: string
         createdProjectId:
           type: string
+    AiServicePriceRule:
+      type: object
+      required:
+        - id
+        - ruleCode
+        - ruleName
+        - conditionType
+        - adjustmentType
+        - adjustmentValue
+        - priority
+        - active
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        tenantId:
+          type: [string, "null"]
+        serviceId:
+          type: [integer, "null"]
+        ruleCode:
+          type: string
+        ruleName:
+          type: string
+        conditionType:
+          type: string
+        conditionJson:
+          type: [object, "null"]
+        adjustmentType:
+          type: string
+        adjustmentValue:
+          type: string
+        minimumCharge:
+          type: [string, "null"]
+        maximumCharge:
+          type: [string, "null"]
+        priority:
+          type: integer
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AiServicePriceRuleInput:
+      type: object
+      required:
+        - ruleCode
+        - ruleName
+        - conditionType
+        - adjustmentType
+        - adjustmentValue
+      properties:
+        tenantId:
+          type: string
+        serviceId:
+          type: integer
+        ruleCode:
+          type: string
+        ruleName:
+          type: string
+        conditionType:
+          type: string
+        conditionJson:
+          type: object
+        adjustmentType:
+          type: string
+        adjustmentValue:
+          type: string
+        minimumCharge:
+          type: string
+        maximumCharge:
+          type: string
+        priority:
+          type: integer
+        active:
+          type: boolean
+    AiServiceMarginReview:
+      type: object
+      properties:
+        estimatedAiCost:
+          type: [string, "null"]
+        humanLaborEstimate:
+          type: [string, "null"]
+        grossMargin:
+          type: [string, "null"]
+        grossMarginPercent:
+          type: [string, "null"]
+        marginApprovalRequired:
+          type: boolean
+        marginApprovedBy:
+          type: [string, "null"]
+        marginApprovedAt:
+          type: [string, "null"]
+          format: date-time
     CatalogAnalytics:
       type: object
       required:

@@ -4528,8 +4528,19 @@ export const RequestServiceBody = zod.object({
   "pricingModelSelected": zod.string(),
   "customerName": zod.string(),
   "customerEmail": zod.string(),
+  "customerPhone": zod.string().optional(),
   "companyName": zod.string().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "briefJson": zod.object({
+
+}).passthrough().optional(),
+  "quantity": zod.number().optional(),
+  "rushSpeed": zod.enum(['48h', '24h', 'same_day']).optional(),
+  "humanReviewRequested": zod.boolean().optional(),
+  "extraRevisions": zod.number().optional(),
+  "bilingual": zod.boolean().optional(),
+  "editableSourceFile": zod.boolean().optional(),
+  "extendedUsageRights": zod.boolean().optional()
 })
 
 export const RequestServiceResponse = zod.object({
@@ -4541,11 +4552,231 @@ export const RequestServiceResponse = zod.object({
   "customerName": zod.string(),
   "customerEmail": zod.string(),
   "companyName": zod.string().nullish(),
+  "customerPhone": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "briefJson": zod.object({
+
+}).passthrough().nullish(),
+  "quantity": zod.number().optional(),
+  "rushSpeed": zod.string().nullish(),
+  "humanReviewRequested": zod.boolean().optional(),
+  "extraRevisions": zod.number().optional(),
+  "bilingual": zod.boolean().optional(),
+  "editableSourceFile": zod.boolean().optional(),
+  "extendedUsageRights": zod.boolean().optional(),
+  "currency": zod.string().optional(),
+  "subtotal": zod.string().optional(),
+  "rushFee": zod.string().optional(),
+  "revisionFee": zod.string().optional(),
+  "humanReviewFee": zod.string().optional(),
+  "additionalServiceFee": zod.string().optional(),
+  "discount": zod.string().optional(),
+  "tax": zod.string().optional(),
+  "total": zod.string().optional(),
   "status": zod.string(),
   "createdProjectId": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Calculate a customer-facing price quote for a service (no internal cost/margin fields)
+ */
+export const QuoteServiceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const QuoteServiceBody = zod.object({
+  "packageId": zod.number().optional(),
+  "pricingModelSelected": zod.string().optional(),
+  "quantity": zod.number().optional(),
+  "rushSpeed": zod.enum(['48h', '24h', 'same_day']).optional(),
+  "humanReviewRequested": zod.boolean().optional(),
+  "extraRevisions": zod.number().optional(),
+  "bilingual": zod.boolean().optional(),
+  "editableSourceFile": zod.boolean().optional(),
+  "extendedUsageRights": zod.boolean().optional(),
+  "discount": zod.number().optional()
+})
+
+export const QuoteServiceResponse = zod.object({
+  "currency": zod.string(),
+  "basePrice": zod.number(),
+  "quantityAdjustment": zod.number().optional(),
+  "rushFee": zod.number().optional(),
+  "revisionFee": zod.number().optional(),
+  "humanReviewFee": zod.number().optional(),
+  "additionalServiceFee": zod.number().optional(),
+  "discount": zod.number().optional(),
+  "subtotal": zod.number(),
+  "taxPercent": zod.number().optional(),
+  "tax": zod.number(),
+  "total": zod.number(),
+  "lineItems": zod.array(zod.object({
+  "code": zod.string(),
+  "label": zod.string(),
+  "amount": zod.number()
+}))
+})
+
+
+/**
+ * @summary List pricing rules (admin)
+ */
+export const ListPriceRulesQueryParams = zod.object({
+  "serviceId": zod.coerce.number().optional()
+})
+
+export const ListPriceRulesResponseItem = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceId": zod.number().nullish(),
+  "ruleCode": zod.string(),
+  "ruleName": zod.string(),
+  "conditionType": zod.string(),
+  "conditionJson": zod.object({
+
+}).passthrough().nullish(),
+  "adjustmentType": zod.string(),
+  "adjustmentValue": zod.string(),
+  "minimumCharge": zod.string().nullish(),
+  "maximumCharge": zod.string().nullish(),
+  "priority": zod.number(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListPriceRulesResponse = zod.array(ListPriceRulesResponseItem)
+
+
+/**
+ * @summary Create a pricing rule (admin)
+ */
+export const CreatePriceRuleBody = zod.object({
+  "tenantId": zod.string().optional(),
+  "serviceId": zod.number().optional(),
+  "ruleCode": zod.string(),
+  "ruleName": zod.string(),
+  "conditionType": zod.string(),
+  "conditionJson": zod.object({
+
+}).passthrough().optional(),
+  "adjustmentType": zod.string(),
+  "adjustmentValue": zod.string(),
+  "minimumCharge": zod.string().optional(),
+  "maximumCharge": zod.string().optional(),
+  "priority": zod.number().optional(),
+  "active": zod.boolean().optional()
+})
+
+export const CreatePriceRuleResponse = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceId": zod.number().nullish(),
+  "ruleCode": zod.string(),
+  "ruleName": zod.string(),
+  "conditionType": zod.string(),
+  "conditionJson": zod.object({
+
+}).passthrough().nullish(),
+  "adjustmentType": zod.string(),
+  "adjustmentValue": zod.string(),
+  "minimumCharge": zod.string().nullish(),
+  "maximumCharge": zod.string().nullish(),
+  "priority": zod.number(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a pricing rule (admin)
+ */
+export const UpdatePriceRuleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdatePriceRuleBody = zod.object({
+  "tenantId": zod.string().optional(),
+  "serviceId": zod.number().optional(),
+  "ruleCode": zod.string(),
+  "ruleName": zod.string(),
+  "conditionType": zod.string(),
+  "conditionJson": zod.object({
+
+}).passthrough().optional(),
+  "adjustmentType": zod.string(),
+  "adjustmentValue": zod.string(),
+  "minimumCharge": zod.string().optional(),
+  "maximumCharge": zod.string().optional(),
+  "priority": zod.number().optional(),
+  "active": zod.boolean().optional()
+})
+
+export const UpdatePriceRuleResponse = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceId": zod.number().nullish(),
+  "ruleCode": zod.string(),
+  "ruleName": zod.string(),
+  "conditionType": zod.string(),
+  "conditionJson": zod.object({
+
+}).passthrough().nullish(),
+  "adjustmentType": zod.string(),
+  "adjustmentValue": zod.string(),
+  "minimumCharge": zod.string().nullish(),
+  "maximumCharge": zod.string().nullish(),
+  "priority": zod.number(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a pricing rule (admin)
+ */
+export const DeletePriceRuleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeletePriceRuleResponse = zod.void()
+
+
+/**
+ * @summary Internal cost/margin details for a request (admin only — never expose to customers)
+ */
+export const GetRequestMarginReviewParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetRequestMarginReviewResponse = zod.object({
+  "estimatedAiCost": zod.string().nullish(),
+  "humanLaborEstimate": zod.string().nullish(),
+  "grossMargin": zod.string().nullish(),
+  "grossMarginPercent": zod.string().nullish(),
+  "marginApprovalRequired": zod.boolean().optional(),
+  "marginApprovedBy": zod.string().nullish(),
+  "marginApprovedAt": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary Approve a low-margin request so it can proceed (admin)
+ */
+export const ApproveRequestMarginParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ApproveRequestMarginBody = zod.object({
+  "approvedBy": zod.string()
+})
+
+export const ApproveRequestMarginResponse = zod.object({
+  "ok": zod.boolean().optional()
 })
 
 
@@ -4615,7 +4846,27 @@ export const ListServiceRequestsResponseItem = zod.object({
   "customerName": zod.string(),
   "customerEmail": zod.string(),
   "companyName": zod.string().nullish(),
+  "customerPhone": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "briefJson": zod.object({
+
+}).passthrough().nullish(),
+  "quantity": zod.number().optional(),
+  "rushSpeed": zod.string().nullish(),
+  "humanReviewRequested": zod.boolean().optional(),
+  "extraRevisions": zod.number().optional(),
+  "bilingual": zod.boolean().optional(),
+  "editableSourceFile": zod.boolean().optional(),
+  "extendedUsageRights": zod.boolean().optional(),
+  "currency": zod.string().optional(),
+  "subtotal": zod.string().optional(),
+  "rushFee": zod.string().optional(),
+  "revisionFee": zod.string().optional(),
+  "humanReviewFee": zod.string().optional(),
+  "additionalServiceFee": zod.string().optional(),
+  "discount": zod.string().optional(),
+  "tax": zod.string().optional(),
+  "total": zod.string().optional(),
   "status": zod.string(),
   "createdProjectId": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
@@ -4645,7 +4896,27 @@ export const UpdateServiceRequestStatusResponse = zod.object({
   "customerName": zod.string(),
   "customerEmail": zod.string(),
   "companyName": zod.string().nullish(),
+  "customerPhone": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "briefJson": zod.object({
+
+}).passthrough().nullish(),
+  "quantity": zod.number().optional(),
+  "rushSpeed": zod.string().nullish(),
+  "humanReviewRequested": zod.boolean().optional(),
+  "extraRevisions": zod.number().optional(),
+  "bilingual": zod.boolean().optional(),
+  "editableSourceFile": zod.boolean().optional(),
+  "extendedUsageRights": zod.boolean().optional(),
+  "currency": zod.string().optional(),
+  "subtotal": zod.string().optional(),
+  "rushFee": zod.string().optional(),
+  "revisionFee": zod.string().optional(),
+  "humanReviewFee": zod.string().optional(),
+  "additionalServiceFee": zod.string().optional(),
+  "discount": zod.string().optional(),
+  "tax": zod.string().optional(),
+  "total": zod.string().optional(),
   "status": zod.string(),
   "createdProjectId": zod.string().nullish(),
   "createdAt": zod.coerce.date(),

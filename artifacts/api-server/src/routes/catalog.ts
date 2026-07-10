@@ -21,12 +21,15 @@ import {
   aiServicesTable,
   aiServicePackagesTable,
   aiServiceRequestsTable,
+  aiServicePriceRulesTable,
   insertAiServiceCategorySchema,
   insertAiServiceSchema,
   insertAiServicePackageSchema,
   insertAiServiceRequestSchema,
+  insertAiServicePriceRuleSchema,
 } from "@workspace/db";
 import { logAudit } from "../services/aiAuditService.js";
+import { generatePricingSnapshot, toCustomerFacingBreakdown, type PricingSelections } from "../services/aiPricingService.js";
 
 const router = Router();
 
@@ -203,14 +206,47 @@ router.delete("/ai/catalog/packages/:id", async (req, res): Promise<void> => {
   res.status(204).send();
 });
 
+// ── Pricing Calculator ───────────────────────────────────────────────────────
+
+async function loadServiceAndPackage(serviceId: number, packageId: number | null | undefined, res: import("express").Response) {
+  const [service] = await db.select().from(aiServicesTable).where(eq(aiServicesTable.id, serviceId)).limit(1);
+  if (!service) { res.status(404).json({ error: "Service not found" }); return null; }
+  let pkg = null;
+  if (packageId != null) {
+    const [row] = await db.select().from(aiServicePackagesTable).where(eq(aiServicePackagesTable.id, packageId)).limit(1);
+    if (!row || row.serviceId !== serviceId) { res.status(400).json({ error: "packageId does not belong to the requested service" }); return null; }
+    pkg = row;
+  }
+  return { service, pkg };
+}
+
+router.post("/ai/catalog/services/:id/quote", async (req, res): Promise<void> => {
+  const serviceId = parseId(req.params.id, res);
+  if (serviceId === null) return;
+  const body = req.body as { packageId?: number; pricingModelSelected?: string; discount?: number; tenantId?: string } & PricingSelections;
+
+  const loaded = await loadServiceAndPackage(serviceId, body.packageId, res);
+  if (!loaded) return;
+  const { service, pkg } = loaded;
+
+  const breakdown = await generatePricingSnapshot(
+    service,
+    pkg,
+    body.pricingModelSelected ?? service.pricingModel,
+    body,
+    body.discount ?? 0,
+    body.tenantId ?? null,
+  );
+
+  // Customer-facing quote preview never includes internal cost/margin.
+  res.json(toCustomerFacingBreakdown(breakdown));
+});
+
 // ── Requests (Request Service → intake for AI Orchestrator) ─────────────────
 
 router.post("/ai/catalog/services/:id/request", async (req, res): Promise<void> => {
   const serviceId = parseId(req.params.id, res);
   if (serviceId === null) return;
-
-  const [service] = await db.select().from(aiServicesTable).where(eq(aiServicesTable.id, serviceId)).limit(1);
-  if (!service) { res.status(404).json({ error: "Service not found" }); return; }
 
   const parsed = insertAiServiceRequestSchema.safeParse({ ...req.body, serviceId });
   if (!parsed.success) {
@@ -218,30 +254,55 @@ router.post("/ai/catalog/services/:id/request", async (req, res): Promise<void> 
     return;
   }
 
-  if (parsed.data.packageId != null) {
-    const [pkg] = await db
-      .select()
-      .from(aiServicePackagesTable)
-      .where(eq(aiServicePackagesTable.id, parsed.data.packageId))
-      .limit(1);
-    if (!pkg || pkg.serviceId !== serviceId) {
-      res.status(400).json({ error: "packageId does not belong to the requested service" });
-      return;
-    }
-  }
+  const loaded = await loadServiceAndPackage(serviceId, parsed.data.packageId, res);
+  if (!loaded) return;
+  const { service, pkg } = loaded;
+
+  const breakdown = await generatePricingSnapshot(
+    service,
+    pkg,
+    parsed.data.pricingModelSelected ?? service.pricingModel,
+    parsed.data as PricingSelections,
+    0,
+    parsed.data.tenantId ?? null,
+  );
 
   const [row] = await db
     .insert(aiServiceRequestsTable)
-    .values({ ...parsed.data, requestId: randomUUID() })
+    .values({
+      ...parsed.data,
+      requestId: randomUUID(),
+      status: "quoted",
+      currency: breakdown.currency,
+      subtotal: String(breakdown.subtotal),
+      rushFee: String(breakdown.rushFee),
+      revisionFee: String(breakdown.revisionFee),
+      humanReviewFee: String(breakdown.humanReviewFee),
+      additionalServiceFee: String(breakdown.additionalServiceFee),
+      discount: String(breakdown.discount),
+      tax: String(breakdown.tax),
+      total: String(breakdown.total),
+      pricingSnapshotJson: breakdown as unknown as Record<string, unknown>,
+      estimatedAiCost: String(breakdown.estimatedAiCost),
+      humanLaborEstimate: String(breakdown.humanLaborEstimate),
+      grossMargin: String(breakdown.grossMargin),
+      grossMarginPercent: String(breakdown.grossMarginPercent),
+      marginApprovalRequired: breakdown.marginApprovalRequired,
+    })
     .returning();
 
   await logAudit("catalog", "request_service", String(row.id), "ai_service_request", "success", {
     serviceId,
     serviceName: service.serviceName,
     customerEmail: row.customerEmail,
+    total: row.total,
+    marginApprovalRequired: row.marginApprovalRequired,
   });
 
-  res.status(201).json(row);
+  // Customer-facing response — strip internal cost/margin fields, including
+  // the nested pricingSnapshotJson blob (which also carries cost/margin data).
+  const { estimatedAiCost, actualAiCost, humanLaborEstimate, grossMargin, grossMarginPercent, marginApprovalRequired, marginApprovedBy, marginApprovedAt, pricingSnapshotJson, ...customerFacing } = row;
+  res.status(201).json({ ...customerFacing, pricingSnapshotJson: toCustomerFacingBreakdown(breakdown) });
 });
 
 router.get("/ai/catalog/requests", async (_req, res): Promise<void> => {
@@ -250,6 +311,37 @@ router.get("/ai/catalog/requests", async (_req, res): Promise<void> => {
     .from(aiServiceRequestsTable)
     .orderBy(desc(aiServiceRequestsTable.createdAt));
   res.json(rows);
+});
+
+router.get("/ai/catalog/requests/:id/margin-review", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
+  const [row] = await db.select().from(aiServiceRequestsTable).where(eq(aiServiceRequestsTable.id, id)).limit(1);
+  if (!row) { res.status(404).json({ error: "Request not found" }); return; }
+  res.json({
+    estimatedAiCost: row.estimatedAiCost,
+    humanLaborEstimate: row.humanLaborEstimate,
+    grossMargin: row.grossMargin,
+    grossMarginPercent: row.grossMarginPercent,
+    marginApprovalRequired: row.marginApprovalRequired,
+    marginApprovedBy: row.marginApprovedBy,
+    marginApprovedAt: row.marginApprovedAt,
+  });
+});
+
+router.post("/ai/catalog/requests/:id/approve-margin", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
+  const { approvedBy } = req.body as { approvedBy?: string };
+  if (!approvedBy) { res.status(400).json({ error: "approvedBy is required" }); return; }
+  const [row] = await db
+    .update(aiServiceRequestsTable)
+    .set({ marginApprovalRequired: false, marginApprovedBy: approvedBy, marginApprovedAt: new Date(), updatedAt: new Date() })
+    .where(eq(aiServiceRequestsTable.id, id))
+    .returning();
+  if (!row) { res.status(404).json({ error: "Request not found" }); return; }
+  await logAudit("catalog", "approve_margin", String(id), "ai_service_request", "success", { approvedBy });
+  res.json({ ok: true });
 });
 
 router.patch("/ai/catalog/requests/:id/status", async (req, res): Promise<void> => {
@@ -265,6 +357,50 @@ router.patch("/ai/catalog/requests/:id/status", async (req, res): Promise<void> 
   if (!row) { res.status(404).json({ error: "Request not found" }); return; }
   await logAudit("catalog", "update_request_status", String(id), "ai_service_request", "success", { status });
   res.json(row);
+});
+
+// ── Price Rules ───────────────────────────────────────────────────────────────
+
+router.get("/ai/catalog/price-rules", async (req, res): Promise<void> => {
+  const serviceId = req.query.serviceId ? parseInt(String(req.query.serviceId), 10) : null;
+  const rows = await db.select().from(aiServicePriceRulesTable).orderBy(aiServicePriceRulesTable.priority);
+  res.json(serviceId && !Number.isNaN(serviceId) ? rows.filter((r) => r.serviceId === serviceId || r.serviceId === null) : rows);
+});
+
+router.post("/ai/catalog/price-rules", async (req, res): Promise<void> => {
+  const parsed = insertAiServicePriceRuleSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  try {
+    const [row] = await db.insert(aiServicePriceRulesTable).values(parsed.data).returning();
+    await logAudit("catalog", "create_price_rule", String(row.id), "ai_service_price_rule", "success", { ruleCode: row.ruleCode });
+    res.status(201).json(row);
+  } catch (err) {
+    const msg = String(err);
+    res.status(msg.includes("unique") || msg.includes("duplicate") ? 409 : 500).json({ error: msg });
+  }
+});
+
+router.patch("/ai/catalog/price-rules/:id", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
+  const parsed = insertAiServicePriceRuleSchema.partial().safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const [row] = await db
+    .update(aiServicePriceRulesTable)
+    .set({ ...parsed.data, updatedAt: new Date() })
+    .where(eq(aiServicePriceRulesTable.id, id))
+    .returning();
+  if (!row) { res.status(404).json({ error: "Price rule not found" }); return; }
+  await logAudit("catalog", "update_price_rule", String(id), "ai_service_price_rule", "success", parsed.data);
+  res.json(row);
+});
+
+router.delete("/ai/catalog/price-rules/:id", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
+  await db.delete(aiServicePriceRulesTable).where(eq(aiServicePriceRulesTable.id, id));
+  await logAudit("catalog", "delete_price_rule", String(id), "ai_service_price_rule", "success");
+  res.status(204).send();
 });
 
 // ── Analytics ─────────────────────────────────────────────────────────────────

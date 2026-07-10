@@ -13,6 +13,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <span className="font-serif font-semibold text-lg tracking-tight">Creative Studio</span>
           </Link>
           <nav className="flex items-center gap-4">
+            <Link href="/services" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors hidden sm:inline-flex">
+              Services & Pricing
+            </Link>
             <Link href="/access" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               Client Login
             </Link>

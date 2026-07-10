@@ -10,6 +10,8 @@ import ReviewPage from '@/pages/review';
 import DashboardPage from '@/pages/dashboard';
 import AccessPage from '@/pages/access';
 import QuotationPage from '@/pages/quotation';
+import ServicesPage from '@/pages/services';
+import ServiceDetailPage from '@/pages/service-detail';
 
 const queryClient = new QueryClient();
 
@@ -28,6 +30,8 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={LandingPage} />
+      <Route path="/services" component={ServicesPage} />
+      <Route path="/services/:id" component={ServiceDetailPage} />
       <Route path="/submit" component={SubmitPage} />
       <Route path="/success" component={SuccessPage} />
       <Route path="/review/:token" component={ReviewPage} />

@@ -50,8 +50,13 @@ import type {
   AiServiceCategoryInput,
   AiServiceDetail,
   AiServiceInput,
+  AiServiceMarginReview,
   AiServicePackage,
   AiServicePackageInput,
+  AiServicePriceRule,
+  AiServicePriceRuleInput,
+  AiServicePricingBreakdown,
+  AiServiceQuoteInput,
   AiServiceRequest,
   AiServiceRequestInput,
   AiServiceRequestStatusUpdate,
@@ -62,6 +67,8 @@ import type {
   AiWorkflowInput,
   AiWorkflowUpdate,
   AnalyticsOverview,
+  ApproveRequestMargin200,
+  ApproveRequestMarginBody,
   AssetFeedbackInput,
   AssetStatusUpdate,
   AssignHumanTaskBody,
@@ -128,6 +135,7 @@ import type {
   ListJobsParams,
   ListMemoryEntriesParams,
   ListModelsParams,
+  ListPriceRulesParams,
   ListPromptsParams,
   ListRunsForScheduleParams,
   ListScheduleRunsParams,
@@ -12099,6 +12107,520 @@ export const useRequestService = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getRequestServiceMutationOptions(options));
+    }
+
+export const getQuoteServiceUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/services/${id}/quote`
+}
+
+/**
+ * @summary Calculate a customer-facing price quote for a service (no internal cost/margin fields)
+ */
+export const quoteService = async (id: number,
+    aiServiceQuoteInput: AiServiceQuoteInput, options?: RequestInit): Promise<AiServicePricingBreakdown> => {
+
+  return customFetch<AiServicePricingBreakdown>(getQuoteServiceUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiServiceQuoteInput)
+  }
+);}
+
+
+
+
+export const getQuoteServiceMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof quoteService>>, TError,{id: number;data: BodyType<AiServiceQuoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof quoteService>>, TError,{id: number;data: BodyType<AiServiceQuoteInput>}, TContext> => {
+
+const mutationKey = ['quoteService'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof quoteService>>, {id: number;data: BodyType<AiServiceQuoteInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  quoteService(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type QuoteServiceMutationResult = NonNullable<Awaited<ReturnType<typeof quoteService>>>
+    export type QuoteServiceMutationBody = BodyType<AiServiceQuoteInput>
+    export type QuoteServiceMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Calculate a customer-facing price quote for a service (no internal cost/margin fields)
+ */
+export const useQuoteService = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof quoteService>>, TError,{id: number;data: BodyType<AiServiceQuoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof quoteService>>,
+        TError,
+        {id: number;data: BodyType<AiServiceQuoteInput>},
+        TContext
+      > => {
+      return useMutation(getQuoteServiceMutationOptions(options));
+    }
+
+export const getListPriceRulesUrl = (params?: ListPriceRulesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/ai/catalog/price-rules?${stringifiedParams}` : `/api/ai/catalog/price-rules`
+}
+
+/**
+ * @summary List pricing rules (admin)
+ */
+export const listPriceRules = async (params?: ListPriceRulesParams, options?: RequestInit): Promise<AiServicePriceRule[]> => {
+
+  return customFetch<AiServicePriceRule[]>(getListPriceRulesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPriceRulesQueryKey = (params?: ListPriceRulesParams,) => {
+    return [
+    `/api/ai/catalog/price-rules`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListPriceRulesQueryOptions = <TData = Awaited<ReturnType<typeof listPriceRules>>, TError = ErrorType<unknown>>(params?: ListPriceRulesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPriceRules>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPriceRulesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPriceRules>>> = ({ signal }) => listPriceRules(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPriceRules>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPriceRulesQueryResult = NonNullable<Awaited<ReturnType<typeof listPriceRules>>>
+export type ListPriceRulesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List pricing rules (admin)
+ */
+
+export function useListPriceRules<TData = Awaited<ReturnType<typeof listPriceRules>>, TError = ErrorType<unknown>>(
+ params?: ListPriceRulesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPriceRules>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPriceRulesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePriceRuleUrl = () => {
+
+
+
+
+  return `/api/ai/catalog/price-rules`
+}
+
+/**
+ * @summary Create a pricing rule (admin)
+ */
+export const createPriceRule = async (aiServicePriceRuleInput: AiServicePriceRuleInput, options?: RequestInit): Promise<AiServicePriceRule> => {
+
+  return customFetch<AiServicePriceRule>(getCreatePriceRuleUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiServicePriceRuleInput)
+  }
+);}
+
+
+
+
+export const getCreatePriceRuleMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPriceRule>>, TError,{data: BodyType<AiServicePriceRuleInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPriceRule>>, TError,{data: BodyType<AiServicePriceRuleInput>}, TContext> => {
+
+const mutationKey = ['createPriceRule'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPriceRule>>, {data: BodyType<AiServicePriceRuleInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPriceRule(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePriceRuleMutationResult = NonNullable<Awaited<ReturnType<typeof createPriceRule>>>
+    export type CreatePriceRuleMutationBody = BodyType<AiServicePriceRuleInput>
+    export type CreatePriceRuleMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a pricing rule (admin)
+ */
+export const useCreatePriceRule = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPriceRule>>, TError,{data: BodyType<AiServicePriceRuleInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPriceRule>>,
+        TError,
+        {data: BodyType<AiServicePriceRuleInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePriceRuleMutationOptions(options));
+    }
+
+export const getUpdatePriceRuleUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/price-rules/${id}`
+}
+
+/**
+ * @summary Update a pricing rule (admin)
+ */
+export const updatePriceRule = async (id: number,
+    aiServicePriceRuleInput: AiServicePriceRuleInput, options?: RequestInit): Promise<AiServicePriceRule> => {
+
+  return customFetch<AiServicePriceRule>(getUpdatePriceRuleUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiServicePriceRuleInput)
+  }
+);}
+
+
+
+
+export const getUpdatePriceRuleMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePriceRule>>, TError,{id: number;data: BodyType<AiServicePriceRuleInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePriceRule>>, TError,{id: number;data: BodyType<AiServicePriceRuleInput>}, TContext> => {
+
+const mutationKey = ['updatePriceRule'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePriceRule>>, {id: number;data: BodyType<AiServicePriceRuleInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updatePriceRule(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePriceRuleMutationResult = NonNullable<Awaited<ReturnType<typeof updatePriceRule>>>
+    export type UpdatePriceRuleMutationBody = BodyType<AiServicePriceRuleInput>
+    export type UpdatePriceRuleMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a pricing rule (admin)
+ */
+export const useUpdatePriceRule = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePriceRule>>, TError,{id: number;data: BodyType<AiServicePriceRuleInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePriceRule>>,
+        TError,
+        {id: number;data: BodyType<AiServicePriceRuleInput>},
+        TContext
+      > => {
+      return useMutation(getUpdatePriceRuleMutationOptions(options));
+    }
+
+export const getDeletePriceRuleUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/price-rules/${id}`
+}
+
+/**
+ * @summary Delete a pricing rule (admin)
+ */
+export const deletePriceRule = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeletePriceRuleUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeletePriceRuleMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePriceRule>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deletePriceRule>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deletePriceRule'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePriceRule>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deletePriceRule(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeletePriceRuleMutationResult = NonNullable<Awaited<ReturnType<typeof deletePriceRule>>>
+
+    export type DeletePriceRuleMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a pricing rule (admin)
+ */
+export const useDeletePriceRule = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePriceRule>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deletePriceRule>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeletePriceRuleMutationOptions(options));
+    }
+
+export const getGetRequestMarginReviewUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/requests/${id}/margin-review`
+}
+
+/**
+ * @summary Internal cost/margin details for a request (admin only — never expose to customers)
+ */
+export const getRequestMarginReview = async (id: number, options?: RequestInit): Promise<AiServiceMarginReview> => {
+
+  return customFetch<AiServiceMarginReview>(getGetRequestMarginReviewUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRequestMarginReviewQueryKey = (id: number,) => {
+    return [
+    `/api/ai/catalog/requests/${id}/margin-review`
+    ] as const;
+    }
+
+
+export const getGetRequestMarginReviewQueryOptions = <TData = Awaited<ReturnType<typeof getRequestMarginReview>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRequestMarginReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRequestMarginReviewQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRequestMarginReview>>> = ({ signal }) => getRequestMarginReview(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRequestMarginReview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRequestMarginReviewQueryResult = NonNullable<Awaited<ReturnType<typeof getRequestMarginReview>>>
+export type GetRequestMarginReviewQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Internal cost/margin details for a request (admin only — never expose to customers)
+ */
+
+export function useGetRequestMarginReview<TData = Awaited<ReturnType<typeof getRequestMarginReview>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRequestMarginReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRequestMarginReviewQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getApproveRequestMarginUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/requests/${id}/approve-margin`
+}
+
+/**
+ * @summary Approve a low-margin request so it can proceed (admin)
+ */
+export const approveRequestMargin = async (id: number,
+    approveRequestMarginBody: ApproveRequestMarginBody, options?: RequestInit): Promise<ApproveRequestMargin200> => {
+
+  return customFetch<ApproveRequestMargin200>(getApproveRequestMarginUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(approveRequestMarginBody)
+  }
+);}
+
+
+
+
+export const getApproveRequestMarginMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveRequestMargin>>, TError,{id: number;data: BodyType<ApproveRequestMarginBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveRequestMargin>>, TError,{id: number;data: BodyType<ApproveRequestMarginBody>}, TContext> => {
+
+const mutationKey = ['approveRequestMargin'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveRequestMargin>>, {id: number;data: BodyType<ApproveRequestMarginBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  approveRequestMargin(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveRequestMarginMutationResult = NonNullable<Awaited<ReturnType<typeof approveRequestMargin>>>
+    export type ApproveRequestMarginMutationBody = BodyType<ApproveRequestMarginBody>
+    export type ApproveRequestMarginMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Approve a low-margin request so it can proceed (admin)
+ */
+export const useApproveRequestMargin = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveRequestMargin>>, TError,{id: number;data: BodyType<ApproveRequestMarginBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveRequestMargin>>,
+        TError,
+        {id: number;data: BodyType<ApproveRequestMarginBody>},
+        TContext
+      > => {
+      return useMutation(getApproveRequestMarginMutationOptions(options));
     }
 
 export const getUpdateServicePackageUrl = (id: number,) => {
