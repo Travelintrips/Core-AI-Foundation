@@ -14,8 +14,13 @@ export function adminAuth(req: Request, res: Response, next: NextFunction): void
   const adminKey = process.env["ADMIN_API_KEY"];
 
   if (!adminKey) {
-    // No key configured — allow all (development mode)
-    next();
+    if (process.env["NODE_ENV"] === "development") {
+      // No key configured in development — allow all (dev convenience)
+      next();
+      return;
+    }
+    // Outside development: fail-closed to avoid accidental public exposure
+    res.status(401).json({ error: "Unauthorized: ADMIN_API_KEY is not configured" });
     return;
   }
 
