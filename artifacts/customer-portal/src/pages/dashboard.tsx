@@ -99,9 +99,10 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {data.projects.map((project) => (
-                <Link key={project.projectId} href={`/review/${project.reviewToken}`} className="group block">
-                  <div className="bg-card border border-card-border rounded-2xl p-6 shadow-sm hover:shadow-md hover:border-primary/30 transition-all h-full flex flex-col">
+              {data.projects.map((project) => {
+                const hasReviewLink = !!project.reviewToken;
+                const cardContent = (
+                  <div className={`bg-card border border-card-border rounded-2xl p-6 shadow-sm transition-all h-full flex flex-col ${hasReviewLink ? 'group-hover:shadow-md group-hover:border-primary/30' : 'opacity-80'}`}>
                     <div className="flex justify-between items-start mb-4 gap-4">
                       <div>
                         <h3 className="text-lg font-serif font-medium line-clamp-1">{project.brandName}</h3>
@@ -130,13 +131,27 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
                           </span>
                         )}
                       </div>
-                      <div className="text-primary flex items-center gap-1 text-sm font-medium group-hover:translate-x-1 transition-transform">
-                        View <ArrowRight className="w-4 h-4" />
-                      </div>
+                      {hasReviewLink ? (
+                        <div className="text-primary flex items-center gap-1 text-sm font-medium group-hover:translate-x-1 transition-transform">
+                          View <ArrowRight className="w-4 h-4" />
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Use your saved review link</span>
+                      )}
                     </div>
                   </div>
-                </Link>
-              ))}
+                );
+
+                return hasReviewLink ? (
+                  <Link key={project.projectId} href={`/review/${project.reviewToken}`} className="group block">
+                    {cardContent}
+                  </Link>
+                ) : (
+                  <div key={project.projectId} className="block cursor-default" title="This project was set up by your account manager. Use the review link you received to access it.">
+                    {cardContent}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
