@@ -14,6 +14,10 @@ import ServicesPage from '@/pages/services';
 import ServiceDetailPage from '@/pages/service-detail';
 import CommercialGatePage from '@/pages/commercial-gate';
 import ProjectPage from '@/pages/project';
+import BriefPage from '@/pages/brief';
+import RequestPricingPage from '@/pages/request-pricing';
+import RequestQuotationPage from '@/pages/request-quotation';
+import RequestApprovalPage from '@/pages/request-approval';
 
 const queryClient = new QueryClient();
 
@@ -42,6 +46,10 @@ function Router() {
       <Route path="/quotation/:token" component={QuotationPage} />
       <Route path="/gate/:token" component={CommercialGatePage} />
       <Route path="/project/:token" component={ProjectPage} />
+      <Route path="/request-service/:requestId/brief" component={BriefPage} />
+      <Route path="/request-service/:requestId/pricing" component={RequestPricingPage} />
+      <Route path="/request-service/:requestId/quotation" component={RequestQuotationPage} />
+      <Route path="/request-service/:requestId/approval" component={RequestApprovalPage} />
       <Route component={NotFound} />
     </Switch>
   );

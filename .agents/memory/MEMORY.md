@@ -21,3 +21,4 @@
 - [reimport-artifact-registration](reimport-artifact-registration.md) — GitHub re-import loses artifact/workflow registration; fix with runPostMergeSetup(), not createArtifact()
 - [supabase-secret-name-mismatch](supabase-secret-name-mismatch.md) — imported secrets named SUPABASE_DATABASE_URL_DEV/SUPABASE_DATABASE_URL vs code expecting SUPABASE_DEV/PROD_DATABASE_URL; alias, don't rename
 - [drizzle-push-false-positive](drizzle-push-false-positive.md) — drizzle-kit push proposes dropping the whole ai_platform schema even for additive changes; hand-write DDL for new tables instead
+- [service-catalog-quotation-flow](service-catalog-quotation-flow.md) — ai_quotations + ai_quotation_items tables, service-catalog flow vs legacy flow, nullable quotationId on gates

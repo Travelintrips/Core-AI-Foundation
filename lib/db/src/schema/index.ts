@@ -47,3 +47,5 @@ export * from "./ai-human-task-history";
 export * from "./customer-dashboard-tokens";
 export * from "./ai-service-catalog";
 export * from "./ai-commercial-gates";
+export * from "./ai-quotations";
+export * from "./ai-quotation-items";

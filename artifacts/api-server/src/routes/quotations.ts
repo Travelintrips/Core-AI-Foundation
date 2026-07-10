@@ -333,6 +333,53 @@ router.post("/public/customer/quotation/:token/approve", async (req, res): Promi
 
 // ── Public: reject quotation ──────────────────────────────────────────────────
 
+router.post("/public/customer/quotation/:token/request-change", async (req, res): Promise<void> => {
+  const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0] ?? req.socket.remoteAddress ?? "unknown";
+  if (!checkRateLimit(ip)) {
+    res.status(429).json({ error: "Too many requests" });
+    return;
+  }
+
+  const { token } = req.params as { token: string };
+  const review = await resolveClientToken(token);
+  if (!review || !isReviewValid(review)) {
+    res.status(401).json({ error: "Invalid, expired, or revoked link" });
+    return;
+  }
+
+  const notesRaw = (req.body as Record<string, unknown> | undefined)?.notes;
+  const notes = typeof notesRaw === "string" ? notesRaw.slice(0, 2000).replace(/<[^>]*>/g, "").trim() : undefined;
+  if (!notes) {
+    res.status(400).json({ error: "notes (reason for change request) is required" });
+    return;
+  }
+
+  // CAS: only transition from "sent" — terminal states must not be overwritten
+  const [saved] = await db
+    .update(creativeProjectQuotationsTable)
+    .set({ status: "sent", respondedAt: new Date(), responseNotes: notes })
+    .where(and(
+      eq(creativeProjectQuotationsTable.projectId, review.projectId),
+      eq(creativeProjectQuotationsTable.status, "sent"),
+    ))
+    .returning();
+
+  if (!saved) {
+    res.status(409).json({ error: "No pending quotation to request change on, or already responded" });
+    return;
+  }
+
+  await logAudit("quotation", "quotation_change_requested", review.projectId, "quotation", "success", { notes });
+  publishSafe({
+    eventType: "quotation.change_requested",
+    sourceModule: "quotation",
+    sourceId: review.projectId,
+    payload: { projectId: review.projectId, notes },
+  });
+
+  res.json({ success: true, status: "revision_requested", message: "Change request submitted" });
+});
+
 router.post("/public/customer/quotation/:token/reject", async (req, res): Promise<void> => {
   const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0] ?? req.socket.remoteAddress ?? "unknown";
   if (!checkRateLimit(ip)) {

@@ -73,9 +73,11 @@ router.post("/commercial-gates/:id/verify", async (req, res): Promise<void> => {
     const gate = await verifyGate(id, verifiedBy, verifiedAmount, referenceNumber);
 
     // Attempt conversion now that gate is cleared (fire-and-forget)
-    checkAndMaybeConvert(gate.quotationId).catch((err) => {
-      console.warn("[commercial-gates] checkAndMaybeConvert non-fatal error:", err);
-    });
+    if (gate.quotationId != null) {
+      checkAndMaybeConvert(gate.quotationId).catch((err) => {
+        console.warn("[commercial-gates] checkAndMaybeConvert non-fatal error:", err);
+      });
+    }
 
     res.json(gate);
   } catch (err) {
@@ -117,9 +119,11 @@ router.post("/commercial-gates/:id/waive", async (req, res): Promise<void> => {
     const gate = await waiveGate(id, waivedBy, reason);
 
     // Attempt conversion now that gate is cleared (fire-and-forget)
-    checkAndMaybeConvert(gate.quotationId).catch((err) => {
-      console.warn("[commercial-gates] checkAndMaybeConvert non-fatal error:", err);
-    });
+    if (gate.quotationId != null) {
+      checkAndMaybeConvert(gate.quotationId).catch((err) => {
+        console.warn("[commercial-gates] checkAndMaybeConvert non-fatal error:", err);
+      });
+    }
 
     res.json(gate);
   } catch (err) {

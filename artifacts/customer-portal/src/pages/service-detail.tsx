@@ -37,7 +37,7 @@ export default function ServiceDetailPage() {
       { ...selections, ...contact },
       {
         onSuccess: (res) => {
-          setLocation(`/success?request=${res.requestId}`);
+          setLocation(`/request-service/${res.requestId}/brief`);
         },
         onError: (err) => {
           toast({ title: "Request failed", description: err instanceof Error ? err.message : "Something went wrong.", variant: "destructive" });

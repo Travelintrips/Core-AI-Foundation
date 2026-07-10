@@ -6,6 +6,11 @@ import { z } from "zod/v4";
 export const creativeProjectsTable = appSchema.table("creative_projects", {
   id: serial("id").primaryKey(),
   projectId: text("project_id").notNull().unique(), // UUID string, client-facing ID
+  // Legacy compatibility: source_type distinguishes direct (legacy) from service_catalog flow.
+  // service_request_id and service_quotation_id are nullable — legacy projects leave them null.
+  sourceType: text("source_type").notNull().default("direct"), // direct | service_catalog
+  serviceRequestId: integer("service_request_id"), // nullable FK to ai_service_requests.id
+  serviceQuotationId: integer("service_quotation_id"), // nullable FK to ai_quotations.id
   brandName: text("brand_name").notNull(),
   businessType: text("business_type").notNull(),
   targetMarket: text("target_market").notNull(),

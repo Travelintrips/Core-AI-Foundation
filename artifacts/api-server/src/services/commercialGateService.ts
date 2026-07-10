@@ -247,6 +247,67 @@ export async function getGateForQuotation(
   return gate ?? null;
 }
 
+// ── createGateForServiceQuotation ─────────────────────────────────────────────
+// New service-catalog flow: gate linked to ai_quotations (serviceQuotationId).
+
+export async function createGateForServiceQuotation(opts: {
+  serviceQuotationId: number;
+  serviceRequestId?: number | null;
+  gateType?: string;
+  requiredAmount?: number | null;
+  tenantId?: string | null;
+}): Promise<AiCommercialGate> {
+  const [existing] = await db
+    .select()
+    .from(aiCommercialGatesTable)
+    .where(eq(aiCommercialGatesTable.serviceQuotationId, opts.serviceQuotationId))
+    .limit(1);
+  if (existing) return existing;
+
+  const [gate] = await db
+    .insert(aiCommercialGatesTable)
+    .values({
+      serviceQuotationId: opts.serviceQuotationId,
+      serviceRequestId: opts.serviceRequestId ?? null,
+      gateType: opts.gateType ?? "admin_approval",
+      status: "pending",
+      requiredAmount: opts.requiredAmount != null ? String(opts.requiredAmount) : null,
+      tenantId: opts.tenantId ?? null,
+    })
+    .returning();
+
+  await logAudit(
+    "commercial-gate",
+    "gate_created",
+    String(gate.id),
+    "ai_commercial_gate",
+    "success",
+    { serviceQuotationId: opts.serviceQuotationId, gateType: gate.gateType },
+  );
+
+  publishSafe({
+    eventType: "commercial_gate.created",
+    sourceModule: "commercial-gate",
+    sourceId: String(gate.id),
+    payload: { gateId: gate.id, serviceQuotationId: opts.serviceQuotationId, gateType: gate.gateType },
+  });
+
+  return gate;
+}
+
+// ── getGateForServiceQuotation ────────────────────────────────────────────────
+
+export async function getGateForServiceQuotation(
+  serviceQuotationId: number,
+): Promise<AiCommercialGate | null> {
+  const [gate] = await db
+    .select()
+    .from(aiCommercialGatesTable)
+    .where(eq(aiCommercialGatesTable.serviceQuotationId, serviceQuotationId))
+    .limit(1);
+  return gate ?? null;
+}
+
 // ── gateIsCleared ─────────────────────────────────────────────────────────────
 
 export function gateIsCleared(gate: AiCommercialGate): boolean {

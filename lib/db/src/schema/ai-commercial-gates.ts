@@ -4,6 +4,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { creativeProjectQuotationsTable } from "./creative-project-quotations";
 import { aiServiceRequestsTable } from "./ai-service-catalog";
+import { aiQuotationsTable } from "./ai-quotations";
 
 /**
  * Commercial gates: a payment / approval check that must be verified or
@@ -16,7 +17,10 @@ export const aiCommercialGatesTable = appSchema.table("ai_commercial_gates", {
   id: serial("id").primaryKey(),
   tenantId: text("tenant_id"), // null = default/shared tenant
   serviceRequestId: integer("service_request_id").references(() => aiServiceRequestsTable.id, { onDelete: "set null" }),
-  quotationId: integer("quotation_id").notNull().references(() => creativeProjectQuotationsTable.id, { onDelete: "cascade" }),
+  // Legacy flow: references creative_project_quotations (nullable for new service-catalog flow)
+  quotationId: integer("quotation_id").references(() => creativeProjectQuotationsTable.id, { onDelete: "cascade" }),
+  // New service-catalog flow: references ai_quotations
+  serviceQuotationId: integer("service_quotation_id").references(() => aiQuotationsTable.id, { onDelete: "set null" }),
   gateType: text("gate_type").notNull().default("admin_approval"),
   // gate_type: full_payment | deposit | active_subscription | purchase_order | admin_approval | free_trial
   status: text("status").notNull().default("pending"),

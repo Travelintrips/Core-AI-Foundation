@@ -135,3 +135,142 @@ export function useRequestService(serviceId: number | undefined) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['catalog', 'requests'] }),
   });
 }
+
+// ── Service Request Detail (public, by UUID) ──────────────────────────────────
+
+export type ServiceRequestDetail = {
+  id: number;
+  requestId: string;
+  serviceId: number;
+  packageId: number | null;
+  customerName: string;
+  customerEmail: string;
+  companyName: string | null;
+  currency: string;
+  subtotal: string;
+  rushFee: string;
+  revisionFee: string;
+  humanReviewFee: string;
+  discount: string;
+  tax: string;
+  total: string;
+  status: string;
+  briefJson: Record<string, unknown> | null;
+  createdAt: string;
+};
+
+export function useRequestDetail(requestId: string | undefined) {
+  return useQuery({
+    enabled: !!requestId,
+    queryKey: ['catalog', 'request', requestId],
+    queryFn: ({ signal }) =>
+      customFetch<ServiceRequestDetail>(`/api/public/catalog/requests/${requestId}`, { signal }),
+  });
+}
+
+// ── Save Brief (public, by UUID) ──────────────────────────────────────────────
+
+export function useSaveBrief() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ requestId, brief }: { requestId: string; brief: Record<string, unknown> }) =>
+      customFetch<{ ok: boolean; status: string }>(`/api/public/catalog/requests/${requestId}/brief`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brief }),
+      }),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['catalog', 'request', vars.requestId] });
+    },
+  });
+}
+
+// ── Service Quotation (ai_quotations, by token) ───────────────────────────────
+
+export type ServiceQuotationItem = {
+  id: number;
+  quotationId: number;
+  itemType: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+  displayOrder: number;
+};
+
+export type ServiceQuotation = {
+  id: number;
+  quotationCode: string;
+  serviceRequestId: number | null;
+  customerName: string;
+  customerEmail: string;
+  currency: string;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+  status: string;
+  validUntil: string | null;
+  issuedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  revisionRequestedAt: string | null;
+  revisionNotes: string | null;
+};
+
+export function useServiceQuotation(token: string | undefined) {
+  return useQuery({
+    enabled: !!token,
+    queryKey: ['service-quotation', token],
+    queryFn: ({ signal }) =>
+      customFetch<{ quotation: ServiceQuotation; items: ServiceQuotationItem[] }>(
+        `/api/public/quotations/${token}`,
+        { signal },
+      ),
+  });
+}
+
+export function useApproveServiceQuotation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ token }: { token: string }) =>
+      customFetch<{ success: boolean; status: string }>(`/api/public/quotations/${token}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['service-quotation', vars.token] });
+    },
+  });
+}
+
+export function useRequestChangeServiceQuotation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ token, notes }: { token: string; notes: string }) =>
+      customFetch<{ success: boolean; status: string }>(`/api/public/quotations/${token}/request-change`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes }),
+      }),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['service-quotation', vars.token] });
+    },
+  });
+}
+
+export function useRejectServiceQuotation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ token, notes }: { token: string; notes?: string }) =>
+      customFetch<{ success: boolean; status: string }>(`/api/public/quotations/${token}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes }),
+      }),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['service-quotation', vars.token] });
+    },
+  });
+}

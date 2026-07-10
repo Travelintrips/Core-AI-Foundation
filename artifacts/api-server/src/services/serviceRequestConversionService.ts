@@ -27,6 +27,7 @@ import { publishSafe } from "./aiEventBusService.js";
 import { runCreativeBriefWorkflow } from "./creativeWorkflowRunner.js";
 import {
   getGateForQuotation,
+  getGateForServiceQuotation,
   gateIsCleared,
 } from "./commercialGateService.js";
 
@@ -73,7 +74,11 @@ export async function convertServiceRequestToProject(
     return { alreadyConverted: false, createdProjectId: null, skipped: "gate_not_cleared" };
   }
 
-  // Load the quotation
+  // Load the quotation (legacy path — gate must have a quotationId)
+  if (gate.quotationId == null) {
+    return { alreadyConverted: false, createdProjectId: null, skipped: "no_legacy_quotation_id" };
+  }
+
   const [quotation] = await db
     .select()
     .from(creativeProjectQuotationsTable)
@@ -178,15 +183,25 @@ export async function convertServiceRequestToProject(
 // ── checkAndMaybeConvert ──────────────────────────────────────────────────────
 
 /**
- * Called from both the quotation-approval handler and the gate verify/waive
- * handlers. Resolves the service request from the gate's serviceRequestId,
- * then delegates to convertServiceRequestToProject. Safe to call multiple
- * times — idempotent via convertServiceRequestToProject.
+ * Legacy flow: called from quotation-approval and gate verify/waive handlers.
+ * Resolves service request from gate.serviceRequestId (legacy creative_project_quotations path).
  */
 export async function checkAndMaybeConvert(quotationId: number): Promise<ConversionResult | null> {
-  // Find the gate for this quotation
   const gate = await getGateForQuotation(quotationId);
   if (!gate || gate.serviceRequestId == null) return null;
+  return convertServiceRequestToProject(gate.serviceRequestId);
+}
 
+// ── checkAndMaybeConvertByServiceQuotation ────────────────────────────────────
+
+/**
+ * New service-catalog flow: called from ai_quotations approval and gate handlers.
+ * Resolves service request from gate.serviceRequestId via the ai_quotations path.
+ */
+export async function checkAndMaybeConvertByServiceQuotation(
+  serviceQuotationId: number,
+): Promise<ConversionResult | null> {
+  const gate = await getGateForServiceQuotation(serviceQuotationId);
+  if (!gate || gate.serviceRequestId == null) return null;
   return convertServiceRequestToProject(gate.serviceRequestId);
 }

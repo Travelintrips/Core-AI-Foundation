@@ -493,4 +493,95 @@ router.get("/ai/catalog/analytics", async (_req, res): Promise<void> => {
   });
 });
 
+// ── Public: get service request by UUID (customer-facing, no admin auth) ──────
+
+router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void> => {
+  const { requestId } = req.params as { requestId: string };
+  if (!requestId || requestId.length < 8) {
+    res.status(400).json({ error: "Invalid requestId" });
+    return;
+  }
+
+  const [row] = await db
+    .select()
+    .from(aiServiceRequestsTable)
+    .where(eq(aiServiceRequestsTable.requestId, requestId))
+    .limit(1);
+
+  if (!row) {
+    res.status(404).json({ error: "Service request not found" });
+    return;
+  }
+
+  // Return customer-safe fields only (no margin/cost)
+  res.json({
+    id: row.id,
+    requestId: row.requestId,
+    serviceId: row.serviceId,
+    packageId: row.packageId,
+    customerName: row.customerName,
+    customerEmail: row.customerEmail,
+    companyName: row.companyName,
+    currency: row.currency,
+    subtotal: row.subtotal,
+    rushFee: row.rushFee,
+    revisionFee: row.revisionFee,
+    humanReviewFee: row.humanReviewFee,
+    discount: row.discount,
+    tax: row.tax,
+    total: row.total,
+    status: row.status,
+    briefJson: row.briefJson,
+    createdAt: row.createdAt,
+  });
+});
+
+// ── Public: update brief by UUID ──────────────────────────────────────────────
+
+router.put("/public/catalog/requests/:requestId/brief", async (req, res): Promise<void> => {
+  const { requestId } = req.params as { requestId: string };
+  if (!requestId || requestId.length < 8) {
+    res.status(400).json({ error: "Invalid requestId" });
+    return;
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const brief = body.brief;
+  if (!brief || typeof brief !== "object" || Array.isArray(brief)) {
+    res.status(400).json({ error: "brief object is required" });
+    return;
+  }
+
+  const [existing] = await db
+    .select({ id: aiServiceRequestsTable.id, status: aiServiceRequestsTable.status })
+    .from(aiServiceRequestsTable)
+    .where(eq(aiServiceRequestsTable.requestId, requestId))
+    .limit(1);
+
+  if (!existing) {
+    res.status(404).json({ error: "Service request not found" });
+    return;
+  }
+
+  const TERMINAL = new Set(["completed", "cancelled", "converted_to_project"]);
+  if (TERMINAL.has(existing.status)) {
+    res.status(409).json({ error: `Cannot update brief on ${existing.status} request` });
+    return;
+  }
+
+  const [updated] = await db
+    .update(aiServiceRequestsTable)
+    .set({
+      briefJson: brief as Record<string, unknown>,
+      status: "brief_completed",
+      updatedAt: new Date(),
+    })
+    .where(eq(aiServiceRequestsTable.id, existing.id))
+    .returning({ requestId: aiServiceRequestsTable.requestId, status: aiServiceRequestsTable.status });
+
+  await logAudit("catalog", "brief_updated", requestId, "ai_service_request", "success", {});
+
+  res.json({ ok: true, status: updated.status });
+});
+
 export default router;
