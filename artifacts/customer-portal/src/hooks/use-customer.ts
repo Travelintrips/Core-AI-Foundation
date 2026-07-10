@@ -29,7 +29,6 @@ export type CustomerProjectSubmission = {
   goal: string;
   notes?: string;
   deadline?: string;
-  autoGenerate?: boolean;
 };
 
 export type CustomerSubmissionResult = {

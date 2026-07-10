@@ -37,7 +37,7 @@ export default function SuccessPage() {
           
           <h1 className="text-3xl md:text-4xl font-serif font-medium mb-4">Project Submitted!</h1>
           <p className="text-lg text-muted-foreground mb-10 max-w-lg mx-auto">
-            Our AI agents are already reviewing your brief and getting to work. We'll generate concepts and assets shortly.
+            We're reviewing your brief and preparing a price quotation. You'll receive a link to approve it — production only begins once you confirm.
           </p>
 
           <div className="bg-accent/30 border border-accent rounded-2xl p-6 mb-8 text-left">

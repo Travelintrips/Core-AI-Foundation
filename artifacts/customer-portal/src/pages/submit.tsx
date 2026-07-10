@@ -20,8 +20,7 @@ const formSchema = z.object({
   referenceLinks: z.string().optional(),
   goal: z.string().min(10, "Please provide more details about your goal"),
   notes: z.string().optional(),
-  deadline: z.string().optional(),
-  autoGenerate: z.boolean().default(false)
+  deadline: z.string().optional()
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -46,8 +45,7 @@ export default function SubmitPage() {
       referenceLinks: "",
       goal: "",
       notes: "",
-      deadline: "",
-      autoGenerate: true
+      deadline: ""
     }
   });
 
@@ -169,12 +167,12 @@ export default function SubmitPage() {
                 <label className="text-sm font-medium">Deadline (Optional)</label>
                 <input {...form.register("deadline")} className="w-full px-4 py-3 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none" placeholder="e.g. Next Tuesday, 2 weeks" />
               </div>
-              
-              <div className="flex items-center gap-3 p-4 bg-primary/5 rounded-xl border border-primary/20">
-                <input type="checkbox" id="autoGenerate" {...form.register("autoGenerate")} className="w-5 h-5 text-primary border-input rounded focus:ring-primary" />
-                <label htmlFor="autoGenerate" className="text-sm font-medium text-foreground cursor-pointer">
-                  Automatically begin AI generation upon submission
-                </label>
+
+              <div className="flex items-start gap-3 p-4 bg-primary/5 rounded-xl border border-primary/20">
+                <span className="bg-primary text-primary-foreground w-5 h-5 rounded-full inline-flex items-center justify-center text-xs shrink-0 mt-0.5">!</span>
+                <p className="text-sm font-medium text-foreground">
+                  We'll review your brief and send you a price quotation to approve. Production starts as soon as you confirm it.
+                </p>
               </div>
             </div>
           </div>
