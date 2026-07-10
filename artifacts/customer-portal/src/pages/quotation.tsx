@@ -1,11 +1,13 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { Layout } from "@/components/layout";
+import { FlowStepper } from "@/components/flow-stepper";
 import {
   useGetPublicQuotation,
   useApproveQuotation,
   useRejectQuotation,
 } from "@/hooks/use-customer";
-import { Loader2, CheckCircle2, XCircle, FileText, Clock } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, FileText, Clock, ShieldCheck, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
@@ -53,10 +55,22 @@ export default function QuotationPage({ params }: { params: { token: string } })
   }
 
   const isTerminal = quotation.status === "approved" || quotation.status === "rejected";
+  // After approve, gate is pending — show commercial gate step
+  const gateAwaitingClearance =
+    quotation.status === "approved" &&
+    quotation.projectStatus !== "running" &&
+    quotation.projectStatus !== "completed";
+
+  const stepperStep =
+    quotation.status === "sent"
+      ? "persetujuan"
+      : gateAwaitingClearance
+      ? "verifikasi"
+      : "produksi";
 
   const handleApprove = () => {
     approve.mutate({ token: params.token }, {
-      onSuccess: () => toast({ title: "Quotation approved!", description: "We've started production on your project." }),
+      onSuccess: () => toast({ title: "Quotation approved!", description: "We're verifying the commercial step before production starts." }),
       onError: (err: unknown) => toast({ title: "Failed to approve", description: String((err as Error)?.message ?? err), variant: "destructive" }),
     });
   };
@@ -70,6 +84,13 @@ export default function QuotationPage({ params }: { params: { token: string } })
 
   return (
     <Layout>
+      {/* Flow stepper */}
+      <div className="border-b border-border/40 bg-muted/20">
+        <div className="container mx-auto px-4 md:px-8 max-w-3xl">
+          <FlowStepper currentStep={stepperStep} />
+        </div>
+      </div>
+
       <div className="container mx-auto px-4 md:px-8 py-12 max-w-3xl">
         <div className="mb-8">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
@@ -82,7 +103,28 @@ export default function QuotationPage({ params }: { params: { token: string } })
           </p>
         </div>
 
-        {quotation.status === "approved" && (
+        {/* Commercial gate pending banner */}
+        {gateAwaitingClearance && (
+          <div className="mb-6 bg-primary/5 border border-primary/20 rounded-xl px-4 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center gap-2 text-primary flex-1">
+              <ShieldCheck className="w-5 h-5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Quotation approved — thank you!</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  We're finalizing the commercial step before production starts.
+                </p>
+              </div>
+            </div>
+            <Link
+              href={`/gate/${params.token}`}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline shrink-0"
+            >
+              View status <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        )}
+
+        {quotation.status === "approved" && !gateAwaitingClearance && (
           <div className="mb-6 flex items-center gap-2 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-900/40 rounded-xl px-4 py-3">
             <CheckCircle2 className="w-5 h-5 shrink-0" />
             <span className="text-sm font-medium">Approved — production is underway.</span>

@@ -67,7 +67,7 @@ export type PublicQuotation = {
   projectId: string;
   brandName: string;
   clientName: string;
-  projectStatus: string;
+  projectStatus: 'pending' | 'running' | 'completed' | 'failed' | string;
   currency: string;
   lineItems: QuotationLineItem[];
   discount: number;
@@ -262,6 +262,18 @@ export const useGetPublicQuotation = (token: string) => {
       return customFetch<PublicQuotation>(`/api/public/customer/quotation/${token}`, { signal });
     },
     enabled: !!token,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      // Poll every 5s while quotation is approved but project hasn't started yet
+      if (
+        data?.status === 'approved' &&
+        data?.projectStatus !== 'running' &&
+        data?.projectStatus !== 'completed'
+      ) {
+        return 5000;
+      }
+      return false;
+    },
   });
 };
 

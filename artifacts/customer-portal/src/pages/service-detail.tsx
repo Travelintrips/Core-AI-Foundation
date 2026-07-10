@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import { Layout } from "@/components/layout";
+import { FlowStepper } from "@/components/flow-stepper";
 import { useServiceDetail, useQuoteCalculator, useRequestService, type QuoteSelections } from "@/hooks/use-catalog";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
@@ -60,6 +61,11 @@ export default function ServiceDetailPage() {
 
   return (
     <Layout>
+      <div className="border-b border-border/40 bg-muted/20">
+        <div className="container mx-auto px-4 md:px-8 max-w-5xl">
+          <FlowStepper currentStep="harga" />
+        </div>
+      </div>
       <div className="container mx-auto px-4 md:px-8 py-12 max-w-5xl">
         <Link href="/services" className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground mb-8">
           <ArrowLeft className="w-4 h-4" /> All services

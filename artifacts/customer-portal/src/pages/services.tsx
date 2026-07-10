@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { Layout } from "@/components/layout";
+import { FlowStepper } from "@/components/flow-stepper";
 import { useCategories, useServices } from "@/hooks/use-catalog";
 import { Loader2, ArrowRight, Sparkles } from "lucide-react";
 import { useState } from "react";
@@ -17,6 +18,11 @@ export default function ServicesPage() {
 
   return (
     <Layout>
+      <div className="border-b border-border/40 bg-muted/20">
+        <div className="container mx-auto px-4 md:px-8 max-w-5xl">
+          <FlowStepper currentStep="paket" />
+        </div>
+      </div>
       <div className="container mx-auto px-4 md:px-8 py-16">
         <div className="text-center mb-12 space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">

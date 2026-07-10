@@ -30,6 +30,7 @@ import type {
   AiCapability,
   AiCapabilityInput,
   AiCapabilityUpdate,
+  AiCommercialGate,
   AiEvent,
   AiEventSubscription,
   AiJob,
@@ -86,6 +87,9 @@ import type {
   ClientReviewLinkInput,
   ClientReviewWithToken,
   ClusterStatus,
+  CommercialGateFailInput,
+  CommercialGateVerifyInput,
+  CommercialGateWaiveInput,
   CompleteHumanTaskBody,
   CostAnalyticsResponse,
   CreateHumanTaskBody,
@@ -130,6 +134,7 @@ import type {
   KnowledgeDocument,
   KnowledgeDocumentInput,
   ListAuditLogsParams,
+  ListCommercialGatesParams,
   ListEventsParams,
   ListHumanTasksParams,
   ListJobsParams,
@@ -12988,4 +12993,378 @@ export function useGetCatalogAnalytics<TData = Awaited<ReturnType<typeof getCata
 
 
 
+
+export const getListCommercialGatesUrl = (params?: ListCommercialGatesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/commercial-gates?${stringifiedParams}` : `/api/commercial-gates`
+}
+
+/**
+ * @summary List commercial gates (optionally filter by quotationId)
+ */
+export const listCommercialGates = async (params?: ListCommercialGatesParams, options?: RequestInit): Promise<AiCommercialGate[]> => {
+
+  return customFetch<AiCommercialGate[]>(getListCommercialGatesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCommercialGatesQueryKey = (params?: ListCommercialGatesParams,) => {
+    return [
+    `/api/commercial-gates`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCommercialGatesQueryOptions = <TData = Awaited<ReturnType<typeof listCommercialGates>>, TError = ErrorType<unknown>>(params?: ListCommercialGatesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCommercialGates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCommercialGatesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCommercialGates>>> = ({ signal }) => listCommercialGates(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCommercialGates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCommercialGatesQueryResult = NonNullable<Awaited<ReturnType<typeof listCommercialGates>>>
+export type ListCommercialGatesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List commercial gates (optionally filter by quotationId)
+ */
+
+export function useListCommercialGates<TData = Awaited<ReturnType<typeof listCommercialGates>>, TError = ErrorType<unknown>>(
+ params?: ListCommercialGatesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCommercialGates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCommercialGatesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCommercialGateUrl = (id: number,) => {
+
+
+
+
+  return `/api/commercial-gates/${id}`
+}
+
+/**
+ * @summary Get a single commercial gate by id
+ */
+export const getCommercialGate = async (id: number, options?: RequestInit): Promise<AiCommercialGate> => {
+
+  return customFetch<AiCommercialGate>(getGetCommercialGateUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCommercialGateQueryKey = (id: number,) => {
+    return [
+    `/api/commercial-gates/${id}`
+    ] as const;
+    }
+
+
+export const getGetCommercialGateQueryOptions = <TData = Awaited<ReturnType<typeof getCommercialGate>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommercialGate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCommercialGateQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCommercialGate>>> = ({ signal }) => getCommercialGate(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCommercialGate>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCommercialGateQueryResult = NonNullable<Awaited<ReturnType<typeof getCommercialGate>>>
+export type GetCommercialGateQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a single commercial gate by id
+ */
+
+export function useGetCommercialGate<TData = Awaited<ReturnType<typeof getCommercialGate>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCommercialGate>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCommercialGateQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getVerifyCommercialGateUrl = (id: number,) => {
+
+
+
+
+  return `/api/commercial-gates/${id}/verify`
+}
+
+/**
+ * @summary Verify a commercial gate (admin only)
+ */
+export const verifyCommercialGate = async (id: number,
+    commercialGateVerifyInput: CommercialGateVerifyInput, options?: RequestInit): Promise<AiCommercialGate> => {
+
+  return customFetch<AiCommercialGate>(getVerifyCommercialGateUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(commercialGateVerifyInput)
+  }
+);}
+
+
+
+
+export const getVerifyCommercialGateMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyCommercialGate>>, TError,{id: number;data: BodyType<CommercialGateVerifyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyCommercialGate>>, TError,{id: number;data: BodyType<CommercialGateVerifyInput>}, TContext> => {
+
+const mutationKey = ['verifyCommercialGate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyCommercialGate>>, {id: number;data: BodyType<CommercialGateVerifyInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  verifyCommercialGate(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyCommercialGateMutationResult = NonNullable<Awaited<ReturnType<typeof verifyCommercialGate>>>
+    export type VerifyCommercialGateMutationBody = BodyType<CommercialGateVerifyInput>
+    export type VerifyCommercialGateMutationError = ErrorType<void>
+
+    /**
+ * @summary Verify a commercial gate (admin only)
+ */
+export const useVerifyCommercialGate = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyCommercialGate>>, TError,{id: number;data: BodyType<CommercialGateVerifyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyCommercialGate>>,
+        TError,
+        {id: number;data: BodyType<CommercialGateVerifyInput>},
+        TContext
+      > => {
+      return useMutation(getVerifyCommercialGateMutationOptions(options));
+    }
+
+export const getFailCommercialGateUrl = (id: number,) => {
+
+
+
+
+  return `/api/commercial-gates/${id}/fail`
+}
+
+/**
+ * @summary Fail a commercial gate (admin only)
+ */
+export const failCommercialGate = async (id: number,
+    commercialGateFailInput: CommercialGateFailInput, options?: RequestInit): Promise<AiCommercialGate> => {
+
+  return customFetch<AiCommercialGate>(getFailCommercialGateUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(commercialGateFailInput)
+  }
+);}
+
+
+
+
+export const getFailCommercialGateMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof failCommercialGate>>, TError,{id: number;data: BodyType<CommercialGateFailInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof failCommercialGate>>, TError,{id: number;data: BodyType<CommercialGateFailInput>}, TContext> => {
+
+const mutationKey = ['failCommercialGate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof failCommercialGate>>, {id: number;data: BodyType<CommercialGateFailInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  failCommercialGate(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FailCommercialGateMutationResult = NonNullable<Awaited<ReturnType<typeof failCommercialGate>>>
+    export type FailCommercialGateMutationBody = BodyType<CommercialGateFailInput>
+    export type FailCommercialGateMutationError = ErrorType<void>
+
+    /**
+ * @summary Fail a commercial gate (admin only)
+ */
+export const useFailCommercialGate = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof failCommercialGate>>, TError,{id: number;data: BodyType<CommercialGateFailInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof failCommercialGate>>,
+        TError,
+        {id: number;data: BodyType<CommercialGateFailInput>},
+        TContext
+      > => {
+      return useMutation(getFailCommercialGateMutationOptions(options));
+    }
+
+export const getWaiveCommercialGateUrl = (id: number,) => {
+
+
+
+
+  return `/api/commercial-gates/${id}/waive`
+}
+
+/**
+ * @summary Waive a commercial gate (admin only, requires reason)
+ */
+export const waiveCommercialGate = async (id: number,
+    commercialGateWaiveInput: CommercialGateWaiveInput, options?: RequestInit): Promise<AiCommercialGate> => {
+
+  return customFetch<AiCommercialGate>(getWaiveCommercialGateUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(commercialGateWaiveInput)
+  }
+);}
+
+
+
+
+export const getWaiveCommercialGateMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof waiveCommercialGate>>, TError,{id: number;data: BodyType<CommercialGateWaiveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof waiveCommercialGate>>, TError,{id: number;data: BodyType<CommercialGateWaiveInput>}, TContext> => {
+
+const mutationKey = ['waiveCommercialGate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof waiveCommercialGate>>, {id: number;data: BodyType<CommercialGateWaiveInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  waiveCommercialGate(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type WaiveCommercialGateMutationResult = NonNullable<Awaited<ReturnType<typeof waiveCommercialGate>>>
+    export type WaiveCommercialGateMutationBody = BodyType<CommercialGateWaiveInput>
+    export type WaiveCommercialGateMutationError = ErrorType<void>
+
+    /**
+ * @summary Waive a commercial gate (admin only, requires reason)
+ */
+export const useWaiveCommercialGate = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof waiveCommercialGate>>, TError,{id: number;data: BodyType<CommercialGateWaiveInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof waiveCommercialGate>>,
+        TError,
+        {id: number;data: BodyType<CommercialGateWaiveInput>},
+        TContext
+      > => {
+      return useMutation(getWaiveCommercialGateMutationOptions(options));
+    }
 

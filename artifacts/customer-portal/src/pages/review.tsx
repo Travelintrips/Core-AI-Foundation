@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { Layout } from "@/components/layout";
+import { FlowStepper } from "@/components/flow-stepper";
 import { StatusBadge } from "@/components/status-badge";
 import { useGetPublicCreativeReview, useAddClientComment, useApproveCreativeReview, useRejectCreativeReview, useRequestRevisionCreativeReview } from "@/hooks/use-customer";
 import { Loader2, MessageSquare, Image as ImageIcon, Send, CheckCircle2, XCircle, RefreshCcw, FileText, Receipt } from "lucide-react";
@@ -92,8 +93,20 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
     });
   };
 
+  const reviewStepperStep =
+    review.reviewStatus === "approved" ? "selesai" :
+    (review.reviewStatus === "shared" || review.reviewStatus === "viewed" || review.reviewStatus === "revision_requested") ? "review" :
+    "produksi";
+
   return (
     <Layout>
+      {/* Flow Stepper */}
+      <div className="border-b border-border/40 bg-muted/20">
+        <div className="container mx-auto px-4 md:px-8 max-w-5xl">
+          <FlowStepper currentStep={reviewStepperStep} />
+        </div>
+      </div>
+
       {/* Header Bar */}
       <div className="bg-card border-b border-card-border sticky top-16 z-40 shadow-sm">
         <div className="container mx-auto px-4 md:px-8 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">

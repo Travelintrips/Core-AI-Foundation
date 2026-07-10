@@ -2540,6 +2540,46 @@ export interface CustomerAccessResult {
   message?: string;
 }
 
+export interface AiCommercialGate {
+  id: number;
+  /** @nullable */
+  tenantId?: string | null;
+  /** @nullable */
+  serviceRequestId?: number | null;
+  quotationId: number;
+  gateType: string;
+  status: string;
+  /** @nullable */
+  requiredAmount?: string | null;
+  /** @nullable */
+  verifiedAmount?: string | null;
+  /** @nullable */
+  referenceNumber?: string | null;
+  /** @nullable */
+  verifiedBy?: string | null;
+  /** @nullable */
+  verifiedAt?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CommercialGateVerifyInput {
+  verifiedBy: string;
+  verifiedAmount?: number;
+  referenceNumber?: string;
+}
+
+export interface CommercialGateFailInput {
+  reason: string;
+}
+
+export interface CommercialGateWaiveInput {
+  waivedBy: string;
+  reason: string;
+}
+
 export interface AiServiceCategory {
   id: number;
   code: string;
@@ -3079,5 +3119,9 @@ export type ApproveRequestMarginBody = {
 
 export type ApproveRequestMargin200 = {
   ok?: boolean;
+};
+
+export type ListCommercialGatesParams = {
+quotationId?: number;
 };
 

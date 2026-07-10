@@ -12,6 +12,8 @@ import AccessPage from '@/pages/access';
 import QuotationPage from '@/pages/quotation';
 import ServicesPage from '@/pages/services';
 import ServiceDetailPage from '@/pages/service-detail';
+import CommercialGatePage from '@/pages/commercial-gate';
+import ProjectPage from '@/pages/project';
 
 const queryClient = new QueryClient();
 
@@ -38,6 +40,8 @@ function Router() {
       <Route path="/dashboard/:dashboardToken" component={DashboardPage} />
       <Route path="/access" component={AccessPage} />
       <Route path="/quotation/:token" component={QuotationPage} />
+      <Route path="/gate/:token" component={CommercialGatePage} />
+      <Route path="/project/:token" component={ProjectPage} />
       <Route component={NotFound} />
     </Switch>
   );

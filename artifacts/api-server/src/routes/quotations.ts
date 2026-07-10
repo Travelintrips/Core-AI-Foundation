@@ -22,12 +22,14 @@ import {
   creativeProjectsTable,
   creativeProjectQuotationsTable,
   creativeAiClientReviewsTable,
+  aiServiceRequestsTable,
   type QuotationLineItem,
 } from "@workspace/db";
 import { hashToken, isReviewValid } from "../services/clientReviewService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
 import { logAudit } from "../services/aiAuditService.js";
-import { runCreativeBriefWorkflow } from "../services/creativeWorkflowRunner.js";
+import { createGateForQuotation } from "../services/commercialGateService.js";
+import { checkAndMaybeConvert } from "../services/serviceRequestConversionService.js";
 
 const router = Router();
 
@@ -315,24 +317,18 @@ router.post("/public/customer/quotation/:token/approve", async (req, res): Promi
     payload: { projectId: review.projectId, total: saved.total, currency: saved.currency },
   });
 
-  // Only start generation if the project hasn't already started/finished.
-  const [project] = await db
-    .select()
-    .from(creativeProjectsTable)
-    .where(eq(creativeProjectsTable.projectId, review.projectId));
+  // Commercial gate: ensure one exists for this quotation (idempotent).
+  // If a gate is already cleared, checkAndMaybeConvert will trigger conversion.
+  await createGateForQuotation({ quotationId: saved.id }).catch((err) => {
+    console.warn("[quotation] createGateForQuotation non-fatal error:", err);
+  });
 
-  if (project && project.status === "pending") {
-    runCreativeBriefWorkflow(project.id).catch(async (err) => {
-      console.error(`[quotation] Workflow failed for project ${project.projectId}:`, err);
-      await db
-        .update(creativeProjectsTable)
-        .set({ status: "failed" })
-        .where(eq(creativeProjectsTable.id, project.id));
-      await logAudit("quotation", "workflow_error", project.projectId, "creative_project", "failure", { error: String(err) });
-    });
-  }
+  // Trigger conversion if both conditions are already met (gate was pre-verified/waived).
+  checkAndMaybeConvert(saved.id).catch((err) => {
+    console.warn("[quotation] checkAndMaybeConvert non-fatal error:", err);
+  });
 
-  res.json({ success: true, status: "approved", message: "Quotation approved — production has started" });
+  res.json({ success: true, status: "approved", message: "Quotation approved — awaiting commercial gate clearance" });
 });
 
 // ── Public: reject quotation ──────────────────────────────────────────────────

@@ -34,6 +34,7 @@ import customerPortalRouter from "./customer-portal";
 import publicReviewRouter from "./public-review";
 import quotationsRouter from "./quotations";
 import catalogRouter from "./catalog";
+import commercialGatesRouter from "./commercialGates";
 
 const router: IRouter = Router();
 
@@ -70,5 +71,6 @@ router.use(customerPortalRouter);
 router.use(publicReviewRouter);
 router.use(quotationsRouter);
 router.use(catalogRouter);
+router.use(commercialGatesRouter);
 
 export default router;

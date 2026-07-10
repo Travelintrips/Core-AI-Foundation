@@ -4950,3 +4950,144 @@ export const GetCatalogAnalyticsResponse = zod.object({
 })
 
 
+/**
+ * @summary List commercial gates (optionally filter by quotationId)
+ */
+export const ListCommercialGatesQueryParams = zod.object({
+  "quotationId": zod.coerce.number().optional()
+})
+
+export const ListCommercialGatesResponseItem = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceRequestId": zod.number().nullish(),
+  "quotationId": zod.number(),
+  "gateType": zod.string(),
+  "status": zod.string(),
+  "requiredAmount": zod.string().nullish(),
+  "verifiedAmount": zod.string().nullish(),
+  "referenceNumber": zod.string().nullish(),
+  "verifiedBy": zod.string().nullish(),
+  "verifiedAt": zod.coerce.date().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListCommercialGatesResponse = zod.array(ListCommercialGatesResponseItem)
+
+
+/**
+ * @summary Get a single commercial gate by id
+ */
+export const GetCommercialGateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCommercialGateResponse = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceRequestId": zod.number().nullish(),
+  "quotationId": zod.number(),
+  "gateType": zod.string(),
+  "status": zod.string(),
+  "requiredAmount": zod.string().nullish(),
+  "verifiedAmount": zod.string().nullish(),
+  "referenceNumber": zod.string().nullish(),
+  "verifiedBy": zod.string().nullish(),
+  "verifiedAt": zod.coerce.date().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Verify a commercial gate (admin only)
+ */
+export const VerifyCommercialGateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const VerifyCommercialGateBody = zod.object({
+  "verifiedBy": zod.string(),
+  "verifiedAmount": zod.number().optional(),
+  "referenceNumber": zod.string().optional()
+})
+
+export const VerifyCommercialGateResponse = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceRequestId": zod.number().nullish(),
+  "quotationId": zod.number(),
+  "gateType": zod.string(),
+  "status": zod.string(),
+  "requiredAmount": zod.string().nullish(),
+  "verifiedAmount": zod.string().nullish(),
+  "referenceNumber": zod.string().nullish(),
+  "verifiedBy": zod.string().nullish(),
+  "verifiedAt": zod.coerce.date().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Fail a commercial gate (admin only)
+ */
+export const FailCommercialGateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const FailCommercialGateBody = zod.object({
+  "reason": zod.string()
+})
+
+export const FailCommercialGateResponse = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceRequestId": zod.number().nullish(),
+  "quotationId": zod.number(),
+  "gateType": zod.string(),
+  "status": zod.string(),
+  "requiredAmount": zod.string().nullish(),
+  "verifiedAmount": zod.string().nullish(),
+  "referenceNumber": zod.string().nullish(),
+  "verifiedBy": zod.string().nullish(),
+  "verifiedAt": zod.coerce.date().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Waive a commercial gate (admin only, requires reason)
+ */
+export const WaiveCommercialGateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const WaiveCommercialGateBody = zod.object({
+  "waivedBy": zod.string(),
+  "reason": zod.string()
+})
+
+export const WaiveCommercialGateResponse = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceRequestId": zod.number().nullish(),
+  "quotationId": zod.number(),
+  "gateType": zod.string(),
+  "status": zod.string(),
+  "requiredAmount": zod.string().nullish(),
+  "verifiedAmount": zod.string().nullish(),
+  "referenceNumber": zod.string().nullish(),
+  "verifiedBy": zod.string().nullish(),
+  "verifiedAt": zod.coerce.date().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+

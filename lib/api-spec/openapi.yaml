@@ -48,6 +48,8 @@ tags:
     description: Human Task Center — AI-to-human handoff, review, approval, and escalation
   - name: service-catalog
     description: AI Service Catalog & Pricing Center — departments, services, packages, and customer requests
+  - name: commercial-gates
+    description: Commercial gate management — payment verification, waiver, and approval before project conversion
 paths:
   /healthz:
     get:
@@ -3710,6 +3712,129 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CatalogAnalytics"
+  /commercial-gates:
+    get:
+      operationId: listCommercialGates
+      tags: [commercial-gates]
+      summary: List commercial gates (optionally filter by quotationId)
+      parameters:
+        - in: query
+          name: quotationId
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of gates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiCommercialGate"
+  /commercial-gates/{id}:
+    get:
+      operationId: getCommercialGate
+      tags: [commercial-gates]
+      summary: Get a single commercial gate by id
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Gate found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiCommercialGate"
+        "404":
+          description: Not found
+  /commercial-gates/{id}/verify:
+    post:
+      operationId: verifyCommercialGate
+      tags: [commercial-gates]
+      summary: Verify a commercial gate (admin only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommercialGateVerifyInput"
+      responses:
+        "200":
+          description: Gate verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiCommercialGate"
+        "400":
+          description: Bad request
+        "404":
+          description: Not found
+  /commercial-gates/{id}/fail:
+    post:
+      operationId: failCommercialGate
+      tags: [commercial-gates]
+      summary: Fail a commercial gate (admin only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommercialGateFailInput"
+      responses:
+        "200":
+          description: Gate failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiCommercialGate"
+        "400":
+          description: Bad request
+        "404":
+          description: Not found
+  /commercial-gates/{id}/waive:
+    post:
+      operationId: waiveCommercialGate
+      tags: [commercial-gates]
+      summary: Waive a commercial gate (admin only, requires reason)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommercialGateWaiveInput"
+      responses:
+        "200":
+          description: Gate waived
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiCommercialGate"
+        "400":
+          description: Bad request
+        "404":
+          description: Not found
 components:
   schemas:
     HealthStatus:
@@ -7650,6 +7775,75 @@ components:
         projectCount:
           type: integer
         message:
+          type: string
+    AiCommercialGate:
+      type: object
+      required:
+        - id
+        - quotationId
+        - gateType
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        tenantId:
+          type: [string, "null"]
+        serviceRequestId:
+          type: [integer, "null"]
+        quotationId:
+          type: integer
+        gateType:
+          type: string
+        status:
+          type: string
+        requiredAmount:
+          type: [string, "null"]
+        verifiedAmount:
+          type: [string, "null"]
+        referenceNumber:
+          type: [string, "null"]
+        verifiedBy:
+          type: [string, "null"]
+        verifiedAt:
+          type: [string, "null"]
+          format: date-time
+        notes:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CommercialGateVerifyInput:
+      type: object
+      required:
+        - verifiedBy
+      properties:
+        verifiedBy:
+          type: string
+        verifiedAmount:
+          type: number
+        referenceNumber:
+          type: string
+    CommercialGateFailInput:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+    CommercialGateWaiveInput:
+      type: object
+      required:
+        - waivedBy
+        - reason
+      properties:
+        waivedBy:
+          type: string
+        reason:
           type: string
     AiServiceCategory:
       type: object
