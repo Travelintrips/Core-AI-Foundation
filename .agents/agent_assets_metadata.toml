@@ -6,3 +6,15 @@ id = "YjrbmyC2wN70mRV8j0CkG"
 uri = "file://attached_assets/test-replicate.png"
 type = "image"
 title = "Test Replicate Image"
+
+[[outputs]]
+id = "TOMwNQA0Rx0F56oNVu233"
+uri = "file://attached_assets/kopi-logo-1.png"
+type = "image"
+title = "Kopi Nusantara Logo — Variasi 1"
+
+[[outputs]]
+id = "5mGQhfC7-MVulweOKGOBY"
+uri = "file://attached_assets/kopi-logo-2.png"
+type = "image"
+title = "Kopi Nusantara Logo — Variasi 2"
