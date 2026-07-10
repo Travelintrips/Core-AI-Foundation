@@ -111,81 +111,77 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
         {/* Main Content Area */}
         <div className="flex-1 w-full space-y-10">
           
-          {isGenerating ? (
-            <div className="bg-accent/20 border border-accent rounded-2xl p-12 text-center flex flex-col items-center justify-center min-h-[400px]">
-              <div className="relative mb-8">
-                <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse"></div>
-                <Loader2 className="w-16 h-16 text-primary animate-spin relative z-10" />
-              </div>
-              <h2 className="text-2xl font-serif mb-4">Generating your assets...</h2>
-              <p className="text-muted-foreground max-w-md mx-auto">
-                Our autonomous agents are currently working on your brief. This usually takes a few minutes. This page will update automatically.
-              </p>
+          {/* Assets section: spinner while generating, grid when done */}
+          <section>
+            <div className="flex items-center gap-2 mb-6">
+              <ImageIcon className="w-5 h-5 text-primary" />
+              <h2 className="text-2xl font-serif font-medium">Visual Assets</h2>
             </div>
-          ) : (
-            <>
-              {/* Assets Grid */}
-              <section>
-                <div className="flex items-center gap-2 mb-6">
-                  <ImageIcon className="w-5 h-5 text-primary" />
-                  <h2 className="text-2xl font-serif font-medium">Visual Assets</h2>
-                </div>
-                
-                {review.assets && review.assets.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    {review.assets.map((asset) => (
-                      <div key={asset.id} className="group relative rounded-2xl overflow-hidden border border-border bg-card shadow-sm aspect-square">
-                        <img 
-                          src={asset.imageUrl} 
-                          alt="Generated asset" 
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
-                          <a href={asset.imageUrl} target="_blank" rel="noreferrer" className="px-4 py-2 bg-white/20 backdrop-blur-md text-white rounded-lg text-sm font-medium hover:bg-white/30 transition-colors">
-                            View Full Size
-                          </a>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="bg-card border border-border border-dashed rounded-2xl p-12 text-center text-muted-foreground">
-                    No visual assets generated for this project.
-                  </div>
-                )}
-              </section>
 
-              {/* Copy & Creative Direction */}
-              {(review.copyOutput || review.creativeDirection) && (
-                <section className="grid md:grid-cols-2 gap-8">
-                  {review.copyOutput && (
-                    <div className="bg-card border border-card-border rounded-2xl p-6 shadow-sm">
-                      <div className="flex items-center gap-2 mb-4 border-b border-border pb-4">
-                        <FileText className="w-5 h-5 text-secondary" />
-                        <h2 className="text-lg font-serif font-medium">Generated Copy</h2>
-                      </div>
-                      <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground whitespace-pre-wrap">
-                        {review.copyOutput}
-                      </div>
+            {isGenerating ? (
+              <div className="bg-accent/20 border border-accent rounded-2xl p-12 text-center flex flex-col items-center justify-center min-h-[300px]">
+                <div className="relative mb-6">
+                  <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse"></div>
+                  <Loader2 className="w-12 h-12 text-primary animate-spin relative z-10" />
+                </div>
+                <h2 className="text-xl font-serif mb-2">Generating your assets…</h2>
+                <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+                  Our AI agents are working on your brief. This page refreshes automatically every few seconds.
+                </p>
+              </div>
+            ) : review.assets && review.assets.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                {review.assets.map((asset) => (
+                  <div key={asset.id} className="group relative rounded-2xl overflow-hidden border border-border bg-card shadow-sm aspect-square">
+                    <img 
+                      src={asset.imageUrl} 
+                      alt="Generated asset" 
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
+                      <a href={asset.imageUrl} target="_blank" rel="noreferrer" className="px-4 py-2 bg-white/20 backdrop-blur-md text-white rounded-lg text-sm font-medium hover:bg-white/30 transition-colors">
+                        View Full Size
+                      </a>
                     </div>
-                  )}
-                  {review.creativeDirection && (
-                    <div className="bg-card border border-card-border rounded-2xl p-6 shadow-sm">
-                      <div className="flex items-center gap-2 mb-4 border-b border-border pb-4">
-                        <MessageSquare className="w-5 h-5 text-orange-500" />
-                        <h2 className="text-lg font-serif font-medium">Creative Direction</h2>
-                      </div>
-                      <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground whitespace-pre-wrap">
-                        {review.creativeDirection}
-                      </div>
-                    </div>
-                  )}
-                </section>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-card border border-border border-dashed rounded-2xl p-12 text-center text-muted-foreground">
+                No visual assets generated for this project yet.
+              </div>
+            )}
+          </section>
+
+          {/* Copy & Creative Direction (only when completed) */}
+          {!isGenerating && (review.copyOutput || review.creativeDirection) && (
+            <section className="grid md:grid-cols-2 gap-8">
+              {review.copyOutput && (
+                <div className="bg-card border border-card-border rounded-2xl p-6 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4 border-b border-border pb-4">
+                    <FileText className="w-5 h-5 text-secondary" />
+                    <h2 className="text-lg font-serif font-medium">Generated Copy</h2>
+                  </div>
+                  <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground whitespace-pre-wrap">
+                    {review.copyOutput}
+                  </div>
+                </div>
               )}
-            </>
+              {review.creativeDirection && (
+                <div className="bg-card border border-card-border rounded-2xl p-6 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4 border-b border-border pb-4">
+                    <MessageSquare className="w-5 h-5 text-orange-500" />
+                    <h2 className="text-lg font-serif font-medium">Creative Direction</h2>
+                  </div>
+                  <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground whitespace-pre-wrap">
+                    {review.creativeDirection}
+                  </div>
+                </div>
+              )}
+            </section>
           )}
 
-          {/* Brief Summary */}
+          {/* Brief Summary — always visible */}
           <section className="bg-muted/30 rounded-2xl p-6 md:p-8">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-6">Original Brief</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -212,100 +208,106 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
 
         </div>
 
-        {/* Sidebar: Actions & Comments */}
+        {/* Sidebar: Actions & Comments — always visible */}
         <div className="w-full lg:w-96 shrink-0 space-y-6">
           
           {/* Action Card */}
-          {!isGenerating && (
-            <div className="bg-card border border-card-border rounded-2xl p-6 shadow-sm sticky top-36">
-              {isTerminal ? (
-                <div className="text-center py-6">
-                  {review.reviewStatus === 'approved' ? (
-                    <>
-                      <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <CheckCircle2 className="w-8 h-8" />
-                      </div>
-                      <h3 className="font-serif text-xl font-medium mb-2">Approved</h3>
-                      <p className="text-sm text-muted-foreground">Thank you for approving this project. We'll be in touch with final deliverables.</p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-16 h-16 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mx-auto mb-4">
-                        <XCircle className="w-8 h-8" />
-                      </div>
-                      <h3 className="font-serif text-xl font-medium mb-2">Rejected</h3>
-                      <p className="text-sm text-muted-foreground">This project has been closed.</p>
-                    </>
-                  )}
+          <div className="bg-card border border-card-border rounded-2xl p-6 shadow-sm sticky top-36">
+            {isGenerating ? (
+              <div className="text-center py-4">
+                <div className="w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-3">
+                  <Loader2 className="w-6 h-6 animate-spin" />
                 </div>
-              ) : review.reviewStatus === 'revision_requested' ? (
-                <div className="text-center py-6">
-                  <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <RefreshCcw className="w-8 h-8" />
+                <h3 className="font-serif font-medium mb-1">In Production</h3>
+                <p className="text-xs text-muted-foreground">Action buttons will appear once your assets are ready. You can leave comments below while you wait.</p>
+              </div>
+            ) : isTerminal ? (
+              <div className="text-center py-6">
+                {review.reviewStatus === 'approved' ? (
+                  <>
+                    <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <CheckCircle2 className="w-8 h-8" />
+                    </div>
+                    <h3 className="font-serif text-xl font-medium mb-2">Approved</h3>
+                    <p className="text-sm text-muted-foreground">Thank you for approving this project. We'll be in touch with final deliverables.</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-16 h-16 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mx-auto mb-4">
+                      <XCircle className="w-8 h-8" />
+                    </div>
+                    <h3 className="font-serif text-xl font-medium mb-2">Rejected</h3>
+                    <p className="text-sm text-muted-foreground">This project has been closed.</p>
+                  </>
+                )}
+              </div>
+            ) : review.reviewStatus === 'revision_requested' ? (
+              <div className="text-center py-6">
+                <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <RefreshCcw className="w-8 h-8" />
+                </div>
+                <h3 className="font-serif text-xl font-medium mb-2">Revision in progress</h3>
+                <p className="text-sm text-muted-foreground">Our AI is generating new assets based on your feedback. Please check back later.</p>
+              </div>
+            ) : (
+              <>
+                <h3 className="font-serif font-medium text-lg mb-4 text-center">Your Decision</h3>
+                
+                {showRevisionInput ? (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-top-4">
+                    <textarea 
+                      value={revisionNotes}
+                      onChange={(e) => setRevisionNotes(e.target.value)}
+                      className="w-full text-sm px-3 py-2 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none resize-none"
+                      rows={4}
+                      placeholder="What should we change? Be specific..."
+                    />
+                    <div className="flex gap-2">
+                      <button onClick={() => setShowRevisionInput(false)} className="flex-1 py-2 rounded-xl text-sm font-medium border border-border hover:bg-muted">
+                        Cancel
+                      </button>
+                      <button 
+                        onClick={handleRequestRevision}
+                        disabled={requestRevision.isPending}
+                        className="flex-1 py-2 rounded-xl text-sm font-medium bg-orange-500 text-white hover:bg-orange-600 flex items-center justify-center gap-2"
+                      >
+                        {requestRevision.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                        Submit
+                      </button>
+                    </div>
                   </div>
-                  <h3 className="font-serif text-xl font-medium mb-2">Revision in progress</h3>
-                  <p className="text-sm text-muted-foreground">Our AI is generating new assets based on your feedback. Please check back later.</p>
-                </div>
-              ) : (
-                <>
-                  <h3 className="font-serif font-medium text-lg mb-4 text-center">Your Decision</h3>
-                  
-                  {showRevisionInput ? (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-top-4">
-                      <textarea 
-                        value={revisionNotes}
-                        onChange={(e) => setRevisionNotes(e.target.value)}
-                        className="w-full text-sm px-3 py-2 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none resize-none"
-                        rows={4}
-                        placeholder="What should we change? Be specific..."
-                      />
-                      <div className="flex gap-2">
-                        <button onClick={() => setShowRevisionInput(false)} className="flex-1 py-2 rounded-xl text-sm font-medium border border-border hover:bg-muted">
-                          Cancel
-                        </button>
-                        <button 
-                          onClick={handleRequestRevision}
-                          disabled={requestRevision.isPending}
-                          className="flex-1 py-2 rounded-xl text-sm font-medium bg-orange-500 text-white hover:bg-orange-600 flex items-center justify-center gap-2"
-                        >
-                          {requestRevision.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                          Submit
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-3">
-                      <button 
-                        onClick={handleApprove}
-                        disabled={approveReview.isPending}
-                        className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
-                      >
-                        {approveReview.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-                        <CheckCircle2 className="w-5 h-5" /> Approve All
-                      </button>
-                      
-                      <button 
-                        onClick={() => setShowRevisionInput(true)}
-                        className="w-full py-3 bg-secondary/10 text-secondary-foreground rounded-xl font-medium hover:bg-secondary/20 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <RefreshCcw className="w-5 h-5" /> Request Revision
-                      </button>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    <button 
+                      onClick={handleApprove}
+                      disabled={approveReview.isPending}
+                      className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+                    >
+                      {approveReview.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                      <CheckCircle2 className="w-5 h-5" /> Approve All
+                    </button>
+                    
+                    <button 
+                      onClick={() => setShowRevisionInput(true)}
+                      className="w-full py-3 bg-secondary/10 text-secondary-foreground rounded-xl font-medium hover:bg-secondary/20 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <RefreshCcw className="w-5 h-5" /> Request Revision
+                    </button>
 
-                      <button 
-                        onClick={handleReject}
-                        disabled={rejectReview.isPending}
-                        className="w-full py-2 text-muted-foreground text-sm font-medium hover:text-destructive transition-colors mt-2"
-                      >
-                        Reject completely
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+                    <button 
+                      onClick={handleReject}
+                      disabled={rejectReview.isPending}
+                      className="w-full py-2 text-muted-foreground text-sm font-medium hover:text-destructive transition-colors mt-2"
+                    >
+                      Reject completely
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
 
-          {/* Comments Section */}
+          {/* Comments Section — always visible */}
           <div className="bg-card border border-card-border rounded-2xl p-6 shadow-sm flex flex-col h-[500px]">
             <div className="flex items-center gap-2 mb-4 border-b border-border pb-4 shrink-0">
               <MessageSquare className="w-5 h-5 text-muted-foreground" />

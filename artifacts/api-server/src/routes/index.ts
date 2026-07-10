@@ -31,6 +31,7 @@ import schedulesRouter from "./schedules";
 import marketplaceRouter from "./marketplace";
 import humanTasksRouter from "./human-tasks";
 import customerPortalRouter from "./customer-portal";
+import publicReviewRouter from "./public-review";
 
 const router: IRouter = Router();
 
@@ -64,5 +65,6 @@ router.use(schedulesRouter);
 router.use(marketplaceRouter);
 router.use(humanTasksRouter);
 router.use(customerPortalRouter);
+router.use(publicReviewRouter);
 
 export default router;

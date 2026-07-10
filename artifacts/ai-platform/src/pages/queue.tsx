@@ -39,6 +39,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
   Activity,
   AlertCircle,
   AlertTriangle,
@@ -164,11 +171,13 @@ function JobRow({
   job,
   onCancel,
   onRetry,
+  onView,
   isMutating,
 }: {
   job: AiJob;
   onCancel: (id: number) => void;
   onRetry: (id: number) => void;
+  onView: (job: AiJob) => void;
   isMutating: boolean;
 }) {
   const canCancel = ["queued", "waiting", "running", "retrying", "blocked"].includes(job.status);
@@ -176,7 +185,18 @@ function JobRow({
   const age = formatDistanceToNow(new Date(job.createdAt), { addSuffix: true });
 
   return (
-    <div className="flex items-center gap-3 py-2.5 px-3 border-b border-border/30 hover:bg-muted/10 transition-colors text-xs font-mono">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onView(job)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onView(job);
+        }
+      }}
+      className="flex items-center gap-3 py-2.5 px-3 border-b border-border/30 hover:bg-muted/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/60 focus-visible:-outline-offset-2 transition-colors text-xs font-mono cursor-pointer"
+    >
       {/* Job code + type */}
       <div className="w-40 min-w-0">
         <p className="text-foreground truncate">{job.jobCode}</p>
@@ -218,7 +238,7 @@ function JobRow({
             size="sm"
             variant="ghost"
             disabled={isMutating}
-            onClick={() => onRetry(job.id)}
+            onClick={(e) => { e.stopPropagation(); onRetry(job.id); }}
             className="h-6 px-2 text-[10px] font-mono text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10"
           >
             <RotateCcw className="size-3" />
@@ -229,13 +249,80 @@ function JobRow({
             size="sm"
             variant="ghost"
             disabled={isMutating}
-            onClick={() => onCancel(job.id)}
+            onClick={(e) => { e.stopPropagation(); onCancel(job.id); }}
             className="h-6 px-2 text-[10px] font-mono text-red-400 hover:text-red-300 hover:bg-red-500/10"
           >
             <XCircle className="size-3" />
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Job Detail Dialog ─────────────────────────────────────────────────────────
+
+function JobDetailDialog({ job, onOpenChange }: { job: AiJob | null; onOpenChange: (open: boolean) => void }) {
+  return (
+    <Dialog open={!!job} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl font-mono">
+        {job && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-sm">
+                {job.jobCode}
+                <JobStatusBadge status={job.status} />
+              </DialogTitle>
+              <DialogDescription className="text-xs">{job.jobType}</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <DetailField label="Priority" value={`P${job.priority} (${job.priorityScore?.toFixed(0) ?? "—"} pts)`} />
+                <DetailField label="Retry" value={`${job.retryCount} / ${job.maxRetry} (${job.retryStrategy})`} />
+                <DetailField label="Created" value={new Date(job.createdAt).toLocaleString()} />
+                <DetailField label="Started" value={job.startedAt ? new Date(job.startedAt).toLocaleString() : "—"} />
+                <DetailField label="Completed" value={job.completedAt ? new Date(job.completedAt).toLocaleString() : "—"} />
+                <DetailField label="Duration" value={job.actualDuration != null ? `${job.actualDuration}ms` : "—"} />
+                <DetailField label="Est. cost" value={job.estimatedCost != null ? `${job.estimatedCost}` : "—"} />
+                <DetailField label="Actual cost" value={job.actualCost != null ? `${job.actualCost}` : "—"} />
+              </div>
+
+              {job.errorMessage && (
+                <div>
+                  <p className="text-[10px] text-red-400 uppercase tracking-wide mb-1">Error</p>
+                  <pre className="bg-red-500/10 border border-red-500/20 rounded p-2 text-[11px] text-red-300 whitespace-pre-wrap break-words">
+                    {job.errorMessage}
+                  </pre>
+                </div>
+              )}
+
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Payload</p>
+                <pre className="bg-muted/20 border border-border/40 rounded p-2 text-[11px] whitespace-pre-wrap break-words max-h-40 overflow-auto">
+                  {JSON.stringify(job.payloadJson, null, 2) || "—"}
+                </pre>
+              </div>
+
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Result</p>
+                <pre className="bg-muted/20 border border-border/40 rounded p-2 text-[11px] whitespace-pre-wrap break-words max-h-40 overflow-auto">
+                  {job.resultJson != null ? JSON.stringify(job.resultJson, null, 2) : "No result yet"}
+                </pre>
+              </div>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
+      <p className="text-foreground">{value}</p>
     </div>
   );
 }
@@ -561,6 +648,7 @@ export default function QueuePage() {
   const [statusFilter, setStatusFilter] = useState<string>("active");
   const [typeFilter,   setTypeFilter]   = useState<string>("all");
   const [offset, setOffset] = useState(0);
+  const [viewedJob, setViewedJob] = useState<AiJob | null>(null);
 
   // Derive status param
   const statusParam =
@@ -897,6 +985,7 @@ export default function QueuePage() {
                         job={job}
                         onCancel={(id) => cancelJob.mutate({ id })}
                         onRetry={(id) => retryJob.mutate({ id })}
+                        onView={setViewedJob}
                         isMutating={isMutating}
                       />
                     ))}
@@ -934,6 +1023,8 @@ export default function QueuePage() {
           </div>
         </div>
       </ScrollArea>
+
+      <JobDetailDialog job={viewedJob} onOpenChange={(open) => !open && setViewedJob(null)} />
     </div>
   );
 }
