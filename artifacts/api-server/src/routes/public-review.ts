@@ -109,12 +109,7 @@ router.get("/public/creative-review/:token", async (req, res): Promise<void> => 
     .orderBy(creativeAiClientCommentsTable.createdAt);
 
   // Fire-and-forget audit + event
-  logAudit({
-    action: "public.review.viewed",
-    entityType: "creative_ai_client_review",
-    entityId: String(review.id),
-    metadata: { clientName: review.clientName, projectId: review.projectId },
-  });
+  logAudit("public-review", "public.review.viewed", String(review.id), "creative_ai_client_review", "success", { clientName: review.clientName, projectId: review.projectId });
   publishSafe({
     eventType: "customer.review.viewed",
     sourceModule: "public-review",
@@ -259,12 +254,7 @@ router.post("/public/creative-review/:token/approve", async (req, res): Promise<
     return;
   }
 
-  logAudit({
-    action: "public.review.approved",
-    entityType: "creative_ai_client_review",
-    entityId: String(review.id),
-    metadata: { projectId: review.projectId },
-  });
+  logAudit("public-review", "public.review.approved", String(review.id), "creative_ai_client_review", "success", { projectId: review.projectId });
   publishSafe({
     eventType: "customer.review.approved",
     sourceModule: "public-review",
@@ -304,12 +294,7 @@ router.post("/public/creative-review/:token/reject", async (req, res): Promise<v
     return;
   }
 
-  logAudit({
-    action: "public.review.rejected",
-    entityType: "creative_ai_client_review",
-    entityId: String(review.id),
-    metadata: { projectId: review.projectId },
-  });
+  logAudit("public-review", "public.review.rejected", String(review.id), "creative_ai_client_review", "success", { projectId: review.projectId });
   publishSafe({
     eventType: "customer.review.rejected",
     sourceModule: "public-review",
@@ -369,12 +354,7 @@ router.post("/public/creative-review/:token/request-revision", async (req, res):
     status: "open",
   });
 
-  logAudit({
-    action: "public.review.revision_requested",
-    entityType: "creative_ai_client_review",
-    entityId: String(review.id),
-    metadata: { projectId: review.projectId, notes: notes.trim() },
-  });
+  logAudit("public-review", "public.review.revision_requested", String(review.id), "creative_ai_client_review", "success", { projectId: review.projectId, notes: notes.trim() });
   publishSafe({
     eventType: "customer.review.revision_requested",
     sourceModule: "public-review",
