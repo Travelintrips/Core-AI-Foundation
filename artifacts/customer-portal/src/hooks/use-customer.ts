@@ -50,8 +50,37 @@ export type CustomerDashboardProject = {
   deadline?: string;
   hasResult: boolean;
   assetCount: number;
+  quotationStatus?: 'sent' | 'approved' | 'rejected' | 'expired' | null;
+  quotationTotal?: number | null;
+  quotationCurrency?: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type QuotationLineItem = {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+};
+
+export type PublicQuotation = {
+  id: number;
+  projectId: string;
+  brandName: string;
+  clientName: string;
+  projectStatus: string;
+  currency: string;
+  lineItems: QuotationLineItem[];
+  discount: number;
+  taxPercent: number;
+  subtotal: number;
+  taxAmount: number;
+  total: number;
+  notes: string | null;
+  validUntil: string | null;
+  status: 'sent' | 'approved' | 'rejected' | 'expired';
+  sentAt: string | null;
+  respondedAt: string | null;
 };
 
 export type CustomerDashboard = {
@@ -220,6 +249,46 @@ export const useRequestRevisionCreativeReview = () => {
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['creative-review', variables.token] });
+    }
+  });
+};
+
+export const useGetPublicQuotation = (token: string) => {
+  return useQuery({
+    queryKey: ['quotation', token],
+    queryFn: async ({ signal }) => {
+      return customFetch<PublicQuotation>(`/api/public/customer/quotation/${token}`, { signal });
+    },
+    enabled: !!token,
+  });
+};
+
+export const useApproveQuotation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ token }: { token: string }) => {
+      return customFetch<{ success: boolean; status: string; message: string }>(`/api/public/customer/quotation/${token}/approve`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['quotation', variables.token] });
+    }
+  });
+};
+
+export const useRejectQuotation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ token, data }: { token: string; data?: { notes?: string } }) => {
+      return customFetch<{ success: boolean; status: string; message: string }>(`/api/public/customer/quotation/${token}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data || {}),
+      });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['quotation', variables.token] });
     }
   });
 };

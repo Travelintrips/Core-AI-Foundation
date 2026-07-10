@@ -16,3 +16,4 @@
 - [phase6-ai-scheduler](phase6-ai-scheduler.md) — Scheduler target_types (create_job/publish_event/webhook-audit-only/audit_log); create_job priority must be numeric, not a string label
 - [phase65-human-task-center](phase65-human-task-center.md) — Phase 6.5 rules: ALLOWED_TRANSITIONS map, slaStatus vs status for overdue metric, SSRF guard on notificationHookUrl, orval date() on format:date-time query params
 - [customer-portal](customer-portal.md) — Token handling, dashboard navigation fix (reviewTokenPlain), URL construction with REPLIT_DEV_DOMAIN, route mounting
+- [quotation-flow](quotation-flow.md) — penawaran (quotation) gate between submission and AI generation; approve/reject public routes must use atomic CAS updates

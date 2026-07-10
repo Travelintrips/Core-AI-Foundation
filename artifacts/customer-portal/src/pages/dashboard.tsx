@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import { StatusBadge } from "@/components/status-badge";
 import { useGetCustomerDashboard } from "@/hooks/use-customer";
-import { Folder, Clock, CheckCircle, ArrowRight, ArrowLeft, Loader2, Calendar } from "lucide-react";
+import { Folder, Clock, CheckCircle, ArrowRight, ArrowLeft, Loader2, Calendar, FileText } from "lucide-react";
 import { format } from "date-fns";
 
 export default function DashboardPage({ params }: { params: { dashboardToken: string } }) {
@@ -117,6 +117,26 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
                     <p className="text-sm text-foreground/80 line-clamp-2 mb-6 flex-1">
                       {project.goal}
                     </p>
+
+                    {project.quotationStatus && (
+                      <div className={`flex items-center justify-between mb-4 px-3 py-2 rounded-lg text-xs ${
+                        project.quotationStatus === 'sent'
+                          ? 'bg-primary/10 text-primary'
+                          : project.quotationStatus === 'approved'
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                          : 'bg-muted text-muted-foreground'
+                      }`}>
+                        <span className="flex items-center gap-1.5 font-medium">
+                          <FileText className="w-3.5 h-3.5" />
+                          {project.quotationStatus === 'sent' ? 'Quotation awaiting your approval' :
+                            project.quotationStatus === 'approved' ? 'Quotation approved' :
+                            project.quotationStatus === 'rejected' ? 'Quotation declined' : 'Quotation expired'}
+                        </span>
+                        {typeof project.quotationTotal === 'number' && (
+                          <span className="font-semibold">{project.quotationCurrency} {project.quotationTotal.toLocaleString()}</span>
+                        )}
+                      </div>
+                    )}
                     
                     <div className="flex items-center justify-between mt-auto pt-4 border-t border-border/50">
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -142,8 +162,12 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
                   </div>
                 );
 
+                const linkHref = project.quotationStatus === 'sent'
+                  ? `/quotation/${project.reviewToken}`
+                  : `/review/${project.reviewToken}`;
+
                 return hasReviewLink ? (
-                  <Link key={project.projectId} href={`/review/${project.reviewToken}`} className="group block">
+                  <Link key={project.projectId} href={linkHref} className="group block">
                     {cardContent}
                   </Link>
                 ) : (

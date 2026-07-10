@@ -9,6 +9,7 @@ import SuccessPage from '@/pages/success';
 import ReviewPage from '@/pages/review';
 import DashboardPage from '@/pages/dashboard';
 import AccessPage from '@/pages/access';
+import QuotationPage from '@/pages/quotation';
 
 const queryClient = new QueryClient();
 
@@ -32,6 +33,7 @@ function Router() {
       <Route path="/review/:token" component={ReviewPage} />
       <Route path="/dashboard/:dashboardToken" component={DashboardPage} />
       <Route path="/access" component={AccessPage} />
+      <Route path="/quotation/:token" component={QuotationPage} />
       <Route component={NotFound} />
     </Switch>
   );
