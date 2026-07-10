@@ -57,6 +57,11 @@ pnpm --filter @workspace/api-server run seed
 
 The seed is idempotent — safe to run multiple times.
 
+## Setup Status (imported from GitHub, verified 2026-07-10)
+- `pnpm install` run, DB schema pushed (`pnpm --filter @workspace/db run push`), and seed data loaded (`pnpm --filter @workspace/api-server run seed`).
+- All 4 workflows running: API Server, AI Platform (frontend, `/`), Customer Portal (`/studio`), Canvas/mockup-sandbox.
+- `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY` are not set — auth middleware runs fail-open (dev convenience), fine for now but should be set before any real deployment.
+
 ## Environment / Secrets
 
 | Secret | Where used | Purpose |
