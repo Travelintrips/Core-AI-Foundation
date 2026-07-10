@@ -21,11 +21,16 @@ import {
   useListReviewComments,
   getListClientReviewsQueryKey,
   getListReviewCommentsQueryKey,
+  useGetProjectQuotation,
+  useSaveProjectQuotation,
+  useSendProjectQuotation,
+  getProjectQuotationQueryKey,
   type CreativeProject,
   type FeedbackEntry,
   type CreativeAiAsset,
   type ClientReview,
   type ClientComment,
+  type QuotationLineItemInput,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -71,6 +76,8 @@ import {
   CalendarClock,
   Send,
   Eye,
+  Trash2,
+  Receipt,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -1048,6 +1055,235 @@ function ClientReviewSection({ projectId }: { projectId: string }) {
 
 // ── Project Detail ─────────────────────────────────────────────────────────────
 
+function QuotationSection({ projectId }: { projectId: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: quotation } = useGetProjectQuotation(projectId, {
+    query: { queryKey: getProjectQuotationQueryKey(projectId) },
+  });
+
+  const [editing, setEditing] = useState(false);
+  const [currency, setCurrency] = useState("IDR");
+  const [discount, setDiscount] = useState(0);
+  const [taxPercent, setTaxPercent] = useState(11);
+  const [notes, setNotes] = useState("");
+  const [items, setItems] = useState<QuotationLineItemInput[]>([{ description: "", quantity: 1, unitPrice: 0 }]);
+
+  const startEditing = () => {
+    if (quotation) {
+      setCurrency(quotation.currency);
+      setDiscount(quotation.discount);
+      setTaxPercent(quotation.taxPercent);
+      setNotes(quotation.notes ?? "");
+      setItems(quotation.lineItems.length ? quotation.lineItems : [{ description: "", quantity: 1, unitPrice: 0 }]);
+    }
+    setEditing(true);
+  };
+
+  const saveQuotation = useSaveProjectQuotation({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getProjectQuotationQueryKey(projectId) });
+        setEditing(false);
+        toast({ title: "Quotation saved as draft" });
+      },
+      onError: (err: unknown) => toast({ title: "Failed to save", description: String((err as Error)?.message ?? err), variant: "destructive" }),
+    },
+  });
+
+  const sendQuotation = useSendProjectQuotation({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getProjectQuotationQueryKey(projectId) });
+        toast({ title: "Quotation sent to client" });
+      },
+      onError: (err: unknown) => toast({ title: "Failed to send", description: String((err as Error)?.message ?? err), variant: "destructive" }),
+    },
+  });
+
+  const subtotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
+  const discounted = Math.max(0, subtotal - discount);
+  const taxAmount = Math.round((discounted * taxPercent) / 100);
+  const total = discounted + taxAmount;
+
+  const statusColor = (s: string) => {
+    switch (s) {
+      case "sent":     return "bg-cyan-500/15 text-cyan-400 border-cyan-500/30";
+      case "approved": return "bg-green-500/15 text-green-400 border-green-500/30";
+      case "rejected": return "bg-red-500/15 text-red-400 border-red-500/30";
+      case "expired":  return "bg-orange-500/15 text-orange-400 border-orange-500/30";
+      default:         return "bg-muted text-muted-foreground border-border";
+    }
+  };
+
+  const canEdit = !quotation || quotation.status === "draft";
+
+  return (
+    <div className="mt-4 space-y-3 border-t border-border/50 pt-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Receipt className="size-4 text-primary" />
+          <span className="font-mono text-sm font-semibold">Quotation</span>
+          {quotation && (
+            <Badge className={cn("text-[10px] border font-mono px-1.5 h-5", statusColor(quotation.status))}>
+              {quotation.status}
+            </Badge>
+          )}
+        </div>
+        {canEdit && !editing && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={startEditing}
+            className="h-6 gap-1.5 text-[10px] font-mono text-muted-foreground hover:text-primary"
+          >
+            <Plus className="size-3" />
+            {quotation ? "Edit Draft" : "Create Offer"}
+          </Button>
+        )}
+      </div>
+
+      {!editing && quotation && (
+        <div className="border border-border/40 rounded-lg p-3 space-y-2">
+          {quotation.lineItems.map((item, i) => (
+            <div key={i} className="flex items-center justify-between text-[11px] font-mono">
+              <span className="text-foreground/80">{item.description} × {item.quantity}</span>
+              <span className="text-muted-foreground">{quotation.currency} {(item.quantity * item.unitPrice).toLocaleString()}</span>
+            </div>
+          ))}
+          <div className="flex items-center justify-between text-xs font-mono font-semibold pt-2 border-t border-border/40">
+            <span>Total</span>
+            <span>{quotation.currency} {quotation.total.toLocaleString()}</span>
+          </div>
+          {quotation.status === "draft" && (
+            <Button
+              size="sm"
+              onClick={() => sendQuotation.mutate(projectId)}
+              disabled={sendQuotation.isPending}
+              className="h-7 w-full text-[10px] font-mono gap-1.5 mt-2"
+            >
+              {sendQuotation.isPending ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />}
+              Send to Client
+            </Button>
+          )}
+          {quotation.status === "rejected" && quotation.responseNotes && (
+            <p className="text-[10px] font-mono text-red-400 pt-1">Client note: {quotation.responseNotes}</p>
+          )}
+        </div>
+      )}
+
+      {editing && (
+        <div className="border border-border/50 rounded-lg p-4 space-y-3 bg-muted/10">
+          <div className="space-y-2">
+            {items.map((item, i) => (
+              <div key={i} className="grid grid-cols-[1fr_60px_100px_28px] gap-2 items-end">
+                <div>
+                  {i === 0 && <Label className="text-[10px] font-mono text-muted-foreground">Description</Label>}
+                  <Input
+                    value={item.description}
+                    onChange={(e) => setItems((arr) => arr.map((it, idx) => idx === i ? { ...it, description: e.target.value } : it))}
+                    placeholder="e.g. Brand Strategy Package"
+                    className="h-7 text-xs font-mono mt-1"
+                  />
+                </div>
+                <div>
+                  {i === 0 && <Label className="text-[10px] font-mono text-muted-foreground">Qty</Label>}
+                  <Input
+                    type="number"
+                    value={item.quantity}
+                    onChange={(e) => setItems((arr) => arr.map((it, idx) => idx === i ? { ...it, quantity: Number(e.target.value) || 0 } : it))}
+                    min={1}
+                    className="h-7 text-xs font-mono mt-1"
+                  />
+                </div>
+                <div>
+                  {i === 0 && <Label className="text-[10px] font-mono text-muted-foreground">Unit Price</Label>}
+                  <Input
+                    type="number"
+                    value={item.unitPrice}
+                    onChange={(e) => setItems((arr) => arr.map((it, idx) => idx === i ? { ...it, unitPrice: Number(e.target.value) || 0 } : it))}
+                    min={0}
+                    className="h-7 text-xs font-mono mt-1"
+                  />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 text-muted-foreground hover:text-red-400"
+                  onClick={() => setItems((arr) => arr.length > 1 ? arr.filter((_, idx) => idx !== i) : arr)}
+                >
+                  <Trash2 className="size-3" />
+                </Button>
+              </div>
+            ))}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setItems((arr) => [...arr, { description: "", quantity: 1, unitPrice: 0 }])}
+              className="h-6 gap-1.5 text-[10px] font-mono text-muted-foreground hover:text-primary"
+            >
+              <Plus className="size-3" />
+              Add Item
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <Label className="text-[10px] font-mono text-muted-foreground">Currency</Label>
+              <Input value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} className="h-7 text-xs font-mono mt-1" />
+            </div>
+            <div>
+              <Label className="text-[10px] font-mono text-muted-foreground">Discount</Label>
+              <Input type="number" value={discount} onChange={(e) => setDiscount(Number(e.target.value) || 0)} min={0} className="h-7 text-xs font-mono mt-1" />
+            </div>
+            <div>
+              <Label className="text-[10px] font-mono text-muted-foreground">Tax %</Label>
+              <Input type="number" value={taxPercent} onChange={(e) => setTaxPercent(Number(e.target.value) || 0)} min={0} className="h-7 text-xs font-mono mt-1" />
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-[10px] font-mono text-muted-foreground">Notes (optional)</Label>
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="text-xs font-mono mt-1 min-h-[60px]" placeholder="Payment terms, scope details..." />
+          </div>
+
+          <div className="flex items-center justify-between text-xs font-mono font-semibold pt-2 border-t border-border/40">
+            <span>Total</span>
+            <span>{currency} {total.toLocaleString()}</span>
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              disabled={items.every((it) => !it.description.trim()) || saveQuotation.isPending}
+              onClick={() =>
+                saveQuotation.mutate({
+                  projectId,
+                  data: {
+                    lineItems: items.filter((it) => it.description.trim()),
+                    discount,
+                    taxPercent,
+                    currency,
+                    notes: notes || undefined,
+                  },
+                })
+              }
+              className="h-7 text-[10px] font-mono gap-1.5"
+            >
+              {saveQuotation.isPending ? <Loader2 className="size-3 animate-spin" /> : null}
+              Save Draft
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setEditing(false)} className="h-7 text-[10px] font-mono">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProjectDetail({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -1391,6 +1627,9 @@ function ProjectDetail({ projectId }: { projectId: string }) {
               )}
             </div>
           )}
+
+          {/* ── Quotation Section ───────────────────────────────────────── */}
+          <QuotationSection projectId={projectId} />
 
           {/* ── Client Review Section ─────────────────────────────────── */}
           <ClientReviewSection projectId={projectId} />

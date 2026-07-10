@@ -12,6 +12,7 @@ import {
   creativeAiClientReviewsTable,
   creativeAiAssetsTable,
   creativeAiClientCommentsTable,
+  creativeProjectQuotationsTable,
 } from "@workspace/db";
 import { hashToken } from "../services/clientReviewService.js";
 import { logAudit } from "../services/aiAuditService.js";
@@ -147,6 +148,11 @@ router.get("/public/creative-review/:token", async (req, res): Promise<void> => 
 
   const result = project.result as Record<string, unknown> | null;
 
+  const [quotation] = await db
+    .select({ status: creativeProjectQuotationsTable.status, total: creativeProjectQuotationsTable.total, currency: creativeProjectQuotationsTable.currency })
+    .from(creativeProjectQuotationsTable)
+    .where(eq(creativeProjectQuotationsTable.projectId, review.projectId));
+
   res.json({
     reviewId: review.id,
     projectId: review.projectId,
@@ -183,6 +189,9 @@ router.get("/public/creative-review/:token", async (req, res): Promise<void> => 
       updatedAt: c.updatedAt.toISOString(),
     })),
     createdAt: review.createdAt.toISOString(),
+    quotationStatus: quotation?.status ?? null,
+    quotationTotal: quotation?.total ?? null,
+    quotationCurrency: quotation?.currency ?? null,
   });
 });
 

@@ -12,6 +12,7 @@ import {
   creativeAiClientReviewsTable,
   creativeAiAssetsTable,
   customerDashboardTokensTable,
+  creativeProjectQuotationsTable,
 } from "@workspace/db";
 import {
   SubmitCustomerProjectBody,
@@ -352,6 +353,11 @@ router.get("/public/customer/dashboard/:dashboardToken", async (req, res): Promi
       // navigate. Since we can't recover plaintext from hash, we pass reviewId instead
       // and include a pre-built reviewUrl constructed from what we have.
       // The dashboard just shows status; navigation uses the bookmarked review link.
+      const [quotation] = await db
+        .select()
+        .from(creativeProjectQuotationsTable)
+        .where(eq(creativeProjectQuotationsTable.projectId, review.projectId));
+
       const plainToken = review.reviewTokenPlain ?? "";
       const base = buildBaseUrl(req);
       return {
@@ -367,6 +373,9 @@ router.get("/public/customer/dashboard/:dashboardToken", async (req, res): Promi
         deadline: project.deadline ?? null,
         hasResult: !!project.result,
         assetCount: assets.length,
+        quotationStatus: quotation && quotation.status !== "draft" ? quotation.status : null,
+        quotationTotal: quotation && quotation.status !== "draft" ? quotation.total : null,
+        quotationCurrency: quotation?.currency ?? null,
         createdAt: project.createdAt.toISOString(),
         updatedAt: project.updatedAt.toISOString(),
       };
