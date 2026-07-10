@@ -12,10 +12,134 @@
  */
 
 import { eq, and, inArray, sql } from "drizzle-orm";
-import { db, aiJobsTable, aiWorkersTable } from "@workspace/db";
+import { db, aiJobsTable, aiWorkersTable, aiModelsTable, aiProvidersTable } from "@workspace/db";
 import type { AiJob, AiWorker } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
+import { executeAI } from "./aiExecutionService.js";
+import { routeToModel } from "./aiModelRouter.js";
+import { getProviderApiKey } from "./aiSecretService.js";
+
+// ── Real AI execution helpers ───────────────────────────────────────────────
+
+interface JobModelResolution {
+  model: typeof aiModelsTable.$inferSelect;
+  provider: typeof aiProvidersTable.$inferSelect;
+}
+
+/**
+ * Resolve the model+provider to use for a job.
+ * Honors an explicit `model` / `modelId` string in the payload (matched against
+ * the registry's modelId column); otherwise auto-routes based on the prompt.
+ */
+async function resolveJobModel(
+  payload: Record<string, unknown>,
+  prompt: string,
+): Promise<JobModelResolution | null> {
+  const requestedModelId = coerceString(payload.modelId) ?? coerceString(payload.model);
+
+  if (requestedModelId) {
+    const [row] = await db
+      .select({ model: aiModelsTable, provider: aiProvidersTable })
+      .from(aiModelsTable)
+      .leftJoin(aiProvidersTable, eq(aiModelsTable.providerId, aiProvidersTable.id))
+      .where(eq(aiModelsTable.modelId, requestedModelId));
+
+    if (row?.model && row.provider && row.model.isActive && row.provider.isActive && getProviderApiKey(row.provider.slug)) {
+      return { model: row.model, provider: row.provider };
+    }
+    // Requested model unavailable — fall through to auto-routing.
+  }
+
+  const routed = await routeToModel(prompt);
+  return routed ? { model: routed.model, provider: routed.provider } : null;
+}
+
+/** Coerce a possibly-untrusted JSON field to a finite number, or null. */
+function coerceNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** Coerce a possibly-untrusted JSON field to a non-empty string, or null. */
+function coerceString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/** Execute a text/LLM-style job via the registered model/provider. */
+async function executeTextJob(job: AiJob, dispatchedLabel: string): Promise<Record<string, unknown>> {
+  const payload = (job.payloadJson as Record<string, unknown>) ?? {};
+  const prompt =
+    coerceString(payload.prompt) ?? coerceString(payload.brief) ?? `${dispatchedLabel} for job #${job.id}`;
+  const systemPrompt = coerceString(payload.systemPrompt);
+
+  const resolved = await resolveJobModel(payload, prompt);
+  if (!resolved) {
+    throw new Error(
+      "No active model with a configured API key is available for this job. Add a provider API key in Settings.",
+    );
+  }
+
+  const output = await executeAI({
+    prompt,
+    systemPrompt,
+    model: resolved.model,
+    provider: resolved.provider,
+    temperature: coerceNumber(payload.temperature),
+    maxTokens: coerceNumber(payload.maxTokens),
+  });
+
+  return {
+    jobId: job.id,
+    message: `${dispatchedLabel} completed`,
+    modelUsed: resolved.model.modelId,
+    providerUsed: resolved.provider.slug,
+    content: output.content,
+    tokensUsed: output.tokensUsed,
+    latencyMs: output.latencyMs,
+  };
+}
+
+/** Execute an image-generation job via the registered image-capable model (Replicate FLUX). */
+async function executeImageJob(job: AiJob): Promise<Record<string, unknown>> {
+  const payload = (job.payloadJson as Record<string, unknown>) ?? {};
+  const prompt = String(payload.prompt ?? `Image generation for job #${job.id}`);
+
+  const isImageCapable = (r: JobModelResolution | null) =>
+    !!r && ((r.model.capabilities as string[] | null)?.includes("image-generation") ?? false);
+
+  // Prefer an explicit model; otherwise route using an image-biased prompt so the
+  // router's task-type heuristics select an image-capable model (e.g. FLUX via Replicate).
+  let resolved = await resolveJobModel(payload, prompt);
+  if (!isImageCapable(resolved)) {
+    const routed = await routeToModel(`generate image: ${prompt}`);
+    resolved = routed ? { model: routed.model, provider: routed.provider } : null;
+  }
+
+  // Invariant: never execute an image_generation job against a non-image model —
+  // that would silently return text in place of an image URL.
+  if (!resolved || !isImageCapable(resolved)) {
+    throw new Error(
+      "No active image-generation model with a configured API key is available. Add a Replicate API key in Settings.",
+    );
+  }
+
+  const finalResolved: JobModelResolution = resolved;
+
+  const output = await executeAI({
+    prompt,
+    model: finalResolved.model,
+    provider: finalResolved.provider,
+  });
+
+  return {
+    jobId: job.id,
+    message: "Image generation completed",
+    modelUsed: finalResolved.model.modelId,
+    providerUsed: finalResolved.provider.slug,
+    imageUrl: output.content,
+    latencyMs: output.latencyMs,
+  };
+}
 
 // ── Retry delay helpers ───────────────────────────────────────────────────────
 
@@ -132,19 +256,19 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
 export async function executeJob(job: AiJob, workerId: number): Promise<Record<string, unknown>> {
   switch (job.jobType) {
     case "llm_inference":
-      return { message: "LLM inference dispatched", jobId: job.id };
+      return executeTextJob(job, "LLM inference");
 
     case "creative_brief":
-      return { message: "Creative brief workflow dispatched", jobId: job.id };
+      return executeTextJob(job, "Creative brief workflow");
 
     case "creative_text":
-      return { message: "Creative text generation dispatched", jobId: job.id };
+      return executeTextJob(job, "Creative text generation");
 
     case "qc_review":
-      return { message: "QC review dispatched", jobId: job.id };
+      return executeTextJob(job, "QC review");
 
     case "image_generation":
-      return { message: "Image generation dispatched", jobId: job.id };
+      return executeImageJob(job);
 
     case "image_qc":
       return { message: "Image QC dispatched", jobId: job.id };
