@@ -1,4 +1,5 @@
-import { pgTable, serial, text, timestamp, integer, boolean, numeric } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp, integer, boolean, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { aiProvidersTable } from "./ai-providers";
@@ -8,7 +9,7 @@ import { aiModelsTable } from "./ai-models";
  * Capability Matrix — per-skill performance scores for each provider/model/agent combination.
  * Used by the Intelligent Router to score and select the best model for a given task.
  */
-export const aiCapabilitiesTable = pgTable("ai_capabilities", {
+export const aiCapabilitiesTable = appSchema.table("ai_capabilities", {
   id: serial("id").primaryKey(),
   providerId: integer("provider_id").references(() => aiProvidersTable.id, { onDelete: "set null" }),
   modelId: integer("model_id").references(() => aiModelsTable.id, { onDelete: "set null" }),

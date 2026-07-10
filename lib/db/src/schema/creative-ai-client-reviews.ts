@@ -1,8 +1,9 @@
-import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const creativeAiClientReviewsTable = pgTable("creative_ai_client_reviews", {
+export const creativeAiClientReviewsTable = appSchema.table("creative_ai_client_reviews", {
   id: serial("id").primaryKey(),
   projectId: text("project_id").notNull(), // UUID — matches creative_projects.project_id
   clientName: text("client_name").notNull(),

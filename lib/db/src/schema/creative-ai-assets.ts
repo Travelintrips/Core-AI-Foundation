@@ -1,10 +1,11 @@
-import { pgTable, serial, text, timestamp, jsonb, integer, numeric } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp, jsonb, integer, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { creativeProjectsTable } from "./creative-projects";
 import { aiAgentsTable } from "./ai-agents";
 
-export const creativeAiAssetsTable = pgTable("creative_ai_assets", {
+export const creativeAiAssetsTable = appSchema.table("creative_ai_assets", {
   id: serial("id").primaryKey(),
   projectId: text("project_id").notNull(), // UUID string — matches creativeProjectsTable.projectId
   stepId: integer("step_id"), // optional FK to creative_project_steps.id

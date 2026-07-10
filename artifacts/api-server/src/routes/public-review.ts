@@ -19,6 +19,34 @@ import { publishSafe } from "../services/aiEventBusService.js";
 
 const router = Router();
 
+// ── Shared helper: render an agent's structured JSON output as plain text ─────
+// The copywriter/creative-director agents return nested JSON objects (e.g.
+// { tagline, headline: { primary, alternatives }, ... }), not flat strings.
+// Rendering an object directly as a React child crashes the client, so we
+// flatten it into readable plain text here instead.
+function formatAgentOutput(data: unknown, indent = ""): string {
+  if (data == null) return "";
+  if (typeof data === "string") return data;
+  if (typeof data === "number" || typeof data === "boolean") return String(data);
+  if (Array.isArray(data)) {
+    return data
+      .map((item) => `${indent}- ${typeof item === "object" && item !== null ? formatAgentOutput(item, indent + "  ") : String(item)}`)
+      .join("\n");
+  }
+  if (typeof data === "object") {
+    return Object.entries(data as Record<string, unknown>)
+      .map(([key, value]) => {
+        const label = key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        if (value !== null && typeof value === "object") {
+          return `${indent}${label}:\n${formatAgentOutput(value, indent + "  ")}`;
+        }
+        return `${indent}${label}: ${String(value ?? "—")}`;
+      })
+      .join("\n");
+  }
+  return String(data);
+}
+
 // ── Shared helper: look up AND validate a review record by plain-text token ───
 
 type ReviewValidationError =
@@ -131,8 +159,8 @@ router.get("/public/creative-review/:token", async (req, res): Promise<void> => 
     stylePreference: project.stylePreference ?? undefined,
     goal: project.goal,
     status: project.status,
-    copyOutput: (result?.copyOutput ?? result?.copy ?? null) as string | null,
-    creativeDirection: (result?.creativeDirection ?? result?.direction ?? null) as string | null,
+    copyOutput: formatAgentOutput(result?.copyOutput ?? result?.copy ?? null) || null,
+    creativeDirection: formatAgentOutput(result?.creativeDirection ?? result?.direction ?? null) || null,
     assets: assets
       .filter((a) => !!a.imageUrl)
       .map((a) => ({

@@ -1,5 +1,5 @@
+import { appSchema } from "./_pg-schema";
 import {
-  pgTable,
   serial,
   text,
   integer,
@@ -11,7 +11,7 @@ import { aiExecutionPlansTable } from "./ai-execution-plans";
 import { aiDepartmentsTable } from "./ai-departments";
 import { aiEmployeesTable } from "./ai-employees";
 
-export const aiJobsTable = pgTable("ai_jobs", {
+export const aiJobsTable = appSchema.table("ai_jobs", {
   id: serial("id").primaryKey(),
 
   // Identity

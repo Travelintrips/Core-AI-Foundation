@@ -43,7 +43,12 @@ Config: `lib/api-spec/orval.config.mjs` (ESM). Output: `lib/api-client-react/src
 
 ## Database
 
-Uses Replit's built-in PostgreSQL (DATABASE_URL is pre-configured).
+Uses Supabase Postgres (migrated off Replit's built-in Postgres). All tables live in the dedicated `ai_platform` schema — not `public` — since the Supabase project's `public` schema is shared with other apps.
+
+- Dev connection: `SUPABASE_DEV_DATABASE_URL` secret
+- Prod connection: `SUPABASE_PROD_DATABASE_URL` secret
+- Selection logic lives in `lib/db/src/env.ts` (`resolveDatabaseUrl()`): picks prod url when `NODE_ENV=production`, otherwise dev.
+- Table definitions use `appSchema.table(...)` (see `lib/db/src/schema/_pg-schema.ts`) instead of `pgTable(...)` so everything is created under `ai_platform`.
 
 **Push schema changes:**
 ```bash

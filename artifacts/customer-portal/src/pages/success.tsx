@@ -24,8 +24,8 @@ export default function SuccessPage() {
     }
   };
 
-  const reviewUrl = `${window.location.origin}/studio/review/${reviewToken}`;
-  const dashboardUrl = `${window.location.origin}/studio/dashboard/${dashboardToken}`;
+  const reviewUrl = `${window.location.origin}/review/${reviewToken}`;
+  const dashboardUrl = `${window.location.origin}/dashboard/${dashboardToken}`;
 
   return (
     <Layout>

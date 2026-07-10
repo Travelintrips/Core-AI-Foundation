@@ -1,4 +1,5 @@
-import { pgTable, serial, integer, text, boolean, jsonb, timestamp, unique } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, integer, text, boolean, jsonb, timestamp, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -8,7 +9,7 @@ import { z } from "zod/v4";
  * tenantId is a free-text slug ("default" until real multi-tenancy lands)
  * so this stays additive without requiring a tenants table migration now.
  */
-export const aiInstalledPackagesTable = pgTable("ai_installed_packages", {
+export const aiInstalledPackagesTable = appSchema.table("ai_installed_packages", {
   id: serial("id").primaryKey(),
 
   tenantId: text("tenant_id").notNull().default("default"),

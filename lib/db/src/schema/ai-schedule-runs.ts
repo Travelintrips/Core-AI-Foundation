@@ -1,5 +1,5 @@
+import { appSchema } from "./_pg-schema";
 import {
-  pgTable,
   serial,
   integer,
   text,
@@ -12,7 +12,7 @@ import { aiSchedulesTable } from "./ai-schedules";
  * ai_schedule_runs — Phase 6 AI Scheduler & Automation Engine
  * Execution history for a schedule.
  */
-export const aiScheduleRunsTable = pgTable("ai_schedule_runs", {
+export const aiScheduleRunsTable = appSchema.table("ai_schedule_runs", {
   id: serial("id").primaryKey(),
 
   scheduleId: integer("schedule_id")

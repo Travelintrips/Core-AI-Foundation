@@ -1,9 +1,10 @@
-import { pgTable, serial, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { aiAgentsTable } from "./ai-agents";
 
-export const aiAgentCapabilitiesTable = pgTable("ai_agent_capabilities", {
+export const aiAgentCapabilitiesTable = appSchema.table("ai_agent_capabilities", {
   id: serial("id").primaryKey(),
   agentId: integer("agent_id").notNull().references(() => aiAgentsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),

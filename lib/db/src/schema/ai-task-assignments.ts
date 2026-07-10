@@ -1,8 +1,9 @@
-import { pgTable, serial, integer, text, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, integer, text, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { aiExecutionPlansTable } from "./ai-execution-plans";
 import { aiEmployeesTable } from "./ai-employees";
 
-export const aiTaskAssignmentsTable = pgTable("ai_task_assignments", {
+export const aiTaskAssignmentsTable = appSchema.table("ai_task_assignments", {
   id: serial("id").primaryKey(),
 
   executionPlanId: integer("execution_plan_id")

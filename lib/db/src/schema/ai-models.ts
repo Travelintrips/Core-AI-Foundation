@@ -1,9 +1,10 @@
-import { pgTable, serial, text, boolean, timestamp, jsonb, integer, numeric } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, boolean, timestamp, jsonb, integer, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { aiProvidersTable } from "./ai-providers";
 
-export const aiModelsTable = pgTable("ai_models", {
+export const aiModelsTable = appSchema.table("ai_models", {
   id: serial("id").primaryKey(),
   providerId: integer("provider_id").notNull().references(() => aiProvidersTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),

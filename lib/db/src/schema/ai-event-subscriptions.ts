@@ -1,10 +1,11 @@
-import { pgTable, serial, text, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp, jsonb } from "drizzle-orm/pg-core";
 
 /**
  * ai_event_subscriptions — Phase 5.5 AI Event Bus
  * Route events to handler functions when eventType matches.
  */
-export const aiEventSubscriptionsTable = pgTable("ai_event_subscriptions", {
+export const aiEventSubscriptionsTable = appSchema.table("ai_event_subscriptions", {
   id:                 serial("id").primaryKey(),
   subscriptionName:   text("subscription_name").notNull().unique(),
   eventType:          text("event_type").notNull(),           // exact match or "*" wildcard

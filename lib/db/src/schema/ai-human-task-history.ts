@@ -1,5 +1,5 @@
+import { appSchema } from "./_pg-schema";
 import {
-  pgTable,
   serial,
   text,
   integer,
@@ -7,7 +7,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { aiHumanTasksTable } from "./ai-human-tasks";
 
-export const aiHumanTaskHistoryTable = pgTable("ai_human_task_history", {
+export const aiHumanTaskHistoryTable = appSchema.table("ai_human_task_history", {
   id:          serial("id").primaryKey(),
   taskId:      integer("task_id").notNull().references(() => aiHumanTasksTable.id, { onDelete: "cascade" }),
 

@@ -1,9 +1,10 @@
-import { pgTable, serial, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { creativeAiClientReviewsTable } from "./creative-ai-client-reviews";
 
-export const creativeAiClientCommentsTable = pgTable("creative_ai_client_comments", {
+export const creativeAiClientCommentsTable = appSchema.table("creative_ai_client_comments", {
   id: serial("id").primaryKey(),
   reviewId: integer("review_id")
     .notNull()

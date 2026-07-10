@@ -1,9 +1,10 @@
-import { pgTable, serial, text, timestamp, jsonb, integer } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp, jsonb, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { aiWorkflowsTable } from "./ai-workflows";
 
-export const aiWorkflowExecutionsTable = pgTable("ai_workflow_executions", {
+export const aiWorkflowExecutionsTable = appSchema.table("ai_workflow_executions", {
   id: serial("id").primaryKey(),
   workflowId: integer("workflow_id").notNull().references(() => aiWorkflowsTable.id, { onDelete: "cascade" }),
   status: text("status").notNull().default("pending"),

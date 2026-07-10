@@ -1,4 +1,5 @@
-import { pgTable, serial, text, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, jsonb, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -10,7 +11,7 @@ import { z } from "zod/v4";
  * for workforce tool permissions — this is the marketplace catalog + the
  * connector framework's config surface (auth, health, rate limits).
  */
-export const aiToolPackagesTable = pgTable("ai_tool_packages", {
+export const aiToolPackagesTable = appSchema.table("ai_tool_packages", {
   id: serial("id").primaryKey(),
 
   toolCode: text("tool_code").notNull().unique(),

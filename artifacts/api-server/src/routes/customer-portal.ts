@@ -20,6 +20,7 @@ import {
 import { generateReviewToken, hashToken } from "../services/clientReviewService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
 import { logAudit } from "../services/aiAuditService.js";
+import { runCreativeBriefWorkflow } from "../services/creativeWorkflowRunner.js";
 
 const router = Router();
 
@@ -98,20 +99,23 @@ router.post("/public/customer/submit", async (req, res): Promise<void> => {
   const projectId = randomUUID();
 
   // 1. Create the creative project
-  await db.insert(creativeProjectsTable).values({
-    projectId,
-    brandName,
-    businessType,
-    productOrService,
-    targetMarket,
-    stylePreference: stylePreference ?? null,
-    colorPreference: colorPreference ?? null,
-    referenceLinks: referenceLinks ?? null,
-    goal,
-    notes: notes ?? null,
-    deadline: deadline ?? null,
-    status: "pending",
-  });
+  const [project] = await db
+    .insert(creativeProjectsTable)
+    .values({
+      projectId,
+      brandName,
+      businessType,
+      productOrService,
+      targetMarket,
+      stylePreference: stylePreference ?? null,
+      colorPreference: colorPreference ?? null,
+      referenceLinks: referenceLinks ?? null,
+      goal,
+      notes: notes ?? null,
+      deadline: deadline ?? null,
+      status: "pending",
+    })
+    .returning();
 
   // 2. Generate review token (60-day expiry)
   const { plaintext: reviewToken, hash: reviewTokenHash } = generateReviewToken();
@@ -167,9 +171,24 @@ router.post("/public/customer/submit", async (req, res): Promise<void> => {
     brandName,
   });
 
+  // 5. Kick off the 4-agent creative workflow in the background (unless the
+  // client opted to submit the brief for manual handling only).
+  if (autoGenerate ?? true) {
+    runCreativeBriefWorkflow(project.id).catch(async (err) => {
+      console.error(`[customer-portal] Workflow failed for project ${projectId}:`, err);
+      await db
+        .update(creativeProjectsTable)
+        .set({ status: "failed" })
+        .where(eq(creativeProjectsTable.id, project.id));
+      await logAudit("customer-portal", "workflow_error", projectId, "creative_project", "failure", {
+        error: String(err),
+      });
+    });
+  }
+
   const base = buildBaseUrl(req);
-  const reviewUrl = `${base}/studio/review/${reviewToken}`;
-  const dashboardUrl = `${base}/studio/dashboard/${dashboardToken}`;
+  const reviewUrl = `${base}/review/${reviewToken}`;
+  const dashboardUrl = `${base}/dashboard/${dashboardToken}`;
 
   res.status(201).json({
     projectId,
@@ -260,7 +279,7 @@ router.post("/public/customer/request-access", async (req, res): Promise<void> =
   }
 
   const base = buildBaseUrl(req);
-  const dashboardUrl = `${base}/studio/dashboard/${dashboardToken}`;
+  const dashboardUrl = `${base}/dashboard/${dashboardToken}`;
 
   res.json({
     dashboardToken,
@@ -344,7 +363,7 @@ router.get("/public/customer/dashboard/:dashboardToken", async (req, res): Promi
         status: project.status,
         reviewStatus: review.status,
         reviewToken: plainToken,
-        reviewUrl: plainToken ? `${base}/studio/review/${plainToken}` : "",
+        reviewUrl: plainToken ? `${base}/review/${plainToken}` : "",
         deadline: project.deadline ?? null,
         hasResult: !!project.result,
         assetCount: assets.length,
