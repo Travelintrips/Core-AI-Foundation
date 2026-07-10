@@ -129,6 +129,9 @@ export type PublicProjectReview = {
   assets: PublicAsset[];
   comments: ClientComment[];
   createdAt: string;
+  quotationStatus: 'draft' | 'sent' | 'approved' | 'rejected' | 'expired' | null;
+  quotationTotal: number | null;
+  quotationCurrency: string | null;
 };
 
 export const useSubmitCustomerProject = () => {

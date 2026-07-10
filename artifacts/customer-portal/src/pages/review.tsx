@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { StatusBadge } from "@/components/status-badge";
 import { useGetPublicCreativeReview, useAddClientComment, useApproveCreativeReview, useRejectCreativeReview, useRequestRevisionCreativeReview } from "@/hooks/use-customer";
-import { Loader2, MessageSquare, Image as ImageIcon, Send, CheckCircle2, XCircle, RefreshCcw, FileText } from "lucide-react";
+import { Loader2, MessageSquare, Image as ImageIcon, Send, CheckCircle2, XCircle, RefreshCcw, FileText, Receipt } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
@@ -43,7 +44,10 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
   }
 
   const isTerminal = review.reviewStatus === 'approved' || review.reviewStatus === 'rejected';
-  const isGenerating = review.status === 'pending' || review.status === 'running';
+  // A quotation that hasn't been approved yet means production hasn't actually started,
+  // even though the project row is still sitting in "pending" — don't show a false "generating" spinner.
+  const awaitingQuotation = review.status === 'pending' && !!review.quotationStatus && review.quotationStatus !== 'approved';
+  const isGenerating = (review.status === 'pending' || review.status === 'running') && !awaitingQuotation;
 
   const handleApprove = () => {
     approveReview.mutate({ token: params.token, data: {} }, {
@@ -118,7 +122,29 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
               <h2 className="text-2xl font-serif font-medium">Visual Assets</h2>
             </div>
 
-            {isGenerating ? (
+            {awaitingQuotation ? (
+              <div className="bg-primary/5 border border-primary/20 rounded-2xl p-12 text-center flex flex-col items-center justify-center min-h-[300px]">
+                <Receipt className="w-12 h-12 text-primary mb-6" />
+                <h2 className="text-xl font-serif mb-2">
+                  {review.quotationStatus === 'sent' ? "Your price quotation is ready" : "Awaiting your quotation"}
+                </h2>
+                <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-6">
+                  {review.quotationStatus === 'sent'
+                    ? "Please review and approve the offer before we begin production."
+                    : review.quotationStatus === 'rejected'
+                    ? "This quotation was declined and the project has been closed."
+                    : "We're preparing a price quotation for this project. You'll receive a link to review it soon."}
+                </p>
+                {review.quotationStatus === 'sent' && (
+                  <Link
+                    href={`/quotation/${params.token}`}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full font-medium hover:bg-primary/90 transition-all"
+                  >
+                    Review Quotation
+                  </Link>
+                )}
+              </div>
+            ) : isGenerating ? (
               <div className="bg-accent/20 border border-accent rounded-2xl p-12 text-center flex flex-col items-center justify-center min-h-[300px]">
                 <div className="relative mb-6">
                   <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse"></div>
