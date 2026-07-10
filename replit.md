@@ -26,12 +26,18 @@ lib/
 
 **After cloning/importing from GitHub, always run `pnpm install` first** (node_modules are not committed).
 
-Both services start automatically via the **Project** run button:
+All services run as Replit workflows (start automatically):
 
-| Service | Command | Port |
-|---------|---------|------|
-| API Server | `pnpm --filter @workspace/api-server run dev` | 8080 |
-| Frontend | `pnpm --filter @workspace/ai-platform run dev` | 20785 |
+| Service | Command | Port | Preview path |
+|---------|---------|------|--------------|
+| API Server | `pnpm --filter @workspace/api-server run dev` | 8080 | `/api` |
+| Admin frontend (ai-platform) | `pnpm --filter @workspace/ai-platform run dev` | 20785 | `/admin/` |
+| Customer portal | `pnpm --filter @workspace/customer-portal run dev` | 23434 | `/` |
+| Mockup sandbox | `pnpm --filter @workspace/mockup-sandbox run dev` | 8081 | `/__mockup` |
+
+Note: after a GitHub re-import, artifact registration and workflows can be lost even though `artifact.toml` files remain on disk. Running `runPostMergeSetup()` (post-merge-setup skill) re-registers the artifacts and recreates the workflows automatically.
+
+The Supabase dev DB URL secret is named `SUPABASE_DEV_DATABASE_URL` (read by `lib/db/src/env.ts`). Some environments only expose it under a differently-named var (e.g. `SUPABASE_DATABASE_URL_DEV`) — copy the value across if `SUPABASE_DEV_DATABASE_URL` is missing.
 
 ## API Codegen
 

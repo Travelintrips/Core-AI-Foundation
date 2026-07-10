@@ -8,9 +8,12 @@
 export function resolveDatabaseUrl(): string {
   const isProduction = process.env.NODE_ENV === "production";
 
+  // Some environments provision the connection string under a differently
+  // named var (e.g. SUPABASE_DATABASE_URL_DEV / SUPABASE_DATABASE_URL)
+  // instead of the canonical SUPABASE_(DEV|PROD)_DATABASE_URL name.
   const url = isProduction
-    ? process.env.SUPABASE_PROD_DATABASE_URL
-    : process.env.SUPABASE_DEV_DATABASE_URL;
+    ? process.env.SUPABASE_PROD_DATABASE_URL || process.env.SUPABASE_DATABASE_URL
+    : process.env.SUPABASE_DEV_DATABASE_URL || process.env.SUPABASE_DATABASE_URL_DEV;
 
   if (!url) {
     const missingVar = isProduction
