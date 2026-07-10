@@ -27,6 +27,9 @@ import Events from "@/pages/events";
 import Scheduler from "@/pages/scheduler";
 import Marketplace from "@/pages/marketplace";
 import HumanTasks from "@/pages/human-tasks";
+import Services from "@/pages/services";
+import ServiceDetail from "@/pages/service-detail";
+import CatalogAdmin from "@/pages/catalog-admin";
 
 const queryClient = new QueryClient();
 
@@ -54,6 +57,9 @@ function AdminRouter() {
         <Route path="/human-tasks" component={HumanTasks} />
         <Route path="/scheduler" component={Scheduler} />
         <Route path="/marketplace" component={Marketplace} />
+        <Route path="/services" component={Services} />
+        <Route path="/services/:id" component={ServiceDetail} />
+        <Route path="/catalog-admin" component={CatalogAdmin} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

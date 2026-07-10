@@ -45,6 +45,16 @@ import type {
   AiProviderInput,
   AiProviderUpdate,
   AiSchedule,
+  AiService,
+  AiServiceCategory,
+  AiServiceCategoryInput,
+  AiServiceDetail,
+  AiServiceInput,
+  AiServicePackage,
+  AiServicePackageInput,
+  AiServiceRequest,
+  AiServiceRequestInput,
+  AiServiceRequestStatusUpdate,
   AiSetting,
   AiSettingInput,
   AiWorker,
@@ -57,6 +67,7 @@ import type {
   AssignHumanTaskBody,
   AuditLogPage,
   CancelJobBody,
+  CatalogAnalytics,
   ClientActionResult,
   ClientApprovalInput,
   ClientComment,
@@ -121,6 +132,7 @@ import type {
   ListRunsForScheduleParams,
   ListScheduleRunsParams,
   ListSchedulesParams,
+  ListServicesParams,
   ListWorkflowExecutionsParams,
   MemoryEntry,
   MemoryEntryInput,
@@ -11275,6 +11287,1174 @@ export function useGetCustomerDashboard<TData = Awaited<ReturnType<typeof getCus
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetCustomerDashboardQueryOptions(dashboardToken,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListServiceCategoriesUrl = () => {
+
+
+
+
+  return `/api/ai/catalog/categories`
+}
+
+/**
+ * @summary List all AI service categories
+ */
+export const listServiceCategories = async ( options?: RequestInit): Promise<AiServiceCategory[]> => {
+
+  return customFetch<AiServiceCategory[]>(getListServiceCategoriesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListServiceCategoriesQueryKey = () => {
+    return [
+    `/api/ai/catalog/categories`
+    ] as const;
+    }
+
+
+export const getListServiceCategoriesQueryOptions = <TData = Awaited<ReturnType<typeof listServiceCategories>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listServiceCategories>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListServiceCategoriesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listServiceCategories>>> = ({ signal }) => listServiceCategories({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listServiceCategories>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListServiceCategoriesQueryResult = NonNullable<Awaited<ReturnType<typeof listServiceCategories>>>
+export type ListServiceCategoriesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all AI service categories
+ */
+
+export function useListServiceCategories<TData = Awaited<ReturnType<typeof listServiceCategories>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listServiceCategories>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListServiceCategoriesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateServiceCategoryUrl = () => {
+
+
+
+
+  return `/api/ai/catalog/categories`
+}
+
+/**
+ * @summary Create an AI service category
+ */
+export const createServiceCategory = async (aiServiceCategoryInput: AiServiceCategoryInput, options?: RequestInit): Promise<AiServiceCategory> => {
+
+  return customFetch<AiServiceCategory>(getCreateServiceCategoryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiServiceCategoryInput)
+  }
+);}
+
+
+
+
+export const getCreateServiceCategoryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createServiceCategory>>, TError,{data: BodyType<AiServiceCategoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createServiceCategory>>, TError,{data: BodyType<AiServiceCategoryInput>}, TContext> => {
+
+const mutationKey = ['createServiceCategory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createServiceCategory>>, {data: BodyType<AiServiceCategoryInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createServiceCategory(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateServiceCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof createServiceCategory>>>
+    export type CreateServiceCategoryMutationBody = BodyType<AiServiceCategoryInput>
+    export type CreateServiceCategoryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create an AI service category
+ */
+export const useCreateServiceCategory = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createServiceCategory>>, TError,{data: BodyType<AiServiceCategoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createServiceCategory>>,
+        TError,
+        {data: BodyType<AiServiceCategoryInput>},
+        TContext
+      > => {
+      return useMutation(getCreateServiceCategoryMutationOptions(options));
+    }
+
+export const getUpdateServiceCategoryUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/categories/${id}`
+}
+
+/**
+ * @summary Update an AI service category
+ */
+export const updateServiceCategory = async (id: number,
+    aiServiceCategoryInput: AiServiceCategoryInput, options?: RequestInit): Promise<AiServiceCategory> => {
+
+  return customFetch<AiServiceCategory>(getUpdateServiceCategoryUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiServiceCategoryInput)
+  }
+);}
+
+
+
+
+export const getUpdateServiceCategoryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateServiceCategory>>, TError,{id: number;data: BodyType<AiServiceCategoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateServiceCategory>>, TError,{id: number;data: BodyType<AiServiceCategoryInput>}, TContext> => {
+
+const mutationKey = ['updateServiceCategory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateServiceCategory>>, {id: number;data: BodyType<AiServiceCategoryInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateServiceCategory(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateServiceCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof updateServiceCategory>>>
+    export type UpdateServiceCategoryMutationBody = BodyType<AiServiceCategoryInput>
+    export type UpdateServiceCategoryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update an AI service category
+ */
+export const useUpdateServiceCategory = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateServiceCategory>>, TError,{id: number;data: BodyType<AiServiceCategoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateServiceCategory>>,
+        TError,
+        {id: number;data: BodyType<AiServiceCategoryInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateServiceCategoryMutationOptions(options));
+    }
+
+export const getDeleteServiceCategoryUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/categories/${id}`
+}
+
+/**
+ * @summary Delete an AI service category
+ */
+export const deleteServiceCategory = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteServiceCategoryUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteServiceCategoryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteServiceCategory>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteServiceCategory>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteServiceCategory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteServiceCategory>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteServiceCategory(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteServiceCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof deleteServiceCategory>>>
+
+    export type DeleteServiceCategoryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete an AI service category
+ */
+export const useDeleteServiceCategory = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteServiceCategory>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteServiceCategory>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteServiceCategoryMutationOptions(options));
+    }
+
+export const getListServicesUrl = (params?: ListServicesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/ai/catalog/services?${stringifiedParams}` : `/api/ai/catalog/services`
+}
+
+/**
+ * @summary List AI services, optionally filtered by category
+ */
+export const listServices = async (params?: ListServicesParams, options?: RequestInit): Promise<AiService[]> => {
+
+  return customFetch<AiService[]>(getListServicesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListServicesQueryKey = (params?: ListServicesParams,) => {
+    return [
+    `/api/ai/catalog/services`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListServicesQueryOptions = <TData = Awaited<ReturnType<typeof listServices>>, TError = ErrorType<unknown>>(params?: ListServicesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listServices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListServicesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listServices>>> = ({ signal }) => listServices(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listServices>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListServicesQueryResult = NonNullable<Awaited<ReturnType<typeof listServices>>>
+export type ListServicesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List AI services, optionally filtered by category
+ */
+
+export function useListServices<TData = Awaited<ReturnType<typeof listServices>>, TError = ErrorType<unknown>>(
+ params?: ListServicesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listServices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListServicesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateServiceUrl = () => {
+
+
+
+
+  return `/api/ai/catalog/services`
+}
+
+/**
+ * @summary Create an AI service
+ */
+export const createService = async (aiServiceInput: AiServiceInput, options?: RequestInit): Promise<AiService> => {
+
+  return customFetch<AiService>(getCreateServiceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiServiceInput)
+  }
+);}
+
+
+
+
+export const getCreateServiceMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createService>>, TError,{data: BodyType<AiServiceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createService>>, TError,{data: BodyType<AiServiceInput>}, TContext> => {
+
+const mutationKey = ['createService'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createService>>, {data: BodyType<AiServiceInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createService(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateServiceMutationResult = NonNullable<Awaited<ReturnType<typeof createService>>>
+    export type CreateServiceMutationBody = BodyType<AiServiceInput>
+    export type CreateServiceMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create an AI service
+ */
+export const useCreateService = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createService>>, TError,{data: BodyType<AiServiceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createService>>,
+        TError,
+        {data: BodyType<AiServiceInput>},
+        TContext
+      > => {
+      return useMutation(getCreateServiceMutationOptions(options));
+    }
+
+export const getGetServiceUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/services/${id}`
+}
+
+/**
+ * @summary Get an AI service, including its packages
+ */
+export const getService = async (id: number, options?: RequestInit): Promise<AiServiceDetail> => {
+
+  return customFetch<AiServiceDetail>(getGetServiceUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetServiceQueryKey = (id: number,) => {
+    return [
+    `/api/ai/catalog/services/${id}`
+    ] as const;
+    }
+
+
+export const getGetServiceQueryOptions = <TData = Awaited<ReturnType<typeof getService>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getService>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetServiceQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getService>>> = ({ signal }) => getService(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getService>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetServiceQueryResult = NonNullable<Awaited<ReturnType<typeof getService>>>
+export type GetServiceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get an AI service, including its packages
+ */
+
+export function useGetService<TData = Awaited<ReturnType<typeof getService>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getService>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetServiceQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateServiceUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/services/${id}`
+}
+
+/**
+ * @summary Update an AI service
+ */
+export const updateService = async (id: number,
+    aiServiceInput: AiServiceInput, options?: RequestInit): Promise<AiService> => {
+
+  return customFetch<AiService>(getUpdateServiceUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiServiceInput)
+  }
+);}
+
+
+
+
+export const getUpdateServiceMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateService>>, TError,{id: number;data: BodyType<AiServiceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateService>>, TError,{id: number;data: BodyType<AiServiceInput>}, TContext> => {
+
+const mutationKey = ['updateService'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateService>>, {id: number;data: BodyType<AiServiceInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateService(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateServiceMutationResult = NonNullable<Awaited<ReturnType<typeof updateService>>>
+    export type UpdateServiceMutationBody = BodyType<AiServiceInput>
+    export type UpdateServiceMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update an AI service
+ */
+export const useUpdateService = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateService>>, TError,{id: number;data: BodyType<AiServiceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateService>>,
+        TError,
+        {id: number;data: BodyType<AiServiceInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateServiceMutationOptions(options));
+    }
+
+export const getDeleteServiceUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/services/${id}`
+}
+
+/**
+ * @summary Delete an AI service
+ */
+export const deleteService = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteServiceUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteServiceMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteService>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteService>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteService'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteService>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteService(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteServiceMutationResult = NonNullable<Awaited<ReturnType<typeof deleteService>>>
+
+    export type DeleteServiceMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete an AI service
+ */
+export const useDeleteService = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteService>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteService>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteServiceMutationOptions(options));
+    }
+
+export const getCreateServicePackageUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/services/${id}/packages`
+}
+
+/**
+ * @summary Add a pricing package to a service
+ */
+export const createServicePackage = async (id: number,
+    aiServicePackageInput: AiServicePackageInput, options?: RequestInit): Promise<AiServicePackage> => {
+
+  return customFetch<AiServicePackage>(getCreateServicePackageUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiServicePackageInput)
+  }
+);}
+
+
+
+
+export const getCreateServicePackageMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createServicePackage>>, TError,{id: number;data: BodyType<AiServicePackageInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createServicePackage>>, TError,{id: number;data: BodyType<AiServicePackageInput>}, TContext> => {
+
+const mutationKey = ['createServicePackage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createServicePackage>>, {id: number;data: BodyType<AiServicePackageInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createServicePackage(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateServicePackageMutationResult = NonNullable<Awaited<ReturnType<typeof createServicePackage>>>
+    export type CreateServicePackageMutationBody = BodyType<AiServicePackageInput>
+    export type CreateServicePackageMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Add a pricing package to a service
+ */
+export const useCreateServicePackage = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createServicePackage>>, TError,{id: number;data: BodyType<AiServicePackageInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createServicePackage>>,
+        TError,
+        {id: number;data: BodyType<AiServicePackageInput>},
+        TContext
+      > => {
+      return useMutation(getCreateServicePackageMutationOptions(options));
+    }
+
+export const getRequestServiceUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/services/${id}/request`
+}
+
+/**
+ * @summary Customer requests a service — creates an intake record for the AI Orchestrator
+ */
+export const requestService = async (id: number,
+    aiServiceRequestInput: AiServiceRequestInput, options?: RequestInit): Promise<AiServiceRequest> => {
+
+  return customFetch<AiServiceRequest>(getRequestServiceUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiServiceRequestInput)
+  }
+);}
+
+
+
+
+export const getRequestServiceMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestService>>, TError,{id: number;data: BodyType<AiServiceRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestService>>, TError,{id: number;data: BodyType<AiServiceRequestInput>}, TContext> => {
+
+const mutationKey = ['requestService'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestService>>, {id: number;data: BodyType<AiServiceRequestInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  requestService(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestServiceMutationResult = NonNullable<Awaited<ReturnType<typeof requestService>>>
+    export type RequestServiceMutationBody = BodyType<AiServiceRequestInput>
+    export type RequestServiceMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Customer requests a service — creates an intake record for the AI Orchestrator
+ */
+export const useRequestService = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestService>>, TError,{id: number;data: BodyType<AiServiceRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestService>>,
+        TError,
+        {id: number;data: BodyType<AiServiceRequestInput>},
+        TContext
+      > => {
+      return useMutation(getRequestServiceMutationOptions(options));
+    }
+
+export const getUpdateServicePackageUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/packages/${id}`
+}
+
+/**
+ * @summary Update a service pricing package
+ */
+export const updateServicePackage = async (id: number,
+    aiServicePackageInput: AiServicePackageInput, options?: RequestInit): Promise<AiServicePackage> => {
+
+  return customFetch<AiServicePackage>(getUpdateServicePackageUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiServicePackageInput)
+  }
+);}
+
+
+
+
+export const getUpdateServicePackageMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateServicePackage>>, TError,{id: number;data: BodyType<AiServicePackageInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateServicePackage>>, TError,{id: number;data: BodyType<AiServicePackageInput>}, TContext> => {
+
+const mutationKey = ['updateServicePackage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateServicePackage>>, {id: number;data: BodyType<AiServicePackageInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateServicePackage(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateServicePackageMutationResult = NonNullable<Awaited<ReturnType<typeof updateServicePackage>>>
+    export type UpdateServicePackageMutationBody = BodyType<AiServicePackageInput>
+    export type UpdateServicePackageMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a service pricing package
+ */
+export const useUpdateServicePackage = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateServicePackage>>, TError,{id: number;data: BodyType<AiServicePackageInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateServicePackage>>,
+        TError,
+        {id: number;data: BodyType<AiServicePackageInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateServicePackageMutationOptions(options));
+    }
+
+export const getDeleteServicePackageUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/packages/${id}`
+}
+
+/**
+ * @summary Delete a service pricing package
+ */
+export const deleteServicePackage = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteServicePackageUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteServicePackageMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteServicePackage>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteServicePackage>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteServicePackage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteServicePackage>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteServicePackage(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteServicePackageMutationResult = NonNullable<Awaited<ReturnType<typeof deleteServicePackage>>>
+
+    export type DeleteServicePackageMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a service pricing package
+ */
+export const useDeleteServicePackage = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteServicePackage>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteServicePackage>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteServicePackageMutationOptions(options));
+    }
+
+export const getListServiceRequestsUrl = () => {
+
+
+
+
+  return `/api/ai/catalog/requests`
+}
+
+/**
+ * @summary List customer service requests (admin)
+ */
+export const listServiceRequests = async ( options?: RequestInit): Promise<AiServiceRequest[]> => {
+
+  return customFetch<AiServiceRequest[]>(getListServiceRequestsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListServiceRequestsQueryKey = () => {
+    return [
+    `/api/ai/catalog/requests`
+    ] as const;
+    }
+
+
+export const getListServiceRequestsQueryOptions = <TData = Awaited<ReturnType<typeof listServiceRequests>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listServiceRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListServiceRequestsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listServiceRequests>>> = ({ signal }) => listServiceRequests({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listServiceRequests>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListServiceRequestsQueryResult = NonNullable<Awaited<ReturnType<typeof listServiceRequests>>>
+export type ListServiceRequestsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List customer service requests (admin)
+ */
+
+export function useListServiceRequests<TData = Awaited<ReturnType<typeof listServiceRequests>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listServiceRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListServiceRequestsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateServiceRequestStatusUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/requests/${id}/status`
+}
+
+/**
+ * @summary Update a service request's status (admin)
+ */
+export const updateServiceRequestStatus = async (id: number,
+    aiServiceRequestStatusUpdate: AiServiceRequestStatusUpdate, options?: RequestInit): Promise<AiServiceRequest> => {
+
+  return customFetch<AiServiceRequest>(getUpdateServiceRequestStatusUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiServiceRequestStatusUpdate)
+  }
+);}
+
+
+
+
+export const getUpdateServiceRequestStatusMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateServiceRequestStatus>>, TError,{id: number;data: BodyType<AiServiceRequestStatusUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateServiceRequestStatus>>, TError,{id: number;data: BodyType<AiServiceRequestStatusUpdate>}, TContext> => {
+
+const mutationKey = ['updateServiceRequestStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateServiceRequestStatus>>, {id: number;data: BodyType<AiServiceRequestStatusUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateServiceRequestStatus(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateServiceRequestStatusMutationResult = NonNullable<Awaited<ReturnType<typeof updateServiceRequestStatus>>>
+    export type UpdateServiceRequestStatusMutationBody = BodyType<AiServiceRequestStatusUpdate>
+    export type UpdateServiceRequestStatusMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a service request's status (admin)
+ */
+export const useUpdateServiceRequestStatus = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateServiceRequestStatus>>, TError,{id: number;data: BodyType<AiServiceRequestStatusUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateServiceRequestStatus>>,
+        TError,
+        {id: number;data: BodyType<AiServiceRequestStatusUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateServiceRequestStatusMutationOptions(options));
+    }
+
+export const getGetCatalogAnalyticsUrl = () => {
+
+
+
+
+  return `/api/ai/catalog/analytics`
+}
+
+/**
+ * @summary Service catalog dashboard — most requested services, revenue per category, etc.
+ */
+export const getCatalogAnalytics = async ( options?: RequestInit): Promise<CatalogAnalytics> => {
+
+  return customFetch<CatalogAnalytics>(getGetCatalogAnalyticsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCatalogAnalyticsQueryKey = () => {
+    return [
+    `/api/ai/catalog/analytics`
+    ] as const;
+    }
+
+
+export const getGetCatalogAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getCatalogAnalytics>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCatalogAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCatalogAnalyticsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCatalogAnalytics>>> = ({ signal }) => getCatalogAnalytics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCatalogAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCatalogAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getCatalogAnalytics>>>
+export type GetCatalogAnalyticsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Service catalog dashboard — most requested services, revenue per category, etc.
+ */
+
+export function useGetCatalogAnalytics<TData = Awaited<ReturnType<typeof getCatalogAnalytics>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCatalogAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCatalogAnalyticsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

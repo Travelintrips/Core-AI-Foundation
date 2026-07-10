@@ -46,6 +46,8 @@ tags:
     description: AI Event Subscriptions — route events to handler functions
   - name: human-tasks
     description: Human Task Center — AI-to-human handoff, review, approval, and escalation
+  - name: service-catalog
+    description: AI Service Catalog & Pricing Center — departments, services, packages, and customer requests
 paths:
   /healthz:
     get:
@@ -3267,6 +3269,301 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /ai/catalog/categories:
+    get:
+      operationId: listServiceCategories
+      tags: [service-catalog]
+      summary: List all AI service categories
+      responses:
+        "200":
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiServiceCategory"
+    post:
+      operationId: createServiceCategory
+      tags: [service-catalog]
+      summary: Create an AI service category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiServiceCategoryInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiServiceCategory"
+  /ai/catalog/categories/{id}:
+    patch:
+      operationId: updateServiceCategory
+      tags: [service-catalog]
+      summary: Update an AI service category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiServiceCategoryInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiServiceCategory"
+    delete:
+      operationId: deleteServiceCategory
+      tags: [service-catalog]
+      summary: Delete an AI service category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+  /ai/catalog/services:
+    get:
+      operationId: listServices
+      tags: [service-catalog]
+      summary: List AI services, optionally filtered by category
+      parameters:
+        - name: categoryId
+          in: query
+          schema:
+            type:
+              - integer
+              - "null"
+      responses:
+        "200":
+          description: List of services
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiService"
+    post:
+      operationId: createService
+      tags: [service-catalog]
+      summary: Create an AI service
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiServiceInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiService"
+  /ai/catalog/services/{id}:
+    get:
+      operationId: getService
+      tags: [service-catalog]
+      summary: Get an AI service, including its packages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Service detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiServiceDetail"
+    patch:
+      operationId: updateService
+      tags: [service-catalog]
+      summary: Update an AI service
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiServiceInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiService"
+    delete:
+      operationId: deleteService
+      tags: [service-catalog]
+      summary: Delete an AI service
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+  /ai/catalog/services/{id}/packages:
+    post:
+      operationId: createServicePackage
+      tags: [service-catalog]
+      summary: Add a pricing package to a service
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiServicePackageInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiServicePackage"
+  /ai/catalog/services/{id}/request:
+    post:
+      operationId: requestService
+      tags: [service-catalog]
+      summary: Customer requests a service — creates an intake record for the AI Orchestrator
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiServiceRequestInput"
+      responses:
+        "201":
+          description: Request created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiServiceRequest"
+  /ai/catalog/packages/{id}:
+    patch:
+      operationId: updateServicePackage
+      tags: [service-catalog]
+      summary: Update a service pricing package
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiServicePackageInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiServicePackage"
+    delete:
+      operationId: deleteServicePackage
+      tags: [service-catalog]
+      summary: Delete a service pricing package
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+  /ai/catalog/requests:
+    get:
+      operationId: listServiceRequests
+      tags: [service-catalog]
+      summary: List customer service requests (admin)
+      responses:
+        "200":
+          description: List of requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiServiceRequest"
+  /ai/catalog/requests/{id}/status:
+    patch:
+      operationId: updateServiceRequestStatus
+      tags: [service-catalog]
+      summary: Update a service request's status (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiServiceRequestStatusUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiServiceRequest"
+  /ai/catalog/analytics:
+    get:
+      operationId: getCatalogAnalytics
+      tags: [service-catalog]
+      summary: Service catalog dashboard — most requested services, revenue per category, etc.
+      responses:
+        "200":
+          description: Analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogAnalytics"
 components:
   schemas:
     HealthStatus:
@@ -7208,3 +7505,367 @@ components:
           type: integer
         message:
           type: string
+    AiServiceCategory:
+      type: object
+      required:
+        - id
+        - code
+        - name
+        - displayOrder
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: [string, "null"]
+        icon:
+          type: [string, "null"]
+        displayOrder:
+          type: integer
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AiServiceCategoryInput:
+      type: object
+      required:
+        - code
+        - name
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        displayOrder:
+          type: integer
+        status:
+          type: string
+    AiService:
+      type: object
+      required:
+        - id
+        - categoryId
+        - serviceCode
+        - serviceName
+        - serviceType
+        - pricingModel
+        - currency
+        - humanReview
+        - aiOnly
+        - subscriptionSupported
+        - enterpriseSupported
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        categoryId:
+          type: integer
+        serviceCode:
+          type: string
+        serviceName:
+          type: string
+        shortDescription:
+          type: [string, "null"]
+        fullDescription:
+          type: [string, "null"]
+        serviceType:
+          type: string
+        pricingModel:
+          type: string
+        startingPrice:
+          type: [string, "null"]
+        currency:
+          type: string
+        estimatedDelivery:
+          type: [string, "null"]
+        humanReview:
+          type: boolean
+        aiOnly:
+          type: boolean
+        subscriptionSupported:
+          type: boolean
+        enterpriseSupported:
+          type: boolean
+        department:
+          type: [string, "null"]
+        workflowSummary:
+          type: [string, "null"]
+        aiEmployeesInvolved:
+          type: [array, "null"]
+          items:
+            type: string
+        deliverables:
+          type: [array, "null"]
+          items:
+            type: string
+        revisionPolicy:
+          type: [string, "null"]
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AiServiceInput:
+      type: object
+      required:
+        - categoryId
+        - serviceCode
+        - serviceName
+      properties:
+        categoryId:
+          type: integer
+        serviceCode:
+          type: string
+        serviceName:
+          type: string
+        shortDescription:
+          type: string
+        fullDescription:
+          type: string
+        serviceType:
+          type: string
+        pricingModel:
+          type: string
+        startingPrice:
+          type: string
+        currency:
+          type: string
+        estimatedDelivery:
+          type: string
+        humanReview:
+          type: boolean
+        aiOnly:
+          type: boolean
+        subscriptionSupported:
+          type: boolean
+        enterpriseSupported:
+          type: boolean
+        department:
+          type: string
+        workflowSummary:
+          type: string
+        aiEmployeesInvolved:
+          type: array
+          items:
+            type: string
+        deliverables:
+          type: array
+          items:
+            type: string
+        revisionPolicy:
+          type: string
+        status:
+          type: string
+    AiServicePackage:
+      type: object
+      required:
+        - id
+        - serviceId
+        - packageName
+        - packageType
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        serviceId:
+          type: integer
+        packageName:
+          type: string
+        packageType:
+          type: string
+        monthlyPrice:
+          type: [string, "null"]
+        yearlyPrice:
+          type: [string, "null"]
+        oneTimePrice:
+          type: [string, "null"]
+        featuresJson:
+          type: [array, "null"]
+          items:
+            type: string
+        limitsJson:
+          type: [object, "null"]
+        slaJson:
+          type: [object, "null"]
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AiServicePackageInput:
+      type: object
+      required:
+        - packageName
+      properties:
+        packageName:
+          type: string
+        packageType:
+          type: string
+        monthlyPrice:
+          type: string
+        yearlyPrice:
+          type: string
+        oneTimePrice:
+          type: string
+        featuresJson:
+          type: array
+          items:
+            type: string
+        limitsJson:
+          type: object
+        slaJson:
+          type: object
+        status:
+          type: string
+    AiServiceDetail:
+      allOf:
+        - $ref: "#/components/schemas/AiService"
+        - type: object
+          properties:
+            packages:
+              type: array
+              items:
+                $ref: "#/components/schemas/AiServicePackage"
+    AiServiceRequest:
+      type: object
+      required:
+        - id
+        - requestId
+        - serviceId
+        - pricingModelSelected
+        - customerName
+        - customerEmail
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        requestId:
+          type: string
+        serviceId:
+          type: integer
+        packageId:
+          type: [integer, "null"]
+        pricingModelSelected:
+          type: string
+        customerName:
+          type: string
+        customerEmail:
+          type: string
+        companyName:
+          type: [string, "null"]
+        notes:
+          type: [string, "null"]
+        status:
+          type: string
+        createdProjectId:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AiServiceRequestInput:
+      type: object
+      required:
+        - customerName
+        - customerEmail
+        - pricingModelSelected
+      properties:
+        packageId:
+          type: integer
+        pricingModelSelected:
+          type: string
+        customerName:
+          type: string
+        customerEmail:
+          type: string
+        companyName:
+          type: string
+        notes:
+          type: string
+    AiServiceRequestStatusUpdate:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+        createdProjectId:
+          type: string
+    CatalogAnalytics:
+      type: object
+      required:
+        - mostRequestedServices
+        - revenuePerCategory
+        - averageDeliveryTimeDays
+        - mostPopularPackage
+        - conversionRate
+      properties:
+        mostRequestedServices:
+          type: array
+          items:
+            type: object
+            required: [serviceId, serviceName, requestCount]
+            properties:
+              serviceId:
+                type: integer
+              serviceName:
+                type: string
+              requestCount:
+                type: integer
+        revenuePerCategory:
+          type: array
+          items:
+            type: object
+            required: [categoryId, categoryName, estimatedRevenue]
+            properties:
+              categoryId:
+                type: integer
+              categoryName:
+                type: string
+              estimatedRevenue:
+                type: number
+        averageDeliveryTimeDays:
+          type: [number, "null"]
+        mostPopularPackage:
+          type: [object, "null"]
+          properties:
+            packageId:
+              type: integer
+            packageName:
+              type: string
+            requestCount:
+              type: integer
+        conversionRate:
+          type: number
+        totalRequests:
+          type: integer
+        completedRequests:
+          type: integer

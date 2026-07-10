@@ -88,6 +88,7 @@ The seed is idempotent — safe to run multiple times.
 - **Phase 5**: Image Designer pipeline (prompt generation → design → QC)
 - **Phase 6**: Client portal with project review and approval flows
 - **Phase 8**: AI Skills Marketplace & Tool Ecosystem — installable skill/tool packages per tenant (`/marketplace`), dependency validation, connector health checks, package lifecycle events
+- **Service Catalog & Pricing Center**: 14 departments, 51 seeded services with pricing packages (One Time/Monthly/Yearly/Enterprise) (`/services` customer catalog + detail, `/catalog-admin` CRUD + analytics), "Request Service" intake flow feeding the AI Orchestrator
 
 ## User Preferences
 

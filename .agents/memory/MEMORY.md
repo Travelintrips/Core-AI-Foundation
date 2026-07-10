@@ -19,3 +19,4 @@
 - [supabase-schema-migration](supabase-schema-migration.md) — DB moved to Supabase in a dedicated `ai_platform` schema (not public); set search_path for raw SQL; dev/prod picked via NODE_ENV
 - [quotation-flow](quotation-flow.md) — penawaran (quotation) gate between submission and AI generation; approve/reject public routes must use atomic CAS updates
 - [supabase-secret-name-mismatch](supabase-secret-name-mismatch.md) — imported secrets named SUPABASE_DATABASE_URL_DEV/SUPABASE_DATABASE_URL vs code expecting SUPABASE_DEV/PROD_DATABASE_URL; alias, don't rename
+- [drizzle-push-false-positive](drizzle-push-false-positive.md) — drizzle-kit push proposes dropping the whole ai_platform schema even for additive changes; hand-write DDL for new tables instead

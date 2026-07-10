@@ -2540,6 +2540,206 @@ export interface CustomerAccessResult {
   message?: string;
 }
 
+export interface AiServiceCategory {
+  id: number;
+  code: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  icon?: string | null;
+  displayOrder: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiServiceCategoryInput {
+  code: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  displayOrder?: number;
+  status?: string;
+}
+
+export interface AiService {
+  id: number;
+  categoryId: number;
+  serviceCode: string;
+  serviceName: string;
+  /** @nullable */
+  shortDescription?: string | null;
+  /** @nullable */
+  fullDescription?: string | null;
+  serviceType: string;
+  pricingModel: string;
+  /** @nullable */
+  startingPrice?: string | null;
+  currency: string;
+  /** @nullable */
+  estimatedDelivery?: string | null;
+  humanReview: boolean;
+  aiOnly: boolean;
+  subscriptionSupported: boolean;
+  enterpriseSupported: boolean;
+  /** @nullable */
+  department?: string | null;
+  /** @nullable */
+  workflowSummary?: string | null;
+  /** @nullable */
+  aiEmployeesInvolved?: string[] | null;
+  /** @nullable */
+  deliverables?: string[] | null;
+  /** @nullable */
+  revisionPolicy?: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiServiceInput {
+  categoryId: number;
+  serviceCode: string;
+  serviceName: string;
+  shortDescription?: string;
+  fullDescription?: string;
+  serviceType?: string;
+  pricingModel?: string;
+  startingPrice?: string;
+  currency?: string;
+  estimatedDelivery?: string;
+  humanReview?: boolean;
+  aiOnly?: boolean;
+  subscriptionSupported?: boolean;
+  enterpriseSupported?: boolean;
+  department?: string;
+  workflowSummary?: string;
+  aiEmployeesInvolved?: string[];
+  deliverables?: string[];
+  revisionPolicy?: string;
+  status?: string;
+}
+
+/**
+ * @nullable
+ */
+export type AiServicePackageLimitsJson = { [key: string]: unknown } | null;
+
+/**
+ * @nullable
+ */
+export type AiServicePackageSlaJson = { [key: string]: unknown } | null;
+
+export interface AiServicePackage {
+  id: number;
+  serviceId: number;
+  packageName: string;
+  packageType: string;
+  /** @nullable */
+  monthlyPrice?: string | null;
+  /** @nullable */
+  yearlyPrice?: string | null;
+  /** @nullable */
+  oneTimePrice?: string | null;
+  /** @nullable */
+  featuresJson?: string[] | null;
+  /** @nullable */
+  limitsJson?: AiServicePackageLimitsJson;
+  /** @nullable */
+  slaJson?: AiServicePackageSlaJson;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AiServicePackageInputLimitsJson = { [key: string]: unknown };
+
+export type AiServicePackageInputSlaJson = { [key: string]: unknown };
+
+export interface AiServicePackageInput {
+  packageName: string;
+  packageType?: string;
+  monthlyPrice?: string;
+  yearlyPrice?: string;
+  oneTimePrice?: string;
+  featuresJson?: string[];
+  limitsJson?: AiServicePackageInputLimitsJson;
+  slaJson?: AiServicePackageInputSlaJson;
+  status?: string;
+}
+
+export type AiServiceDetail = AiService & {
+  packages?: AiServicePackage[];
+};
+
+export interface AiServiceRequest {
+  id: number;
+  requestId: string;
+  serviceId: number;
+  /** @nullable */
+  packageId?: number | null;
+  pricingModelSelected: string;
+  customerName: string;
+  customerEmail: string;
+  /** @nullable */
+  companyName?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  status: string;
+  /** @nullable */
+  createdProjectId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiServiceRequestInput {
+  packageId?: number;
+  pricingModelSelected: string;
+  customerName: string;
+  customerEmail: string;
+  companyName?: string;
+  notes?: string;
+}
+
+export interface AiServiceRequestStatusUpdate {
+  status: string;
+  createdProjectId?: string;
+}
+
+export type CatalogAnalyticsMostRequestedServicesItem = {
+  serviceId: number;
+  serviceName: string;
+  requestCount: number;
+};
+
+export type CatalogAnalyticsRevenuePerCategoryItem = {
+  categoryId: number;
+  categoryName: string;
+  estimatedRevenue: number;
+};
+
+/**
+ * @nullable
+ */
+export type CatalogAnalyticsMostPopularPackage = {
+  packageId?: number;
+  packageName?: string;
+  requestCount?: number;
+} | null;
+
+export interface CatalogAnalytics {
+  mostRequestedServices: CatalogAnalyticsMostRequestedServicesItem[];
+  revenuePerCategory: CatalogAnalyticsRevenuePerCategoryItem[];
+  /** @nullable */
+  averageDeliveryTimeDays: number | null;
+  /** @nullable */
+  mostPopularPackage: CatalogAnalyticsMostPopularPackage;
+  conversionRate: number;
+  totalRequests?: number;
+  completedRequests?: number;
+}
+
 export type ListModelsParams = {
 /**
  * @nullable
@@ -2709,5 +2909,12 @@ limit?: number;
  * @minimum 0
  */
 offset?: number;
+};
+
+export type ListServicesParams = {
+/**
+ * @nullable
+ */
+categoryId?: number | null;
 };
 
