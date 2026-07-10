@@ -18,3 +18,4 @@
 - [customer-portal](customer-portal.md) — Token handling, dashboard navigation fix (reviewTokenPlain), URL construction with REPLIT_DEV_DOMAIN, route mounting
 - [supabase-schema-migration](supabase-schema-migration.md) — DB moved to Supabase in a dedicated `ai_platform` schema (not public); set search_path for raw SQL; dev/prod picked via NODE_ENV
 - [quotation-flow](quotation-flow.md) — penawaran (quotation) gate between submission and AI generation; approve/reject public routes must use atomic CAS updates
+- [supabase-secret-name-mismatch](supabase-secret-name-mismatch.md) — imported secrets named SUPABASE_DATABASE_URL_DEV/SUPABASE_DATABASE_URL vs code expecting SUPABASE_DEV/PROD_DATABASE_URL; alias, don't rename
