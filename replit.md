@@ -68,9 +68,10 @@ pnpm --filter @workspace/api-server run seed
 
 The seed is idempotent — safe to run multiple times.
 
-## Setup Status (imported from GitHub, verified 2026-07-10)
-- `pnpm install` run, DB schema pushed (`pnpm --filter @workspace/db run push`), and seed data loaded (`pnpm --filter @workspace/api-server run seed`).
-- All 4 workflows running: API Server, AI Platform (frontend, `/`), Customer Portal (`/studio`), Canvas/mockup-sandbox.
+## Setup Status (re-imported from GitHub, re-verified 2026-07-10)
+- `pnpm install` run. DB already had the full schema + seed data (46 tables in `ai_platform`, 5 providers) from a prior session — skipped `db push` since it proposed dropping/recreating the schema (data-loss prompt), which would have destroyed existing data.
+- Artifacts were re-registered by import (API Server, AI Platform at `/admin/`, Customer Portal at `/`, Canvas/mockup-sandbox) and all 4 workflows are running and verified via screenshot.
+- Fixed a secret name mismatch: `lib/db/src/env.ts` expects `SUPABASE_DEV_DATABASE_URL` / `SUPABASE_PROD_DATABASE_URL`, but the imported secrets were named `SUPABASE_DATABASE_URL_DEV` / `SUPABASE_DATABASE_URL` (prod). Added the correctly-named secrets with the same values rather than renaming the originals.
 - `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY` are not set — auth middleware runs fail-open (dev convenience), fine for now but should be set before any real deployment.
 
 ## Environment / Secrets
@@ -93,6 +94,7 @@ The seed is idempotent — safe to run multiple times.
 - **Phase 5**: Image Designer pipeline (prompt generation → design → QC)
 - **Phase 6**: Client portal with project review and approval flows
 - **Phase 8**: AI Skills Marketplace & Tool Ecosystem — installable skill/tool packages per tenant (`/marketplace`), dependency validation, connector health checks, package lifecycle events
+- **Service Catalog & Pricing Center**: 14 departments, 51 seeded services with pricing packages (One Time/Monthly/Yearly/Enterprise) (`/services` customer catalog + detail, `/catalog-admin` CRUD + analytics), "Request Service" intake flow feeding the AI Orchestrator
 
 ## User Preferences
 

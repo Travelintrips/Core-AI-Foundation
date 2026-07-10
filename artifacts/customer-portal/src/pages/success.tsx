@@ -9,6 +9,7 @@ export default function SuccessPage() {
   const searchParams = new URLSearchParams(window.location.search);
   const reviewToken = searchParams.get('review') || "";
   const dashboardToken = searchParams.get('dashboard') || "";
+  const requestId = searchParams.get('request') || "";
 
   const [copiedReview, setCopiedReview] = useState(false);
   const [copiedDashboard, setCopiedDashboard] = useState(false);
@@ -26,6 +27,30 @@ export default function SuccessPage() {
 
   const reviewUrl = `${window.location.origin}/review/${reviewToken}`;
   const dashboardUrl = `${window.location.origin}/dashboard/${dashboardToken}`;
+
+  if (requestId) {
+    return (
+      <Layout>
+        <div className="flex-1 flex items-center justify-center p-4 py-12 md:py-24">
+          <div className="w-full max-w-xl bg-card border border-card-border p-8 md:p-12 rounded-[2rem] shadow-sm text-center">
+            <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-8">
+              <CheckCircle2 className="w-10 h-10" />
+            </div>
+            <h1 className="text-3xl md:text-4xl font-serif font-medium mb-4">Request Received!</h1>
+            <p className="text-lg text-muted-foreground mb-8 max-w-lg mx-auto">
+              Thanks — our team will review your request and reach out by email shortly to confirm details and kick things off.
+            </p>
+            <div className="bg-accent/30 border border-accent rounded-2xl p-4 mb-8 text-sm font-mono text-foreground break-all">
+              Request ID: {requestId}
+            </div>
+            <Link href="/services" className="inline-flex px-8 py-4 bg-primary text-primary-foreground rounded-full font-medium text-lg hover:bg-primary/90 transition-all items-center gap-2">
+              Browse more services <ArrowRight className="w-5 h-5" />
+            </Link>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>

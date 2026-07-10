@@ -33,6 +33,7 @@ import humanTasksRouter from "./human-tasks";
 import customerPortalRouter from "./customer-portal";
 import publicReviewRouter from "./public-review";
 import quotationsRouter from "./quotations";
+import catalogRouter from "./catalog";
 
 const router: IRouter = Router();
 
@@ -68,5 +69,6 @@ router.use(humanTasksRouter);
 router.use(customerPortalRouter);
 router.use(publicReviewRouter);
 router.use(quotationsRouter);
+router.use(catalogRouter);
 
 export default router;

@@ -1,0 +1,362 @@
+import { useState } from "react";
+import {
+  useListServiceCategories,
+  useCreateServiceCategory,
+  useUpdateServiceCategory,
+  useDeleteServiceCategory,
+  useListServices,
+  useCreateService,
+  useUpdateService,
+  useDeleteService,
+  useListServiceRequests,
+  useUpdateServiceRequestStatus,
+  useGetCatalogAnalytics,
+  getListServiceCategoriesQueryKey,
+  getListServicesQueryKey,
+  getListServiceRequestsQueryKey,
+  type AiServiceCategory,
+  type AiService,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { LayoutGrid, Plus, Pencil, Trash2, BarChart2, ClipboardList, Boxes } from "lucide-react";
+
+const REQUEST_STATUSES = ["pending", "reviewing", "accepted", "in_progress", "completed", "rejected"];
+
+function StatBox({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="border border-border rounded-lg bg-card px-4 py-3">
+      <div className="text-lg font-semibold leading-none">{value}</div>
+      <div className="text-xs text-muted-foreground mt-1">{label}</div>
+    </div>
+  );
+}
+
+function CategoriesTab() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: categories = [], isLoading } = useListServiceCategories();
+  const [editing, setEditing] = useState<AiServiceCategory | null>(null);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ code: "", name: "", description: "", icon: "", displayOrder: 0 });
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: getListServiceCategoriesQueryKey() });
+
+  const createMutation = useCreateServiceCategory({ mutation: { onSuccess: () => { invalidate(); setOpen(false); } } });
+  const updateMutation = useUpdateServiceCategory({ mutation: { onSuccess: () => { invalidate(); setOpen(false); } } });
+  const deleteMutation = useDeleteServiceCategory({
+    mutation: {
+      onSuccess: () => invalidate(),
+      onError: (err: unknown) => toast({ title: "Delete failed", description: err instanceof Error ? err.message : "Category may have services attached.", variant: "destructive" }),
+    },
+  });
+
+  function openCreate() {
+    setEditing(null);
+    setForm({ code: "", name: "", description: "", icon: "", displayOrder: categories.length });
+    setOpen(true);
+  }
+  function openEdit(c: AiServiceCategory) {
+    setEditing(c);
+    setForm({ code: c.code, name: c.name, description: c.description ?? "", icon: c.icon ?? "", displayOrder: c.displayOrder });
+    setOpen(true);
+  }
+  function save() {
+    if (editing) {
+      updateMutation.mutate({ id: editing.id, data: { code: editing.code, name: form.name, description: form.description, icon: form.icon, displayOrder: form.displayOrder } });
+    } else {
+      createMutation.mutate({ data: { code: form.code || form.name.toLowerCase().replace(/\s+/g, "-"), name: form.name, description: form.description, icon: form.icon, displayOrder: form.displayOrder } });
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button size="sm" className="gap-1" onClick={openCreate} data-testid="button-add-category"><Plus className="size-3.5" /> Add category</Button>
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Code</TableHead>
+            <TableHead>Order</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {isLoading && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>}
+          {categories.map((c) => (
+            <TableRow key={c.id} data-testid={`row-category-${c.code}`}>
+              <TableCell className="font-medium">{c.name}</TableCell>
+              <TableCell className="font-mono text-xs text-muted-foreground">{c.code}</TableCell>
+              <TableCell>{c.displayOrder}</TableCell>
+              <TableCell className="text-right space-x-1">
+                <Button size="icon" variant="ghost" className="size-7" onClick={() => openEdit(c)} data-testid={`button-edit-category-${c.code}`}><Pencil className="size-3.5" /></Button>
+                <Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => deleteMutation.mutate({ id: c.id })} data-testid={`button-delete-category-${c.code}`}><Trash2 className="size-3.5" /></Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editing ? "Edit category" : "Add category"}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            {!editing && <Input placeholder="Code (e.g. creative)" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} data-testid="input-category-code" />}
+            <Input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="input-category-name" />
+            <Input placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} data-testid="input-category-description" />
+            <Input placeholder="Icon (lucide name)" value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })} data-testid="input-category-icon" />
+            <Input type="number" placeholder="Display order" value={form.displayOrder} onChange={(e) => setForm({ ...form, displayOrder: Number(e.target.value) })} data-testid="input-category-order" />
+            <Button className="w-full" onClick={save} disabled={createMutation.isPending || updateMutation.isPending} data-testid="button-save-category">Save</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function ServicesTab() {
+  const queryClient = useQueryClient();
+  const { data: categories = [] } = useListServiceCategories();
+  const { data: services = [], isLoading } = useListServices();
+  const [editing, setEditing] = useState<AiService | null>(null);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    categoryId: 0, serviceCode: "", serviceName: "", shortDescription: "",
+    pricingModel: "one_time", startingPrice: "", estimatedDelivery: "", status: "active",
+  });
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: getListServicesQueryKey() });
+  const createMutation = useCreateService({ mutation: { onSuccess: () => { invalidate(); setOpen(false); } } });
+  const updateMutation = useUpdateService({ mutation: { onSuccess: () => { invalidate(); setOpen(false); } } });
+  const deleteMutation = useDeleteService({ mutation: { onSuccess: () => invalidate() } });
+
+  function openCreate() {
+    setEditing(null);
+    setForm({ categoryId: categories[0]?.id ?? 0, serviceCode: "", serviceName: "", shortDescription: "", pricingModel: "one_time", startingPrice: "", estimatedDelivery: "", status: "active" });
+    setOpen(true);
+  }
+  function openEdit(s: AiService) {
+    setEditing(s);
+    setForm({
+      categoryId: s.categoryId, serviceCode: s.serviceCode, serviceName: s.serviceName,
+      shortDescription: s.shortDescription ?? "", pricingModel: s.pricingModel, startingPrice: s.startingPrice ?? "",
+      estimatedDelivery: s.estimatedDelivery ?? "", status: s.status,
+    });
+    setOpen(true);
+  }
+  function save() {
+    const data = {
+      categoryId: form.categoryId, serviceCode: form.serviceCode, serviceName: form.serviceName,
+      shortDescription: form.shortDescription, pricingModel: form.pricingModel, startingPrice: form.startingPrice || undefined,
+      estimatedDelivery: form.estimatedDelivery, status: form.status,
+    };
+    if (editing) updateMutation.mutate({ id: editing.id, data });
+    else createMutation.mutate({ data });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button size="sm" className="gap-1" onClick={openCreate} data-testid="button-add-service"><Plus className="size-3.5" /> Add service</Button>
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Category</TableHead>
+            <TableHead>Pricing</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {isLoading && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>}
+          {services.map((s) => (
+            <TableRow key={s.id} data-testid={`row-service-${s.serviceCode}`}>
+              <TableCell className="font-medium">{s.serviceName}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">{categories.find((c) => c.id === s.categoryId)?.name ?? "—"}</TableCell>
+              <TableCell className="text-xs">{s.startingPrice ? `$${Number(s.startingPrice).toLocaleString()}` : "—"} · {s.pricingModel}</TableCell>
+              <TableCell><Badge variant="outline" className="text-xs capitalize">{s.status}</Badge></TableCell>
+              <TableCell className="text-right space-x-1">
+                <Button size="icon" variant="ghost" className="size-7" onClick={() => openEdit(s)} data-testid={`button-edit-service-${s.serviceCode}`}><Pencil className="size-3.5" /></Button>
+                <Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => deleteMutation.mutate({ id: s.id })} data-testid={`button-delete-service-${s.serviceCode}`}><Trash2 className="size-3.5" /></Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editing ? "Edit service" : "Add service"}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <Select value={String(form.categoryId)} onValueChange={(v) => setForm({ ...form, categoryId: Number(v) })}>
+              <SelectTrigger data-testid="select-service-category"><SelectValue placeholder="Category" /></SelectTrigger>
+              <SelectContent>
+                {categories.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {!editing && <Input placeholder="Service code" value={form.serviceCode} onChange={(e) => setForm({ ...form, serviceCode: e.target.value })} data-testid="input-service-code" />}
+            <Input placeholder="Service name" value={form.serviceName} onChange={(e) => setForm({ ...form, serviceName: e.target.value })} data-testid="input-service-name" />
+            <Input placeholder="Short description" value={form.shortDescription} onChange={(e) => setForm({ ...form, shortDescription: e.target.value })} data-testid="input-service-description" />
+            <Select value={form.pricingModel} onValueChange={(v) => setForm({ ...form, pricingModel: v })}>
+              <SelectTrigger data-testid="select-service-pricing-model"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="one_time">One Time</SelectItem>
+                <SelectItem value="monthly_subscription">Monthly Subscription</SelectItem>
+                <SelectItem value="yearly_subscription">Yearly Subscription</SelectItem>
+                <SelectItem value="enterprise_custom">Enterprise Custom</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input placeholder="Starting price (USD)" value={form.startingPrice} onChange={(e) => setForm({ ...form, startingPrice: e.target.value })} data-testid="input-service-price" />
+            <Input placeholder="Estimated delivery (e.g. 3-5 days)" value={form.estimatedDelivery} onChange={(e) => setForm({ ...form, estimatedDelivery: e.target.value })} data-testid="input-service-delivery" />
+            <Button className="w-full" onClick={save} disabled={createMutation.isPending || updateMutation.isPending} data-testid="button-save-service">Save</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function RequestsTab() {
+  const queryClient = useQueryClient();
+  const { data: requests = [], isLoading } = useListServiceRequests();
+  const { data: services = [] } = useListServices();
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: getListServiceRequestsQueryKey() });
+  const statusMutation = useUpdateServiceRequestStatus({ mutation: { onSuccess: () => invalidate() } });
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Customer</TableHead>
+          <TableHead>Service</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Submitted</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {isLoading && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>}
+        {requests.length === 0 && !isLoading && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">No requests yet.</TableCell></TableRow>}
+        {requests.map((r) => (
+          <TableRow key={r.id} data-testid={`row-request-${r.requestId}`}>
+            <TableCell>
+              <div className="font-medium">{r.customerName}</div>
+              <div className="text-xs text-muted-foreground">{r.customerEmail}</div>
+            </TableCell>
+            <TableCell className="text-sm">{services.find((s) => s.id === r.serviceId)?.serviceName ?? `#${r.serviceId}`}</TableCell>
+            <TableCell>
+              <Select value={r.status} onValueChange={(v) => statusMutation.mutate({ id: r.id, data: { status: v } })}>
+                <SelectTrigger className="h-7 w-36 text-xs" data-testid={`select-request-status-${r.requestId}`}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {REQUEST_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </TableCell>
+            <TableCell className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function AnalyticsTab() {
+  const { data: analytics, isLoading } = useGetCatalogAnalytics();
+  if (isLoading) return <div className="text-sm text-muted-foreground py-8 text-center">Loading analytics…</div>;
+  if (!analytics) return null;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatBox label="Total requests" value={analytics.totalRequests ?? 0} />
+        <StatBox label="Completed" value={analytics.completedRequests ?? 0} />
+        <StatBox label="Conversion rate" value={`${analytics.conversionRate}%`} />
+        <StatBox label="Avg delivery (days)" value={analytics.averageDeliveryTimeDays ?? "—"} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <div className="text-sm font-medium mb-2">Most requested services</div>
+          <Table>
+            <TableHeader><TableRow><TableHead>Service</TableHead><TableHead className="text-right">Requests</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {analytics.mostRequestedServices.length === 0 && <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground">No requests yet.</TableCell></TableRow>}
+              {analytics.mostRequestedServices.map((s) => (
+                <TableRow key={s.serviceId}><TableCell>{s.serviceName}</TableCell><TableCell className="text-right">{s.requestCount}</TableCell></TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        <div>
+          <div className="text-sm font-medium mb-2">Revenue per category</div>
+          <Table>
+            <TableHeader><TableRow><TableHead>Category</TableHead><TableHead className="text-right">Est. revenue</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {analytics.revenuePerCategory.length === 0 && <TableRow><TableCell colSpan={2} className="text-center text-muted-foreground">No revenue yet.</TableCell></TableRow>}
+              {analytics.revenuePerCategory.map((c) => (
+                <TableRow key={c.categoryId}><TableCell>{c.categoryName}</TableCell><TableCell className="text-right">${c.estimatedRevenue.toLocaleString()}</TableCell></TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      {analytics.mostPopularPackage && (
+        <div className="border border-border rounded-lg bg-card p-4">
+          <div className="text-sm font-medium mb-1">Most popular package</div>
+          <div className="text-sm text-muted-foreground">{analytics.mostPopularPackage.packageName} — {analytics.mostPopularPackage.requestCount} requests</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function CatalogAdmin() {
+  return (
+    <div className="p-6 space-y-6 overflow-y-auto h-full">
+      <div className="flex items-center gap-3">
+        <div className="size-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+          <LayoutGrid className="size-5" />
+        </div>
+        <div>
+          <h1 className="text-xl font-semibold">Service Catalog Admin</h1>
+          <p className="text-sm text-muted-foreground">Manage categories, services, requests, and view catalog analytics.</p>
+        </div>
+      </div>
+
+      <Tabs defaultValue="categories">
+        <TabsList>
+          <TabsTrigger value="categories" className="gap-1"><Boxes className="size-3.5" /> Categories</TabsTrigger>
+          <TabsTrigger value="services" className="gap-1"><LayoutGrid className="size-3.5" /> Services</TabsTrigger>
+          <TabsTrigger value="requests" className="gap-1"><ClipboardList className="size-3.5" /> Requests</TabsTrigger>
+          <TabsTrigger value="analytics" className="gap-1"><BarChart2 className="size-3.5" /> Analytics</TabsTrigger>
+        </TabsList>
+        <TabsContent value="categories" className="mt-4"><CategoriesTab /></TabsContent>
+        <TabsContent value="services" className="mt-4"><ServicesTab /></TabsContent>
+        <TabsContent value="requests" className="mt-4"><RequestsTab /></TabsContent>
+        <TabsContent value="analytics" className="mt-4"><AnalyticsTab /></TabsContent>
+      </Tabs>
+    </div>
+  );
+}

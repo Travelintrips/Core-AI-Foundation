@@ -45,3 +45,4 @@ export * from "./ai-installed-packages";
 export * from "./ai-human-tasks";
 export * from "./ai-human-task-history";
 export * from "./customer-dashboard-tokens";
+export * from "./ai-service-catalog";

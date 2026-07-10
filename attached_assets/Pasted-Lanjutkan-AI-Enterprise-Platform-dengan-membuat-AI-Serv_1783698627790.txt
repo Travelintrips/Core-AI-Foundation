@@ -1,0 +1,1167 @@
+Lanjutkan AI Enterprise Platform dengan membuat AI Service Catalog,
+Pricing Engine, Package Management, dan Customer Service Request Flow.
+
+PENTING:
+
+Jangan merombak fitur yang sudah berjalan.
+
+Jangan mengubah AI Workforce, Creative AI, Job Engine, Queue,
+Dispatcher, Event Bus, Scheduler, Human Task, Client Review,
+Multi-Tenant, maupun Marketplace.
+
+Semua perubahan harus:
+- additive
+- modular
+- backward compatible
+- OpenAPI-first
+- TypeScript clean
+- lolos pnpm run verify
+
+==========================================================
+TUJUAN
+==========================================================
+
+Membuat katalog layanan AI yang bisa digunakan customer untuk:
+
+1. Memilih AI Department.
+2. Memilih layanan.
+3. Memilih paket.
+4. Melihat harga dan deliverables.
+5. Mengisi brief.
+6. Mendapat estimasi harga otomatis.
+7. Membuat service request.
+8. Meneruskan request ke AI Orchestrator.
+9. Melacak proses.
+10. Melakukan review, revisi, dan approval.
+
+Harga dalam seed adalah harga peluncuran dan harus dapat diubah
+oleh admin tanpa mengubah source code.
+
+==========================================================
+PRINSIP PRICING
+==========================================================
+
+Support pricing model:
+
+- one_time
+- monthly_subscription
+- yearly_subscription
+- usage_based
+- enterprise_custom
+
+Support delivery mode:
+
+- ai_only
+- ai_plus_human_review
+- human_led_ai_assisted
+
+Support customer segment:
+
+- personal
+- umkm
+- professional
+- corporate
+- enterprise
+
+Jangan tampilkan istilah provider/model AI ke customer.
+
+Customer hanya melihat:
+- layanan
+- paket
+- output
+- estimasi waktu
+- jumlah revisi
+- harga
+- status human review
+
+==========================================================
+DATABASE — SERVICE CATEGORIES
+==========================================================
+
+Buat tabel:
+
+ai_service_categories
+
+Field:
+- id
+- tenant_id nullable
+- code
+- name
+- description
+- icon
+- display_order
+- status
+- created_at
+- updated_at
+
+Seed kategori:
+
+1. Creative AI
+2. Marketing AI
+3. Sales AI
+4. Finance AI
+5. Accounting AI
+6. Tax AI
+7. HR & Payroll AI
+8. Legal AI
+9. Logistics AI
+10. Customs & PPJK AI
+11. Procurement AI
+12. Trading AI
+13. Data Analytics AI
+14. Executive AI
+15. Customer Service AI
+
+==========================================================
+DATABASE — SERVICES
+==========================================================
+
+Buat tabel:
+
+ai_services
+
+Field:
+- id
+- tenant_id nullable
+- category_id
+- service_code
+- service_name
+- short_description
+- full_description
+- service_type
+- pricing_model
+- base_price
+- starting_price
+- currency
+- estimated_delivery_days
+- default_revision_limit
+- human_review
+- ai_only_available
+- subscription_supported
+- enterprise_supported
+- featured
+- status
+- created_at
+- updated_at
+
+==========================================================
+DATABASE — PACKAGES
+==========================================================
+
+Buat tabel:
+
+ai_service_packages
+
+Field:
+- id
+- tenant_id nullable
+- service_id nullable
+- package_code
+- package_name
+- package_level
+- package_type
+- one_time_price
+- monthly_price
+- yearly_price
+- setup_fee
+- included_credits
+- included_projects
+- included_users
+- included_revisions
+- included_storage_mb
+- features_json
+- deliverables_json
+- limits_json
+- sla_json
+- overage_rules_json
+- status
+- display_order
+- created_at
+- updated_at
+
+Package level:
+- starter
+- professional
+- business
+- enterprise
+
+==========================================================
+DATABASE — PRICE RULES
+==========================================================
+
+Buat tabel:
+
+ai_service_price_rules
+
+Field:
+- id
+- tenant_id nullable
+- service_id
+- rule_code
+- rule_name
+- condition_type
+- condition_json
+- adjustment_type
+- adjustment_value
+- minimum_charge
+- maximum_charge nullable
+- priority
+- active
+- created_at
+- updated_at
+
+Adjustment type:
+- fixed_amount
+- percentage
+- multiplier
+- per_unit
+
+==========================================================
+DATABASE — SERVICE REQUESTS
+==========================================================
+
+Buat tabel:
+
+ai_service_requests
+
+Field:
+- id
+- tenant_id
+- request_code
+- customer_id nullable
+- customer_name
+- customer_email
+- customer_phone
+- category_id
+- service_id
+- package_id nullable
+- brief_json
+- quantity
+- subtotal
+- rush_fee
+- revision_fee
+- human_review_fee
+- additional_service_fee
+- discount
+- tax
+- total
+- currency
+- pricing_snapshot_json
+- status
+- project_id nullable
+- execution_plan_id nullable
+- created_at
+- updated_at
+
+Status:
+- draft
+- quoted
+- waiting_customer_approval
+- approved
+- in_progress
+- waiting_review
+- revision_requested
+- completed
+- cancelled
+
+==========================================================
+SEED HARGA — CREATIVE AI
+==========================================================
+
+Gunakan harga seed berikut.
+
+Semua harga dalam IDR dan editable dari admin.
+
+----------------------------------------------------------
+1. Logo Concept AI
+----------------------------------------------------------
+
+AI Only Starter:
+- Harga: Rp299.000
+- 3 konsep awal
+- 1 arah warna
+- 1 revisi prompt
+- PNG/JPG concept
+- Delivery: 1–2 hari
+
+AI + Human Review:
+- Harga: Rp1.250.000
+- 3 konsep logo
+- 2 revisi
+- Color palette
+- Typography recommendation
+- PNG/JPG/PDF
+- Human designer review
+- Delivery: 3–5 hari
+
+Professional Logo:
+- Harga: Rp3.500.000
+- Brand discovery
+- 3 logo directions
+- 3 revisions
+- Logo usage guide
+- Color and typography system
+- Editable master file jika diselesaikan designer
+- Delivery: 7–10 hari
+
+Enterprise:
+- Starting price: Rp10.000.000
+- Harga custom
+
+----------------------------------------------------------
+2. Brand Strategy
+----------------------------------------------------------
+
+Starter:
+- Rp750.000
+- Positioning
+- Target audience
+- USP
+- Brand personality
+- Tone of voice
+
+Professional:
+- Rp2.500.000
+- Semua fitur Starter
+- Competitor overview
+- Customer persona
+- Brand messaging
+- Content pillars
+- Human strategist review
+
+Enterprise:
+- Starting price Rp15.000.000
+- Custom research dan workshop
+
+----------------------------------------------------------
+3. Brand Identity Package
+----------------------------------------------------------
+
+Starter:
+- Rp1.750.000
+- Logo concept
+- Color palette
+- Typography
+- Brand tone
+- 2 revisions
+
+Professional:
+- Rp5.500.000
+- Logo final direction
+- Brand guideline 10–15 halaman
+- Social profile kit
+- Business card concept
+- 3 revisions
+- Human review
+
+Business:
+- Rp12.500.000
+- Brand guideline lengkap
+- Stationery kit
+- Social media template
+- Presentation template
+- 4 revisions
+
+Enterprise:
+- Starting price Rp25.000.000
+- Harga custom
+
+----------------------------------------------------------
+4. Social Media Design
+----------------------------------------------------------
+
+Per single post AI Only:
+- Rp75.000
+
+Per single post Human Reviewed:
+- Rp175.000
+
+Paket 10 desain:
+- AI Only Rp599.000
+- Human Reviewed Rp1.500.000
+
+Paket 20 desain:
+- AI Only Rp999.000
+- Human Reviewed Rp2.750.000
+
+Paket 30 desain:
+- AI Only Rp1.350.000
+- Human Reviewed Rp3.750.000
+
+Termasuk:
+- ukuran feed
+- headline/copy pendek
+- 1 revision per batch
+
+Tidak termasuk:
+- photography
+- talent
+- ad spend
+- video production
+
+----------------------------------------------------------
+5. Social Media Content Monthly
+----------------------------------------------------------
+
+Starter:
+- Rp999.000/bulan
+- 12 content ideas
+- 12 captions
+- 12 visual concepts
+- content calendar
+- AI only
+
+Professional:
+- Rp2.500.000/bulan
+- 20 posts
+- captions
+- visual design
+- content calendar
+- 2 revision rounds
+- human review
+
+Business:
+- Rp4.500.000/bulan
+- 30 posts
+- 8 short-video scripts
+- captions
+- creative direction
+- monthly report
+- human review
+
+Enterprise:
+- Starting price Rp10.000.000/bulan
+- Multi-brand
+- Multi-platform
+- SLA custom
+
+----------------------------------------------------------
+6. Company Profile
+----------------------------------------------------------
+
+AI Content Only:
+- Rp750.000
+- Struktur dan copy
+- maksimal 12 halaman
+- output DOCX/Markdown/PDF draft
+
+AI + Layout Starter:
+- Rp1.500.000
+- maksimal 8 halaman
+- 2 revisions
+- PDF
+
+Professional:
+- Rp3.500.000
+- maksimal 16 halaman
+- copywriting
+- custom layout
+- 3 revisions
+- PDF + editable source jika tersedia
+
+Business:
+- Rp6.500.000
+- maksimal 24 halaman
+- content restructuring
+- infographics
+- bilingual surcharge terpisah
+- 3 revisions
+
+Additional page:
+- AI layout Rp100.000/halaman
+- Human custom layout Rp200.000/halaman
+
+----------------------------------------------------------
+7. Pitch Deck / Presentation
+----------------------------------------------------------
+
+Starter:
+- Rp1.250.000
+- maksimal 10 slides
+- AI content + layout
+- 2 revisions
+
+Professional:
+- Rp2.750.000
+- maksimal 15 slides
+- storytelling
+- visual direction
+- human review
+- 3 revisions
+
+Investor / Enterprise:
+- Rp6.500.000
+- maksimal 20 slides
+- business narrative
+- chart direction
+- executive review
+- 4 revisions
+
+Additional slide:
+- Rp150.000
+
+----------------------------------------------------------
+8. Packaging Concept
+----------------------------------------------------------
+
+AI Concept:
+- Rp750.000
+- 3 visual concepts
+- no print-ready dieline
+
+Professional:
+- Rp2.500.000
+- 2 final directions
+- label layout
+- mockup
+- 3 revisions
+- human review
+
+Print-Ready:
+- Starting Rp5.000.000
+- membutuhkan ukuran/dieline resmi
+- prepress review
+- harga custom berdasarkan SKU
+
+Additional SKU:
+- Rp500.000–Rp1.500.000 per SKU
+
+----------------------------------------------------------
+9. Poster / Banner / Brochure
+----------------------------------------------------------
+
+Poster or Digital Banner:
+- AI Only Rp150.000
+- Human Reviewed Rp350.000
+
+Brochure 2 sides:
+- Starter Rp500.000
+- Professional Rp1.250.000
+
+Brochure 4–6 pages:
+- Starting Rp1.750.000
+
+Large campaign key visual:
+- Starting Rp2.500.000
+
+----------------------------------------------------------
+10. Copywriting
+----------------------------------------------------------
+
+10 captions:
+- Rp350.000
+
+30 captions:
+- Rp850.000
+
+Landing page copy:
+- Rp1.250.000
+
+Company profile copy:
+- Rp1.500.000
+
+Campaign copy package:
+- Rp2.500.000
+
+Brand naming + tagline:
+- Starter Rp750.000
+- Professional Rp2.000.000
+
+==========================================================
+SEED HARGA — MARKETING AI
+==========================================================
+
+Marketing Plan Starter:
+- Rp750.000
+
+Marketing Plan Professional:
+- Rp2.500.000
+- human review
+
+Campaign Plan:
+- Rp1.500.000
+
+30-Day Content Calendar:
+- Rp500.000
+
+Competitor Analysis:
+- Rp1.250.000
+
+Customer Persona Package:
+- Rp750.000
+
+Monthly Marketing AI Subscription:
+- Starter Rp1.250.000/bulan
+- Professional Rp3.500.000/bulan
+- Enterprise mulai Rp10.000.000/bulan
+
+==========================================================
+SEED HARGA — FINANCE AI
+==========================================================
+
+Financial Health Check:
+- Rp1.500.000 per analysis
+
+Profit and Loss Analysis:
+- Rp1.250.000
+
+Cash Flow Analysis:
+- Rp1.500.000
+
+Budget vs Actual Review:
+- Rp2.000.000
+
+Bank Reconciliation Assistance:
+- Starting Rp2.500.000 per period
+
+Financial Forecast:
+- Rp3.500.000
+
+Management Finance Report:
+- Rp2.500.000
+
+Finance AI Monthly:
+- Starter Rp2.500.000/bulan
+- Professional Rp5.000.000/bulan
+- Enterprise mulai Rp15.000.000/bulan
+
+Semua output Finance AI:
+- advisory only
+- tidak otomatis posting jurnal
+- human approval required untuk transaksi
+
+==========================================================
+SEED HARGA — ACCOUNTING AI
+==========================================================
+
+Journal Review up to 100 transactions:
+- Rp1.500.000
+
+GL Review:
+- Rp2.000.000
+
+Trial Balance Review:
+- Rp2.000.000
+
+Closing Assistance:
+- Rp3.500.000 per period
+
+Account Reconciliation:
+- Rp1.500.000 per account
+
+Accounting AI Monthly:
+- Rp3.500.000/bulan
+- fair usage 500 transactions
+
+Overage:
+- Rp2.500 per transaction
+
+==========================================================
+SEED HARGA — TAX AI
+==========================================================
+
+Invoice Tax Review:
+- Rp25.000 per document
+- minimum charge Rp500.000
+
+PPN Review:
+- Rp1.500.000 per period
+
+PPh Review:
+- Rp1.500.000 per period
+
+Tax Reconciliation:
+- Rp3.000.000 per period
+
+SPT Readiness Review:
+- Rp2.500.000
+
+Tax AI Monthly:
+- Starter Rp2.500.000/bulan
+- Professional Rp5.000.000/bulan
+- Enterprise mulai Rp15.000.000/bulan
+
+Wajib tampilkan:
+- AI-assisted analysis
+- needs tax officer verification
+- not final tax determination
+
+==========================================================
+SEED HARGA — LEGAL AI
+==========================================================
+
+Contract Summary:
+- Rp500.000 per document
+
+Contract Risk Review:
+- Rp1.500.000 per document
+- maksimal 30 halaman
+
+Agreement Draft:
+- Starting Rp1.500.000
+
+NDA Draft/Review:
+- Rp750.000
+
+Vendor Agreement:
+- Starting Rp2.000.000
+
+Legal AI Monthly:
+- Rp3.500.000/bulan
+- fair usage 10 documents
+
+Additional document:
+- Rp350.000
+
+Wajib tampilkan:
+- AI-assisted legal review
+- bukan pengganti pendapat advokat
+- human legal review tersedia sebagai add-on
+
+==========================================================
+SEED HARGA — LOGISTICS AI
+==========================================================
+
+RFQ Generation:
+- Rp250.000 per RFQ
+
+Vendor Comparison:
+- Rp500.000 per comparison
+
+Freight Cost Analysis:
+- Rp750.000 per route
+
+Shipment Exception Analysis:
+- Rp500.000 per shipment case
+
+Monthly Logistics AI:
+- Starter Rp2.500.000/bulan
+- Professional Rp5.000.000/bulan
+- Enterprise mulai Rp15.000.000/bulan
+
+==========================================================
+SEED HARGA — CUSTOMS & PPJK AI
+==========================================================
+
+HS Code Candidate Analysis:
+- Simple product Rp250.000
+- Technical product Rp750.000
+- Complex machine/chemical Rp1.500.000
+
+Import Requirement Checklist:
+- Rp750.000 per commodity
+
+Export Requirement Checklist:
+- Rp750.000 per commodity
+
+Lartas Review:
+- Rp500.000 per HS candidate
+
+Duty and Tax Simulation:
+- Rp350.000 per scenario
+
+PIB/PEB Document Readiness Review:
+- Starting Rp1.500.000
+
+Customs AI Monthly:
+- Starter Rp2.500.000/bulan
+- Professional Rp5.000.000/bulan
+- Enterprise mulai Rp15.000.000/bulan
+
+Wajib:
+- tampilkan maximum 3 HS candidates
+- confidence score
+- source/version
+- needs PPJK verification
+- jangan nyatakan sebagai penetapan final
+
+==========================================================
+SEED HARGA — HR & PAYROLL AI
+==========================================================
+
+CV Screening:
+- Rp15.000 per CV
+- minimum Rp300.000
+
+Job Description:
+- Rp250.000
+
+Interview Package:
+- Rp350.000 per role
+
+Payroll Review:
+- Starting Rp1.500.000 per period
+
+Performance Summary:
+- Rp50.000 per employee
+- minimum Rp500.000
+
+HR AI Monthly:
+- Starter Rp1.500.000/bulan
+- Professional Rp3.500.000/bulan
+- Enterprise mulai Rp10.000.000/bulan
+
+==========================================================
+SEED HARGA — PROCUREMENT AI
+==========================================================
+
+RFQ Preparation:
+- Rp350.000
+
+Vendor Comparison:
+- Rp750.000
+
+Supplier Scorecard:
+- Rp1.000.000
+
+Spend Analysis:
+- Starting Rp2.500.000
+
+Monthly Procurement AI:
+- Rp3.500.000/bulan
+
+==========================================================
+SEED HARGA — TRADING AI
+==========================================================
+
+Commercial Offer:
+- Rp500.000
+
+Buyer/Supplier Profile:
+- Rp750.000
+
+Commodity Specification Draft:
+- Rp500.000
+
+Margin Simulation:
+- Rp500.000
+
+Export Deal Readiness:
+- Rp1.500.000
+
+Trading AI Monthly:
+- Starter Rp2.500.000/bulan
+- Professional Rp5.000.000/bulan
+- Enterprise mulai Rp15.000.000/bulan
+
+==========================================================
+SUBSCRIPTION CREATIVE DEPARTMENT
+==========================================================
+
+Seed paket utama yang ditampilkan di halaman pricing:
+
+----------------------------------------------------------
+Creative Starter
+----------------------------------------------------------
+
+Harga:
+Rp499.000/bulan
+
+Termasuk:
+- 10 AI image concepts
+- 10 captions
+- 5 social media designs
+- 1 active brand
+- 1 user
+- AI only
+- standard queue
+- 1 revision round
+
+----------------------------------------------------------
+Creative Professional
+----------------------------------------------------------
+
+Harga:
+Rp1.500.000/bulan
+
+Termasuk:
+- 30 image concepts
+- 30 captions
+- 15 social media designs
+- 2 active brands
+- 3 users
+- human review untuk maksimal 5 output
+- priority queue
+- 2 revision rounds
+
+----------------------------------------------------------
+Creative Business
+----------------------------------------------------------
+
+Harga:
+Rp3.500.000/bulan
+
+Termasuk:
+- 75 image concepts
+- 60 captions
+- 30 designs
+- 5 active brands
+- 10 users
+- human review maksimal 15 output
+- brand kit
+- monthly content plan
+- priority processing
+- 3 revision rounds
+
+----------------------------------------------------------
+Creative Enterprise
+----------------------------------------------------------
+
+Starting price:
+Rp10.000.000/bulan
+
+Termasuk:
+- custom usage
+- dedicated AI department
+- custom workflow
+- white label
+- SLA
+- approval workflow
+- API integration
+- custom number of users
+- human creative team add-on
+
+==========================================================
+BIAYA TAMBAHAN
+==========================================================
+
+Tambahkan price rules:
+
+Rush delivery:
+- 48 jam: +25%
+- 24 jam: +50%
+- same day: +100%
+
+Extra revision:
+- simple design: Rp100.000
+- company profile/presentation: Rp250.000
+- branding/logo: Rp500.000
+
+Human review:
+- simple output: Rp150.000
+- professional document: Rp500.000
+- strategy review: Rp1.000.000
+
+Bilingual:
+- +25%
+
+Additional concept:
+- simple image concept Rp75.000
+- logo concept Rp250.000
+- campaign direction Rp500.000
+
+Source/editable file:
+- included jika paket menyebutkan
+- jika tidak: +20%
+
+Commercial extended usage:
+- +25%
+
+Full ownership/exclusive buyout:
+- configurable, default +50%
+
+==========================================================
+PRICING ENGINE
+==========================================================
+
+Buat service:
+
+aiPricingService
+
+Method:
+- calculateBasePrice()
+- applyPackagePrice()
+- applyQuantityRule()
+- applyRushFee()
+- applyRevisionFee()
+- applyHumanReviewFee()
+- applyLanguageFee()
+- applyUsageRightsFee()
+- applyDiscount()
+- calculateTax()
+- generatePricingSnapshot()
+- validateMinimumCharge()
+
+Formula:
+
+subtotal =
+base_price
++ quantity_adjustment
++ rush_fee
++ human_review_fee
++ revision_fee
++ language_fee
++ usage_right_fee
++ additional_service_fee
+- discount
+
+tax dihitung terpisah sesuai konfigurasi tenant.
+
+total = subtotal + tax
+
+Jangan hardcode formula pajak Indonesia.
+Gunakan tenant tax configuration.
+
+==========================================================
+CUSTOMER UI
+==========================================================
+
+Buat halaman:
+
+/services
+/pricing
+/services/:serviceCode
+/request-service
+/my-requests/:token
+
+Halaman service menampilkan:
+- nama layanan
+- starting price
+- paket
+- deliverables
+- estimated delivery
+- jumlah revisi
+- human review badge
+- AI only badge
+- enterprise available
+
+Tambahkan pricing calculator:
+
+Customer memilih:
+- service
+- package
+- quantity
+- delivery speed
+- human review
+- revision count
+- bilingual
+- editable source file
+- usage rights
+
+Sistem menampilkan:
+- base price
+- add-ons
+- discount
+- tax
+- estimated total
+- estimated delivery
+
+==========================================================
+REQUEST SERVICE FLOW
+==========================================================
+
+Alur:
+
+Customer pilih service
+→ pilih package
+→ isi brief
+→ pricing engine
+→ tampilkan quotation
+→ customer confirm
+→ create ai_service_request
+→ AI CEO memilih department
+→ execution plan
+→ job queue
+→ human task jika diperlukan
+→ client review
+→ completed
+
+==========================================================
+ADMIN UI
+==========================================================
+
+Tambahkan halaman admin:
+
+/admin/service-catalog
+/admin/pricing
+/admin/packages
+/admin/service-requests
+
+Admin bisa:
+- CRUD category
+- CRUD service
+- CRUD package
+- ubah harga
+- ubah features
+- ubah limits
+- membuat discount
+- membuat price rule
+- mengaktifkan/nonaktifkan service
+- override quotation
+- melihat margin estimate
+
+==========================================================
+MARGIN & COST CONTROL
+==========================================================
+
+Simpan untuk setiap service request:
+- estimated AI cost
+- actual AI cost
+- human labor estimate
+- selling price
+- gross margin
+- gross margin percentage
+
+Tambahkan guardrail:
+Jika estimasi gross margin di bawah 40%:
+- tampilkan warning
+- require admin approval
+
+Jangan tampilkan AI cost atau gross margin ke customer.
+
+==========================================================
+DISCLAIMER
+==========================================================
+
+Tampilkan disclaimer berbeda per kategori:
+
+Finance:
+AI memberikan analisis pendukung, bukan keputusan keuangan final.
+
+Tax:
+Hasil wajib diverifikasi petugas pajak atau konsultan yang berwenang.
+
+Legal:
+Hasil AI bukan pengganti pendapat hukum profesional.
+
+Customs:
+HS Code adalah kandidat rekomendasi dan memerlukan verifikasi PPJK
+atau pejabat/otoritas yang berwenang.
+
+Creative:
+AI-generated concepts dapat memerlukan penyempurnaan desainer manusia
+untuk kebutuhan cetak, merek dagang, dan penggunaan komersial.
+
+==========================================================
+VERIFICATION
+==========================================================
+
+Pastikan:
+- DB push clean
+- OpenAPI clean
+- codegen clean
+- pnpm run verify clean
+- build clean
+- seed idempotent
+
+Test wajib:
+1. Service catalog tampil.
+2. Paket dan harga tampil.
+3. Pricing calculator menghitung benar.
+4. Rush fee diterapkan.
+5. Extra revision diterapkan.
+6. Human review fee diterapkan.
+7. Subscription limits tampil.
+8. Customer request membuat quotation.
+9. Pricing snapshot tidak berubah jika harga master berubah.
+10. Admin dapat mengubah harga tanpa edit source code.
+11. Tenant dapat memiliki harga berbeda.
+12. Margin warning bekerja.
+13. Customer tidak melihat internal AI cost.
+
+TARGET AKHIR:
+
+AI Enterprise Platform memiliki Service Catalog, Package Management,
+Pricing Engine, Pricing Calculator, Quotation Flow, dan Service Request
+Flow lengkap sehingga customer dapat memilih layanan, mengetahui harga,
+dan memulai proyek secara mandiri.

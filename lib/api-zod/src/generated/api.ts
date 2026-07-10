@@ -4182,3 +4182,771 @@ export const GetCustomerDashboardResponse = zod.object({
 })
 
 
+/**
+ * @summary List all AI service categories
+ */
+export const ListServiceCategoriesResponseItem = zod.object({
+  "id": zod.number(),
+  "code": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "icon": zod.string().nullish(),
+  "displayOrder": zod.number(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListServiceCategoriesResponse = zod.array(ListServiceCategoriesResponseItem)
+
+
+/**
+ * @summary Create an AI service category
+ */
+export const CreateServiceCategoryBody = zod.object({
+  "code": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().optional(),
+  "icon": zod.string().optional(),
+  "displayOrder": zod.number().optional(),
+  "status": zod.string().optional()
+})
+
+export const CreateServiceCategoryResponse = zod.object({
+  "id": zod.number(),
+  "code": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "icon": zod.string().nullish(),
+  "displayOrder": zod.number(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update an AI service category
+ */
+export const UpdateServiceCategoryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateServiceCategoryBody = zod.object({
+  "code": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().optional(),
+  "icon": zod.string().optional(),
+  "displayOrder": zod.number().optional(),
+  "status": zod.string().optional()
+})
+
+export const UpdateServiceCategoryResponse = zod.object({
+  "id": zod.number(),
+  "code": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "icon": zod.string().nullish(),
+  "displayOrder": zod.number(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete an AI service category
+ */
+export const DeleteServiceCategoryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteServiceCategoryResponse = zod.void()
+
+
+/**
+ * @summary List AI services, optionally filtered by category
+ */
+export const ListServicesQueryParams = zod.object({
+  "categoryId": zod.coerce.number().nullish()
+})
+
+export const ListServicesResponseItem = zod.object({
+  "id": zod.number(),
+  "categoryId": zod.number(),
+  "serviceCode": zod.string(),
+  "serviceName": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "fullDescription": zod.string().nullish(),
+  "serviceType": zod.string(),
+  "pricingModel": zod.string(),
+  "startingPrice": zod.string().nullish(),
+  "currency": zod.string(),
+  "estimatedDelivery": zod.string().nullish(),
+  "humanReview": zod.boolean(),
+  "aiOnly": zod.boolean(),
+  "subscriptionSupported": zod.boolean(),
+  "enterpriseSupported": zod.boolean(),
+  "department": zod.string().nullish(),
+  "workflowSummary": zod.string().nullish(),
+  "aiEmployeesInvolved": zod.array(zod.string()).nullish(),
+  "deliverables": zod.array(zod.string()).nullish(),
+  "revisionPolicy": zod.string().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListServicesResponse = zod.array(ListServicesResponseItem)
+
+
+/**
+ * @summary Create an AI service
+ */
+export const CreateServiceBody = zod.object({
+  "categoryId": zod.number(),
+  "serviceCode": zod.string(),
+  "serviceName": zod.string(),
+  "shortDescription": zod.string().optional(),
+  "fullDescription": zod.string().optional(),
+  "serviceType": zod.string().optional(),
+  "pricingModel": zod.string().optional(),
+  "startingPrice": zod.string().optional(),
+  "currency": zod.string().optional(),
+  "estimatedDelivery": zod.string().optional(),
+  "humanReview": zod.boolean().optional(),
+  "aiOnly": zod.boolean().optional(),
+  "subscriptionSupported": zod.boolean().optional(),
+  "enterpriseSupported": zod.boolean().optional(),
+  "department": zod.string().optional(),
+  "workflowSummary": zod.string().optional(),
+  "aiEmployeesInvolved": zod.array(zod.string()).optional(),
+  "deliverables": zod.array(zod.string()).optional(),
+  "revisionPolicy": zod.string().optional(),
+  "status": zod.string().optional()
+})
+
+export const CreateServiceResponse = zod.object({
+  "id": zod.number(),
+  "categoryId": zod.number(),
+  "serviceCode": zod.string(),
+  "serviceName": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "fullDescription": zod.string().nullish(),
+  "serviceType": zod.string(),
+  "pricingModel": zod.string(),
+  "startingPrice": zod.string().nullish(),
+  "currency": zod.string(),
+  "estimatedDelivery": zod.string().nullish(),
+  "humanReview": zod.boolean(),
+  "aiOnly": zod.boolean(),
+  "subscriptionSupported": zod.boolean(),
+  "enterpriseSupported": zod.boolean(),
+  "department": zod.string().nullish(),
+  "workflowSummary": zod.string().nullish(),
+  "aiEmployeesInvolved": zod.array(zod.string()).nullish(),
+  "deliverables": zod.array(zod.string()).nullish(),
+  "revisionPolicy": zod.string().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get an AI service, including its packages
+ */
+export const GetServiceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetServiceResponse = zod.object({
+  "id": zod.number(),
+  "categoryId": zod.number(),
+  "serviceCode": zod.string(),
+  "serviceName": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "fullDescription": zod.string().nullish(),
+  "serviceType": zod.string(),
+  "pricingModel": zod.string(),
+  "startingPrice": zod.string().nullish(),
+  "currency": zod.string(),
+  "estimatedDelivery": zod.string().nullish(),
+  "humanReview": zod.boolean(),
+  "aiOnly": zod.boolean(),
+  "subscriptionSupported": zod.boolean(),
+  "enterpriseSupported": zod.boolean(),
+  "department": zod.string().nullish(),
+  "workflowSummary": zod.string().nullish(),
+  "aiEmployeesInvolved": zod.array(zod.string()).nullish(),
+  "deliverables": zod.array(zod.string()).nullish(),
+  "revisionPolicy": zod.string().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "packages": zod.array(zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "packageName": zod.string(),
+  "packageType": zod.string(),
+  "monthlyPrice": zod.string().nullish(),
+  "yearlyPrice": zod.string().nullish(),
+  "oneTimePrice": zod.string().nullish(),
+  "featuresJson": zod.array(zod.string()).nullish(),
+  "limitsJson": zod.object({
+
+}).passthrough().nullish(),
+  "slaJson": zod.object({
+
+}).passthrough().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})).optional()
+}))
+
+
+/**
+ * @summary Update an AI service
+ */
+export const UpdateServiceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateServiceBody = zod.object({
+  "categoryId": zod.number(),
+  "serviceCode": zod.string(),
+  "serviceName": zod.string(),
+  "shortDescription": zod.string().optional(),
+  "fullDescription": zod.string().optional(),
+  "serviceType": zod.string().optional(),
+  "pricingModel": zod.string().optional(),
+  "startingPrice": zod.string().optional(),
+  "currency": zod.string().optional(),
+  "estimatedDelivery": zod.string().optional(),
+  "humanReview": zod.boolean().optional(),
+  "aiOnly": zod.boolean().optional(),
+  "subscriptionSupported": zod.boolean().optional(),
+  "enterpriseSupported": zod.boolean().optional(),
+  "department": zod.string().optional(),
+  "workflowSummary": zod.string().optional(),
+  "aiEmployeesInvolved": zod.array(zod.string()).optional(),
+  "deliverables": zod.array(zod.string()).optional(),
+  "revisionPolicy": zod.string().optional(),
+  "status": zod.string().optional()
+})
+
+export const UpdateServiceResponse = zod.object({
+  "id": zod.number(),
+  "categoryId": zod.number(),
+  "serviceCode": zod.string(),
+  "serviceName": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "fullDescription": zod.string().nullish(),
+  "serviceType": zod.string(),
+  "pricingModel": zod.string(),
+  "startingPrice": zod.string().nullish(),
+  "currency": zod.string(),
+  "estimatedDelivery": zod.string().nullish(),
+  "humanReview": zod.boolean(),
+  "aiOnly": zod.boolean(),
+  "subscriptionSupported": zod.boolean(),
+  "enterpriseSupported": zod.boolean(),
+  "department": zod.string().nullish(),
+  "workflowSummary": zod.string().nullish(),
+  "aiEmployeesInvolved": zod.array(zod.string()).nullish(),
+  "deliverables": zod.array(zod.string()).nullish(),
+  "revisionPolicy": zod.string().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete an AI service
+ */
+export const DeleteServiceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteServiceResponse = zod.void()
+
+
+/**
+ * @summary Add a pricing package to a service
+ */
+export const CreateServicePackageParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CreateServicePackageBody = zod.object({
+  "packageName": zod.string(),
+  "packageType": zod.string().optional(),
+  "monthlyPrice": zod.string().optional(),
+  "yearlyPrice": zod.string().optional(),
+  "oneTimePrice": zod.string().optional(),
+  "featuresJson": zod.array(zod.string()).optional(),
+  "limitsJson": zod.object({
+
+}).passthrough().optional(),
+  "slaJson": zod.object({
+
+}).passthrough().optional(),
+  "status": zod.string().optional()
+})
+
+export const CreateServicePackageResponse = zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "packageName": zod.string(),
+  "packageType": zod.string(),
+  "monthlyPrice": zod.string().nullish(),
+  "yearlyPrice": zod.string().nullish(),
+  "oneTimePrice": zod.string().nullish(),
+  "featuresJson": zod.array(zod.string()).nullish(),
+  "limitsJson": zod.object({
+
+}).passthrough().nullish(),
+  "slaJson": zod.object({
+
+}).passthrough().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Customer requests a service — creates an intake record for the AI Orchestrator
+ */
+export const RequestServiceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RequestServiceBody = zod.object({
+  "packageId": zod.number().optional(),
+  "pricingModelSelected": zod.string(),
+  "customerName": zod.string(),
+  "customerEmail": zod.string(),
+  "customerPhone": zod.string().optional(),
+  "companyName": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "briefJson": zod.object({
+
+}).passthrough().optional(),
+  "quantity": zod.number().optional(),
+  "rushSpeed": zod.enum(['48h', '24h', 'same_day']).optional(),
+  "humanReviewRequested": zod.boolean().optional(),
+  "extraRevisions": zod.number().optional(),
+  "bilingual": zod.boolean().optional(),
+  "editableSourceFile": zod.boolean().optional(),
+  "extendedUsageRights": zod.boolean().optional()
+})
+
+export const RequestServiceResponse = zod.object({
+  "id": zod.number(),
+  "requestId": zod.string(),
+  "serviceId": zod.number(),
+  "packageId": zod.number().nullish(),
+  "pricingModelSelected": zod.string(),
+  "customerName": zod.string(),
+  "customerEmail": zod.string(),
+  "companyName": zod.string().nullish(),
+  "customerPhone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "briefJson": zod.object({
+
+}).passthrough().nullish(),
+  "quantity": zod.number().optional(),
+  "rushSpeed": zod.string().nullish(),
+  "humanReviewRequested": zod.boolean().optional(),
+  "extraRevisions": zod.number().optional(),
+  "bilingual": zod.boolean().optional(),
+  "editableSourceFile": zod.boolean().optional(),
+  "extendedUsageRights": zod.boolean().optional(),
+  "currency": zod.string().optional(),
+  "subtotal": zod.string().optional(),
+  "rushFee": zod.string().optional(),
+  "revisionFee": zod.string().optional(),
+  "humanReviewFee": zod.string().optional(),
+  "additionalServiceFee": zod.string().optional(),
+  "discount": zod.string().optional(),
+  "tax": zod.string().optional(),
+  "total": zod.string().optional(),
+  "status": zod.string(),
+  "createdProjectId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Calculate a customer-facing price quote for a service (no internal cost/margin fields)
+ */
+export const QuoteServiceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const QuoteServiceBody = zod.object({
+  "packageId": zod.number().optional(),
+  "pricingModelSelected": zod.string().optional(),
+  "quantity": zod.number().optional(),
+  "rushSpeed": zod.enum(['48h', '24h', 'same_day']).optional(),
+  "humanReviewRequested": zod.boolean().optional(),
+  "extraRevisions": zod.number().optional(),
+  "bilingual": zod.boolean().optional(),
+  "editableSourceFile": zod.boolean().optional(),
+  "extendedUsageRights": zod.boolean().optional(),
+  "discount": zod.number().optional()
+})
+
+export const QuoteServiceResponse = zod.object({
+  "currency": zod.string(),
+  "basePrice": zod.number(),
+  "quantityAdjustment": zod.number().optional(),
+  "rushFee": zod.number().optional(),
+  "revisionFee": zod.number().optional(),
+  "humanReviewFee": zod.number().optional(),
+  "additionalServiceFee": zod.number().optional(),
+  "discount": zod.number().optional(),
+  "subtotal": zod.number(),
+  "taxPercent": zod.number().optional(),
+  "tax": zod.number(),
+  "total": zod.number(),
+  "lineItems": zod.array(zod.object({
+  "code": zod.string(),
+  "label": zod.string(),
+  "amount": zod.number()
+}))
+})
+
+
+/**
+ * @summary List pricing rules (admin)
+ */
+export const ListPriceRulesQueryParams = zod.object({
+  "serviceId": zod.coerce.number().optional()
+})
+
+export const ListPriceRulesResponseItem = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceId": zod.number().nullish(),
+  "ruleCode": zod.string(),
+  "ruleName": zod.string(),
+  "conditionType": zod.string(),
+  "conditionJson": zod.object({
+
+}).passthrough().nullish(),
+  "adjustmentType": zod.string(),
+  "adjustmentValue": zod.string(),
+  "minimumCharge": zod.string().nullish(),
+  "maximumCharge": zod.string().nullish(),
+  "priority": zod.number(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListPriceRulesResponse = zod.array(ListPriceRulesResponseItem)
+
+
+/**
+ * @summary Create a pricing rule (admin)
+ */
+export const CreatePriceRuleBody = zod.object({
+  "tenantId": zod.string().optional(),
+  "serviceId": zod.number().optional(),
+  "ruleCode": zod.string(),
+  "ruleName": zod.string(),
+  "conditionType": zod.string(),
+  "conditionJson": zod.object({
+
+}).passthrough().optional(),
+  "adjustmentType": zod.string(),
+  "adjustmentValue": zod.string(),
+  "minimumCharge": zod.string().optional(),
+  "maximumCharge": zod.string().optional(),
+  "priority": zod.number().optional(),
+  "active": zod.boolean().optional()
+})
+
+export const CreatePriceRuleResponse = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceId": zod.number().nullish(),
+  "ruleCode": zod.string(),
+  "ruleName": zod.string(),
+  "conditionType": zod.string(),
+  "conditionJson": zod.object({
+
+}).passthrough().nullish(),
+  "adjustmentType": zod.string(),
+  "adjustmentValue": zod.string(),
+  "minimumCharge": zod.string().nullish(),
+  "maximumCharge": zod.string().nullish(),
+  "priority": zod.number(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a pricing rule (admin)
+ */
+export const UpdatePriceRuleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdatePriceRuleBody = zod.object({
+  "tenantId": zod.string().optional(),
+  "serviceId": zod.number().optional(),
+  "ruleCode": zod.string(),
+  "ruleName": zod.string(),
+  "conditionType": zod.string(),
+  "conditionJson": zod.object({
+
+}).passthrough().optional(),
+  "adjustmentType": zod.string(),
+  "adjustmentValue": zod.string(),
+  "minimumCharge": zod.string().optional(),
+  "maximumCharge": zod.string().optional(),
+  "priority": zod.number().optional(),
+  "active": zod.boolean().optional()
+})
+
+export const UpdatePriceRuleResponse = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceId": zod.number().nullish(),
+  "ruleCode": zod.string(),
+  "ruleName": zod.string(),
+  "conditionType": zod.string(),
+  "conditionJson": zod.object({
+
+}).passthrough().nullish(),
+  "adjustmentType": zod.string(),
+  "adjustmentValue": zod.string(),
+  "minimumCharge": zod.string().nullish(),
+  "maximumCharge": zod.string().nullish(),
+  "priority": zod.number(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a pricing rule (admin)
+ */
+export const DeletePriceRuleParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeletePriceRuleResponse = zod.void()
+
+
+/**
+ * @summary Internal cost/margin details for a request (admin only — never expose to customers)
+ */
+export const GetRequestMarginReviewParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetRequestMarginReviewResponse = zod.object({
+  "estimatedAiCost": zod.string().nullish(),
+  "humanLaborEstimate": zod.string().nullish(),
+  "grossMargin": zod.string().nullish(),
+  "grossMarginPercent": zod.string().nullish(),
+  "marginApprovalRequired": zod.boolean().optional(),
+  "marginApprovedBy": zod.string().nullish(),
+  "marginApprovedAt": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary Approve a low-margin request so it can proceed (admin)
+ */
+export const ApproveRequestMarginParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ApproveRequestMarginBody = zod.object({
+  "approvedBy": zod.string()
+})
+
+export const ApproveRequestMarginResponse = zod.object({
+  "ok": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Update a service pricing package
+ */
+export const UpdateServicePackageParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateServicePackageBody = zod.object({
+  "packageName": zod.string(),
+  "packageType": zod.string().optional(),
+  "monthlyPrice": zod.string().optional(),
+  "yearlyPrice": zod.string().optional(),
+  "oneTimePrice": zod.string().optional(),
+  "featuresJson": zod.array(zod.string()).optional(),
+  "limitsJson": zod.object({
+
+}).passthrough().optional(),
+  "slaJson": zod.object({
+
+}).passthrough().optional(),
+  "status": zod.string().optional()
+})
+
+export const UpdateServicePackageResponse = zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "packageName": zod.string(),
+  "packageType": zod.string(),
+  "monthlyPrice": zod.string().nullish(),
+  "yearlyPrice": zod.string().nullish(),
+  "oneTimePrice": zod.string().nullish(),
+  "featuresJson": zod.array(zod.string()).nullish(),
+  "limitsJson": zod.object({
+
+}).passthrough().nullish(),
+  "slaJson": zod.object({
+
+}).passthrough().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a service pricing package
+ */
+export const DeleteServicePackageParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteServicePackageResponse = zod.void()
+
+
+/**
+ * @summary List customer service requests (admin)
+ */
+export const ListServiceRequestsResponseItem = zod.object({
+  "id": zod.number(),
+  "requestId": zod.string(),
+  "serviceId": zod.number(),
+  "packageId": zod.number().nullish(),
+  "pricingModelSelected": zod.string(),
+  "customerName": zod.string(),
+  "customerEmail": zod.string(),
+  "companyName": zod.string().nullish(),
+  "customerPhone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "briefJson": zod.object({
+
+}).passthrough().nullish(),
+  "quantity": zod.number().optional(),
+  "rushSpeed": zod.string().nullish(),
+  "humanReviewRequested": zod.boolean().optional(),
+  "extraRevisions": zod.number().optional(),
+  "bilingual": zod.boolean().optional(),
+  "editableSourceFile": zod.boolean().optional(),
+  "extendedUsageRights": zod.boolean().optional(),
+  "currency": zod.string().optional(),
+  "subtotal": zod.string().optional(),
+  "rushFee": zod.string().optional(),
+  "revisionFee": zod.string().optional(),
+  "humanReviewFee": zod.string().optional(),
+  "additionalServiceFee": zod.string().optional(),
+  "discount": zod.string().optional(),
+  "tax": zod.string().optional(),
+  "total": zod.string().optional(),
+  "status": zod.string(),
+  "createdProjectId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListServiceRequestsResponse = zod.array(ListServiceRequestsResponseItem)
+
+
+/**
+ * @summary Update a service request's status (admin)
+ */
+export const UpdateServiceRequestStatusParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateServiceRequestStatusBody = zod.object({
+  "status": zod.string(),
+  "createdProjectId": zod.string().optional()
+})
+
+export const UpdateServiceRequestStatusResponse = zod.object({
+  "id": zod.number(),
+  "requestId": zod.string(),
+  "serviceId": zod.number(),
+  "packageId": zod.number().nullish(),
+  "pricingModelSelected": zod.string(),
+  "customerName": zod.string(),
+  "customerEmail": zod.string(),
+  "companyName": zod.string().nullish(),
+  "customerPhone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "briefJson": zod.object({
+
+}).passthrough().nullish(),
+  "quantity": zod.number().optional(),
+  "rushSpeed": zod.string().nullish(),
+  "humanReviewRequested": zod.boolean().optional(),
+  "extraRevisions": zod.number().optional(),
+  "bilingual": zod.boolean().optional(),
+  "editableSourceFile": zod.boolean().optional(),
+  "extendedUsageRights": zod.boolean().optional(),
+  "currency": zod.string().optional(),
+  "subtotal": zod.string().optional(),
+  "rushFee": zod.string().optional(),
+  "revisionFee": zod.string().optional(),
+  "humanReviewFee": zod.string().optional(),
+  "additionalServiceFee": zod.string().optional(),
+  "discount": zod.string().optional(),
+  "tax": zod.string().optional(),
+  "total": zod.string().optional(),
+  "status": zod.string(),
+  "createdProjectId": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Service catalog dashboard — most requested services, revenue per category, etc.
+ */
+export const GetCatalogAnalyticsResponse = zod.object({
+  "mostRequestedServices": zod.array(zod.object({
+  "serviceId": zod.number(),
+  "serviceName": zod.string(),
+  "requestCount": zod.number()
+})),
+  "revenuePerCategory": zod.array(zod.object({
+  "categoryId": zod.number(),
+  "categoryName": zod.string(),
+  "estimatedRevenue": zod.number()
+})),
+  "averageDeliveryTimeDays": zod.number().nullable(),
+  "mostPopularPackage": zod.object({
+  "packageId": zod.number().optional(),
+  "packageName": zod.string().optional(),
+  "requestCount": zod.number().optional()
+}).nullable(),
+  "conversionRate": zod.number(),
+  "totalRequests": zod.number().optional(),
+  "completedRequests": zod.number().optional()
+})
+
+

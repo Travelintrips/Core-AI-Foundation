@@ -31,6 +31,7 @@ import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { computePriorityScore } from "./services/priorityEngine.js";
 import { createSchedule } from "./services/aiSchedulerService.js";
+import { seedServiceCatalog } from "./seedCatalog.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1070,6 +1071,9 @@ async function main() {
 
   // Phase 8: AI Skills Marketplace & Tool Ecosystem
   await seedMarketplace();
+
+  // AI Service Catalog & Pricing Center
+  await seedServiceCatalog();
 
   console.log("\n✅ Seed complete!\n");
   process.exit(0);
