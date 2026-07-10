@@ -185,6 +185,20 @@ export function useSaveBrief() {
   });
 }
 
+export function useStartBrief() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ requestId }: { requestId: string }) =>
+      customFetch<{ ok: boolean; status: string }>(`/api/public/catalog/requests/${requestId}/start-brief`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['catalog', 'request', vars.requestId] });
+    },
+  });
+}
+
 // ── Service Quotation (ai_quotations, by token) ───────────────────────────────
 
 export type ServiceQuotationItem = {

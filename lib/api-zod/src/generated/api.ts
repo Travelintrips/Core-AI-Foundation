@@ -4573,7 +4573,7 @@ export const RequestServiceResponse = zod.object({
   "discount": zod.string().optional(),
   "tax": zod.string().optional(),
   "total": zod.string().optional(),
-  "status": zod.string(),
+  "status": zod.enum(['draft', 'brief_in_progress', 'brief_completed', 'pricing_calculated', 'quotation_ready', 'waiting_customer_approval', 'waiting_commercial_gate', 'approved', 'rejected', 'revision_requested', 'expired', 'converted_to_project', 'pending', 'orchestrating', 'in_progress', 'waiting_review', 'completed', 'cancelled']),
   "createdProjectId": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -4867,7 +4867,7 @@ export const ListServiceRequestsResponseItem = zod.object({
   "discount": zod.string().optional(),
   "tax": zod.string().optional(),
   "total": zod.string().optional(),
-  "status": zod.string(),
+  "status": zod.enum(['draft', 'brief_in_progress', 'brief_completed', 'pricing_calculated', 'quotation_ready', 'waiting_customer_approval', 'waiting_commercial_gate', 'approved', 'rejected', 'revision_requested', 'expired', 'converted_to_project', 'pending', 'orchestrating', 'in_progress', 'waiting_review', 'completed', 'cancelled']),
   "createdProjectId": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -4883,7 +4883,7 @@ export const UpdateServiceRequestStatusParams = zod.object({
 })
 
 export const UpdateServiceRequestStatusBody = zod.object({
-  "status": zod.string(),
+  "status": zod.enum(['draft', 'brief_in_progress', 'brief_completed', 'pricing_calculated', 'quotation_ready', 'waiting_customer_approval', 'waiting_commercial_gate', 'approved', 'rejected', 'revision_requested', 'expired', 'converted_to_project', 'pending', 'orchestrating', 'in_progress', 'waiting_review', 'completed', 'cancelled']),
   "createdProjectId": zod.string().optional()
 })
 
@@ -4917,7 +4917,7 @@ export const UpdateServiceRequestStatusResponse = zod.object({
   "discount": zod.string().optional(),
   "tax": zod.string().optional(),
   "total": zod.string().optional(),
-  "status": zod.string(),
+  "status": zod.enum(['draft', 'brief_in_progress', 'brief_completed', 'pricing_calculated', 'quotation_ready', 'waiting_customer_approval', 'waiting_commercial_gate', 'approved', 'rejected', 'revision_requested', 'expired', 'converted_to_project', 'pending', 'orchestrating', 'in_progress', 'waiting_review', 'completed', 'cancelled']),
   "createdProjectId": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -4946,7 +4946,36 @@ export const GetCatalogAnalyticsResponse = zod.object({
 }).nullable(),
   "conversionRate": zod.number(),
   "totalRequests": zod.number().optional(),
-  "completedRequests": zod.number().optional()
+  "completedRequests": zod.number().optional(),
+  "briefCompletionRate": zod.number().optional(),
+  "quotationApprovalRate": zod.number().optional(),
+  "approvalToPaymentRate": zod.number().optional(),
+  "requestToProjectRate": zod.number().optional(),
+  "averageQuotationValue": zod.number().nullish(),
+  "averageTimeToApprovalDays": zod.number().nullish(),
+  "funnelCounts": zod.object({
+  "newRequests": zod.number().optional(),
+  "briefInProgress": zod.number().optional(),
+  "briefCompleted": zod.number().optional(),
+  "quotationReady": zod.number().optional(),
+  "waitingApproval": zod.number().optional(),
+  "approved": zod.number().optional(),
+  "inProduction": zod.number().optional(),
+  "completed": zod.number().optional()
+}).optional()
+})
+
+
+/**
+ * @summary Mark a service request as brief in progress (customer-facing, no auth required)
+ */
+export const StartBriefParams = zod.object({
+  "requestId": zod.coerce.string()
+})
+
+export const StartBriefResponse = zod.object({
+  "ok": zod.boolean(),
+  "status": zod.string()
 })
 
 

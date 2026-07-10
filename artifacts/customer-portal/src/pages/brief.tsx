@@ -3,7 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import { FlowStepper } from "@/components/flow-stepper";
 import { useToast } from "@/hooks/use-toast";
-import { useRequestDetail, useSaveBrief } from "@/hooks/use-catalog";
+import { useRequestDetail, useSaveBrief, useStartBrief } from "@/hooks/use-catalog";
 import {
   ArrowLeft, ArrowRight, Save, CheckCircle2, Loader2,
   Building2, Target, Users, Palette, Package, Calendar, ClipboardList,
@@ -78,8 +78,17 @@ export default function BriefPage() {
 
   const { data: requestDetail, isLoading: requestLoading } = useRequestDetail(requestId);
   const saveBrief = useSaveBrief();
+  const startBrief = useStartBrief();
 
   const STORAGE_KEY = `brief_draft_${requestId}`;
+
+  // Advance service request from draft → brief_in_progress when page mounts
+  useEffect(() => {
+    if (requestId) {
+      startBrief.mutate({ requestId });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestId]);
 
   const [currentStep, setCurrentStep] = useState(1);
   const [brief, setBrief] = useState<BriefData>(() => {

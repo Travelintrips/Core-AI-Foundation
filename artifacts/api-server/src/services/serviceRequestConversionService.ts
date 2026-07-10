@@ -14,11 +14,13 @@
  * second triggers the actual conversion.
  */
 
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import {
   db,
   aiCommercialGatesTable,
   creativeProjectQuotationsTable,
+  aiQuotationsTable,
   aiServiceRequestsTable,
   creativeProjectsTable,
 } from "@workspace/db";
@@ -74,38 +76,98 @@ export async function convertServiceRequestToProject(
     return { alreadyConverted: false, createdProjectId: null, skipped: "gate_not_cleared" };
   }
 
-  // Load the quotation (legacy path — gate must have a quotationId)
-  if (gate.quotationId == null) {
-    return { alreadyConverted: false, createdProjectId: null, skipped: "no_legacy_quotation_id" };
+  // ── Quotation & project lookup — supports legacy (quotationId) and service-catalog (serviceQuotationId) paths ──
+
+  let projectId: string;
+  let quotationDbId: number;
+
+  if (gate.quotationId != null) {
+    // ── Legacy path: creative_project_quotations ──
+    const [quotation] = await db
+      .select()
+      .from(creativeProjectQuotationsTable)
+      .where(eq(creativeProjectQuotationsTable.id, gate.quotationId))
+      .limit(1);
+
+    if (!quotation) return { alreadyConverted: false, createdProjectId: null, skipped: "quotation_not_found" };
+    if (quotation.status !== "approved") return { alreadyConverted: false, createdProjectId: null, skipped: "quotation_not_approved" };
+
+    const [project] = await db
+      .select()
+      .from(creativeProjectsTable)
+      .where(eq(creativeProjectsTable.projectId, quotation.projectId))
+      .limit(1);
+
+    if (!project) return { alreadyConverted: false, createdProjectId: null, skipped: "project_not_found" };
+
+    projectId = project.projectId;
+    quotationDbId = quotation.id;
+  } else if (gate.serviceQuotationId != null) {
+    // ── Service-catalog path: ai_quotations ──
+    const [serviceQuotation] = await db
+      .select()
+      .from(aiQuotationsTable)
+      .where(eq(aiQuotationsTable.id, gate.serviceQuotationId))
+      .limit(1);
+
+    if (!serviceQuotation) return { alreadyConverted: false, createdProjectId: null, skipped: "service_quotation_not_found" };
+    if (serviceQuotation.status !== "approved") return { alreadyConverted: false, createdProjectId: null, skipped: "quotation_not_approved" };
+
+    // Find or create the creative project for this service request
+    const [existingProject] = await db
+      .select()
+      .from(creativeProjectsTable)
+      .where(
+        and(
+          eq(creativeProjectsTable.serviceRequestId, request.id),
+          eq(creativeProjectsTable.sourceType, "service_catalog"),
+        ),
+      )
+      .limit(1);
+
+    if (existingProject) {
+      projectId = existingProject.projectId;
+    } else {
+      // Create the creative project from the service request brief data
+      const brief = (request.briefJson ?? {}) as Record<string, string>;
+      const newProjectId = randomUUID();
+      const [newProject] = await db
+        .insert(creativeProjectsTable)
+        .values({
+          projectId: newProjectId,
+          sourceType: "service_catalog",
+          serviceRequestId: request.id,
+          serviceQuotationId: gate.serviceQuotationId,
+          brandName: request.companyName ?? request.customerName,
+          businessType: brief.companyIndustry ?? "general",
+          targetMarket: brief.audienceDemographics ?? "general",
+          productOrService: brief.outputFormats ?? "creative assets",
+          stylePreference: brief.stylePreference ?? null,
+          colorPreference: brief.colorPalette ?? null,
+          referenceLinks: brief.referenceLinks ?? null,
+          goal: brief.primaryGoal ?? "brand creative project",
+          notes: request.notes ?? null,
+          deadline: brief.deadline ?? null,
+          status: "pending",
+        })
+        .returning();
+      projectId = newProject.projectId;
+    }
+    quotationDbId = serviceQuotation.id;
+  } else {
+    return { alreadyConverted: false, createdProjectId: null, skipped: "no_quotation_id" };
   }
 
-  const [quotation] = await db
-    .select()
-    .from(creativeProjectQuotationsTable)
-    .where(eq(creativeProjectQuotationsTable.id, gate.quotationId))
-    .limit(1);
-
-  if (!quotation) {
-    return { alreadyConverted: false, createdProjectId: null, skipped: "quotation_not_found" };
-  }
-
-  if (quotation.status !== "approved") {
-    return { alreadyConverted: false, createdProjectId: null, skipped: "quotation_not_approved" };
-  }
-
-  // Load the creative project by projectId stored on the quotation
+  // Load the project record (for status check before enqueue)
   const [project] = await db
     .select()
     .from(creativeProjectsTable)
-    .where(eq(creativeProjectsTable.projectId, quotation.projectId))
+    .where(eq(creativeProjectsTable.projectId, projectId))
     .limit(1);
 
-  if (!project) {
-    return { alreadyConverted: false, createdProjectId: null, skipped: "project_not_found" };
-  }
+  if (!project) return { alreadyConverted: false, createdProjectId: null, skipped: "project_not_found" };
 
   // All preconditions met — perform the conversion in a transaction
-  const projectId = project.projectId;
 
   await db.transaction(async (tx) => {
     // Update service request: mark as converted, store the project id
@@ -126,7 +188,7 @@ export async function convertServiceRequestToProject(
     String(serviceRequestId),
     "ai_service_request",
     "success",
-    { projectId, quotationId: quotation.id, gateId: gate.id, gateStatus: gate.status },
+    { projectId, quotationDbId, gateId: gate.id, gateStatus: gate.status },
   );
 
   // Publish lifecycle events
@@ -134,28 +196,28 @@ export async function convertServiceRequestToProject(
     eventType: "service_request.approved",
     sourceModule: "conversion",
     sourceId: String(serviceRequestId),
-    payload: { serviceRequestId, quotationId: quotation.id, projectId },
+    payload: { serviceRequestId, quotationId: quotationDbId, projectId },
   });
 
   publishSafe({
     eventType: gate.status === "waived" ? "commercial_gate.waived" : "commercial_gate.verified",
     sourceModule: "conversion",
     sourceId: String(gate.id),
-    payload: { gateId: gate.id, quotationId: quotation.id, serviceRequestId },
+    payload: { gateId: gate.id, quotationId: quotationDbId, serviceRequestId },
   });
 
   publishSafe({
     eventType: "service_request.converted",
     sourceModule: "conversion",
     sourceId: String(serviceRequestId),
-    payload: { serviceRequestId, projectId, quotationId: quotation.id },
+    payload: { serviceRequestId, projectId, quotationId: quotationDbId },
   });
 
   publishSafe({
     eventType: "project.created",
     sourceModule: "conversion",
     sourceId: projectId,
-    payload: { projectId, serviceRequestId, quotationId: quotation.id },
+    payload: { projectId, serviceRequestId, quotationId: quotationDbId },
   });
 
   // Enqueue AI generation workflow (only if project is still pending)

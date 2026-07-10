@@ -208,11 +208,11 @@ export async function issueQuotation(quotationId: number, validDays = 14): Promi
     payload: { quotationId: q.id, code: q.quotationCode, serviceRequestId: q.serviceRequestId },
   });
 
-  // Update service request status to waiting_customer_approval
+  // Update service request status to quotation_ready (customer sees it as waiting once they view the token)
   if (q.serviceRequestId) {
     await db
       .update(aiServiceRequestsTable)
-      .set({ status: "waiting_customer_approval", updatedAt: now })
+      .set({ status: "quotation_ready", updatedAt: now })
       .where(eq(aiServiceRequestsTable.id, q.serviceRequestId));
   }
 
@@ -241,10 +241,25 @@ export async function getByToken(plainToken: string): Promise<QuotationWithItems
 // ── markViewed ────────────────────────────────────────────────────────────────
 
 export async function markViewed(quotationId: number): Promise<void> {
-  await db
+  const now = new Date();
+  const [updated] = await db
     .update(aiQuotationsTable)
-    .set({ status: "viewed", viewedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(aiQuotationsTable.id, quotationId), eq(aiQuotationsTable.status, "issued")));
+    .set({ status: "viewed", viewedAt: now, updatedAt: now })
+    .where(and(eq(aiQuotationsTable.id, quotationId), eq(aiQuotationsTable.status, "issued")))
+    .returning({ id: aiQuotationsTable.id, serviceRequestId: aiQuotationsTable.serviceRequestId });
+
+  // When customer first views the quotation, advance service request to waiting_customer_approval
+  if (updated?.serviceRequestId) {
+    await db
+      .update(aiServiceRequestsTable)
+      .set({ status: "waiting_customer_approval", updatedAt: now })
+      .where(
+        and(
+          eq(aiServiceRequestsTable.id, updated.serviceRequestId),
+          eq(aiServiceRequestsTable.status, "quotation_ready"),
+        ),
+      );
+  }
 }
 
 // ── CAS transition helper ─────────────────────────────────────────────────────
@@ -380,7 +395,7 @@ export async function rejectByToken(plainToken: string, notes?: string): Promise
   if (saved.serviceRequestId) {
     await db
       .update(aiServiceRequestsTable)
-      .set({ status: "cancelled", updatedAt: new Date() })
+      .set({ status: "rejected", updatedAt: new Date() })
       .where(eq(aiServiceRequestsTable.id, saved.serviceRequestId));
   }
 

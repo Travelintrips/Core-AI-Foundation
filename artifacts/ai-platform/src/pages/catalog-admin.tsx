@@ -16,6 +16,7 @@ import {
   getListServiceRequestsQueryKey,
   type AiServiceCategory,
   type AiService,
+  type ServiceRequestStatus,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -39,7 +40,13 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { LayoutGrid, Plus, Pencil, Trash2, BarChart2, ClipboardList, Boxes } from "lucide-react";
 
-const REQUEST_STATUSES = ["pending", "reviewing", "accepted", "in_progress", "completed", "rejected"];
+const REQUEST_STATUSES: ServiceRequestStatus[] = [
+  "draft", "brief_in_progress", "brief_completed", "pricing_calculated",
+  "quotation_ready", "waiting_customer_approval", "waiting_commercial_gate",
+  "approved", "rejected", "revision_requested", "expired",
+  "in_progress", "orchestrating", "pending", "waiting_review",
+  "completed", "converted_to_project", "cancelled",
+];
 
 function StatBox({ label, value }: { label: string; value: string | number }) {
   return (
@@ -266,7 +273,7 @@ function RequestsTab() {
             </TableCell>
             <TableCell className="text-sm">{services.find((s) => s.id === r.serviceId)?.serviceName ?? `#${r.serviceId}`}</TableCell>
             <TableCell>
-              <Select value={r.status} onValueChange={(v) => statusMutation.mutate({ id: r.id, data: { status: v } })}>
+              <Select value={r.status} onValueChange={(v) => statusMutation.mutate({ id: r.id, data: { status: v as ServiceRequestStatus } })}>
                 <SelectTrigger className="h-7 w-36 text-xs" data-testid={`select-request-status-${r.requestId}`}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {REQUEST_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}

@@ -15,11 +15,19 @@ function formatMoney(amount: number | string, currency = "IDR") {
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "Permintaan Diterima",
+  brief_in_progress: "Mengisi Brief",
+  brief_completed: "Brief Selesai",
+  pricing_calculated: "Harga Dikonfirmasi",
   quoted: "Sedang Dikalkulasi",
+  quotation_ready: "Penawaran Siap Dikirim",
   waiting_customer_approval: "Menunggu Persetujuan Anda",
   approved: "Disetujui",
+  waiting_commercial_gate: "Menunggu Konfirmasi Pembayaran",
   revision_requested: "Revisi Dibutuhkan",
+  rejected: "Ditolak",
+  expired: "Kedaluwarsa",
   cancelled: "Dibatalkan",
+  converted_to_project: "Project Dibuat",
 };
 
 export default function RequestPricingPage() {
@@ -50,7 +58,7 @@ export default function RequestPricingPage() {
     );
   }
 
-  const hasQuotation = request.status === "waiting_customer_approval";
+  const hasQuotation = ["quotation_ready", "waiting_customer_approval", "approved", "waiting_commercial_gate", "converted_to_project"].includes(request.status);
 
   return (
     <Layout>

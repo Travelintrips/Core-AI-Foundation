@@ -13,7 +13,7 @@
  * GET        /ai/catalog/analytics
  */
 import { Router } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import {
   db,
@@ -272,7 +272,7 @@ router.post("/ai/catalog/services/:id/request", async (req, res): Promise<void> 
     .values({
       ...parsed.data,
       requestId: randomUUID(),
-      status: "quoted",
+      status: "draft",
       currency: breakdown.currency,
       subtotal: String(breakdown.subtotal),
       rushFee: String(breakdown.rushFee),
@@ -482,6 +482,63 @@ router.get("/ai/catalog/analytics", async (_req, res): Promise<void> => {
   const totalRequests = requests.length;
   const conversionRate = totalRequests > 0 ? Math.round((completed / totalRequests) * 1000) / 10 : 0;
 
+  // ── Funnel counts ──
+  const countByStatus = new Map<string, number>();
+  for (const r of requests) countByStatus.set(r.status, (countByStatus.get(r.status) ?? 0) + 1);
+
+  const countForStatuses = (...statuses: string[]) =>
+    statuses.reduce((sum, s) => sum + (countByStatus.get(s) ?? 0), 0);
+
+  const briefCompletedCount = countForStatuses("brief_completed", "pricing_calculated", "quotation_ready", "waiting_customer_approval", "approved", "waiting_commercial_gate", "in_progress", "orchestrating", "pending", "waiting_review", "completed", "converted_to_project");
+  const quotationReadyCount = countForStatuses("quotation_ready", "waiting_customer_approval", "approved", "waiting_commercial_gate", "in_progress", "orchestrating", "pending", "waiting_review", "completed", "converted_to_project");
+  const approvedCount = countForStatuses("approved", "waiting_commercial_gate", "in_progress", "orchestrating", "pending", "waiting_review", "completed", "converted_to_project");
+  const projectCount = countForStatuses("completed", "converted_to_project", "in_progress", "orchestrating", "waiting_review");
+
+  const briefCompletionRate = totalRequests > 0 ? Math.round((briefCompletedCount / totalRequests) * 1000) / 10 : 0;
+  const quotationApprovalRate = quotationReadyCount > 0 ? Math.round((approvedCount / quotationReadyCount) * 1000) / 10 : 0;
+  const approvalToPaymentRate = approvedCount > 0 ? Math.round((projectCount / approvedCount) * 1000) / 10 : 0;
+  const requestToProjectRate = totalRequests > 0 ? Math.round((projectCount / totalRequests) * 1000) / 10 : 0;
+
+  // Average quotation value from total field
+  const totals = requests.map((r) => parseFloat(r.total ?? "0")).filter((n) => n > 0);
+  const averageQuotationValue = totals.length > 0 ? Math.round(totals.reduce((a, b) => a + b, 0) / totals.length) : null;
+
+  // Average time to approval (days)
+  const approvalTimes: number[] = [];
+  for (const r of requests) {
+    if (r.status === "approved" || r.status === "converted_to_project") {
+      const created = new Date(r.createdAt).getTime();
+      const updated = new Date(r.updatedAt).getTime();
+      if (updated > created) {
+        approvalTimes.push((updated - created) / 86_400_000);
+      }
+    }
+  }
+  const averageTimeToApprovalDays = approvalTimes.length > 0
+    ? Math.round((approvalTimes.reduce((a, b) => a + b, 0) / approvalTimes.length) * 10) / 10
+    : null;
+
+  const funnelCounts = {
+    // Include "quoted" (legacy status) in newRequests for backward compat
+    newRequests: countForStatuses("draft", "quoted"),
+    briefInProgress: countForStatuses("brief_in_progress"),
+    briefCompleted: countForStatuses("brief_completed", "pricing_calculated"),
+    quotationReady: countForStatuses("quotation_ready"),
+    waitingApproval: countForStatuses("waiting_customer_approval"),
+    approved: countForStatuses("approved"),
+    inProduction: countForStatuses("in_progress", "orchestrating", "pending", "waiting_review"),
+    completed: countForStatuses("completed", "converted_to_project"),
+  };
+
+  // averageQuotationValue: only count requests that reached quotation stage or later
+  const quotationStageTotals = requests
+    .filter((r) => ["quotation_ready", "waiting_customer_approval", "waiting_commercial_gate", "approved", "in_progress", "orchestrating", "pending", "waiting_review", "completed", "converted_to_project"].includes(r.status))
+    .map((r) => parseFloat(r.total ?? "0"))
+    .filter((n) => n > 0);
+  const correctedAverageQuotationValue = quotationStageTotals.length > 0
+    ? Math.round(quotationStageTotals.reduce((a, b) => a + b, 0) / quotationStageTotals.length)
+    : averageQuotationValue; // fall back to all-requests value
+
   res.json({
     mostRequestedServices,
     revenuePerCategory,
@@ -490,7 +547,55 @@ router.get("/ai/catalog/analytics", async (_req, res): Promise<void> => {
     conversionRate,
     totalRequests,
     completedRequests: completed,
+    briefCompletionRate,
+    quotationApprovalRate,
+    approvalToPaymentRate,
+    requestToProjectRate,
+    averageQuotationValue: correctedAverageQuotationValue,
+    averageTimeToApprovalDays,
+    funnelCounts,
   });
+});
+
+// ── Public: start brief (draft → brief_in_progress) ──────────────────────────
+
+router.patch("/public/catalog/requests/:requestId/start-brief", async (req, res): Promise<void> => {
+  const { requestId } = req.params as { requestId: string };
+  if (!requestId || requestId.length < 8) {
+    res.status(400).json({ error: "Invalid requestId" });
+    return;
+  }
+
+  const [existing] = await db
+    .select({ id: aiServiceRequestsTable.id, status: aiServiceRequestsTable.status })
+    .from(aiServiceRequestsTable)
+    .where(eq(aiServiceRequestsTable.requestId, requestId))
+    .limit(1);
+
+  if (!existing) {
+    res.status(404).json({ error: "Service request not found" });
+    return;
+  }
+
+  const TERMINAL = new Set(["completed", "cancelled", "converted_to_project", "rejected", "expired"]);
+  if (TERMINAL.has(existing.status)) {
+    res.status(409).json({ error: `Cannot start brief on ${existing.status} request` });
+    return;
+  }
+
+  // Only advance from draft; idempotent if already further along
+  if (existing.status !== "draft") {
+    res.json({ ok: true, status: existing.status });
+    return;
+  }
+
+  const [updated] = await db
+    .update(aiServiceRequestsTable)
+    .set({ status: "brief_in_progress", updatedAt: new Date() })
+    .where(and(eq(aiServiceRequestsTable.id, existing.id), eq(aiServiceRequestsTable.status, "draft")))
+    .returning({ requestId: aiServiceRequestsTable.requestId, status: aiServiceRequestsTable.status });
+
+  res.json({ ok: true, status: updated?.status ?? "brief_in_progress" });
 });
 
 // ── Public: get service request by UUID (customer-facing, no admin auth) ──────

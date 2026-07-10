@@ -170,6 +170,7 @@ import type {
   ScheduleRunPage,
   SchedulerSettings,
   SchedulerStatus,
+  StartBrief200,
   SubscriptionListResponse,
   TickDispatcher200,
   UpdateScheduleBody,
@@ -12993,6 +12994,76 @@ export function useGetCatalogAnalytics<TData = Awaited<ReturnType<typeof getCata
 
 
 
+
+export const getStartBriefUrl = (requestId: string,) => {
+
+
+
+
+  return `/api/public/catalog/requests/${requestId}/start-brief`
+}
+
+/**
+ * @summary Mark a service request as brief in progress (customer-facing, no auth required)
+ */
+export const startBrief = async (requestId: string, options?: RequestInit): Promise<StartBrief200> => {
+
+  return customFetch<StartBrief200>(getStartBriefUrl(requestId),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+export const getStartBriefMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startBrief>>, TError,{requestId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startBrief>>, TError,{requestId: string}, TContext> => {
+
+const mutationKey = ['startBrief'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startBrief>>, {requestId: string}> = (props) => {
+          const {requestId} = props ?? {};
+
+          return  startBrief(requestId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartBriefMutationResult = NonNullable<Awaited<ReturnType<typeof startBrief>>>
+
+    export type StartBriefMutationError = ErrorType<void>
+
+    /**
+ * @summary Mark a service request as brief in progress (customer-facing, no auth required)
+ */
+export const useStartBrief = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startBrief>>, TError,{requestId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startBrief>>,
+        TError,
+        {requestId: string},
+        TContext
+      > => {
+      return useMutation(getStartBriefMutationOptions(options));
+    }
 
 export const getListCommercialGatesUrl = (params?: ListCommercialGatesParams,) => {
   const normalizedParams = new URLSearchParams();

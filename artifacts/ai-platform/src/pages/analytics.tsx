@@ -10,12 +10,51 @@
  */
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   useGetAnalyticsOverview,
   useGetAgentStats,
   useGetCostAnalytics,
   useGetProviderBreakdown,
 } from "@workspace/api-client-react";
+
+const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+async function apiFetch<T>(path: string): Promise<T> {
+  const headers: Record<string, string> = {};
+  const key = import.meta.env.VITE_ADMIN_API_KEY;
+  if (key) headers["x-admin-api-key"] = key;
+  const res = await fetch(`${API_BASE}${path}`, { headers });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+type CatalogFunnelCounts = {
+  newRequests: number; briefInProgress: number; briefCompleted: number;
+  quotationReady: number; waitingApproval: number; approved: number;
+  inProduction: number; completed: number;
+};
+
+type CatalogAnalyticsData = {
+  totalRequests: number;
+  completedRequests: number;
+  conversionRate: number;
+  briefCompletionRate?: number;
+  quotationApprovalRate?: number;
+  approvalToPaymentRate?: number;
+  requestToProjectRate?: number;
+  averageQuotationValue?: number | null;
+  averageTimeToApprovalDays?: number | null;
+  funnelCounts?: CatalogFunnelCounts;
+};
+
+function useCatalogAnalytics() {
+  return useQuery({
+    queryKey: ["catalog-analytics"],
+    queryFn: () => apiFetch<CatalogAnalyticsData>("/api/ai/catalog/analytics"),
+    refetchInterval: 60_000,
+  });
+}
 import {
   AreaChart,
   Area,
@@ -175,6 +214,7 @@ export default function Analytics() {
   const { data: costData, isLoading: costLoading } = useGetCostAnalytics({ days });
   const { data: rawAgentStats = [], isLoading: agentLoading } = useGetAgentStats({ days });
   const { data: providerBreakdown = [] } = useGetProviderBreakdown();
+  const { data: catalogAnalytics } = useCatalogAnalytics();
 
   const isLoading = overviewLoading || costLoading || agentLoading;
 
@@ -488,6 +528,81 @@ export default function Analytics() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Service Catalog Funnel */}
+          {catalogAnalytics && (
+            <Card className="border-border/50">
+              <CardHeader className="pb-2 pt-4 px-5">
+                <CardTitle className="text-sm font-mono font-semibold text-foreground/80 flex items-center gap-2">
+                  <TrendingUp className="size-3.5 text-primary" />
+                  Service Request Funnel
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pb-5">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+                  <div className="bg-muted/20 border border-border/40 rounded-lg px-4 py-3">
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Total Requests</p>
+                    <p className="text-xl font-bold font-mono tabular-nums mt-1">{fmt(catalogAnalytics.totalRequests)}</p>
+                  </div>
+                  <div className="bg-muted/20 border border-border/40 rounded-lg px-4 py-3">
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Brief Complete</p>
+                    <p className="text-xl font-bold font-mono tabular-nums mt-1 text-blue-400">{catalogAnalytics.briefCompletionRate?.toFixed(1) ?? "—"}%</p>
+                  </div>
+                  <div className="bg-muted/20 border border-border/40 rounded-lg px-4 py-3">
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Quotation Approved</p>
+                    <p className="text-xl font-bold font-mono tabular-nums mt-1 text-amber-400">{catalogAnalytics.quotationApprovalRate?.toFixed(1) ?? "—"}%</p>
+                  </div>
+                  <div className="bg-muted/20 border border-border/40 rounded-lg px-4 py-3">
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">To Project</p>
+                    <p className="text-xl font-bold font-mono tabular-nums mt-1 text-green-400">{catalogAnalytics.requestToProjectRate?.toFixed(1) ?? "—"}%</p>
+                  </div>
+                </div>
+
+                {catalogAnalytics.funnelCounts && (() => {
+                  const fc = catalogAnalytics.funnelCounts!;
+                  const stages = [
+                    { label: "New Requests",      value: fc.newRequests,     color: "bg-slate-400" },
+                    { label: "Brief In Progress",  value: fc.briefInProgress, color: "bg-blue-400" },
+                    { label: "Brief Completed",    value: fc.briefCompleted,  color: "bg-indigo-400" },
+                    { label: "Quotation Ready",    value: fc.quotationReady,  color: "bg-amber-400" },
+                    { label: "Waiting Approval",   value: fc.waitingApproval, color: "bg-orange-400" },
+                    { label: "Approved",           value: fc.approved,        color: "bg-lime-400" },
+                    { label: "In Production",      value: fc.inProduction,    color: "bg-sky-400" },
+                    { label: "Completed",          value: fc.completed,       color: "bg-green-400" },
+                  ];
+                  const maxVal = Math.max(...stages.map((s) => s.value), 1);
+                  return (
+                    <div className="space-y-1.5">
+                      {stages.map((s) => (
+                        <div key={s.label} className="flex items-center gap-3">
+                          <span className="text-[10px] font-mono text-muted-foreground w-36 shrink-0 truncate">{s.label}</span>
+                          <div className="flex-1 bg-muted/30 rounded-full h-2 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${s.color}`}
+                              style={{ width: `${Math.max((s.value / maxVal) * 100, s.value > 0 ? 3 : 0)}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] font-mono tabular-nums text-muted-foreground w-6 text-right shrink-0">{s.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                <div className="mt-4 pt-3 border-t border-border/30 grid grid-cols-2 md:grid-cols-3 gap-3 text-[10px] font-mono">
+                  {catalogAnalytics.averageQuotationValue != null && (
+                    <div><span className="text-muted-foreground">Avg. Quotation Value — </span><span className="tabular-nums">{catalogAnalytics.averageQuotationValue.toLocaleString("id-ID")}</span></div>
+                  )}
+                  {catalogAnalytics.averageTimeToApprovalDays != null && (
+                    <div><span className="text-muted-foreground">Avg. Time to Approval — </span><span className="tabular-nums">{catalogAnalytics.averageTimeToApprovalDays.toFixed(1)} days</span></div>
+                  )}
+                  {catalogAnalytics.approvalToPaymentRate != null && (
+                    <div><span className="text-muted-foreground">Approval → Payment — </span><span className="tabular-nums text-emerald-400">{catalogAnalytics.approvalToPaymentRate.toFixed(1)}%</span></div>
+                  )}
                 </div>
               </CardContent>
             </Card>

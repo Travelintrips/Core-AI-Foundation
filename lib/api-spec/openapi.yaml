@@ -3712,6 +3712,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CatalogAnalytics"
+  /public/catalog/requests/{requestId}/start-brief:
+    patch:
+      operationId: startBrief
+      tags: [service-catalog]
+      summary: Mark a service request as brief in progress (customer-facing, no auth required)
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, status]
+                properties:
+                  ok:
+                    type: boolean
+                  status:
+                    type: string
+        "404":
+          description: Not found
+        "409":
+          description: Already in progress or terminal state
   /commercial-gates:
     get:
       operationId: listCommercialGates
@@ -8158,7 +8186,7 @@ components:
         total:
           type: string
         status:
-          type: string
+          $ref: "#/components/schemas/ServiceRequestStatus"
         createdProjectId:
           type: [string, "null"]
         createdAt:
@@ -8281,7 +8309,7 @@ components:
         - status
       properties:
         status:
-          type: string
+          $ref: "#/components/schemas/ServiceRequestStatus"
         createdProjectId:
           type: string
     AiServicePriceRule:
@@ -8431,3 +8459,66 @@ components:
           type: integer
         completedRequests:
           type: integer
+        briefCompletionRate:
+          type: number
+        quotationApprovalRate:
+          type: number
+        approvalToPaymentRate:
+          type: number
+        requestToProjectRate:
+          type: number
+        averageQuotationValue:
+          type: [number, "null"]
+        averageTimeToApprovalDays:
+          type: [number, "null"]
+        funnelCounts:
+          type: object
+          properties:
+            newRequests:
+              type: integer
+            briefInProgress:
+              type: integer
+            briefCompleted:
+              type: integer
+            quotationReady:
+              type: integer
+            waitingApproval:
+              type: integer
+            approved:
+              type: integer
+            inProduction:
+              type: integer
+            completed:
+              type: integer
+    ServiceRequestStatus:
+      type: string
+      enum:
+        - draft
+        - brief_in_progress
+        - brief_completed
+        - pricing_calculated
+        - quotation_ready
+        - waiting_customer_approval
+        - waiting_commercial_gate
+        - approved
+        - rejected
+        - revision_requested
+        - expired
+        - converted_to_project
+        - pending
+        - orchestrating
+        - in_progress
+        - waiting_review
+        - completed
+        - cancelled
+    QuotationStatus:
+      type: string
+      enum:
+        - draft
+        - issued
+        - viewed
+        - approved
+        - rejected
+        - revision_requested
+        - expired
+        - cancelled

@@ -2718,6 +2718,30 @@ export type AiServiceDetail = AiService & {
  */
 export type AiServiceRequestBriefJson = { [key: string]: unknown } | null;
 
+export type ServiceRequestStatus = typeof ServiceRequestStatus[keyof typeof ServiceRequestStatus];
+
+
+export const ServiceRequestStatus = {
+  draft: 'draft',
+  brief_in_progress: 'brief_in_progress',
+  brief_completed: 'brief_completed',
+  pricing_calculated: 'pricing_calculated',
+  quotation_ready: 'quotation_ready',
+  waiting_customer_approval: 'waiting_customer_approval',
+  waiting_commercial_gate: 'waiting_commercial_gate',
+  approved: 'approved',
+  rejected: 'rejected',
+  revision_requested: 'revision_requested',
+  expired: 'expired',
+  converted_to_project: 'converted_to_project',
+  pending: 'pending',
+  orchestrating: 'orchestrating',
+  in_progress: 'in_progress',
+  waiting_review: 'waiting_review',
+  completed: 'completed',
+  cancelled: 'cancelled',
+} as const;
+
 export interface AiServiceRequest {
   id: number;
   requestId: string;
@@ -2752,7 +2776,7 @@ export interface AiServiceRequest {
   discount?: string;
   tax?: string;
   total?: string;
-  status: string;
+  status: ServiceRequestStatus;
   /** @nullable */
   createdProjectId?: string | null;
   createdAt: string;
@@ -2833,7 +2857,7 @@ export interface AiServicePricingBreakdown {
 }
 
 export interface AiServiceRequestStatusUpdate {
-  status: string;
+  status: ServiceRequestStatus;
   createdProjectId?: string;
 }
 
@@ -2919,6 +2943,17 @@ export type CatalogAnalyticsMostPopularPackage = {
   requestCount?: number;
 } | null;
 
+export type CatalogAnalyticsFunnelCounts = {
+  newRequests?: number;
+  briefInProgress?: number;
+  briefCompleted?: number;
+  quotationReady?: number;
+  waitingApproval?: number;
+  approved?: number;
+  inProduction?: number;
+  completed?: number;
+};
+
 export interface CatalogAnalytics {
   mostRequestedServices: CatalogAnalyticsMostRequestedServicesItem[];
   revenuePerCategory: CatalogAnalyticsRevenuePerCategoryItem[];
@@ -2929,7 +2964,30 @@ export interface CatalogAnalytics {
   conversionRate: number;
   totalRequests?: number;
   completedRequests?: number;
+  briefCompletionRate?: number;
+  quotationApprovalRate?: number;
+  approvalToPaymentRate?: number;
+  requestToProjectRate?: number;
+  /** @nullable */
+  averageQuotationValue?: number | null;
+  /** @nullable */
+  averageTimeToApprovalDays?: number | null;
+  funnelCounts?: CatalogAnalyticsFunnelCounts;
 }
+
+export type QuotationStatus = typeof QuotationStatus[keyof typeof QuotationStatus];
+
+
+export const QuotationStatus = {
+  draft: 'draft',
+  issued: 'issued',
+  viewed: 'viewed',
+  approved: 'approved',
+  rejected: 'rejected',
+  revision_requested: 'revision_requested',
+  expired: 'expired',
+  cancelled: 'cancelled',
+} as const;
 
 export type ListModelsParams = {
 /**
@@ -3119,6 +3177,11 @@ export type ApproveRequestMarginBody = {
 
 export type ApproveRequestMargin200 = {
   ok?: boolean;
+};
+
+export type StartBrief200 = {
+  ok: boolean;
+  status: string;
 };
 
 export type ListCommercialGatesParams = {
