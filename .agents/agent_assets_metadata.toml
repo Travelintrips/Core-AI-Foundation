@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "YjrbmyC2wN70mRV8j0CkG"
+uri = "file://attached_assets/test-replicate.png"
+type = "image"
+title = "Test Replicate Image"
