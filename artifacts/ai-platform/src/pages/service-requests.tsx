@@ -143,7 +143,7 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
 
   const generateLink = useMutation({
     mutationFn: () =>
-      apiFetch<{ ok: boolean; quotationUrl: string; validUntil: string; customerEmail: string }>(
+      apiFetch<{ ok: boolean; quotationUrl: string; validUntil: string; customerEmail: string; emailSent: boolean; emailError?: string }>(
         `/api/ai/catalog/requests/${req.id}/issue-quotation`,
         { method: "POST" },
       ),
@@ -325,6 +325,53 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
             </section>
           )}
         </div>
+
+        {/* Send / Resend Quotation Email */}
+        {snapshot && (
+          <div className="shrink-0 border-t border-border px-6 py-4 bg-muted/10 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Email Penawaran</p>
+            <button
+              onClick={() => generateLink.mutate()}
+              disabled={generateLink.isPending}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 bg-muted text-foreground hover:bg-muted/80 border border-border"
+            >
+              {generateLink.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              {quotationLink ? "Kirim Ulang Email Penawaran" : "Kirim Email Penawaran"}
+            </button>
+
+            {generateLink.isError && (
+              <p className="text-xs text-destructive">{(generateLink.error as Error).message}</p>
+            )}
+
+            {generateLink.isSuccess && (
+              <div className={`text-xs rounded-lg px-3 py-2 flex items-start gap-2 ${
+                generateLink.data.emailSent
+                  ? "bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400"
+                  : "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400"
+              }`}>
+                {generateLink.data.emailSent ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" /> : <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />}
+                <span>
+                  {generateLink.data.emailSent
+                    ? `Email terkirim ke ${req.customerEmail}.`
+                    : `Gagal mengirim email otomatis (${generateLink.data.emailError ?? "unknown error"}). Salin link di bawah untuk dikirim manual.`}
+                </span>
+              </div>
+            )}
+
+            {quotationLink && (
+              <div className="flex items-center gap-2 bg-background border border-border rounded-lg px-3 py-2">
+                <Link2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <span className="text-xs font-mono truncate flex-1">{quotationLink.url}</span>
+                <button onClick={copyLink} className="p-1 hover:bg-muted rounded shrink-0" title="Salin link">
+                  {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+                <a href={quotationLink.url} target="_blank" rel="noreferrer" className="p-1 hover:bg-muted rounded shrink-0" title="Buka link">
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Action Footer */}
         {actions.length > 0 && (

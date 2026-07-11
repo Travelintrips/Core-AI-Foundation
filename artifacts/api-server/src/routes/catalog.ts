@@ -32,8 +32,13 @@ import {
   insertAiServicePriceRuleSchema,
 } from "@workspace/db";
 import { logAudit } from "../services/aiAuditService.js";
+import { sendEmail } from "../services/emailService.js";
 import { generatePricingSnapshot, toCustomerFacingBreakdown, type PricingSelections } from "../services/aiPricingService.js";
 import { createHash, randomBytes } from "crypto";
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
 
 function generateToken(): string { return randomBytes(32).toString("base64url"); }
 function hashToken(t: string): string { return createHash("sha256").update(t).digest("hex"); }
@@ -525,12 +530,29 @@ router.post("/ai/catalog/requests/:id/issue-quotation", async (req, res): Promis
   const base = buildBaseUrl(req);
   const quotationUrl = `${base}/request-service/${serviceReq.requestId}/quotation?token=${token}`;
 
+  const emailResult = await sendEmail({
+    to: serviceReq.customerEmail,
+    subject: `Penawaran Harga Siap — ${serviceReq.requestId}`,
+    html: `
+      <p>Halo ${escapeHtml(serviceReq.customerName)},</p>
+      <p>Penawaran harga untuk permintaan Anda (<strong>${escapeHtml(serviceReq.requestId)}</strong>) sudah siap untuk ditinjau.</p>
+      <p><a href="${quotationUrl}" style="display:inline-block;padding:10px 20px;background:#111;color:#fff;text-decoration:none;border-radius:8px;">Lihat Penawaran</a></p>
+      <p>Link ini berlaku sampai ${validUntil.toLocaleDateString("id-ID")}.</p>
+      <p>Jika tombol di atas tidak berfungsi, salin tautan berikut ke browser Anda:<br/>${quotationUrl}</p>
+    `,
+    module: "catalog",
+    action: "quotation_email_sent",
+    resourceId: String(quotationId),
+  });
+
   res.json({
     ok: true,
     quotationId,
     quotationUrl,
     validUntil: validUntil.toISOString(),
     customerEmail: serviceReq.customerEmail,
+    emailSent: emailResult.ok,
+    emailError: emailResult.ok ? undefined : emailResult.error,
     note: "Store or share this URL immediately — the plaintext token is not stored and cannot be recovered.",
   });
 });
