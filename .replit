@@ -31,6 +31,8 @@ REPLICATE_API_TOKEN = "r8_bcqzMXfcX9BqlBFiuqxs17hKgjxo3RU1Lgq2w"
 SMTP_HOST = "smtp.hostinger.com"
 SMTP_PASS = "#Admin12345@$"
 SMTP_USER = "info@cstlogistic.co.od"
+SMTP_PORT = "465"
+SMTP_FROM = "info@cstlogistic.co.id"
 
 [userenv.development]
 SUPABASE_ANON_KEY_DEV = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhzc3Jmc2hkcnRkZnVwZ3F3ZmR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4OTY3MjgsImV4cCI6MjA5NDQ3MjcyOH0.czKzR9GjEL6UK8AhPAX6OYyF74fz1YtImYQSXiiG69U"
