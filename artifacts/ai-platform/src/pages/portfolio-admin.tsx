@@ -1,0 +1,578 @@
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Plus, Play, Ban, CheckCircle, XCircle, Loader2, RefreshCcw, Images, Star, TrendingUp, BarChart3, Settings, ListChecks, Layers } from "lucide-react";
+
+// ── API helpers ───────────────────────────────────────────────────────────────
+
+const API = "/api";
+const KEY = import.meta.env.VITE_ADMIN_API_KEY ?? "";
+
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", "x-admin-api-key": KEY, ...(init?.headers ?? {}) },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface GenerationBatch {
+  id: number;
+  batchCode: string;
+  industry: string;
+  style: string;
+  packageLevel: string;
+  requestedCount: number;
+  generatedCount: number;
+  approvedCount: number;
+  rejectedCount: number;
+  failedCount: number;
+  status: string;
+  maxCost: string | null;
+  actualCost: string;
+  autoPublish: boolean;
+  createdBy: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+interface Portfolio {
+  id: number;
+  title: string;
+  industry: string;
+  style: string;
+  status: string;
+  publishStatus?: string;
+  featured: boolean;
+  views: number;
+  rating: string | null;
+  isDemo?: boolean;
+  qcScore?: string | null;
+  trademarkRisk?: string;
+  createdAt: string;
+}
+
+interface Permission {
+  id: number;
+  projectId: number;
+  customerId: number | null;
+  permissionStatus: string;
+  requestedAt: string | null;
+  approvedAt: string | null;
+  notes: string | null;
+}
+
+// ── Status badge ─────────────────────────────────────────────────────────────
+
+const STATUS_COLORS: Record<string, string> = {
+  draft: "bg-gray-100 text-gray-600",
+  queued: "bg-blue-100 text-blue-700",
+  running: "bg-yellow-100 text-yellow-700",
+  review: "bg-purple-100 text-purple-700",
+  completed: "bg-green-100 text-green-700",
+  partially_failed: "bg-orange-100 text-orange-700",
+  failed: "bg-red-100 text-red-700",
+  cancelled: "bg-gray-100 text-gray-500",
+  blocked_by_budget: "bg-red-100 text-red-700",
+  published: "bg-green-100 text-green-700",
+  hidden: "bg-gray-100 text-gray-500",
+  archived: "bg-gray-100 text-gray-400",
+  pending: "bg-yellow-100 text-yellow-700",
+  approved: "bg-green-100 text-green-700",
+  rejected: "bg-red-100 text-red-600",
+  revoked: "bg-gray-100 text-gray-500",
+};
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[status] ?? "bg-gray-100 text-gray-600"}`}>
+      {status.replace(/_/g, " ")}
+    </span>
+  );
+}
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+
+type Tab = "portfolios" | "batches" | "review" | "permissions" | "analytics";
+const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  { id: "portfolios", label: "Portfolio", icon: <Images className="w-4 h-4" /> },
+  { id: "batches", label: "Generation Batches", icon: <Layers className="w-4 h-4" /> },
+  { id: "review", label: "Review Queue", icon: <ListChecks className="w-4 h-4" /> },
+  { id: "permissions", label: "Permissions", icon: <Settings className="w-4 h-4" /> },
+  { id: "analytics", label: "Analytics", icon: <BarChart3 className="w-4 h-4" /> },
+];
+
+// ── Create Batch Form ─────────────────────────────────────────────────────────
+
+const INDUSTRIES = [
+  "coffee", "restaurant", "hotel", "logistics", "mining", "trading",
+  "palm-oil", "fashion", "medical", "property", "technology", "construction",
+  "retail", "education", "manufacturing", "beauty", "automotive", "furniture",
+];
+const STYLES = [
+  "Minimalist", "Modern", "Luxury", "Corporate", "Elegant", "Premium",
+  "Industrial", "Bold", "Classic", "Natural", "Clean", "Futuristic", "Professional",
+];
+const PKG_LEVELS = ["starter", "standard", "professional", "enterprise"];
+
+function CreateBatchPanel({ onCreated }: { onCreated: () => void }) {
+  const [form, setForm] = useState({
+    industry: "coffee", style: "Minimalist", packageLevel: "standard",
+    requestedCount: 3, maxCost: "", autoPublish: false, qcThreshold: 70,
+  });
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleCreate = async () => {
+    setCreating(true);
+    setError("");
+    try {
+      await apiFetch("/ai/portfolio/batch", {
+        method: "POST",
+        body: JSON.stringify({
+          ...form,
+          maxCost: form.maxCost ? parseFloat(form.maxCost) : undefined,
+          requestedCount: Number(form.requestedCount),
+          qcThreshold: Number(form.qcThreshold),
+        }),
+      });
+      onCreated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create batch");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div className="p-5 rounded-2xl border border-border bg-card space-y-4">
+      <h3 className="font-medium text-sm">Create Generation Batch</h3>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Industry</label>
+          <select className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm" value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })}>
+            {INDUSTRIES.map((i) => <option key={i} value={i}>{i}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Style</label>
+          <select className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm" value={form.style} onChange={(e) => setForm({ ...form, style: e.target.value })}>
+            {STYLES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Package</label>
+          <select className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm" value={form.packageLevel} onChange={(e) => setForm({ ...form, packageLevel: e.target.value })}>
+            {PKG_LEVELS.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Count (1–10)</label>
+          <input type="number" min={1} max={10} className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm" value={form.requestedCount} onChange={(e) => setForm({ ...form, requestedCount: parseInt(e.target.value) })} />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Max Cost (USD, optional)</label>
+          <input type="number" step="0.01" placeholder="No limit" className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm" value={form.maxCost} onChange={(e) => setForm({ ...form, maxCost: e.target.value })} />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">QC Threshold (0–100)</label>
+          <input type="number" min={0} max={100} className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm" value={form.qcThreshold} onChange={(e) => setForm({ ...form, qcThreshold: parseInt(e.target.value) })} />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <input type="checkbox" id="autoPublish" checked={form.autoPublish} onChange={(e) => setForm({ ...form, autoPublish: e.target.checked })} className="rounded" />
+        <label htmlFor="autoPublish" className="text-sm">Auto-publish if QC passes & trademark risk is low</label>
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <button onClick={handleCreate} disabled={creating}
+        className="w-full px-4 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-60 flex items-center justify-center gap-2"
+      >
+        {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+        Create Batch
+      </button>
+    </div>
+  );
+}
+
+// ── Batches Tab ───────────────────────────────────────────────────────────────
+
+function BatchesTab() {
+  const qc = useQueryClient();
+  const { data: batches = [], isLoading, refetch } = useQuery<GenerationBatch[]>({
+    queryKey: ["portfolio-batches"],
+    queryFn: () => apiFetch("/ai/portfolio/batch"),
+  });
+
+  const startMutation = useMutation({
+    mutationFn: (id: number) => apiFetch(`/ai/portfolio/batch/${id}/start`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["portfolio-batches"] }),
+  });
+  const cancelMutation = useMutation({
+    mutationFn: (id: number) => apiFetch(`/ai/portfolio/batch/${id}/cancel`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["portfolio-batches"] }),
+  });
+
+  return (
+    <div className="space-y-5">
+      <CreateBatchPanel onCreated={() => qc.invalidateQueries({ queryKey: ["portfolio-batches"] })} />
+
+      <div className="flex items-center justify-between">
+        <h3 className="font-medium text-sm">{batches.length} Batches</h3>
+        <button onClick={() => refetch()} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+          <RefreshCcw className="w-3 h-3" /> Refresh
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+      ) : batches.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-8">No batches yet. Create your first batch above.</p>
+      ) : (
+        <div className="space-y-3">
+          {batches.map((b) => (
+            <div key={b.id} className="p-4 rounded-xl border border-border bg-card">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-mono text-muted-foreground">{b.batchCode}</span>
+                    <StatusBadge status={b.status} />
+                    {b.autoPublish && <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-600">auto-publish</span>}
+                  </div>
+                  <p className="font-medium text-sm">{b.industry} · {b.style} · {b.packageLevel}</p>
+                  <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground flex-wrap">
+                    <span>Requested: {b.requestedCount}</span>
+                    <span className="text-green-600">✓ {b.generatedCount} generated</span>
+                    {b.failedCount > 0 && <span className="text-red-500">✗ {b.failedCount} failed</span>}
+                    {b.approvedCount > 0 && <span className="text-blue-600">✓ {b.approvedCount} approved</span>}
+                    <span>Cost: ${parseFloat(b.actualCost || "0").toFixed(4)}{b.maxCost ? ` / $${parseFloat(b.maxCost).toFixed(2)} max` : ""}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {["draft", "failed", "partially_failed"].includes(b.status) && (
+                    <button
+                      onClick={() => startMutation.mutate(b.id)}
+                      disabled={startMutation.isPending}
+                      className="p-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                      title="Start batch"
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {b.status === "running" && (
+                    <button onClick={() => cancelMutation.mutate(b.id)} className="p-1.5 rounded-lg border border-destructive/30 text-destructive hover:bg-destructive/5 transition-colors" title="Cancel">
+                      <Ban className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Portfolio List Tab ────────────────────────────────────────────────────────
+
+function PortfoliosTab() {
+  const { data: portfolios = [], isLoading } = useQuery<Portfolio[]>({
+    queryKey: ["admin-portfolios"],
+    queryFn: () => apiFetch("/ai/portfolio/services/1/portfolios").catch(() => []),
+  });
+
+  return (
+    <div>
+      {isLoading ? (
+        <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+      ) : portfolios.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border p-10 text-center">
+          <Images className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">No portfolios. Seed them via the API or create a generation batch.</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-border rounded-xl border border-border overflow-hidden">
+          {portfolios.map((p) => (
+            <div key={p.id} className="flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/40 transition-colors">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="font-medium text-sm truncate">{p.title}</span>
+                  {p.isDemo && <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-50 text-amber-600 shrink-0">demo</span>}
+                  {p.featured && <span className="px-1.5 py-0.5 rounded text-[10px] bg-primary/10 text-primary shrink-0">featured</span>}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                  <span>{p.industry}</span>
+                  <span>·</span>
+                  <span>{p.style}</span>
+                  {p.rating && <span className="inline-flex items-center gap-0.5"><Star className="w-3 h-3 fill-amber-400 text-amber-400" />{p.rating}</span>}
+                  <span className="inline-flex items-center gap-0.5"><TrendingUp className="w-3 h-3" />{p.views}</span>
+                </div>
+              </div>
+              <StatusBadge status={p.status} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Review Queue Tab ──────────────────────────────────────────────────────────
+
+function ReviewQueueTab() {
+  const qc = useQueryClient();
+  const { data: queue = [], isLoading, refetch } = useQuery<Portfolio[]>({
+    queryKey: ["portfolio-review-queue"],
+    queryFn: () => apiFetch("/ai/portfolio/review-queue"),
+    refetchInterval: 15000,
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: (id: number) => apiFetch(`/ai/portfolio/portfolios/${id}/approve`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["portfolio-review-queue"] }),
+  });
+  const rejectMutation = useMutation({
+    mutationFn: (id: number) => apiFetch(`/ai/portfolio/portfolios/${id}/reject`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["portfolio-review-queue"] }),
+  });
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-muted-foreground">{queue.length} items awaiting review</p>
+        <button onClick={() => refetch()} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+          <RefreshCcw className="w-3 h-3" /> Refresh
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+      ) : queue.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border p-10 text-center">
+          <ListChecks className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">Review queue is empty.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {queue.map((p) => (
+            <div key={p.id} className="p-4 rounded-xl border border-border bg-card">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium text-sm">{p.title}</span>
+                    {p.isDemo && <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-50 text-amber-600">demo</span>}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{p.industry} · {p.style}</span>
+                    {p.qcScore && <span className="text-blue-600">QC: {p.qcScore}</span>}
+                    {p.trademarkRisk && (
+                      <span className={p.trademarkRisk === "high" ? "text-red-600" : p.trademarkRisk === "medium" ? "text-amber-600" : "text-green-600"}>
+                        TM risk: {p.trademarkRisk}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => approveMutation.mutate(p.id)}
+                    disabled={approveMutation.isPending}
+                    className="p-1.5 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                    title="Approve & Publish"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => rejectMutation.mutate(p.id)}
+                    disabled={rejectMutation.isPending}
+                    className="p-1.5 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
+                    title="Reject"
+                  >
+                    <XCircle className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Permissions Tab ───────────────────────────────────────────────────────────
+
+function PermissionsTab() {
+  const qc = useQueryClient();
+  const { data: permissions = [], isLoading } = useQuery<Permission[]>({
+    queryKey: ["portfolio-permissions"],
+    queryFn: () => apiFetch("/ai/portfolio/permissions"),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      apiFetch(`/ai/portfolio/permissions/${id}`, { method: "PATCH", body: JSON.stringify({ permissionStatus: status }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["portfolio-permissions"] }),
+  });
+
+  return (
+    <div>
+      {isLoading ? (
+        <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+      ) : permissions.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border p-10 text-center">
+          <Settings className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">No permission requests yet.</p>
+          <p className="text-xs text-muted-foreground mt-1">Permissions are requested when converting a completed project to a portfolio item.</p>
+        </div>
+      ) : (
+        <div className="divide-y divide-border rounded-xl border border-border overflow-hidden">
+          {permissions.map((p) => (
+            <div key={p.id} className="flex items-center gap-3 px-4 py-3 bg-card">
+              <div className="flex-1">
+                <p className="text-sm font-medium">Project #{p.projectId}</p>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {p.requestedAt && <span>Requested {new Date(p.requestedAt).toLocaleDateString()}</span>}
+                  {p.notes && <span>· {p.notes}</span>}
+                </div>
+              </div>
+              <StatusBadge status={p.permissionStatus} />
+              {p.permissionStatus === "pending" && (
+                <div className="flex items-center gap-1">
+                  <button onClick={() => updateMutation.mutate({ id: p.id, status: "approved" })}
+                    className="p-1.5 rounded-lg bg-green-100 text-green-700 hover:bg-green-200" title="Approve">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => updateMutation.mutate({ id: p.id, status: "rejected" })}
+                    className="p-1.5 rounded-lg bg-red-100 text-red-600 hover:bg-red-200" title="Reject">
+                    <XCircle className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Analytics Tab ─────────────────────────────────────────────────────────────
+
+function AnalyticsTab() {
+  const { data: analytics, isLoading } = useQuery({
+    queryKey: ["portfolio-analytics"],
+    queryFn: () => apiFetch<{
+      funnel: { portfolioViews: number; previewsGenerated: number; previewToCheckout: number };
+      previews: { total: number; converted: number; failed: number };
+      topPortfolios: Portfolio[];
+    }>("/ai/portfolio/analytics"),
+  });
+
+  if (isLoading) return <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+
+  const funnel = analytics?.funnel;
+  const previews = analytics?.previews;
+
+  return (
+    <div className="space-y-6">
+      {/* KPI row */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: "Portfolio Views", value: funnel?.portfolioViews ?? 0 },
+          { label: "Previews Generated", value: previews?.total ?? 0 },
+          { label: "Preview → Checkout", value: funnel?.previewToCheckout ?? 0 },
+        ].map((kpi) => (
+          <div key={kpi.label} className="p-4 rounded-xl border border-border bg-card text-center">
+            <p className="text-2xl font-bold">{kpi.value.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground mt-1">{kpi.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Preview funnel */}
+      <div className="p-4 rounded-xl border border-border bg-card">
+        <h4 className="text-sm font-medium mb-3">Preview Funnel</h4>
+        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+          <div className="p-2 rounded-lg bg-muted">
+            <p className="font-bold text-lg">{previews?.total ?? 0}</p>
+            <p className="text-muted-foreground">Total Previews</p>
+          </div>
+          <div className="p-2 rounded-lg bg-green-50">
+            <p className="font-bold text-lg text-green-600">{previews?.converted ?? 0}</p>
+            <p className="text-muted-foreground">Converted</p>
+          </div>
+          <div className="p-2 rounded-lg bg-red-50">
+            <p className="font-bold text-lg text-red-500">{previews?.failed ?? 0}</p>
+            <p className="text-muted-foreground">Failed</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Top portfolios */}
+      {analytics?.topPortfolios && analytics.topPortfolios.length > 0 && (
+        <div>
+          <h4 className="text-sm font-medium mb-3">Top Portfolios by Views</h4>
+          <div className="divide-y divide-border rounded-xl border border-border overflow-hidden">
+            {analytics.topPortfolios.map((p) => (
+              <div key={p.id} className="flex items-center gap-3 px-4 py-2.5 bg-card">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{p.title}</p>
+                  <p className="text-xs text-muted-foreground">{p.industry} · {p.style}</p>
+                </div>
+                <span className="text-sm font-medium tabular-nums">{p.views.toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+
+export default function PortfolioAdminPage() {
+  const [activeTab, setActiveTab] = useState<Tab>("portfolios");
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold flex items-center gap-2">
+          <Images className="w-6 h-6" /> Portfolio Center
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">Manage portfolio items, generation batches, review queue, and permissions.</p>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
+              activeTab === tab.id
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      {activeTab === "portfolios" && <PortfoliosTab />}
+      {activeTab === "batches" && <BatchesTab />}
+      {activeTab === "review" && <ReviewQueueTab />}
+      {activeTab === "permissions" && <PermissionsTab />}
+      {activeTab === "analytics" && <AnalyticsTab />}
+    </div>
+  );
+}

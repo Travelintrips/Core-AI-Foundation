@@ -1,0 +1,941 @@
+Lanjutkan AI Enterprise Platform ke Sprint P2:
+Portfolio Growth, Demo Portfolio Generator, AI Inspiration Gallery,
+dan Conversion Optimization.
+
+STATUS SAAT INI:
+
+- Sprint P0 Production Readiness selesai
+- Sprint P1 Customer Workspace selesai
+- Sprint P1.1 API Standardization, Invoice PDF, Token Security,
+  IDOR Protection, Impersonation Hardening, dan Migration Package selesai
+- OpenAPI memiliki 239 operations
+- Codegen clean
+- pnpm run verify clean
+- Invoice PDF server-generated sudah berjalan
+- Signed document access sudah berjalan
+- Customer Workspace production-ready
+- Semua workflow utama sehat
+
+PENTING:
+
+Jangan merombak:
+
+- Payment Gate
+- File Lock
+- Signed URL
+- Customer Workspace
+- Invoice PDF
+- AI Workforce
+- Queue
+- Dispatcher
+- Event Bus
+- Scheduler
+- Workflow Runner
+- Creative AI
+- Pricing Engine
+- Client Review
+- Security P0/P1.1
+
+Semua perubahan harus:
+
+- additive
+- backward compatible
+- OpenAPI-first
+- generated client first
+- type-safe
+- tenant-ready tanpa memaksa migrasi multi-tenant penuh
+- pnpm run verify clean
+
+=========================================================
+TUJUAN
+=========================================================
+
+Membangun mesin pertumbuhan penjualan berbasis:
+
+1. Portfolio Gallery
+2. AI Inspiration Gallery
+3. Demo Portfolio Generator
+4. Live AI Preview
+5. Continue Preview to Checkout
+6. Conversion Analytics
+7. Portfolio Admin
+8. Project-to-Portfolio Publishing
+9. Success Stories
+10. Recommendation Engine
+
+Customer harus dapat:
+
+- melihat hasil
+- memilih industri dan style
+- mencoba preview
+- menyimpan konsep
+- melanjutkan ke brief
+- checkout
+- membayar
+- memulai project
+
+=========================================================
+BAGIAN 1 — AUDIT REUSE TERLEBIH DAHULU
+=========================================================
+
+Sebelum membuat kode:
+
+Audit komponen yang sudah ada:
+
+- portfolio-gallery.tsx
+- live-ai-preview.tsx
+- portfolio routes
+- portfolio schema
+- asset library
+- creative_ai_assets
+- project results
+- image generation
+- watermark logic
+- analytics
+- admin portfolio page
+- storage integration
+
+Tentukan:
+
+- yang bisa direuse
+- yang parsial
+- yang duplikat
+- yang belum terhubung
+- yang harus dideprecate
+
+Jangan membuat portfolio system kedua.
+
+=========================================================
+BAGIAN 2 — PORTFOLIO DATA MODEL
+=========================================================
+
+Gunakan tabel portfolio yang sudah ada jika memadai.
+
+Jika perlu, tambahkan secara additive:
+
+ai_service_portfolios
+
+Field minimum:
+
+- id
+- tenant_id nullable
+- service_id
+- package_id nullable
+- source_project_id nullable
+- portfolio_code
+- title
+- slug
+- short_description
+- full_description
+- industry
+- business_type
+- style
+- primary_color
+- secondary_color
+- package_level
+- delivery_days
+- rating
+- total_reviews
+- total_views
+- total_clicks
+- total_checkouts
+- completed_projects
+- featured
+- published
+- publish_status
+- display_order
+- cover_asset_id nullable
+- before_asset_id nullable
+- after_asset_id nullable
+- metadata_json
+- created_at
+- updated_at
+
+publish_status:
+
+- draft
+- review
+- published
+- hidden
+- archived
+
+Tambahkan unique constraint:
+
+- slug
+- portfolio_code
+
+=========================================================
+BAGIAN 3 — PORTFOLIO ASSETS
+=========================================================
+
+Buat atau reuse:
+
+ai_portfolio_assets
+
+Field:
+
+- id
+- portfolio_id
+- creative_asset_id nullable
+- asset_type
+- asset_role
+- title
+- alt_text
+- file_name
+- thumbnail_url
+- preview_url
+- storage_path
+- mime_type
+- width
+- height
+- display_order
+- downloadable
+- watermark_required
+- metadata_json
+- created_at
+- updated_at
+
+asset_type:
+
+- image
+- video
+- pdf
+- mockup
+- presentation
+- company_profile
+- brand_guideline
+- before
+- after
+
+asset_role:
+
+- cover
+- gallery
+- thumbnail
+- preview
+- hero
+- before
+- after
+- deliverable
+
+Jangan expose storage_path ke public response.
+
+=========================================================
+BAGIAN 4 — DEMO PORTFOLIO GENERATOR
+=========================================================
+
+Buat admin service:
+
+demoPortfolioGeneratorService
+
+Method:
+
+- createGenerationBatch()
+- generateBrandConcept()
+- generateCreativeDirection()
+- generateVisualAssets()
+- generateMockups()
+- generatePortfolioCopy()
+- runPortfolioQc()
+- publishApprovedPortfolio()
+- retryFailedPortfolio()
+- cancelGenerationBatch()
+
+Gunakan AI OS yang sudah ada:
+
+- AI CEO
+- Creative Department
+- Brand Strategist
+- Creative Director
+- Copywriter
+- Image Designer
+- QC
+- Queue
+- Dispatcher
+- Worker Cluster
+- Event Bus
+- Cost Tracking
+- Guardrails
+
+Jangan membuat pipeline AI baru yang terpisah.
+
+=========================================================
+BAGIAN 5 — GENERATION BATCH
+=========================================================
+
+Buat tabel:
+
+ai_portfolio_generation_batches
+
+Field:
+
+- id
+- batch_code
+- service_id nullable
+- industry
+- style
+- package_level
+- requested_count
+- generated_count
+- approved_count
+- rejected_count
+- failed_count
+- status
+- max_cost
+- actual_cost
+- created_by
+- started_at
+- completed_at
+- created_at
+- updated_at
+
+Status:
+
+- draft
+- queued
+- running
+- review
+- completed
+- partially_failed
+- failed
+- cancelled
+
+Admin dapat memilih:
+
+- industry
+- jumlah portfolio
+- style
+- package
+- aspect ratio
+- jumlah asset per portfolio
+- max cost
+- auto publish false by default
+
+=========================================================
+BAGIAN 6 — SEED INDUSTRI
+=========================================================
+
+Seed industri awal:
+
+- Coffee
+- Restaurant
+- Hotel
+- Logistics
+- Freight Forwarding
+- Mining
+- Palm Oil
+- Trading
+- Export Import
+- Manufacturing
+- Construction
+- Property
+- Fashion
+- Furniture
+- Medical
+- Beauty
+- Education
+- Technology
+- Automotive
+- Retail
+
+=========================================================
+BAGIAN 7 — SEED STYLE
+=========================================================
+
+Seed style:
+
+- Minimalist
+- Modern
+- Luxury
+- Corporate
+- Elegant
+- Premium
+- Industrial
+- Bold
+- Classic
+- Natural
+- Clean
+- Futuristic
+- Vintage Modern
+- Professional
+
+=========================================================
+BAGIAN 8 — DEMO BRAND SAFETY
+=========================================================
+
+Semua demo portfolio harus memakai:
+
+- brand fiktif
+- nama yang tidak meniru merek terkenal
+- logo yang tidak meniru trademark aktif
+- foto berlisensi atau generated
+- label “AI Demo Project”
+- status synthetic/demo
+- disclaimer bahwa hasil merupakan contoh konseptual
+
+Tambahkan duplicate-name check.
+
+Tambahkan trademark-risk placeholder:
+
+- low
+- medium
+- high
+
+Portfolio dengan risk high tidak boleh dipublish otomatis.
+
+=========================================================
+BAGIAN 9 — PORTFOLIO QC
+=========================================================
+
+QC wajib mengecek:
+
+- visual sesuai brief
+- konsistensi brand
+- teks tidak salah
+- tidak ada artefak besar
+- tidak ada logo/merek terkenal yang ditiru
+- tidak ada informasi palsu
+- gambar aman
+- output sesuai package
+- before/after konsisten
+- asset lengkap
+
+QC score 0–100.
+
+Auto publish hanya jika:
+
+- score >= threshold
+- trademark risk low
+- asset lengkap
+- admin auto-publish diaktifkan
+
+Default:
+manual approval required.
+
+=========================================================
+BAGIAN 10 — PUBLIC PORTFOLIO API
+=========================================================
+
+Tambahkan atau retrofit endpoint:
+
+GET /api/public/portfolio
+GET /api/public/portfolio/:slug
+GET /api/public/portfolio/filters
+POST /api/public/portfolio/:id/view
+POST /api/public/portfolio/:id/click
+GET /api/public/portfolio/:id/related
+
+Support filter:
+
+- service
+- industry
+- style
+- package
+- color
+- featured
+- latest
+- popular
+- rating
+
+Wajib:
+
+- pagination
+- bounded page size
+- indexed filter
+- public DTO
+- no storage path
+- no internal AI metadata
+- no cost
+- no prompt internal
+
+=========================================================
+BAGIAN 11 — PORTFOLIO GALLERY UI
+=========================================================
+
+Upgrade halaman:
+
+/services/:serviceCode
+
+dan, jika sesuai arsitektur:
+
+/portfolio
+
+Fitur:
+
+- grid portfolio
+- skeleton
+- empty state
+- filter pills
+- active filter badges
+- clear all
+- sort featured/popular/latest
+- modal detail
+- image carousel
+- deliverable icons
+- before/after slider
+- mobile responsive
+- lazy loading
+- image optimization
+
+Urutan halaman service detail:
+
+Hero
+→ Creative Showcase
+→ Package Comparison
+→ Deliverables
+→ Workflow
+→ Reviews
+→ FAQ
+→ Related Services
+→ Live AI Preview
+→ CTA
+
+=========================================================
+BAGIAN 12 — PORTFOLIO DETAIL
+=========================================================
+
+Halaman/modal detail menampilkan:
+
+- title
+- demo/client badge
+- industry
+- style
+- package
+- delivery time
+- rating
+- views
+- completed projects
+- gallery
+- before/after
+- project overview
+- workflow
+- deliverables
+- related services
+- package recommendation
+- CTA
+
+CTA:
+
+- Start Similar Project
+- Use This Style
+- Choose Package
+- Generate Live Preview
+
+=========================================================
+BAGIAN 13 — LIVE AI PREVIEW
+=========================================================
+
+Audit dan reuse live preview yang sudah ada.
+
+Form:
+
+- company name
+- industry
+- business description
+- style
+- primary color
+- secondary color
+- optional reference
+
+Policy:
+
+- maksimal 2 preview per visitor/customer per period
+- rate limited
+- low resolution
+- watermark
+- no permanent original URL
+- no commercial rights
+- preview expires
+- preview cost recorded
+- preview generation obeys guardrails
+
+Jangan membuat live preview sebagai free unlimited generation endpoint.
+
+=========================================================
+BAGIAN 14 — CONTINUE PREVIEW TO CHECKOUT
+=========================================================
+
+Flow:
+
+Generate Preview
+→ Select Concept
+→ Continue With This Concept
+→ Choose Package
+→ Create Service Request Draft
+→ Seed Brief
+→ Pricing Calculation
+→ Checkout
+→ Payment
+→ Active Project
+
+Wajib:
+
+- preview concept tidak digenerate ulang
+- preview asset disalin/referenced sebagai project seed
+- service request tetap draft sampai checkout
+- project tidak dibuat sebelum payment gate
+- preview tidak dianggap final asset
+
+=========================================================
+BAGIAN 15 — PROJECT TO PORTFOLIO
+=========================================================
+
+Admin dapat mengubah completed project menjadi portfolio.
+
+Flow:
+
+Completed Project
+→ Request Client Permission
+→ Permission Approved
+→ Select Assets
+→ Redact Sensitive Data
+→ Create Portfolio Draft
+→ Admin Review
+→ Publish
+
+Buat table jika belum ada:
+
+ai_portfolio_permissions
+
+Field:
+
+- id
+- project_id
+- customer_id
+- permission_status
+- requested_at
+- approved_at
+- rejected_at
+- scope_json
+- approved_by
+- notes
+- created_at
+- updated_at
+
+Status:
+
+- not_requested
+- pending
+- approved
+- rejected
+- revoked
+
+Tanpa permission approved:
+customer project tidak boleh dipublish.
+
+=========================================================
+BAGIAN 16 — SUCCESS STORIES
+=========================================================
+
+Buat section:
+
+Success Stories
+
+Support:
+
+- problem
+- approach
+- deliverables
+- before
+- after
+- client quote
+- measurable result
+- permission status
+- disclaimer
+
+Jangan membuat angka hasil bisnis fiktif.
+
+Jika metric tidak terverifikasi:
+
+gunakan qualitative outcome,
+bukan angka persentase palsu.
+
+=========================================================
+BAGIAN 17 — REVIEWS
+=========================================================
+
+Gunakan review yang sudah ada jika cocok.
+
+Jika perlu, buat:
+
+ai_portfolio_reviews
+
+Field:
+
+- id
+- portfolio_id
+- project_id nullable
+- customer_id nullable
+- rating
+- review_text
+- company_name
+- industry
+- verified
+- featured
+- status
+- created_at
+- updated_at
+
+Hanya verified project customer yang boleh memiliki badge Verified Client.
+
+Demo portfolio tidak boleh memakai testimoni fiktif seolah-olah dari customer.
+
+=========================================================
+BAGIAN 18 — RECOMMENDATION ENGINE
+=========================================================
+
+Buat service:
+
+portfolioRecommendationService
+
+Input:
+
+- viewed portfolio
+- industry
+- style
+- package
+- selected color
+- service history
+- completed customer projects
+
+Output:
+
+- related portfolio
+- related service
+- recommended package
+- bundle suggestion
+
+Untuk awal gunakan rule-based scoring.
+Jangan buat ML baru.
+
+=========================================================
+BAGIAN 19 — CONVERSION ANALYTICS
+=========================================================
+
+Track events:
+
+- portfolio.viewed
+- portfolio.opened
+- portfolio.cta_clicked
+- portfolio.preview_started
+- portfolio.preview_completed
+- portfolio.preview_selected
+- portfolio.checkout_started
+- portfolio.payment_completed
+- portfolio.project_created
+
+KPI:
+
+- portfolio view rate
+- detail open rate
+- CTA click rate
+- preview generation rate
+- preview to checkout
+- checkout to payment
+- payment to project
+- conversion by industry
+- conversion by style
+- conversion by package
+- portfolio cost per conversion
+
+Jangan simpan sensitive prompt atau customer token di analytics.
+
+=========================================================
+BAGIAN 20 — ADMIN PORTFOLIO CENTER
+=========================================================
+
+Tambahkan atau upgrade halaman:
+
+/admin/portfolio
+
+Tabs:
+
+- Portfolio
+- Generation Batches
+- Review Queue
+- Industries
+- Styles
+- Permissions
+- Analytics
+
+Admin dapat:
+
+- create/edit portfolio
+- upload assets
+- reorder assets
+- set featured
+- publish/hide/archive
+- run generator batch
+- approve/reject generated portfolio
+- retry failed generation
+- view generation cost
+- convert completed project
+- request customer permission
+
+=========================================================
+BAGIAN 21 — COST GUARDRAILS
+=========================================================
+
+Demo Portfolio Generator wajib tunduk pada:
+
+- max cost per batch
+- max assets per project
+- max retries
+- provider timeout
+- image variation limit
+- daily budget
+- manual approval
+
+Jika budget terlampaui:
+
+- stop batch
+- mark blocked_by_budget
+- audit
+- tampilkan jelas di UI
+
+=========================================================
+BAGIAN 22 — STORAGE & IMAGE SECURITY
+=========================================================
+
+Gunakan storage yang sudah ada.
+
+Public portfolio boleh memakai optimized public preview.
+
+Namun:
+
+- original file tetap private
+- storage path tidak bocor
+- no source file download
+- thumbnails optimized
+- watermark untuk live preview
+- signed access jika dibutuhkan
+- EXIF metadata dibersihkan bila relevan
+
+=========================================================
+BAGIAN 23 — SEO
+=========================================================
+
+Untuk portfolio public:
+
+- title
+- description
+- canonical URL
+- Open Graph
+- alt text
+- structured metadata jika framework mendukung
+- slug readable
+- noindex untuk draft/live preview/private project
+
+Jangan expose token pada canonical URL.
+
+=========================================================
+BAGIAN 24 — OPENAPI & CODEGEN
+=========================================================
+
+Semua route baru wajib:
+
+- masuk OpenAPI
+- operationId unik
+- response schema
+- error schema
+- security requirement
+- codegen deterministic
+- generated hooks dipakai frontend
+
+Jangan kembali ke manual fetch jika generated client sudah tersedia.
+
+=========================================================
+BAGIAN 25 — TEST WAJIB
+=========================================================
+
+Test:
+
+1. Portfolio public list tampil.
+2. Filter industry bekerja.
+3. Filter style bekerja.
+4. Sort popular/latest/featured bekerja.
+5. Portfolio detail tampil.
+6. Before/after slider bekerja.
+7. Internal fields tidak bocor.
+8. Demo generation batch membuat jobs.
+9. Cost guardrail menghentikan batch.
+10. QC menahan portfolio score rendah.
+11. Admin approve/publish bekerja.
+12. Live preview rate limit bekerja.
+13. Watermark preview tampil.
+14. Original URL tidak terekspos.
+15. Continue concept membuat draft service request.
+16. Project tidak dibuat sebelum payment.
+17. Selected concept dipakai sebagai project seed.
+18. Completed project tidak dapat dipublish tanpa permission.
+19. Permission revoked menyembunyikan portfolio customer.
+20. Analytics events tercatat idempotent.
+21. OpenAPI valid.
+22. Codegen deterministic.
+23. pnpm run verify clean.
+24. Production build clean.
+
+=========================================================
+BAGIAN 26 — ROLLOUT BERTAHAP
+=========================================================
+
+Jangan generate ratusan portfolio sekaligus.
+
+Seed awal:
+
+- 10 industri
+- 3 portfolio per industri
+- total sekitar 30 portfolio
+- 5–8 asset per portfolio maksimum
+
+Mulai dengan:
+
+- Coffee
+- Restaurant
+- Logistics
+- Mining
+- Trading
+- Palm Oil
+- Fashion
+- Medical
+- Property
+- Technology
+
+Semua seed harus:
+
+- idempotent
+- diberi label demo
+- dapat dihapus/diarsipkan
+- tidak auto publish tanpa QC/admin approval
+
+=========================================================
+FINAL REPORT
+=========================================================
+
+Berikan laporan:
+
+- reuse audit
+- tabel baru/berubah
+- service generator
+- jobs/workflows
+- public API
+- admin API
+- public pages
+- admin pages
+- preview policy
+- project-to-portfolio permission
+- analytics
+- cost control
+- sample generation count
+- total generation cost
+- test results
+- OpenAPI operations added
+- pnpm run verify status
+- known limitations
+
+TARGET AKHIR:
+
+Platform memiliki Portfolio Growth Engine yang legal, aman, terukur,
+mampu menghasilkan demo portfolio sendiri melalui AI OS,
+meningkatkan conversion customer, dan menghubungkan portfolio/live preview
+langsung ke fixed-price checkout tanpa melewati payment gate.

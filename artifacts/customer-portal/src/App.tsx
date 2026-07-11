@@ -28,6 +28,7 @@ import WorkspaceBrandKitPage from '@/pages/workspace/brand-kit';
 import WorkspaceNotificationsPage from '@/pages/workspace/notifications';
 import WorkspaceProfilePage from '@/pages/workspace/profile';
 import WorkspaceSupportPage from '@/pages/workspace/support';
+import PortfolioPage from '@/pages/portfolio';
 
 const queryClient = new QueryClient();
 
@@ -46,6 +47,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={LandingPage} />
+      <Route path="/portfolio" component={PortfolioPage} />
       <Route path="/services" component={ServicesPage} />
       <Route path="/services/:id" component={ServiceDetailPage} />
       <Route path="/submit" component={SubmitPage} />
