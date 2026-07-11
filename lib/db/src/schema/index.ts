@@ -51,3 +51,4 @@ export * from "./ai-quotations";
 export * from "./ai-quotation-items";
 export * from "./ai-payment-schedule";
 export * from "./ai-invoices";
+export * from "./ai-service-portfolios";

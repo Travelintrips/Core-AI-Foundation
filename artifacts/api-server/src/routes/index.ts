@@ -37,6 +37,7 @@ import catalogRouter from "./catalog";
 import commercialGatesRouter from "./commercialGates";
 import aiQuotationsRouter from "./aiQuotations";
 import paymentsRouter from "./payments";
+import portfolioRouter from "./portfolio";
 
 const router: IRouter = Router();
 
@@ -76,5 +77,6 @@ router.use(catalogRouter);
 router.use(commercialGatesRouter);
 router.use(aiQuotationsRouter);
 router.use(paymentsRouter);
+router.use(portfolioRouter);
 
 export default router;

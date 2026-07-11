@@ -1,10 +1,16 @@
-import { useState } from "react";
-import { Link, useParams, useLocation } from "wouter";
+import { useEffect, useState } from "react";
+import { Link, useParams, useLocation, useSearch } from "wouter";
 import { Layout } from "@/components/layout";
 import { FlowStepper } from "@/components/flow-stepper";
 import { useServiceDetail, useQuoteCalculator, useRequestService, type QuoteSelections } from "@/hooks/use-catalog";
+import { useServiceShowcase, type ContinueConceptResult } from "@/hooks/use-portfolio";
+import { PortfolioGallery } from "@/components/portfolio-gallery";
+import { PortfolioReviews } from "@/components/portfolio-reviews";
+import { ServiceFaqSection } from "@/components/service-faq";
+import { RelatedServices } from "@/components/related-services";
+import { LiveAiPreview } from "@/components/live-ai-preview";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Loader2, ArrowLeft, CheckCircle2, Sparkles } from "lucide-react";
 
 function formatMoney(value: number, currency: string) {
   if (currency === "IDR") return `Rp${Math.round(value).toLocaleString("id-ID")}`;
@@ -15,13 +21,32 @@ export default function ServiceDetailPage() {
   const params = useParams<{ id: string }>();
   const serviceId = Number(params.id);
   const [, setLocation] = useLocation();
+  const search = useSearch();
   const { toast } = useToast();
   const { data: service, isLoading } = useServiceDetail(Number.isFinite(serviceId) ? serviceId : undefined);
+  const { data: showcase } = useServiceShowcase(Number.isFinite(serviceId) ? serviceId : undefined);
   const quote = useQuoteCalculator(Number.isFinite(serviceId) ? serviceId : undefined);
   const requestService = useRequestService(Number.isFinite(serviceId) ? serviceId : undefined);
 
   const [selections, setSelections] = useState<QuoteSelections>({ quantity: 1 });
   const [contact, setContact] = useState({ customerName: "", customerEmail: "", customerPhone: "", companyName: "", notes: "" });
+  const [seededConcept, setSeededConcept] = useState<ContinueConceptResult | null>(null);
+
+  // Arriving from "Continue With This Concept" — seed the brief notes with
+  // the exact already-generated concept, never re-run generation here.
+  useEffect(() => {
+    const params2 = new URLSearchParams(search);
+    if (params2.get("seedPreview")) {
+      const raw = sessionStorage.getItem("live-preview-seed");
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as ContinueConceptResult;
+          setSeededConcept(parsed);
+          setContact((c) => ({ ...c, notes: parsed.seed.notes }));
+        } catch { /* ignore */ }
+      }
+    }
+  }, [search]);
 
   const runQuote = (next: QuoteSelections) => {
     setSelections(next);
@@ -76,7 +101,25 @@ export default function ServiceDetailPage() {
             <div>
               <h1 className="text-3xl md:text-4xl font-serif font-medium mb-3">{service.serviceName}</h1>
               <p className="text-lg text-muted-foreground leading-relaxed">{service.fullDescription}</p>
+              {showcase && showcase.stats.reviewCount > 0 && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  {showcase.stats.totalProjects}+ projects delivered
+                  {showcase.stats.avgRating != null ? ` · ${showcase.stats.avgRating.toFixed(1)}★ average rating` : ""}
+                </p>
+              )}
             </div>
+
+            {seededConcept && (
+              <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5 flex items-start gap-3">
+                <Sparkles className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium">Continuing with Concept {seededConcept.selectedConcept}: {seededConcept.conceptData.name}</p>
+                  <p className="text-muted-foreground mt-0.5">We've carried your AI preview concept into this brief — no need to regenerate. Pick a package and submit your details below.</p>
+                </div>
+              </div>
+            )}
+
+            {showcase && showcase.portfolios.length > 0 && <PortfolioGallery portfolios={showcase.portfolios} />}
 
             {service.deliverables && service.deliverables.length > 0 && (
               <div className="bg-card border border-card-border rounded-2xl p-6">
@@ -257,6 +300,13 @@ export default function ServiceDetailPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="mt-14 space-y-14">
+          <LiveAiPreview serviceId={serviceId} />
+          {showcase && <PortfolioReviews reviews={showcase.reviews} avgRating={showcase.stats.avgRating} />}
+          {showcase && <ServiceFaqSection faqs={showcase.faqs} />}
+          {showcase && <RelatedServices services={showcase.relatedServices} />}
         </div>
       </div>
     </Layout>

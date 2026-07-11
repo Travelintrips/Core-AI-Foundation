@@ -156,7 +156,9 @@ export default function ProjectPage({
                   </h2>
                 </div>
                 <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground whitespace-pre-wrap">
-                  {review.copyOutput}
+                  {typeof review.copyOutput === "string"
+                    ? review.copyOutput
+                    : JSON.stringify(review.copyOutput, null, 2)}
                 </div>
               </div>
             )}
@@ -169,7 +171,9 @@ export default function ProjectPage({
                   </h2>
                 </div>
                 <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground whitespace-pre-wrap">
-                  {review.creativeDirection}
+                  {typeof review.creativeDirection === "string"
+                    ? review.creativeDirection
+                    : JSON.stringify(review.creativeDirection, null, 2)}
                 </div>
               </div>
             )}

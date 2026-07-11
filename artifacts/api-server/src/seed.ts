@@ -32,6 +32,7 @@ import { randomUUID } from "crypto";
 import { computePriorityScore } from "./services/priorityEngine.js";
 import { createSchedule } from "./services/aiSchedulerService.js";
 import { seedServiceCatalog } from "./seedCatalog.js";
+import { seedPortfolioShowcase } from "./seedPortfolio.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1074,6 +1075,9 @@ async function main() {
 
   // AI Service Catalog & Pricing Center
   await seedServiceCatalog();
+
+  // Service Showcase: Portfolio / Reviews / FAQ (pre-purchase creative showcase)
+  await seedPortfolioShowcase();
 
   console.log("\n✅ Seed complete!\n");
   process.exit(0);

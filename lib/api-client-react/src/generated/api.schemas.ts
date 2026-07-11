@@ -2970,6 +2970,231 @@ export interface CatalogAnalytics {
   funnelCounts?: CatalogAnalyticsFunnelCounts;
 }
 
+export type AiServicePortfolioGalleryJsonItem = { [key: string]: unknown };
+
+export type AiServicePortfolioWorkflowJsonItem = { [key: string]: unknown };
+
+export interface AiServicePortfolio {
+  id: number;
+  /** @nullable */
+  tenantId?: string | null;
+  serviceId: number;
+  title: string;
+  industry: string;
+  style: string;
+  /** @nullable */
+  colorTags?: string[] | null;
+  businessSize: string;
+  /** @nullable */
+  packageLabel?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  coverImage?: string | null;
+  /** @nullable */
+  galleryJson?: AiServicePortfolioGalleryJsonItem[] | null;
+  /** @nullable */
+  beforeImage?: string | null;
+  /** @nullable */
+  afterImage?: string | null;
+  /** @nullable */
+  deliverablesJson?: string[] | null;
+  /** @nullable */
+  toolsUsedJson?: string[] | null;
+  /** @nullable */
+  workflowJson?: AiServicePortfolioWorkflowJsonItem[] | null;
+  /** @nullable */
+  deliveryTime?: string | null;
+  /** @nullable */
+  rating?: string | null;
+  views: number;
+  completedProjects: number;
+  featured: boolean;
+  status: string;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AiServicePortfolioInputGalleryJsonItem = { [key: string]: unknown };
+
+export type AiServicePortfolioInputWorkflowJsonItem = { [key: string]: unknown };
+
+export interface AiServicePortfolioInput {
+  title: string;
+  industry: string;
+  style: string;
+  colorTags?: string[];
+  businessSize?: string;
+  packageLabel?: string;
+  description?: string;
+  coverImage?: string;
+  galleryJson?: AiServicePortfolioInputGalleryJsonItem[];
+  beforeImage?: string;
+  afterImage?: string;
+  deliverablesJson?: string[];
+  toolsUsedJson?: string[];
+  workflowJson?: AiServicePortfolioInputWorkflowJsonItem[];
+  deliveryTime?: string;
+  rating?: string;
+  completedProjects?: number;
+  featured?: boolean;
+  status?: string;
+  displayOrder?: number;
+}
+
+export interface PortfolioReview {
+  id: number;
+  serviceId: number;
+  /** @nullable */
+  portfolioId?: number | null;
+  rating: number;
+  review: string;
+  company: string;
+  /** @nullable */
+  industry?: string | null;
+  /** @nullable */
+  clientName?: string | null;
+  featured: boolean;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PortfolioReviewInput {
+  portfolioId?: number;
+  rating: number;
+  review: string;
+  company: string;
+  industry?: string;
+  clientName?: string;
+  featured?: boolean;
+  status?: string;
+}
+
+export interface AiServiceFaq {
+  id: number;
+  serviceId: number;
+  question: string;
+  answer: string;
+  displayOrder: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiServiceFaqInput {
+  question: string;
+  answer: string;
+  displayOrder?: number;
+  status?: string;
+}
+
+export interface AiLivePreviewInput {
+  sessionId: string;
+  serviceId: number;
+  companyName: string;
+  industry: string;
+  style: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  shortDescription?: string;
+  referenceImageUrl?: string;
+}
+
+/**
+ * @nullable
+ */
+export type AiLivePreviewConceptA = { [key: string]: unknown } | null;
+
+/**
+ * @nullable
+ */
+export type AiLivePreviewConceptB = { [key: string]: unknown } | null;
+
+export interface AiLivePreview {
+  id: number;
+  sessionId: string;
+  serviceId: number;
+  companyName: string;
+  industry: string;
+  style: string;
+  /** @nullable */
+  primaryColor?: string | null;
+  /** @nullable */
+  secondaryColor?: string | null;
+  /** @nullable */
+  shortDescription?: string | null;
+  /** @nullable */
+  referenceImageUrl?: string | null;
+  /** @nullable */
+  conceptA?: AiLivePreviewConceptA;
+  /** @nullable */
+  conceptB?: AiLivePreviewConceptB;
+  /** @nullable */
+  selectedConcept?: string | null;
+  /** generating | ready | failed | converted */
+  status: string;
+  /** @nullable */
+  errorMessage?: string | null;
+  /** @nullable */
+  serviceRequestId?: number | null;
+  watermarked: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AiLivePreviewContinueResultConceptData = { [key: string]: unknown };
+
+export type AiLivePreviewContinueResultSeed = {
+  brandName: string;
+  businessType: string;
+  stylePreference: string;
+  notes: string;
+};
+
+export interface AiLivePreviewContinueResult {
+  previewId: number;
+  serviceId: number;
+  selectedConcept: string;
+  conceptData: AiLivePreviewContinueResultConceptData;
+  seed: AiLivePreviewContinueResultSeed;
+}
+
+export type ServiceShowcaseStats = {
+  totalProjects: number;
+  /** @nullable */
+  avgRating: number | null;
+  reviewCount: number;
+};
+
+export interface ServiceShowcase {
+  service: AiService;
+  portfolios: AiServicePortfolio[];
+  reviews: PortfolioReview[];
+  faqs: AiServiceFaq[];
+  relatedServices: AiService[];
+  stats: ServiceShowcaseStats;
+}
+
+export type PortfolioAnalyticsFunnel = {
+  portfolioViews: number;
+  previewsGenerated: number;
+  previewToCheckout: number;
+};
+
+export type PortfolioAnalyticsPreviews = {
+  total: number;
+  converted: number;
+  failed: number;
+};
+
+export interface PortfolioAnalytics {
+  funnel: PortfolioAnalyticsFunnel;
+  previews: PortfolioAnalyticsPreviews;
+  topPortfolios: AiServicePortfolio[];
+}
+
 export type QuotationStatus = typeof QuotationStatus[keyof typeof QuotationStatus];
 
 
@@ -3248,6 +3473,34 @@ export type ApproveRequestMarginBody = {
 
 export type ApproveRequestMargin200 = {
   ok?: boolean;
+};
+
+export type RecordPortfolioView200 = {
+  views: number;
+};
+
+export type StartLivePreview202 = {
+  id: number;
+  status: string;
+  remaining: number;
+};
+
+export type GetLivePreviewSessionCount200 = {
+  used: number;
+  limit: number;
+  remaining: number;
+};
+
+export type ContinueLivePreviewBodyConcept = typeof ContinueLivePreviewBodyConcept[keyof typeof ContinueLivePreviewBodyConcept];
+
+
+export const ContinueLivePreviewBodyConcept = {
+  A: 'A',
+  B: 'B',
+} as const;
+
+export type ContinueLivePreviewBody = {
+  concept: ContinueLivePreviewBodyConcept;
 };
 
 export type StartBrief200 = {

@@ -4993,6 +4993,660 @@ export const GetCatalogAnalyticsResponse = zod.object({
 
 
 /**
+ * @summary Full pre-purchase showcase bundle for a service (portfolios, reviews, FAQs, related services, stats)
+ */
+export const GetServiceShowcaseParams = zod.object({
+  "serviceId": zod.coerce.number()
+})
+
+export const GetServiceShowcaseResponse = zod.object({
+  "service": zod.object({
+  "id": zod.number(),
+  "categoryId": zod.number(),
+  "serviceCode": zod.string(),
+  "serviceName": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "fullDescription": zod.string().nullish(),
+  "serviceType": zod.string(),
+  "serviceFlow": zod.string().optional().describe('fixed_price (Standard checkout, no quotation) | custom_project | enterprise'),
+  "pricingModel": zod.string(),
+  "startingPrice": zod.string().nullish(),
+  "currency": zod.string(),
+  "estimatedDelivery": zod.string().nullish(),
+  "humanReview": zod.boolean(),
+  "aiOnly": zod.boolean(),
+  "subscriptionSupported": zod.boolean(),
+  "enterpriseSupported": zod.boolean(),
+  "department": zod.string().nullish(),
+  "workflowSummary": zod.string().nullish(),
+  "aiEmployeesInvolved": zod.array(zod.string()).nullish(),
+  "deliverables": zod.array(zod.string()).nullish(),
+  "revisionPolicy": zod.string().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "portfolios": zod.array(zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceId": zod.number(),
+  "title": zod.string(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "colorTags": zod.array(zod.string()).nullish(),
+  "businessSize": zod.string(),
+  "packageLabel": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "galleryJson": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "beforeImage": zod.string().nullish(),
+  "afterImage": zod.string().nullish(),
+  "deliverablesJson": zod.array(zod.string()).nullish(),
+  "toolsUsedJson": zod.array(zod.string()).nullish(),
+  "workflowJson": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "deliveryTime": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number(),
+  "completedProjects": zod.number(),
+  "featured": zod.boolean(),
+  "status": zod.string(),
+  "displayOrder": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "reviews": zod.array(zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "portfolioId": zod.number().nullish(),
+  "rating": zod.number(),
+  "review": zod.string(),
+  "company": zod.string(),
+  "industry": zod.string().nullish(),
+  "clientName": zod.string().nullish(),
+  "featured": zod.boolean(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "faqs": zod.array(zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "question": zod.string(),
+  "answer": zod.string(),
+  "displayOrder": zod.number(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "relatedServices": zod.array(zod.object({
+  "id": zod.number(),
+  "categoryId": zod.number(),
+  "serviceCode": zod.string(),
+  "serviceName": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "fullDescription": zod.string().nullish(),
+  "serviceType": zod.string(),
+  "serviceFlow": zod.string().optional().describe('fixed_price (Standard checkout, no quotation) | custom_project | enterprise'),
+  "pricingModel": zod.string(),
+  "startingPrice": zod.string().nullish(),
+  "currency": zod.string(),
+  "estimatedDelivery": zod.string().nullish(),
+  "humanReview": zod.boolean(),
+  "aiOnly": zod.boolean(),
+  "subscriptionSupported": zod.boolean(),
+  "enterpriseSupported": zod.boolean(),
+  "department": zod.string().nullish(),
+  "workflowSummary": zod.string().nullish(),
+  "aiEmployeesInvolved": zod.array(zod.string()).nullish(),
+  "deliverables": zod.array(zod.string()).nullish(),
+  "revisionPolicy": zod.string().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "stats": zod.object({
+  "totalProjects": zod.number(),
+  "avgRating": zod.number().nullable(),
+  "reviewCount": zod.number()
+})
+})
+
+
+/**
+ * @summary List portfolio items for a service
+ */
+export const ListPortfoliosForServiceParams = zod.object({
+  "serviceId": zod.coerce.number()
+})
+
+export const ListPortfoliosForServiceResponseItem = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceId": zod.number(),
+  "title": zod.string(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "colorTags": zod.array(zod.string()).nullish(),
+  "businessSize": zod.string(),
+  "packageLabel": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "galleryJson": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "beforeImage": zod.string().nullish(),
+  "afterImage": zod.string().nullish(),
+  "deliverablesJson": zod.array(zod.string()).nullish(),
+  "toolsUsedJson": zod.array(zod.string()).nullish(),
+  "workflowJson": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "deliveryTime": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number(),
+  "completedProjects": zod.number(),
+  "featured": zod.boolean(),
+  "status": zod.string(),
+  "displayOrder": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListPortfoliosForServiceResponse = zod.array(ListPortfoliosForServiceResponseItem)
+
+
+/**
+ * @summary Add a portfolio item to a service (admin)
+ */
+export const CreatePortfolioParams = zod.object({
+  "serviceId": zod.coerce.number()
+})
+
+export const CreatePortfolioBody = zod.object({
+  "title": zod.string(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "colorTags": zod.array(zod.string()).optional(),
+  "businessSize": zod.string().optional(),
+  "packageLabel": zod.string().optional(),
+  "description": zod.string().optional(),
+  "coverImage": zod.string().optional(),
+  "galleryJson": zod.array(zod.object({
+
+}).passthrough()).optional(),
+  "beforeImage": zod.string().optional(),
+  "afterImage": zod.string().optional(),
+  "deliverablesJson": zod.array(zod.string()).optional(),
+  "toolsUsedJson": zod.array(zod.string()).optional(),
+  "workflowJson": zod.array(zod.object({
+
+}).passthrough()).optional(),
+  "deliveryTime": zod.string().optional(),
+  "rating": zod.string().optional(),
+  "completedProjects": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "status": zod.string().optional(),
+  "displayOrder": zod.number().optional()
+})
+
+export const CreatePortfolioResponse = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceId": zod.number(),
+  "title": zod.string(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "colorTags": zod.array(zod.string()).nullish(),
+  "businessSize": zod.string(),
+  "packageLabel": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "galleryJson": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "beforeImage": zod.string().nullish(),
+  "afterImage": zod.string().nullish(),
+  "deliverablesJson": zod.array(zod.string()).nullish(),
+  "toolsUsedJson": zod.array(zod.string()).nullish(),
+  "workflowJson": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "deliveryTime": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number(),
+  "completedProjects": zod.number(),
+  "featured": zod.boolean(),
+  "status": zod.string(),
+  "displayOrder": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a portfolio item (admin)
+ */
+export const UpdatePortfolioParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdatePortfolioBody = zod.object({
+  "title": zod.string(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "colorTags": zod.array(zod.string()).optional(),
+  "businessSize": zod.string().optional(),
+  "packageLabel": zod.string().optional(),
+  "description": zod.string().optional(),
+  "coverImage": zod.string().optional(),
+  "galleryJson": zod.array(zod.object({
+
+}).passthrough()).optional(),
+  "beforeImage": zod.string().optional(),
+  "afterImage": zod.string().optional(),
+  "deliverablesJson": zod.array(zod.string()).optional(),
+  "toolsUsedJson": zod.array(zod.string()).optional(),
+  "workflowJson": zod.array(zod.object({
+
+}).passthrough()).optional(),
+  "deliveryTime": zod.string().optional(),
+  "rating": zod.string().optional(),
+  "completedProjects": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "status": zod.string().optional(),
+  "displayOrder": zod.number().optional()
+})
+
+export const UpdatePortfolioResponse = zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceId": zod.number(),
+  "title": zod.string(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "colorTags": zod.array(zod.string()).nullish(),
+  "businessSize": zod.string(),
+  "packageLabel": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "galleryJson": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "beforeImage": zod.string().nullish(),
+  "afterImage": zod.string().nullish(),
+  "deliverablesJson": zod.array(zod.string()).nullish(),
+  "toolsUsedJson": zod.array(zod.string()).nullish(),
+  "workflowJson": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "deliveryTime": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number(),
+  "completedProjects": zod.number(),
+  "featured": zod.boolean(),
+  "status": zod.string(),
+  "displayOrder": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a portfolio item (admin)
+ */
+export const DeletePortfolioParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeletePortfolioResponse = zod.void()
+
+
+/**
+ * @summary Increment view counter for a portfolio item and emit a funnel event
+ */
+export const RecordPortfolioViewParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RecordPortfolioViewResponse = zod.object({
+  "views": zod.number()
+})
+
+
+/**
+ * @summary List reviews for a service
+ */
+export const ListPortfolioReviewsParams = zod.object({
+  "serviceId": zod.coerce.number()
+})
+
+export const ListPortfolioReviewsResponseItem = zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "portfolioId": zod.number().nullish(),
+  "rating": zod.number(),
+  "review": zod.string(),
+  "company": zod.string(),
+  "industry": zod.string().nullish(),
+  "clientName": zod.string().nullish(),
+  "featured": zod.boolean(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListPortfolioReviewsResponse = zod.array(ListPortfolioReviewsResponseItem)
+
+
+/**
+ * @summary Add a review for a service (admin)
+ */
+export const CreatePortfolioReviewParams = zod.object({
+  "serviceId": zod.coerce.number()
+})
+
+export const CreatePortfolioReviewBody = zod.object({
+  "portfolioId": zod.number().optional(),
+  "rating": zod.number(),
+  "review": zod.string(),
+  "company": zod.string(),
+  "industry": zod.string().optional(),
+  "clientName": zod.string().optional(),
+  "featured": zod.boolean().optional(),
+  "status": zod.string().optional()
+})
+
+export const CreatePortfolioReviewResponse = zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "portfolioId": zod.number().nullish(),
+  "rating": zod.number(),
+  "review": zod.string(),
+  "company": zod.string(),
+  "industry": zod.string().nullish(),
+  "clientName": zod.string().nullish(),
+  "featured": zod.boolean(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a review (admin)
+ */
+export const UpdatePortfolioReviewParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdatePortfolioReviewBody = zod.object({
+  "portfolioId": zod.number().optional(),
+  "rating": zod.number(),
+  "review": zod.string(),
+  "company": zod.string(),
+  "industry": zod.string().optional(),
+  "clientName": zod.string().optional(),
+  "featured": zod.boolean().optional(),
+  "status": zod.string().optional()
+})
+
+export const UpdatePortfolioReviewResponse = zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "portfolioId": zod.number().nullish(),
+  "rating": zod.number(),
+  "review": zod.string(),
+  "company": zod.string(),
+  "industry": zod.string().nullish(),
+  "clientName": zod.string().nullish(),
+  "featured": zod.boolean(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a review (admin)
+ */
+export const DeletePortfolioReviewParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeletePortfolioReviewResponse = zod.void()
+
+
+/**
+ * @summary List FAQs for a service
+ */
+export const ListServiceFaqsParams = zod.object({
+  "serviceId": zod.coerce.number()
+})
+
+export const ListServiceFaqsResponseItem = zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "question": zod.string(),
+  "answer": zod.string(),
+  "displayOrder": zod.number(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListServiceFaqsResponse = zod.array(ListServiceFaqsResponseItem)
+
+
+/**
+ * @summary Add a FAQ entry to a service (admin)
+ */
+export const CreateServiceFaqParams = zod.object({
+  "serviceId": zod.coerce.number()
+})
+
+export const CreateServiceFaqBody = zod.object({
+  "question": zod.string(),
+  "answer": zod.string(),
+  "displayOrder": zod.number().optional(),
+  "status": zod.string().optional()
+})
+
+export const CreateServiceFaqResponse = zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "question": zod.string(),
+  "answer": zod.string(),
+  "displayOrder": zod.number(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a FAQ entry (admin)
+ */
+export const UpdateServiceFaqParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateServiceFaqBody = zod.object({
+  "question": zod.string(),
+  "answer": zod.string(),
+  "displayOrder": zod.number().optional(),
+  "status": zod.string().optional()
+})
+
+export const UpdateServiceFaqResponse = zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "question": zod.string(),
+  "answer": zod.string(),
+  "displayOrder": zod.number(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a FAQ entry (admin)
+ */
+export const DeleteServiceFaqParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteServiceFaqResponse = zod.void()
+
+
+/**
+ * @summary Start a free, watermarked Live AI Preview (max 2 per browser session)
+ */
+export const StartLivePreviewBody = zod.object({
+  "sessionId": zod.string(),
+  "serviceId": zod.number(),
+  "companyName": zod.string(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "primaryColor": zod.string().optional(),
+  "secondaryColor": zod.string().optional(),
+  "shortDescription": zod.string().optional(),
+  "referenceImageUrl": zod.string().optional()
+})
+
+export const StartLivePreviewResponse = zod.object({
+  "id": zod.number(),
+  "status": zod.string(),
+  "remaining": zod.number()
+})
+
+
+/**
+ * @summary Poll the status/result of a Live AI Preview
+ */
+export const GetLivePreviewParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetLivePreviewResponse = zod.object({
+  "id": zod.number(),
+  "sessionId": zod.string(),
+  "serviceId": zod.number(),
+  "companyName": zod.string(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "primaryColor": zod.string().nullish(),
+  "secondaryColor": zod.string().nullish(),
+  "shortDescription": zod.string().nullish(),
+  "referenceImageUrl": zod.string().nullish(),
+  "conceptA": zod.object({
+
+}).passthrough().nullish(),
+  "conceptB": zod.object({
+
+}).passthrough().nullish(),
+  "selectedConcept": zod.string().nullish(),
+  "status": zod.string().describe('generating | ready | failed | converted'),
+  "errorMessage": zod.string().nullish(),
+  "serviceRequestId": zod.number().nullish(),
+  "watermarked": zod.boolean(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get how many free previews a browser session has used
+ */
+export const GetLivePreviewSessionCountParams = zod.object({
+  "sessionId": zod.coerce.string()
+})
+
+export const GetLivePreviewSessionCountResponse = zod.object({
+  "used": zod.number(),
+  "limit": zod.number(),
+  "remaining": zod.number()
+})
+
+
+/**
+ * @summary "Continue With This Concept" — seeds the existing Brief/checkout flow with the exact already-generated concept. Never regenerates.
+ */
+export const ContinueLivePreviewParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ContinueLivePreviewBody = zod.object({
+  "concept": zod.enum(['A', 'B'])
+})
+
+export const ContinueLivePreviewResponse = zod.object({
+  "previewId": zod.number(),
+  "serviceId": zod.number(),
+  "selectedConcept": zod.string(),
+  "conceptData": zod.object({
+
+}).passthrough(),
+  "seed": zod.object({
+  "brandName": zod.string(),
+  "businessType": zod.string(),
+  "stylePreference": zod.string(),
+  "notes": zod.string()
+})
+})
+
+
+/**
+ * @summary Showcase funnel analytics — portfolio views, previews generated, preview-to-checkout, top performers
+ */
+export const GetPortfolioAnalyticsResponse = zod.object({
+  "funnel": zod.object({
+  "portfolioViews": zod.number(),
+  "previewsGenerated": zod.number(),
+  "previewToCheckout": zod.number()
+}),
+  "previews": zod.object({
+  "total": zod.number(),
+  "converted": zod.number(),
+  "failed": zod.number()
+}),
+  "topPortfolios": zod.array(zod.object({
+  "id": zod.number(),
+  "tenantId": zod.string().nullish(),
+  "serviceId": zod.number(),
+  "title": zod.string(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "colorTags": zod.array(zod.string()).nullish(),
+  "businessSize": zod.string(),
+  "packageLabel": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "galleryJson": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "beforeImage": zod.string().nullish(),
+  "afterImage": zod.string().nullish(),
+  "deliverablesJson": zod.array(zod.string()).nullish(),
+  "toolsUsedJson": zod.array(zod.string()).nullish(),
+  "workflowJson": zod.array(zod.object({
+
+}).passthrough()).nullish(),
+  "deliveryTime": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number(),
+  "completedProjects": zod.number(),
+  "featured": zod.boolean(),
+  "status": zod.string(),
+  "displayOrder": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+})
+
+
+/**
  * @summary Mark a service request as brief in progress (customer-facing, no auth required)
  */
 export const StartBriefParams = zod.object({

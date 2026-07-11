@@ -46,6 +46,7 @@ tags:
     description: AI Event Subscriptions — route events to handler functions
   - name: human-tasks
     description: Human Task Center — AI-to-human handoff, review, approval, and escalation
+  - name: service-portfolio
   - name: service-catalog
     description: AI Service Catalog & Pricing Center — departments, services, packages, and customer requests
   - name: commercial-gates
@@ -3712,6 +3713,401 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CatalogAnalytics"
+  /ai/portfolio/services/{serviceId}/showcase:
+    get:
+      operationId: getServiceShowcase
+      tags: [service-portfolio]
+      summary: Full pre-purchase showcase bundle for a service (portfolios, reviews, FAQs, related services, stats)
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Showcase bundle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceShowcase"
+  /ai/portfolio/services/{serviceId}/portfolios:
+    get:
+      operationId: listPortfoliosForService
+      tags: [service-portfolio]
+      summary: List portfolio items for a service
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Portfolio items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiServicePortfolio"
+    post:
+      operationId: createPortfolio
+      tags: [service-portfolio]
+      summary: Add a portfolio item to a service (admin)
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiServicePortfolioInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiServicePortfolio"
+  /ai/portfolio/portfolios/{id}:
+    patch:
+      operationId: updatePortfolio
+      tags: [service-portfolio]
+      summary: Update a portfolio item (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiServicePortfolioInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiServicePortfolio"
+    delete:
+      operationId: deletePortfolio
+      tags: [service-portfolio]
+      summary: Delete a portfolio item (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+  /ai/portfolio/portfolios/{id}/view:
+    post:
+      operationId: recordPortfolioView
+      tags: [service-portfolio]
+      summary: Increment view counter for a portfolio item and emit a funnel event
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated view count
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [views]
+                properties:
+                  views:
+                    type: integer
+  /ai/portfolio/services/{serviceId}/reviews:
+    get:
+      operationId: listPortfolioReviews
+      tags: [service-portfolio]
+      summary: List reviews for a service
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PortfolioReview"
+    post:
+      operationId: createPortfolioReview
+      tags: [service-portfolio]
+      summary: Add a review for a service (admin)
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PortfolioReviewInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioReview"
+  /ai/portfolio/reviews/{id}:
+    patch:
+      operationId: updatePortfolioReview
+      tags: [service-portfolio]
+      summary: Update a review (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PortfolioReviewInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioReview"
+    delete:
+      operationId: deletePortfolioReview
+      tags: [service-portfolio]
+      summary: Delete a review (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+  /ai/portfolio/services/{serviceId}/faqs:
+    get:
+      operationId: listServiceFaqs
+      tags: [service-portfolio]
+      summary: List FAQs for a service
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: FAQs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiServiceFaq"
+    post:
+      operationId: createServiceFaq
+      tags: [service-portfolio]
+      summary: Add a FAQ entry to a service (admin)
+      parameters:
+        - name: serviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiServiceFaqInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiServiceFaq"
+  /ai/portfolio/faqs/{id}:
+    patch:
+      operationId: updateServiceFaq
+      tags: [service-portfolio]
+      summary: Update a FAQ entry (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiServiceFaqInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiServiceFaq"
+    delete:
+      operationId: deleteServiceFaq
+      tags: [service-portfolio]
+      summary: Delete a FAQ entry (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+  /ai/portfolio/preview:
+    post:
+      operationId: startLivePreview
+      tags: [service-portfolio]
+      summary: Start a free, watermarked Live AI Preview (max 2 per browser session)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiLivePreviewInput"
+      responses:
+        "202":
+          description: Preview accepted, generating in the background
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status, remaining]
+                properties:
+                  id:
+                    type: integer
+                  status:
+                    type: string
+                  remaining:
+                    type: integer
+        "429":
+          description: Free preview limit reached for this session
+  /ai/portfolio/preview/{id}:
+    get:
+      operationId: getLivePreview
+      tags: [service-portfolio]
+      summary: Poll the status/result of a Live AI Preview
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Preview record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiLivePreview"
+  /ai/portfolio/preview/session/{sessionId}/count:
+    get:
+      operationId: getLivePreviewSessionCount
+      tags: [service-portfolio]
+      summary: Get how many free previews a browser session has used
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Usage count
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [used, limit, remaining]
+                properties:
+                  used:
+                    type: integer
+                  limit:
+                    type: integer
+                  remaining:
+                    type: integer
+  /ai/portfolio/preview/{id}/continue:
+    post:
+      operationId: continueLivePreview
+      tags: [service-portfolio]
+      summary: >-
+        "Continue With This Concept" — seeds the existing Brief/checkout flow
+        with the exact already-generated concept. Never regenerates.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [concept]
+              properties:
+                concept:
+                  type: string
+                  enum: [A, B]
+      responses:
+        "200":
+          description: Seed data for the request/brief flow
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiLivePreviewContinueResult"
+  /ai/portfolio/analytics:
+    get:
+      operationId: getPortfolioAnalytics
+      tags: [service-portfolio]
+      summary: Showcase funnel analytics — portfolio views, previews generated, preview-to-checkout, top performers
+      responses:
+        "200":
+          description: Analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioAnalytics"
   /public/catalog/requests/{requestId}/start-brief:
     patch:
       operationId: startBrief
@@ -8659,6 +9055,430 @@ components:
               type: integer
             completed:
               type: integer
+    AiServicePortfolio:
+      type: object
+      required:
+        - id
+        - serviceId
+        - title
+        - industry
+        - style
+        - businessSize
+        - views
+        - completedProjects
+        - featured
+        - status
+        - displayOrder
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        tenantId:
+          type: [string, "null"]
+        serviceId:
+          type: integer
+        title:
+          type: string
+        industry:
+          type: string
+        style:
+          type: string
+        colorTags:
+          type: [array, "null"]
+          items:
+            type: string
+        businessSize:
+          type: string
+        packageLabel:
+          type: [string, "null"]
+        description:
+          type: [string, "null"]
+        coverImage:
+          type: [string, "null"]
+        galleryJson:
+          type: [array, "null"]
+          items:
+            type: object
+        beforeImage:
+          type: [string, "null"]
+        afterImage:
+          type: [string, "null"]
+        deliverablesJson:
+          type: [array, "null"]
+          items:
+            type: string
+        toolsUsedJson:
+          type: [array, "null"]
+          items:
+            type: string
+        workflowJson:
+          type: [array, "null"]
+          items:
+            type: object
+        deliveryTime:
+          type: [string, "null"]
+        rating:
+          type: [string, "null"]
+        views:
+          type: integer
+        completedProjects:
+          type: integer
+        featured:
+          type: boolean
+        status:
+          type: string
+        displayOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AiServicePortfolioInput:
+      type: object
+      required:
+        - title
+        - industry
+        - style
+      properties:
+        title:
+          type: string
+        industry:
+          type: string
+        style:
+          type: string
+        colorTags:
+          type: array
+          items:
+            type: string
+        businessSize:
+          type: string
+        packageLabel:
+          type: string
+        description:
+          type: string
+        coverImage:
+          type: string
+        galleryJson:
+          type: array
+          items:
+            type: object
+        beforeImage:
+          type: string
+        afterImage:
+          type: string
+        deliverablesJson:
+          type: array
+          items:
+            type: string
+        toolsUsedJson:
+          type: array
+          items:
+            type: string
+        workflowJson:
+          type: array
+          items:
+            type: object
+        deliveryTime:
+          type: string
+        rating:
+          type: string
+        completedProjects:
+          type: integer
+        featured:
+          type: boolean
+        status:
+          type: string
+        displayOrder:
+          type: integer
+    PortfolioReview:
+      type: object
+      required:
+        - id
+        - serviceId
+        - rating
+        - review
+        - company
+        - featured
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        serviceId:
+          type: integer
+        portfolioId:
+          type: [integer, "null"]
+        rating:
+          type: integer
+        review:
+          type: string
+        company:
+          type: string
+        industry:
+          type: [string, "null"]
+        clientName:
+          type: [string, "null"]
+        featured:
+          type: boolean
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PortfolioReviewInput:
+      type: object
+      required:
+        - rating
+        - review
+        - company
+      properties:
+        portfolioId:
+          type: integer
+        rating:
+          type: integer
+        review:
+          type: string
+        company:
+          type: string
+        industry:
+          type: string
+        clientName:
+          type: string
+        featured:
+          type: boolean
+        status:
+          type: string
+    AiServiceFaq:
+      type: object
+      required:
+        - id
+        - serviceId
+        - question
+        - answer
+        - displayOrder
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        serviceId:
+          type: integer
+        question:
+          type: string
+        answer:
+          type: string
+        displayOrder:
+          type: integer
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AiServiceFaqInput:
+      type: object
+      required:
+        - question
+        - answer
+      properties:
+        question:
+          type: string
+        answer:
+          type: string
+        displayOrder:
+          type: integer
+        status:
+          type: string
+    AiLivePreviewInput:
+      type: object
+      required:
+        - sessionId
+        - serviceId
+        - companyName
+        - industry
+        - style
+      properties:
+        sessionId:
+          type: string
+        serviceId:
+          type: integer
+        companyName:
+          type: string
+        industry:
+          type: string
+        style:
+          type: string
+        primaryColor:
+          type: string
+        secondaryColor:
+          type: string
+        shortDescription:
+          type: string
+        referenceImageUrl:
+          type: string
+    AiLivePreview:
+      type: object
+      required:
+        - id
+        - sessionId
+        - serviceId
+        - companyName
+        - industry
+        - style
+        - status
+        - watermarked
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        sessionId:
+          type: string
+        serviceId:
+          type: integer
+        companyName:
+          type: string
+        industry:
+          type: string
+        style:
+          type: string
+        primaryColor:
+          type: [string, "null"]
+        secondaryColor:
+          type: [string, "null"]
+        shortDescription:
+          type: [string, "null"]
+        referenceImageUrl:
+          type: [string, "null"]
+        conceptA:
+          type: [object, "null"]
+        conceptB:
+          type: [object, "null"]
+        selectedConcept:
+          type: [string, "null"]
+        status:
+          type: string
+          description: generating | ready | failed | converted
+        errorMessage:
+          type: [string, "null"]
+        serviceRequestId:
+          type: [integer, "null"]
+        watermarked:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AiLivePreviewContinueResult:
+      type: object
+      required:
+        - previewId
+        - serviceId
+        - selectedConcept
+        - conceptData
+        - seed
+      properties:
+        previewId:
+          type: integer
+        serviceId:
+          type: integer
+        selectedConcept:
+          type: string
+        conceptData:
+          type: object
+        seed:
+          type: object
+          required: [brandName, businessType, stylePreference, notes]
+          properties:
+            brandName:
+              type: string
+            businessType:
+              type: string
+            stylePreference:
+              type: string
+            notes:
+              type: string
+    ServiceShowcase:
+      type: object
+      required:
+        - service
+        - portfolios
+        - reviews
+        - faqs
+        - relatedServices
+        - stats
+      properties:
+        service:
+          $ref: "#/components/schemas/AiService"
+        portfolios:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiServicePortfolio"
+        reviews:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortfolioReview"
+        faqs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiServiceFaq"
+        relatedServices:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiService"
+        stats:
+          type: object
+          required: [totalProjects, avgRating, reviewCount]
+          properties:
+            totalProjects:
+              type: integer
+            avgRating:
+              type: [number, "null"]
+            reviewCount:
+              type: integer
+    PortfolioAnalytics:
+      type: object
+      required:
+        - funnel
+        - previews
+        - topPortfolios
+      properties:
+        funnel:
+          type: object
+          required: [portfolioViews, previewsGenerated, previewToCheckout]
+          properties:
+            portfolioViews:
+              type: integer
+            previewsGenerated:
+              type: integer
+            previewToCheckout:
+              type: integer
+        previews:
+          type: object
+          required: [total, converted, failed]
+          properties:
+            total:
+              type: integer
+            converted:
+              type: integer
+            failed:
+              type: integer
+        topPortfolios:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiServicePortfolio"
     ServiceRequestStatus:
       type: string
       enum:

@@ -35,6 +35,9 @@ import type {
   AiEventSubscription,
   AiInvoice,
   AiJob,
+  AiLivePreview,
+  AiLivePreviewContinueResult,
+  AiLivePreviewInput,
   AiModel,
   AiModelInput,
   AiModelUpdate,
@@ -52,10 +55,14 @@ import type {
   AiServiceCategory,
   AiServiceCategoryInput,
   AiServiceDetail,
+  AiServiceFaq,
+  AiServiceFaqInput,
   AiServiceInput,
   AiServiceMarginReview,
   AiServicePackage,
   AiServicePackageInput,
+  AiServicePortfolio,
+  AiServicePortfolioInput,
   AiServicePriceRule,
   AiServicePriceRuleInput,
   AiServicePricingBreakdown,
@@ -94,6 +101,7 @@ import type {
   CommercialGateVerifyInput,
   CommercialGateWaiveInput,
   CompleteHumanTaskBody,
+  ContinueLivePreviewBody,
   CostAnalyticsResponse,
   CreateHumanTaskBody,
   CreateJobBody,
@@ -124,6 +132,7 @@ import type {
   GetAnalyticsUsageParams,
   GetCostAnalyticsParams,
   GetCreativeImageAnalyticsParams,
+  GetLivePreviewSessionCount200,
   HealthStatus,
   HumanTask,
   HumanTaskDetail,
@@ -159,12 +168,16 @@ import type {
   PaymentProofInput,
   PaymentVerifyInput,
   PaymentVerifyResult,
+  PortfolioAnalytics,
+  PortfolioReview,
+  PortfolioReviewInput,
   ProviderBreakdown,
   PublicProjectReview,
   PublishEventBody,
   QueueFilterBody,
   ReassignHumanTaskBody,
   RebalanceCluster200,
+  RecordPortfolioView200,
   RecoverStaleWorkers200,
   RegisterClusterWorkerBody,
   RegisterWorkerBody,
@@ -176,7 +189,9 @@ import type {
   ScheduleRunPage,
   SchedulerSettings,
   SchedulerStatus,
+  ServiceShowcase,
   StartBrief200,
+  StartLivePreview202,
   SubmitPaymentProof200,
   SubscriptionListResponse,
   TickDispatcher200,
@@ -12990,6 +13005,1392 @@ export function useGetCatalogAnalytics<TData = Awaited<ReturnType<typeof getCata
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetCatalogAnalyticsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetServiceShowcaseUrl = (serviceId: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/services/${serviceId}/showcase`
+}
+
+/**
+ * @summary Full pre-purchase showcase bundle for a service (portfolios, reviews, FAQs, related services, stats)
+ */
+export const getServiceShowcase = async (serviceId: number, options?: RequestInit): Promise<ServiceShowcase> => {
+
+  return customFetch<ServiceShowcase>(getGetServiceShowcaseUrl(serviceId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetServiceShowcaseQueryKey = (serviceId: number,) => {
+    return [
+    `/api/ai/portfolio/services/${serviceId}/showcase`
+    ] as const;
+    }
+
+
+export const getGetServiceShowcaseQueryOptions = <TData = Awaited<ReturnType<typeof getServiceShowcase>>, TError = ErrorType<unknown>>(serviceId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getServiceShowcase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetServiceShowcaseQueryKey(serviceId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getServiceShowcase>>> = ({ signal }) => getServiceShowcase(serviceId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: serviceId !== null && serviceId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getServiceShowcase>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetServiceShowcaseQueryResult = NonNullable<Awaited<ReturnType<typeof getServiceShowcase>>>
+export type GetServiceShowcaseQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Full pre-purchase showcase bundle for a service (portfolios, reviews, FAQs, related services, stats)
+ */
+
+export function useGetServiceShowcase<TData = Awaited<ReturnType<typeof getServiceShowcase>>, TError = ErrorType<unknown>>(
+ serviceId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getServiceShowcase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetServiceShowcaseQueryOptions(serviceId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListPortfoliosForServiceUrl = (serviceId: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/services/${serviceId}/portfolios`
+}
+
+/**
+ * @summary List portfolio items for a service
+ */
+export const listPortfoliosForService = async (serviceId: number, options?: RequestInit): Promise<AiServicePortfolio[]> => {
+
+  return customFetch<AiServicePortfolio[]>(getListPortfoliosForServiceUrl(serviceId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPortfoliosForServiceQueryKey = (serviceId: number,) => {
+    return [
+    `/api/ai/portfolio/services/${serviceId}/portfolios`
+    ] as const;
+    }
+
+
+export const getListPortfoliosForServiceQueryOptions = <TData = Awaited<ReturnType<typeof listPortfoliosForService>>, TError = ErrorType<unknown>>(serviceId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPortfoliosForService>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPortfoliosForServiceQueryKey(serviceId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPortfoliosForService>>> = ({ signal }) => listPortfoliosForService(serviceId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: serviceId !== null && serviceId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPortfoliosForService>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPortfoliosForServiceQueryResult = NonNullable<Awaited<ReturnType<typeof listPortfoliosForService>>>
+export type ListPortfoliosForServiceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List portfolio items for a service
+ */
+
+export function useListPortfoliosForService<TData = Awaited<ReturnType<typeof listPortfoliosForService>>, TError = ErrorType<unknown>>(
+ serviceId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPortfoliosForService>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPortfoliosForServiceQueryOptions(serviceId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePortfolioUrl = (serviceId: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/services/${serviceId}/portfolios`
+}
+
+/**
+ * @summary Add a portfolio item to a service (admin)
+ */
+export const createPortfolio = async (serviceId: number,
+    aiServicePortfolioInput: AiServicePortfolioInput, options?: RequestInit): Promise<AiServicePortfolio> => {
+
+  return customFetch<AiServicePortfolio>(getCreatePortfolioUrl(serviceId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiServicePortfolioInput)
+  }
+);}
+
+
+
+
+export const getCreatePortfolioMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPortfolio>>, TError,{serviceId: number;data: BodyType<AiServicePortfolioInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPortfolio>>, TError,{serviceId: number;data: BodyType<AiServicePortfolioInput>}, TContext> => {
+
+const mutationKey = ['createPortfolio'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPortfolio>>, {serviceId: number;data: BodyType<AiServicePortfolioInput>}> = (props) => {
+          const {serviceId,data} = props ?? {};
+
+          return  createPortfolio(serviceId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePortfolioMutationResult = NonNullable<Awaited<ReturnType<typeof createPortfolio>>>
+    export type CreatePortfolioMutationBody = BodyType<AiServicePortfolioInput>
+    export type CreatePortfolioMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Add a portfolio item to a service (admin)
+ */
+export const useCreatePortfolio = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPortfolio>>, TError,{serviceId: number;data: BodyType<AiServicePortfolioInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPortfolio>>,
+        TError,
+        {serviceId: number;data: BodyType<AiServicePortfolioInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePortfolioMutationOptions(options));
+    }
+
+export const getUpdatePortfolioUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/portfolios/${id}`
+}
+
+/**
+ * @summary Update a portfolio item (admin)
+ */
+export const updatePortfolio = async (id: number,
+    aiServicePortfolioInput: AiServicePortfolioInput, options?: RequestInit): Promise<AiServicePortfolio> => {
+
+  return customFetch<AiServicePortfolio>(getUpdatePortfolioUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiServicePortfolioInput)
+  }
+);}
+
+
+
+
+export const getUpdatePortfolioMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePortfolio>>, TError,{id: number;data: BodyType<AiServicePortfolioInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePortfolio>>, TError,{id: number;data: BodyType<AiServicePortfolioInput>}, TContext> => {
+
+const mutationKey = ['updatePortfolio'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePortfolio>>, {id: number;data: BodyType<AiServicePortfolioInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updatePortfolio(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePortfolioMutationResult = NonNullable<Awaited<ReturnType<typeof updatePortfolio>>>
+    export type UpdatePortfolioMutationBody = BodyType<AiServicePortfolioInput>
+    export type UpdatePortfolioMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a portfolio item (admin)
+ */
+export const useUpdatePortfolio = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePortfolio>>, TError,{id: number;data: BodyType<AiServicePortfolioInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePortfolio>>,
+        TError,
+        {id: number;data: BodyType<AiServicePortfolioInput>},
+        TContext
+      > => {
+      return useMutation(getUpdatePortfolioMutationOptions(options));
+    }
+
+export const getDeletePortfolioUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/portfolios/${id}`
+}
+
+/**
+ * @summary Delete a portfolio item (admin)
+ */
+export const deletePortfolio = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeletePortfolioUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeletePortfolioMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePortfolio>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deletePortfolio>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deletePortfolio'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePortfolio>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deletePortfolio(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeletePortfolioMutationResult = NonNullable<Awaited<ReturnType<typeof deletePortfolio>>>
+
+    export type DeletePortfolioMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a portfolio item (admin)
+ */
+export const useDeletePortfolio = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePortfolio>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deletePortfolio>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeletePortfolioMutationOptions(options));
+    }
+
+export const getRecordPortfolioViewUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/portfolios/${id}/view`
+}
+
+/**
+ * @summary Increment view counter for a portfolio item and emit a funnel event
+ */
+export const recordPortfolioView = async (id: number, options?: RequestInit): Promise<RecordPortfolioView200> => {
+
+  return customFetch<RecordPortfolioView200>(getRecordPortfolioViewUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRecordPortfolioViewMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordPortfolioView>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordPortfolioView>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['recordPortfolioView'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordPortfolioView>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  recordPortfolioView(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordPortfolioViewMutationResult = NonNullable<Awaited<ReturnType<typeof recordPortfolioView>>>
+
+    export type RecordPortfolioViewMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Increment view counter for a portfolio item and emit a funnel event
+ */
+export const useRecordPortfolioView = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordPortfolioView>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordPortfolioView>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRecordPortfolioViewMutationOptions(options));
+    }
+
+export const getListPortfolioReviewsUrl = (serviceId: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/services/${serviceId}/reviews`
+}
+
+/**
+ * @summary List reviews for a service
+ */
+export const listPortfolioReviews = async (serviceId: number, options?: RequestInit): Promise<PortfolioReview[]> => {
+
+  return customFetch<PortfolioReview[]>(getListPortfolioReviewsUrl(serviceId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPortfolioReviewsQueryKey = (serviceId: number,) => {
+    return [
+    `/api/ai/portfolio/services/${serviceId}/reviews`
+    ] as const;
+    }
+
+
+export const getListPortfolioReviewsQueryOptions = <TData = Awaited<ReturnType<typeof listPortfolioReviews>>, TError = ErrorType<unknown>>(serviceId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPortfolioReviews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPortfolioReviewsQueryKey(serviceId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPortfolioReviews>>> = ({ signal }) => listPortfolioReviews(serviceId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: serviceId !== null && serviceId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPortfolioReviews>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPortfolioReviewsQueryResult = NonNullable<Awaited<ReturnType<typeof listPortfolioReviews>>>
+export type ListPortfolioReviewsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List reviews for a service
+ */
+
+export function useListPortfolioReviews<TData = Awaited<ReturnType<typeof listPortfolioReviews>>, TError = ErrorType<unknown>>(
+ serviceId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPortfolioReviews>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPortfolioReviewsQueryOptions(serviceId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePortfolioReviewUrl = (serviceId: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/services/${serviceId}/reviews`
+}
+
+/**
+ * @summary Add a review for a service (admin)
+ */
+export const createPortfolioReview = async (serviceId: number,
+    portfolioReviewInput: PortfolioReviewInput, options?: RequestInit): Promise<PortfolioReview> => {
+
+  return customFetch<PortfolioReview>(getCreatePortfolioReviewUrl(serviceId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(portfolioReviewInput)
+  }
+);}
+
+
+
+
+export const getCreatePortfolioReviewMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPortfolioReview>>, TError,{serviceId: number;data: BodyType<PortfolioReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPortfolioReview>>, TError,{serviceId: number;data: BodyType<PortfolioReviewInput>}, TContext> => {
+
+const mutationKey = ['createPortfolioReview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPortfolioReview>>, {serviceId: number;data: BodyType<PortfolioReviewInput>}> = (props) => {
+          const {serviceId,data} = props ?? {};
+
+          return  createPortfolioReview(serviceId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePortfolioReviewMutationResult = NonNullable<Awaited<ReturnType<typeof createPortfolioReview>>>
+    export type CreatePortfolioReviewMutationBody = BodyType<PortfolioReviewInput>
+    export type CreatePortfolioReviewMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Add a review for a service (admin)
+ */
+export const useCreatePortfolioReview = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPortfolioReview>>, TError,{serviceId: number;data: BodyType<PortfolioReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPortfolioReview>>,
+        TError,
+        {serviceId: number;data: BodyType<PortfolioReviewInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePortfolioReviewMutationOptions(options));
+    }
+
+export const getUpdatePortfolioReviewUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/reviews/${id}`
+}
+
+/**
+ * @summary Update a review (admin)
+ */
+export const updatePortfolioReview = async (id: number,
+    portfolioReviewInput: PortfolioReviewInput, options?: RequestInit): Promise<PortfolioReview> => {
+
+  return customFetch<PortfolioReview>(getUpdatePortfolioReviewUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(portfolioReviewInput)
+  }
+);}
+
+
+
+
+export const getUpdatePortfolioReviewMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePortfolioReview>>, TError,{id: number;data: BodyType<PortfolioReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePortfolioReview>>, TError,{id: number;data: BodyType<PortfolioReviewInput>}, TContext> => {
+
+const mutationKey = ['updatePortfolioReview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePortfolioReview>>, {id: number;data: BodyType<PortfolioReviewInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updatePortfolioReview(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePortfolioReviewMutationResult = NonNullable<Awaited<ReturnType<typeof updatePortfolioReview>>>
+    export type UpdatePortfolioReviewMutationBody = BodyType<PortfolioReviewInput>
+    export type UpdatePortfolioReviewMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a review (admin)
+ */
+export const useUpdatePortfolioReview = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePortfolioReview>>, TError,{id: number;data: BodyType<PortfolioReviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePortfolioReview>>,
+        TError,
+        {id: number;data: BodyType<PortfolioReviewInput>},
+        TContext
+      > => {
+      return useMutation(getUpdatePortfolioReviewMutationOptions(options));
+    }
+
+export const getDeletePortfolioReviewUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/reviews/${id}`
+}
+
+/**
+ * @summary Delete a review (admin)
+ */
+export const deletePortfolioReview = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeletePortfolioReviewUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeletePortfolioReviewMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePortfolioReview>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deletePortfolioReview>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deletePortfolioReview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePortfolioReview>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deletePortfolioReview(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeletePortfolioReviewMutationResult = NonNullable<Awaited<ReturnType<typeof deletePortfolioReview>>>
+
+    export type DeletePortfolioReviewMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a review (admin)
+ */
+export const useDeletePortfolioReview = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePortfolioReview>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deletePortfolioReview>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeletePortfolioReviewMutationOptions(options));
+    }
+
+export const getListServiceFaqsUrl = (serviceId: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/services/${serviceId}/faqs`
+}
+
+/**
+ * @summary List FAQs for a service
+ */
+export const listServiceFaqs = async (serviceId: number, options?: RequestInit): Promise<AiServiceFaq[]> => {
+
+  return customFetch<AiServiceFaq[]>(getListServiceFaqsUrl(serviceId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListServiceFaqsQueryKey = (serviceId: number,) => {
+    return [
+    `/api/ai/portfolio/services/${serviceId}/faqs`
+    ] as const;
+    }
+
+
+export const getListServiceFaqsQueryOptions = <TData = Awaited<ReturnType<typeof listServiceFaqs>>, TError = ErrorType<unknown>>(serviceId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listServiceFaqs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListServiceFaqsQueryKey(serviceId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listServiceFaqs>>> = ({ signal }) => listServiceFaqs(serviceId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: serviceId !== null && serviceId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listServiceFaqs>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListServiceFaqsQueryResult = NonNullable<Awaited<ReturnType<typeof listServiceFaqs>>>
+export type ListServiceFaqsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List FAQs for a service
+ */
+
+export function useListServiceFaqs<TData = Awaited<ReturnType<typeof listServiceFaqs>>, TError = ErrorType<unknown>>(
+ serviceId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listServiceFaqs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListServiceFaqsQueryOptions(serviceId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateServiceFaqUrl = (serviceId: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/services/${serviceId}/faqs`
+}
+
+/**
+ * @summary Add a FAQ entry to a service (admin)
+ */
+export const createServiceFaq = async (serviceId: number,
+    aiServiceFaqInput: AiServiceFaqInput, options?: RequestInit): Promise<AiServiceFaq> => {
+
+  return customFetch<AiServiceFaq>(getCreateServiceFaqUrl(serviceId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiServiceFaqInput)
+  }
+);}
+
+
+
+
+export const getCreateServiceFaqMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createServiceFaq>>, TError,{serviceId: number;data: BodyType<AiServiceFaqInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createServiceFaq>>, TError,{serviceId: number;data: BodyType<AiServiceFaqInput>}, TContext> => {
+
+const mutationKey = ['createServiceFaq'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createServiceFaq>>, {serviceId: number;data: BodyType<AiServiceFaqInput>}> = (props) => {
+          const {serviceId,data} = props ?? {};
+
+          return  createServiceFaq(serviceId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateServiceFaqMutationResult = NonNullable<Awaited<ReturnType<typeof createServiceFaq>>>
+    export type CreateServiceFaqMutationBody = BodyType<AiServiceFaqInput>
+    export type CreateServiceFaqMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Add a FAQ entry to a service (admin)
+ */
+export const useCreateServiceFaq = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createServiceFaq>>, TError,{serviceId: number;data: BodyType<AiServiceFaqInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createServiceFaq>>,
+        TError,
+        {serviceId: number;data: BodyType<AiServiceFaqInput>},
+        TContext
+      > => {
+      return useMutation(getCreateServiceFaqMutationOptions(options));
+    }
+
+export const getUpdateServiceFaqUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/faqs/${id}`
+}
+
+/**
+ * @summary Update a FAQ entry (admin)
+ */
+export const updateServiceFaq = async (id: number,
+    aiServiceFaqInput: AiServiceFaqInput, options?: RequestInit): Promise<AiServiceFaq> => {
+
+  return customFetch<AiServiceFaq>(getUpdateServiceFaqUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiServiceFaqInput)
+  }
+);}
+
+
+
+
+export const getUpdateServiceFaqMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateServiceFaq>>, TError,{id: number;data: BodyType<AiServiceFaqInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateServiceFaq>>, TError,{id: number;data: BodyType<AiServiceFaqInput>}, TContext> => {
+
+const mutationKey = ['updateServiceFaq'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateServiceFaq>>, {id: number;data: BodyType<AiServiceFaqInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateServiceFaq(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateServiceFaqMutationResult = NonNullable<Awaited<ReturnType<typeof updateServiceFaq>>>
+    export type UpdateServiceFaqMutationBody = BodyType<AiServiceFaqInput>
+    export type UpdateServiceFaqMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a FAQ entry (admin)
+ */
+export const useUpdateServiceFaq = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateServiceFaq>>, TError,{id: number;data: BodyType<AiServiceFaqInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateServiceFaq>>,
+        TError,
+        {id: number;data: BodyType<AiServiceFaqInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateServiceFaqMutationOptions(options));
+    }
+
+export const getDeleteServiceFaqUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/faqs/${id}`
+}
+
+/**
+ * @summary Delete a FAQ entry (admin)
+ */
+export const deleteServiceFaq = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteServiceFaqUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteServiceFaqMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteServiceFaq>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteServiceFaq>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteServiceFaq'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteServiceFaq>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteServiceFaq(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteServiceFaqMutationResult = NonNullable<Awaited<ReturnType<typeof deleteServiceFaq>>>
+
+    export type DeleteServiceFaqMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a FAQ entry (admin)
+ */
+export const useDeleteServiceFaq = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteServiceFaq>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteServiceFaq>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteServiceFaqMutationOptions(options));
+    }
+
+export const getStartLivePreviewUrl = () => {
+
+
+
+
+  return `/api/ai/portfolio/preview`
+}
+
+/**
+ * @summary Start a free, watermarked Live AI Preview (max 2 per browser session)
+ */
+export const startLivePreview = async (aiLivePreviewInput: AiLivePreviewInput, options?: RequestInit): Promise<StartLivePreview202> => {
+
+  return customFetch<StartLivePreview202>(getStartLivePreviewUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiLivePreviewInput)
+  }
+);}
+
+
+
+
+export const getStartLivePreviewMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startLivePreview>>, TError,{data: BodyType<AiLivePreviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startLivePreview>>, TError,{data: BodyType<AiLivePreviewInput>}, TContext> => {
+
+const mutationKey = ['startLivePreview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startLivePreview>>, {data: BodyType<AiLivePreviewInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  startLivePreview(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartLivePreviewMutationResult = NonNullable<Awaited<ReturnType<typeof startLivePreview>>>
+    export type StartLivePreviewMutationBody = BodyType<AiLivePreviewInput>
+    export type StartLivePreviewMutationError = ErrorType<void>
+
+    /**
+ * @summary Start a free, watermarked Live AI Preview (max 2 per browser session)
+ */
+export const useStartLivePreview = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startLivePreview>>, TError,{data: BodyType<AiLivePreviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startLivePreview>>,
+        TError,
+        {data: BodyType<AiLivePreviewInput>},
+        TContext
+      > => {
+      return useMutation(getStartLivePreviewMutationOptions(options));
+    }
+
+export const getGetLivePreviewUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/preview/${id}`
+}
+
+/**
+ * @summary Poll the status/result of a Live AI Preview
+ */
+export const getLivePreview = async (id: number, options?: RequestInit): Promise<AiLivePreview> => {
+
+  return customFetch<AiLivePreview>(getGetLivePreviewUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLivePreviewQueryKey = (id: number,) => {
+    return [
+    `/api/ai/portfolio/preview/${id}`
+    ] as const;
+    }
+
+
+export const getGetLivePreviewQueryOptions = <TData = Awaited<ReturnType<typeof getLivePreview>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLivePreview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLivePreviewQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLivePreview>>> = ({ signal }) => getLivePreview(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLivePreview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLivePreviewQueryResult = NonNullable<Awaited<ReturnType<typeof getLivePreview>>>
+export type GetLivePreviewQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Poll the status/result of a Live AI Preview
+ */
+
+export function useGetLivePreview<TData = Awaited<ReturnType<typeof getLivePreview>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLivePreview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLivePreviewQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetLivePreviewSessionCountUrl = (sessionId: string,) => {
+
+
+
+
+  return `/api/ai/portfolio/preview/session/${sessionId}/count`
+}
+
+/**
+ * @summary Get how many free previews a browser session has used
+ */
+export const getLivePreviewSessionCount = async (sessionId: string, options?: RequestInit): Promise<GetLivePreviewSessionCount200> => {
+
+  return customFetch<GetLivePreviewSessionCount200>(getGetLivePreviewSessionCountUrl(sessionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLivePreviewSessionCountQueryKey = (sessionId: string,) => {
+    return [
+    `/api/ai/portfolio/preview/session/${sessionId}/count`
+    ] as const;
+    }
+
+
+export const getGetLivePreviewSessionCountQueryOptions = <TData = Awaited<ReturnType<typeof getLivePreviewSessionCount>>, TError = ErrorType<unknown>>(sessionId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLivePreviewSessionCount>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLivePreviewSessionCountQueryKey(sessionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLivePreviewSessionCount>>> = ({ signal }) => getLivePreviewSessionCount(sessionId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: sessionId !== null && sessionId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLivePreviewSessionCount>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLivePreviewSessionCountQueryResult = NonNullable<Awaited<ReturnType<typeof getLivePreviewSessionCount>>>
+export type GetLivePreviewSessionCountQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get how many free previews a browser session has used
+ */
+
+export function useGetLivePreviewSessionCount<TData = Awaited<ReturnType<typeof getLivePreviewSessionCount>>, TError = ErrorType<unknown>>(
+ sessionId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLivePreviewSessionCount>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLivePreviewSessionCountQueryOptions(sessionId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getContinueLivePreviewUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/portfolio/preview/${id}/continue`
+}
+
+/**
+ * @summary "Continue With This Concept" — seeds the existing Brief/checkout flow with the exact already-generated concept. Never regenerates.
+ */
+export const continueLivePreview = async (id: number,
+    continueLivePreviewBody: ContinueLivePreviewBody, options?: RequestInit): Promise<AiLivePreviewContinueResult> => {
+
+  return customFetch<AiLivePreviewContinueResult>(getContinueLivePreviewUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(continueLivePreviewBody)
+  }
+);}
+
+
+
+
+export const getContinueLivePreviewMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof continueLivePreview>>, TError,{id: number;data: BodyType<ContinueLivePreviewBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof continueLivePreview>>, TError,{id: number;data: BodyType<ContinueLivePreviewBody>}, TContext> => {
+
+const mutationKey = ['continueLivePreview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof continueLivePreview>>, {id: number;data: BodyType<ContinueLivePreviewBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  continueLivePreview(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ContinueLivePreviewMutationResult = NonNullable<Awaited<ReturnType<typeof continueLivePreview>>>
+    export type ContinueLivePreviewMutationBody = BodyType<ContinueLivePreviewBody>
+    export type ContinueLivePreviewMutationError = ErrorType<unknown>
+
+    /**
+ * @summary "Continue With This Concept" — seeds the existing Brief/checkout flow with the exact already-generated concept. Never regenerates.
+ */
+export const useContinueLivePreview = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof continueLivePreview>>, TError,{id: number;data: BodyType<ContinueLivePreviewBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof continueLivePreview>>,
+        TError,
+        {id: number;data: BodyType<ContinueLivePreviewBody>},
+        TContext
+      > => {
+      return useMutation(getContinueLivePreviewMutationOptions(options));
+    }
+
+export const getGetPortfolioAnalyticsUrl = () => {
+
+
+
+
+  return `/api/ai/portfolio/analytics`
+}
+
+/**
+ * @summary Showcase funnel analytics — portfolio views, previews generated, preview-to-checkout, top performers
+ */
+export const getPortfolioAnalytics = async ( options?: RequestInit): Promise<PortfolioAnalytics> => {
+
+  return customFetch<PortfolioAnalytics>(getGetPortfolioAnalyticsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPortfolioAnalyticsQueryKey = () => {
+    return [
+    `/api/ai/portfolio/analytics`
+    ] as const;
+    }
+
+
+export const getGetPortfolioAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getPortfolioAnalytics>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPortfolioAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPortfolioAnalyticsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPortfolioAnalytics>>> = ({ signal }) => getPortfolioAnalytics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPortfolioAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPortfolioAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getPortfolioAnalytics>>>
+export type GetPortfolioAnalyticsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Showcase funnel analytics — portfolio views, previews generated, preview-to-checkout, top performers
+ */
+
+export function useGetPortfolioAnalytics<TData = Awaited<ReturnType<typeof getPortfolioAnalytics>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPortfolioAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPortfolioAnalyticsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
