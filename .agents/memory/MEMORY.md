@@ -23,6 +23,8 @@
 - [drizzle-push-false-positive](drizzle-push-false-positive.md) — drizzle-kit push proposes dropping the whole ai_platform schema even for additive changes; hand-write DDL for new tables instead
 - [service-catalog-quotation-flow](service-catalog-quotation-flow.md) — ai_quotations + ai_quotation_items tables, service-catalog flow vs legacy flow, nullable quotationId on gates
 - [service-catalog-commercial-flow](service-catalog-commercial-flow.md) — Status transitions, conversion path, status enum in OpenAPI, admin enum cast pattern
+- [provider-health-check-slug-baseurl](provider-health-check-slug-baseurl.md) — Registry INACTIVE 401/404 caused by slug/baseUrl mismatch between seed scripts, not bad API keys
 - [service-request-status-vocabulary](service-request-status-vocabulary.md) — full status list lives in admin NEXT_ACTIONS/dashboard maps, not schema comment; "completed" must be server-guarded
 - [smtp-email-service](smtp-email-service.md) — real email sending added via nodemailer/emailService.ts; resend reuses issue-quotation re-issue endpoint; Hostinger 535 errors need username double-checked, not just port/TLS
 - [dual-commercial-flow](dual-commercial-flow.md) — service_flow (fixed_price vs custom/enterprise) picks checkout-only vs quotation-gated path; payment verification is the sole gate for AI production start
+- [service-request-gate-status-sync](service-request-gate-status-sync.md) — generic status-PATCH must guard against skipping an unverified commercial gate; customer portal must read real status, not infer from quotation.status alone

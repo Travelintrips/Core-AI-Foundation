@@ -304,7 +304,7 @@ export function useServiceQuotation(token: string | undefined) {
     enabled: !!token,
     queryKey: ['service-quotation', token],
     queryFn: ({ signal }) =>
-      customFetch<{ quotation: ServiceQuotation; items: ServiceQuotationItem[] }>(
+      customFetch<{ quotation: ServiceQuotation; items: ServiceQuotationItem[]; requestStatus: string | null; gateStatus: string | null }>(
         `/api/public/quotations/${token}`,
         { signal },
       ),

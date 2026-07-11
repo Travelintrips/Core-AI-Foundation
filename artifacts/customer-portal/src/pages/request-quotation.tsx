@@ -18,14 +18,23 @@ import {
 } from "@/hooks/use-catalog";
 
 /** Map service-request status → flow-stepper key */
-function requestStatusToStep(status: string): string {
+export function requestStatusToStep(status: string): string {
   if (["completed", "converted_to_project"].includes(status)) return "selesai";
   if (["waiting_review", "revision_requested"].includes(status)) return "review";
-  if (["pending", "orchestrating", "in_progress"].includes(status)) return "produksi";
-  if (["approved", "verifikasi_komersial"].includes(status)) return "verifikasi";
+  if (["ready_to_build", "pending", "orchestrating", "in_progress"].includes(status)) return "produksi";
+  if (["approved", "waiting_commercial_gate"].includes(status)) return "verifikasi";
   return "persetujuan";
 }
 import { Loader2, CheckCircle2, XCircle, MessageSquare, FileText, Clock, ShieldCheck } from "lucide-react";
+
+/** Message shown under the "Penawaran telah disetujui!" banner, based on real backend progress. */
+function postApproveMessage(requestStatus: string | null): string {
+  if (!requestStatus) return "Langkah berikutnya: verifikasi komersial oleh tim kami sebelum produksi dimulai.";
+  if (["completed", "converted_to_project"].includes(requestStatus)) return "Project Anda telah selesai!";
+  if (["waiting_review", "revision_requested"].includes(requestStatus)) return "Project Anda sedang ditinjau oleh tim kami sebelum diserahkan.";
+  if (["pending", "orchestrating", "in_progress", "ready_to_build"].includes(requestStatus)) return "Verifikasi komersial selesai — tim AI kami sedang mengerjakan project Anda.";
+  return "Langkah berikutnya: verifikasi komersial oleh tim kami sebelum produksi dimulai.";
+}
 
 function formatMoney(amount: number, currency = "IDR") {
   try {
@@ -94,10 +103,13 @@ export default function RequestQuotationPage() {
     );
   }
 
-  const { quotation, items } = data;
+  const { quotation, items, requestStatus } = data;
   const terminal = TERMINAL[quotation.status];
   const isActive = !terminal;
-  const stepperStep = quotation.status === "approved" ? "verifikasi" : "persetujuan";
+  const stepperStep =
+    quotation.status === "approved"
+      ? requestStatusToStep(requestStatus ?? "approved")
+      : "persetujuan";
 
   const handleApprove = () => {
     approve.mutate({ token }, {
@@ -294,7 +306,7 @@ export default function RequestQuotationPage() {
             <CheckCircle2 className="w-8 h-8 text-green-600 mx-auto mb-2" />
             <p className="font-medium text-green-700 dark:text-green-400">Penawaran telah disetujui!</p>
             <p className="text-sm text-green-600/80 dark:text-green-500/80 mt-1">
-              Langkah berikutnya: verifikasi komersial oleh tim kami sebelum produksi dimulai.
+              {postApproveMessage(requestStatus)}
             </p>
           </div>
         )}

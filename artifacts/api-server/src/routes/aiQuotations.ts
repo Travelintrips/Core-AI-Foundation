@@ -31,7 +31,7 @@ import {
   rejectByToken,
   getQuotationWithItems,
 } from "../services/aiQuotationService.js";
-import { createGateForServiceQuotation } from "../services/commercialGateService.js";
+import { createGateForServiceQuotation, getGateForServiceQuotation, gateIsCleared } from "../services/commercialGateService.js";
 import { checkAndMaybeConvertByServiceQuotation } from "../services/serviceRequestConversionService.js";
 
 const router = Router();
@@ -212,7 +212,25 @@ router.get("/public/quotations/:token", async (req, res): Promise<void> => {
   // Strip internal fields before sending to customer
   const { reviewTokenHash, reviewTokenExpiresAt, ...safeQuotation } = quotation;
 
-  res.json({ quotation: safeQuotation, items });
+  // Surface the real backend progress (service request status + commercial
+  // gate state) so the customer-facing stepper reflects actual state instead
+  // of just inferring everything from quotation.status === "approved".
+  let requestStatus: string | null = null;
+  let gateStatus: string | null = null;
+  if (quotation.serviceRequestId) {
+    const [request] = await db
+      .select({ status: aiServiceRequestsTable.status })
+      .from(aiServiceRequestsTable)
+      .where(eq(aiServiceRequestsTable.id, quotation.serviceRequestId))
+      .limit(1);
+    requestStatus = request?.status ?? null;
+  }
+  const gate = await getGateForServiceQuotation(quotation.id);
+  if (gate) {
+    gateStatus = gateIsCleared(gate) ? gate.status : "pending";
+  }
+
+  res.json({ quotation: safeQuotation, items, requestStatus, gateStatus });
 });
 
 // ── Public: approve ───────────────────────────────────────────────────────────

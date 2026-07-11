@@ -6,6 +6,7 @@ import { useParams } from "wouter";
 import { Layout } from "@/components/layout";
 import { FlowStepper } from "@/components/flow-stepper";
 import { useServiceQuotation } from "@/hooks/use-catalog";
+import { requestStatusToStep } from "@/pages/request-quotation";
 import { Loader2, CheckCircle2, Clock, ShieldCheck, Zap } from "lucide-react";
 
 export default function RequestApprovalPage() {
@@ -14,8 +15,13 @@ export default function RequestApprovalPage() {
 
   const { data, isLoading } = useServiceQuotation(token || undefined);
 
+  const gateCleared = data?.gateStatus === "verified" || data?.gateStatus === "waived";
+  const pastCommercialGate = !!data?.requestStatus && ["ready_to_build", "in_progress", "orchestrating", "waiting_review", "completed", "converted_to_project"].includes(data.requestStatus);
+  const inProduction = !!data?.requestStatus && ["in_progress", "orchestrating", "waiting_review", "completed", "converted_to_project"].includes(data.requestStatus);
   const stepperStep =
-    data?.quotation?.status === "approved" ? "verifikasi" : "persetujuan";
+    data?.quotation?.status === "approved"
+      ? requestStatusToStep(data?.requestStatus ?? "approved")
+      : "persetujuan";
 
   return (
     <Layout>
@@ -53,12 +59,14 @@ export default function RequestApprovalPage() {
               icon={ShieldCheck}
               title="Verifikasi Komersial"
               description={
-                data?.quotation?.status === "approved"
-                  ? "Tim kami sedang memverifikasi pembayaran / dokumen. Anda akan dihubungi dalam 1 hari kerja."
-                  : "Menunggu persetujuan penawaran terlebih dahulu."
+                gateCleared || pastCommercialGate
+                  ? "Verifikasi komersial telah selesai."
+                  : data?.quotation?.status === "approved"
+                    ? "Tim kami sedang memverifikasi pembayaran / dokumen. Anda akan dihubungi dalam 1 hari kerja."
+                    : "Menunggu persetujuan penawaran terlebih dahulu."
               }
-              done={false}
-              pending={data?.quotation?.status === "approved"}
+              done={gateCleared || pastCommercialGate}
+              pending={data?.quotation?.status === "approved" && !(gateCleared || pastCommercialGate)}
               iconColor="text-primary"
               bgColor="bg-primary/5"
               borderColor="border-primary/20"
@@ -68,8 +76,13 @@ export default function RequestApprovalPage() {
             <StatusStep
               icon={Zap}
               title="Produksi Dimulai"
-              description="Setelah verifikasi selesai, tim AI kami akan segera memulai pengerjaan project Anda."
-              done={false}
+              description={
+                inProduction
+                  ? "Tim AI kami sedang mengerjakan project Anda."
+                  : "Setelah verifikasi selesai, tim AI kami akan segera memulai pengerjaan project Anda."
+              }
+              done={inProduction}
+              pending={pastCommercialGate && !inProduction}
               iconColor="text-muted-foreground"
               bgColor="bg-muted/20"
               borderColor="border-border"
