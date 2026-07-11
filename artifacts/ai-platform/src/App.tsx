@@ -33,6 +33,12 @@ import CatalogAdmin from "@/pages/catalog-admin";
 import ServiceRequests from "@/pages/service-requests";
 import Payments from "@/pages/payments";
 import PortfolioAdmin from "@/pages/portfolio-admin";
+import CommercialPage from "@/pages/commercial";
+import PromotionsPage from "@/pages/promotions";
+import CouponsPage from "@/pages/coupons";
+import AffiliatesPage from "@/pages/affiliates";
+import HealthScoresPage from "@/pages/health-scores";
+import ReferralsPage from "@/pages/referrals";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +72,12 @@ function AdminRouter() {
         <Route path="/service-requests" component={ServiceRequests} />
         <Route path="/payments" component={Payments} />
         <Route path="/portfolio" component={PortfolioAdmin} />
+        <Route path="/commercial" component={CommercialPage} />
+        <Route path="/promotions" component={PromotionsPage} />
+        <Route path="/coupons" component={CouponsPage} />
+        <Route path="/affiliates" component={AffiliatesPage} />
+        <Route path="/referrals" component={ReferralsPage} />
+        <Route path="/health-scores" component={HealthScoresPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

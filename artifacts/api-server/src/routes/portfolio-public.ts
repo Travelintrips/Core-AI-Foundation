@@ -137,7 +137,7 @@ router.get("/public/portfolio/filters", async (_req, res): Promise<void> => {
   const allServices = serviceIds.length
     ? await db.select().from(aiServicesTable).where(inArray(aiServicesTable.id, serviceIds))
     : [];
-  const services = allServices.map((s) => ({ id: s.id, name: s.name, serviceCode: (s as Record<string, unknown>)["serviceCode"] ?? null }));
+  const services = allServices.map((s) => ({ id: s.id, name: s.serviceName, serviceCode: (s as Record<string, unknown>)["serviceCode"] ?? null }));
 
   res.json({ industries, styles, services });
 });
@@ -162,7 +162,7 @@ router.get("/public/portfolio/:slug", async (req, res): Promise<void> => {
   if (!row) { res.status(404).json({ error: "Portfolio not found" }); return; }
 
   const [service] = await db
-    .select({ id: aiServicesTable.id, name: aiServicesTable.name, serviceCode: aiServicesTable.serviceCode })
+    .select({ id: aiServicesTable.id, name: aiServicesTable.serviceName, serviceCode: aiServicesTable.serviceCode })
     .from(aiServicesTable).where(eq(aiServicesTable.id, row.serviceId)).limit(1);
 
   res.json({ ...toPublicDto(row), service });

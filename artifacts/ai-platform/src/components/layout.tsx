@@ -24,6 +24,11 @@ import {
   LayoutGrid,
   ClipboardList,
   Wallet,
+  TrendingUp,
+  Ticket,
+  Share2,
+  Users2,
+  Heart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -55,6 +60,13 @@ const NAV_ITEMS = [
   { href: "/service-requests", label: "Service Requests", icon: ClipboardList },
   { href: "/payments", label: "Payments", icon: Wallet },
   { href: "/catalog-admin", label: "Catalog Admin", icon: LayoutGrid },
+  { href: "/commercial", label: "Commercial", icon: TrendingUp },
+  { href: "/promotions", label: "Promotions", icon: Tags },
+  { href: "/coupons", label: "Coupons", icon: Ticket },
+  { href: "/referrals", label: "Referrals", icon: Share2 },
+  { href: "/affiliates", label: "Affiliates", icon: Users2 },
+  { href: "/health-scores", label: "Health Scores", icon: Heart },
+  { href: "/portfolio", label: "Portfolio", icon: Store },
   { href: "/audit", label: "Audit Log", icon: ShieldAlert },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

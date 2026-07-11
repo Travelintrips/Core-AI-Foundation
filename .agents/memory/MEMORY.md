@@ -31,3 +31,4 @@
 - [p0-sprint-complete](p0-sprint-complete.md) — All 6 P0 blockers fixed: payment gate, file lock (signed URLs), rate limiting, Helmet+CORS, SSRF guard, payment admin (reject/KPI/unlock)
 - [customer-workspace](customer-workspace.md) — /workspace/:token portal: synthesized notifications, filesUnlocked is the canonical lock flag, public routes skip api-zod by convention
 - [pdfkit-esbuild-external](pdfkit-esbuild-external.md) — pdfkit must be in esbuild externals list; fontkit dep requires @swc/helpers at runtime which pnpm doesn't symlink to node_modules/@swc/
+- [phase25-commercial-layer](phase25-commercial-layer.md) — P2.5 rules: ai_invoices uses `amount` not `total_amount`, creative_projects has no client_email, use HeadersInit for fetch headers helper

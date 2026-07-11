@@ -6805,3 +6805,777 @@ export const GetCustomerWorkspaceAnalyticsResponse = zod.object({
 })
 
 
+/**
+ * @summary Track a sales funnel event
+ */
+export const TrackFunnelEventBody = zod.object({
+  "eventType": zod.enum(['portfolio_view', 'portfolio_open', 'preview_start', 'preview_complete', 'package_select', 'checkout', 'payment', 'project_created', 'project_completed', 'repeat_order', 'referral', 'affiliate']),
+  "visitorId": zod.string().nullish(),
+  "customerId": zod.number().nullish(),
+  "sessionId": zod.string().nullish(),
+  "serviceId": zod.number().nullish(),
+  "portfolioId": zod.number().nullish(),
+  "projectId": zod.string().nullish(),
+  "packageId": zod.number().nullish(),
+  "campaignId": zod.string().nullish(),
+  "utmSource": zod.string().nullish(),
+  "utmMedium": zod.string().nullish(),
+  "utmCampaign": zod.string().nullish(),
+  "device": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "metadata": zod.object({
+
+}).passthrough().nullish()
+})
+
+export const TrackFunnelEventResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Get sales funnel analytics
+ */
+export const getFunnelAnalyticsQueryDaysDefault = 30;
+
+export const GetFunnelAnalyticsQueryParams = zod.object({
+  "days": zod.coerce.number().default(getFunnelAnalyticsQueryDaysDefault)
+})
+
+export const GetFunnelAnalyticsResponse = zod.object({
+  "days": zod.number(),
+  "steps": zod.array(zod.object({
+  "stage": zod.string(),
+  "count": zod.number(),
+  "conversionRate": zod.number().nullable()
+})),
+  "revenue": zod.number().optional(),
+  "avgOrderValue": zod.number().optional(),
+  "repeatOrders": zod.number(),
+  "referralOrders": zod.number(),
+  "affiliateOrders": zod.number()
+})
+
+
+/**
+ * @summary List promotions
+ */
+export const ListPromotionsQueryParams = zod.object({
+  "includeExpired": zod.coerce.boolean().optional()
+})
+
+export const ListPromotionsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "discountType": zod.enum(['percentage', 'fixed', 'free_revision', 'free_source_file', 'free_consultation', 'bundle']),
+  "discountValue": zod.number().nullish(),
+  "benefitLabel": zod.string().nullish(),
+  "serviceId": zod.number().nullish(),
+  "packageId": zod.number().nullish(),
+  "industry": zod.string().nullish(),
+  "startDate": zod.coerce.date().nullish(),
+  "endDate": zod.coerce.date().nullish(),
+  "usageLimit": zod.number().nullish(),
+  "usageCount": zod.number(),
+  "status": zod.enum(['active', 'paused', 'expired']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Create promotion
+ */
+export const CreatePromotionBody = zod.object({
+  "name": zod.string(),
+  "description": zod.string().optional(),
+  "discountType": zod.enum(['percentage', 'fixed', 'free_revision', 'free_source_file', 'free_consultation', 'bundle']),
+  "discountValue": zod.number().optional(),
+  "benefitLabel": zod.string().optional(),
+  "serviceId": zod.number().optional(),
+  "packageId": zod.number().optional(),
+  "industry": zod.string().optional(),
+  "startDate": zod.coerce.date().optional(),
+  "endDate": zod.coerce.date().optional(),
+  "usageLimit": zod.number().optional(),
+  "status": zod.enum(['active', 'paused', 'expired']).optional()
+})
+
+export const CreatePromotionResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "discountType": zod.enum(['percentage', 'fixed', 'free_revision', 'free_source_file', 'free_consultation', 'bundle']),
+  "discountValue": zod.number().nullish(),
+  "benefitLabel": zod.string().nullish(),
+  "serviceId": zod.number().nullish(),
+  "packageId": zod.number().nullish(),
+  "industry": zod.string().nullish(),
+  "startDate": zod.coerce.date().nullish(),
+  "endDate": zod.coerce.date().nullish(),
+  "usageLimit": zod.number().nullish(),
+  "usageCount": zod.number(),
+  "status": zod.enum(['active', 'paused', 'expired']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get applicable promotions for a service/package
+ */
+export const GetApplicablePromotionsQueryParams = zod.object({
+  "serviceId": zod.coerce.number().optional(),
+  "packageId": zod.coerce.number().optional(),
+  "industry": zod.coerce.string().optional()
+})
+
+export const GetApplicablePromotionsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "discountType": zod.enum(['percentage', 'fixed', 'free_revision', 'free_source_file', 'free_consultation', 'bundle']),
+  "discountValue": zod.number().nullish(),
+  "benefitLabel": zod.string().nullish(),
+  "serviceId": zod.number().nullish(),
+  "packageId": zod.number().nullish(),
+  "industry": zod.string().nullish(),
+  "startDate": zod.coerce.date().nullish(),
+  "endDate": zod.coerce.date().nullish(),
+  "usageLimit": zod.number().nullish(),
+  "usageCount": zod.number(),
+  "status": zod.enum(['active', 'paused', 'expired']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Update promotion
+ */
+export const UpdatePromotionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdatePromotionBody = zod.object({
+  "name": zod.string(),
+  "description": zod.string().optional(),
+  "discountType": zod.enum(['percentage', 'fixed', 'free_revision', 'free_source_file', 'free_consultation', 'bundle']),
+  "discountValue": zod.number().optional(),
+  "benefitLabel": zod.string().optional(),
+  "serviceId": zod.number().optional(),
+  "packageId": zod.number().optional(),
+  "industry": zod.string().optional(),
+  "startDate": zod.coerce.date().optional(),
+  "endDate": zod.coerce.date().optional(),
+  "usageLimit": zod.number().optional(),
+  "status": zod.enum(['active', 'paused', 'expired']).optional()
+})
+
+export const UpdatePromotionResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "discountType": zod.enum(['percentage', 'fixed', 'free_revision', 'free_source_file', 'free_consultation', 'bundle']),
+  "discountValue": zod.number().nullish(),
+  "benefitLabel": zod.string().nullish(),
+  "serviceId": zod.number().nullish(),
+  "packageId": zod.number().nullish(),
+  "industry": zod.string().nullish(),
+  "startDate": zod.coerce.date().nullish(),
+  "endDate": zod.coerce.date().nullish(),
+  "usageLimit": zod.number().nullish(),
+  "usageCount": zod.number(),
+  "status": zod.enum(['active', 'paused', 'expired']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete promotion
+ */
+export const DeletePromotionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeletePromotionResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary List coupons
+ */
+export const ListCouponsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "code": zod.string(),
+  "type": zod.enum(['percentage', 'fixed']),
+  "value": zod.number(),
+  "minimumOrder": zod.number().nullish(),
+  "maximumDiscount": zod.number().nullish(),
+  "startDate": zod.coerce.date().nullish(),
+  "endDate": zod.coerce.date().nullish(),
+  "usageLimit": zod.number().nullish(),
+  "usagePerCustomer": zod.number(),
+  "usageCount": zod.number(),
+  "status": zod.enum(['active', 'paused', 'expired']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Create coupon
+ */
+export const CreateCouponBody = zod.object({
+  "code": zod.string(),
+  "type": zod.enum(['percentage', 'fixed']),
+  "value": zod.number(),
+  "minimumOrder": zod.number().optional(),
+  "maximumDiscount": zod.number().optional(),
+  "startDate": zod.coerce.date().optional(),
+  "endDate": zod.coerce.date().optional(),
+  "usageLimit": zod.number().optional(),
+  "usagePerCustomer": zod.number().optional(),
+  "status": zod.enum(['active', 'paused', 'expired']).optional()
+})
+
+export const CreateCouponResponse = zod.object({
+  "id": zod.number(),
+  "code": zod.string(),
+  "type": zod.enum(['percentage', 'fixed']),
+  "value": zod.number(),
+  "minimumOrder": zod.number().nullish(),
+  "maximumDiscount": zod.number().nullish(),
+  "startDate": zod.coerce.date().nullish(),
+  "endDate": zod.coerce.date().nullish(),
+  "usageLimit": zod.number().nullish(),
+  "usagePerCustomer": zod.number(),
+  "usageCount": zod.number(),
+  "status": zod.enum(['active', 'paused', 'expired']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update coupon
+ */
+export const UpdateCouponParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateCouponBody = zod.object({
+  "code": zod.string(),
+  "type": zod.enum(['percentage', 'fixed']),
+  "value": zod.number(),
+  "minimumOrder": zod.number().optional(),
+  "maximumDiscount": zod.number().optional(),
+  "startDate": zod.coerce.date().optional(),
+  "endDate": zod.coerce.date().optional(),
+  "usageLimit": zod.number().optional(),
+  "usagePerCustomer": zod.number().optional(),
+  "status": zod.enum(['active', 'paused', 'expired']).optional()
+})
+
+export const UpdateCouponResponse = zod.object({
+  "id": zod.number(),
+  "code": zod.string(),
+  "type": zod.enum(['percentage', 'fixed']),
+  "value": zod.number(),
+  "minimumOrder": zod.number().nullish(),
+  "maximumDiscount": zod.number().nullish(),
+  "startDate": zod.coerce.date().nullish(),
+  "endDate": zod.coerce.date().nullish(),
+  "usageLimit": zod.number().nullish(),
+  "usagePerCustomer": zod.number(),
+  "usageCount": zod.number(),
+  "status": zod.enum(['active', 'paused', 'expired']),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Validate a coupon code
+ */
+export const ValidateCouponBody = zod.object({
+  "code": zod.string(),
+  "orderAmount": zod.number(),
+  "customerProfileId": zod.number().optional()
+})
+
+export const ValidateCouponResponse = zod.object({
+  "valid": zod.boolean(),
+  "reason": zod.string().nullish(),
+  "couponId": zod.number().nullish(),
+  "code": zod.string().nullish(),
+  "type": zod.string().nullish(),
+  "value": zod.number().nullish(),
+  "discountAmount": zod.number().nullish()
+})
+
+
+/**
+ * @summary Redeem a coupon
+ */
+export const RedeemCouponBody = zod.object({
+  "couponId": zod.number(),
+  "customerProfileId": zod.number().optional(),
+  "serviceRequestId": zod.number().optional(),
+  "discountAmount": zod.number()
+})
+
+export const RedeemCouponResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary List referrals
+ */
+export const ListReferralsQueryParams = zod.object({
+  "referrerProfileId": zod.coerce.number().optional()
+})
+
+export const ListReferralsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "referrerProfileId": zod.number(),
+  "refereeProfileId": zod.number().nullish(),
+  "referralCode": zod.string(),
+  "referralLink": zod.string().nullish(),
+  "status": zod.enum(['pending', 'converted', 'rewarded']),
+  "rewardType": zod.string().nullish(),
+  "rewardAmount": zod.number().nullish(),
+  "rewardStatus": zod.string().nullish(),
+  "convertedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Generate referral code for a customer
+ */
+export const GenerateReferralBody = zod.object({
+  "customerProfileId": zod.number()
+})
+
+export const GenerateReferralResponse = zod.object({
+  "id": zod.number(),
+  "referrerProfileId": zod.number(),
+  "refereeProfileId": zod.number().nullish(),
+  "referralCode": zod.string(),
+  "referralLink": zod.string().nullish(),
+  "status": zod.enum(['pending', 'converted', 'rewarded']),
+  "rewardType": zod.string().nullish(),
+  "rewardAmount": zod.number().nullish(),
+  "rewardStatus": zod.string().nullish(),
+  "convertedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Convert a referral (link referee to referrer)
+ */
+export const ConvertReferralBody = zod.object({
+  "code": zod.string(),
+  "refereeProfileId": zod.number()
+})
+
+export const ConvertReferralResponse = zod.object({
+  "id": zod.number(),
+  "referrerProfileId": zod.number(),
+  "refereeProfileId": zod.number().nullish(),
+  "referralCode": zod.string(),
+  "referralLink": zod.string().nullish(),
+  "status": zod.enum(['pending', 'converted', 'rewarded']),
+  "rewardType": zod.string().nullish(),
+  "rewardAmount": zod.number().nullish(),
+  "rewardStatus": zod.string().nullish(),
+  "convertedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get referral stats for a customer
+ */
+export const GetReferralStatsParams = zod.object({
+  "profileId": zod.coerce.number()
+})
+
+export const GetReferralStatsResponse = zod.object({
+  "total": zod.number(),
+  "converted": zod.number()
+})
+
+
+/**
+ * @summary List affiliates
+ */
+export const ListAffiliatesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "affiliateCode": zod.string(),
+  "commissionRate": zod.number(),
+  "status": zod.enum(['active', 'suspended', 'pending']),
+  "totalClicks": zod.number(),
+  "totalConversions": zod.number(),
+  "totalRevenue": zod.number(),
+  "totalCommission": zod.number(),
+  "pendingCommission": zod.number(),
+  "paidCommission": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Create affiliate
+ */
+export const CreateAffiliateBody = zod.object({
+  "name": zod.string(),
+  "email": zod.string(),
+  "affiliateCode": zod.string().optional(),
+  "commissionRate": zod.number().optional(),
+  "status": zod.enum(['active', 'suspended', 'pending']).optional()
+})
+
+export const CreateAffiliateResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "affiliateCode": zod.string(),
+  "commissionRate": zod.number(),
+  "status": zod.enum(['active', 'suspended', 'pending']),
+  "totalClicks": zod.number(),
+  "totalConversions": zod.number(),
+  "totalRevenue": zod.number(),
+  "totalCommission": zod.number(),
+  "pendingCommission": zod.number(),
+  "paidCommission": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update affiliate
+ */
+export const UpdateAffiliateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateAffiliateBody = zod.object({
+  "name": zod.string(),
+  "email": zod.string(),
+  "affiliateCode": zod.string().optional(),
+  "commissionRate": zod.number().optional(),
+  "status": zod.enum(['active', 'suspended', 'pending']).optional()
+})
+
+export const UpdateAffiliateResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "affiliateCode": zod.string(),
+  "commissionRate": zod.number(),
+  "status": zod.enum(['active', 'suspended', 'pending']),
+  "totalClicks": zod.number(),
+  "totalConversions": zod.number(),
+  "totalRevenue": zod.number(),
+  "totalCommission": zod.number(),
+  "pendingCommission": zod.number(),
+  "paidCommission": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get affiliate stats
+ */
+export const GetAffiliateStatsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetAffiliateStatsResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "commissionRate": zod.number(),
+  "clicksCount": zod.number(),
+  "conversionsCount": zod.number(),
+  "conversionRate": zod.number()
+})
+
+
+/**
+ * @summary Track affiliate click
+ */
+export const TrackAffiliateClickBody = zod.object({
+  "affiliateCode": zod.string(),
+  "visitorId": zod.string().optional(),
+  "sessionId": zod.string().optional(),
+  "landingPage": zod.string().optional(),
+  "device": zod.string().optional(),
+  "country": zod.string().optional()
+})
+
+export const TrackAffiliateClickResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Track affiliate conversion
+ */
+export const TrackAffiliateConversionBody = zod.object({
+  "affiliateId": zod.number(),
+  "clickId": zod.number().optional(),
+  "serviceRequestId": zod.number().optional(),
+  "orderAmount": zod.number()
+})
+
+export const TrackAffiliateConversionResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary List customer health scores
+ */
+export const ListCustomerHealthResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "customerProfileId": zod.number(),
+  "paymentScore": zod.number(),
+  "activityScore": zod.number(),
+  "repeatOrderScore": zod.number(),
+  "reviewScore": zod.number(),
+  "responseTimeScore": zod.number(),
+  "overallScore": zod.number(),
+  "healthStatus": zod.enum(['healthy', 'potential', 'at_risk', 'lost']),
+  "lastCalculatedAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Get health score for a customer
+ */
+export const GetCustomerHealthParams = zod.object({
+  "profileId": zod.coerce.number()
+})
+
+export const GetCustomerHealthResponse = zod.object({
+  "id": zod.number(),
+  "customerProfileId": zod.number(),
+  "paymentScore": zod.number(),
+  "activityScore": zod.number(),
+  "repeatOrderScore": zod.number(),
+  "reviewScore": zod.number(),
+  "responseTimeScore": zod.number(),
+  "overallScore": zod.number(),
+  "healthStatus": zod.enum(['healthy', 'potential', 'at_risk', 'lost']),
+  "lastCalculatedAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Recalculate health score for a customer
+ */
+export const RecalculateCustomerHealthParams = zod.object({
+  "profileId": zod.coerce.number()
+})
+
+export const RecalculateCustomerHealthResponse = zod.object({
+  "id": zod.number(),
+  "customerProfileId": zod.number(),
+  "paymentScore": zod.number(),
+  "activityScore": zod.number(),
+  "repeatOrderScore": zod.number(),
+  "reviewScore": zod.number(),
+  "responseTimeScore": zod.number(),
+  "overallScore": zod.number(),
+  "healthStatus": zod.enum(['healthy', 'potential', 'at_risk', 'lost']),
+  "lastCalculatedAt": zod.coerce.date(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get commercial analytics KPIs
+ */
+export const getCommercialAnalyticsQueryDaysDefault = 30;
+
+export const GetCommercialAnalyticsQueryParams = zod.object({
+  "days": zod.coerce.number().default(getCommercialAnalyticsQueryDaysDefault)
+})
+
+export const GetCommercialAnalyticsResponse = zod.object({
+  "days": zod.number(),
+  "revenue": zod.object({
+  "total": zod.number(),
+  "mrr": zod.number(),
+  "arr": zod.number(),
+  "avgOrderValue": zod.number()
+}),
+  "projects": zod.object({
+  "total": zod.number(),
+  "completed": zod.number(),
+  "conversionRate": zod.number()
+}),
+  "customers": zod.object({
+  "total": zod.number(),
+  "newInPeriod": zod.number()
+}),
+  "coupons": zod.object({
+  "totalUsed": zod.number(),
+  "totalDiscount": zod.number()
+}),
+  "promotions": zod.object({
+  "activeCount": zod.number()
+}),
+  "referrals": zod.object({
+  "total": zod.number(),
+  "converted": zod.number()
+}),
+  "affiliates": zod.object({
+  "totalRevenue": zod.number(),
+  "totalCommission": zod.number()
+})
+})
+
+
+/**
+ * @summary Get AI-generated business insights
+ */
+export const GetCommercialInsightsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "category": zod.string(),
+  "message": zod.string(),
+  "score": zod.number(),
+  "action": zod.string().nullish()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary List A/B tests
+ */
+export const ListAbTestsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "testType": zod.enum(['package', 'promotion', 'cta']),
+  "status": zod.enum(['active', 'paused', 'completed']),
+  "startDate": zod.coerce.date().nullish(),
+  "endDate": zod.coerce.date().nullish(),
+  "winnerVariantId": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "variants": zod.array(zod.object({
+  "id": zod.number(),
+  "testId": zod.number(),
+  "name": zod.string(),
+  "label": zod.string().nullish(),
+  "impressions": zod.number(),
+  "clicks": zod.number(),
+  "checkouts": zod.number(),
+  "conversions": zod.number(),
+  "revenue": zod.number(),
+  "createdAt": zod.coerce.date()
+}))
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Create A/B test
+ */
+export const CreateAbTestBody = zod.object({
+  "name": zod.string(),
+  "description": zod.string().optional(),
+  "testType": zod.enum(['package', 'promotion', 'cta']),
+  "variants": zod.array(zod.object({
+  "name": zod.string().optional(),
+  "label": zod.string().optional()
+})).optional(),
+  "startDate": zod.coerce.date().optional(),
+  "endDate": zod.coerce.date().optional()
+})
+
+export const CreateAbTestResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "testType": zod.enum(['package', 'promotion', 'cta']),
+  "status": zod.enum(['active', 'paused', 'completed']),
+  "startDate": zod.coerce.date().nullish(),
+  "endDate": zod.coerce.date().nullish(),
+  "winnerVariantId": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "variants": zod.array(zod.object({
+  "id": zod.number(),
+  "testId": zod.number(),
+  "name": zod.string(),
+  "label": zod.string().nullish(),
+  "impressions": zod.number(),
+  "clicks": zod.number(),
+  "checkouts": zod.number(),
+  "conversions": zod.number(),
+  "revenue": zod.number(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Record a metric for an A/B variant
+ */
+export const RecordAbVariantMetricParams = zod.object({
+  "testId": zod.coerce.number(),
+  "variantId": zod.coerce.number()
+})
+
+export const RecordAbVariantMetricBody = zod.object({
+  "metric": zod.enum(['impressions', 'clicks', 'checkouts', 'conversions'])
+})
+
+export const RecordAbVariantMetricResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+

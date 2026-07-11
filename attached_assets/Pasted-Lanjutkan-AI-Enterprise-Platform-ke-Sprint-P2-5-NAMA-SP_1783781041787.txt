@@ -1,0 +1,777 @@
+Lanjutkan AI Enterprise Platform ke Sprint P2.5
+
+NAMA SPRINT
+
+Commercial Conversion Layer
+Revenue Optimization
+AI Sales Intelligence
+
+==========================================================
+STATUS PLATFORM
+==========================================================
+
+Sprint P0 Production Ready
+✅ Complete
+
+Sprint P1 Customer Workspace
+✅ Complete
+
+Sprint P1.1 Production Completion
+✅ Complete
+
+Sprint P2 Portfolio Growth
+✅ Complete
+
+Semua module berikut sudah stabil dan TIDAK BOLEH DIREFACTOR:
+
+- AI Workforce
+- AI Registry
+- AI Router
+- AI Queue
+- Dispatcher
+- Worker Cluster
+- Event Bus
+- Scheduler
+- Workflow Runner
+- Creative AI
+- Pricing Engine
+- Client Review
+- Customer Workspace
+- Invoice PDF
+- Payment Gate
+- Signed URL
+- Portfolio
+- Portfolio Generator
+
+Semua perubahan harus:
+
+- additive
+- backward compatible
+- OpenAPI-first
+- generated client
+- type-safe
+- tenant-ready
+- pnpm run verify clean
+
+==========================================================
+TUJUAN
+==========================================================
+
+Platform saat ini sudah bisa:
+
+Browse
+
+↓
+
+Portfolio
+
+↓
+
+Preview
+
+↓
+
+Checkout
+
+↓
+
+Payment
+
+↓
+
+Project
+
+↓
+
+Workspace
+
+Yang BELUM ADA adalah:
+
+Commercial Intelligence
+
+Target Sprint ini:
+
+Platform mampu meningkatkan conversion rate,
+repeat order,
+customer lifetime value,
+dan revenue secara otomatis menggunakan AI.
+
+==========================================================
+MODUL BARU
+==========================================================
+
+1 Sales Funnel Analytics
+
+2 AI Sales Manager
+
+3 Promotion Engine
+
+4 Coupon Engine
+
+5 Referral System
+
+6 Affiliate System
+
+7 Upsell Engine
+
+8 Cross Sell Engine
+
+9 Customer Health Score
+
+10 Revenue Dashboard
+
+==========================================================
+SALES FUNNEL
+==========================================================
+
+Buat Sales Funnel lengkap.
+
+Tahapan:
+
+Visitor
+
+↓
+
+Portfolio Viewed
+
+↓
+
+Portfolio Detail
+
+↓
+
+Preview Started
+
+↓
+
+Preview Completed
+
+↓
+
+Package Selected
+
+↓
+
+Checkout
+
+↓
+
+Payment
+
+↓
+
+Project Created
+
+↓
+
+Project Completed
+
+↓
+
+Repeat Order
+
+↓
+
+Referral
+
+Semua event harus dicatat.
+
+==========================================================
+DATABASE
+==========================================================
+
+Tambahkan tabel:
+
+sales_funnel_events
+
+Field:
+
+id
+
+visitor_id
+
+customer_id
+
+session_id
+
+event_type
+
+service_id
+
+portfolio_id
+
+project_id
+
+package_id
+
+campaign_id
+
+utm_source
+
+utm_medium
+
+utm_campaign
+
+device
+
+country
+
+created_at
+
+==========================================================
+EVENT TYPES
+==========================================================
+
+portfolio_view
+
+portfolio_open
+
+preview_start
+
+preview_complete
+
+package_select
+
+checkout
+
+payment
+
+project_created
+
+project_completed
+
+repeat_order
+
+referral
+
+affiliate
+
+==========================================================
+FUNNEL ANALYTICS
+==========================================================
+
+Dashboard Owner menampilkan:
+
+Visitors
+
+Portfolio Views
+
+Preview Started
+
+Preview Completed
+
+Checkout
+
+Paid
+
+Projects
+
+Completed
+
+Repeat Orders
+
+Referral Orders
+
+Conversion %
+
+Revenue
+
+Average Order Value
+
+==========================================================
+AI SALES MANAGER
+==========================================================
+
+Buat AI Employee baru:
+
+Sales Manager AI
+
+Department:
+
+Sales
+
+Capability:
+
+Customer Retention
+
+Upselling
+
+Cross Selling
+
+Promotion Recommendation
+
+Lead Scoring
+
+Customer Follow-up
+
+AI otomatis menganalisis:
+
+- customer history
+
+- payment history
+
+- service history
+
+- industry
+
+- package
+
+- project result
+
+==========================================================
+CUSTOMER HEALTH SCORE
+==========================================================
+
+Hitung score:
+
+Payment
+
+Activity
+
+Repeat Order
+
+Support
+
+Review
+
+Revision
+
+Response Time
+
+Hasil:
+
+Healthy
+
+Potential
+
+At Risk
+
+Lost
+
+==========================================================
+PROMOTION ENGINE
+==========================================================
+
+Database:
+
+promotions
+
+Support:
+
+Percentage
+
+Fixed Discount
+
+Free Revision
+
+Free Source File
+
+Free Consultation
+
+Bundle
+
+Promotion memiliki:
+
+Start Date
+
+End Date
+
+Industry
+
+Service
+
+Package
+
+Usage Limit
+
+==========================================================
+COUPON ENGINE
+==========================================================
+
+Database:
+
+coupons
+
+Field:
+
+code
+
+type
+
+value
+
+minimum_order
+
+maximum_discount
+
+start
+
+end
+
+usage_limit
+
+usage_per_customer
+
+==========================================================
+REFERRAL SYSTEM
+==========================================================
+
+Setiap customer memiliki:
+
+Referral Code
+
+Referral Link
+
+Referral Dashboard
+
+Reward
+
+Komisi dapat berupa:
+
+Cash
+
+Discount
+
+Credit
+
+==========================================================
+AFFILIATE SYSTEM
+==========================================================
+
+Affiliate memiliki:
+
+Dashboard
+
+Commission
+
+Clicks
+
+Conversion
+
+Revenue
+
+Pending
+
+Paid
+
+Withdrawal
+
+==========================================================
+UPSELL ENGINE
+==========================================================
+
+AI otomatis merekomendasikan.
+
+Contoh:
+
+Customer beli:
+
+Logo
+
+↓
+
+AI menyarankan:
+
+Brand Guideline
+
+Presentation
+
+Company Profile
+
+Packaging
+
+Social Media Kit
+
+==========================================================
+CROSS SELL
+==========================================================
+
+Contoh:
+
+Coffee
+
+↓
+
+Packaging
+
+↓
+
+Menu
+
+↓
+
+Instagram
+
+↓
+
+Website
+
+Mining
+
+↓
+
+Company Profile
+
+↓
+
+Presentation
+
+↓
+
+Website
+
+==========================================================
+AI RECOMMENDATION ENGINE
+==========================================================
+
+Gunakan rule-based.
+
+Input:
+
+Industry
+
+Package
+
+History
+
+Portfolio
+
+Preview
+
+Project
+
+Output:
+
+Recommended Services
+
+Bundle
+
+Promotion
+
+Coupon
+
+==========================================================
+OWNER DASHBOARD
+==========================================================
+
+Tambahkan halaman:
+
+Commercial Analytics
+
+KPI:
+
+Revenue
+
+MRR
+
+ARR
+
+Conversion Rate
+
+Average Order Value
+
+Customer Lifetime Value
+
+Repeat Rate
+
+Affiliate Revenue
+
+Referral Revenue
+
+Promotion Performance
+
+Coupon Usage
+
+Top Industries
+
+Top Packages
+
+Top Portfolio
+
+Top AI Recommendation
+
+==========================================================
+A/B TESTING
+==========================================================
+
+Support:
+
+Package A
+
+Package B
+
+Promotion A
+
+Promotion B
+
+CTA A
+
+CTA B
+
+Hitung:
+
+CTR
+
+Checkout
+
+Payment
+
+Conversion
+
+==========================================================
+AI INSIGHT
+==========================================================
+
+AI membuat insight otomatis.
+
+Contoh:
+
+"Portfolio Coffee memiliki conversion 18% lebih tinggi."
+
+"Package Premium memiliki repeat order tertinggi."
+
+"Customer Mining cenderung membeli Company Profile setelah Presentation."
+
+==========================================================
+AUTOMATION
+==========================================================
+
+AI otomatis membuat:
+
+Promotion Suggestion
+
+Upsell Suggestion
+
+Cross Sell Suggestion
+
+Inactive Customer Reminder
+
+High Value Customer Alert
+
+==========================================================
+NOTIFICATION
+==========================================================
+
+Owner menerima:
+
+Revenue Milestone
+
+Low Conversion
+
+Promotion End
+
+Coupon Abuse
+
+Affiliate Withdrawal
+
+==========================================================
+SECURITY
+==========================================================
+
+Pastikan:
+
+No duplicate reward
+
+Coupon abuse protection
+
+Referral abuse protection
+
+Affiliate fraud detection placeholder
+
+==========================================================
+OPENAPI
+==========================================================
+
+Semua endpoint baru wajib:
+
+OpenAPI
+
+Generated Hooks
+
+Generated Zod
+
+Generated Types
+
+==========================================================
+VERIFICATION
+==========================================================
+
+Pastikan:
+
+Sales Funnel berjalan.
+
+Conversion benar.
+
+Revenue benar.
+
+Promotion bekerja.
+
+Coupon bekerja.
+
+Referral bekerja.
+
+Affiliate bekerja.
+
+Upsell muncul.
+
+Cross Sell muncul.
+
+AI Recommendation muncul.
+
+Dashboard Owner tampil.
+
+OpenAPI clean.
+
+Generated clean.
+
+pnpm run verify clean.
+
+==========================================================
+FINAL REPORT
+==========================================================
+
+Berikan laporan:
+
+Database
+
+API
+
+Frontend
+
+Analytics
+
+Automation
+
+AI Employee
+
+Dashboard
+
+Testing
+
+Known Limitations
+
+Revenue Readiness Score
+
+==========================================================
+TARGET
+==========================================================
+
+Platform bukan hanya mampu membuat desain dengan AI.
+
+Platform mampu:
+
+Mencari customer.
+
+Mengonversi customer.
+
+Meningkatkan repeat order.
+
+Mengelola referral.
+
+Mengelola affiliate.
+
+Mengoptimalkan revenue.
+
+Memberikan insight bisnis secara otomatis.
+
+Dengan demikian AI Enterprise Platform berkembang menjadi AI Creative Commerce Platform yang tidak hanya menghasilkan karya, tetapi juga menghasilkan penjualan secara berkelanjutan.

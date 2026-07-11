@@ -5020,6 +5020,508 @@ paths:
                 $ref: "#/components/schemas/WorkspaceAnalytics"
 
 
+  # ── P2.5 Commercial Layer ─────────────────────────────────────────────────
+
+  /ai/funnel/track:
+    post:
+      summary: Track a sales funnel event
+      operationId: trackFunnelEvent
+      tags: [SalesFunnel]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TrackFunnelEventInput" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResponse" }
+
+  /ai/funnel/analytics:
+    get:
+      summary: Get sales funnel analytics
+      operationId: getFunnelAnalytics
+      tags: [SalesFunnel]
+      parameters:
+        - in: query
+          name: days
+          schema: { type: integer, default: 30 }
+      responses:
+        "200":
+          description: Funnel analytics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FunnelAnalytics" }
+
+  /ai/promotions:
+    get:
+      summary: List promotions
+      operationId: listPromotions
+      tags: [Promotions]
+      parameters:
+        - in: query
+          name: includeExpired
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Promotions list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PromotionList" }
+    post:
+      summary: Create promotion
+      operationId: createPromotion
+      tags: [Promotions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePromotionInput" }
+      responses:
+        "201":
+          description: Created promotion
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Promotion" }
+
+  /ai/promotions/applicable:
+    get:
+      summary: Get applicable promotions for a service/package
+      operationId: getApplicablePromotions
+      tags: [Promotions]
+      parameters:
+        - in: query
+          name: serviceId
+          schema: { type: integer }
+        - in: query
+          name: packageId
+          schema: { type: integer }
+        - in: query
+          name: industry
+          schema: { type: string }
+      responses:
+        "200":
+          description: Applicable promotions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PromotionList" }
+
+  /ai/promotions/{id}:
+    patch:
+      summary: Update promotion
+      operationId: updatePromotion
+      tags: [Promotions]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePromotionInput" }
+      responses:
+        "200":
+          description: Updated promotion
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Promotion" }
+    delete:
+      summary: Delete promotion
+      operationId: deletePromotion
+      tags: [Promotions]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResponse" }
+
+  /ai/coupons:
+    get:
+      summary: List coupons
+      operationId: listCoupons
+      tags: [Coupons]
+      responses:
+        "200":
+          description: Coupon list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CouponList" }
+    post:
+      summary: Create coupon
+      operationId: createCoupon
+      tags: [Coupons]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCouponInput" }
+      responses:
+        "201":
+          description: Created coupon
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Coupon" }
+
+  /ai/coupons/{id}:
+    patch:
+      summary: Update coupon
+      operationId: updateCoupon
+      tags: [Coupons]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCouponInput" }
+      responses:
+        "200":
+          description: Updated coupon
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Coupon" }
+
+  /ai/coupons/validate:
+    post:
+      summary: Validate a coupon code
+      operationId: validateCoupon
+      tags: [Coupons]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ValidateCouponInput" }
+      responses:
+        "200":
+          description: Coupon validation result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CouponValidationResult" }
+
+  /ai/coupons/redeem:
+    post:
+      summary: Redeem a coupon
+      operationId: redeemCoupon
+      tags: [Coupons]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RedeemCouponInput" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResponse" }
+
+  /ai/referrals:
+    get:
+      summary: List referrals
+      operationId: listReferrals
+      tags: [Referrals]
+      parameters:
+        - in: query
+          name: referrerProfileId
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Referral list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReferralList" }
+
+  /ai/referrals/generate:
+    post:
+      summary: Generate referral code for a customer
+      operationId: generateReferral
+      tags: [Referrals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenerateReferralInput" }
+      responses:
+        "200":
+          description: Referral entry
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Referral" }
+
+  /ai/referrals/convert:
+    post:
+      summary: Convert a referral (link referee to referrer)
+      operationId: convertReferral
+      tags: [Referrals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConvertReferralInput" }
+      responses:
+        "200":
+          description: Updated referral
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Referral" }
+
+  /ai/referrals/stats/{profileId}:
+    get:
+      summary: Get referral stats for a customer
+      operationId: getReferralStats
+      tags: [Referrals]
+      parameters:
+        - in: path
+          name: profileId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Referral stats
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReferralStats" }
+
+  /ai/affiliates:
+    get:
+      summary: List affiliates
+      operationId: listAffiliates
+      tags: [Affiliates]
+      responses:
+        "200":
+          description: Affiliate list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AffiliateList" }
+    post:
+      summary: Create affiliate
+      operationId: createAffiliate
+      tags: [Affiliates]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAffiliateInput" }
+      responses:
+        "201":
+          description: Created affiliate
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Affiliate" }
+
+  /ai/affiliates/{id}:
+    patch:
+      summary: Update affiliate
+      operationId: updateAffiliate
+      tags: [Affiliates]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAffiliateInput" }
+      responses:
+        "200":
+          description: Updated affiliate
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Affiliate" }
+
+  /ai/affiliates/{id}/stats:
+    get:
+      summary: Get affiliate stats
+      operationId: getAffiliateStats
+      tags: [Affiliates]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Affiliate stats
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AffiliateStats" }
+
+  /ai/affiliates/track-click:
+    post:
+      summary: Track affiliate click
+      operationId: trackAffiliateClick
+      tags: [Affiliates]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TrackClickInput" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResponse" }
+
+  /ai/affiliates/track-conversion:
+    post:
+      summary: Track affiliate conversion
+      operationId: trackAffiliateConversion
+      tags: [Affiliates]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TrackConversionInput" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResponse" }
+
+  /ai/customer-health:
+    get:
+      summary: List customer health scores
+      operationId: listCustomerHealth
+      tags: [CustomerHealth]
+      responses:
+        "200":
+          description: Health scores
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerHealthList" }
+
+  /ai/customer-health/{profileId}:
+    get:
+      summary: Get health score for a customer
+      operationId: getCustomerHealth
+      tags: [CustomerHealth]
+      parameters:
+        - in: path
+          name: profileId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Customer health score
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerHealthScore" }
+
+  /ai/customer-health/{profileId}/recalculate:
+    post:
+      summary: Recalculate health score for a customer
+      operationId: recalculateCustomerHealth
+      tags: [CustomerHealth]
+      parameters:
+        - in: path
+          name: profileId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Recalculated health score
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerHealthScore" }
+
+  /ai/commercial-analytics:
+    get:
+      summary: Get commercial analytics KPIs
+      operationId: getCommercialAnalytics
+      tags: [CommercialAnalytics]
+      parameters:
+        - in: query
+          name: days
+          schema: { type: integer, default: 30 }
+      responses:
+        "200":
+          description: Commercial analytics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommercialAnalytics" }
+
+  /ai/commercial-analytics/insights:
+    get:
+      summary: Get AI-generated business insights
+      operationId: getCommercialInsights
+      tags: [CommercialAnalytics]
+      responses:
+        "200":
+          description: AI insights
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InsightList" }
+
+  /ai/ab-tests:
+    get:
+      summary: List A/B tests
+      operationId: listAbTests
+      tags: [AbTests]
+      responses:
+        "200":
+          description: A/B test list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AbTestList" }
+    post:
+      summary: Create A/B test
+      operationId: createAbTest
+      tags: [AbTests]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAbTestInput" }
+      responses:
+        "201":
+          description: Created A/B test
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AbTest" }
+
+  /ai/ab-tests/{testId}/variants/{variantId}/record:
+    post:
+      summary: Record a metric for an A/B variant
+      operationId: recordAbVariantMetric
+      tags: [AbTests]
+      parameters:
+        - in: path
+          name: testId
+          required: true
+          schema: { type: integer }
+        - in: path
+          name: variantId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecordAbMetricInput" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResponse" }
+
 components:
   schemas:
     HealthStatus:
@@ -10661,3 +11163,424 @@ components:
       required: [ok]
       properties:
         ok: { type: boolean }
+
+    # ── P2.5 Commercial Layer Schemas ─────────────────────────────────────────
+
+    TrackFunnelEventInput:
+      type: object
+      required: [eventType]
+      properties:
+        eventType: { type: string, enum: [portfolio_view,portfolio_open,preview_start,preview_complete,package_select,checkout,payment,project_created,project_completed,repeat_order,referral,affiliate] }
+        visitorId: { type: string, nullable: true }
+        customerId: { type: integer, nullable: true }
+        sessionId: { type: string, nullable: true }
+        serviceId: { type: integer, nullable: true }
+        portfolioId: { type: integer, nullable: true }
+        projectId: { type: string, nullable: true }
+        packageId: { type: integer, nullable: true }
+        campaignId: { type: string, nullable: true }
+        utmSource: { type: string, nullable: true }
+        utmMedium: { type: string, nullable: true }
+        utmCampaign: { type: string, nullable: true }
+        device: { type: string, nullable: true }
+        country: { type: string, nullable: true }
+        metadata: { type: object, nullable: true }
+
+    FunnelStep:
+      type: object
+      required: [stage, count, conversionRate]
+      properties:
+        stage: { type: string }
+        count: { type: integer }
+        conversionRate: { type: number, nullable: true }
+
+    FunnelAnalytics:
+      type: object
+      required: [days, steps, repeatOrders, referralOrders, affiliateOrders]
+      properties:
+        days: { type: integer }
+        steps: { type: array, items: { $ref: "#/components/schemas/FunnelStep" } }
+        revenue: { type: number }
+        avgOrderValue: { type: number }
+        repeatOrders: { type: integer }
+        referralOrders: { type: integer }
+        affiliateOrders: { type: integer }
+
+    Promotion:
+      type: object
+      required: [id, name, discountType, usageCount, status, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        discountType: { type: string, enum: [percentage,fixed,free_revision,free_source_file,free_consultation,bundle] }
+        discountValue: { type: integer, nullable: true }
+        benefitLabel: { type: string, nullable: true }
+        serviceId: { type: integer, nullable: true }
+        packageId: { type: integer, nullable: true }
+        industry: { type: string, nullable: true }
+        startDate: { type: string, format: date-time, nullable: true }
+        endDate: { type: string, format: date-time, nullable: true }
+        usageLimit: { type: integer, nullable: true }
+        usageCount: { type: integer }
+        status: { type: string, enum: [active,paused,expired] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PromotionList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Promotion" } }
+        total: { type: integer }
+
+    CreatePromotionInput:
+      type: object
+      required: [name, discountType]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        discountType: { type: string, enum: [percentage,fixed,free_revision,free_source_file,free_consultation,bundle] }
+        discountValue: { type: integer }
+        benefitLabel: { type: string }
+        serviceId: { type: integer }
+        packageId: { type: integer }
+        industry: { type: string }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time }
+        usageLimit: { type: integer }
+        status: { type: string, enum: [active,paused,expired] }
+
+    Coupon:
+      type: object
+      required: [id, code, type, value, usagePerCustomer, usageCount, status, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        type: { type: string, enum: [percentage,fixed] }
+        value: { type: integer }
+        minimumOrder: { type: integer, nullable: true }
+        maximumDiscount: { type: integer, nullable: true }
+        startDate: { type: string, format: date-time, nullable: true }
+        endDate: { type: string, format: date-time, nullable: true }
+        usageLimit: { type: integer, nullable: true }
+        usagePerCustomer: { type: integer }
+        usageCount: { type: integer }
+        status: { type: string, enum: [active,paused,expired] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CouponList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Coupon" } }
+        total: { type: integer }
+
+    CreateCouponInput:
+      type: object
+      required: [code, type, value]
+      properties:
+        code: { type: string }
+        type: { type: string, enum: [percentage,fixed] }
+        value: { type: integer }
+        minimumOrder: { type: integer }
+        maximumDiscount: { type: integer }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time }
+        usageLimit: { type: integer }
+        usagePerCustomer: { type: integer }
+        status: { type: string, enum: [active,paused,expired] }
+
+    ValidateCouponInput:
+      type: object
+      required: [code, orderAmount]
+      properties:
+        code: { type: string }
+        orderAmount: { type: integer }
+        customerProfileId: { type: integer }
+
+    CouponValidationResult:
+      type: object
+      required: [valid]
+      properties:
+        valid: { type: boolean }
+        reason: { type: string, nullable: true }
+        couponId: { type: integer, nullable: true }
+        code: { type: string, nullable: true }
+        type: { type: string, nullable: true }
+        value: { type: integer, nullable: true }
+        discountAmount: { type: integer, nullable: true }
+
+    RedeemCouponInput:
+      type: object
+      required: [couponId, discountAmount]
+      properties:
+        couponId: { type: integer }
+        customerProfileId: { type: integer }
+        serviceRequestId: { type: integer }
+        discountAmount: { type: integer }
+
+    Referral:
+      type: object
+      required: [id, referrerProfileId, referralCode, status, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        referrerProfileId: { type: integer }
+        refereeProfileId: { type: integer, nullable: true }
+        referralCode: { type: string }
+        referralLink: { type: string, nullable: true }
+        status: { type: string, enum: [pending,converted,rewarded] }
+        rewardType: { type: string, nullable: true }
+        rewardAmount: { type: integer, nullable: true }
+        rewardStatus: { type: string, nullable: true }
+        convertedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ReferralList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Referral" } }
+        total: { type: integer }
+
+    GenerateReferralInput:
+      type: object
+      required: [customerProfileId]
+      properties:
+        customerProfileId: { type: integer }
+
+    ConvertReferralInput:
+      type: object
+      required: [code, refereeProfileId]
+      properties:
+        code: { type: string }
+        refereeProfileId: { type: integer }
+
+    ReferralStats:
+      type: object
+      required: [total, converted]
+      properties:
+        total: { type: integer }
+        converted: { type: integer }
+
+    Affiliate:
+      type: object
+      required: [id, name, email, affiliateCode, commissionRate, status, totalClicks, totalConversions, totalRevenue, totalCommission, pendingCommission, paidCommission, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string }
+        affiliateCode: { type: string }
+        commissionRate: { type: integer }
+        status: { type: string, enum: [active,suspended,pending] }
+        totalClicks: { type: integer }
+        totalConversions: { type: integer }
+        totalRevenue: { type: integer }
+        totalCommission: { type: integer }
+        pendingCommission: { type: integer }
+        paidCommission: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AffiliateList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Affiliate" } }
+        total: { type: integer }
+
+    AffiliateStats:
+      type: object
+      required: [id, name, commissionRate, clicksCount, conversionsCount, conversionRate]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        commissionRate: { type: integer }
+        clicksCount: { type: integer }
+        conversionsCount: { type: integer }
+        conversionRate: { type: number }
+
+    CreateAffiliateInput:
+      type: object
+      required: [name, email]
+      properties:
+        name: { type: string }
+        email: { type: string }
+        affiliateCode: { type: string }
+        commissionRate: { type: integer }
+        status: { type: string, enum: [active,suspended,pending] }
+
+    TrackClickInput:
+      type: object
+      required: [affiliateCode]
+      properties:
+        affiliateCode: { type: string }
+        visitorId: { type: string }
+        sessionId: { type: string }
+        landingPage: { type: string }
+        device: { type: string }
+        country: { type: string }
+
+    TrackConversionInput:
+      type: object
+      required: [affiliateId, orderAmount]
+      properties:
+        affiliateId: { type: integer }
+        clickId: { type: integer }
+        serviceRequestId: { type: integer }
+        orderAmount: { type: integer }
+
+    CustomerHealthScore:
+      type: object
+      required: [id, customerProfileId, paymentScore, activityScore, repeatOrderScore, reviewScore, responseTimeScore, overallScore, healthStatus, lastCalculatedAt, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        customerProfileId: { type: integer }
+        paymentScore: { type: integer }
+        activityScore: { type: integer }
+        repeatOrderScore: { type: integer }
+        reviewScore: { type: integer }
+        responseTimeScore: { type: integer }
+        overallScore: { type: integer }
+        healthStatus: { type: string, enum: [healthy,potential,at_risk,lost] }
+        lastCalculatedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CustomerHealthList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/CustomerHealthScore" } }
+        total: { type: integer }
+
+    CommercialRevenueKpi:
+      type: object
+      required: [total, mrr, arr, avgOrderValue]
+      properties:
+        total: { type: number }
+        mrr: { type: number }
+        arr: { type: number }
+        avgOrderValue: { type: number }
+
+    CommercialAnalytics:
+      type: object
+      required: [days, revenue, projects, customers, coupons, promotions, referrals, affiliates]
+      properties:
+        days: { type: integer }
+        revenue: { $ref: "#/components/schemas/CommercialRevenueKpi" }
+        projects:
+          type: object
+          required: [total, completed, conversionRate]
+          properties:
+            total: { type: integer }
+            completed: { type: integer }
+            conversionRate: { type: number }
+        customers:
+          type: object
+          required: [total, newInPeriod]
+          properties:
+            total: { type: integer }
+            newInPeriod: { type: integer }
+        coupons:
+          type: object
+          required: [totalUsed, totalDiscount]
+          properties:
+            totalUsed: { type: integer }
+            totalDiscount: { type: number }
+        promotions:
+          type: object
+          required: [activeCount]
+          properties:
+            activeCount: { type: integer }
+        referrals:
+          type: object
+          required: [total, converted]
+          properties:
+            total: { type: integer }
+            converted: { type: integer }
+        affiliates:
+          type: object
+          required: [totalRevenue, totalCommission]
+          properties:
+            totalRevenue: { type: number }
+            totalCommission: { type: number }
+
+    AiInsight:
+      type: object
+      required: [category, message, score]
+      properties:
+        category: { type: string }
+        message: { type: string }
+        score: { type: integer }
+        action: { type: string, nullable: true }
+
+    InsightList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AiInsight" } }
+        total: { type: integer }
+
+    AbVariant:
+      type: object
+      required: [id, testId, name, impressions, clicks, checkouts, conversions, revenue, createdAt]
+      properties:
+        id: { type: integer }
+        testId: { type: integer }
+        name: { type: string }
+        label: { type: string, nullable: true }
+        impressions: { type: integer }
+        clicks: { type: integer }
+        checkouts: { type: integer }
+        conversions: { type: integer }
+        revenue: { type: integer }
+        createdAt: { type: string, format: date-time }
+
+    AbTest:
+      type: object
+      required: [id, name, testType, status, createdAt, updatedAt, variants]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        testType: { type: string, enum: [package,promotion,cta] }
+        status: { type: string, enum: [active,paused,completed] }
+        startDate: { type: string, format: date-time, nullable: true }
+        endDate: { type: string, format: date-time, nullable: true }
+        winnerVariantId: { type: integer, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        variants: { type: array, items: { $ref: "#/components/schemas/AbVariant" } }
+
+    AbTestList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AbTest" } }
+        total: { type: integer }
+
+    CreateAbTestInput:
+      type: object
+      required: [name, testType]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        testType: { type: string, enum: [package,promotion,cta] }
+        variants:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              label: { type: string }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time }
+
+    RecordAbMetricInput:
+      type: object
+      required: [metric]
+      properties:
+        metric: { type: string, enum: [impressions,clicks,checkouts,conversions] }

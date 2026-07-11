@@ -284,7 +284,7 @@ function BatchesTab() {
 function PortfoliosTab() {
   const { data: portfolios = [], isLoading } = useQuery<Portfolio[]>({
     queryKey: ["admin-portfolios"],
-    queryFn: () => apiFetch("/ai/portfolio/services/1/portfolios").catch(() => []),
+    queryFn: (): Promise<Portfolio[]> => apiFetch<Portfolio[]>("/ai/portfolio/services/1/portfolios").catch(() => [] as Portfolio[]),
   });
 
   return (

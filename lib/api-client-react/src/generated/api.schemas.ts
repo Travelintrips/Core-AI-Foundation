@@ -3711,6 +3711,526 @@ export interface OkResponse {
   ok: boolean;
 }
 
+export type TrackFunnelEventInputEventType = typeof TrackFunnelEventInputEventType[keyof typeof TrackFunnelEventInputEventType];
+
+
+export const TrackFunnelEventInputEventType = {
+  portfolio_view: 'portfolio_view',
+  portfolio_open: 'portfolio_open',
+  preview_start: 'preview_start',
+  preview_complete: 'preview_complete',
+  package_select: 'package_select',
+  checkout: 'checkout',
+  payment: 'payment',
+  project_created: 'project_created',
+  project_completed: 'project_completed',
+  repeat_order: 'repeat_order',
+  referral: 'referral',
+  affiliate: 'affiliate',
+} as const;
+
+export type TrackFunnelEventInputMetadata = { [key: string]: unknown } | null;
+
+export interface TrackFunnelEventInput {
+  eventType: TrackFunnelEventInputEventType;
+  visitorId?: string | null;
+  customerId?: number | null;
+  sessionId?: string | null;
+  serviceId?: number | null;
+  portfolioId?: number | null;
+  projectId?: string | null;
+  packageId?: number | null;
+  campaignId?: string | null;
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
+  device?: string | null;
+  country?: string | null;
+  metadata?: TrackFunnelEventInputMetadata;
+}
+
+export interface FunnelStep {
+  stage: string;
+  count: number;
+  conversionRate: number | null;
+}
+
+export interface FunnelAnalytics {
+  days: number;
+  steps: FunnelStep[];
+  revenue?: number;
+  avgOrderValue?: number;
+  repeatOrders: number;
+  referralOrders: number;
+  affiliateOrders: number;
+}
+
+export type PromotionDiscountType = typeof PromotionDiscountType[keyof typeof PromotionDiscountType];
+
+
+export const PromotionDiscountType = {
+  percentage: 'percentage',
+  fixed: 'fixed',
+  free_revision: 'free_revision',
+  free_source_file: 'free_source_file',
+  free_consultation: 'free_consultation',
+  bundle: 'bundle',
+} as const;
+
+export type PromotionStatus = typeof PromotionStatus[keyof typeof PromotionStatus];
+
+
+export const PromotionStatus = {
+  active: 'active',
+  paused: 'paused',
+  expired: 'expired',
+} as const;
+
+export interface Promotion {
+  id: number;
+  name: string;
+  description?: string | null;
+  discountType: PromotionDiscountType;
+  discountValue?: number | null;
+  benefitLabel?: string | null;
+  serviceId?: number | null;
+  packageId?: number | null;
+  industry?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  usageLimit?: number | null;
+  usageCount: number;
+  status: PromotionStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PromotionList {
+  items: Promotion[];
+  total: number;
+}
+
+export type CreatePromotionInputDiscountType = typeof CreatePromotionInputDiscountType[keyof typeof CreatePromotionInputDiscountType];
+
+
+export const CreatePromotionInputDiscountType = {
+  percentage: 'percentage',
+  fixed: 'fixed',
+  free_revision: 'free_revision',
+  free_source_file: 'free_source_file',
+  free_consultation: 'free_consultation',
+  bundle: 'bundle',
+} as const;
+
+export type CreatePromotionInputStatus = typeof CreatePromotionInputStatus[keyof typeof CreatePromotionInputStatus];
+
+
+export const CreatePromotionInputStatus = {
+  active: 'active',
+  paused: 'paused',
+  expired: 'expired',
+} as const;
+
+export interface CreatePromotionInput {
+  name: string;
+  description?: string;
+  discountType: CreatePromotionInputDiscountType;
+  discountValue?: number;
+  benefitLabel?: string;
+  serviceId?: number;
+  packageId?: number;
+  industry?: string;
+  startDate?: string;
+  endDate?: string;
+  usageLimit?: number;
+  status?: CreatePromotionInputStatus;
+}
+
+export type CouponType = typeof CouponType[keyof typeof CouponType];
+
+
+export const CouponType = {
+  percentage: 'percentage',
+  fixed: 'fixed',
+} as const;
+
+export type CouponStatus = typeof CouponStatus[keyof typeof CouponStatus];
+
+
+export const CouponStatus = {
+  active: 'active',
+  paused: 'paused',
+  expired: 'expired',
+} as const;
+
+export interface Coupon {
+  id: number;
+  code: string;
+  type: CouponType;
+  value: number;
+  minimumOrder?: number | null;
+  maximumDiscount?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  usageLimit?: number | null;
+  usagePerCustomer: number;
+  usageCount: number;
+  status: CouponStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CouponList {
+  items: Coupon[];
+  total: number;
+}
+
+export type CreateCouponInputType = typeof CreateCouponInputType[keyof typeof CreateCouponInputType];
+
+
+export const CreateCouponInputType = {
+  percentage: 'percentage',
+  fixed: 'fixed',
+} as const;
+
+export type CreateCouponInputStatus = typeof CreateCouponInputStatus[keyof typeof CreateCouponInputStatus];
+
+
+export const CreateCouponInputStatus = {
+  active: 'active',
+  paused: 'paused',
+  expired: 'expired',
+} as const;
+
+export interface CreateCouponInput {
+  code: string;
+  type: CreateCouponInputType;
+  value: number;
+  minimumOrder?: number;
+  maximumDiscount?: number;
+  startDate?: string;
+  endDate?: string;
+  usageLimit?: number;
+  usagePerCustomer?: number;
+  status?: CreateCouponInputStatus;
+}
+
+export interface ValidateCouponInput {
+  code: string;
+  orderAmount: number;
+  customerProfileId?: number;
+}
+
+export interface CouponValidationResult {
+  valid: boolean;
+  reason?: string | null;
+  couponId?: number | null;
+  code?: string | null;
+  type?: string | null;
+  value?: number | null;
+  discountAmount?: number | null;
+}
+
+export interface RedeemCouponInput {
+  couponId: number;
+  customerProfileId?: number;
+  serviceRequestId?: number;
+  discountAmount: number;
+}
+
+export type ReferralStatus = typeof ReferralStatus[keyof typeof ReferralStatus];
+
+
+export const ReferralStatus = {
+  pending: 'pending',
+  converted: 'converted',
+  rewarded: 'rewarded',
+} as const;
+
+export interface Referral {
+  id: number;
+  referrerProfileId: number;
+  refereeProfileId?: number | null;
+  referralCode: string;
+  referralLink?: string | null;
+  status: ReferralStatus;
+  rewardType?: string | null;
+  rewardAmount?: number | null;
+  rewardStatus?: string | null;
+  convertedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReferralList {
+  items: Referral[];
+  total: number;
+}
+
+export interface GenerateReferralInput {
+  customerProfileId: number;
+}
+
+export interface ConvertReferralInput {
+  code: string;
+  refereeProfileId: number;
+}
+
+export interface ReferralStats {
+  total: number;
+  converted: number;
+}
+
+export type AffiliateStatus = typeof AffiliateStatus[keyof typeof AffiliateStatus];
+
+
+export const AffiliateStatus = {
+  active: 'active',
+  suspended: 'suspended',
+  pending: 'pending',
+} as const;
+
+export interface Affiliate {
+  id: number;
+  name: string;
+  email: string;
+  affiliateCode: string;
+  commissionRate: number;
+  status: AffiliateStatus;
+  totalClicks: number;
+  totalConversions: number;
+  totalRevenue: number;
+  totalCommission: number;
+  pendingCommission: number;
+  paidCommission: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AffiliateList {
+  items: Affiliate[];
+  total: number;
+}
+
+export interface AffiliateStats {
+  id: number;
+  name: string;
+  commissionRate: number;
+  clicksCount: number;
+  conversionsCount: number;
+  conversionRate: number;
+}
+
+export type CreateAffiliateInputStatus = typeof CreateAffiliateInputStatus[keyof typeof CreateAffiliateInputStatus];
+
+
+export const CreateAffiliateInputStatus = {
+  active: 'active',
+  suspended: 'suspended',
+  pending: 'pending',
+} as const;
+
+export interface CreateAffiliateInput {
+  name: string;
+  email: string;
+  affiliateCode?: string;
+  commissionRate?: number;
+  status?: CreateAffiliateInputStatus;
+}
+
+export interface TrackClickInput {
+  affiliateCode: string;
+  visitorId?: string;
+  sessionId?: string;
+  landingPage?: string;
+  device?: string;
+  country?: string;
+}
+
+export interface TrackConversionInput {
+  affiliateId: number;
+  clickId?: number;
+  serviceRequestId?: number;
+  orderAmount: number;
+}
+
+export type CustomerHealthScoreHealthStatus = typeof CustomerHealthScoreHealthStatus[keyof typeof CustomerHealthScoreHealthStatus];
+
+
+export const CustomerHealthScoreHealthStatus = {
+  healthy: 'healthy',
+  potential: 'potential',
+  at_risk: 'at_risk',
+  lost: 'lost',
+} as const;
+
+export interface CustomerHealthScore {
+  id: number;
+  customerProfileId: number;
+  paymentScore: number;
+  activityScore: number;
+  repeatOrderScore: number;
+  reviewScore: number;
+  responseTimeScore: number;
+  overallScore: number;
+  healthStatus: CustomerHealthScoreHealthStatus;
+  lastCalculatedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerHealthList {
+  items: CustomerHealthScore[];
+  total: number;
+}
+
+export interface CommercialRevenueKpi {
+  total: number;
+  mrr: number;
+  arr: number;
+  avgOrderValue: number;
+}
+
+export type CommercialAnalyticsProjects = {
+  total: number;
+  completed: number;
+  conversionRate: number;
+};
+
+export type CommercialAnalyticsCustomers = {
+  total: number;
+  newInPeriod: number;
+};
+
+export type CommercialAnalyticsCoupons = {
+  totalUsed: number;
+  totalDiscount: number;
+};
+
+export type CommercialAnalyticsPromotions = {
+  activeCount: number;
+};
+
+export type CommercialAnalyticsReferrals = {
+  total: number;
+  converted: number;
+};
+
+export type CommercialAnalyticsAffiliates = {
+  totalRevenue: number;
+  totalCommission: number;
+};
+
+export interface CommercialAnalytics {
+  days: number;
+  revenue: CommercialRevenueKpi;
+  projects: CommercialAnalyticsProjects;
+  customers: CommercialAnalyticsCustomers;
+  coupons: CommercialAnalyticsCoupons;
+  promotions: CommercialAnalyticsPromotions;
+  referrals: CommercialAnalyticsReferrals;
+  affiliates: CommercialAnalyticsAffiliates;
+}
+
+export interface AiInsight {
+  category: string;
+  message: string;
+  score: number;
+  action?: string | null;
+}
+
+export interface InsightList {
+  items: AiInsight[];
+  total: number;
+}
+
+export interface AbVariant {
+  id: number;
+  testId: number;
+  name: string;
+  label?: string | null;
+  impressions: number;
+  clicks: number;
+  checkouts: number;
+  conversions: number;
+  revenue: number;
+  createdAt: string;
+}
+
+export type AbTestTestType = typeof AbTestTestType[keyof typeof AbTestTestType];
+
+
+export const AbTestTestType = {
+  package: 'package',
+  promotion: 'promotion',
+  cta: 'cta',
+} as const;
+
+export type AbTestStatus = typeof AbTestStatus[keyof typeof AbTestStatus];
+
+
+export const AbTestStatus = {
+  active: 'active',
+  paused: 'paused',
+  completed: 'completed',
+} as const;
+
+export interface AbTest {
+  id: number;
+  name: string;
+  description?: string | null;
+  testType: AbTestTestType;
+  status: AbTestStatus;
+  startDate?: string | null;
+  endDate?: string | null;
+  winnerVariantId?: number | null;
+  createdAt: string;
+  updatedAt: string;
+  variants: AbVariant[];
+}
+
+export interface AbTestList {
+  items: AbTest[];
+  total: number;
+}
+
+export type CreateAbTestInputTestType = typeof CreateAbTestInputTestType[keyof typeof CreateAbTestInputTestType];
+
+
+export const CreateAbTestInputTestType = {
+  package: 'package',
+  promotion: 'promotion',
+  cta: 'cta',
+} as const;
+
+export type CreateAbTestInputVariantsItem = {
+  name?: string;
+  label?: string;
+};
+
+export interface CreateAbTestInput {
+  name: string;
+  description?: string;
+  testType: CreateAbTestInputTestType;
+  variants?: CreateAbTestInputVariantsItem[];
+  startDate?: string;
+  endDate?: string;
+}
+
+export type RecordAbMetricInputMetric = typeof RecordAbMetricInputMetric[keyof typeof RecordAbMetricInputMetric];
+
+
+export const RecordAbMetricInputMetric = {
+  impressions: 'impressions',
+  clicks: 'clicks',
+  checkouts: 'checkouts',
+  conversions: 'conversions',
+} as const;
+
+export interface RecordAbMetricInput {
+  metric: RecordAbMetricInputMetric;
+}
+
 export type ListModelsParams = {
 /**
  * @nullable
@@ -4001,4 +4521,26 @@ export const ListWorkspaceNotificationsRead = {
 export type AdminGetCustomerWorkspace200 = { [key: string]: unknown };
 
 export type AdminGetCustomerAssets200 = { [key: string]: unknown };
+
+export type GetFunnelAnalyticsParams = {
+days?: number;
+};
+
+export type ListPromotionsParams = {
+includeExpired?: boolean;
+};
+
+export type GetApplicablePromotionsParams = {
+serviceId?: number;
+packageId?: number;
+industry?: string;
+};
+
+export type ListReferralsParams = {
+referrerProfileId?: number;
+};
+
+export type GetCommercialAnalyticsParams = {
+days?: number;
+};
 

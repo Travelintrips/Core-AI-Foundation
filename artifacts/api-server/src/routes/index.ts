@@ -44,6 +44,13 @@ import filesRouter from "./files";
 import customerWorkspaceRouter from "./customer-workspace";
 import customerWorkspaceDocumentsRouter from "./customer-workspace-documents";
 import adminCustomerWorkspaceRouter from "./admin-customer-workspace";
+import salesFunnelRouter from "./salesFunnel";
+import promotionsRouter from "./promotions";
+import couponsRouter from "./coupons";
+import referralsRouter from "./referrals";
+import affiliatesRouter from "./affiliates";
+import customerHealthRouter from "./customerHealth";
+import commercialAnalyticsRouter from "./commercialAnalytics";
 
 const router: IRouter = Router();
 
@@ -90,5 +97,12 @@ router.use(filesRouter);
 router.use(customerWorkspaceRouter);
 router.use(customerWorkspaceDocumentsRouter);
 router.use(adminCustomerWorkspaceRouter);
+router.use(salesFunnelRouter);
+router.use(promotionsRouter);
+router.use(couponsRouter);
+router.use(referralsRouter);
+router.use(affiliatesRouter);
+router.use(customerHealthRouter);
+router.use(commercialAnalyticsRouter);
 
 export default router;
