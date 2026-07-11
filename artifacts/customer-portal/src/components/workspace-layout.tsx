@@ -11,6 +11,8 @@ import {
   Sparkles,
   Menu,
   X,
+  Award,
+  Gift,
 } from "lucide-react";
 import { useState } from "react";
 import { useWorkspaceNotifications } from "@/hooks/use-workspace";
@@ -22,6 +24,8 @@ const NAV_ITEMS = [
   { href: "/invoices", label: "Invoices", icon: Receipt },
   { href: "/brand-kit", label: "Brand Kit", icon: Palette },
   { href: "/notifications", label: "Notifications", icon: Bell },
+  { href: "/affiliate", label: "Afiliasi", icon: Award },
+  { href: "/referral", label: "Referral", icon: Gift },
   { href: "/profile", label: "Profile", icon: UserCircle },
   { href: "/support", label: "Support", icon: LifeBuoy },
 ];

@@ -267,4 +267,217 @@ router.post(
   },
 );
 
+// ── GET /public/customer/workspace/:token/affiliate ────────────────────────────
+// Return this customer's affiliate profile (by email) or null.
+
+router.get("/public/customer/workspace/:token/affiliate", async (req, res): Promise<void> => {
+  const session = await withSession(req, res);
+  if (!session) return;
+
+  const { db, aiAffiliatesTable } = await import("@workspace/db");
+  const { eq } = await import("drizzle-orm");
+
+  const [aff] = await db
+    .select()
+    .from(aiAffiliatesTable)
+    .where(eq(aiAffiliatesTable.email, session.clientEmail))
+    .limit(1);
+
+  res.json(aff ?? null);
+});
+
+// ── POST /public/customer/workspace/:token/affiliate/join ─────────────────────
+// Register this customer as an affiliate.
+
+router.post("/public/customer/workspace/:token/affiliate/join", async (req, res): Promise<void> => {
+  const session = await withSession(req, res);
+  if (!session) return;
+
+  const { db, aiAffiliatesTable } = await import("@workspace/db");
+  const { eq } = await import("drizzle-orm");
+  const crypto = await import("node:crypto");
+
+  const [existing] = await db
+    .select({ id: aiAffiliatesTable.id })
+    .from(aiAffiliatesTable)
+    .where(eq(aiAffiliatesTable.email, session.clientEmail))
+    .limit(1);
+
+  if (existing) {
+    res.status(409).json({ error: "Already an affiliate" });
+    return;
+  }
+
+  const affiliateCode = crypto.randomBytes(4).toString("hex").toUpperCase();
+  const baseUrl = process.env.REPLIT_DEV_DOMAIN
+    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+    : "https://your-domain.com";
+
+  const [aff] = await db
+    .insert(aiAffiliatesTable)
+    .values({
+      name: session.clientName,
+      email: session.clientEmail,
+      affiliateCode,
+      commissionRate: 10,
+      status: "active",
+    })
+    .returning();
+
+  await logAudit("affiliate", "affiliate_joined", String(aff.id), "ai_affiliate", "success", { email: session.clientEmail });
+  res.status(201).json({ ...aff, affiliateLink: `${baseUrl}?ref=${affiliateCode}` });
+});
+
+// ── GET /public/customer/workspace/:token/affiliate/conversions ───────────────
+
+router.get("/public/customer/workspace/:token/affiliate/conversions", async (req, res): Promise<void> => {
+  const session = await withSession(req, res);
+  if (!session) return;
+
+  const { db, aiAffiliatesTable, aiAffiliateConversionsTable } = await import("@workspace/db");
+  const { eq } = await import("drizzle-orm");
+
+  const [aff] = await db
+    .select({ id: aiAffiliatesTable.id })
+    .from(aiAffiliatesTable)
+    .where(eq(aiAffiliatesTable.email, session.clientEmail))
+    .limit(1);
+
+  if (!aff) { res.json([]); return; }
+
+  const conversions = await db
+    .select()
+    .from(aiAffiliateConversionsTable)
+    .where(eq(aiAffiliateConversionsTable.affiliateId, aff.id));
+
+  res.json(conversions);
+});
+
+// ── GET /public/customer/workspace/:token/referral ────────────────────────────
+// Return this customer's primary referral entry or null.
+
+router.get("/public/customer/workspace/:token/referral", async (req, res): Promise<void> => {
+  const session = await withSession(req, res);
+  if (!session) return;
+
+  const { db } = await import("@workspace/db");
+  const { sql } = await import("drizzle-orm");
+
+  // Get customer profile ID from email
+  const rows = await db.execute(
+    sql`SELECT id FROM ai_platform.customer_profiles WHERE client_email = ${session.clientEmail} LIMIT 1`,
+  );
+  const profileId = (rows as unknown as Array<{ id: number }>)[0]?.id;
+  if (!profileId) { res.json(null); return; }
+
+  const { aiReferralsTable } = await import("@workspace/db");
+  const { eq } = await import("drizzle-orm");
+
+  const [ref] = await db
+    .select()
+    .from(aiReferralsTable)
+    .where(eq(aiReferralsTable.referrerProfileId, profileId))
+    .limit(1);
+
+  res.json(ref ?? null);
+});
+
+// ── POST /public/customer/workspace/:token/referral/generate ──────────────────
+
+router.post("/public/customer/workspace/:token/referral/generate", async (req, res): Promise<void> => {
+  const session = await withSession(req, res);
+  if (!session) return;
+
+  const { db } = await import("@workspace/db");
+  const { sql, eq } = await import("drizzle-orm");
+
+  const rows = await db.execute(
+    sql`SELECT id FROM ai_platform.customer_profiles WHERE client_email = ${session.clientEmail} LIMIT 1`,
+  );
+  const profileId = (rows as unknown as Array<{ id: number }>)[0]?.id;
+  if (!profileId) { res.status(404).json({ error: "Customer profile not found" }); return; }
+
+  const { aiReferralsTable } = await import("@workspace/db");
+  const crypto = await import("node:crypto");
+
+  const [existing] = await db
+    .select()
+    .from(aiReferralsTable)
+    .where(eq(aiReferralsTable.referrerProfileId, profileId))
+    .limit(1);
+
+  if (existing) { res.json(existing); return; }
+
+  const referralCode = crypto.randomBytes(5).toString("hex").toUpperCase();
+  const baseUrl = process.env.REPLIT_DEV_DOMAIN
+    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+    : "https://your-domain.com";
+
+  const [ref] = await db
+    .insert(aiReferralsTable)
+    .values({
+      referrerProfileId: profileId,
+      referralCode,
+      referralLink: `${baseUrl}?r=${referralCode}`,
+      status: "pending",
+      rewardType: "discount",
+      rewardAmount: 50000,
+      rewardStatus: "pending",
+    })
+    .returning();
+
+  await logAudit("referral", "referral_generated", String(ref.id), "ai_referral", "success", { email: session.clientEmail });
+  res.status(201).json(ref);
+});
+
+// ── GET /public/customer/workspace/:token/referral/stats ──────────────────────
+
+router.get("/public/customer/workspace/:token/referral/stats", async (req, res): Promise<void> => {
+  const session = await withSession(req, res);
+  if (!session) return;
+
+  const { db } = await import("@workspace/db");
+  const { sql, eq, count } = await import("drizzle-orm");
+
+  const rows = await db.execute(
+    sql`SELECT id FROM ai_platform.customer_profiles WHERE client_email = ${session.clientEmail} LIMIT 1`,
+  );
+  const profileId = (rows as unknown as Array<{ id: number }>)[0]?.id;
+  if (!profileId) { res.json({ totalReferrals: 0, pendingReferrals: 0, convertedReferrals: 0, totalRewardEarned: 0 }); return; }
+
+  const { aiReferralsTable } = await import("@workspace/db");
+  const allReferrals = await db.select().from(aiReferralsTable).where(eq(aiReferralsTable.referrerProfileId, profileId));
+
+  const stats = {
+    totalReferrals: allReferrals.length,
+    pendingReferrals: allReferrals.filter((r) => r.status === "pending").length,
+    convertedReferrals: allReferrals.filter((r) => r.status === "converted").length,
+    totalRewardEarned: allReferrals
+      .filter((r) => r.rewardStatus === "claimed")
+      .reduce((sum, r) => sum + (r.rewardAmount ?? 0), 0),
+  };
+
+  res.json(stats);
+});
+
+// ── GET /public/customer/workspace/:token/referral/history ────────────────────
+
+router.get("/public/customer/workspace/:token/referral/history", async (req, res): Promise<void> => {
+  const session = await withSession(req, res);
+  if (!session) return;
+
+  const { db } = await import("@workspace/db");
+  const { sql, eq } = await import("drizzle-orm");
+
+  const rows = await db.execute(
+    sql`SELECT id FROM ai_platform.customer_profiles WHERE client_email = ${session.clientEmail} LIMIT 1`,
+  );
+  const profileId = (rows as unknown as Array<{ id: number }>)[0]?.id;
+  if (!profileId) { res.json([]); return; }
+
+  const { aiReferralsTable } = await import("@workspace/db");
+  const history = await db.select().from(aiReferralsTable).where(eq(aiReferralsTable.referrerProfileId, profileId));
+  res.json(history);
+});
+
 export default router;

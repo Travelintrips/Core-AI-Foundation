@@ -18,6 +18,8 @@ import BriefPage from '@/pages/brief';
 import RequestPricingPage from '@/pages/request-pricing';
 import RequestQuotationPage from '@/pages/request-quotation';
 import RequestApprovalPage from '@/pages/request-approval';
+import AffiliateWorkspacePage from '@/pages/workspace/affiliate';
+import ReferralWorkspacePage from '@/pages/workspace/referral';
 import RequestResultsPage from '@/pages/request-results';
 import WorkspaceDashboardPage from '@/pages/workspace/dashboard';
 import WorkspaceProjectsPage from '@/pages/workspace/projects';
@@ -62,6 +64,8 @@ function Router() {
       <Route path="/request-service/:requestId/pricing" component={RequestPricingPage} />
       <Route path="/request-service/:requestId/quotation" component={RequestQuotationPage} />
       <Route path="/request-service/:requestId/approval" component={RequestApprovalPage} />
+      <Route path="/workspace/:token/affiliate" component={AffiliateWorkspacePage} />
+      <Route path="/workspace/:token/referral" component={ReferralWorkspacePage} />
       <Route path="/request-service/:requestId/results" component={RequestResultsPage} />
       <Route path="/workspace/:token" component={WorkspaceDashboardPage} />
       <Route path="/workspace/:token/projects" component={WorkspaceProjectsPage} />

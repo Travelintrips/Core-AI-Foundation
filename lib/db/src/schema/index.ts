@@ -65,3 +65,5 @@ export * from "./ai-referrals";
 export * from "./ai-affiliates";
 export * from "./ai-customer-health-scores";
 export * from "./ai-ab-tests";
+export * from "./ai-customer-segments";
+export * from "./ai-automation-rules";

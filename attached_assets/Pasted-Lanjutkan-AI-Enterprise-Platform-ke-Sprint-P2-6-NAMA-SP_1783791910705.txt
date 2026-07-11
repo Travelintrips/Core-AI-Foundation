@@ -1,0 +1,742 @@
+Lanjutkan AI Enterprise Platform ke Sprint P2.6
+
+NAMA SPRINT
+
+Commercial Automation Layer
+AI Sales Automation
+Revenue Optimization Engine
+
+==========================================================
+STATUS PLATFORM
+==========================================================
+
+Sprint P0 Production Ready
+✅ Complete
+
+Sprint P1 Customer Workspace
+✅ Complete
+
+Sprint P1.1 Production Completion
+✅ Complete
+
+Sprint P2 Portfolio Growth
+✅ Complete
+
+Sprint P2.5 Commercial Conversion Layer
+✅ Complete
+
+Commercial Layer yang SUDAH ADA:
+
+- Sales Funnel
+- Promotions
+- Coupons
+- Referrals
+- Affiliates
+- Customer Health Score
+- Commercial Dashboard
+- AI Sales Manager
+- A/B Testing
+- Recommendation Engine
+
+JANGAN membuat ulang modul tersebut.
+
+==========================================================
+WAJIB DILAKUKAN TERLEBIH DAHULU
+==========================================================
+
+Sebelum coding:
+
+Lakukan AUDIT MENYELURUH.
+
+Cari:
+
+- tabel yang sudah ada
+- route yang sudah ada
+- event yang sudah ada
+- workflow yang sudah ada
+- services yang sudah ada
+- frontend yang sudah ada
+
+Buat reuse report.
+
+JANGAN membuat:
+
+- tabel duplicate
+- API duplicate
+- workflow duplicate
+- analytics duplicate
+- recommendation duplicate
+
+Gunakan extension secara additive.
+
+==========================================================
+TUJUAN
+==========================================================
+
+Commercial Layer sudah lengkap.
+
+Sekarang semua modul harus saling terhubung
+dan berjalan otomatis.
+
+Target Sprint:
+
+AI mampu membantu meningkatkan revenue
+tanpa operator melakukan pekerjaan manual.
+
+==========================================================
+MODUL 1
+
+AUTO EVENT TRACKING
+==========================================================
+
+Saat ini funnel tracking masih membutuhkan
+POST manual.
+
+Hilangkan ketergantungan tersebut.
+
+Buat Auto Tracking Layer.
+
+Semua event berikut otomatis tercatat:
+
+Landing Viewed
+
+Portfolio Viewed
+
+Portfolio Detail
+
+Preview Started
+
+Preview Finished
+
+Package Selected
+
+Checkout Started
+
+Coupon Applied
+
+Coupon Failed
+
+Payment Started
+
+Payment Success
+
+Payment Failed
+
+Project Created
+
+Workspace Login
+
+Download Asset
+
+Download Invoice
+
+Repeat Order
+
+Referral Created
+
+Affiliate Link Clicked
+
+Affiliate Conversion
+
+Support Ticket
+
+Review Submitted
+
+Project Completed
+
+==========================================================
+IMPLEMENTASI
+==========================================================
+
+Gunakan event bus yang SUDAH ADA.
+
+Jangan membuat event bus baru.
+
+Semua tracking harus publish event otomatis.
+
+Frontend tidak perlu lagi memanggil:
+
+POST /track
+
+secara manual.
+
+==========================================================
+MODUL 2
+
+COUPON AUTOMATION
+==========================================================
+
+Hubungkan:
+
+Coupon
+
+↓
+
+Pricing Engine
+
+↓
+
+Checkout
+
+↓
+
+Payment
+
+↓
+
+Invoice
+
+↓
+
+Accounting
+
+↓
+
+Commercial Analytics
+
+Saat customer memakai coupon:
+
+semua modul otomatis update.
+
+Tidak boleh ada perhitungan ganda.
+
+==========================================================
+MODUL 3
+
+PROMOTION AUTOMATION
+==========================================================
+
+Promotion aktif otomatis jika memenuhi rule.
+
+Contoh:
+
+Coffee
+
+↓
+
+Premium Package
+
+↓
+
+Diskon 10%
+
+Tidak perlu admin mengaktifkan manual.
+
+Support:
+
+Date
+
+Industry
+
+Package
+
+Customer Segment
+
+Health Score
+
+Referral
+
+Affiliate
+
+Repeat Order
+
+==========================================================
+MODUL 4
+
+AI SALES AUTOMATION
+==========================================================
+
+AI Sales Manager harus berjalan otomatis.
+
+Contoh:
+
+Customer melihat
+
+Coffee Portfolio
+
+5x
+
+↓
+
+AI
+
+merekomendasikan
+
+Coffee Promotion.
+
+==========================================================
+
+Customer preview
+
+3x
+
+belum checkout
+
+↓
+
+AI
+
+mengirim reminder.
+
+==========================================================
+
+Customer membeli
+
+Logo
+
+↓
+
+AI
+
+merekomendasikan
+
+Brand Guideline
+
+Presentation
+
+Packaging
+
+==========================================================
+MODUL 5
+
+CUSTOMER SEGMENTATION
+==========================================================
+
+Buat segment otomatis.
+
+New
+
+Returning
+
+VIP
+
+Enterprise
+
+Inactive
+
+Lost
+
+High Potential
+
+High Value
+
+At Risk
+
+Segment berubah otomatis.
+
+==========================================================
+MODUL 6
+
+CUSTOMER HEALTH AUTOMATION
+==========================================================
+
+Health Score tidak lagi dihitung manual.
+
+Recalculate otomatis saat:
+
+Payment
+
+Review
+
+Project
+
+Support
+
+Repeat Order
+
+Referral
+
+==========================================================
+MODUL 7
+
+UPSELL AUTOMATION
+==========================================================
+
+Gunakan Recommendation Engine yang sudah ada.
+
+Tambahkan rule automation.
+
+Contoh:
+
+Logo
+
+↓
+
+Brand Guideline
+
+↓
+
+Presentation
+
+↓
+
+Website
+
+Mining
+
+↓
+
+Presentation
+
+↓
+
+Company Profile
+
+↓
+
+Website
+
+==========================================================
+MODUL 8
+
+CROSS SELL AUTOMATION
+==========================================================
+
+AI menentukan:
+
+Related Services
+
+Bundle
+
+Promotion
+
+Coupon
+
+berdasarkan histori customer.
+
+==========================================================
+MODUL 9
+
+AFFILIATE AUTOMATION
+==========================================================
+
+Affiliate tidak hanya admin.
+
+Tambahkan Customer Workspace.
+
+Halaman:
+
+My Affiliate
+
+Isi:
+
+Referral Link
+
+QR Code
+
+Clicks
+
+Conversions
+
+Revenue
+
+Pending Commission
+
+Paid Commission
+
+Withdrawal
+
+Marketing Kit
+
+Leaderboard
+
+==========================================================
+MODUL 10
+
+REFERRAL AUTOMATION
+==========================================================
+
+Customer Workspace
+
+↓
+
+Referral Center
+
+Fitur:
+
+Invite
+
+Referral History
+
+Reward
+
+Status
+
+Referral Tree
+
+==========================================================
+MODUL 11
+
+COMMERCIAL AUTOMATION ENGINE
+==========================================================
+
+Buat service:
+
+commercialAutomationService
+
+Rule Engine:
+
+IF
+
+Customer viewed same portfolio
+
+>=3
+
+AND
+
+No checkout
+
+↓
+
+Recommend Coupon
+
+--------------------------------
+
+IF
+
+Customer inactive
+
+30 hari
+
+↓
+
+Recommend Reminder
+
+--------------------------------
+
+IF
+
+Customer repeat order
+
+>=5
+
+↓
+
+VIP Promotion
+
+--------------------------------
+
+IF
+
+Affiliate conversion
+
+>=50
+
+↓
+
+Upgrade Commission
+
+==========================================================
+MODUL 12
+
+OWNER DASHBOARD
+==========================================================
+
+Tambahkan:
+
+Automation Center
+
+Isi:
+
+Automation Executed
+
+Coupons Sent
+
+Promotions Triggered
+
+Upsell Success
+
+Cross Sell Success
+
+Reminder Sent
+
+Affiliate Upgrade
+
+VIP Upgrade
+
+Revenue Generated
+
+==========================================================
+MODUL 13
+
+AI INSIGHT
+==========================================================
+
+AI otomatis membuat insight.
+
+Contoh:
+
+"Customer Coffee lebih sering checkout pada hari Senin."
+
+"Coupon LOGO10 meningkatkan conversion sebesar X."
+
+"Portfolio Mining menghasilkan revenue tertinggi."
+
+Gunakan data nyata.
+
+Jangan membuat angka palsu.
+
+Jika data belum cukup,
+berikan insight kualitatif.
+
+==========================================================
+MODUL 14
+
+NOTIFICATION
+==========================================================
+
+Owner menerima:
+
+Low Conversion
+
+Promotion Ending
+
+Coupon Abuse
+
+Affiliate Abuse
+
+Revenue Spike
+
+High Value Customer
+
+Lost Customer
+
+==========================================================
+MODUL 15
+
+SECURITY
+==========================================================
+
+Pastikan:
+
+No duplicate reward
+
+No duplicate commission
+
+Coupon abuse detection
+
+Referral abuse detection
+
+Affiliate fraud placeholder
+
+Rate limit automation
+
+Audit log semua automation
+
+==========================================================
+MODUL 16
+
+OPENAPI
+==========================================================
+
+Semua endpoint baru:
+
+OpenAPI
+
+Generated Types
+
+Generated Hooks
+
+Generated Zod
+
+==========================================================
+MODUL 17
+
+TEST
+==========================================================
+
+Pastikan:
+
+Auto tracking bekerja.
+
+Coupon otomatis update payment.
+
+Promotion otomatis aktif.
+
+AI Sales Manager otomatis.
+
+Health Score otomatis.
+
+Customer Segment otomatis.
+
+Affiliate Workspace berjalan.
+
+Referral Workspace berjalan.
+
+Automation Engine berjalan.
+
+Commercial Dashboard update.
+
+Analytics update.
+
+OpenAPI clean.
+
+Generated clean.
+
+pnpm run verify clean.
+
+==========================================================
+FINAL REPORT
+==========================================================
+
+Berikan laporan:
+
+Reuse Audit
+
+Automation Flow
+
+Database
+
+Services
+
+Events
+
+API
+
+Frontend
+
+Automation Rules
+
+AI Sales
+
+Affiliate
+
+Referral
+
+Analytics
+
+Testing
+
+Known Limitations
+
+Revenue Automation Score
+
+==========================================================
+TARGET
+==========================================================
+
+Platform tidak lagi hanya menyediakan fitur.
+
+Platform mampu:
+
+✔ Menganalisis perilaku customer.
+
+✔ Memberikan rekomendasi otomatis.
+
+✔ Menjalankan promosi otomatis.
+
+✔ Mengoptimalkan upsell.
+
+✔ Mengoptimalkan cross sell.
+
+✔ Mengelola affiliate otomatis.
+
+✔ Mengelola referral otomatis.
+
+✔ Menghitung health score otomatis.
+
+✔ Menghubungkan seluruh Commercial Layer menjadi satu sistem otomatis berbasis AI.
+
+PENTING:
+
+Sebelum membuat tabel, route, service, workflow, atau halaman baru, WAJIB melakukan reuse audit terlebih dahulu. Jika fungsi serupa sudah ada, lakukan integrasi atau ekstensi secara additive. Hindari duplikasi arsitektur dan technical debt.

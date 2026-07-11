@@ -31,6 +31,8 @@ import Services from "@/pages/services";
 import ServiceDetail from "@/pages/service-detail";
 import CatalogAdmin from "@/pages/catalog-admin";
 import ServiceRequests from "@/pages/service-requests";
+import AutomationPage from "@/pages/automation";
+import AIInsightsPage from "@/pages/ai-insights";
 import Payments from "@/pages/payments";
 import PortfolioAdmin from "@/pages/portfolio-admin";
 import CommercialPage from "@/pages/commercial";
@@ -70,6 +72,8 @@ function AdminRouter() {
         <Route path="/services/:id" component={ServiceDetail} />
         <Route path="/catalog-admin" component={CatalogAdmin} />
         <Route path="/service-requests" component={ServiceRequests} />
+        <Route path="/automation" component={AutomationPage} />
+        <Route path="/ai-insights" component={AIInsightsPage} />
         <Route path="/payments" component={Payments} />
         <Route path="/portfolio" component={PortfolioAdmin} />
         <Route path="/commercial" component={CommercialPage} />

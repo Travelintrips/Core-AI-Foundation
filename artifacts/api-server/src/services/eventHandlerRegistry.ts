@@ -193,10 +193,99 @@ const callWebhookHandler: HandlerFn = async (event, _sub, config) => {
 
 // ── Registry ──────────────────────────────────────────────────────────────────
 
+// ── automation_trigger ────────────────────────────────────────────────────────
+// Evaluates all matching automation rules when an event fires.
+
+const automationTriggerHandler: HandlerFn = async (event, _sub, _config) => {
+  try {
+    const { evaluateRulesForEvent } = await import("./commercialAutomationService.js");
+    const payload = (event.payloadJson ?? {}) as Record<string, unknown>;
+    const customerProfileId =
+      typeof payload.customerProfileId === "number" ? payload.customerProfileId : null;
+    const results = await evaluateRulesForEvent({
+      eventType: event.eventType,
+      eventId: event.eventId,
+      payload,
+      customerProfileId,
+    });
+    return { ok: true, data: { rulesEvaluated: results.length, results } };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+};
+
+// ── recalculate_health ────────────────────────────────────────────────────────
+// Recalculates a customer's health score on-demand from event data.
+
+const recalculateHealthHandler: HandlerFn = async (event, _sub, _config) => {
+  try {
+    const payload = (event.payloadJson ?? {}) as Record<string, unknown>;
+    const customerProfileId =
+      typeof payload.customerProfileId === "number" ? payload.customerProfileId : null;
+    if (customerProfileId == null) return { ok: true, data: { skipped: "no_customer_profile_id" } };
+    const { calculateHealthScore } = await import("./customerHealthService.js");
+    const score = await calculateHealthScore(customerProfileId);
+    return { ok: true, data: { customerProfileId, overallScore: score.overallScore } };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+};
+
+// ── resegment_customer ────────────────────────────────────────────────────────
+// Re-evaluates a customer's segment from event data.
+
+const resegmentCustomerHandler: HandlerFn = async (event, _sub, _config) => {
+  try {
+    const payload = (event.payloadJson ?? {}) as Record<string, unknown>;
+    const customerProfileId =
+      typeof payload.customerProfileId === "number" ? payload.customerProfileId : null;
+    if (customerProfileId == null) return { ok: true, data: { skipped: "no_customer_profile_id" } };
+    const { calculateCustomerSegment } = await import("./customerSegmentService.js");
+    const seg = await calculateCustomerSegment(customerProfileId);
+    return { ok: true, data: { customerProfileId, segment: seg.segment } };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+};
+
+// ── track_funnel_event ────────────────────────────────────────────────────────
+// Auto-tracks a funnel event from the event bus payload.
+
+const trackFunnelEventHandler: HandlerFn = async (event, _sub, _config) => {
+  try {
+    const { trackFunnelEvent } = await import("./funnelEventService.js");
+    const payload = (event.payloadJson ?? {}) as Record<string, unknown>;
+    await trackFunnelEvent({
+      eventType: String(payload.funnelEventType ?? event.eventType),
+      visitorId: typeof payload.visitorId === "string" ? payload.visitorId : undefined,
+      customerId: typeof payload.customerId === "number" ? payload.customerId : undefined,
+      sessionId: typeof payload.sessionId === "string" ? payload.sessionId : undefined,
+      serviceId: typeof payload.serviceId === "number" ? payload.serviceId : undefined,
+      portfolioId: typeof payload.portfolioId === "number" ? payload.portfolioId : undefined,
+      packageId: typeof payload.packageId === "number" ? payload.packageId : undefined,
+      projectId: typeof payload.projectId === "string" ? payload.projectId : undefined,
+      device: typeof payload.device === "string" ? payload.device : undefined,
+      country: typeof payload.country === "string" ? payload.country : undefined,
+      metadata: typeof payload.metadata === "object" && payload.metadata !== null
+        ? payload.metadata as Record<string, unknown>
+        : undefined,
+    });
+    return { ok: true, data: { tracked: true } };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+};
+
+// ── Registry ──────────────────────────────────────────────────────────────────
+
 export const eventHandlerRegistry: Record<string, HandlerFn> = {
   create_job:             createJobHandler,
   audit_log:              auditLogHandler,
   notification_hook:      notificationHookHandler,
   update_project_status:  updateProjectStatusHandler,
   call_webhook:           callWebhookHandler,
+  automation_trigger:     automationTriggerHandler,
+  recalculate_health:     recalculateHealthHandler,
+  resegment_customer:     resegmentCustomerHandler,
+  track_funnel_event:     trackFunnelEventHandler,
 };

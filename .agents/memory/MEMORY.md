@@ -32,3 +32,4 @@
 - [customer-workspace](customer-workspace.md) — /workspace/:token portal: synthesized notifications, filesUnlocked is the canonical lock flag, public routes skip api-zod by convention
 - [pdfkit-esbuild-external](pdfkit-esbuild-external.md) — pdfkit must be in esbuild externals list; fontkit dep requires @swc/helpers at runtime which pnpm doesn't symlink to node_modules/@swc/
 - [phase25-commercial-layer](phase25-commercial-layer.md) — P2.5 rules: ai_invoices uses `amount` not `total_amount`, creative_projects has no client_email, use HeadersInit for fetch headers helper
+- [phase26-automation-layer](phase26-automation-layer.md) — P2.6 rules: aiServiceRequestsTable has customerEmail not customerProfileId; service_requests count must use raw SQL join via customer_profiles; customerId in sales_funnel_events is integer not string
