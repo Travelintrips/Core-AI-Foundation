@@ -163,6 +163,8 @@ export type ServiceRequestDetail = {
   total: string;
   status: string;
   briefJson: Record<string, unknown> | null;
+  completionNotes: string | null;
+  completionLinks: Array<{ label: string; url: string }> | null;
   createdAt: string;
   pricingBreakdown: {
     basePrice: number | null;

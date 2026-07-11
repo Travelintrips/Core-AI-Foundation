@@ -7,6 +7,7 @@ import {
   Send, ThumbsUp, ShieldCheck, Zap, Eye, CheckCircle2, XCircle,
   ChevronDown, ChevronRight, X, TrendingUp, DollarSign, Users,
   ArrowRight, AlertTriangle, CheckCircle, Copy, Link2, ExternalLink,
+  Plus, Trash2, Save,
 } from "lucide-react";
 
 // Use empty string so fetch("/api/...") goes through the Vite /api proxy,
@@ -95,6 +96,8 @@ type ServiceRequest = {
   grossMargin: string | null;
   grossMarginPercent: string | null;
   pricingSnapshotJson: PricingSnapshot | null;
+  completionNotes: string | null;
+  completionLinks: Array<{ label: string; url: string }> | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -160,6 +163,25 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
       setTimeout(() => setCopied(false), 2000);
     });
   }
+
+  const [completionNotes, setCompletionNotes] = useState(req.completionNotes ?? "");
+  const [completionLinks, setCompletionLinks] = useState<Array<{ label: string; url: string }>>(
+    req.completionLinks ?? [],
+  );
+
+  const saveCompletion = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/ai/catalog/requests/${req.id}/completion`, {
+        method: "PATCH",
+        body: JSON.stringify({ notes: completionNotes, links: completionLinks }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["service-requests"] });
+      toast({ title: "Hasil proyek disimpan dan akan tampil ke customer." });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Gagal menyimpan", description: err.message, variant: "destructive" }),
+  });
 
   const { toast } = useToast();
   const changeStatus = useMutation({
@@ -322,6 +344,85 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
                     <Row key={k} label={k.replace(/_/g, " ")} value={String(v)} />
                   ))}
               </div>
+            </section>
+          )}
+
+          {/* Hasil Proyek — only visible when request is completed */}
+          {["completed", "converted_to_project"].includes(req.status) && (
+            <section className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-5 space-y-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-green-700 dark:text-green-400">
+                Hasil Proyek — Tampil ke Customer
+              </h3>
+
+              {/* Notes */}
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">Catatan untuk Customer</label>
+                <textarea
+                  value={completionNotes}
+                  onChange={(e) => setCompletionNotes(e.target.value)}
+                  rows={4}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+                  placeholder="Tuliskan pesan untuk customer tentang hasil proyek ini..."
+                />
+              </div>
+
+              {/* Links */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-muted-foreground">Link Deliverable</label>
+                  <button
+                    onClick={() => setCompletionLinks([...completionLinks, { label: "", url: "" }])}
+                    className="flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <Plus className="w-3 h-3" /> Tambah Link
+                  </button>
+                </div>
+                {completionLinks.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">Belum ada link. Klik "Tambah Link" untuk menambahkan Google Drive, Dropbox, dll.</p>
+                )}
+                {completionLinks.map((link, i) => (
+                  <div key={i} className="flex gap-2 mb-2">
+                    <input
+                      value={link.label}
+                      onChange={(e) => {
+                        const updated = [...completionLinks];
+                        updated[i] = { ...updated[i], label: e.target.value };
+                        setCompletionLinks(updated);
+                      }}
+                      placeholder="Label (mis: Google Drive)"
+                      className="w-28 shrink-0 rounded-lg border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <input
+                      value={link.url}
+                      onChange={(e) => {
+                        const updated = [...completionLinks];
+                        updated[i] = { ...updated[i], url: e.target.value };
+                        setCompletionLinks(updated);
+                      }}
+                      placeholder="https://..."
+                      className="flex-1 min-w-0 rounded-lg border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <button
+                      onClick={() => setCompletionLinks(completionLinks.filter((_, idx) => idx !== i))}
+                      className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Save button */}
+              <button
+                onClick={() => saveCompletion.mutate()}
+                disabled={saveCompletion.isPending}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+              >
+                {saveCompletion.isPending
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Save className="w-3.5 h-3.5" />}
+                Simpan & Tampilkan ke Customer
+              </button>
             </section>
           )}
         </div>

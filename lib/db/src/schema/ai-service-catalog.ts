@@ -153,6 +153,8 @@ export const aiServiceRequestsTable = appSchema.table("ai_service_requests", {
   marginApprovedAt: timestamp("margin_approved_at", { withTimezone: true }),
   status: text("status").notNull().default("draft"), // draft | quoted | waiting_customer_approval | approved | pending | orchestrating | in_progress | waiting_review | revision_requested | completed | cancelled
   createdProjectId: text("created_project_id"), // set once handed off to a project/workflow
+  completionNotes: text("completion_notes"),   // admin-authored notes shown to customer on completion
+  completionLinks: jsonb("completion_links").$type<Array<{ label: string; url: string }>>(), // downloadable/reviewable deliverable links
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

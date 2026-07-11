@@ -376,6 +376,8 @@ router.get("/public/customer/dashboard/:dashboardToken", async (req, res): Promi
       currency: aiServiceRequestsTable.currency,
       total: aiServiceRequestsTable.total,
       status: aiServiceRequestsTable.status,
+      completionNotes: aiServiceRequestsTable.completionNotes,
+      completionLinks: aiServiceRequestsTable.completionLinks,
       createdAt: aiServiceRequestsTable.createdAt,
       updatedAt: aiServiceRequestsTable.updatedAt,
       serviceName: aiServicesTable.serviceName,
@@ -470,10 +472,14 @@ router.get("/public/customer/dashboard/:dashboardToken", async (req, res): Promi
       };
       return map[r.status] ?? r.status;
     })(),
+    completionNotes: r.completionNotes ?? null,
+    completionLinks: (r.completionLinks as Array<{ label: string; url: string }> | null) ?? null,
     // Link to the right page based on status (no token needed for brief/pricing pages)
     portalPath: ((): string => {
       if (["draft", "brief_in_progress"].includes(r.status))
         return `/request-service/${r.requestId}/brief`;
+      if (["completed", "converted_to_project"].includes(r.status))
+        return `/request-service/${r.requestId}/results`;
       return `/request-service/${r.requestId}/pricing`;
     })(),
     createdAt: r.createdAt.toISOString(),

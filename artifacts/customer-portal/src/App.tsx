@@ -18,6 +18,7 @@ import BriefPage from '@/pages/brief';
 import RequestPricingPage from '@/pages/request-pricing';
 import RequestQuotationPage from '@/pages/request-quotation';
 import RequestApprovalPage from '@/pages/request-approval';
+import RequestResultsPage from '@/pages/request-results';
 
 const queryClient = new QueryClient();
 
@@ -50,6 +51,7 @@ function Router() {
       <Route path="/request-service/:requestId/pricing" component={RequestPricingPage} />
       <Route path="/request-service/:requestId/quotation" component={RequestQuotationPage} />
       <Route path="/request-service/:requestId/approval" component={RequestApprovalPage} />
+      <Route path="/request-service/:requestId/results" component={RequestResultsPage} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -380,6 +380,36 @@ router.patch("/ai/catalog/requests/:id/status", async (req, res): Promise<void> 
   res.json(row);
 });
 
+// ── Completion Notes & Links (admin → customer deliverable handoff) ────────────
+// PATCH /ai/catalog/requests/:id/completion
+// Admin saves notes + downloadable links that appear on the customer portal
+// results page once a request is marked as completed.
+
+router.patch("/ai/catalog/requests/:id/completion", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
+  const { notes, links } = req.body as {
+    notes?: string;
+    links?: Array<{ label: string; url: string }>;
+  };
+
+  const [row] = await db
+    .update(aiServiceRequestsTable)
+    .set({
+      completionNotes: notes ?? null,
+      completionLinks: links ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(aiServiceRequestsTable.id, id))
+    .returning();
+  if (!row) { res.status(404).json({ error: "Request not found" }); return; }
+  await logAudit("catalog", "update_completion", String(id), "ai_service_request", "success", {
+    notesLength: notes?.length ?? 0,
+    linkCount: links?.length ?? 0,
+  });
+  res.json({ ok: true });
+});
+
 // ── Issue Quotation Link ──────────────────────────────────────────────────────
 // POST /ai/catalog/requests/:id/issue-quotation
 // Creates (or re-issues) an ai_quotation from the request's pricing snapshot,
@@ -806,6 +836,8 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
     total: row.total,
     status: row.status,
     briefJson: row.briefJson,
+    completionNotes: row.completionNotes ?? null,
+    completionLinks: row.completionLinks ?? null,
     createdAt: row.createdAt,
     // Customer-facing breakdown: lineItems + basePrice from snapshot so
     // the portal can render an accurate itemised breakdown without
