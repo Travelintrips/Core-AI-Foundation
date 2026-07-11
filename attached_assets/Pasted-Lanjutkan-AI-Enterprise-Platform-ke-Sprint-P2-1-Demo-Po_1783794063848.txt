@@ -1,0 +1,340 @@
+Lanjutkan AI Enterprise Platform ke Sprint P2.1:
+Demo Portfolio Production & Gallery Content Population.
+
+STATUS SAAT INI:
+
+- Portfolio system sudah live
+- Public gallery sudah berjalan
+- Admin Portfolio Center sudah berjalan
+- Demo Portfolio Generator sudah tersedia
+- Queue, Dispatcher, Worker Cluster, Event Bus, Cost Tracking, Guardrails, dan QC sudah tersedia
+- Saat ini baru ada 9 seeded portfolios
+- Tujuan sprint ini bukan membangun sistem baru, tetapi mengisi gallery dengan konten demo berkualitas tinggi
+
+PENTING:
+
+Jangan membuat tabel, route, workflow, generator, atau gallery baru.
+Reuse seluruh Portfolio, Creative AI, Image Designer, Queue, Dispatcher, Event Bus, Storage, QC, dan Admin Review yang sudah ada.
+
+Semua perubahan harus:
+- reuse-first
+- additive
+- idempotent
+- cost-guarded
+- audit logged
+- pnpm run verify clean
+
+==========================================================
+TUJUAN
+==========================================================
+
+Membuat batch awal 30 demo portfolio berkualitas tinggi untuk customer-facing launch.
+
+Target:
+
+10 industri
+×
+3 portfolio per industri
+=
+30 portfolio
+
+Masing-masing portfolio memiliki 5–8 aset.
+
+==========================================================
+INDUSTRI
+==========================================================
+
+Gunakan:
+
+1. Coffee
+2. Restaurant
+3. Logistics
+4. Mining
+5. Trading
+6. Palm Oil
+7. Fashion
+8. Medical
+9. Property
+10. Technology
+
+==========================================================
+STYLE DISTRIBUTION
+==========================================================
+
+Gunakan kombinasi:
+
+- Minimalist
+- Modern
+- Luxury
+- Corporate
+- Premium
+- Industrial
+- Elegant
+- Bold
+- Natural
+- Clean
+
+Jangan membuat seluruh portfolio memakai style yang sama.
+
+==========================================================
+DEMO BRAND SAFETY
+==========================================================
+
+Semua brand harus:
+
+- fiktif
+- tidak memakai nama perusahaan nyata
+- tidak meniru merek terkenal
+- tidak meniru logo aktif
+- tidak memakai testimoni palsu
+- berlabel AI Demo Project
+- memiliki synthetic=true
+- memiliki trademark_risk=low sebelum publish
+
+Lakukan duplicate-name check.
+
+Portfolio dengan trademark risk medium/high:
+- jangan publish
+- masuk Review Queue
+
+==========================================================
+ASSET PER PORTFOLIO
+==========================================================
+
+Setiap portfolio minimum:
+
+1. Logo concept
+2. Color palette
+3. Typography direction
+4. Main brand mockup
+5. Social media visual 1
+6. Social media visual 2
+
+Tambahan sesuai industri:
+
+Coffee/Restaurant:
+- packaging/cup/menu mockup
+
+Logistics/Mining/Trading/Palm Oil:
+- company profile cover
+- presentation cover
+- corporate social post
+
+Fashion:
+- packaging/tag/apparel mockup
+
+Medical:
+- clinic signage/social post/brochure cover
+
+Property:
+- brochure/banner/social ad
+
+Technology:
+- landing page hero/dashboard/presentation cover
+
+==========================================================
+GENERATION FLOW
+==========================================================
+
+Gunakan pipeline existing:
+
+Brand Strategist
+→ Creative Director
+→ Copywriter
+→ Image Designer
+→ Image QC
+→ Admin Review
+→ Publish
+
+Jangan membuat pipeline paralel baru.
+
+==========================================================
+BATCH STRATEGY
+==========================================================
+
+Jangan generate 30 portfolio sekaligus.
+
+Bagi menjadi:
+
+Batch 1:
+- Coffee
+- Restaurant
+- Logistics
+- total 9 portfolios
+
+Batch 2:
+- Mining
+- Trading
+- Palm Oil
+- total 9 portfolios
+
+Batch 3:
+- Fashion
+- Medical
+- Property
+- Technology
+- total 12 portfolios
+
+Setiap batch harus selesai QC sebelum batch berikutnya dimulai.
+
+==========================================================
+COST GUARDRAILS
+==========================================================
+
+Tambahkan atau gunakan:
+
+- max_cost_per_batch
+- max_images_per_portfolio
+- max_retry_per_asset
+- provider timeout
+- daily generation budget
+- manual approval required
+- stop on budget exceeded
+
+Sebelum menjalankan batch:
+
+Tampilkan estimasi:
+
+- jumlah portfolio
+- jumlah gambar
+- estimated token cost
+- estimated image cost
+- estimated total cost
+
+Admin harus confirm sebelum start.
+
+==========================================================
+QC MINIMUM
+==========================================================
+
+Portfolio hanya boleh masuk Review Queue jika:
+
+- semua required assets ada
+- QC score minimal 80
+- tidak ada teks rusak fatal
+- tidak ada logo/merek terkenal
+- tidak ada artefak besar
+- visual konsisten
+- cover image tersedia
+- alt text tersedia
+
+Portfolio hanya boleh publish jika:
+
+- admin approve
+- publish_status = published
+- trademark_risk = low
+
+==========================================================
+ADMIN REVIEW
+==========================================================
+
+Pada Review Queue tampilkan:
+
+- industry
+- style
+- generated brand name
+- asset completeness
+- QC score
+- trademark risk
+- total generation cost
+- provider/model
+- preview gallery
+
+Actions:
+
+- Approve & Publish
+- Request Regeneration
+- Reject
+- Archive
+
+==========================================================
+GALLERY POPULATION
+==========================================================
+
+Setelah publish:
+
+- portfolio otomatis tampil di public gallery
+- filter industry/style bekerja
+- related portfolio bekerja
+- featured flag dapat diatur
+- popular/latest/rating sort tetap bekerja
+
+Tandai minimal:
+
+- 1 featured portfolio per industry
+- 1 luxury/premium example per relevant industry
+- 1 corporate example per B2B industry
+
+==========================================================
+IMAGE STORAGE
+==========================================================
+
+Pastikan:
+
+- thumbnail generated
+- preview optimized
+- original file private
+- storage path tidak tampil ke public
+- EXIF dibersihkan jika relevan
+- no source file download
+- alt text tersimpan
+
+==========================================================
+ANALYTICS
+==========================================================
+
+Track:
+
+- generation batch started
+- portfolio generated
+- portfolio QC passed
+- portfolio QC failed
+- portfolio approved
+- portfolio published
+- portfolio viewed
+- CTA clicked
+
+==========================================================
+VERIFICATION
+==========================================================
+
+Pastikan:
+
+1. Total published demo portfolio = 30.
+2. Masing-masing industri memiliki 3 portfolio.
+3. Tidak ada duplicate brand name.
+4. Semua demo berlabel AI Demo Project.
+5. Semua published portfolio memiliki trademark risk low.
+6. Semua portfolio memiliki cover image.
+7. Semua portfolio memiliki minimum 6 assets.
+8. Filter industri bekerja.
+9. Filter style bekerja.
+10. Portfolio detail tampil.
+11. Related recommendations tampil.
+12. No internal storage path leaks.
+13. Cost per batch tercatat.
+14. pnpm run verify clean.
+15. Production build clean.
+
+==========================================================
+FINAL REPORT
+==========================================================
+
+Berikan laporan:
+
+- jumlah portfolio per industri
+- jumlah asset
+- brand names yang dibuat
+- style distribution
+- QC pass/fail
+- trademark risk
+- batch cost
+- total cost
+- portfolio published
+- portfolio rejected
+- known limitations
+- pnpm run verify status
+
+TARGET AKHIR:
+
+Public gallery memiliki 30 demo portfolio berkualitas tinggi dan legal, sehingga customer dapat melihat contoh nyata sebelum memilih paket dan melakukan pembayaran.
