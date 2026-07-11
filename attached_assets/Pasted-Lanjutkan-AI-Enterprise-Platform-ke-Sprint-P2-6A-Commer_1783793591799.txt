@@ -1,0 +1,895 @@
+Lanjutkan AI Enterprise Platform ke Sprint P2.6A:
+
+Commercial Automation Audit,
+Revenue Integration Hardening,
+Event Reliability,
+dan Production Verification.
+
+STATUS SAAT INI:
+
+Sprint P2.6 Commercial Automation Layer sudah selesai.
+
+Backend yang sudah ada:
+
+- ai_customer_segments
+- ai_automation_rules
+- ai_automation_executions
+- commercialAutomationService.ts
+- customerSegmentService.ts
+- automation routes
+- eventHandlerRegistry dengan handler:
+  - automation_trigger
+  - recalculate_health
+  - resegment_customer
+  - track_funnel_event
+- 6 default automation rules
+
+Admin Platform:
+
+- /automation
+- /ai-insights
+
+Customer Workspace:
+
+- /workspace/:token/affiliate
+- /workspace/:token/referral
+
+PENTING:
+
+Jangan membuat Marketplace dulu.
+Jangan membuat tabel, engine, event bus, referral system, affiliate system,
+segment engine, atau automation engine kedua.
+
+Semua perubahan harus:
+
+- reuse-first
+- additive
+- backward compatible
+- OpenAPI-first
+- generated client first
+- type-safe
+- audit logged
+- idempotent
+- pnpm run verify clean
+
+==========================================================
+TUJUAN
+==========================================================
+
+Memastikan Commercial Automation Layer:
+
+1. Benar-benar dipicu oleh event nyata.
+2. Tidak membuat reward/komisi/coupon ganda.
+3. Terhubung ke Pricing, Checkout, Payment, Invoice, Project, dan Workspace.
+4. Menghasilkan analytics revenue yang akurat.
+5. Tidak mengirim automation berulang secara berlebihan.
+6. Aman digunakan dengan customer nyata.
+7. Memiliki observability dan kontrol admin yang lengkap.
+
+==========================================================
+BAGIAN 1 — REUSE & INTEGRATION AUDIT
+==========================================================
+
+Sebelum coding:
+
+Audit secara nyata:
+
+- seluruh automation rules
+- seluruh event subscriptions
+- seluruh handler
+- funnel tracking frontend
+- pricing engine
+- coupon validation
+- checkout
+- payment verification
+- invoice generation
+- referral conversion
+- affiliate conversion
+- commission calculation
+- health score recalculation
+- customer segmentation
+- customer notifications
+- admin automation UI
+- commercial analytics
+
+Untuk setiap komponen, tentukan:
+
+- CONNECTED
+- PARTIAL
+- MANUAL
+- DUPLICATE
+- NOT TRIGGERED
+- MOCK
+- PRODUCTION READY
+
+Jangan menganggap route aktif hanya karena file ada.
+
+Verifikasi:
+
+- route terdaftar
+- UI memanggil route
+- event benar-benar dipublish
+- handler benar-benar dieksekusi
+- data benar-benar masuk database
+
+==========================================================
+BAGIAN 2 — AUTOMATIC FUNNEL TRACKING
+==========================================================
+
+Pastikan event funnel otomatis tercatat dari Customer Portal dan Workspace.
+
+Event minimum:
+
+- landing_viewed
+- service_viewed
+- portfolio_viewed
+- portfolio_opened
+- preview_started
+- preview_completed
+- preview_selected
+- package_selected
+- checkout_started
+- coupon_applied
+- coupon_rejected
+- payment_started
+- payment_submitted
+- payment_verified
+- payment_failed
+- project_created
+- project_completed
+- workspace_opened
+- asset_downloaded
+- repeat_order_created
+- referral_link_created
+- referral_conversion
+- affiliate_click
+- affiliate_conversion
+- support_ticket_created
+- client_review_submitted
+
+Gunakan tracking helper terpusat.
+
+Jangan menulis implementasi tracking berbeda di setiap halaman.
+
+Tambahkan:
+
+commercialTrackingService
+
+Method:
+
+- trackPublicEvent()
+- trackCustomerEvent()
+- trackPaymentEvent()
+- trackProjectEvent()
+- deduplicateEvent()
+- normalizeUtm()
+- resolveVisitor()
+- resolveCustomer()
+
+==========================================================
+BAGIAN 3 — EVENT IDEMPOTENCY
+==========================================================
+
+Semua funnel dan automation event wajib memiliki idempotency key.
+
+Contoh:
+
+event_type
++ source_id
++ customer_id
++ rule_id
++ relevant lifecycle version
+
+Tambahkan unique/idempotency protection agar:
+
+- payment_verified tidak tercatat dua kali
+- referral reward tidak diberikan dua kali
+- affiliate commission tidak dibuat dua kali
+- coupon redemption tidak dihitung dua kali
+- health recalculation tidak menumpuk
+- segmentation tidak menghasilkan event loop
+- retry/replay event tidak menghasilkan tindakan ganda
+
+Event replay harus aman.
+
+==========================================================
+BAGIAN 4 — COUPON TO PAYMENT INTEGRATION
+==========================================================
+
+Audit dan hubungkan secara end-to-end:
+
+Coupon
+→ Pricing Engine
+→ Pricing Snapshot
+→ Checkout
+→ Payment Schedule
+→ Invoice
+→ Revenue Analytics
+
+Aturan:
+
+- backend wajib menghitung coupon
+- frontend tidak boleh menentukan discount final
+- coupon hanya dapat digunakan jika valid
+- minimum order wajib dicek
+- maximum discount wajib dicek
+- start/end date wajib dicek
+- usage limit wajib dicek
+- per-customer cap wajib dicek
+- package/service restriction wajib dicek
+- coupon usage baru final setelah payment verified
+
+Jika checkout batal atau payment gagal:
+
+- jangan menghitung coupon sebagai successful redemption
+- reserved usage boleh dilepas sesuai policy
+
+Pricing snapshot harus menyimpan:
+
+- coupon code
+- original price
+- discount amount
+- final price
+- rule version
+- validation result
+
+==========================================================
+BAGIAN 5 — PROMOTION RESOLUTION
+==========================================================
+
+Pastikan promotion engine memiliki urutan resolusi yang jelas.
+
+Jika lebih dari satu promotion cocok:
+
+Support policy:
+
+- best_discount_only
+- stackable
+- exclusive
+- priority_based
+
+Default:
+
+best_discount_only
+
+Jangan menggabungkan promotion secara tidak sengaja.
+
+Simpan promotion snapshot pada checkout.
+
+Promotion master yang berubah tidak boleh mengubah transaksi lama.
+
+==========================================================
+BAGIAN 6 — REFERRAL LIFECYCLE
+==========================================================
+
+Verifikasi lifecycle referral:
+
+Referral Link Created
+→ Clicked
+→ Registered/Identified
+→ Checkout
+→ Payment Verified
+→ Conversion Confirmed
+→ Reward Pending
+→ Reward Approved
+→ Reward Issued
+
+Jangan memberi reward hanya berdasarkan klik atau checkout.
+
+Conversion final hanya saat:
+
+payment_verified
+
+Tambahkan protection:
+
+- self-referral detection
+- same email
+- same customer
+- same payment account placeholder
+- same IP/device heuristic
+- duplicate conversion
+- cancelled/refunded transaction reversal
+
+Status:
+
+- pending
+- qualified
+- approved
+- rejected
+- reversed
+- rewarded
+
+==========================================================
+BAGIAN 7 — AFFILIATE LIFECYCLE
+==========================================================
+
+Verifikasi:
+
+Affiliate Link
+→ Click
+→ Attribution
+→ Checkout
+→ Payment Verified
+→ Conversion
+→ Commission Pending
+→ Commission Approved
+→ Commission Paid
+
+Tambahkan attribution policy:
+
+- first_click
+- last_click
+
+Default:
+last_click
+
+Tambahkan attribution window:
+
+default 30 days
+
+Commission tidak boleh confirmed sebelum payment verified.
+
+Jika payment:
+
+- refunded
+- cancelled
+- chargeback placeholder
+
+maka commission:
+
+- reversed
+- cancelled
+
+==========================================================
+BAGIAN 8 — COMMISSION CALCULATION
+==========================================================
+
+Buat atau audit service terpusat:
+
+commissionService
+
+Method:
+
+- calculateReferralReward()
+- calculateAffiliateCommission()
+- createPendingCommission()
+- approveCommission()
+- reverseCommission()
+- markPaid()
+- validateDuplicate()
+- calculateNetEligibleRevenue()
+
+Commission dihitung dari:
+
+eligible net revenue
+
+Bukan dari:
+
+- tax
+- refunded amount
+- cancelled payment
+- unpaid balance
+
+Semua kalkulasi uang harus memakai decimal/integer yang aman.
+
+==========================================================
+BAGIAN 9 — HEALTH SCORE AUTOMATION
+==========================================================
+
+Health Score harus otomatis dihitung saat:
+
+- payment verified
+- payment overdue
+- project completed
+- review submitted
+- support ticket opened
+- support ticket unresolved
+- repeat order
+- referral conversion
+- inactivity threshold reached
+
+Cegah recalculation storm.
+
+Gunakan:
+
+- debounce
+- queue job
+- idempotency key
+- latest-state calculation
+
+Simpan:
+
+- previous score
+- new score
+- reason
+- components
+- calculated_at
+
+==========================================================
+BAGIAN 10 — CUSTOMER SEGMENT AUTOMATION
+==========================================================
+
+Segment recalculation otomatis berdasarkan:
+
+- lifetime revenue
+- order count
+- repeat order
+- recency
+- health score
+- payment behavior
+- activity
+- company type
+- enterprise flags
+
+Pastikan hanya satu primary segment aktif per customer.
+
+Support optional secondary tags.
+
+Simpan segment history:
+
+- old_segment
+- new_segment
+- trigger
+- reason
+- changed_at
+
+Cegah loop:
+
+segment.changed
+→ automation
+→ recalculate segment
+→ segment.changed berulang
+
+==========================================================
+BAGIAN 11 — AUTOMATION COOLDOWN
+==========================================================
+
+Tambahkan cooldown dan frequency cap.
+
+Contoh:
+
+- coupon recommendation: maksimal 1 per 7 hari
+- checkout reminder: maksimal 3 kali per checkout
+- inactive reminder: maksimal 1 per 14 hari
+- upsell recommendation: maksimal 1 per completed project
+- VIP promotion: maksimal 1 active promotion per customer
+- affiliate upgrade: maksimal 1 evaluation per 30 hari
+
+Setiap rule memiliki:
+
+- cooldown_seconds
+- max_executions_per_customer
+- max_executions_per_day
+- stop_after_conversion
+- suppression_conditions
+
+==========================================================
+BAGIAN 12 — AUTOMATION STATE MACHINE
+==========================================================
+
+Status execution:
+
+- pending
+- evaluating
+- eligible
+- suppressed
+- executing
+- completed
+- failed
+- cancelled
+- expired
+
+Simpan:
+
+- matched conditions
+- failed conditions
+- selected action
+- action result
+- suppression reason
+- error
+- retry_count
+- next_retry_at
+
+Jangan hanya menyimpan success/failure tanpa alasan.
+
+==========================================================
+BAGIAN 13 — DRY RUN & SIMULATION
+==========================================================
+
+Tambahkan Dry Run Mode pada Automation Center.
+
+Admin dapat memilih:
+
+- rule
+- customer
+- event
+- test payload
+
+Sistem menampilkan:
+
+- apakah rule match
+- condition evaluation
+- action yang akan dijalankan
+- coupon/promotion yang dipilih
+- estimated impact
+- tanpa mengeksekusi action nyata
+
+Dry run tidak boleh:
+
+- memberi coupon
+- memberi reward
+- membuat commission
+- mengirim notification nyata
+- mengubah segment
+
+==========================================================
+BAGIAN 14 — MANUAL APPROVAL POLICY
+==========================================================
+
+Support action mode:
+
+- automatic
+- approval_required
+- recommendation_only
+
+Default:
+
+recommendation_only untuk rule baru.
+
+Action sensitif wajib approval:
+
+- high-value coupon
+- commission upgrade
+- VIP promotion bernilai besar
+- manual reward
+- affiliate payout
+- exceptional discount
+
+Tambahkan approval queue ke Automation Center.
+
+==========================================================
+BAGIAN 15 — CUSTOMER AFFILIATE WORKSPACE
+==========================================================
+
+Audit halaman:
+
+/workspace/:token/affiliate
+
+Pastikan menampilkan data real:
+
+- affiliate code
+- affiliate link
+- QR code
+- clicks
+- attributed customers
+- conversions
+- eligible revenue
+- pending commission
+- approved commission
+- paid commission
+- reversed commission
+- conversion history
+- payment history
+- marketing materials
+
+Customer tidak boleh melihat:
+
+- customer pribadi orang lain
+- payment reference sensitif
+- internal fraud score
+- admin notes
+
+==========================================================
+BAGIAN 16 — CUSTOMER REFERRAL WORKSPACE
+==========================================================
+
+Audit:
+
+/workspace/:token/referral
+
+Fitur:
+
+- referral code/link
+- share
+- referral history
+- qualified referral
+- rejected referral
+- reward pending
+- reward issued
+- reward reversed
+- terms
+- FAQ
+
+Jangan menampilkan referral sebagai berhasil sebelum payment verified.
+
+==========================================================
+BAGIAN 17 — AFFILIATE WITHDRAWAL FRAMEWORK
+==========================================================
+
+Jika belum ada, buat framework additive:
+
+ai_affiliate_withdrawals
+
+Field:
+
+- id
+- affiliate_id
+- amount
+- currency
+- status
+- payment_method_snapshot_json
+- requested_at
+- reviewed_at
+- approved_at
+- paid_at
+- rejected_at
+- reviewer_id
+- rejection_reason
+- metadata_json
+- created_at
+- updated_at
+
+Status:
+
+- requested
+- under_review
+- approved
+- rejected
+- processing
+- paid
+- cancelled
+
+Untuk sekarang manual payout.
+
+Jangan membuat payment disbursement otomatis dulu.
+
+==========================================================
+BAGIAN 18 — REVENUE ATTRIBUTION
+==========================================================
+
+Setiap paid transaction harus bisa diatribusikan ke:
+
+- direct
+- organic
+- portfolio
+- live_preview
+- coupon
+- promotion
+- referral
+- affiliate
+- AI recommendation
+- repeat order
+- unknown
+
+Tambahkan attribution snapshot.
+
+Jangan menghitung satu revenue di dua channel sekaligus.
+
+Support assisted attribution sebagai metadata terpisah.
+
+==========================================================
+BAGIAN 19 — COMMERCIAL ANALYTICS ACCURACY
+==========================================================
+
+Audit KPI:
+
+- revenue
+- paid revenue
+- pending revenue
+- refunded revenue
+- AOV
+- conversion
+- coupon revenue
+- promotion revenue
+- referral revenue
+- affiliate revenue
+- commission expense
+- net attributable revenue
+- repeat revenue
+
+Revenue hanya dihitung dari payment verified/paid.
+
+Jangan menghitung:
+
+- quotation
+- checkout
+- payment proof pending
+- cancelled project
+- failed payment
+
+Tambahkan formula documentation.
+
+==========================================================
+BAGIAN 20 — AI INSIGHTS VALIDITY
+==========================================================
+
+AI Insights hanya boleh memakai data nyata.
+
+Jika sample size kecil:
+
+Tampilkan:
+
+“Data belum cukup untuk kesimpulan statistik.”
+
+Tambahkan minimum sample thresholds.
+
+Bedakan:
+
+- factual metric
+- rule-based observation
+- AI inference
+- recommendation
+
+Jangan membuat persentase tanpa denominator nyata.
+
+==========================================================
+BAGIAN 21 — OBSERVABILITY
+==========================================================
+
+Automation Center tampilkan:
+
+- rules active
+- events received
+- evaluations
+- matched
+- suppressed
+- executed
+- failed
+- retrying
+- revenue attributed
+- coupon cost
+- commission cost
+- last run
+- error rate
+- average execution time
+
+Tambahkan drill-down per rule.
+
+==========================================================
+BAGIAN 22 — DEAD LETTER / FAILED AUTOMATION
+==========================================================
+
+Jangan biarkan automation gagal hilang.
+
+Tambahkan failed execution queue atau reuse job/event retry.
+
+Admin dapat:
+
+- inspect
+- retry
+- cancel
+- mark resolved
+
+Retry harus idempotent.
+
+==========================================================
+BAGIAN 23 — RATE LIMIT & ABUSE PROTECTION
+==========================================================
+
+Rate limit:
+
+- funnel tracking
+- referral creation
+- affiliate clicks
+- coupon validation
+- automation test
+- withdrawal request
+
+Tambahkan abuse flags:
+
+- coupon abuse
+- self-referral
+- rapid affiliate clicks
+- repeated conversion same customer
+- suspicious device/IP pattern placeholder
+
+Jangan auto-ban.
+Flag untuk review.
+
+==========================================================
+BAGIAN 24 — AUDIT LOG
+==========================================================
+
+Audit wajib:
+
+- rule created/updated/toggled
+- rule evaluated
+- action executed
+- action suppressed
+- coupon applied/rejected
+- referral qualified/rejected
+- commission created/reversed/paid
+- segment changed
+- health score changed
+- withdrawal requested/approved/rejected/paid
+- dry run executed
+- manual approval action
+
+Redact sensitive data.
+
+==========================================================
+BAGIAN 25 — OPENAPI & CODEGEN
+==========================================================
+
+Semua route baru/berubah:
+
+- masuk OpenAPI
+- operationId unik
+- generated Zod
+- generated hooks
+- generated types
+- documented error
+- security requirement
+
+Jangan edit generated file manual.
+
+==========================================================
+BAGIAN 26 — TEST END-TO-END
+==========================================================
+
+Test wajib:
+
+1. Landing event tercatat otomatis.
+2. Portfolio view tercatat otomatis.
+3. Preview events tercatat.
+4. Checkout event tercatat.
+5. Coupon valid mengubah pricing snapshot.
+6. Coupon invalid ditolak.
+7. Payment verified menyelesaikan coupon usage.
+8. Payment failed tidak menyelesaikan coupon usage.
+9. Referral click tidak langsung memberi reward.
+10. Referral payment verified memberi reward sekali.
+11. Event replay tidak memberi reward ganda.
+12. Affiliate attribution window bekerja.
+13. Affiliate conversion membuat commission pending.
+14. Refund membalik commission.
+15. Health score recalculate otomatis.
+16. Segment berubah otomatis.
+17. Segment event tidak looping.
+18. Cooldown menekan reminder duplikat.
+19. Dry run tidak mengubah data.
+20. Approval-required action masuk queue.
+21. Revenue dashboard hanya menghitung paid payment.
+22. Affiliate workspace tidak bocor data customer lain.
+23. Referral workspace menampilkan status real.
+24. Withdrawal tidak bisa melebihi approved balance.
+25. Failed automation bisa diretry idempotent.
+26. OpenAPI clean.
+27. Codegen deterministic.
+28. pnpm run verify clean.
+29. Production build clean.
+
+==========================================================
+BAGIAN 27 — FINAL REPORT
+==========================================================
+
+Berikan laporan:
+
+- reuse audit
+- integration map
+- event map
+- funnel tracking coverage
+- coupon/payment integration
+- referral lifecycle
+- affiliate lifecycle
+- commission formula
+- health and segmentation automation
+- cooldown rules
+- dry run
+- approval policy
+- analytics formulas
+- test results
+- OpenAPI operation count
+- pnpm run verify status
+- known limitations
+- Commercial Automation Readiness Score
+
+Jangan lanjut ke Marketplace pada sprint ini.
+
+TARGET AKHIR:
+
+Commercial Automation Layer tidak hanya memiliki fitur,
+tetapi benar-benar terhubung secara end-to-end,
+idempotent, revenue-accurate, observable,
+aman dari reward duplication,
+dan siap dipakai oleh customer nyata.
