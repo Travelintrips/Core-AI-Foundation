@@ -54,10 +54,10 @@ function makeBatchCode(): string {
 const BASE_ASSET_ROLES: NamedAssetRole[] = [
   { role: "logo_concept", label: "Logo Concept", aspectRatio: "1:1",
     promptHint: "A clean, modern logo concept mark on a plain background, professional branding presentation" },
-  { role: "color_palette", label: "Color Palette", aspectRatio: "16:9",
+  { role: "color_palette", label: "Color Palette", aspectRatio: "16:9", noText: true,
     promptHint: "A stylish brand color palette board showing primary and secondary colors as clean geometric swatches, minimal graphic design layout" },
-  { role: "typography_direction", label: "Typography Direction", aspectRatio: "16:9",
-    promptHint: "A typography moodboard showing an elegant font-pairing direction as abstract lettering shapes, graphic design layout, no readable words" },
+  { role: "typography_direction", label: "Typography Direction", aspectRatio: "16:9", noText: true,
+    promptHint: "A typography moodboard showing an elegant font-pairing direction as abstract lettering shapes and glyph forms, graphic design layout" },
   { role: "main_brand_mockup", label: "Main Brand Mockup", aspectRatio: "3:2",
     promptHint: "A realistic brand identity application mockup (stationery, signage, or product) shown in a real-world setting" },
   { role: "social_visual_1", label: "Social Media Visual 1", aspectRatio: "1:1",
@@ -69,30 +69,30 @@ const BASE_ASSET_ROLES: NamedAssetRole[] = [
 const INDUSTRY_EXTRA_ROLES: Record<string, NamedAssetRole[]> = {
   coffee: [
     { role: "packaging_mockup", label: "Cup/Packaging Mockup", aspectRatio: "3:2", promptHint: "A branded coffee cup and packaging mockup, product photography" },
-    { role: "menu_mockup", label: "Menu Mockup", aspectRatio: "3:2", promptHint: "A café menu design mockup layout, elegant food & beverage graphic design" },
+    { role: "menu_mockup", label: "Menu Mockup", aspectRatio: "3:2", noText: true, promptHint: "A café menu design mockup layout viewed from a slight distance, elegant food & beverage graphic design, abstract placeholder lines instead of a real price list" },
   ],
   restaurant: [
     { role: "packaging_mockup", label: "Packaging Mockup", aspectRatio: "3:2", promptHint: "Branded food packaging/takeaway box mockup, product photography" },
-    { role: "menu_mockup", label: "Menu Mockup", aspectRatio: "3:2", promptHint: "A restaurant menu design mockup layout, appetizing food graphic design" },
+    { role: "menu_mockup", label: "Menu Mockup", aspectRatio: "3:2", noText: true, promptHint: "A restaurant menu design mockup layout viewed from a slight distance, appetizing food graphic design, abstract placeholder lines instead of a real price list" },
   ],
   logistics: [
-    { role: "company_profile_cover", label: "Company Profile Cover", aspectRatio: "3:2", promptHint: "A corporate company profile document cover design, logistics industry, professional" },
-    { role: "presentation_cover", label: "Presentation Cover", aspectRatio: "16:9", promptHint: "A corporate presentation title slide cover design, logistics industry" },
+    { role: "company_profile_cover", label: "Company Profile Cover", aspectRatio: "3:2", noText: true, promptHint: "A corporate company profile document cover design, logistics industry, professional" },
+    { role: "presentation_cover", label: "Presentation Cover", aspectRatio: "16:9", noText: true, promptHint: "A corporate presentation title slide cover design, logistics industry" },
     { role: "corporate_social_post", label: "Corporate Social Post", aspectRatio: "1:1", promptHint: "A professional corporate social media post visual, logistics industry" },
   ],
   mining: [
-    { role: "company_profile_cover", label: "Company Profile Cover", aspectRatio: "3:2", promptHint: "A corporate company profile document cover design, mining industry, industrial professional" },
-    { role: "presentation_cover", label: "Presentation Cover", aspectRatio: "16:9", promptHint: "A corporate presentation title slide cover design, mining industry" },
+    { role: "company_profile_cover", label: "Company Profile Cover", aspectRatio: "3:2", noText: true, promptHint: "A corporate company profile document cover design, mining industry, industrial professional" },
+    { role: "presentation_cover", label: "Presentation Cover", aspectRatio: "16:9", noText: true, promptHint: "A corporate presentation title slide cover design, mining industry" },
     { role: "corporate_social_post", label: "Corporate Social Post", aspectRatio: "1:1", promptHint: "A professional corporate social media post visual, mining industry" },
   ],
   trading: [
-    { role: "company_profile_cover", label: "Company Profile Cover", aspectRatio: "3:2", promptHint: "A corporate company profile document cover design, trading industry, professional" },
-    { role: "presentation_cover", label: "Presentation Cover", aspectRatio: "16:9", promptHint: "A corporate presentation title slide cover design, trading industry" },
+    { role: "company_profile_cover", label: "Company Profile Cover", aspectRatio: "3:2", noText: true, promptHint: "A corporate company profile document cover design, trading industry, professional" },
+    { role: "presentation_cover", label: "Presentation Cover", aspectRatio: "16:9", noText: true, promptHint: "A corporate presentation title slide cover design, trading industry" },
     { role: "corporate_social_post", label: "Corporate Social Post", aspectRatio: "1:1", promptHint: "A professional corporate social media post visual, trading industry" },
   ],
   palm_oil: [
-    { role: "company_profile_cover", label: "Company Profile Cover", aspectRatio: "3:2", promptHint: "A corporate company profile document cover design, palm oil plantation industry, professional natural tones" },
-    { role: "presentation_cover", label: "Presentation Cover", aspectRatio: "16:9", promptHint: "A corporate presentation title slide cover design, palm oil industry" },
+    { role: "company_profile_cover", label: "Company Profile Cover", aspectRatio: "3:2", noText: true, promptHint: "A corporate company profile document cover design, palm oil plantation industry, professional natural tones" },
+    { role: "presentation_cover", label: "Presentation Cover", aspectRatio: "16:9", noText: true, promptHint: "A corporate presentation title slide cover design, palm oil industry" },
     { role: "corporate_social_post", label: "Corporate Social Post", aspectRatio: "1:1", promptHint: "A professional corporate social media post visual, palm oil industry" },
   ],
   fashion: [
@@ -102,17 +102,17 @@ const INDUSTRY_EXTRA_ROLES: Record<string, NamedAssetRole[]> = {
   medical: [
     { role: "clinic_signage", label: "Clinic Signage", aspectRatio: "3:2", promptHint: "A modern medical clinic signage mockup, professional healthcare branding" },
     { role: "social_post", label: "Social Post", aspectRatio: "1:1", promptHint: "A professional healthcare social media post visual" },
-    { role: "brochure_cover", label: "Brochure Cover", aspectRatio: "3:2", promptHint: "A medical clinic brochure cover design, clean healthcare graphic design" },
+    { role: "brochure_cover", label: "Brochure Cover", aspectRatio: "3:2", noText: true, promptHint: "A medical clinic brochure cover design, clean healthcare graphic design" },
   ],
   property: [
-    { role: "brochure", label: "Brochure", aspectRatio: "3:2", promptHint: "A real estate property brochure cover design, premium property marketing" },
-    { role: "banner", label: "Banner", aspectRatio: "16:9", promptHint: "A real estate marketing banner design, premium property visual" },
+    { role: "brochure", label: "Brochure", aspectRatio: "3:2", noText: true, promptHint: "A real estate property brochure cover design, premium property marketing" },
+    { role: "banner", label: "Banner", aspectRatio: "16:9", noText: true, promptHint: "A real estate marketing banner design, premium property visual" },
     { role: "social_ad", label: "Social Ad", aspectRatio: "1:1", promptHint: "A real estate social media advertisement visual" },
   ],
   technology: [
-    { role: "landing_page_hero", label: "Landing Page Hero", aspectRatio: "16:9", promptHint: "A modern SaaS landing page hero section mockup, technology product design" },
-    { role: "dashboard_mockup", label: "Dashboard Mockup", aspectRatio: "16:9", promptHint: "A modern software dashboard UI mockup, technology product design" },
-    { role: "presentation_cover", label: "Presentation Cover", aspectRatio: "16:9", promptHint: "A technology company pitch deck presentation cover design" },
+    { role: "landing_page_hero", label: "Landing Page Hero", aspectRatio: "16:9", noText: true, promptHint: "A modern SaaS landing page hero section mockup, technology product design" },
+    { role: "dashboard_mockup", label: "Dashboard Mockup", aspectRatio: "16:9", noText: true, promptHint: "A modern software dashboard UI mockup, technology product design" },
+    { role: "presentation_cover", label: "Presentation Cover", aspectRatio: "16:9", noText: true, promptHint: "A technology company pitch deck presentation cover design" },
   ],
 };
 
@@ -499,12 +499,19 @@ Return ONLY JSON (no markdown):
         altText: a.status === "completed" ? `${a.label} — ${brandName} (AI Demo Project)` : null,
         thumbnailUrl: a.imageUrl,
         previewUrl: a.imageUrl,
-        storagePath: null, // Replicate-hosted URL only; no separate private-original storage layer exists yet
+        // Populated once the image is downloaded from the (ephemeral) provider URL and
+        // re-hosted in object storage; null only if persistence failed and imageUrl still
+        // points at the temporary provider URL (see sourceProviderUrl in metadata for provenance).
+        storagePath: a.sourceProviderUrl && a.imageUrl !== a.sourceProviderUrl ? a.imageUrl : null,
         mimeType: a.status === "completed" ? "image/webp" : null,
         displayOrder: i,
         downloadable: false,
         watermarkRequired: false,
-        metadataJson: { status: a.status, qcScore: a.qcScore, qcNotes: a.qcNotes, cost: a.cost, retries: a.retries, prompt: a.prompt },
+        metadataJson: {
+          status: a.status, qcScore: a.qcScore, qcNotes: a.qcNotes, cost: a.cost, retries: a.retries,
+          prompt: a.prompt, sourceProviderUrl: a.sourceProviderUrl ?? null,
+          persisted: Boolean(a.sourceProviderUrl && a.imageUrl !== a.sourceProviderUrl),
+        },
       })),
     );
   }

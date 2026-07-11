@@ -52,10 +52,12 @@ import referralsRouter from "./referrals";
 import affiliatesRouter from "./affiliates";
 import customerHealthRouter from "./customerHealth";
 import commercialAnalyticsRouter from "./commercialAnalytics";
+import storageRouter from "./storage";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(storageRouter);
 router.use(agentsRouter);
 router.use(registryRouter);
 router.use(orchestratorRouter);

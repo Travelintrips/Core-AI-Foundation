@@ -15,6 +15,9 @@ export interface ExecutionInput {
   };
   temperature?: number | null;
   maxTokens?: number | null;
+  /** Optional image to attach as vision input (OpenAI/Gemini only). Ignored by
+   * providers/models without vision support — callers should check before relying on it. */
+  imageUrl?: string | null;
 }
 
 export interface ExecutionOutput {
@@ -34,11 +37,22 @@ async function executeOpenAI(input: ExecutionInput, apiKey: string): Promise<Exe
   const isOSeries = /^o\d/i.test(modelId);
   const baseURL = (input.provider.baseUrl as string | undefined) || "https://api.openai.com/v1";
 
-  const messages: Array<{ role: string; content: string }> = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const messages: Array<{ role: string; content: any }> = [];
   if (input.systemPrompt && !isOSeries) {
     messages.push({ role: "system", content: input.systemPrompt });
   }
-  messages.push({ role: "user", content: input.prompt });
+  if (input.imageUrl) {
+    messages.push({
+      role: "user",
+      content: [
+        { type: "text", text: input.prompt },
+        { type: "image_url", image_url: { url: input.imageUrl } },
+      ],
+    });
+  } else {
+    messages.push({ role: "user", content: input.prompt });
+  }
 
   const body: Record<string, unknown> = {
     model: modelId,

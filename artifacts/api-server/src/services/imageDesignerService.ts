@@ -291,21 +291,21 @@ Goal: ${(brief as { goal?: string }).goal ?? ""}
 PROMPT USED TO GENERATE THE IMAGE:
 ${prompt}
 
-IMAGE URL: ${imageUrl}
-
-Note: Evaluate based on how well the prompt aligns with the brief (you cannot see the actual image pixel-by-pixel, but judge the prompt's quality as a brand visual directive).
+You are looking at the actual generated image (attached). Judge the real pixels, not just the prompt.
 
 Scoring:
-- Brand Alignment (0–40 pts): Does the prompt match positioning, tone, and target market?
-- Prompt Effectiveness (0–30 pts): Is the visual direction clear, specific, and actionable?
-- Brand Safety (0–30 pts): Is the content appropriate for professional client presentation?
+- Brand Alignment (0–30 pts): Does the image match positioning, tone, and target market?
+- Visual Quality (0–25 pts): Composition, color usage, legibility, absence of visual artifacts.
+- Text/Legibility (0–25 pts): If the image contains any text, wordmark, or lettering, is it crisp, spelled correctly, and readable — or is it garbled/gibberish/melted? Images with broken or nonsensical text MUST score at most 40 pts total and MUST NOT be marked "pass" on brand_safety_text.
+- Brand Safety (0–20 pts): Free of real trademarks/logos, NSFW content, or anything unfit for a client-facing portfolio.
 
 Respond with ONLY valid JSON:
 {
   "score": <integer 1-100>,
-  "notes": "<2-3 sentences: what works, what could be improved>",
+  "notes": "<2-3 sentences: what works, what could be improved — explicitly mention any garbled/gibberish text if present>",
   "brand_alignment": "<pass|warning|fail>",
   "visual_clarity": "<pass|warning|fail>",
+  "text_legible": "<pass|warning|fail|not_applicable>",
   "brand_safety": "<pass|warning|fail>"
 }`;
 
@@ -319,6 +319,7 @@ Respond with ONLY valid JSON:
       provider,
       temperature: agent.temperature ? parseFloat(String(agent.temperature)) : 0.3,
       maxTokens: agent.maxTokens ?? 1024,
+      imageUrl,
     });
   } catch {
     return { score: 70, notes: "QC agent call failed; defaulting to 70.", latencyMs: 0, tokensUsed: 0 };
@@ -361,6 +362,10 @@ export interface NamedAssetRole {
   label: string;
   promptHint: string;
   aspectRatio?: string;
+  /** True for roles that must NOT attempt to render body copy (menus, price lists,
+   * paragraphs). Diffusion models reliably produce gibberish for this kind of text,
+   * so these roles get a hardened anti-text prompt/negative-prompt (Sprint P2.1 policy). */
+  noText?: boolean;
 }
 
 export interface GeneratedNamedAsset {
@@ -373,6 +378,46 @@ export interface GeneratedNamedAsset {
   qcNotes: string;
   cost: number;
   retries: number;
+  /** Original provider (Replicate) delivery URL, kept for provenance/debugging.
+   * Replicate URLs are ephemeral (~hours), so `imageUrl` above is the permanently
+   * stored copy whenever persistence succeeds; this is null if persistence failed
+   * and we had to fall back to the ephemeral URL. */
+  sourceProviderUrl?: string | null;
+}
+
+/** Background jobs have no Express request to read forwarded headers from, so
+ * this mirrors the buildBaseUrl() helpers used by request-scoped routes but
+ * without req dependency. REPLIT_DEV_DOMAIN covers Replit dev/prod hosting. */
+function getServiceBaseUrl(): string {
+  if (process.env["REPLIT_DEV_DOMAIN"]) return `https://${process.env["REPLIT_DEV_DOMAIN"]}`;
+  return `http://localhost:${process.env["PORT"] ?? 8080}`;
+}
+
+/**
+ * Downloads a (typically ephemeral) provider-hosted image and persists a
+ * permanent copy in object storage. Returns the new absolute public URL, or
+ * null if persistence isn't available/fails — callers should fall back to the
+ * original URL in that case rather than losing the asset entirely.
+ */
+async function persistGeneratedImage(
+  providerUrl: string,
+  brandSlug: string,
+  role: string,
+): Promise<string | null> {
+  if (!process.env["PUBLIC_OBJECT_SEARCH_PATHS"]) return null; // object storage not provisioned
+  try {
+    const { objectStorageService } = await import("../lib/objectStorage.js");
+    const res = await fetch(providerUrl);
+    if (!res.ok) return null;
+    const contentType = res.headers.get("content-type") || "image/webp";
+    const ext = contentType.includes("png") ? "png" : contentType.includes("jpeg") ? "jpg" : "webp";
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const relativePath = `demo-portfolios/${brandSlug}/${role}-${Date.now()}.${ext}`;
+    const { objectPath } = await objectStorageService.uploadPublicAsset(relativePath, buffer, contentType);
+    return `${getServiceBaseUrl()}/api${objectPath}`;
+  } catch {
+    return null;
+  }
 }
 
 function sleep(ms: number): Promise<void> {
@@ -413,8 +458,13 @@ export async function generateNamedAssetSet(
     const brandName = String(brief["brandName"] ?? "the brand");
     const industry = String(brief["businessType"] ?? brief["industry"] ?? "");
     const style = String(brief["stylePreference"] ?? "");
-    const prompt = `${role.promptHint}. Brand: ${brandName}. Industry: ${industry}. Visual style: ${style}. Professional quality, on-brand, clean composition. No readable text or logos of real companies.`;
-    const negativePrompt = "text, watermark, low quality, blurry, distorted, real company logo, trademark, nsfw, signature";
+    const textPolicy = role.noText
+      ? "Do NOT render any readable words, labels, price lists, menus, paragraphs, or body copy — diffusion models cannot spell reliably. Keep it purely visual: colors, shapes, layout, imagery only, no legible letters anywhere."
+      : "Keep any lettering minimal (short brand name only, at most 1-2 words) — do not attempt full sentences, price lists, or body copy.";
+    const prompt = `${role.promptHint}. Brand: ${brandName}. Industry: ${industry}. Visual style: ${style}. Professional quality, on-brand, clean composition. ${textPolicy} No logos of real companies.`;
+    const negativePrompt = role.noText
+      ? "text, words, letters, typography, gibberish text, misspelled words, illegible text, price list, menu text, labels, captions, paragraphs, watermark, low quality, blurry, distorted, real company logo, trademark, nsfw, signature"
+      : "gibberish text, misspelled words, illegible text, extra letters, watermark, low quality, blurry, distorted, real company logo, trademark, nsfw, signature";
 
     let attempt = 0;
     let imageUrl: string | null = null;
@@ -464,8 +514,14 @@ export async function generateNamedAssetSet(
     }
 
     const qc = await reviewImage(brief, prompt, imageUrl);
+    const brandSlug = String(brief["brandName"] ?? "brand")
+      .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "brand";
+    const persistedUrl = await persistGeneratedImage(imageUrl, brandSlug, role.role);
     results.push({
-      role: role.role, label: role.label, prompt, imageUrl, status: "completed",
+      role: role.role, label: role.label, prompt,
+      imageUrl: persistedUrl ?? imageUrl,
+      sourceProviderUrl: imageUrl,
+      status: "completed",
       qcScore: qc.score, qcNotes: qc.notes, cost: IMAGE_COST_SCHNELL, retries: attempt - 1,
     });
   }
