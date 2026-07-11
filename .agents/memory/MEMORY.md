@@ -26,3 +26,4 @@
 - [provider-health-check-slug-baseurl](provider-health-check-slug-baseurl.md) — Registry INACTIVE 401/404 caused by slug/baseUrl mismatch between seed scripts, not bad API keys
 - [service-request-status-vocabulary](service-request-status-vocabulary.md) — full status list lives in admin NEXT_ACTIONS/dashboard maps, not schema comment; "completed" must be server-guarded
 - [smtp-email-service](smtp-email-service.md) — real email sending added via nodemailer/emailService.ts; resend reuses issue-quotation re-issue endpoint; Hostinger 535 errors need username double-checked, not just port/TLS
+- [service-request-gate-status-sync](service-request-gate-status-sync.md) — generic status-PATCH must guard against skipping an unverified commercial gate; customer portal must read real status, not infer from quotation.status alone

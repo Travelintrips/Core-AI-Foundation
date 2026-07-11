@@ -35,6 +35,24 @@ import { logAudit } from "../services/aiAuditService.js";
 import { sendEmail } from "../services/emailService.js";
 import { generatePricingSnapshot, toCustomerFacingBreakdown, type PricingSelections } from "../services/aiPricingService.js";
 import { createHash, randomBytes } from "crypto";
+import { getGateForServiceQuotation, gateIsCleared } from "../services/commercialGateService.js";
+
+// Statuses that must only be reached once the commercial gate (if one exists
+// for this request's quotation) has been verified or waived. Without this
+// guard, PATCH /ai/catalog/requests/:id/status can be called directly (e.g.
+// from admin NEXT_ACTIONS buttons) to skip straight past an unresolved
+// commercial gate, leaving the customer-facing "Verifikasi Komersial" step
+// permanently stuck at "pending" while the backend claims to be much further
+// along (see .agents/memory/provider-health-check-slug-baseurl.md-adjacent
+// bug class — status vocabulary vs. real gate state diverging).
+const POST_GATE_STATUSES = new Set([
+  "ready_to_build",
+  "in_progress",
+  "orchestrating",
+  "waiting_review",
+  "completed",
+  "converted_to_project",
+]);
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
@@ -369,6 +387,48 @@ router.patch("/ai/catalog/requests/:id/status", async (req, res): Promise<void> 
   if (id === null) return;
   const { status, createdProjectId } = req.body as { status?: string; createdProjectId?: string };
   if (!status) { res.status(400).json({ error: "status is required" }); return; }
+
+  if (POST_GATE_STATUSES.has(status)) {
+    const [existing] = await db
+      .select({ id: aiServiceRequestsTable.id, createdProjectId: aiServiceRequestsTable.createdProjectId })
+      .from(aiServiceRequestsTable)
+      .where(eq(aiServiceRequestsTable.id, id))
+      .limit(1);
+    if (!existing) { res.status(404).json({ error: "Request not found" }); return; }
+
+    const [quotation] = await db
+      .select({ id: aiQuotationsTable.id })
+      .from(aiQuotationsTable)
+      .where(eq(aiQuotationsTable.serviceRequestId, id))
+      .limit(1);
+
+    if (quotation) {
+      const gate = await getGateForServiceQuotation(quotation.id);
+      if (gate && !gateIsCleared(gate)) {
+        res.status(409).json({
+          error: `Cannot move to "${status}": commercial gate ${gate.id} is still "${gate.status}". Verify or waive it first via /commercial-gates/${gate.id}/verify or /waive.`,
+        });
+        return;
+      }
+    }
+
+    if (status === "completed" || status === "converted_to_project") {
+      const finalProjectId = createdProjectId ?? existing.createdProjectId;
+      if (!finalProjectId) {
+        res.status(409).json({ error: `Cannot move to "${status}" without a createdProjectId — production must actually exist first.` });
+        return;
+      }
+      const [project] = await db
+        .select({ status: creativeProjectsTable.status })
+        .from(creativeProjectsTable)
+        .where(eq(creativeProjectsTable.id, Number(finalProjectId)))
+        .limit(1);
+      if (!project || project.status !== "completed") {
+        res.status(409).json({ error: `Cannot move to "${status}": linked project ${finalProjectId} is not marked completed.` });
+        return;
+      }
+    }
+  }
 
   const [row] = await db
     .update(aiServiceRequestsTable)
