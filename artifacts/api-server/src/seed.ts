@@ -109,7 +109,7 @@ async function seedProviders() {
   const anthropic = await upsertProvider({
     name: "Anthropic",
     slug: "anthropic",
-    baseUrl: "https://api.anthropic.com",
+    baseUrl: "https://api.anthropic.com/v1",
     apiKeyEnvVar: "ANTHROPIC_API_KEY",
     isActive: true,
   });

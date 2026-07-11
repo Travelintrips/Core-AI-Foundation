@@ -49,7 +49,7 @@ async function pingProvider(
       url = `${baseUrl}/models`;
       headers["x-api-key"] = apiKey;
       headers["anthropic-version"] = "2023-06-01";
-    } else if (slug === "gemini" || slug === "google-gemini") {
+    } else if (slug === "gemini" || slug === "google-gemini" || slug === "google") {
       url = `${baseUrl}/models?key=${encodeURIComponent(apiKey)}`;
     } else if (slug === "replicate") {
       url = `${baseUrl}/models`;
