@@ -74,4 +74,13 @@ This runs orval to regenerate `lib/api-zod` and `lib/api-client-react`.
 
 **Note:** orval 8.18.0 has a `@scalar/json-magic` bug — the generate script pre-parses YAML as an object to bypass it.
 
+## Setup Status (2026-07-11)
+
+Project was re-imported from GitHub and set up on Replit:
+- `pnpm install` run, shared libs + generated codegen (`lib/api-zod`, `lib/api-client-react`) rebuilt.
+- All 4 workflows (API Server, Admin Dashboard, Customer Portal, Canvas/mockup sandbox) start cleanly.
+- Verified DB connectivity: Admin Dashboard renders live data (5 providers, 14 models, 3 workflows) from the dev Supabase DB.
+- All secrets/env vars referenced in this file (Supabase URLs, AI provider keys, SMTP, `SESSION_SECRET`) were already present in the environment from the import — nothing new had to be requested.
+- `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY` are still unset. This is safe in development (the admin auth middleware fails open only when `NODE_ENV=development`) but must be set before deploying to production, where it fails closed (401s on all admin routes).
+
 ## User Preferences
