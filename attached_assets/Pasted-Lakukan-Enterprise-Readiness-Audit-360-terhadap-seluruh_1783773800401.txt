@@ -1,0 +1,663 @@
+Lakukan Enterprise Readiness Audit 360° terhadap seluruh AI Enterprise Platform yang sudah ada.
+
+PENTING:
+
+Jangan langsung membuat fitur baru.
+
+Jangan langsung refactor besar.
+
+Jangan menghapus tabel, route, service, workflow, atau halaman apa pun sebelum audit selesai.
+
+Audit harus bersifat read-first, evidence-based, dan menghasilkan rekomendasi prioritas.
+
+Semua temuan wajib berdasarkan kondisi kode, database, route, workflow, dan frontend yang benar-benar ada.
+
+==========================================================
+TUJUAN AUDIT
+==========================================================
+
+Menilai apakah platform saat ini sudah siap dilanjutkan ke fase berikutnya.
+
+Audit harus menjawab:
+
+1. Fitur apa yang benar-benar selesai.
+2. Fitur apa yang baru sebagian selesai.
+3. Fitur apa yang masih simulasi atau placeholder.
+4. Fitur apa yang duplikat atau overlap.
+5. Fitur apa yang sudah ada tetapi belum terhubung.
+6. Fitur apa yang berisiko merusak alur bisnis.
+7. Fitur apa yang perlu diperbaiki sebelum membuat Portfolio Gallery, Live Preview, Checkout, Payment, atau modul bisnis baru.
+8. Apakah customer sudah bisa membeli layanan dari awal sampai selesai tanpa bantuan admin.
+9. Apakah admin sudah bisa mengelola seluruh proses secara end-to-end.
+10. Apakah platform sudah aman dan siap production.
+
+==========================================================
+SCOPE AUDIT
+==========================================================
+
+Audit seluruh modul berikut:
+
+- AI Providers
+- AI Models
+- AI Registry
+- AI Agents
+- AI Workforce
+- Departments
+- Employees
+- Skills
+- Tool Permissions
+- AI Orchestrator
+- AI CEO
+- Execution Plans
+- Task Assignments
+- Performance Engine
+- Job Engine
+- Queue
+- Dispatcher Runtime
+- Worker Cluster
+- Event Bus
+- Scheduler
+- Human Task Center
+- Creative AI
+- Image Designer
+- Client Review
+- Service Catalog
+- Packages
+- Pricing Engine
+- Price Rules
+- Service Requests
+- Fixed Price Flow
+- Custom / Enterprise Flow
+- Payment Policy
+- Deposit Flow
+- Remaining Payment
+- Project Lifecycle
+- Portfolio / Gallery
+- Live Preview
+- Customer Portal
+- Admin Portal
+- Multi-Tenant
+- RBAC
+- Feature Flags
+- Marketplace / Packages
+- Analytics
+- Cost Tracking
+- Guardrails
+- Audit Log
+- Knowledge Base
+- Memory
+- Settings
+- Build Pipeline
+- OpenAPI
+- Orval
+- api-zod
+- api-client-react
+- Database Schema
+- Security
+- Production Readiness
+
+==========================================================
+AUDIT 1 — BUSINESS FLOW
+==========================================================
+
+Audit alur customer saat ini.
+
+Bandingkan kondisi aktual dengan target flow berikut.
+
+STANDARD / FIXED PRICE:
+
+Browse Service
+→ Choose Package
+→ View Portfolio
+→ Brief
+→ Pricing Calculation
+→ Checkout
+→ Full Payment atau DP
+→ Payment Verification
+→ Project Created
+→ AI Build
+→ Internal QC
+→ Client Review
+→ Revision
+→ Final Approval
+→ Remaining Payment
+→ Final File Unlock
+→ Download
+→ Archive
+
+CUSTOM / ENTERPRISE:
+
+Browse Service
+→ Request Consultation
+→ Requirement Form
+→ AI Requirement Analysis
+→ Consultation
+→ Quotation
+→ Customer Approval
+→ DP / PO
+→ Commercial Verification
+→ Project Created
+→ Production
+→ Review
+→ Revision
+→ Final Payment
+→ Delivery
+
+Periksa:
+
+- Apakah fixed-price masih membuat quotation yang tidak perlu?
+- Apakah custom project punya quotation lifecycle?
+- Apakah service request dan active project sudah dipisahkan?
+- Apakah project bisa dibuat sebelum payment verified?
+- Apakah AI build bisa berjalan sebelum DP/full payment?
+- Apakah final file terkunci sebelum pelunasan?
+- Apakah preview memakai watermark?
+- Apakah customer bisa menyelesaikan flow tanpa admin?
+
+==========================================================
+AUDIT 2 — CUSTOMER PORTAL
+==========================================================
+
+Periksa seluruh halaman customer.
+
+Minimal cek:
+
+- landing page
+- service catalog
+- service detail
+- package comparison
+- portfolio/sample gallery
+- brief wizard
+- pricing calculator
+- checkout
+- payment status
+- project workspace
+- client review
+- revision request
+- download center
+- invoice / receipt
+- project archive
+
+Untuk setiap halaman, tentukan:
+
+- ada / tidak ada
+- berfungsi / tidak
+- terhubung ke backend / hanya UI
+- data nyata / mock
+- aman / bocor data internal
+- mobile friendly / tidak
+- blocker ke conversion / tidak
+
+Pastikan customer tidak melihat:
+
+- provider
+- model
+- token
+- latency
+- AI cost
+- gross margin
+- queue
+- worker
+- dispatcher
+- internal prompt
+- audit internal
+- API key
+
+==========================================================
+AUDIT 3 — ADMIN FLOW
+==========================================================
+
+Audit apakah admin dapat:
+
+- mengelola service
+- mengelola package
+- mengelola harga
+- mengelola price rules
+- mengelola request
+- melihat brief
+- mengedit quotation
+- verifikasi DP
+- verifikasi pelunasan
+- membuat project
+- melihat production progress
+- review hasil AI
+- meminta revisi
+- unlock file
+- generate invoice
+- melihat revenue
+- melihat margin
+- melihat outstanding payment
+- cancel/refund
+- audit seluruh aktivitas
+
+Identifikasi semua proses yang masih harus dilakukan manual di database atau API.
+
+==========================================================
+AUDIT 4 — DATA MODEL
+==========================================================
+
+Audit seluruh tabel yang terkait.
+
+Cari:
+
+- duplicate tables
+- overlap
+- nullable foreign key yang berisiko
+- status enum tidak sinkron
+- field yang tidak pernah dipakai
+- field UI yang tidak tersimpan
+- field backend yang tidak tampil
+- relation yang belum ada
+- missing unique constraint
+- missing index
+- missing tenant_id
+- missing audit trail
+- destructive migration risk
+
+Fokus khusus pada:
+
+- services
+- packages
+- price_rules
+- service_requests
+- quotations
+- quotation_items
+- payment_schedules
+- payments
+- projects
+- project_steps
+- deliverables
+- portfolios
+- reviews
+- preview assets
+- client reviews
+
+Buat peta relasi aktual.
+
+==========================================================
+AUDIT 5 — API
+==========================================================
+
+Audit semua route.
+
+Periksa:
+
+- route yang duplikat
+- route yang overlap
+- route tidak terdaftar
+- route frontend tidak punya backend
+- backend route tidak dipakai
+- route public yang bocor data
+- route admin tanpa auth
+- route tanpa tenant filter
+- route tanpa validation
+- route tanpa idempotency
+- route tanpa state-machine guard
+- route tanpa audit log
+- route yang masih simulasi
+
+Buat tabel:
+
+Endpoint
+Method
+Auth
+Tenant Scope
+Validation
+Used By UI
+Status
+Risk
+
+==========================================================
+AUDIT 6 — WORKFLOW & EVENT
+==========================================================
+
+Audit:
+
+- Orchestrator
+- execution plans
+- job creation
+- queue
+- dispatcher
+- worker claim
+- worker lease
+- event publish
+- event subscription
+- scheduler
+- human task
+- creative pipeline
+- image pipeline
+- payment gate
+- project conversion
+- client review
+- final delivery
+
+Pastikan tidak ada:
+
+- duplicate job creation
+- duplicate event
+- job dibuat sebelum payment
+- infinite retry
+- event replay membuat duplikasi
+- schedule membuat duplikasi
+- project conversion dua kali
+- file unlock tanpa pelunasan
+
+==========================================================
+AUDIT 7 — AI CAPABILITY
+==========================================================
+
+Audit setiap agent/employee.
+
+Periksa:
+
+- role
+- capability
+- provider
+- model
+- prompt
+- knowledge
+- memory
+- tool permission
+- cost
+- latency
+- success rate
+- fallback
+- human approval requirement
+
+Tentukan:
+
+- agent aktif
+- agent tidak dipakai
+- agent duplikat
+- capability overlap
+- missing agent
+- wrong model assignment
+- missing fallback
+- excessive cost
+
+==========================================================
+AUDIT 8 — PRICING & PAYMENT
+==========================================================
+
+Audit Pricing Engine:
+
+- base price
+- package price
+- quantity
+- rush fee
+- revision fee
+- human review fee
+- bilingual fee
+- editable source fee
+- commercial usage fee
+- discount
+- tax
+- total
+- margin
+
+Pastikan:
+
+- backend menghitung ulang
+- frontend tidak bisa mengubah harga
+- pricing snapshot immutable
+- uang tidak dihitung dengan floating point tidak aman
+- tenant-specific pricing bekerja
+- margin internal tidak bocor
+- payment policy per package bekerja
+- DP dan pelunasan sinkron
+- project tidak mulai sebelum pembayaran sesuai policy
+
+==========================================================
+AUDIT 9 — PORTFOLIO & LIVE PREVIEW READINESS
+==========================================================
+
+Audit apakah komponen berikut sudah ada:
+
+- asset library
+- gallery
+- image storage
+- watermark
+- image optimization
+- preview token
+- download protection
+- portfolio metadata
+- industry/style tagging
+- review
+- analytics
+- project-to-portfolio conversion
+
+Jika sudah ada, rekomendasikan reuse.
+
+Jika belum ada, sebutkan gap.
+
+Jangan membuat fitur Portfolio dulu.
+
+==========================================================
+AUDIT 10 — MULTI-TENANT & SECURITY
+==========================================================
+
+Audit:
+
+- tenant isolation
+- tenant_id coverage
+- RBAC
+- API key per tenant
+- admin key handling
+- public token security
+- secret masking
+- rate limiting
+- input sanitization
+- file upload validation
+- access control
+- IDOR risk
+- SQL injection risk
+- XSS risk
+- CSRF risk
+- SSRF risk
+- audit log
+- session management
+- custom domain isolation
+
+Cari query yang tidak memakai tenant filter.
+
+==========================================================
+AUDIT 11 — BUILD & CODEGEN
+==========================================================
+
+Audit:
+
+- OpenAPI source of truth
+- orval config
+- generated hooks
+- generated zod schemas
+- duplicate exports
+- stale dist
+- stale generated
+- manual wrapper
+- package references
+- root scripts
+- pnpm run verify
+- build reproducibility
+
+Pastikan tidak ada generated file yang diedit manual.
+
+==========================================================
+AUDIT 12 — PRODUCTION READINESS
+==========================================================
+
+Audit:
+
+- env validation
+- health checks
+- provider health
+- retry
+- timeout
+- circuit breaker
+- queue recovery
+- worker recovery
+- scheduler recovery
+- event replay
+- backup
+- restore
+- logging
+- metrics
+- alerting
+- error tracking
+- storage durability
+- migration safety
+- rollback
+- disaster recovery
+- rate limits
+- cost guardrails
+
+==========================================================
+OUTPUT WAJIB
+==========================================================
+
+Hasil audit harus terdiri dari:
+
+1. Executive Summary
+
+Berikan skor 0–100 untuk:
+
+- Business Flow
+- Customer UX
+- Admin UX
+- AI Core
+- Data Architecture
+- API Quality
+- Security
+- Multi-Tenant
+- Payment Readiness
+- Production Readiness
+- Developer Experience
+
+2. Feature Inventory
+
+Tabel:
+
+Module
+Feature
+Status
+Evidence
+Missing
+Risk
+Recommendation
+
+Status:
+
+- COMPLETE
+- PARTIAL
+- PLACEHOLDER
+- SIMULATION
+- NOT CONNECTED
+- DUPLICATE
+- MISSING
+- DEPRECATED
+
+3. Duplicate & Overlap Report
+
+Tampilkan:
+
+- duplicate tables
+- duplicate routes
+- duplicate services
+- duplicate workflows
+- duplicate pages
+- duplicate statuses
+
+4. Critical Findings
+
+Severity:
+
+- P0 Critical
+- P1 High
+- P2 Medium
+- P3 Low
+
+Untuk setiap temuan:
+
+- masalah
+- bukti file/route/table
+- dampak bisnis
+- dampak teknis
+- rekomendasi
+- estimasi effort
+
+5. Customer Journey Gap Map
+
+Tampilkan flow aktual dan flow target.
+
+Tandai titik:
+
+- missing
+- manual
+- unsafe
+- duplicated
+- blocked
+
+6. Readiness Matrix
+
+Tabel:
+
+Capability
+Ready Now
+Needs Fix
+Can Reuse
+Must Build
+Can Postpone
+
+7. Prioritized Roadmap
+
+Bagi menjadi:
+
+Phase A — Critical Fixes
+Phase B — Commercial Flow Completion
+Phase C — Portfolio & Preview
+Phase D — Payment & Delivery
+Phase E — Production Hardening
+Phase F — New Business Modules
+
+8. Build / Fix Recommendation
+
+Untuk setiap fase, berikan:
+
+- scope
+- dependencies
+- files/modules impacted
+- risk
+- acceptance criteria
+
+==========================================================
+ATURAN AUDIT
+==========================================================
+
+- Jangan menganggap fitur selesai hanya karena file ada.
+- Verifikasi route terdaftar.
+- Verifikasi UI memanggil route.
+- Verifikasi route mengakses DB nyata.
+- Verifikasi DB menyimpan data.
+- Verifikasi status berubah end-to-end.
+- Verifikasi auth dan tenant scope.
+- Verifikasi build/typecheck.
+- Jangan membuat kode baru kecuali fix kecil yang benar-benar blocking audit.
+- Jika menemukan bug kritis, laporkan dulu sebelum memperbaiki.
+- Jangan menyimpulkan berdasarkan nama file saja.
+- Gunakan evidence konkret.
+
+==========================================================
+FINAL DECISION
+==========================================================
+
+Di akhir audit, jawab secara tegas:
+
+1. Apakah platform siap lanjut ke Portfolio Gallery?
+2. Apakah platform siap menerima customer berbayar?
+3. Apakah fixed-price flow sudah siap?
+4. Apakah custom/enterprise flow sudah siap?
+5. Apakah payment/DP flow sudah siap?
+6. Apakah final file protection sudah siap?
+7. Apa 10 pekerjaan paling penting berikutnya?
+8. Fitur apa yang sebaiknya jangan dibangun dulu?
+
+Jangan implementasi Portfolio Gallery sebelum audit ini selesai.
