@@ -9,6 +9,7 @@ import { PortfolioReviews } from "@/components/portfolio-reviews";
 import { ServiceFaqSection } from "@/components/service-faq";
 import { RelatedServices } from "@/components/related-services";
 import { LiveAiPreview } from "@/components/live-ai-preview";
+import { ServiceWorkflow } from "@/components/service-workflow";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, CheckCircle2, Sparkles } from "lucide-react";
 
@@ -303,10 +304,11 @@ export default function ServiceDetailPage() {
         </div>
 
         <div className="mt-14 space-y-14">
-          <LiveAiPreview serviceId={serviceId} />
+          <ServiceWorkflow />
           {showcase && <PortfolioReviews reviews={showcase.reviews} avgRating={showcase.stats.avgRating} />}
           {showcase && <ServiceFaqSection faqs={showcase.faqs} />}
           {showcase && <RelatedServices services={showcase.relatedServices} />}
+          <LiveAiPreview serviceId={serviceId} />
         </div>
       </div>
     </Layout>
