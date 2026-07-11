@@ -30,7 +30,7 @@ MISTRAL_API_KEY = "bDsdCOTE5H0BMsAZ7OIccWw0lPgpajyk"
 REPLICATE_API_TOKEN = "r8_bcqzMXfcX9BqlBFiuqxs17hKgjxo3RU1Lgq2w"
 SMTP_HOST = "smtp.hostinger.com"
 SMTP_PASS = "#Admin12345@$"
-SMTP_USER = "info@cstlogistic.co.od"
+SMTP_USER = "info@cstlogistic.co.id"
 SMTP_PORT = "465"
 SMTP_FROM = "info@cstlogistic.co.id"
 
