@@ -362,9 +362,6 @@ importers:
 
   artifacts/api-server:
     dependencies:
-      '@types/nodemailer':
-        specifier: ^8.0.1
-        version: 8.0.1
       '@workspace/api-zod':
         specifier: workspace:*
         version: link:../../lib/api-zod
@@ -411,6 +408,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.4
+      '@types/nodemailer':
+        specifier: ^8.0.1
+        version: 8.0.1
       esbuild:
         specifier: 0.27.3
         version: 0.27.3
