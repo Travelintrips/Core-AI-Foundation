@@ -34,6 +34,7 @@ import { buildCreativeDirectorPrompt, buildCopywriterPrompt, parseJsonResponse, 
 import { generateNamedAssetSet, type NamedAssetRole } from "./imageDesignerService.js";
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
+import { archivePortfolioAssets } from "./portfolioStorageService.js";
 
 const WORKFLOW_STANDARD = [
   { step: "brief", label: "Brief" },
@@ -439,10 +440,12 @@ Return ONLY JSON (no markdown):
   if (!serviceId) throw new Error("No active service for portfolio");
 
   const portfolioCode = `DEMO-${config.industry.toUpperCase().replace(/\s+/g, "-")}-${Date.now().toString(36).toUpperCase()}`;
-  const slug = `${config.industry.toLowerCase()}-${brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`.substring(0, 100);
+  const brandSlug = brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-").substring(0, 40);
+  const slug = `${config.industry.toLowerCase()}-${brandSlug}-${Date.now().toString(36)}`.substring(0, 100);
 
-  const mainMockup = completedAssets.find((a) => a.role === "main_brand_mockup") ?? completedAssets[0];
-  const galleryJson = completedAssets.map((a) => ({ role: a.role, label: a.label, url: a.imageUrl, altText: `${a.label} — ${brandName} (${config.industry}, ${config.style} style, AI Demo Project)` }));
+  // Use Replicate URLs directly for immediate DB insert; archiving runs in background
+  const completedForGallery = completedAssets;
+  const mainMockup = completedForGallery.find((a) => a.role === "main_brand_mockup") ?? completedForGallery[0];
 
   const publishStatus = !allRequiredAssetsPresent
     ? "review" // any failed asset always forces manual review, regardless of autoPublish
@@ -463,7 +466,7 @@ Return ONLY JSON (no markdown):
     isDemo: true, trademarkRisk,
     qcScore: String(avgQcScore),
     coverImage: mainMockup?.imageUrl ?? null,
-    galleryJson,
+    galleryJson: completedForGallery.map((a) => ({ role: a.role, label: a.label, url: a.imageUrl, altText: `${a.label} — ${brandName} (${config.industry}, ${config.style} style, AI Demo Project)` })),
     publishStatus,
     status: publishStatus === "published" ? "published" : "draft",
     featured: false,
@@ -488,7 +491,7 @@ Return ONLY JSON (no markdown):
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [portfolio] = await db.insert(aiServicePortfoliosTable).values(insertValues as any).returning();
 
-  // Insert structured asset registry rows (both completed and failed, for admin visibility)
+  // Insert structured asset registry rows immediately with Replicate URLs
   if (generatedAssets.length) {
     await db.insert(aiPortfolioAssetsTable).values(
       generatedAssets.map((a, i) => ({
@@ -499,7 +502,7 @@ Return ONLY JSON (no markdown):
         altText: a.status === "completed" ? `${a.label} — ${brandName} (AI Demo Project)` : null,
         thumbnailUrl: a.imageUrl,
         previewUrl: a.imageUrl,
-        storagePath: null, // Replicate-hosted URL only; no separate private-original storage layer exists yet
+        storagePath: null, // will be updated by background archiver
         mimeType: a.status === "completed" ? "image/webp" : null,
         displayOrder: i,
         downloadable: false,
@@ -508,6 +511,34 @@ Return ONLY JSON (no markdown):
       })),
     );
   }
+
+  // ── Background: archive Replicate URLs to GCS, update DB rows asynchronously ──
+  const portfolioId = portfolio!.id;
+  archivePortfolioAssets(brandSlug, generatedAssets)
+    .then(async (archivedAssets) => {
+      const updates = generatedAssets.map((a, i) => ({
+        role: a.role,
+        permanentUrl: archivedAssets[i]?.permanentUrl ?? a.imageUrl,
+        storagePath: archivedAssets[i]?.storagePath ?? null,
+      })).filter((u) => u.storagePath !== null);
+
+      for (const u of updates) {
+        await db
+          .update(aiPortfolioAssetsTable)
+          .set({ thumbnailUrl: u.permanentUrl, previewUrl: u.permanentUrl, storagePath: u.storagePath })
+          .where(
+            eq(
+              (aiPortfolioAssetsTable as unknown as Record<string, unknown>)["portfolioId"] as ReturnType<typeof eq>,
+              portfolioId,
+            ),
+          );
+      }
+    })
+    .catch((err) => {
+      // Non-fatal: portfolio is already created with Replicate URLs
+      const { logger: _log } = await import("../lib/logger.js").catch(() => ({ logger: console }));
+      _log.error?.({ err, portfolioId }, "[portfolioStorage] background archive failed");
+    });
 
   await logAudit(
     "portfolio-generator",

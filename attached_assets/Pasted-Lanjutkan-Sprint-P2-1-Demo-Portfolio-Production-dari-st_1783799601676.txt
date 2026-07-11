@@ -1,0 +1,372 @@
+Lanjutkan Sprint P2.1 Demo Portfolio Production dari state terakhir.
+
+JANGAN mengulang implementasi dari awal.
+JANGAN langsung menjalankan seluruh batch 30 portfolio sebelum smoke test pertama lolos pemeriksaan kualitas.
+
+STATUS TERAKHIR:
+
+- API server berjalan clean
+- Pipeline nyata sudah memanggil Replicate
+- Satu throwaway portfolio berhasil diproses end-to-end
+- Status batch/portfolio: review
+- generated: 1
+- failed: 0
+- actual cost: sekitar USD 0.01
+- Quota habis saat memeriksa portfolio row dan asset rows
+
+==========================================================
+TAHAP 1 — INSPEKSI SMOKE TEST
+==========================================================
+
+Periksa portfolio dan seluruh asset hasil smoke test.
+
+Verifikasi:
+
+1. Portfolio row tersimpan lengkap.
+2. portfolio_code dan slug unik.
+3. Brand name fiktif dan tidak menduplikasi brand lain.
+4. synthetic/demo flag aktif.
+5. Label “AI Demo Project” tersedia.
+6. Industry, style, package, dan service benar.
+7. Cover asset terhubung.
+8. Semua asset memiliki relasi portfolio_id yang benar.
+9. Provider dan model tercatat internal.
+10. Cost tercatat benar.
+11. Tidak ada storage_path atau metadata internal dalam public DTO.
+
+Tampilkan daftar asset:
+
+- asset type
+- asset role
+- status
+- provider
+- model
+- dimensions
+- file size
+- preview URL availability
+- QC score
+- QC notes
+- storage state
+
+==========================================================
+TAHAP 2 — VALIDASI FILE GAMBAR NYATA
+==========================================================
+
+Pastikan asset benar-benar berupa file gambar yang dapat dibuka,
+bukan hanya prediction ID, placeholder URL, atau URL provider sementara.
+
+Periksa:
+
+- image_url tersedia
+- HTTP response gambar valid
+- mime type benar
+- file tidak kosong
+- width/height masuk akal
+- thumbnail tersedia
+- preview tersedia
+- original tersimpan private jika storage integration aktif
+
+Jika URL Replicate bersifat sementara:
+
+- download asset ke storage internal
+- simpan storage_path internal
+- buat thumbnail/preview
+- jangan expose URL asli Replicate sebagai permanent public asset
+
+==========================================================
+TAHAP 3 — VISUAL QUALITY REVIEW
+==========================================================
+
+Buka semua gambar hasil smoke test dan lakukan review visual.
+
+Nilai:
+
+- kesesuaian dengan industry
+- kesesuaian dengan style
+- konsistensi antar-asset
+- kualitas logo
+- kualitas mockup
+- komposisi
+- artefak visual
+- teks rusak/gibberish
+- penggunaan warna
+- keterbacaan
+- kelayakan ditampilkan ke calon customer
+
+Jangan hanya mengandalkan status completed dari API.
+
+Gunakan penilaian:
+
+- PASS
+- PASS_WITH_MINOR_FIX
+- REGENERATE
+- REJECT
+
+Berikan alasan konkret untuk setiap asset.
+
+==========================================================
+TAHAP 4 — ASSET COMPLETENESS
+==========================================================
+
+Pastikan smoke portfolio memiliki minimum:
+
+1. Logo concept
+2. Color palette
+3. Typography direction
+4. Main brand mockup
+5. Social media visual 1
+6. Social media visual 2
+
+Jika pipeline saat ini hanya membuat satu gambar:
+
+JANGAN menjalankan batch 30.
+
+Perbaiki generator agar satu portfolio menghasilkan seluruh required assets.
+
+Setiap asset harus memakai prompt yang sesuai dengan role-nya,
+bukan satu gambar yang diduplikasi menjadi beberapa jenis asset.
+
+==========================================================
+TAHAP 5 — LOGO & TEXT POLICY
+==========================================================
+
+Model image sering menghasilkan teks/logo yang rusak.
+
+Terapkan strategi:
+
+- jangan mengandalkan image model untuk teks panjang
+- buat wordmark/logo text melalui SVG/layout layer jika diperlukan
+- gunakan image model untuk visual direction dan mockup
+- overlay nama brand dengan renderer terkontrol untuk hasil portfolio
+- jangan publish mockup dengan gibberish text
+
+Jika logo final belum cukup konsisten:
+
+- tandai sebagai conceptual logo
+- jangan klaim vector/source-ready
+- masukkan ke admin review
+
+==========================================================
+TAHAP 6 — QC DAN TRADEMARK SAFETY
+==========================================================
+
+Verifikasi:
+
+- QC score benar-benar berasal dari evaluasi, bukan nilai default
+- trademark risk dinilai
+- duplicate-name check berjalan
+- kemiripan nama/visual dengan merek terkenal diperiksa
+- risk medium/high masuk review dan tidak auto-publish
+
+Minimum publish rule:
+
+- QC score >= 80
+- trademark risk = low
+- seluruh required assets tersedia
+- cover tersedia
+- tidak ada artefak fatal
+- tidak ada gibberish text signifikan
+- admin approved
+
+==========================================================
+TAHAP 7 — PERBAIKI SMOKE TEST JIKA DIPERLUKAN
+==========================================================
+
+Jika ada masalah:
+
+- perbaiki hanya generator/QC/storage yang terkait
+- jangan rewrite Portfolio System
+- jangan membuat pipeline kedua
+- gunakan Queue, Dispatcher, Creative AI, Image Designer,
+  Storage, Cost Tracking, dan Review Queue yang sudah ada
+
+Setelah perbaikan:
+
+- hapus/archive throwaway smoke portfolio secara aman
+- jalankan satu smoke test baru
+- ulangi pemeriksaan sampai PASS
+
+==========================================================
+TAHAP 8 — COST BASELINE
+==========================================================
+
+Hitung biaya nyata per portfolio:
+
+- text token cost
+- image generation cost
+- retry cost
+- storage cost jika tersedia
+- total cost
+
+Jangan menganggap USD 0.01 sebagai biaya final jika portfolio baru
+menghasilkan satu asset.
+
+Proyeksikan biaya:
+
+- per complete portfolio
+- per batch 9 portfolio
+- total 30 portfolio
+
+Tampilkan estimasi dalam:
+
+- USD
+- IDR menggunakan exchange rate configurable/manual,
+  jangan hardcode sebagai nilai permanen
+
+==========================================================
+TAHAP 9 — PILOT BATCH KECIL
+==========================================================
+
+Setelah smoke test PASS, jangan langsung 30.
+
+Jalankan pilot batch:
+
+- Coffee: 1
+- Restaurant: 1
+- Logistics: 1
+
+Total: 3 complete portfolios.
+
+Style:
+
+- Coffee: Luxury atau Natural
+- Restaurant: Modern atau Elegant
+- Logistics: Corporate atau Industrial
+
+Setiap portfolio minimum 6 asset.
+
+Stop batch jika:
+
+- satu portfolio gagal total
+- QC failure rate > 25%
+- budget terlampaui
+- provider error berulang
+- storage gagal
+- trademark risk bukan low
+
+==========================================================
+TAHAP 10 — REVIEW PILOT BATCH
+==========================================================
+
+Setelah tiga portfolio selesai:
+
+Tampilkan di Review Queue dan verifikasi:
+
+- asset completeness
+- visual consistency
+- quality
+- cost
+- processing time
+- provider/model
+- QC score
+- trademark risk
+- public preview
+- mobile gallery rendering
+
+Jangan publish otomatis.
+
+Admin harus memilih:
+
+- Approve & Publish
+- Regenerate Asset
+- Reject
+- Archive
+
+==========================================================
+TAHAP 11 — FULL BATCH HANYA SETELAH APPROVAL
+==========================================================
+
+Setelah pilot batch disetujui admin, jalankan bertahap:
+
+Batch 1:
+- Coffee 3
+- Restaurant 3
+- Logistics 3
+
+Batch 2:
+- Mining 3
+- Trading 3
+- Palm Oil 3
+
+Batch 3:
+- Fashion 3
+- Medical 3
+- Property 3
+- Technology 3
+
+Jika tiga pilot portfolio dihitung sebagai bagian Batch 1,
+jangan membuat duplikat. Lengkapi hanya jumlah yang tersisa.
+
+==========================================================
+TAHAP 12 — IDEMPOTENCY & RESUME
+==========================================================
+
+Pastikan:
+
+- batch dapat dilanjutkan setelah quota/server restart
+- portfolio completed tidak dibuat ulang
+- failed asset dapat diretry secara individual
+- approved portfolio tidak tertimpa
+- brand name tidak diduplikasi
+- rerun tidak menggandakan cost record
+- generation jobs memakai idempotency key
+
+==========================================================
+TAHAP 13 — VERIFICATION
+==========================================================
+
+Sebelum menyatakan Sprint P2.1 selesai:
+
+1. Total published portfolio sesuai target 30.
+2. Setiap industri memiliki tepat 3, kecuali ada alasan terdokumentasi.
+3. Setiap portfolio minimum 6 asset valid.
+4. Semua gambar dapat dibuka.
+5. Semua cover tersedia.
+6. Tidak ada temporary provider URL sebagai source permanen.
+7. Semua published portfolio QC >= 80.
+8. Semua published portfolio trademark risk low.
+9. Semua portfolio berlabel AI Demo Project.
+10. Tidak ada testimonial customer fiktif.
+11. Public gallery menampilkan aset nyata.
+12. Filter dan related portfolio bekerja.
+13. Tidak ada internal metadata bocor.
+14. Cost tercatat per portfolio dan batch.
+15. OpenAPI/codegen tetap clean jika tidak ada API baru.
+16. pnpm run verify clean.
+17. Production build clean.
+
+==========================================================
+FINAL REPORT
+==========================================================
+
+Berikan laporan:
+
+- hasil pemeriksaan smoke test awal
+- masalah visual yang ditemukan
+- perubahan yang dilakukan
+- jumlah asset smoke test
+- hasil pilot batch
+- daftar 30 brand fiktif
+- jumlah portfolio per industri
+- jumlah asset per portfolio
+- style distribution
+- QC score distribution
+- trademark risk
+- failed/regenerated assets
+- biaya per portfolio
+- biaya per batch
+- total biaya
+- portfolio published
+- portfolio review/rejected
+- provider/model usage
+- pnpm run verify status
+- known limitations
+
+Jangan lanjut ke Marketplace atau fitur baru.
+
+Target akhir:
+
+Demo Portfolio Generator terbukti menghasilkan portfolio lengkap,
+bukan hanya satu gambar, dengan file nyata yang tersimpan aman,
+kualitas visual layak jual, biaya terukur, dan batch 30 portfolio
+dijalankan secara bertahap setelah smoke test dan pilot batch disetujui.

@@ -52,6 +52,7 @@ import referralsRouter from "./referrals";
 import affiliatesRouter from "./affiliates";
 import customerHealthRouter from "./customerHealth";
 import commercialAnalyticsRouter from "./commercialAnalytics";
+import storageRouter from "./storage";
 
 const router: IRouter = Router();
 
@@ -106,5 +107,6 @@ router.use(referralsRouter);
 router.use(affiliatesRouter);
 router.use(customerHealthRouter);
 router.use(commercialAnalyticsRouter);
+router.use(storageRouter);
 
 export default router;
