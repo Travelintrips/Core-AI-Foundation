@@ -137,12 +137,11 @@ export default function RequestPricingPage() {
 
         {/* CTA */}
         {hasQuotation ? (
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground mb-4">
-              Penawaran resmi telah dikirim ke email <strong>{request.customerEmail}</strong>
-            </p>
+          <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center">
+            <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-3" />
+            <p className="font-medium mb-1">Penawaran Siap Ditinjau</p>
             <p className="text-sm text-muted-foreground">
-              Gunakan link di email untuk meninjau dan menyetujui penawaran.
+              Tim kami telah mengirimkan link penawaran ke <strong>{request.customerEmail}</strong>. Jika belum menerima link, hubungi tim kami.
             </p>
           </div>
         ) : (
@@ -150,7 +149,7 @@ export default function RequestPricingPage() {
             <Clock className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
             <p className="font-medium mb-1">Menunggu Penawaran Resmi</p>
             <p className="text-sm text-muted-foreground">
-              Biasanya selesai dalam 1–2 hari kerja. Cek email Anda secara berkala.
+              Tim kami sedang menyiapkan penawaran. Anda akan dihubungi segera setelah siap.
             </p>
           </div>
         )}

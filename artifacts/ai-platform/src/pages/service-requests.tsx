@@ -5,7 +5,7 @@ import {
   Loader2, RefreshCw, FileText, ClipboardList, Calculator,
   Send, ThumbsUp, ShieldCheck, Zap, Eye, CheckCircle2, XCircle,
   ChevronDown, ChevronRight, X, TrendingUp, DollarSign, Users,
-  ArrowRight, AlertTriangle, CheckCircle,
+  ArrowRight, AlertTriangle, CheckCircle, Copy, Link2, ExternalLink,
 } from "lucide-react";
 
 // Use empty string so fetch("/api/...") goes through the Vite /api proxy,
@@ -128,6 +128,9 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
   const qc = useQueryClient();
   const snapshot = req.pricingSnapshotJson;
 
+  const [quotationLink, setQuotationLink] = useState<{ url: string; validUntil: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
   const approveMargin = useMutation({
     mutationFn: () =>
       apiFetch(`/api/ai/catalog/requests/${req.id}/approve-margin`, {
@@ -136,6 +139,26 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["service-requests"] }),
   });
+
+  const generateLink = useMutation({
+    mutationFn: () =>
+      apiFetch<{ ok: boolean; quotationUrl: string; validUntil: string; customerEmail: string }>(
+        `/api/ai/catalog/requests/${req.id}/issue-quotation`,
+        { method: "POST" },
+      ),
+    onSuccess: (data) => {
+      setQuotationLink({ url: data.quotationUrl, validUntil: data.validUntil });
+      qc.invalidateQueries({ queryKey: ["service-requests"] });
+    },
+  });
+
+  function copyLink() {
+    if (!quotationLink) return;
+    navigator.clipboard.writeText(quotationLink.url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   const changeStatus = useMutation({
     mutationFn: (status: string) =>

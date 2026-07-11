@@ -22,6 +22,8 @@ import {
   aiServicePackagesTable,
   aiServiceRequestsTable,
   aiServicePriceRulesTable,
+  aiQuotationsTable,
+  aiQuotationItemsTable,
   insertAiServiceCategorySchema,
   insertAiServiceSchema,
   insertAiServicePackageSchema,
@@ -30,6 +32,18 @@ import {
 } from "@workspace/db";
 import { logAudit } from "../services/aiAuditService.js";
 import { generatePricingSnapshot, toCustomerFacingBreakdown, type PricingSelections } from "../services/aiPricingService.js";
+import { createHash, randomBytes } from "crypto";
+
+function generateToken(): string { return randomBytes(32).toString("base64url"); }
+function hashToken(t: string): string { return createHash("sha256").update(t).digest("hex"); }
+
+/** Build the base URL for constructing portal links */
+function buildBaseUrl(req: import("express").Request): string {
+  if (process.env["REPLIT_DEV_DOMAIN"]) return `https://${process.env["REPLIT_DEV_DOMAIN"]}`;
+  const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0] ?? req.protocol;
+  const host = (req.headers["x-forwarded-host"] as string | undefined) ?? req.get("host") ?? "localhost";
+  return `${proto}://${host}`;
+}
 
 const router = Router();
 
@@ -357,6 +371,134 @@ router.patch("/ai/catalog/requests/:id/status", async (req, res): Promise<void> 
   if (!row) { res.status(404).json({ error: "Request not found" }); return; }
   await logAudit("catalog", "update_request_status", String(id), "ai_service_request", "success", { status });
   res.json(row);
+});
+
+// ── Issue Quotation Link ──────────────────────────────────────────────────────
+// POST /ai/catalog/requests/:id/issue-quotation
+// Creates (or re-issues) an ai_quotation from the request's pricing snapshot,
+// returns the plaintext token + full quotation URL once so admin can share it.
+
+router.post("/ai/catalog/requests/:id/issue-quotation", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
+
+  const [serviceReq] = await db
+    .select()
+    .from(aiServiceRequestsTable)
+    .where(eq(aiServiceRequestsTable.id, id))
+    .limit(1);
+
+  if (!serviceReq) { res.status(404).json({ error: "Request not found" }); return; }
+
+  const snapshot = serviceReq.pricingSnapshotJson as Record<string, unknown> | null;
+  if (!snapshot) { res.status(400).json({ error: "No pricing snapshot available — quote the service first" }); return; }
+
+  const now = new Date();
+  const token = generateToken();
+  const tokenHash = hashToken(token);
+  const validUntil = new Date(Date.now() + 14 * 86_400_000); // 14 days
+
+  // Find existing quotation for this service request
+  const [existing] = await db
+    .select({ id: aiQuotationsTable.id, status: aiQuotationsTable.status })
+    .from(aiQuotationsTable)
+    .where(eq(aiQuotationsTable.serviceRequestId, id))
+    .limit(1);
+
+  let quotationId: number;
+
+  if (existing) {
+    // Re-issue: overwrite token (invalidates previous link) and reset to issued
+    await db
+      .update(aiQuotationsTable)
+      .set({
+        status: "issued",
+        reviewTokenHash: tokenHash,
+        reviewTokenExpiresAt: validUntil,
+        issuedAt: now,
+        validUntil,
+        updatedAt: now,
+      })
+      .where(eq(aiQuotationsTable.id, existing.id));
+    quotationId = existing.id;
+  } else {
+    // Sequential quotation code: QT-YYYY-NNNN
+    const year = now.getFullYear();
+    const countRow = await db
+      .select({ cnt: aiQuotationsTable.id })
+      .from(aiQuotationsTable)
+      .orderBy(desc(aiQuotationsTable.id))
+      .limit(1);
+    const seq = (countRow[0]?.cnt ?? 0) + 1;
+    const quotationCode = `QT-${year}-${String(seq).padStart(4, "0")}`;
+
+    const total = Number(serviceReq.total) || 0;
+    const subtotal = Number(serviceReq.subtotal) || total;
+    const discount = Number(serviceReq.discount) || 0;
+    const tax = Number(serviceReq.tax) || 0;
+
+    const [newQ] = await db
+      .insert(aiQuotationsTable)
+      .values({
+        quotationCode,
+        serviceRequestId: id,
+        customerName: serviceReq.customerName,
+        customerEmail: serviceReq.customerEmail,
+        currency: serviceReq.currency,
+        subtotal,
+        discount,
+        tax,
+        total,
+        pricingSnapshotJson: snapshot,
+        status: "issued",
+        reviewTokenHash: tokenHash,
+        reviewTokenExpiresAt: validUntil,
+        issuedAt: now,
+        validUntil,
+      })
+      .returning({ id: aiQuotationsTable.id });
+
+    quotationId = newQ!.id;
+
+    // Insert line items from snapshot if available
+    const lineItems = (snapshot?.lineItems ?? []) as { code: string; label: string; amount: number }[];
+    if (lineItems.length > 0) {
+      await db.insert(aiQuotationItemsTable).values(
+        lineItems.map((item, idx) => ({
+          quotationId,
+          itemCode: item.code,
+          description: item.label,
+          quantity: 1,
+          unitPrice: item.amount,
+          amount: item.amount,
+          displayOrder: idx,
+        })),
+      );
+    }
+  }
+
+  // Advance service request status to quotation_ready
+  await db
+    .update(aiServiceRequestsTable)
+    .set({ status: "quotation_ready", updatedAt: now })
+    .where(eq(aiServiceRequestsTable.id, id));
+
+  await logAudit("catalog", "issue_quotation_link", String(id), "ai_service_request", "success", {
+    quotationId,
+    customerEmail: serviceReq.customerEmail,
+  });
+
+  const base = buildBaseUrl(req);
+  const quotationUrl = `${base}/request-service/${serviceReq.requestId}/quotation?token=${token}`;
+
+  res.json({
+    ok: true,
+    quotationId,
+    quotationUrl,
+    validUntil: validUntil.toISOString(),
+    customerEmail: serviceReq.customerEmail,
+    note: "Store or share this URL immediately — the plaintext token is not stored and cannot be recovered.",
+  });
 });
 
 // ── Price Rules ───────────────────────────────────────────────────────────────
