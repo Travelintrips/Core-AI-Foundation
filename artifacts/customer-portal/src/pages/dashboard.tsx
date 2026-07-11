@@ -3,8 +3,39 @@ import { Link, useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import { StatusBadge } from "@/components/status-badge";
 import { useGetCustomerDashboard } from "@/hooks/use-customer";
-import { Folder, Clock, CheckCircle, ArrowRight, ArrowLeft, Loader2, Calendar, FileText } from "lucide-react";
+import { Folder, Clock, CheckCircle, ArrowRight, ArrowLeft, Loader2, Calendar, FileText, ShoppingBag, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
+
+type ServiceRequestItem = {
+  requestId: string;
+  serviceName: string;
+  currency: string;
+  total: string;
+  status: string;
+  statusLabel: string;
+  portalPath: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function fmtMoney(amount: string | number, currency = "IDR") {
+  const n = typeof amount === "string" ? parseFloat(amount) : amount;
+  if (isNaN(n)) return "—";
+  if (currency === "IDR") return `Rp${Math.round(n).toLocaleString("id-ID")}`;
+  return `${currency} ${n.toLocaleString()}`;
+}
+
+function serviceRequestStatusColor(status: string) {
+  if (["waiting_customer_approval", "quotation_ready"].includes(status))
+    return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
+  if (["approved", "completed", "converted_to_project"].includes(status))
+    return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+  if (["cancelled", "revision_requested"].includes(status))
+    return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
+  if (["in_progress", "orchestrating", "waiting_review", "ready_to_build", "waiting_commercial_gate"].includes(status))
+    return "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300";
+  return "bg-muted text-muted-foreground";
+}
 
 export default function DashboardPage({ params }: { params: { dashboardToken: string } }) {
   const { data, isLoading, error } = useGetCustomerDashboard(params.dashboardToken);
@@ -80,6 +111,59 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
           </div>
         </div>
 
+        {/* ── Service Requests (new catalog flow) ────────────────────── */}
+        {(data as { serviceRequests?: ServiceRequestItem[] }).serviceRequests && (data as { serviceRequests?: ServiceRequestItem[] }).serviceRequests!.length > 0 && (
+          <div className="mb-10">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-serif font-medium">Pesanan Layanan</h2>
+              <Link href="/services" className="text-sm font-medium text-primary hover:underline">
+                + Pesan Layanan
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {(data as { serviceRequests?: ServiceRequestItem[] }).serviceRequests!.map((sr) => {
+                const needsAction = ["waiting_customer_approval", "quotation_ready"].includes(sr.status);
+                return (
+                  <Link key={sr.requestId} href={sr.portalPath} className="group block">
+                    <div className="bg-card border border-card-border rounded-2xl p-6 shadow-sm transition-all h-full flex flex-col group-hover:shadow-md group-hover:border-primary/30">
+                      <div className="flex justify-between items-start mb-4 gap-4">
+                        <div>
+                          <h3 className="text-lg font-serif font-medium line-clamp-1">{sr.serviceName}</h3>
+                          <p className="text-xs text-muted-foreground font-mono mt-0.5">{sr.requestId.slice(0, 8)}</p>
+                        </div>
+                        <span className={`shrink-0 text-xs font-medium px-2.5 py-1 rounded-full ${serviceRequestStatusColor(sr.status)}`}>
+                          {sr.statusLabel}
+                        </span>
+                      </div>
+
+                      {needsAction && (
+                        <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 mb-4 text-xs text-amber-800 dark:text-amber-300">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span>Tindakan diperlukan — cek email Anda untuk link penawaran</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between mt-auto pt-4 border-t border-border/50">
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            {format(new Date(sr.updatedAt), 'MMM d, yyyy')}
+                          </span>
+                          <span className="font-semibold text-foreground">{fmtMoney(sr.total, sr.currency)}</span>
+                        </div>
+                        <div className="text-primary flex items-center gap-1 text-sm font-medium group-hover:translate-x-1 transition-transform">
+                          Lihat <ArrowRight className="w-4 h-4" />
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Creative Projects (old direct-submit flow) ──────────────── */}
         <div>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-serif font-medium">Your Projects</h2>
@@ -88,7 +172,7 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
             </Link>
           </div>
           
-          {data.projects.length === 0 ? (
+          {data.projects.length === 0 && !(data as { serviceRequests?: ServiceRequestItem[] }).serviceRequests?.length ? (
             <div className="bg-card border border-card-border rounded-2xl p-12 text-center">
               <Folder className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
               <h3 className="text-xl font-medium mb-2">No projects yet</h3>
@@ -97,7 +181,7 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
                 Start a Project
               </Link>
             </div>
-          ) : (
+          ) : data.projects.length === 0 ? null : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {data.projects.map((project) => {
                 const hasReviewLink = !!project.reviewToken;

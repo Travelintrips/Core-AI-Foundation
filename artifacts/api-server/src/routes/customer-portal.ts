@@ -13,6 +13,8 @@ import {
   creativeAiAssetsTable,
   customerDashboardTokensTable,
   creativeProjectQuotationsTable,
+  aiServiceRequestsTable,
+  aiServicesTable,
 } from "@workspace/db";
 import {
   SubmitCustomerProjectBody,
@@ -258,16 +260,26 @@ router.post("/public/customer/request-access", async (req, res): Promise<void> =
     .from(customerDashboardTokensTable)
     .where(eq(customerDashboardTokensTable.emailHash, emailHash));
 
-  // Count projects for this email from client reviews
+  // Count projects for this email from client reviews (old flow)
   const reviews = await db
     .select({ id: creativeAiClientReviewsTable.id })
     .from(creativeAiClientReviewsTable)
     .where(eq(creativeAiClientReviewsTable.clientEmail, email.toLowerCase().trim()));
 
-  const projectCount = reviews.length;
+  // Count service requests for this email (new catalog flow)
+  const serviceReqs = await db
+    .select({ id: aiServiceRequestsTable.id, customerName: aiServiceRequestsTable.customerName })
+    .from(aiServiceRequestsTable)
+    .where(eq(aiServiceRequestsTable.customerEmail, email.toLowerCase().trim()));
+
+  const projectCount = reviews.length + serviceReqs.length;
 
   let dashboardToken: string;
-  let clientName = existing?.clientName ?? "Customer";
+  // Prefer name from service requests if available and not already set
+  const nameFromServiceReq = serviceReqs[0]?.customerName;
+  let clientName = existing?.clientName && existing.clientName !== "Customer"
+    ? existing.clientName
+    : (nameFromServiceReq ?? existing?.clientName ?? "Customer");
 
   if (existing && new Date() < existing.expiresAt) {
     // Reuse existing token — regenerate a new one pointing to same email
@@ -347,12 +359,31 @@ router.get("/public/customer/dashboard/:dashboardToken", async (req, res): Promi
     payload: { clientEmail: session.clientEmail, clientName: session.clientName },
   });
 
-  // Fetch all client review records for this email
+  // Fetch all client review records for this email (old creative flow)
   const reviews = await db
     .select()
     .from(creativeAiClientReviewsTable)
     .where(eq(creativeAiClientReviewsTable.clientEmail, session.clientEmail))
     .orderBy(creativeAiClientReviewsTable.createdAt);
+
+  // Fetch all service requests for this email (new catalog flow)
+  const rawServiceRequests = await db
+    .select({
+      id: aiServiceRequestsTable.id,
+      requestId: aiServiceRequestsTable.requestId,
+      serviceId: aiServiceRequestsTable.serviceId,
+      customerName: aiServiceRequestsTable.customerName,
+      currency: aiServiceRequestsTable.currency,
+      total: aiServiceRequestsTable.total,
+      status: aiServiceRequestsTable.status,
+      createdAt: aiServiceRequestsTable.createdAt,
+      updatedAt: aiServiceRequestsTable.updatedAt,
+      serviceName: aiServicesTable.serviceName,
+    })
+    .from(aiServiceRequestsTable)
+    .leftJoin(aiServicesTable, eq(aiServiceRequestsTable.serviceId, aiServicesTable.id))
+    .where(eq(aiServiceRequestsTable.customerEmail, session.clientEmail))
+    .orderBy(aiServiceRequestsTable.createdAt);
 
   // For each review, fetch the associated project and asset count
   const projects = await Promise.all(
@@ -410,14 +441,58 @@ router.get("/public/customer/dashboard/:dashboardToken", async (req, res): Promi
 
   const validProjects = projects.filter(Boolean) as NonNullable<(typeof projects)[number]>[];
 
+  // Map service requests to a dashboard-friendly shape
+  const serviceRequests = rawServiceRequests.map((r) => ({
+    requestId: r.requestId,
+    serviceName: r.serviceName ?? "Layanan",
+    currency: r.currency,
+    total: r.total,
+    status: r.status,
+    // Derive a customer-friendly label for the status
+    statusLabel: ((): string => {
+      const map: Record<string, string> = {
+        draft: "Baru",
+        brief_in_progress: "Brief Sedang Diisi",
+        brief_completed: "Brief Selesai",
+        quoted: "Harga Dikalkulasi",
+        quotation_ready: "Penawaran Dikirim",
+        waiting_customer_approval: "Menunggu Persetujuan Anda",
+        approved: "Disetujui",
+        waiting_commercial_gate: "Verifikasi Komersial",
+        ready_to_build: "Siap Produksi",
+        in_progress: "Sedang Diproduksi",
+        orchestrating: "Sedang Diproduksi",
+        waiting_review: "Menunggu Review",
+        completed: "Selesai",
+        converted_to_project: "Selesai",
+        cancelled: "Dibatalkan",
+        revision_requested: "Revisi Diminta",
+      };
+      return map[r.status] ?? r.status;
+    })(),
+    // Link to the right page based on status (no token needed for brief/pricing pages)
+    portalPath: ((): string => {
+      if (["draft", "brief_in_progress"].includes(r.status))
+        return `/request-service/${r.requestId}/brief`;
+      return `/request-service/${r.requestId}/pricing`;
+    })(),
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+  }));
+
+  const pendingServiceRequests = serviceRequests.filter((r) =>
+    ["waiting_customer_approval", "quotation_ready"].includes(r.status),
+  ).length;
+
   res.json({
     clientName: session.clientName,
     clientEmail: session.clientEmail,
     projects: validProjects,
-    totalProjects: validProjects.length,
+    serviceRequests,
+    totalProjects: validProjects.length + serviceRequests.length,
     pendingReview: validProjects.filter((p) =>
       ["not_shared", "shared", "viewed"].includes(p.reviewStatus),
-    ).length,
+    ).length + pendingServiceRequests,
     approved: validProjects.filter((p) => p.reviewStatus === "approved").length,
   });
 });
