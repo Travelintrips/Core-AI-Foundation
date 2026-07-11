@@ -7,7 +7,9 @@ import {
   ChevronDown, ChevronRight,
 } from "lucide-react";
 
-const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+// Use empty string so fetch("/api/...") goes through the Vite /api proxy,
+// not "/admin/api/..." which bypasses it.
+const API_BASE = "";
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {};

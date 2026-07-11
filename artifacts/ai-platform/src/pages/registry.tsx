@@ -20,7 +20,7 @@ import { Cpu } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const BASE = "";
 
 interface HealthResult {
   keyConfigured: boolean;

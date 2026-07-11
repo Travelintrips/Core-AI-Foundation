@@ -18,7 +18,8 @@ import {
   useGetProviderBreakdown,
 } from "@workspace/api-client-react";
 
-const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+// Use empty string so fetch("/api/...") goes through the Vite /api proxy.
+const API_BASE = "";
 
 async function apiFetch<T>(path: string): Promise<T> {
   const headers: Record<string, string> = {};

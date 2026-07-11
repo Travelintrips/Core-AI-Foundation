@@ -43,7 +43,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
-const API = import.meta.env.BASE_URL.replace(/\/$/, "");
+const API = "";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

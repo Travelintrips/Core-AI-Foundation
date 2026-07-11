@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const API = import.meta.env.BASE_URL.replace(/\/$/, "");
+const API = "";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
