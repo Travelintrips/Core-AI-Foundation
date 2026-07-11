@@ -167,19 +167,13 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
         <div>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-serif font-medium">Your Projects</h2>
-            <Link href="/submit" className="text-sm font-medium text-primary hover:underline">
-              + New Project
-            </Link>
           </div>
           
           {data.projects.length === 0 && !(data as { serviceRequests?: ServiceRequestItem[] }).serviceRequests?.length ? (
             <div className="bg-card border border-card-border rounded-2xl p-12 text-center">
               <Folder className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
               <h3 className="text-xl font-medium mb-2">No projects yet</h3>
-              <p className="text-muted-foreground mb-6">You haven't submitted any creative briefs.</p>
-              <Link href="/submit" className="inline-flex px-6 py-3 bg-primary text-primary-foreground rounded-full font-medium hover:bg-primary/90 transition-colors">
-                Start a Project
-              </Link>
+              <p className="text-muted-foreground mb-6">Gunakan menu <strong>Pesan Layanan</strong> di atas untuk memulai proyek baru.</p>
             </div>
           ) : data.projects.length === 0 ? null : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
