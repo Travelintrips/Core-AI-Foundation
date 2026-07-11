@@ -19,6 +19,15 @@ import RequestPricingPage from '@/pages/request-pricing';
 import RequestQuotationPage from '@/pages/request-quotation';
 import RequestApprovalPage from '@/pages/request-approval';
 import RequestResultsPage from '@/pages/request-results';
+import WorkspaceDashboardPage from '@/pages/workspace/dashboard';
+import WorkspaceProjectsPage from '@/pages/workspace/projects';
+import WorkspaceProjectDetailPage from '@/pages/workspace/project-detail';
+import WorkspaceDownloadsPage from '@/pages/workspace/downloads';
+import WorkspaceInvoicesPage from '@/pages/workspace/invoices';
+import WorkspaceBrandKitPage from '@/pages/workspace/brand-kit';
+import WorkspaceNotificationsPage from '@/pages/workspace/notifications';
+import WorkspaceProfilePage from '@/pages/workspace/profile';
+import WorkspaceSupportPage from '@/pages/workspace/support';
 
 const queryClient = new QueryClient();
 
@@ -52,6 +61,15 @@ function Router() {
       <Route path="/request-service/:requestId/quotation" component={RequestQuotationPage} />
       <Route path="/request-service/:requestId/approval" component={RequestApprovalPage} />
       <Route path="/request-service/:requestId/results" component={RequestResultsPage} />
+      <Route path="/workspace/:token" component={WorkspaceDashboardPage} />
+      <Route path="/workspace/:token/projects" component={WorkspaceProjectsPage} />
+      <Route path="/workspace/:token/projects/:projectNumber" component={WorkspaceProjectDetailPage} />
+      <Route path="/workspace/:token/downloads" component={WorkspaceDownloadsPage} />
+      <Route path="/workspace/:token/invoices" component={WorkspaceInvoicesPage} />
+      <Route path="/workspace/:token/brand-kit" component={WorkspaceBrandKitPage} />
+      <Route path="/workspace/:token/notifications" component={WorkspaceNotificationsPage} />
+      <Route path="/workspace/:token/profile" component={WorkspaceProfilePage} />
+      <Route path="/workspace/:token/support" component={WorkspaceSupportPage} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -74,9 +74,17 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
   return (
     <Layout>
       <div className="container mx-auto px-4 md:px-8 py-12 max-w-6xl">
-        <div className="mb-12">
-          <h1 className="text-3xl md:text-4xl font-serif font-medium mb-2">Welcome back, {data.clientName}</h1>
-          <p className="text-muted-foreground text-lg">Here are your creative projects and their current status.</p>
+        <div className="mb-12 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-serif font-medium mb-2">Welcome back, {data.clientName}</h1>
+            <p className="text-muted-foreground text-lg">Here are your creative projects and their current status.</p>
+          </div>
+          <Link
+            href={`/workspace/${params.dashboardToken}`}
+            className="inline-flex items-center gap-2 text-sm font-medium bg-foreground text-background px-5 py-2.5 rounded-full hover:bg-foreground/90 transition-colors shrink-0"
+          >
+            Open Full Workspace <ArrowRight className="w-4 h-4" />
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-12">

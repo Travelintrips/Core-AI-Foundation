@@ -26,6 +26,13 @@ export const creativeAiAssetsTable = appSchema.table("creative_ai_assets", {
   cost: numeric("cost", { precision: 10, scale: 6 }), // USD
   latencyMs: integer("latency_ms"),
   metadata: jsonb("metadata"),
+  // Customer Workspace additions (additive, all nullable/defaulted — no impact
+  // on existing inserts). Powers Brand Asset Library grouping + version history.
+  category: text("category"), // logo | logo_variant | brand_guideline | typography | color_palette | icon | illustration | packaging | presentation | social_media | company_profile | source_file | other
+  version: integer("version").notNull().default(1),
+  parentAssetId: integer("parent_asset_id"), // self-reference: previous version of this asset
+  approvedBy: text("approved_by"),
+  revisionNotes: text("revision_notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

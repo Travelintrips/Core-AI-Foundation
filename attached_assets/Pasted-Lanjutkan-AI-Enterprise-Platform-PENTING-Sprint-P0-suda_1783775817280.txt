@@ -1,0 +1,739 @@
+Lanjutkan AI Enterprise Platform.
+
+PENTING:
+
+Sprint P0 sudah selesai (Payment Gate, File Lock, Security, Rate Limiting, SSRF, Payment Verification).
+
+JANGAN mengubah:
+
+- AI Workforce
+- Queue
+- Dispatcher
+- Event Bus
+- Scheduler
+- Workflow Runner
+- Creative AI
+- Pricing Engine
+- Marketplace
+- Human Task
+- Client Review
+- Security P0
+
+Semua perubahan harus:
+
+- additive
+- backward compatible
+- OpenAPI-first
+- TypeScript clean
+- pnpm run verify clean
+
+=========================================================
+TUJUAN
+=========================================================
+
+Bangun CUSTOMER WORKSPACE.
+
+Setelah customer melakukan pembayaran,
+customer harus memiliki dashboard profesional untuk
+mengelola seluruh project, invoice, asset, download,
+brand kit, notification, dan repeat order.
+
+Target UX:
+
+Adobe Creative Cloud
+
++
+
+Canva Teams
+
++
+
+Monday.com
+
++
+
+Notion Projects
+
+=========================================================
+CUSTOMER DASHBOARD
+=========================================================
+
+Halaman:
+
+/workspace
+
+Dashboard harus menampilkan:
+
+Welcome Card
+
+Company Name
+
+Project Statistics
+
+Outstanding Payment
+
+Completed Projects
+
+Waiting Review
+
+Download Available
+
+Recent Activity
+
+Quick Actions
+
+=========================================================
+STATISTICS
+=========================================================
+
+Cards:
+
+Active Projects
+
+Projects Waiting Review
+
+Completed Projects
+
+Outstanding Balance
+
+Invoices
+
+Downloads
+
+Brand Assets
+
+AI Credits (future ready)
+
+=========================================================
+QUICK ACTION
+=========================================================
+
+Buttons:
+
+New Project
+
+Browse Services
+
+View Downloads
+
+Invoices
+
+Brand Assets
+
+Notifications
+
+Support
+
+=========================================================
+MY PROJECTS
+=========================================================
+
+Halaman:
+
+/workspace/projects
+
+List semua project customer.
+
+Support:
+
+Search
+
+Filter
+
+Sort
+
+Status
+
+Date
+
+Service
+
+Package
+
+Industry
+
+Project Card menampilkan:
+
+Project Number
+
+Service
+
+Package
+
+Current Stage
+
+Progress
+
+Assigned AI Team
+
+Delivery Date
+
+Payment Status
+
+Review Status
+
+=========================================================
+PROJECT DETAIL
+=========================================================
+
+Halaman:
+
+/workspace/projects/:id
+
+Tabs:
+
+Overview
+
+Timeline
+
+Deliverables
+
+Reviews
+
+Payments
+
+Invoices
+
+Downloads
+
+Activity
+
+Support
+
+=========================================================
+PROJECT TIMELINE
+=========================================================
+
+Visual Timeline:
+
+Package Selected
+
+↓
+
+Brief Completed
+
+↓
+
+Payment Verified
+
+↓
+
+AI Strategy
+
+↓
+
+Creative Direction
+
+↓
+
+Production
+
+↓
+
+Internal QC
+
+↓
+
+Client Review
+
+↓
+
+Revision
+
+↓
+
+Completed
+
+Timeline harus realtime.
+
+=========================================================
+DOWNLOAD CENTER
+=========================================================
+
+Halaman:
+
+/workspace/downloads
+
+Kategori:
+
+Images
+
+Source Files
+
+Brand Guideline
+
+Presentation
+
+Company Profile
+
+ZIP
+
+Invoice
+
+Receipt
+
+Support:
+
+Search
+
+Category Filter
+
+Project Filter
+
+Download Counter
+
+Latest Download
+
+=========================================================
+DOWNLOAD SECURITY
+=========================================================
+
+Integrasikan dengan Signed URL
+yang sudah dibuat pada Sprint P0.
+
+Jika belum unlock:
+
+tampilkan icon lock.
+
+Tidak boleh ada direct URL.
+
+=========================================================
+INVOICE CENTER
+=========================================================
+
+Halaman:
+
+/workspace/invoices
+
+Support:
+
+Deposit Invoice
+
+Remaining Invoice
+
+Receipt
+
+Status
+
+Due Date
+
+Paid Date
+
+Remaining Balance
+
+Download PDF
+
+=========================================================
+PAYMENT HISTORY
+=========================================================
+
+Timeline:
+
+Invoice Generated
+
+↓
+
+Payment Submitted
+
+↓
+
+Payment Verified
+
+↓
+
+Deposit Paid
+
+↓
+
+Remaining Paid
+
+↓
+
+Completed
+
+=========================================================
+BRAND ASSET LIBRARY
+=========================================================
+
+Halaman:
+
+/workspace/assets
+
+Semua asset customer:
+
+Logo
+
+Logo Variants
+
+Brand Guideline
+
+Typography
+
+Color Palette
+
+Icons
+
+Illustrations
+
+Packaging
+
+Presentation
+
+Social Media
+
+Company Profile
+
+=========================================================
+VERSION HISTORY
+=========================================================
+
+Setiap asset memiliki:
+
+Version
+
+Created Date
+
+Status
+
+Approved By
+
+Revision Notes
+
+Current Version
+
+=========================================================
+BRAND KIT
+=========================================================
+
+Halaman:
+
+/workspace/brand-kit
+
+Menampilkan:
+
+Logo
+
+Color Palette
+
+Typography
+
+Brand Voice
+
+Tone
+
+Visual Style
+
+Target Audience
+
+Brand Values
+
+Download Brand Guideline
+
+=========================================================
+NOTIFICATION CENTER
+=========================================================
+
+Halaman:
+
+/workspace/notifications
+
+Kategori:
+
+Payment
+
+Project
+
+Review
+
+Revision
+
+Download
+
+Invoice
+
+Announcement
+
+Support:
+
+Read
+
+Unread
+
+Mark All Read
+
+Filter
+
+=========================================================
+RECENT ACTIVITY
+=========================================================
+
+Timeline:
+
+Project Created
+
+↓
+
+Payment Verified
+
+↓
+
+AI Build Started
+
+↓
+
+Preview Ready
+
+↓
+
+Review Submitted
+
+↓
+
+Revision Completed
+
+↓
+
+Files Ready
+
+↓
+
+Download
+
+=========================================================
+REPEAT ORDER
+=========================================================
+
+Tambahkan tombol:
+
+Order Again
+
+Create Similar Project
+
+Duplicate Project
+
+Use Previous Brief
+
+=========================================================
+AI RECOMMENDATION
+=========================================================
+
+Setelah project selesai,
+AI memberikan rekomendasi:
+
+Related Services
+
+Upsell
+
+Cross Sell
+
+Bundle
+
+Misalnya:
+
+Logo selesai
+
+↓
+
+AI menyarankan:
+
+Company Profile
+
+Presentation
+
+Social Media Kit
+
+Packaging
+
+Website Landing Page
+
+=========================================================
+PROJECT SEARCH
+=========================================================
+
+Support:
+
+Keyword
+
+Status
+
+Industry
+
+Package
+
+Date
+
+Invoice Status
+
+=========================================================
+CUSTOMER PROFILE
+=========================================================
+
+Halaman:
+
+/workspace/profile
+
+Company
+
+Address
+
+PIC
+
+Billing
+
+Payment Method
+
+Tax Information
+
+Brand Preferences
+
+=========================================================
+SUPPORT CENTER
+=========================================================
+
+Halaman:
+
+/workspace/support
+
+Support Ticket
+
+Live Chat (placeholder)
+
+FAQ
+
+Documentation
+
+Project Discussion
+
+=========================================================
+API
+=========================================================
+
+Tambahkan endpoint:
+
+GET /workspace/dashboard
+
+GET /workspace/projects
+
+GET /workspace/projects/:id
+
+GET /workspace/downloads
+
+GET /workspace/assets
+
+GET /workspace/brand-kit
+
+GET /workspace/invoices
+
+GET /workspace/notifications
+
+GET /workspace/activity
+
+GET /workspace/profile
+
+Semua endpoint:
+
+tenant aware
+
+RBAC
+
+pagination
+
+filter
+
+sorting
+
+=========================================================
+ADMIN
+=========================================================
+
+Admin dapat:
+
+Melihat dashboard customer
+
+Masuk sebagai customer (impersonate dengan audit log)
+
+Melihat download history
+
+Melihat invoice history
+
+Melihat asset history
+
+Melihat activity log
+
+=========================================================
+ANALYTICS
+=========================================================
+
+Tambahkan KPI:
+
+Repeat Order Rate
+
+Download Count
+
+Average Project Time
+
+Average Revision
+
+Invoice Collection Time
+
+Customer Retention
+
+Customer Lifetime Value (placeholder)
+
+=========================================================
+UX
+=========================================================
+
+Desktop
+
+Tablet
+
+Mobile
+
+Responsive.
+
+Gunakan layout modern.
+
+Loading skeleton.
+
+Empty state.
+
+Error state.
+
+=========================================================
+VERIFICATION
+=========================================================
+
+Pastikan:
+
+Customer dapat melihat seluruh project.
+
+Invoice dapat diunduh.
+
+Download memakai signed URL.
+
+Brand Kit tampil.
+
+Asset Version tampil.
+
+Notification bekerja.
+
+Repeat Order bekerja.
+
+Timeline realtime.
+
+API aman.
+
+TypeScript clean.
+
+OpenAPI clean.
+
+pnpm run verify clean.
+
+=========================================================
+TARGET
+=========================================================
+
+Customer tidak hanya membeli jasa.
+
+Customer memiliki Workspace profesional untuk mengelola seluruh aset digital perusahaan, histori project, invoice, pembayaran, download, dan branding dalam satu dashboard enterprise.
