@@ -1,0 +1,750 @@
+Lanjutkan AI Enterprise Platform.
+
+PENTING:
+
+Jangan mengubah workflow yang sudah ada.
+
+Jangan mengubah Pricing Engine, Queue, Dispatcher, Event Bus, Human Task, Client Review, Marketplace, maupun Creative AI Pipeline.
+
+Semua perubahan harus:
+
+- additive
+- modular
+- OpenAPI-first
+- backward compatible
+- TypeScript clean
+- lolos pnpm run verify
+
+==========================================================
+TUJUAN
+==========================================================
+
+Sebelum customer membeli paket, customer harus dapat melihat:
+
+- Portfolio
+- Gallery
+- Deliverables
+- Workflow
+- Reviews
+- FAQ
+- Live AI Preview
+
+Tujuannya meningkatkan conversion rate.
+
+JANGAN menggunakan istilah "Sample".
+
+Gunakan istilah:
+
+Portfolio
+
+Creative Showcase
+
+Featured Projects
+
+Recent Works
+
+AI Showcase
+
+==========================================================
+SERVICE DETAIL PAGE
+==========================================================
+
+Halaman:
+
+/services/:serviceCode
+
+Urutan halaman:
+
+Hero
+
+↓
+
+Portfolio Gallery
+
+↓
+
+Package Comparison
+
+↓
+
+Deliverables
+
+↓
+
+Workflow
+
+↓
+
+Client Reviews
+
+↓
+
+FAQ
+
+↓
+
+Related Services
+
+↓
+
+Live AI Preview
+
+↓
+
+Buy Now
+
+==========================================================
+PORTFOLIO DATABASE
+==========================================================
+
+Buat tabel:
+
+ai_service_portfolios
+
+Field:
+
+id
+
+tenant_id
+
+service_id
+
+title
+
+industry
+
+style
+
+description
+
+cover_image
+
+gallery_json
+
+before_image
+
+after_image
+
+deliverables_json
+
+tools_used_json
+
+workflow_json
+
+featured
+
+status
+
+display_order
+
+created_at
+
+updated_at
+
+==========================================================
+PORTFOLIO GALLERY
+==========================================================
+
+Gallery mendukung:
+
+Cover Image
+
+Image Carousel
+
+Video
+
+PDF Preview
+
+Mockup
+
+Brand Guideline Preview
+
+Presentation Preview
+
+Packaging Preview
+
+Company Profile Preview
+
+==========================================================
+FILTER
+==========================================================
+
+Tambahkan filter:
+
+Industry
+
+Style
+
+Color
+
+Business Size
+
+Package
+
+Latest
+
+Popular
+
+==========================================================
+INDUSTRY FILTER
+==========================================================
+
+Seed:
+
+Coffee
+
+Restaurant
+
+Hotel
+
+Manufacturing
+
+Mining
+
+Trading
+
+Logistics
+
+Construction
+
+Medical
+
+Education
+
+Retail
+
+Fashion
+
+Technology
+
+Government
+
+==========================================================
+STYLE FILTER
+==========================================================
+
+Seed:
+
+Minimalist
+
+Luxury
+
+Modern
+
+Corporate
+
+Elegant
+
+Creative
+
+Premium
+
+Industrial
+
+Classic
+
+Bold
+
+==========================================================
+PORTFOLIO CARD
+==========================================================
+
+Setiap card menampilkan:
+
+Thumbnail
+
+Title
+
+Industry
+
+Style
+
+Package
+
+Delivery Time
+
+Rating
+
+Views
+
+Completed Projects
+
+==========================================================
+DETAIL PORTFOLIO
+==========================================================
+
+Klik portfolio membuka:
+
+Gallery
+
+Project Overview
+
+Deliverables
+
+Workflow
+
+Timeline
+
+Client Rating
+
+Related Projects
+
+==========================================================
+BEFORE AFTER
+==========================================================
+
+Support:
+
+Before
+
+↓
+
+After
+
+Slider Comparison
+
+==========================================================
+DELIVERABLES
+==========================================================
+
+Tampilkan ikon:
+
+PNG
+
+SVG
+
+AI
+
+PSD
+
+PDF
+
+DOCX
+
+PPTX
+
+ZIP
+
+Brand Guideline
+
+Editable Source
+
+Commercial License
+
+==========================================================
+WORKFLOW
+==========================================================
+
+Visual Timeline:
+
+Brief
+
+↓
+
+Brand Strategy
+
+↓
+
+Creative Direction
+
+↓
+
+Image Generation
+
+↓
+
+Copywriting
+
+↓
+
+Quality Control
+
+↓
+
+Client Review
+
+↓
+
+Revision
+
+↓
+
+Final Delivery
+
+==========================================================
+CLIENT REVIEWS
+==========================================================
+
+Database:
+
+portfolio_reviews
+
+Field:
+
+rating
+
+review
+
+company
+
+industry
+
+created_at
+
+Support:
+
+5-star rating
+
+Featured Reviews
+
+Average Rating
+
+Total Projects
+
+==========================================================
+FAQ
+==========================================================
+
+FAQ per service.
+
+Contoh:
+
+Berapa revisi?
+
+Apakah source file termasuk?
+
+Berapa lama pengerjaan?
+
+Apakah ada human review?
+
+Apakah hak cipta milik customer?
+
+==========================================================
+RELATED SERVICES
+==========================================================
+
+Tampilkan:
+
+Logo
+
+↓
+
+Brand Guideline
+
+↓
+
+Packaging
+
+↓
+
+Presentation
+
+↓
+
+Company Profile
+
+↓
+
+Social Media
+
+==========================================================
+LIVE AI PREVIEW
+==========================================================
+
+Ini adalah fitur utama.
+
+Customer dapat mencoba AI sebelum membeli.
+
+Form:
+
+Company Name
+
+Industry
+
+Style
+
+Primary Color
+
+Secondary Color
+
+Short Description
+
+Reference Upload (optional)
+
+==========================================================
+LIVE PREVIEW POLICY
+==========================================================
+
+Preview GRATIS.
+
+Tetapi dibatasi:
+
+Maksimal 2 preview.
+
+Resolusi rendah.
+
+Watermark.
+
+Tidak dapat di-download.
+
+Tidak dapat digunakan komersial.
+
+==========================================================
+AI PREVIEW FLOW
+==========================================================
+
+Customer klik:
+
+Generate Preview
+
+↓
+
+AI Brand Strategist
+
+↓
+
+Creative Director
+
+↓
+
+Image Designer
+
+↓
+
+Generate 2 Concept
+
+↓
+
+Show Preview
+
+==========================================================
+PREVIEW RESULT
+==========================================================
+
+Tampilkan:
+
+Concept A
+
+Concept B
+
+Rating
+
+Style Explanation
+
+Reasoning
+
+Color Recommendation
+
+Typography Recommendation
+
+==========================================================
+WATERMARK
+==========================================================
+
+Semua preview:
+
+Low Resolution
+
+Watermark AssistX
+
+Disable Download
+
+Disable Right Click
+
+Disable Original URL
+
+==========================================================
+BUY CTA
+==========================================================
+
+Di bawah preview tampilkan:
+
+"Suka dengan konsep ini?"
+
+Button:
+
+Continue With This Concept
+
+↓
+
+Package Checkout
+
+==========================================================
+CHECKOUT
+==========================================================
+
+Jika customer klik:
+
+Continue
+
+↓
+
+Konsep otomatis masuk ke:
+
+Brief
+
+↓
+
+Checkout
+
+↓
+
+Payment
+
+↓
+
+Project
+
+Jangan generate ulang.
+
+Gunakan concept sebagai project seed.
+
+==========================================================
+ANALYTICS
+==========================================================
+
+Tambahkan KPI:
+
+Portfolio Views
+
+Portfolio Click Rate
+
+Preview Generated
+
+Preview To Checkout
+
+Checkout To Payment
+
+Payment To Project
+
+Most Viewed Portfolio
+
+Most Converted Style
+
+Most Popular Industry
+
+==========================================================
+ADMIN
+==========================================================
+
+Admin dapat:
+
+Upload Portfolio
+
+Upload Gallery
+
+Upload Mockup
+
+Upload Before After
+
+Upload Deliverables
+
+Upload Video
+
+Set Featured
+
+Hide Portfolio
+
+Arrange Display Order
+
+==========================================================
+AI RECOMMENDATION
+==========================================================
+
+Saat customer melihat portfolio:
+
+AI otomatis merekomendasikan:
+
+"You may also like..."
+
+berdasarkan:
+
+Industry
+
+Style
+
+Color
+
+Business Type
+
+==========================================================
+SEARCH
+==========================================================
+
+Support:
+
+Keyword Search
+
+Industry
+
+Style
+
+Package
+
+Color
+
+Delivery Time
+
+Rating
+
+==========================================================
+PERFORMANCE
+==========================================================
+
+Gunakan:
+
+Lazy Loading
+
+Image Optimization
+
+Infinite Scroll
+
+Image CDN
+
+==========================================================
+VERIFICATION
+==========================================================
+
+Pastikan:
+
+Portfolio tampil.
+
+Gallery bekerja.
+
+Filter bekerja.
+
+Review bekerja.
+
+FAQ bekerja.
+
+Live Preview bekerja.
+
+Watermark bekerja.
+
+Download terkunci.
+
+Continue With This Concept bekerja.
+
+Concept masuk ke Brief.
+
+Project menggunakan concept yang sama.
+
+Analytics berjalan.
+
+OpenAPI clean.
+
+Codegen clean.
+
+pnpm run verify clean.
+
+Build clean.
+
+==========================================================
+TARGET
+==========================================================
+
+Customer tidak hanya melihat daftar harga.
+
+Customer dapat melihat hasil nyata, mencoba AI secara gratis dengan preview ber-watermark, mendapatkan rekomendasi AI, kemudian langsung melanjutkan ke checkout menggunakan konsep yang sudah dibuat.
+
+Tujuan akhirnya adalah meningkatkan conversion rate dan membuat AI Enterprise Platform memiliki pengalaman seperti kombinasi Apple Product Page, Dribbble, ThemeForest, dan Canva Pro.
