@@ -267,6 +267,12 @@ export function useApproveServiceQuotation() {
       }),
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['service-quotation', vars.token] });
+      // Approving also advances the underlying service request's status
+      // (ai_service_requests.status -> "approved"), which the
+      // request-pricing page reads via useRequestDetail. Without this the
+      // pricing/status page keeps showing stale data until it happens to
+      // refetch on its own.
+      queryClient.invalidateQueries({ queryKey: ['catalog', 'request'] });
     },
   });
 }
@@ -282,6 +288,7 @@ export function useRequestChangeServiceQuotation() {
       }),
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['service-quotation', vars.token] });
+      queryClient.invalidateQueries({ queryKey: ['catalog', 'request'] });
     },
   });
 }
@@ -297,6 +304,7 @@ export function useRejectServiceQuotation() {
       }),
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['service-quotation', vars.token] });
+      queryClient.invalidateQueries({ queryKey: ['catalog', 'request'] });
     },
   });
 }

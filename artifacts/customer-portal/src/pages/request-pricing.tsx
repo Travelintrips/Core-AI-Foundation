@@ -1,6 +1,6 @@
 import { useParams, useLocation, Link } from "wouter";
 import { Layout } from "@/components/layout";
-import { FlowStepper } from "@/components/flow-stepper";
+import { FlowStepper, type FlowStep } from "@/components/flow-stepper";
 import { useRequestDetail } from "@/hooks/use-catalog";
 import { Loader2, Clock, CheckCircle2, ArrowRight, Info } from "lucide-react";
 
@@ -38,14 +38,46 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: "Dibatalkan",
 };
 
+// Drives which dot on the FlowStepper is highlighted as "current". Kept as
+// its own map (rather than derived from `stageFor` below) because the
+// stepper has finer-grained steps than the 5 message stages do — e.g.
+// "waiting_customer_approval" and "approved" share a stage but are two
+// different steps ("Persetujuan" vs "Verifikasi Komersial").
+const STATUS_STEP: Record<string, FlowStep["key"]> = {
+  draft: "brief",
+  brief_in_progress: "brief",
+  brief_completed: "harga",
+  quoted: "harga",
+  quotation_ready: "harga",
+  waiting_customer_approval: "persetujuan",
+  approved: "verifikasi",
+  waiting_commercial_gate: "verifikasi",
+  ready_to_build: "produksi",
+  in_progress: "produksi",
+  orchestrating: "produksi",
+  waiting_review: "review",
+  converted_to_project: "produksi",
+  completed: "selesai",
+  revision_requested: "persetujuan",
+  rejected: "persetujuan",
+  expired: "persetujuan",
+  cancelled: "paket",
+};
+
 // Stage buckets drive which message/CTA is shown — this replaces the old
 // binary "hasQuotation" check, which only recognised 5 statuses and silently
 // mislabeled everything past that (e.g. "completed") as "still preparing".
-type Stage = "awaiting_quotation" | "quotation_pending" | "in_production" | "done" | "stopped";
+// "quotation_pending" (not yet approved) and "quotation_approved" (approved,
+// awaiting internal commercial verification) are split so the copy never
+// tells a customer who already approved to go approve it.
+type Stage = "awaiting_quotation" | "quotation_pending" | "quotation_approved" | "in_production" | "done" | "stopped";
 
 function stageFor(status: string): Stage {
-  if (["quotation_ready", "waiting_customer_approval", "approved", "waiting_commercial_gate", "revision_requested"].includes(status)) {
+  if (["quotation_ready", "waiting_customer_approval", "revision_requested"].includes(status)) {
     return "quotation_pending";
+  }
+  if (["approved", "waiting_commercial_gate"].includes(status)) {
+    return "quotation_approved";
   }
   if (["ready_to_build", "in_progress", "orchestrating", "waiting_review", "converted_to_project"].includes(status)) {
     return "in_production";
@@ -84,11 +116,12 @@ export default function RequestPricingPage() {
   }
 
   const stage = stageFor(request.status);
-  const isPositiveStage = stage === "quotation_pending" || stage === "in_production" || stage === "done";
+  const isPositiveStage = stage === "quotation_pending" || stage === "quotation_approved" || stage === "in_production" || stage === "done";
 
   const STAGE_COPY: Record<Stage, string> = {
     awaiting_quotation: "Tim kami sedang menyiapkan penawaran harga berdasarkan brief yang Anda kirimkan. Anda akan dihubungi via email saat penawaran siap.",
     quotation_pending: "Penawaran harga sudah siap untuk Anda tinjau dan setujui.",
+    quotation_approved: "Terima kasih, penawaran sudah Anda setujui. Tim kami sedang melakukan verifikasi komersial internal sebelum memulai pengerjaan.",
     in_production: "Penawaran sudah disetujui dan pekerjaan sedang dikerjakan oleh tim kami.",
     done: "Pekerjaan untuk permintaan ini sudah selesai dikerjakan. Cek email Anda atau dashboard untuk melihat hasilnya.",
     stopped: "Permintaan ini tidak lagi berjalan.",
@@ -98,7 +131,7 @@ export default function RequestPricingPage() {
     <Layout>
       <div className="border-b border-border/40 bg-muted/20">
         <div className="container mx-auto px-4 md:px-8 max-w-3xl">
-          <FlowStepper currentStep="harga" />
+          <FlowStepper currentStep={STATUS_STEP[request.status] ?? "harga"} />
         </div>
       </div>
 
@@ -167,6 +200,15 @@ export default function RequestPricingPage() {
             <p className="font-medium mb-1">Penawaran Siap Ditinjau</p>
             <p className="text-sm text-muted-foreground">
               Tim kami telah mengirimkan link penawaran ke <strong>{request.customerEmail}</strong>. Jika belum menerima link, hubungi tim kami.
+            </p>
+          </div>
+        )}
+        {stage === "quotation_approved" && (
+          <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center">
+            <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-3" />
+            <p className="font-medium mb-1">Penawaran Disetujui</p>
+            <p className="text-sm text-muted-foreground">
+              Terima kasih! Penawaran sudah Anda setujui. Tim kami sedang menyelesaikan verifikasi komersial internal sebelum pengerjaan dimulai — Anda akan dihubungi via email begitu proses ini selesai.
             </p>
           </div>
         )}
