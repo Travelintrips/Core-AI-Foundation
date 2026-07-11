@@ -69,7 +69,7 @@ type ServiceRequest = {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ServiceRequestsPage() {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(["new", "waiting", "approved", "gate", "production"]));
+  const [expanded, setExpanded] = useState<Set<string>>(new Set(["new", "brief", "brief_done", "pricing", "waiting", "approved", "gate", "production"]));
 
   const { data: requests = [], isLoading, refetch, isFetching } = useQuery<ServiceRequest[]>({
     queryKey: ["service-requests"],

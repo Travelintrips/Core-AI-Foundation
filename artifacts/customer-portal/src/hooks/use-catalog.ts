@@ -138,6 +138,12 @@ export function useRequestService(serviceId: number | undefined) {
 
 // ── Service Request Detail (public, by UUID) ──────────────────────────────────
 
+export type PricingLineItem = {
+  code: string;
+  label: string;
+  amount: number;
+};
+
 export type ServiceRequestDetail = {
   id: number;
   requestId: string;
@@ -151,12 +157,18 @@ export type ServiceRequestDetail = {
   rushFee: string;
   revisionFee: string;
   humanReviewFee: string;
+  additionalServiceFee: string;
   discount: string;
   tax: string;
   total: string;
   status: string;
   briefJson: Record<string, unknown> | null;
   createdAt: string;
+  pricingBreakdown: {
+    basePrice: number | null;
+    lineItems: PricingLineItem[];
+    taxPercent: number;
+  } | null;
 };
 
 export function useRequestDetail(requestId: string | undefined) {

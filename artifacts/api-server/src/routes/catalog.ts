@@ -618,7 +618,8 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
     return;
   }
 
-  // Return customer-safe fields only (no margin/cost)
+  // Return customer-safe fields only (no margin/cost/internal pricing)
+  const snapshot = row.pricingSnapshotJson as Record<string, unknown> | null;
   res.json({
     id: row.id,
     requestId: row.requestId,
@@ -628,16 +629,28 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
     customerEmail: row.customerEmail,
     companyName: row.companyName,
     currency: row.currency,
+    // Keep individual fee columns for backward compat
     subtotal: row.subtotal,
     rushFee: row.rushFee,
     revisionFee: row.revisionFee,
     humanReviewFee: row.humanReviewFee,
+    additionalServiceFee: row.additionalServiceFee,
     discount: row.discount,
     tax: row.tax,
     total: row.total,
     status: row.status,
     briefJson: row.briefJson,
     createdAt: row.createdAt,
+    // Customer-facing breakdown: lineItems + basePrice from snapshot so
+    // the portal can render an accurate itemised breakdown without
+    // needing to re-derive values from the individual fee columns.
+    pricingBreakdown: snapshot
+      ? {
+          basePrice: snapshot["basePrice"] ?? null,
+          lineItems: snapshot["lineItems"] ?? [],
+          taxPercent: snapshot["taxPercent"] ?? 0,
+        }
+      : null,
   });
 });
 

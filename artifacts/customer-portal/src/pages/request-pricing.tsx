@@ -101,21 +101,24 @@ export default function RequestPricingPage() {
           <div className="bg-card border border-border rounded-2xl p-6 mb-6">
             <h2 className="font-serif text-lg font-medium mb-4">Estimasi Harga</h2>
             <div className="space-y-3">
-              <PriceRow label="Harga Dasar" amount={request.subtotal} currency={request.currency} />
-              {parseFloat(String(request.rushFee ?? "0")) > 0 && (
-                <PriceRow label="Rush Fee" amount={request.rushFee} currency={request.currency} />
-              )}
-              {parseFloat(String(request.revisionFee ?? "0")) > 0 && (
-                <PriceRow label="Biaya Revisi" amount={request.revisionFee} currency={request.currency} />
-              )}
-              {parseFloat(String(request.humanReviewFee ?? "0")) > 0 && (
-                <PriceRow label="Human Review" amount={request.humanReviewFee} currency={request.currency} />
+              {request.pricingBreakdown?.lineItems && request.pricingBreakdown.lineItems.length > 0 ? (
+                // Use itemised line items from pricing snapshot for accurate display
+                request.pricingBreakdown.lineItems.map((item) => (
+                  <PriceRow key={item.code} label={item.label} amount={item.amount} currency={request.currency} />
+                ))
+              ) : (
+                // Fallback: show base price from snapshot or subtotal
+                <PriceRow
+                  label="Harga Dasar"
+                  amount={request.pricingBreakdown?.basePrice ?? request.subtotal}
+                  currency={request.currency}
+                />
               )}
               {parseFloat(String(request.discount ?? "0")) > 0 && (
-                <PriceRow label="Diskon" amount={`-${request.discount}`} currency={request.currency} highlight="text-green-600" />
+                <PriceRow label="Diskon" amount={-parseFloat(String(request.discount))} currency={request.currency} highlight="text-green-600" />
               )}
-              {parseFloat(String(request.tax ?? "0")) > 0 && (
-                <PriceRow label="Pajak (PPN)" amount={request.tax} currency={request.currency} />
+              {(request.pricingBreakdown?.taxPercent ?? 0) > 0 && parseFloat(String(request.tax ?? "0")) > 0 && (
+                <PriceRow label={`Pajak (PPN ${request.pricingBreakdown!.taxPercent}%)`} amount={request.tax} currency={request.currency} />
               )}
               <div className="border-t border-border pt-3 flex justify-between items-center">
                 <span className="font-semibold">Total</span>
