@@ -1,50 +1,77 @@
-# AI Platform — Creative Studio
+# AI Enterprise Platform
 
-A PNPM monorepo powering an AI-driven creative agency platform. It includes an admin control plane, a customer-facing portal, a backend API, and a UI prototyping sandbox.
+A full-stack AI agency management platform built as a pnpm monorepo.
 
 ## Architecture
 
-| Artifact | Path | Preview URL | Description |
-|---|---|---|---|
-| API Server | `artifacts/api-server` | `/api` | Express backend with Drizzle ORM, job dispatcher, and AI provider integrations |
-| AI Platform (admin) | `artifacts/ai-platform` | `/admin/` | Internal dashboard for managing agents, workflows, providers, and telemetry |
-| Customer Portal | `artifacts/customer-portal` | `/` | Public-facing creative studio site with client submission and project tracking |
-| Mockup Sandbox | `artifacts/mockup-sandbox` | `/__mockup` | Vite preview server for UI component prototyping on the canvas |
+| Artifact | Path | Preview |
+|---|---|---|
+| **API Server** | `artifacts/api-server` | `/api` |
+| **Admin Dashboard** | `artifacts/ai-platform` | `/admin/` |
+| **Customer Portal** | `artifacts/customer-portal` | `/` |
+| **Mockup Sandbox** | `artifacts/mockup-sandbox` | `/__mockup` |
 
-Shared libraries live in `lib/`:
-- `lib/api-spec` — OpenAPI spec + codegen scripts
-- `lib/api-zod` — Generated Zod schemas (from OpenAPI)
-- `lib/api-client-react` — Generated React Query hooks (from OpenAPI)
-- `lib/db` — Drizzle ORM schema definitions
+### Shared Libraries
+- `lib/db` — Drizzle ORM schema targeting Supabase PostgreSQL (`ai_platform` schema)
+- `lib/api-spec` — OpenAPI spec + orval codegen pipeline
+- `lib/api-zod` — Generated Zod schemas (output of codegen)
+- `lib/api-client-react` — Generated React Query hooks (output of codegen)
 
-## How to Run
+## Stack
+- **Backend:** Node.js + Express + Drizzle ORM + PostgreSQL (Supabase)
+- **Frontend:** React 19 + Vite + TailwindCSS v4 + Wouter
+- **Database:** Supabase PostgreSQL, `ai_platform` schema
+- **Background:** Built-in job dispatcher + AI scheduler with cron
 
-All workflows start automatically. Dependencies install on first run via `pnpm install`.
+## Running the Project
 
+```bash
+# Install dependencies
+pnpm install
+
+# Regenerate API types (after editing lib/api-spec/openapi.yaml)
+pnpm run build:generated
+
+# Build shared libraries
+pnpm run build:libs
+
+# Individual services (each runs automatically via Replit workflows)
+pnpm --filter @workspace/api-server run dev
+pnpm --filter @workspace/ai-platform run dev
+pnpm --filter @workspace/customer-portal run dev
 ```
-pnpm install          # install all workspace deps
-pnpm build            # full typecheck + recursive build
-pnpm verify           # OpenAPI checks + typecheck
-pnpm --filter @workspace/api-server run seed   # seed DB with providers/models/agents
-```
-
-## Database
-
-PostgreSQL via Supabase in the `ai_platform` schema (not `public`). Dev and prod databases are separate.
-
-- Dev: `SUPABASE_DEV_DATABASE_URL` (also aliased as `SUPABASE_DATABASE_URL_DEV`)
-- Prod: `SUPABASE_PROD_DATABASE_URL` (also aliased as `SUPABASE_DATABASE_URL`)
-
-**Never use `drizzle-kit push`** for schema changes — it proposes dropping the whole schema. Write DDL by hand instead.
 
 ## Environment Variables
 
-AI provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `REPLICATE_API_TOKEN`), Supabase URLs/keys, and `SESSION_SECRET` are all set as Replit secrets/env vars.
+All secrets are managed in Replit Secrets / environment variables:
 
-`ADMIN_API_KEY` — optional server-side key that gates `/api` admin routes. When unset, admin auth is fail-open (development convenience). Set it and `VITE_ADMIN_API_KEY` (same value) to enable protection.
+| Variable | Env | Purpose |
+|---|---|---|
+| `SUPABASE_DEV_DATABASE_URL` | development | Dev Supabase connection string |
+| `SUPABASE_PROD_DATABASE_URL` | production | Prod Supabase connection string |
+| `ADMIN_API_KEY` | shared | Protects admin API routes (fail-open in dev if unset) |
+| `VITE_ADMIN_API_KEY` | shared | Same value — exposes key to the admin frontend |
+| `OPENAI_API_KEY` | shared | OpenAI completions |
+| `ANTHROPIC_API_KEY` | shared | Anthropic Claude |
+| `GEMINI_API_KEY` | shared | Google Gemini |
+| `MISTRAL_API_KEY` | shared | Mistral AI |
+| `REPLICATE_API_TOKEN` | shared | Replicate image generation |
+
+## Database
+
+- Schema lives in `lib/db/src/schema/`
+- Uses `ai_platform` PostgreSQL schema (not `public`) — search_path set at connection pool level
+- **Do not use `drizzle-kit push`** for schema changes — it will propose dropping the entire `ai_platform` schema. Write DDL migrations by hand instead.
+- Seed data: `pnpm --filter @workspace/api-server run seed` (idempotent; seeds providers, models, and a starter agent)
+
+## Codegen Pipeline
+
+After editing `lib/api-spec/openapi.yaml`:
+```bash
+pnpm run build:generated
+```
+This runs orval to regenerate `lib/api-zod` and `lib/api-client-react`.
+
+**Note:** orval 8.18.0 has a `@scalar/json-magic` bug — the generate script pre-parses YAML as an object to bypass it.
 
 ## User Preferences
-
-- Keep the existing monorepo structure and naming conventions.
-- Never import `zod/v4` directly in `api-server` routes — use `@workspace/api-zod` schemas only.
-- For new DB tables, write DDL by hand rather than using drizzle-kit push.
