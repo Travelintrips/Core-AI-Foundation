@@ -1,85 +1,50 @@
-# AI Enterprise Platform
+# AI Platform — Creative Studio
 
-A full-stack AI operations platform for managing AI providers, models, agents, workflows, and a digital workforce across departments.
+A PNPM monorepo powering an AI-driven creative agency platform. It includes an admin control plane, a customer-facing portal, a backend API, and a UI prototyping sandbox.
 
-## Stack
+## Architecture
 
-- **Frontend**: React + Vite + TailwindCSS v4 + Wouter (routing) + TanStack Query
-- **Backend**: Express (Node.js) + Drizzle ORM + PostgreSQL
-- **Monorepo**: pnpm workspaces
+| Artifact | Path | Preview URL | Description |
+|---|---|---|---|
+| API Server | `artifacts/api-server` | `/api` | Express backend with Drizzle ORM, job dispatcher, and AI provider integrations |
+| AI Platform (admin) | `artifacts/ai-platform` | `/admin/` | Internal dashboard for managing agents, workflows, providers, and telemetry |
+| Customer Portal | `artifacts/customer-portal` | `/` | Public-facing creative studio site with client submission and project tracking |
+| Mockup Sandbox | `artifacts/mockup-sandbox` | `/__mockup` | Vite preview server for UI component prototyping on the canvas |
 
-## Project Structure
+Shared libraries live in `lib/`:
+- `lib/api-spec` — OpenAPI spec + codegen scripts
+- `lib/api-zod` — Generated Zod schemas (from OpenAPI)
+- `lib/api-client-react` — Generated React Query hooks (from OpenAPI)
+- `lib/db` — Drizzle ORM schema definitions
+
+## How to Run
+
+All workflows start automatically. Dependencies install on first run via `pnpm install`.
 
 ```
-artifacts/
-  ai-platform/   — React frontend (served at /)
-  api-server/    — Express API backend (served at /api)
-  mockup-sandbox/ — Design mockup sandbox (internal)
-lib/
-  db/            — Drizzle schema + migration config
-  api-spec/      — OpenAPI spec + codegen (orval)
-  api-zod/       — Zod schemas (shared between frontend & backend)
-  api-client-react/ — Generated React Query hooks
+pnpm install          # install all workspace deps
+pnpm build            # full typecheck + recursive build
+pnpm verify           # OpenAPI checks + typecheck
+pnpm --filter @workspace/api-server run seed   # seed DB with providers/models/agents
 ```
-
-## Running the Project
-
-**After cloning/importing from GitHub, always run `pnpm install` first** (node_modules are not committed).
-
-Both services start automatically via the **Project** run button:
-
-| Service | Command | Port |
-|---------|---------|------|
-| API Server | `pnpm --filter @workspace/api-server run dev` | 8080 |
-| Frontend | `pnpm --filter @workspace/ai-platform run dev` | 20785 |
-
-## API Codegen
-
-Re-generate React Query hooks and Zod schemas from the OpenAPI spec:
-```bash
-pnpm --filter @workspace/api-spec run codegen
-```
-Config: `lib/api-spec/orval.config.mjs` (ESM). Output: `lib/api-client-react/src/generated/` and `lib/api-zod/src/generated/`.
 
 ## Database
 
-Uses Replit's built-in PostgreSQL (DATABASE_URL is pre-configured).
+PostgreSQL via Supabase in the `ai_platform` schema (not `public`). Dev and prod databases are separate.
 
-**Push schema changes:**
-```bash
-pnpm --filter @workspace/db run push
-```
+- Dev: `SUPABASE_DEV_DATABASE_URL` (also aliased as `SUPABASE_DATABASE_URL_DEV`)
+- Prod: `SUPABASE_PROD_DATABASE_URL` (also aliased as `SUPABASE_DATABASE_URL`)
 
-**Seed initial data** (providers, models, workflows, AI workforce):
-```bash
-pnpm --filter @workspace/api-server run seed
-```
+**Never use `drizzle-kit push`** for schema changes — it proposes dropping the whole schema. Write DDL by hand instead.
 
-The seed is idempotent — safe to run multiple times.
+## Environment Variables
 
-## Environment / Secrets
+AI provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `REPLICATE_API_TOKEN`), Supabase URLs/keys, and `SESSION_SECRET` are all set as Replit secrets/env vars.
 
-| Secret | Where used | Purpose |
-|--------|-----------|---------|
-| `DATABASE_URL` | Auto-injected | PostgreSQL connection |
-| `SESSION_SECRET` | api-server | Session signing |
-| `ADMIN_API_KEY` | api-server | Protects all `/api/*` routes |
-| `VITE_ADMIN_API_KEY` | ai-platform (Vite) | Frontend sends this as Bearer token |
-
-> Auth middleware is **fail-open** when `ADMIN_API_KEY` is not set (development convenience).
-
-## Key Features (Phases)
-
-- **Phase 1–2**: Providers, models, agents, prompts, knowledge bases
-- **Phase 3**: Creative AI (image designer, project pipeline, client review)
-- **Phase 4**: AI capabilities, memory, cost tracking, intelligent routing
-- **Phase 4.8**: Digital Workforce — AI employees across 8 departments with CEO
-- **Phase 5**: Image Designer pipeline (prompt generation → design → QC)
-- **Phase 6**: Client portal with project review and approval flows
-- **Phase 8**: AI Skills Marketplace & Tool Ecosystem — installable skill/tool packages per tenant (`/marketplace`), dependency validation, connector health checks, package lifecycle events
+`ADMIN_API_KEY` — optional server-side key that gates `/api` admin routes. When unset, admin auth is fail-open (development convenience). Set it and `VITE_ADMIN_API_KEY` (same value) to enable protection.
 
 ## User Preferences
 
-- Keep existing monorepo structure — do not restructure or migrate
-- Use `@workspace/api-zod` schemas in api-server routes; never import `zod/v4` directly
-- All `/api/*` routes are protected by adminAuth middleware (except `/api/healthz`, `/api/health`)
+- Keep the existing monorepo structure and naming conventions.
+- Never import `zod/v4` directly in `api-server` routes — use `@workspace/api-zod` schemas only.
+- For new DB tables, write DDL by hand rather than using drizzle-kit push.

@@ -1,10 +1,11 @@
-import { pgTable, serial, integer, boolean, text, timestamp } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, integer, boolean, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { aiEmployeesTable } from "./ai-employees";
 import { aiToolsTable } from "./ai-tools";
 
-export const employeeToolPermissionsTable = pgTable("employee_tool_permissions", {
+export const employeeToolPermissionsTable = appSchema.table("employee_tool_permissions", {
   id: serial("id").primaryKey(),
   employeeId: integer("employee_id").notNull().references(() => aiEmployeesTable.id, { onDelete: "cascade" }),
   toolId: integer("tool_id").notNull().references(() => aiToolsTable.id, { onDelete: "cascade" }),

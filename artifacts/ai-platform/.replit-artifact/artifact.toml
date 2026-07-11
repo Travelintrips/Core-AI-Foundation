@@ -1,5 +1,5 @@
 kind = "web"
-previewPath = "/"
+previewPath = "/admin/"
 title = "AI Platform Enterprise"
 version = "1.0.0"
 id = "artifacts/ai-platform"
@@ -11,7 +11,7 @@ version = "1.0.0"
 
 [[services]]
 name = "web"
-paths = [ "/" ]
+paths = [ "/admin/" ]
 localPort = 20785
 
 [services.development]
@@ -28,4 +28,4 @@ to = "/index.html"
 
 [services.env]
 PORT = "20785"
-BASE_PATH = "/"
+BASE_PATH = "/admin/"

@@ -1,8 +1,9 @@
-import { pgTable, serial, text, boolean, timestamp, jsonb, integer } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, boolean, timestamp, jsonb, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const aiWorkflowsTable = pgTable("ai_workflows", {
+export const aiWorkflowsTable = appSchema.table("ai_workflows", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),

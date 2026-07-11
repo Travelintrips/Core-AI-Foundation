@@ -9,6 +9,15 @@ import SuccessPage from '@/pages/success';
 import ReviewPage from '@/pages/review';
 import DashboardPage from '@/pages/dashboard';
 import AccessPage from '@/pages/access';
+import QuotationPage from '@/pages/quotation';
+import ServicesPage from '@/pages/services';
+import ServiceDetailPage from '@/pages/service-detail';
+import CommercialGatePage from '@/pages/commercial-gate';
+import ProjectPage from '@/pages/project';
+import BriefPage from '@/pages/brief';
+import RequestPricingPage from '@/pages/request-pricing';
+import RequestQuotationPage from '@/pages/request-quotation';
+import RequestApprovalPage from '@/pages/request-approval';
 
 const queryClient = new QueryClient();
 
@@ -27,11 +36,20 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={LandingPage} />
+      <Route path="/services" component={ServicesPage} />
+      <Route path="/services/:id" component={ServiceDetailPage} />
       <Route path="/submit" component={SubmitPage} />
       <Route path="/success" component={SuccessPage} />
       <Route path="/review/:token" component={ReviewPage} />
       <Route path="/dashboard/:dashboardToken" component={DashboardPage} />
       <Route path="/access" component={AccessPage} />
+      <Route path="/quotation/:token" component={QuotationPage} />
+      <Route path="/gate/:token" component={CommercialGatePage} />
+      <Route path="/project/:token" component={ProjectPage} />
+      <Route path="/request-service/:requestId/brief" component={BriefPage} />
+      <Route path="/request-service/:requestId/pricing" component={RequestPricingPage} />
+      <Route path="/request-service/:requestId/quotation" component={RequestQuotationPage} />
+      <Route path="/request-service/:requestId/approval" component={RequestApprovalPage} />
       <Route component={NotFound} />
     </Switch>
   );

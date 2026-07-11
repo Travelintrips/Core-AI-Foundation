@@ -1,4 +1,5 @@
-import { pgTable, serial, text, timestamp, numeric, jsonb, unique } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp, numeric, jsonb, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -7,7 +8,7 @@ import { z } from "zod/v4";
  * Examples: preferred_color, writing_style, target_audience, approved_cta, visual_style.
  * Separate from ai_memory (which is agent/session scoped).
  */
-export const aiClientMemoryTable = pgTable(
+export const aiClientMemoryTable = appSchema.table(
   "ai_client_memory",
   {
     id: serial("id").primaryKey(),

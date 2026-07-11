@@ -1,0 +1,479 @@
+Lanjutkan AI Enterprise Platform dengan membuat AI Service Catalog & Pricing Center.
+
+PENTING:
+
+Jangan mengubah arsitektur AI Platform yang sudah ada.
+
+Jangan mengubah Creative AI, Workforce, Queue, Event Bus, Scheduler, Human Task, ataupun Marketplace.
+
+Semua perubahan harus additive, OpenAPI-first, TypeScript clean, dan lolos pnpm run verify.
+
+==========================================================
+VISI
+==========================================================
+
+Saat ini customer hanya dapat menggunakan AI.
+
+Saya ingin membuat halaman AI Service Catalog.
+
+Customer tidak membeli "desain".
+
+Customer membeli AI Department.
+
+Contoh:
+
+Creative AI Department
+
+Finance AI Department
+
+Tax AI Department
+
+Logistics AI Department
+
+Legal AI Department
+
+HR AI Department
+
+Marketing AI Department
+
+Trading AI Department
+
+==========================================================
+DATABASE
+==========================================================
+
+Buat tabel:
+
+ai_service_categories
+
+Field:
+
+id
+
+code
+
+name
+
+description
+
+icon
+
+display_order
+
+status
+
+created_at
+
+updated_at
+
+----------------------------------------------------------
+
+Buat tabel:
+
+ai_services
+
+Field:
+
+id
+
+category_id
+
+service_code
+
+service_name
+
+short_description
+
+full_description
+
+service_type
+
+pricing_model
+
+starting_price
+
+currency
+
+estimated_delivery
+
+human_review
+
+ai_only
+
+subscription_supported
+
+enterprise_supported
+
+status
+
+created_at
+
+updated_at
+
+----------------------------------------------------------
+
+Buat tabel:
+
+ai_service_packages
+
+Field:
+
+id
+
+service_id
+
+package_name
+
+package_type
+
+monthly_price
+
+yearly_price
+
+one_time_price
+
+features_json
+
+limits_json
+
+sla_json
+
+status
+
+==========================================================
+SERVICE CATEGORY
+==========================================================
+
+Seed data:
+
+Creative AI
+
+Marketing AI
+
+Finance AI
+
+Accounting AI
+
+Tax AI
+
+HR AI
+
+Legal AI
+
+Logistics AI
+
+Customs AI
+
+Procurement AI
+
+Trading AI
+
+Data Analytics AI
+
+Executive AI
+
+Customer Service AI
+
+==========================================================
+CREATIVE AI
+==========================================================
+
+Tambahkan service:
+
+Logo Design
+
+Brand Identity
+
+Brand Strategy
+
+Social Media Design
+
+Instagram Content
+
+Company Profile
+
+Pitch Deck
+
+Packaging Design
+
+Presentation Design
+
+Copywriting
+
+Image Generation
+
+Creative Consultation
+
+==========================================================
+FINANCE AI
+==========================================================
+
+Tambahkan service:
+
+Financial Analysis
+
+Cashflow Analysis
+
+Budget Planning
+
+Forecasting
+
+Profitability Analysis
+
+Bank Reconciliation
+
+Financial Dashboard
+
+Management Report
+
+==========================================================
+ACCOUNTING AI
+==========================================================
+
+Tambahkan service:
+
+Journal Review
+
+General Ledger Analysis
+
+Trial Balance Review
+
+Closing Assistance
+
+Account Reconciliation
+
+COA Recommendation
+
+==========================================================
+TAX AI
+==========================================================
+
+Tambahkan service:
+
+VAT Review
+
+PPh Analysis
+
+Tax Planning
+
+Coretax Assistance
+
+Invoice Validation
+
+SPT Review
+
+==========================================================
+LOGISTICS AI
+==========================================================
+
+Tambahkan service:
+
+Freight Planning
+
+Vendor Comparison
+
+Shipment Monitoring
+
+ETA Prediction
+
+RFQ Generation
+
+Quotation Assistant
+
+==========================================================
+CUSTOMS AI
+==========================================================
+
+Tambahkan service:
+
+HS Code Classification
+
+Import Compliance
+
+Export Compliance
+
+PIB Review
+
+PEB Review
+
+Lartas Checking
+
+Duty Simulation
+
+==========================================================
+LEGAL AI
+==========================================================
+
+Tambahkan service:
+
+Contract Review
+
+Agreement Drafting
+
+Legal Due Diligence
+
+NDA Review
+
+Vendor Agreement
+
+Commitment Fee Agreement
+
+==========================================================
+PRICING MODEL
+==========================================================
+
+Support:
+
+One Time
+
+Monthly Subscription
+
+Yearly Subscription
+
+Enterprise Custom
+
+==========================================================
+UI
+==========================================================
+
+Buat halaman:
+
+/services
+
+Kategori di kiri.
+
+List service di kanan.
+
+Setiap service memiliki:
+
+Nama
+
+Deskripsi
+
+Starting From Price
+
+Delivery Time
+
+Human Review badge
+
+AI Only badge
+
+Subscription badge
+
+Enterprise badge
+
+==========================================================
+SERVICE DETAIL
+==========================================================
+
+Klik service membuka detail.
+
+Tampilkan:
+
+Overview
+
+Workflow AI
+
+Department
+
+AI Employees involved
+
+Estimated Time
+
+Deliverables
+
+Revision Policy
+
+Pricing Options
+
+==========================================================
+PRICING
+==========================================================
+
+Support 4 model:
+
+One Time
+
+Subscription Monthly
+
+Subscription Yearly
+
+Enterprise Custom
+
+==========================================================
+REQUEST SERVICE
+==========================================================
+
+Customer dapat klik:
+
+Request Service
+
+↓
+
+Create Project
+
+↓
+
+AI Orchestrator
+
+↓
+
+Department
+
+↓
+
+Workflow
+
+==========================================================
+ADMIN
+==========================================================
+
+Tambahkan Admin CRUD:
+
+Category
+
+Service
+
+Package
+
+Pricing
+
+Features
+
+==========================================================
+ANALYTICS
+==========================================================
+
+Dashboard:
+
+Most Requested Services
+
+Revenue per Category
+
+Average Delivery Time
+
+Most Popular Package
+
+Conversion Rate
+
+==========================================================
+VERIFICATION
+==========================================================
+
+Pastikan:
+
+DB Push Clean
+
+OpenAPI Clean
+
+Codegen Clean
+
+pnpm run verify Clean
+
+Build Clean
+
+==========================================================
+TARGET
+==========================================================
+
+AI Enterprise Platform memiliki AI Service Catalog profesional sehingga customer dapat memilih layanan AI berdasarkan kebutuhan bisnis, melihat harga, paket, workflow, dan langsung membuat project tanpa perlu menghubungi admin.

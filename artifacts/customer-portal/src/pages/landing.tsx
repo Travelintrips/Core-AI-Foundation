@@ -19,7 +19,7 @@ export default function LandingPage() {
             Submit your creative brief and our autonomous AI agents will generate production-ready assets, copy, and creative direction in minutes.
           </p>
           <div className="pt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/submit" className="w-full sm:w-auto px-8 py-4 bg-primary text-primary-foreground rounded-full font-medium text-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5">
+            <Link href="/services" className="w-full sm:w-auto px-8 py-4 bg-primary text-primary-foreground rounded-full font-medium text-lg hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5">
               Start Your Project <ArrowRight className="w-5 h-5" />
             </Link>
             <Link href="/access" className="w-full sm:w-auto px-8 py-4 bg-secondary/10 text-foreground rounded-full font-medium text-lg hover:bg-secondary/20 transition-all flex items-center justify-center">
@@ -73,7 +73,7 @@ export default function LandingPage() {
               <p className="text-primary-foreground/80 mb-8 text-lg max-w-xl mx-auto">
                 No credit card required. Submit a brief and see what our AI studio can generate for your brand today.
               </p>
-              <Link href="/submit" className="inline-flex px-8 py-4 bg-background text-primary rounded-full font-medium text-lg hover:bg-background/90 transition-all items-center gap-2">
+              <Link href="/services" className="inline-flex px-8 py-4 bg-background text-primary rounded-full font-medium text-lg hover:bg-background/90 transition-all items-center gap-2">
                 Start a Project <ArrowRight className="w-5 h-5" />
               </Link>
             </div>

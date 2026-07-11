@@ -16,3 +16,10 @@
 - [phase6-ai-scheduler](phase6-ai-scheduler.md) — Scheduler target_types (create_job/publish_event/webhook-audit-only/audit_log); create_job priority must be numeric, not a string label
 - [phase65-human-task-center](phase65-human-task-center.md) — Phase 6.5 rules: ALLOWED_TRANSITIONS map, slaStatus vs status for overdue metric, SSRF guard on notificationHookUrl, orval date() on format:date-time query params
 - [customer-portal](customer-portal.md) — Token handling, dashboard navigation fix (reviewTokenPlain), URL construction with REPLIT_DEV_DOMAIN, route mounting
+- [supabase-schema-migration](supabase-schema-migration.md) — DB moved to Supabase in a dedicated `ai_platform` schema (not public); set search_path for raw SQL; dev/prod picked via NODE_ENV
+- [quotation-flow](quotation-flow.md) — penawaran (quotation) gate between submission and AI generation; approve/reject public routes must use atomic CAS updates
+- [reimport-artifact-registration](reimport-artifact-registration.md) — GitHub re-import loses artifact/workflow registration; fix with runPostMergeSetup(), not createArtifact()
+- [supabase-secret-name-mismatch](supabase-secret-name-mismatch.md) — imported secrets named SUPABASE_DATABASE_URL_DEV/SUPABASE_DATABASE_URL vs code expecting SUPABASE_DEV/PROD_DATABASE_URL; alias, don't rename
+- [drizzle-push-false-positive](drizzle-push-false-positive.md) — drizzle-kit push proposes dropping the whole ai_platform schema even for additive changes; hand-write DDL for new tables instead
+- [service-catalog-quotation-flow](service-catalog-quotation-flow.md) — ai_quotations + ai_quotation_items tables, service-catalog flow vs legacy flow, nullable quotationId on gates
+- [service-catalog-commercial-flow](service-catalog-commercial-flow.md) — Status transitions, conversion path, status enum in OpenAPI, admin enum cast pattern

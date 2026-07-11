@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { Layout } from "@/components/layout";
+import { FlowStepper } from "@/components/flow-stepper";
 import { StatusBadge } from "@/components/status-badge";
 import { useGetPublicCreativeReview, useAddClientComment, useApproveCreativeReview, useRejectCreativeReview, useRequestRevisionCreativeReview } from "@/hooks/use-customer";
-import { Loader2, MessageSquare, Image as ImageIcon, Send, CheckCircle2, XCircle, RefreshCcw, FileText } from "lucide-react";
+import { Loader2, MessageSquare, Image as ImageIcon, Send, CheckCircle2, XCircle, RefreshCcw, FileText, Receipt } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
@@ -47,6 +49,10 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
   // Still "in production" while the text workflow is running OR the image
   // pipeline (which is chained after it) hasn't finished producing assets yet.
   const isGenerating = review.status === 'pending' || review.status === 'running' || assetsInProgress;
+  // A quotation that hasn't been approved yet means production hasn't actually started,
+  // even though the project row is still sitting in "pending" — don't show a false "generating" spinner.
+  const awaitingQuotation = review.status === 'pending' && !!review.quotationStatus && review.quotationStatus !== 'approved';
+  const isGenerating = (review.status === 'pending' || review.status === 'running') && !awaitingQuotation;
 
   const handleApprove = () => {
     approveReview.mutate({ token: params.token, data: {} }, {
@@ -91,8 +97,20 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
     });
   };
 
+  const reviewStepperStep =
+    review.reviewStatus === "approved" ? "selesai" :
+    (review.reviewStatus === "shared" || review.reviewStatus === "viewed" || review.reviewStatus === "revision_requested") ? "review" :
+    "produksi";
+
   return (
     <Layout>
+      {/* Flow Stepper */}
+      <div className="border-b border-border/40 bg-muted/20">
+        <div className="container mx-auto px-4 md:px-8 max-w-5xl">
+          <FlowStepper currentStep={reviewStepperStep} />
+        </div>
+      </div>
+
       {/* Header Bar */}
       <div className="bg-card border-b border-card-border sticky top-16 z-40 shadow-sm">
         <div className="container mx-auto px-4 md:px-8 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -121,7 +139,29 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
               <h2 className="text-2xl font-serif font-medium">Visual Assets</h2>
             </div>
 
-            {isGenerating ? (
+            {awaitingQuotation ? (
+              <div className="bg-primary/5 border border-primary/20 rounded-2xl p-12 text-center flex flex-col items-center justify-center min-h-[300px]">
+                <Receipt className="w-12 h-12 text-primary mb-6" />
+                <h2 className="text-xl font-serif mb-2">
+                  {review.quotationStatus === 'sent' ? "Your price quotation is ready" : "Awaiting your quotation"}
+                </h2>
+                <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-6">
+                  {review.quotationStatus === 'sent'
+                    ? "Please review and approve the offer before we begin production."
+                    : review.quotationStatus === 'rejected'
+                    ? "This quotation was declined and the project has been closed."
+                    : "We're preparing a price quotation for this project. You'll receive a link to review it soon."}
+                </p>
+                {review.quotationStatus === 'sent' && (
+                  <Link
+                    href={`/quotation/${params.token}`}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full font-medium hover:bg-primary/90 transition-all"
+                  >
+                    Review Quotation
+                  </Link>
+                )}
+              </div>
+            ) : isGenerating ? (
               <div className="bg-accent/20 border border-accent rounded-2xl p-12 text-center flex flex-col items-center justify-center min-h-[300px]">
                 <div className="relative mb-6">
                   <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse"></div>

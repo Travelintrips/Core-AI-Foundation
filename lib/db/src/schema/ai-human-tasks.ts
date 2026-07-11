@@ -1,5 +1,5 @@
+import { appSchema } from "./_pg-schema";
 import {
-  pgTable,
   serial,
   text,
   integer,
@@ -8,7 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { aiExecutionPlansTable } from "./ai-execution-plans";
 
-export const aiHumanTasksTable = pgTable("ai_human_tasks", {
+export const aiHumanTasksTable = appSchema.table("ai_human_tasks", {
   id: serial("id").primaryKey(),
 
   // Identity

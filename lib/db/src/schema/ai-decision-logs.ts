@@ -1,6 +1,7 @@
-import { pgTable, serial, integer, text, numeric, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, integer, text, numeric, timestamp, jsonb } from "drizzle-orm/pg-core";
 
-export const aiDecisionLogsTable = pgTable("ai_decision_logs", {
+export const aiDecisionLogsTable = appSchema.table("ai_decision_logs", {
   id: serial("id").primaryKey(),
 
   executionPlanId: integer("execution_plan_id"),  // soft FK to ai_execution_plans

@@ -1,4 +1,5 @@
-import { pgTable, serial, text, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, jsonb, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -9,7 +10,7 @@ import { z } from "zod/v4";
  * "OCR Invoice"). Distinct from the lightweight `ai_skills` table used by
  * workforce employee-skill assignment — this is the marketplace catalog.
  */
-export const aiSkillPackagesTable = pgTable("ai_skill_packages", {
+export const aiSkillPackagesTable = appSchema.table("ai_skill_packages", {
   id: serial("id").primaryKey(),
 
   skillCode: text("skill_code").notNull().unique(),

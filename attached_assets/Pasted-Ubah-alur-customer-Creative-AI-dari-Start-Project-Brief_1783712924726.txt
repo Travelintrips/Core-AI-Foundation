@@ -1,0 +1,257 @@
+Ubah alur customer Creative AI dari:
+
+Start Project
+→ Brief
+→ Queue
+→ Review
+
+menjadi commercial-first flow:
+
+Service Catalog
+→ Choose Package
+→ Create Service Request
+→ Complete Brief
+→ Pricing Calculation
+→ Quotation
+→ Customer Approval
+→ Commercial Gate
+→ Create Active Project
+→ Build
+→ Internal Review
+→ Customer Review
+→ Final Delivery
+
+PENTING:
+Jangan merombak AI Workflow, Queue, Dispatcher, Event Bus, Client Review, atau Pricing Engine yang sudah ada.
+Perubahan harus additive, backward compatible, OpenAPI-first, dan lolos pnpm run verify.
+
+1. Pisahkan Service Request dan Active Project
+
+Sebelum quotation disetujui, data harus tersimpan sebagai ai_service_request, bukan active project.
+
+Active project hanya dibuat setelah:
+- quotation approved;
+- commercial gate terpenuhi.
+
+2. Tambahkan status service request:
+
+DRAFT
+BRIEF_IN_PROGRESS
+BRIEF_COMPLETED
+PRICING_CALCULATED
+QUOTATION_READY
+WAITING_CUSTOMER_APPROVAL
+APPROVED
+REJECTED
+REVISION_REQUESTED
+EXPIRED
+CONVERTED_TO_PROJECT
+
+3. Tambahkan quotation lifecycle:
+
+DRAFT
+ISSUED
+VIEWED
+APPROVED
+REJECTED
+REVISION_REQUESTED
+EXPIRED
+CANCELLED
+
+4. Commercial gate:
+
+Support:
+- full_payment
+- deposit
+- active_subscription
+- purchase_order
+- admin_approval
+- free_trial
+
+Status:
+- pending
+- verified
+- failed
+- waived
+
+Jangan buat payment gateway baru jika belum tersedia.
+Siapkan interface/hook saja dan gunakan manual verification untuk sekarang.
+
+5. Frontend customer flow:
+
+/services
+/services/:serviceCode
+/request-service
+/request-service/:id/brief
+/request-service/:id/pricing
+/request-service/:id/quotation
+/request-service/:id/approval
+/project/:token
+
+6. Service package page harus menampilkan:
+
+- package name
+- price
+- deliverables
+- revision limit
+- delivery estimate
+- AI only / human review
+- add-ons
+- button Choose Package
+
+7. Brief dibuat sebagai wizard bertahap:
+
+Step 1 Business Information
+Step 2 Project Goal
+Step 3 Target Audience
+Step 4 Visual Style and References
+Step 5 Deliverables
+Step 6 Deadline
+Step 7 Review
+
+Support autosave draft.
+
+8. Pricing page:
+
+Gunakan aiPricingService yang sudah ada.
+
+Tampilkan:
+- base price
+- quantity adjustment
+- rush fee
+- revision fee
+- human review fee
+- bilingual fee
+- source file fee
+- usage rights fee
+- discount
+- tax
+- total
+
+9. Quotation:
+
+Buat immutable pricing snapshot.
+
+Quotation harus menyimpan:
+- service
+- package
+- brief summary
+- deliverables
+- exclusions
+- revision policy
+- delivery estimate
+- validity date
+- subtotal
+- tax
+- total
+- terms and conditions
+
+Perubahan harga master setelah quotation dibuat tidak boleh mengubah quotation lama.
+
+10. Customer approval:
+
+Customer dapat:
+- Approve
+- Request Change
+- Reject
+
+Semua aksi harus memakai secure token dan masuk audit log.
+
+11. Saat approved:
+
+Jangan langsung menjalankan AI.
+
+Periksa commercial gate terlebih dahulu.
+
+Jika gate verified:
+- create active project
+- create execution plan
+- enqueue jobs
+- publish service_request.converted
+- publish project.created
+
+Jika gate belum verified:
+- status WAITING_COMMERCIAL_GATE
+- jangan enqueue job
+
+12. Project workspace:
+
+Setelah active project dibuat, tampilkan:
+- project status
+- progress steps
+- deliverables
+- comments
+- revisions
+- client review
+- final files
+
+13. Cost safety:
+
+Sebelum quotation approval, hanya izinkan AI ringan untuk:
+- brief normalization
+- missing-information detection
+- package recommendation
+- pricing assistance
+- quotation drafting
+
+Jangan jalankan:
+- full creative workflow
+- image generation
+- expensive model chain
+- export final asset
+
+14. Admin UI:
+
+Tambahkan funnel:
+
+New Requests
+Brief Completed
+Quotation Ready
+Waiting Approval
+Approved
+Waiting Commercial Gate
+In Production
+Waiting Review
+Completed
+
+Admin dapat:
+- edit quotation sebelum issued
+- override price dengan audit reason
+- verify commercial gate
+- convert approved request ke project
+- cancel request
+
+15. Analytics:
+
+Tambahkan:
+- service view to request conversion
+- brief completion rate
+- quotation approval rate
+- approval to payment rate
+- request to project conversion
+- average quotation value
+- average time to approval
+- abandonment stage
+
+16. Migration:
+
+Existing projects tetap berjalan.
+Jangan memaksa project lama melewati quotation flow.
+Gunakan field source_type atau legacy flag jika diperlukan.
+
+17. Verification:
+
+- service request tidak langsung membuat project
+- brief autosave bekerja
+- pricing calculation benar
+- quotation snapshot immutable
+- approval tersimpan
+- commercial gate mencegah build
+- approved + verified gate membuat project
+- job baru dibuat hanya setelah gate
+- existing Creative AI project tetap berfungsi
+- OpenAPI clean
+- codegen clean
+- pnpm run verify clean
+- build clean
+``

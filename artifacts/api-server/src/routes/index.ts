@@ -32,6 +32,10 @@ import marketplaceRouter from "./marketplace";
 import humanTasksRouter from "./human-tasks";
 import customerPortalRouter from "./customer-portal";
 import publicReviewRouter from "./public-review";
+import quotationsRouter from "./quotations";
+import catalogRouter from "./catalog";
+import commercialGatesRouter from "./commercialGates";
+import aiQuotationsRouter from "./aiQuotations";
 
 const router: IRouter = Router();
 
@@ -66,5 +70,9 @@ router.use(marketplaceRouter);
 router.use(humanTasksRouter);
 router.use(customerPortalRouter);
 router.use(publicReviewRouter);
+router.use(quotationsRouter);
+router.use(catalogRouter);
+router.use(commercialGatesRouter);
+router.use(aiQuotationsRouter);
 
 export default router;

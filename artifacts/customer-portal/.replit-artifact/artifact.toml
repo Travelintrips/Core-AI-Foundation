@@ -1,5 +1,5 @@
 kind = "web"
-previewPath = "/studio/"
+previewPath = "/"
 title = "Creative AI Studio — Customer Portal"
 version = "1.0.0"
 id = "artifacts/customer-portal"
@@ -7,7 +7,7 @@ router = "path"
 
 [[services]]
 name = "web"
-paths = [ "/studio/" ]
+paths = [ "/" ]
 localPort = 23434
 
 [services.development]
@@ -24,4 +24,4 @@ to = "/index.html"
 
 [services.env]
 PORT = "23434"
-BASE_PATH = "/studio/"
+BASE_PATH = "/"

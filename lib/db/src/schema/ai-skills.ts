@@ -1,8 +1,9 @@
-import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const aiSkillsTable = pgTable("ai_skills", {
+export const aiSkillsTable = appSchema.table("ai_skills", {
   id: serial("id").primaryKey(),
   skillCode: text("skill_code").notNull().unique(),
   skillName: text("skill_name").notNull(),

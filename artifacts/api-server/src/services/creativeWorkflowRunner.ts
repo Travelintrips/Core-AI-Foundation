@@ -469,4 +469,27 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
       anyFailed,
     },
   );
+
+  // Kick off visual asset generation once the text pipeline has produced
+  // creative direction to draw from. This pipeline is a distinct feature
+  // (Image Prompt Generator → Replicate FLUX.1 → Image QC) that previously
+  // had no automatic trigger anywhere in the app — it only existed as a
+  // manual POST endpoint nothing in the UI ever called, so the "Visual
+  // Assets" section on the review page stayed empty forever. Run it
+  // fire-and-forget so a slow/failed image pipeline never blocks the
+  // text-generation status update above.
+  if (!anyFailed) {
+    const { runImageDesignerPipeline } = await import("./imageDesignerService.js");
+    runImageDesignerPipeline(projectDbId, project.projectId, 2).catch(async (err) => {
+      console.error(`[image-designer] Pipeline failed for project ${project.projectId}:`, err);
+      await logAudit(
+        "creative-ai",
+        "image_pipeline_error",
+        project.projectId,
+        "creative_project",
+        "failure",
+        { error: String(err) },
+      );
+    });
+  }
 }

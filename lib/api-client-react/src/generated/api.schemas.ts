@@ -2540,6 +2540,455 @@ export interface CustomerAccessResult {
   message?: string;
 }
 
+export interface AiCommercialGate {
+  id: number;
+  /** @nullable */
+  tenantId?: string | null;
+  /** @nullable */
+  serviceRequestId?: number | null;
+  quotationId: number;
+  gateType: string;
+  status: string;
+  /** @nullable */
+  requiredAmount?: string | null;
+  /** @nullable */
+  verifiedAmount?: string | null;
+  /** @nullable */
+  referenceNumber?: string | null;
+  /** @nullable */
+  verifiedBy?: string | null;
+  /** @nullable */
+  verifiedAt?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CommercialGateVerifyInput {
+  verifiedBy: string;
+  verifiedAmount?: number;
+  referenceNumber?: string;
+}
+
+export interface CommercialGateFailInput {
+  reason: string;
+}
+
+export interface CommercialGateWaiveInput {
+  waivedBy: string;
+  reason: string;
+}
+
+export interface AiServiceCategory {
+  id: number;
+  code: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  icon?: string | null;
+  displayOrder: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiServiceCategoryInput {
+  code: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  displayOrder?: number;
+  status?: string;
+}
+
+export interface AiService {
+  id: number;
+  categoryId: number;
+  serviceCode: string;
+  serviceName: string;
+  /** @nullable */
+  shortDescription?: string | null;
+  /** @nullable */
+  fullDescription?: string | null;
+  serviceType: string;
+  pricingModel: string;
+  /** @nullable */
+  startingPrice?: string | null;
+  currency: string;
+  /** @nullable */
+  estimatedDelivery?: string | null;
+  humanReview: boolean;
+  aiOnly: boolean;
+  subscriptionSupported: boolean;
+  enterpriseSupported: boolean;
+  /** @nullable */
+  department?: string | null;
+  /** @nullable */
+  workflowSummary?: string | null;
+  /** @nullable */
+  aiEmployeesInvolved?: string[] | null;
+  /** @nullable */
+  deliverables?: string[] | null;
+  /** @nullable */
+  revisionPolicy?: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiServiceInput {
+  categoryId: number;
+  serviceCode: string;
+  serviceName: string;
+  shortDescription?: string;
+  fullDescription?: string;
+  serviceType?: string;
+  pricingModel?: string;
+  startingPrice?: string;
+  currency?: string;
+  estimatedDelivery?: string;
+  humanReview?: boolean;
+  aiOnly?: boolean;
+  subscriptionSupported?: boolean;
+  enterpriseSupported?: boolean;
+  department?: string;
+  workflowSummary?: string;
+  aiEmployeesInvolved?: string[];
+  deliverables?: string[];
+  revisionPolicy?: string;
+  status?: string;
+}
+
+/**
+ * @nullable
+ */
+export type AiServicePackageLimitsJson = { [key: string]: unknown } | null;
+
+/**
+ * @nullable
+ */
+export type AiServicePackageSlaJson = { [key: string]: unknown } | null;
+
+export interface AiServicePackage {
+  id: number;
+  serviceId: number;
+  packageName: string;
+  packageType: string;
+  /** @nullable */
+  monthlyPrice?: string | null;
+  /** @nullable */
+  yearlyPrice?: string | null;
+  /** @nullable */
+  oneTimePrice?: string | null;
+  /** @nullable */
+  featuresJson?: string[] | null;
+  /** @nullable */
+  limitsJson?: AiServicePackageLimitsJson;
+  /** @nullable */
+  slaJson?: AiServicePackageSlaJson;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AiServicePackageInputLimitsJson = { [key: string]: unknown };
+
+export type AiServicePackageInputSlaJson = { [key: string]: unknown };
+
+export interface AiServicePackageInput {
+  packageName: string;
+  packageType?: string;
+  monthlyPrice?: string;
+  yearlyPrice?: string;
+  oneTimePrice?: string;
+  featuresJson?: string[];
+  limitsJson?: AiServicePackageInputLimitsJson;
+  slaJson?: AiServicePackageInputSlaJson;
+  status?: string;
+}
+
+export type AiServiceDetail = AiService & {
+  packages?: AiServicePackage[];
+};
+
+/**
+ * @nullable
+ */
+export type AiServiceRequestBriefJson = { [key: string]: unknown } | null;
+
+export type ServiceRequestStatus = typeof ServiceRequestStatus[keyof typeof ServiceRequestStatus];
+
+
+export const ServiceRequestStatus = {
+  draft: 'draft',
+  brief_in_progress: 'brief_in_progress',
+  brief_completed: 'brief_completed',
+  pricing_calculated: 'pricing_calculated',
+  quotation_ready: 'quotation_ready',
+  waiting_customer_approval: 'waiting_customer_approval',
+  waiting_commercial_gate: 'waiting_commercial_gate',
+  approved: 'approved',
+  rejected: 'rejected',
+  revision_requested: 'revision_requested',
+  expired: 'expired',
+  converted_to_project: 'converted_to_project',
+  pending: 'pending',
+  orchestrating: 'orchestrating',
+  in_progress: 'in_progress',
+  waiting_review: 'waiting_review',
+  completed: 'completed',
+  cancelled: 'cancelled',
+} as const;
+
+export interface AiServiceRequest {
+  id: number;
+  requestId: string;
+  serviceId: number;
+  /** @nullable */
+  packageId?: number | null;
+  pricingModelSelected: string;
+  customerName: string;
+  customerEmail: string;
+  /** @nullable */
+  companyName?: string | null;
+  /** @nullable */
+  customerPhone?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  briefJson?: AiServiceRequestBriefJson;
+  quantity?: number;
+  /** @nullable */
+  rushSpeed?: string | null;
+  humanReviewRequested?: boolean;
+  extraRevisions?: number;
+  bilingual?: boolean;
+  editableSourceFile?: boolean;
+  extendedUsageRights?: boolean;
+  currency?: string;
+  subtotal?: string;
+  rushFee?: string;
+  revisionFee?: string;
+  humanReviewFee?: string;
+  additionalServiceFee?: string;
+  discount?: string;
+  tax?: string;
+  total?: string;
+  status: ServiceRequestStatus;
+  /** @nullable */
+  createdProjectId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AiServiceRequestInputBriefJson = { [key: string]: unknown };
+
+export type AiServiceRequestInputRushSpeed = typeof AiServiceRequestInputRushSpeed[keyof typeof AiServiceRequestInputRushSpeed];
+
+
+export const AiServiceRequestInputRushSpeed = {
+  '48h': '48h',
+  '24h': '24h',
+  same_day: 'same_day',
+} as const;
+
+export interface AiServiceRequestInput {
+  packageId?: number;
+  pricingModelSelected: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string;
+  companyName?: string;
+  notes?: string;
+  briefJson?: AiServiceRequestInputBriefJson;
+  quantity?: number;
+  rushSpeed?: AiServiceRequestInputRushSpeed;
+  humanReviewRequested?: boolean;
+  extraRevisions?: number;
+  bilingual?: boolean;
+  editableSourceFile?: boolean;
+  extendedUsageRights?: boolean;
+}
+
+export type AiServiceQuoteInputRushSpeed = typeof AiServiceQuoteInputRushSpeed[keyof typeof AiServiceQuoteInputRushSpeed];
+
+
+export const AiServiceQuoteInputRushSpeed = {
+  '48h': '48h',
+  '24h': '24h',
+  same_day: 'same_day',
+} as const;
+
+export interface AiServiceQuoteInput {
+  packageId?: number;
+  pricingModelSelected?: string;
+  quantity?: number;
+  rushSpeed?: AiServiceQuoteInputRushSpeed;
+  humanReviewRequested?: boolean;
+  extraRevisions?: number;
+  bilingual?: boolean;
+  editableSourceFile?: boolean;
+  extendedUsageRights?: boolean;
+  discount?: number;
+}
+
+export type AiServicePricingBreakdownLineItemsItem = {
+  code: string;
+  label: string;
+  amount: number;
+};
+
+export interface AiServicePricingBreakdown {
+  currency: string;
+  basePrice: number;
+  quantityAdjustment?: number;
+  rushFee?: number;
+  revisionFee?: number;
+  humanReviewFee?: number;
+  additionalServiceFee?: number;
+  discount?: number;
+  subtotal: number;
+  taxPercent?: number;
+  tax: number;
+  total: number;
+  lineItems: AiServicePricingBreakdownLineItemsItem[];
+}
+
+export interface AiServiceRequestStatusUpdate {
+  status: ServiceRequestStatus;
+  createdProjectId?: string;
+}
+
+/**
+ * @nullable
+ */
+export type AiServicePriceRuleConditionJson = { [key: string]: unknown } | null;
+
+export interface AiServicePriceRule {
+  id: number;
+  /** @nullable */
+  tenantId?: string | null;
+  /** @nullable */
+  serviceId?: number | null;
+  ruleCode: string;
+  ruleName: string;
+  conditionType: string;
+  /** @nullable */
+  conditionJson?: AiServicePriceRuleConditionJson;
+  adjustmentType: string;
+  adjustmentValue: string;
+  /** @nullable */
+  minimumCharge?: string | null;
+  /** @nullable */
+  maximumCharge?: string | null;
+  priority: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AiServicePriceRuleInputConditionJson = { [key: string]: unknown };
+
+export interface AiServicePriceRuleInput {
+  tenantId?: string;
+  serviceId?: number;
+  ruleCode: string;
+  ruleName: string;
+  conditionType: string;
+  conditionJson?: AiServicePriceRuleInputConditionJson;
+  adjustmentType: string;
+  adjustmentValue: string;
+  minimumCharge?: string;
+  maximumCharge?: string;
+  priority?: number;
+  active?: boolean;
+}
+
+export interface AiServiceMarginReview {
+  /** @nullable */
+  estimatedAiCost?: string | null;
+  /** @nullable */
+  humanLaborEstimate?: string | null;
+  /** @nullable */
+  grossMargin?: string | null;
+  /** @nullable */
+  grossMarginPercent?: string | null;
+  marginApprovalRequired?: boolean;
+  /** @nullable */
+  marginApprovedBy?: string | null;
+  /** @nullable */
+  marginApprovedAt?: string | null;
+}
+
+export type CatalogAnalyticsMostRequestedServicesItem = {
+  serviceId: number;
+  serviceName: string;
+  requestCount: number;
+};
+
+export type CatalogAnalyticsRevenuePerCategoryItem = {
+  categoryId: number;
+  categoryName: string;
+  estimatedRevenue: number;
+};
+
+/**
+ * @nullable
+ */
+export type CatalogAnalyticsMostPopularPackage = {
+  packageId?: number;
+  packageName?: string;
+  requestCount?: number;
+} | null;
+
+export type CatalogAnalyticsFunnelCounts = {
+  newRequests?: number;
+  briefInProgress?: number;
+  briefCompleted?: number;
+  quotationReady?: number;
+  waitingApproval?: number;
+  approved?: number;
+  inProduction?: number;
+  completed?: number;
+};
+
+export interface CatalogAnalytics {
+  mostRequestedServices: CatalogAnalyticsMostRequestedServicesItem[];
+  revenuePerCategory: CatalogAnalyticsRevenuePerCategoryItem[];
+  /** @nullable */
+  averageDeliveryTimeDays: number | null;
+  /** @nullable */
+  mostPopularPackage: CatalogAnalyticsMostPopularPackage;
+  conversionRate: number;
+  totalRequests?: number;
+  completedRequests?: number;
+  briefCompletionRate?: number;
+  quotationApprovalRate?: number;
+  approvalToPaymentRate?: number;
+  requestToProjectRate?: number;
+  /** @nullable */
+  averageQuotationValue?: number | null;
+  /** @nullable */
+  averageTimeToApprovalDays?: number | null;
+  funnelCounts?: CatalogAnalyticsFunnelCounts;
+}
+
+export type QuotationStatus = typeof QuotationStatus[keyof typeof QuotationStatus];
+
+
+export const QuotationStatus = {
+  draft: 'draft',
+  issued: 'issued',
+  viewed: 'viewed',
+  approved: 'approved',
+  rejected: 'rejected',
+  revision_requested: 'revision_requested',
+  expired: 'expired',
+  cancelled: 'cancelled',
+} as const;
+
 export type ListModelsParams = {
 /**
  * @nullable
@@ -2709,5 +3158,33 @@ limit?: number;
  * @minimum 0
  */
 offset?: number;
+};
+
+export type ListServicesParams = {
+/**
+ * @nullable
+ */
+categoryId?: number | null;
+};
+
+export type ListPriceRulesParams = {
+serviceId?: number;
+};
+
+export type ApproveRequestMarginBody = {
+  approvedBy: string;
+};
+
+export type ApproveRequestMargin200 = {
+  ok?: boolean;
+};
+
+export type StartBrief200 = {
+  ok: boolean;
+  status: string;
+};
+
+export type ListCommercialGatesParams = {
+quotationId?: number;
 };
 

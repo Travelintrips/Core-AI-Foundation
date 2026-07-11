@@ -1,4 +1,5 @@
-import { pgTable, serial, text, timestamp, integer, numeric } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp, integer, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -7,7 +8,7 @@ import { z } from "zod/v4";
  * Records every AI execution with token counts, estimated cost, latency, and retry metadata.
  * Supports cost aggregation per: request, workflow, project, client, agent, provider.
  */
-export const aiCostRecordsTable = pgTable("ai_cost_records", {
+export const aiCostRecordsTable = appSchema.table("ai_cost_records", {
   id: serial("id").primaryKey(),
   // Scope identifiers
   projectId: text("project_id"),          // Creative project UUID (string)

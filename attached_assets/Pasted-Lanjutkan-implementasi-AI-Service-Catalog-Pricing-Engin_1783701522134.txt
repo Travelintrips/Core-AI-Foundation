@@ -1,0 +1,445 @@
+Lanjutkan implementasi AI Service Catalog, Pricing Engine, dan Commercial-First Customer Flow dari state terakhir.
+
+JANGAN mengulang dari awal.
+JANGAN rewrite backend, schema, pricing engine, seed, OpenAPI, atau frontend yang sudah berjalan dan typecheck clean.
+
+STATUS TERAKHIR:
+
+- Database constraint sudah dirapikan tanpa destructive change
+- Pricing engine sudah dibuat dan berjalan
+- Price rule CRUD sudah tersedia
+- Seed service catalog, package, harga IDR, dan price rules sudah masuk
+- Request creation sudah memakai pricing engine
+- Margin dan internal AI cost tidak bocor ke customer
+- Margin review/approval endpoint sudah berjalan
+- OpenAPI sudah diperbarui
+- Orval codegen berhasil
+- Typecheck seluruh workspace clean
+- Customer portal:
+  - /services sudah tampil
+  - service detail sudah tampil
+  - pricing calculator dan request form sudah dibuat
+  - route dan navigasi sudah terpasang
+- Screenshot halaman sudah diperiksa
+- Quota habis saat mandatory code review
+
+==========================================================
+TUGAS 1 — SELESAIKAN CODE REVIEW
+==========================================================
+
+Jalankan kembali mandatory code review.
+
+Periksa khusus:
+
+1. Customer tidak menerima:
+   - estimated_ai_cost
+   - actual_ai_cost
+   - human_labor_estimate
+   - gross_margin
+   - gross_margin_percentage
+   - internal provider/model metadata
+
+2. Semua nilai harga dari request body tidak boleh dipercaya langsung.
+   Backend wajib menghitung ulang menggunakan aiPricingService.
+
+3. Customer tidak boleh mengubah:
+   - base price
+   - discount internal
+   - tax rate
+   - margin
+   - package price
+   - price rule result
+
+4. Price rule harus:
+   - deterministic
+   - memiliki priority
+   - tidak diaplikasikan dua kali
+   - tersimpan dalam pricing snapshot
+
+5. Semua monetary fields harus konsisten:
+   - gunakan integer rupiah atau decimal yang aman
+   - jangan memakai floating point mentah untuk kalkulasi uang
+
+6. Seed harus idempotent dan tidak membuat duplikasi.
+
+7. Customer route tidak boleh memakai admin API key secara terbuka di browser.
+
+Fix semua temuan yang terkait implementasi ini secara minimal dan aman.
+
+==========================================================
+TUGAS 2 — PASTIKAN FLOW COMMERCIAL-FIRST LENGKAP
+==========================================================
+
+Flow final harus:
+
+Service Catalog
+→ Choose Package
+→ Create Service Request
+→ Complete Brief
+→ Pricing Calculation
+→ Quotation
+→ Customer Approval
+→ Commercial Gate
+→ Create Active Project
+→ Build
+→ Internal Review
+→ Customer Review
+→ Final Delivery
+
+Pastikan service request tidak langsung menjadi project aktif.
+
+==========================================================
+TUGAS 3 — QUOTATION DATA MODEL
+==========================================================
+
+Jika belum ada, tambahkan secara additive:
+
+ai_quotations
+
+Field:
+- id
+- tenant_id
+- quotation_code
+- service_request_id
+- customer_name
+- customer_email
+- currency
+- subtotal
+- discount
+- tax
+- total
+- pricing_snapshot_json
+- scope_snapshot_json
+- terms_snapshot_json
+- valid_until
+- status
+- issued_at
+- viewed_at
+- approved_at
+- rejected_at
+- revision_requested_at
+- created_at
+- updated_at
+
+Status:
+- draft
+- issued
+- viewed
+- approved
+- rejected
+- revision_requested
+- expired
+- cancelled
+
+Tambahkan:
+
+ai_quotation_items
+
+Field:
+- id
+- quotation_id
+- item_type
+- description
+- quantity
+- unit_price
+- amount
+- metadata_json
+- display_order
+
+Pricing snapshot harus immutable setelah quotation issued.
+
+==========================================================
+TUGAS 4 — CUSTOMER APPROVAL
+==========================================================
+
+Buat secure quotation approval flow.
+
+Customer harus dapat:
+
+- View Quotation
+- Approve
+- Request Change
+- Reject
+
+Gunakan secure token:
+- random kuat
+- simpan hash token
+- expiry
+- revoke support
+- token tidak disimpan plaintext
+
+Endpoint public:
+
+GET /api/public/quotations/:token
+POST /api/public/quotations/:token/approve
+POST /api/public/quotations/:token/request-change
+POST /api/public/quotations/:token/reject
+
+State-machine guard:
+- quotation terminal tidak boleh dioverwrite
+- approve/reject hanya sekali
+- perubahan status harus atomic
+
+==========================================================
+TUGAS 5 — COMMERCIAL GATE
+==========================================================
+
+Tambahkan atau verifikasi commercial gate.
+
+Support:
+
+- full_payment
+- deposit
+- active_subscription
+- purchase_order
+- admin_approval
+- free_trial
+
+Status:
+
+- pending
+- verified
+- failed
+- waived
+
+Field minimum:
+
+ai_commercial_gates
+- id
+- service_request_id
+- quotation_id
+- gate_type
+- status
+- required_amount
+- verified_amount
+- reference_number
+- verified_by
+- verified_at
+- notes
+- created_at
+- updated_at
+
+Untuk sekarang tidak perlu payment gateway nyata.
+
+Admin dapat:
+- verify gate
+- fail gate
+- waive gate dengan alasan audit
+
+==========================================================
+TUGAS 6 — CONVERSION KE ACTIVE PROJECT
+==========================================================
+
+Project aktif hanya dibuat jika:
+
+- quotation status approved
+- commercial gate status verified atau waived
+- service request belum pernah dikonversi
+
+Conversion harus idempotent.
+
+Saat conversion:
+
+1. Buat active project
+2. Simpan service_request_id dan quotation_id
+3. Buat execution plan
+4. Enqueue jobs
+5. Publish event:
+   - service_request.approved
+   - commercial_gate.verified
+   - service_request.converted
+   - project.created
+6. Update service request ke converted_to_project
+7. Simpan project_id di service request
+
+Gunakan transaction agar tidak membuat duplicate project atau duplicate jobs.
+
+==========================================================
+TUGAS 7 — CUSTOMER FRONTEND FINAL
+==========================================================
+
+Pastikan halaman berikut tersedia:
+
+/services
+/services/:serviceCode
+/request-service
+/request-service/:id/brief
+/request-service/:id/pricing
+/request-service/:id/quotation
+/request-service/:id/approval
+/project/:token
+
+Frontend flow:
+
+1. Service listing
+2. Service detail
+3. Package selection
+4. Brief wizard
+5. Pricing summary
+6. Quotation preview
+7. Approval page
+8. Waiting commercial gate page
+9. Active project workspace
+
+Tambahkan progress stepper:
+
+Paket
+→ Brief
+→ Harga
+→ Persetujuan
+→ Verifikasi Komersial
+→ Produksi
+→ Review
+→ Selesai
+
+==========================================================
+TUGAS 8 — BRIEF WIZARD
+==========================================================
+
+Pastikan brief wizard memiliki:
+
+Step 1 — Informasi Bisnis
+Step 2 — Tujuan Project
+Step 3 — Target Audiens
+Step 4 — Gaya Visual dan Referensi
+Step 5 — Deliverables
+Step 6 — Deadline
+Step 7 — Review
+
+Wajib:
+- autosave
+- resume draft
+- validation per step
+- jangan menjalankan workflow AI penuh sebelum quotation dan commercial gate selesai
+
+AI sebelum approval hanya boleh:
+- brief normalization
+- missing information detection
+- package recommendation
+- pricing assistance
+- quotation drafting
+
+==========================================================
+TUGAS 9 — ADMIN FUNNEL
+==========================================================
+
+Pastikan admin memiliki funnel:
+
+- New Requests
+- Brief In Progress
+- Brief Completed
+- Pricing Calculated
+- Quotation Ready
+- Waiting Customer Approval
+- Approved
+- Waiting Commercial Gate
+- Ready to Build
+- In Production
+- Waiting Review
+- Completed
+- Cancelled
+
+Admin action:
+
+- edit draft quotation
+- issue quotation
+- override price dengan alasan
+- verify commercial gate
+- waive gate dengan alasan
+- convert ke project
+- cancel request
+
+==========================================================
+TUGAS 10 — ANALYTICS
+==========================================================
+
+Tambahkan atau verifikasi KPI:
+
+- service views
+- service view to request conversion
+- brief completion rate
+- quotation issue rate
+- quotation approval rate
+- approval to commercial gate conversion
+- request to active project conversion
+- average quotation value
+- average time to approval
+- average time to commercial verification
+- abandonment stage
+- gross margin internal
+
+Jangan tampilkan margin ke customer.
+
+==========================================================
+TUGAS 11 — LEGACY COMPATIBILITY
+==========================================================
+
+Existing Creative AI projects harus tetap berjalan.
+
+Jangan paksa project lama memiliki:
+- service request
+- quotation
+- commercial gate
+
+Gunakan:
+- source_type
+- legacy flag
+- nullable foreign keys
+
+Jangan migrasikan project lama secara destruktif.
+
+==========================================================
+TUGAS 12 — FINAL VERIFICATION
+==========================================================
+
+Test wajib:
+
+1. Service catalog tampil.
+2. Package selection bekerja.
+3. Brief autosave bekerja.
+4. Pricing backend menghitung ulang.
+5. Rush fee benar.
+6. Revision fee benar.
+7. Human review fee benar.
+8. Quotation snapshot immutable setelah issued.
+9. Customer approve berhasil.
+10. Customer request change berhasil.
+11. Customer reject berhasil.
+12. Approved quotation tanpa commercial gate tidak membuat project.
+13. Verified commercial gate membuat project.
+14. Conversion idempotent.
+15. Job hanya dibuat setelah gate verified/waived.
+16. Customer tidak melihat internal cost/margin.
+17. Existing Creative AI project tetap berjalan.
+18. OpenAPI clean.
+19. Codegen clean.
+20. pnpm run verify clean.
+21. Production build clean untuk package yang terkait.
+
+Jika mockup-sandbox masih gagal karena PORT env pre-existing:
+- catat sebagai known issue terpisah
+- jangan mengubahnya kecuali memang berhubungan langsung dengan flow ini
+
+==========================================================
+FINAL REPORT
+==========================================================
+
+Berikan laporan:
+
+- tabel baru/berubah
+- services baru
+- endpoint admin
+- endpoint public
+- customer routes
+- admin routes
+- pricing logic
+- quotation lifecycle
+- commercial gate lifecycle
+- conversion transaction
+- hasil code review
+- hasil verification
+- known limitations
+
+Target akhir:
+
+Customer memulai dari memilih paket, membuat service request, mengisi brief, menerima quotation, menyetujui harga, melewati commercial gate, lalu sistem baru membuat active project dan menjalankan AI build.

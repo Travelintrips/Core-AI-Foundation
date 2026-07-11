@@ -1,11 +1,12 @@
-import { pgTable, serial, text, boolean, timestamp, jsonb, integer, numeric } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, boolean, timestamp, jsonb, integer, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { aiProvidersTable } from "./ai-providers";
 import { aiModelsTable } from "./ai-models";
 import { aiKnowledgeBasesTable } from "./ai-knowledge-bases";
 
-export const aiAgentsTable = pgTable("ai_agents", {
+export const aiAgentsTable = appSchema.table("ai_agents", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),

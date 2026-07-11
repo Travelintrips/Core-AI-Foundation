@@ -1,9 +1,10 @@
-import { pgTable, serial, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { aiPromptsTable } from "./ai-prompts";
 
-export const aiPromptVersionsTable = pgTable("ai_prompt_versions", {
+export const aiPromptVersionsTable = appSchema.table("ai_prompt_versions", {
   id: serial("id").primaryKey(),
   promptId: integer("prompt_id").notNull().references(() => aiPromptsTable.id, { onDelete: "cascade" }),
   version: integer("version").notNull(),

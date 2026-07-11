@@ -20,6 +20,9 @@ import {
   Crown,
   Zap,
   Store,
+  Tags,
+  LayoutGrid,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -47,6 +50,9 @@ const NAV_ITEMS = [
   { href: "/events", label: "AI Events", icon: Zap },
   { href: "/scheduler", label: "Scheduler", icon: CalendarClock },
   { href: "/marketplace", label: "Marketplace", icon: Store },
+  { href: "/services", label: "Service Catalog", icon: Tags },
+  { href: "/service-requests", label: "Service Requests", icon: ClipboardList },
+  { href: "/catalog-admin", label: "Catalog Admin", icon: LayoutGrid },
   { href: "/audit", label: "Audit Log", icon: ShieldAlert },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

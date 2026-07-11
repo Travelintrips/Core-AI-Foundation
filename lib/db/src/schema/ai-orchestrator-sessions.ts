@@ -1,8 +1,9 @@
-import { pgTable, serial, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const aiOrchestratorSessionsTable = pgTable("ai_orchestrator_sessions", {
+export const aiOrchestratorSessionsTable = appSchema.table("ai_orchestrator_sessions", {
   id: serial("id").primaryKey(),
   sessionId: text("session_id").notNull().unique(),
   agentId: text("agent_id"),

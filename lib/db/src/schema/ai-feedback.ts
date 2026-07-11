@@ -1,4 +1,5 @@
-import { pgTable, serial, text, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -6,7 +7,7 @@ import { z } from "zod/v4";
  * Human Feedback — approve/reject/revise loop on Creative AI step outputs.
  * Stores original AI output alongside any human edits. Never overwrites the original.
  */
-export const aiFeedbackTable = pgTable("ai_feedback", {
+export const aiFeedbackTable = appSchema.table("ai_feedback", {
   id: serial("id").primaryKey(),
   projectId: text("project_id").notNull(),  // Creative project UUID (string)
   stepId: integer("step_id"),               // creative_project_steps.id

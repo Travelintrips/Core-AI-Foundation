@@ -1,5 +1,5 @@
+import { appSchema } from "./_pg-schema";
 import {
-  pgTable,
   serial,
   text,
   integer,
@@ -8,7 +8,7 @@ import {
   jsonb,
 } from "drizzle-orm/pg-core";
 
-export const aiWorkersTable = pgTable("ai_workers", {
+export const aiWorkersTable = appSchema.table("ai_workers", {
   id: serial("id").primaryKey(),
 
   // ── Identity ────────────────────────────────────────────────────────────

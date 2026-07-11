@@ -1,10 +1,11 @@
-import { pgTable, serial, text, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp, jsonb } from "drizzle-orm/pg-core";
 
 /**
  * ai_events — Phase 5.5 AI Event Bus
  * Persistent event store for all inter-module events.
  */
-export const aiEventsTable = pgTable("ai_events", {
+export const aiEventsTable = appSchema.table("ai_events", {
   id:            serial("id").primaryKey(),
   eventId:       text("event_id").notNull().unique(),         // UUID, globally unique
   eventType:     text("event_type").notNull(),               // e.g. "job.completed"

@@ -1,7 +1,8 @@
-import { pgTable, serial, integer, numeric, boolean, text, timestamp } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, integer, numeric, boolean, text, timestamp } from "drizzle-orm/pg-core";
 import { aiEmployeesTable } from "./ai-employees";
 
-export const aiEmployeePerformanceTable = pgTable("ai_employee_performance", {
+export const aiEmployeePerformanceTable = appSchema.table("ai_employee_performance", {
   id: serial("id").primaryKey(),
 
   employeeId: integer("employee_id")

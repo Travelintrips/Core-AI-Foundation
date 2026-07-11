@@ -1,8 +1,9 @@
-import { pgTable, serial, text, boolean, timestamp, integer } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, boolean, timestamp, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const aiPromptsTable = pgTable("ai_prompts", {
+export const aiPromptsTable = appSchema.table("ai_prompts", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),

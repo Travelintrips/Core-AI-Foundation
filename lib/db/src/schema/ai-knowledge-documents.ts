@@ -1,9 +1,10 @@
-import { pgTable, serial, text, timestamp, jsonb, integer } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp, jsonb, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { aiKnowledgeBasesTable } from "./ai-knowledge-bases";
 
-export const aiKnowledgeDocumentsTable = pgTable("ai_knowledge_documents", {
+export const aiKnowledgeDocumentsTable = appSchema.table("ai_knowledge_documents", {
   id: serial("id").primaryKey(),
   knowledgeBaseId: integer("knowledge_base_id").notNull().references(() => aiKnowledgeBasesTable.id, { onDelete: "cascade" }),
   title: text("title").notNull(),

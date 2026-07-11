@@ -1,4 +1,5 @@
-import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -9,7 +10,7 @@ import { z } from "zod/v4";
  * The plaintext token is shown once after creation and never stored.
  * The token_hash (SHA-256) is stored and used for lookup.
  */
-export const customerDashboardTokensTable = pgTable("customer_dashboard_tokens", {
+export const customerDashboardTokensTable = appSchema.table("customer_dashboard_tokens", {
   id: serial("id").primaryKey(),
   emailHash: text("email_hash").notNull(),        // SHA-256 of lower-cased email — for fast lookup
   clientEmail: text("client_email").notNull(),

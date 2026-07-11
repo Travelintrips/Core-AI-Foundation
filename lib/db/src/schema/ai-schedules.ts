@@ -1,5 +1,5 @@
+import { appSchema } from "./_pg-schema";
 import {
-  pgTable,
   serial,
   text,
   integer,
@@ -12,7 +12,7 @@ import {
  * ai_schedules — Phase 6 AI Scheduler & Automation Engine
  * Defines a recurring or one-time trigger that creates jobs / publishes events.
  */
-export const aiSchedulesTable = pgTable("ai_schedules", {
+export const aiSchedulesTable = appSchema.table("ai_schedules", {
   id: serial("id").primaryKey(),
 
   scheduleCode: text("schedule_code").notNull().unique(),

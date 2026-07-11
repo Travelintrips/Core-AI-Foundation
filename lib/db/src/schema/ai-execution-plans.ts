@@ -1,6 +1,7 @@
-import { pgTable, serial, text, integer, numeric, timestamp } from "drizzle-orm/pg-core";
+import { appSchema } from "./_pg-schema";
+import { serial, text, integer, numeric, timestamp } from "drizzle-orm/pg-core";
 
-export const aiExecutionPlansTable = pgTable("ai_execution_plans", {
+export const aiExecutionPlansTable = appSchema.table("ai_execution_plans", {
   id: serial("id").primaryKey(),
 
   // Link to project (any type — 'creative_ai', 'custom', etc.)
