@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import {
   Loader2, RefreshCw, FileText, ClipboardList, Calculator,
   Send, ThumbsUp, ShieldCheck, Zap, Eye, CheckCircle2, XCircle,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, X, TrendingUp, DollarSign, Users,
+  ArrowRight, AlertTriangle, CheckCircle,
 } from "lucide-react";
 
 // Use empty string so fetch("/api/...") goes through the Vite /api proxy,
@@ -54,24 +55,325 @@ const STAGES: Stage[] = [
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+type PricingLineItem = { code: string; label: string; amount: number };
+type PricingSnapshot = {
+  basePrice?: number;
+  lineItems?: PricingLineItem[];
+  total?: number;
+  taxPercent?: number;
+  grossMargin?: number;
+  grossMarginPercent?: number;
+  estimatedAiCost?: number;
+  humanLaborEstimate?: number;
+};
+
 type ServiceRequest = {
   id: number;
   requestId: string;
   serviceId: number;
   customerName: string;
   customerEmail: string;
+  customerPhone?: string;
   companyName: string | null;
   currency: string;
   total: string;
+  subtotal: string;
+  rushFee: string;
+  revisionFee: string;
+  humanReviewFee: string;
+  additionalServiceFee: string;
+  discount: string;
+  tax: string;
   status: string;
+  briefJson: Record<string, unknown> | null;
+  marginApprovalRequired: boolean;
+  marginApprovedBy: string | null;
+  marginApprovedAt: string | null;
+  estimatedAiCost: string | null;
+  humanLaborEstimate: string | null;
+  grossMargin: string | null;
+  grossMarginPercent: string | null;
+  pricingSnapshotJson: PricingSnapshot | null;
   createdAt: string;
   updatedAt: string;
 };
+
+// Next status actions for each current status
+const NEXT_ACTIONS: Record<string, { label: string; status: string; variant: "primary" | "secondary" | "danger" }[]> = {
+  draft:                      [{ label: "Mulai Brief", status: "brief_in_progress", variant: "primary" }],
+  brief_in_progress:          [{ label: "Tandai Brief Selesai", status: "brief_completed", variant: "primary" }],
+  brief_completed:            [{ label: "Kirim Penawaran ke Customer", status: "quotation_ready", variant: "primary" }],
+  quoted:                     [{ label: "Penawaran Siap Dikirim", status: "quotation_ready", variant: "primary" }],
+  quotation_ready:            [{ label: "Tandai Menunggu Persetujuan", status: "waiting_customer_approval", variant: "secondary" }],
+  waiting_customer_approval:  [],   // customer action
+  approved:                   [{ label: "Proses Gate Komersial", status: "waiting_commercial_gate", variant: "primary" }, { label: "Langsung ke Produksi", status: "in_progress", variant: "secondary" }],
+  waiting_commercial_gate:    [{ label: "Siap Produksi", status: "ready_to_build", variant: "primary" }],
+  ready_to_build:             [{ label: "Mulai Produksi", status: "in_progress", variant: "primary" }],
+  in_progress:                [{ label: "Ke Review", status: "waiting_review", variant: "secondary" }],
+  orchestrating:              [{ label: "Ke Review", status: "waiting_review", variant: "secondary" }],
+  waiting_review:             [{ label: "Selesai", status: "completed", variant: "primary" }],
+};
+
+function fmt(amount: string | number | null | undefined, currency = "IDR") {
+  if (amount === null || amount === undefined) return "—";
+  const n = typeof amount === "string" ? parseFloat(amount) : amount;
+  if (isNaN(n)) return "—";
+  if (currency === "IDR") return `Rp${Math.round(n).toLocaleString("id-ID")}`;
+  return `${currency} ${n.toLocaleString()}`;
+}
+
+// ── Detail Panel ──────────────────────────────────────────────────────────────
+
+function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => void }) {
+  const qc = useQueryClient();
+  const snapshot = req.pricingSnapshotJson;
+
+  const approveMargin = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/ai/catalog/requests/${req.id}/approve-margin`, {
+        method: "POST",
+        body: JSON.stringify({ approvedBy: "admin" }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["service-requests"] }),
+  });
+
+  const changeStatus = useMutation({
+    mutationFn: (status: string) =>
+      apiFetch(`/api/ai/catalog/requests/${req.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["service-requests"] }),
+  });
+
+  const actions = NEXT_ACTIONS[req.status] ?? [];
+  const marginNeeded = req.marginApprovalRequired && !req.marginApprovedBy;
+  const marginApproved = !!req.marginApprovedBy;
+
+  const stage = STAGES.find((s) => s.statuses.includes(req.status));
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div
+        className="relative w-full max-w-lg h-full bg-background border-l border-border shadow-2xl flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+          <div>
+            <h2 className="font-semibold text-lg">{req.customerName}</h2>
+            <p className="text-xs text-muted-foreground font-mono">{req.requestId}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {stage && (
+              <span className={`text-xs font-medium px-2 py-1 rounded-full ${stage.bg} ${stage.color}`}>
+                {stage.label}
+              </span>
+            )}
+            <button onClick={onClose} className="p-1.5 hover:bg-muted rounded-lg transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+
+          {/* Customer Info */}
+          <section>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Info Customer</h3>
+            <div className="bg-muted/30 rounded-xl p-4 space-y-2 text-sm">
+              <Row label="Nama" value={req.customerName} />
+              <Row label="Email" value={req.customerEmail} />
+              {req.customerPhone && <Row label="Telepon" value={req.customerPhone} />}
+              {req.companyName && <Row label="Perusahaan" value={req.companyName} />}
+              <Row label="Masuk" value={new Date(req.createdAt).toLocaleString("id-ID")} />
+            </div>
+          </section>
+
+          {/* Margin Warning */}
+          {marginNeeded && (
+            <section className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-medium text-amber-800 dark:text-amber-300 text-sm">Persetujuan Margin Diperlukan</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                    Margin gross di bawah threshold yang ditetapkan. Admin harus menyetujui sebelum penawaran dikirim ke customer.
+                  </p>
+                  <button
+                    onClick={() => approveMargin.mutate()}
+                    disabled={approveMargin.isPending}
+                    className="mt-3 flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
+                  >
+                    {approveMargin.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                    Approve Margin
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {marginApproved && (
+            <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-xl px-4 py-2.5">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              Margin disetujui oleh <strong className="ml-1">{req.marginApprovedBy}</strong>
+              {req.marginApprovedAt && <span className="ml-1 text-muted-foreground">· {new Date(req.marginApprovedAt).toLocaleDateString("id-ID")}</span>}
+            </div>
+          )}
+
+          {/* Pricing Breakdown */}
+          <section>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Rincian Harga</h3>
+            <div className="bg-muted/30 rounded-xl p-4 space-y-2 text-sm">
+              {snapshot?.lineItems && snapshot.lineItems.length > 0
+                ? snapshot.lineItems.map((item) => (
+                    <div key={item.code} className="flex justify-between">
+                      <span className="text-muted-foreground">{item.label}</span>
+                      <span className="font-medium">{fmt(item.amount, req.currency)}</span>
+                    </div>
+                  ))
+                : (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span className="font-medium">{fmt(req.subtotal, req.currency)}</span>
+                    </div>
+                  )}
+              {parseFloat(req.discount) > 0 && (
+                <div className="flex justify-between text-green-600">
+                  <span>Diskon</span>
+                  <span>−{fmt(req.discount, req.currency)}</span>
+                </div>
+              )}
+              {parseFloat(req.tax) > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Pajak</span>
+                  <span className="font-medium">{fmt(req.tax, req.currency)}</span>
+                </div>
+              )}
+              <div className="border-t border-border pt-2 flex justify-between font-semibold">
+                <span>Total</span>
+                <span className="text-primary">{fmt(req.total, req.currency)}</span>
+              </div>
+            </div>
+          </section>
+
+          {/* Margin / Cost Internal */}
+          {(req.grossMargin || snapshot?.grossMargin) && (
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Margin & Biaya Internal</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <MetricCard
+                  icon={TrendingUp}
+                  label="Gross Margin"
+                  value={fmt(req.grossMargin ?? snapshot?.grossMargin, req.currency)}
+                  sub={`${parseFloat(req.grossMarginPercent ?? String(snapshot?.grossMarginPercent ?? 0)).toFixed(1)}%`}
+                  color="text-green-600"
+                />
+                <MetricCard
+                  icon={DollarSign}
+                  label="Est. AI Cost"
+                  value={fmt(req.estimatedAiCost ?? snapshot?.estimatedAiCost, req.currency)}
+                  color="text-blue-600"
+                />
+                <MetricCard
+                  icon={Users}
+                  label="Labor Estimate"
+                  value={fmt(req.humanLaborEstimate ?? snapshot?.humanLaborEstimate, req.currency)}
+                  color="text-purple-600"
+                />
+              </div>
+            </section>
+          )}
+
+          {/* Brief */}
+          {req.briefJson && Object.keys(req.briefJson).length > 0 && (
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Data Brief</h3>
+              <div className="bg-muted/30 rounded-xl p-4 space-y-2 text-sm">
+                {Object.entries(req.briefJson)
+                  .filter(([, v]) => v !== null && v !== undefined && v !== "")
+                  .map(([k, v]) => (
+                    <Row key={k} label={k.replace(/_/g, " ")} value={String(v)} />
+                  ))}
+              </div>
+            </section>
+          )}
+        </div>
+
+        {/* Action Footer */}
+        {actions.length > 0 && (
+          <div className="shrink-0 border-t border-border px-6 py-4 bg-muted/10 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Langkah Berikutnya</p>
+            {actions.map((action) => (
+              <button
+                key={action.status}
+                onClick={() => changeStatus.mutate(action.status)}
+                disabled={changeStatus.isPending || (marginNeeded && action.status === "quotation_ready")}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 ${
+                  action.variant === "primary"
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : action.variant === "danger"
+                    ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    : "bg-muted text-foreground hover:bg-muted/80 border border-border"
+                }`}
+              >
+                {changeStatus.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <ArrowRight className="w-3.5 h-3.5" />
+                )}
+                {action.label}
+                {marginNeeded && action.status === "quotation_ready" && (
+                  <span className="ml-1 text-[10px] opacity-70">(approve margin dulu)</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {req.status === "waiting_customer_approval" && (
+          <div className="shrink-0 border-t border-border px-6 py-4 bg-muted/10">
+            <p className="text-xs text-muted-foreground text-center">
+              Menunggu customer menyetujui penawaran — tidak ada aksi admin di tahap ini.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4">
+      <span className="text-muted-foreground capitalize shrink-0">{label}</span>
+      <span className="font-medium text-right break-all">{value}</span>
+    </div>
+  );
+}
+
+function MetricCard({ icon: Icon, label, value, sub, color }: {
+  icon: typeof TrendingUp; label: string; value: string; sub?: string; color: string;
+}) {
+  return (
+    <div className="bg-background border border-border rounded-xl p-3 flex items-start gap-3">
+      <div className={`w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0`}>
+        <Icon className={`w-4 h-4 ${color}`} />
+      </div>
+      <div>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-sm font-semibold">{value}</p>
+        {sub && <p className={`text-xs font-medium ${color}`}>{sub}</p>}
+      </div>
+    </div>
+  );
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ServiceRequestsPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set(["new", "brief", "brief_done", "pricing", "waiting", "approved", "gate", "production"]));
+  const [selected, setSelected] = useState<ServiceRequest | null>(null);
 
   const { data: requests = [], isLoading, refetch, isFetching } = useQuery<ServiceRequest[]>({
     queryKey: ["service-requests"],
@@ -101,6 +403,9 @@ export default function ServiceRequestsPage() {
   const total = requests.length;
   const completedCount = byStage.get("completed")?.length ?? 0;
   const inProgressCount = (byStage.get("production")?.length ?? 0) + (byStage.get("build")?.length ?? 0);
+
+  // Sync selected request with fresh data after mutations
+  const selectedFresh = selected ? (requests.find((r) => r.id === selected.id) ?? selected) : null;
 
   return (
     <Layout>
@@ -153,30 +458,43 @@ export default function ServiceRequestsPage() {
                   {/* Request rows */}
                   {isOpen && items.length > 0 && (
                     <div className="border-t border-border divide-y divide-border">
-                      {items.map((req) => (
-                        <div key={req.id} className="flex items-center gap-4 px-4 py-3 bg-muted/10 hover:bg-muted/20 transition-colors">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{req.customerName}</p>
-                            <p className="text-xs text-muted-foreground truncate">{req.customerEmail}</p>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-sm font-semibold">
-                              {req.currency === "IDR"
-                                ? `Rp${Math.round(parseFloat(req.total)).toLocaleString("id-ID")}`
-                                : `${req.currency} ${parseFloat(req.total).toLocaleString()}`}
+                      {items.map((req) => {
+                        const needsMargin = req.marginApprovalRequired && !req.marginApprovedBy;
+                        return (
+                          <button
+                            key={req.id}
+                            onClick={() => setSelected(req)}
+                            className="w-full flex items-center gap-4 px-4 py-3 bg-muted/10 hover:bg-muted/30 transition-colors text-left"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{req.customerName}</p>
+                              <p className="text-xs text-muted-foreground truncate">{req.customerEmail}</p>
+                            </div>
+                            {needsMargin && (
+                              <span className="shrink-0 flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">
+                                <AlertTriangle className="w-3 h-3" /> Margin
+                              </span>
+                            )}
+                            <div className="text-right shrink-0">
+                              <p className="text-sm font-semibold">
+                                {req.currency === "IDR"
+                                  ? `Rp${Math.round(parseFloat(req.total)).toLocaleString("id-ID")}`
+                                  : `${req.currency} ${parseFloat(req.total).toLocaleString()}`}
+                              </p>
+                              <p className="text-xs text-muted-foreground font-mono">{req.requestId.slice(0, 8)}</p>
+                            </div>
+                            <div className="shrink-0">
+                              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${stage.bg} ${stage.color}`}>
+                                {req.status}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground shrink-0 hidden sm:block">
+                              {new Date(req.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
                             </p>
-                            <p className="text-xs text-muted-foreground font-mono">{req.requestId.slice(0, 8)}</p>
-                          </div>
-                          <div className="shrink-0">
-                            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${stage.bg} ${stage.color}`}>
-                              {req.status}
-                            </span>
-                          </div>
-                          <p className="text-xs text-muted-foreground shrink-0 hidden sm:block">
-                            {new Date(req.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
-                          </p>
-                        </div>
-                      ))}
+                            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -191,6 +509,11 @@ export default function ServiceRequestsPage() {
           </div>
         )}
       </div>
+
+      {/* Detail Panel */}
+      {selectedFresh && (
+        <DetailPanel req={selectedFresh} onClose={() => setSelected(null)} />
+      )}
     </Layout>
   );
 }
