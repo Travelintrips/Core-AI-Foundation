@@ -48,11 +48,10 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
   const assetsInProgress = (review.assets ?? []).some((a) => a.status === 'generating' || a.status === 'pending');
   // Still "in production" while the text workflow is running OR the image
   // pipeline (which is chained after it) hasn't finished producing assets yet.
-  const isGenerating = review.status === 'pending' || review.status === 'running' || assetsInProgress;
   // A quotation that hasn't been approved yet means production hasn't actually started,
   // even though the project row is still sitting in "pending" — don't show a false "generating" spinner.
   const awaitingQuotation = review.status === 'pending' && !!review.quotationStatus && review.quotationStatus !== 'approved';
-  const isGenerating = (review.status === 'pending' || review.status === 'running') && !awaitingQuotation;
+  const isGenerating = (review.status === 'pending' || review.status === 'running' || assetsInProgress) && !awaitingQuotation;
 
   const handleApprove = () => {
     approveReview.mutate({ token: params.token, data: {} }, {
