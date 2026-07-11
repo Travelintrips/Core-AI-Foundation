@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
+import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, RefreshCw, FileText, ClipboardList, Calculator,
   Send, ThumbsUp, ShieldCheck, Zap, Eye, CheckCircle2, XCircle,
@@ -160,6 +161,7 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
     });
   }
 
+  const { toast } = useToast();
   const changeStatus = useMutation({
     mutationFn: (status: string) =>
       apiFetch(`/api/ai/catalog/requests/${req.id}/status`, {
@@ -167,6 +169,7 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
         body: JSON.stringify({ status }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["service-requests"] }),
+    onError: (err: Error) => toast({ title: "Tidak bisa mengubah status", description: err.message, variant: "destructive" }),
   });
 
   const actions = NEXT_ACTIONS[req.status] ?? [];

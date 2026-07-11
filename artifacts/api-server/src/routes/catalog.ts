@@ -24,6 +24,7 @@ import {
   aiServicePriceRulesTable,
   aiQuotationsTable,
   aiQuotationItemsTable,
+  creativeProjectsTable,
   insertAiServiceCategorySchema,
   insertAiServiceSchema,
   insertAiServicePackageSchema,
@@ -363,6 +364,39 @@ router.patch("/ai/catalog/requests/:id/status", async (req, res): Promise<void> 
   if (id === null) return;
   const { status, createdProjectId } = req.body as { status?: string; createdProjectId?: string };
   if (!status) { res.status(400).json({ error: "status is required" }); return; }
+
+  // Guard: "completed" is a customer-facing promise that real deliverables exist.
+  // Only allow it once this request is actually linked to a project whose AI
+  // production run has finished — otherwise the status lies to the customer
+  // (they'd see "Selesai" with nothing to review).
+  if (status === "completed") {
+    const [existing] = await db
+      .select({ createdProjectId: aiServiceRequestsTable.createdProjectId })
+      .from(aiServiceRequestsTable)
+      .where(eq(aiServiceRequestsTable.id, id))
+      .limit(1);
+    if (!existing) { res.status(404).json({ error: "Request not found" }); return; }
+
+    const projectId = createdProjectId ?? existing.createdProjectId;
+    if (!projectId) {
+      res.status(409).json({
+        error: "Cannot mark this request as completed: no project has been created for it yet (no quotation was approved / no production has run). Issue and approve a quotation first.",
+      });
+      return;
+    }
+    const [project] = await db
+      .select({ status: creativeProjectsTable.status })
+      .from(creativeProjectsTable)
+      .where(eq(creativeProjectsTable.projectId, projectId))
+      .limit(1);
+    if (!project || project.status !== "completed") {
+      res.status(409).json({
+        error: `Cannot mark this request as completed: its linked project has not finished production yet (project status: ${project?.status ?? "not found"}).`,
+      });
+      return;
+    }
+  }
+
   const [row] = await db
     .update(aiServiceRequestsTable)
     .set({ status, createdProjectId: createdProjectId ?? undefined, updatedAt: new Date() })

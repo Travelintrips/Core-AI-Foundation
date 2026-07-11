@@ -13,22 +13,47 @@ function formatMoney(amount: number | string, currency = "IDR") {
   }
 }
 
+// Kept in sync with the label map used on the customer dashboard
+// (artifacts/api-server/src/routes/customer-portal.ts) — every status the
+// backend can set on a service request must have an entry here, otherwise
+// this page falls back to showing the raw backend value.
 const STATUS_LABEL: Record<string, string> = {
   draft: "Permintaan Diterima",
   brief_in_progress: "Mengisi Brief",
   brief_completed: "Brief Selesai",
-  pricing_calculated: "Harga Dikonfirmasi",
-  quoted: "Sedang Dikalkulasi",
+  quoted: "Harga Dikalkulasi",
   quotation_ready: "Penawaran Siap Dikirim",
   waiting_customer_approval: "Menunggu Persetujuan Anda",
   approved: "Disetujui",
-  waiting_commercial_gate: "Menunggu Konfirmasi Pembayaran",
+  waiting_commercial_gate: "Verifikasi Komersial",
+  ready_to_build: "Siap Produksi",
+  in_progress: "Sedang Diproduksi",
+  orchestrating: "Sedang Diproduksi",
+  waiting_review: "Menunggu Review Internal",
+  completed: "Selesai",
+  converted_to_project: "Project Dibuat",
   revision_requested: "Revisi Dibutuhkan",
   rejected: "Ditolak",
   expired: "Kedaluwarsa",
   cancelled: "Dibatalkan",
-  converted_to_project: "Project Dibuat",
 };
+
+// Stage buckets drive which message/CTA is shown — this replaces the old
+// binary "hasQuotation" check, which only recognised 5 statuses and silently
+// mislabeled everything past that (e.g. "completed") as "still preparing".
+type Stage = "awaiting_quotation" | "quotation_pending" | "in_production" | "done" | "stopped";
+
+function stageFor(status: string): Stage {
+  if (["quotation_ready", "waiting_customer_approval", "approved", "waiting_commercial_gate", "revision_requested"].includes(status)) {
+    return "quotation_pending";
+  }
+  if (["ready_to_build", "in_progress", "orchestrating", "waiting_review", "converted_to_project"].includes(status)) {
+    return "in_production";
+  }
+  if (status === "completed") return "done";
+  if (["rejected", "expired", "cancelled"].includes(status)) return "stopped";
+  return "awaiting_quotation"; // draft, brief_in_progress, brief_completed, quoted
+}
 
 export default function RequestPricingPage() {
   const { requestId } = useParams<{ requestId: string }>();
@@ -58,7 +83,16 @@ export default function RequestPricingPage() {
     );
   }
 
-  const hasQuotation = ["quotation_ready", "waiting_customer_approval", "approved", "waiting_commercial_gate", "converted_to_project"].includes(request.status);
+  const stage = stageFor(request.status);
+  const isPositiveStage = stage === "quotation_pending" || stage === "in_production" || stage === "done";
+
+  const STAGE_COPY: Record<Stage, string> = {
+    awaiting_quotation: "Tim kami sedang menyiapkan penawaran harga berdasarkan brief yang Anda kirimkan. Anda akan dihubungi via email saat penawaran siap.",
+    quotation_pending: "Penawaran harga sudah siap untuk Anda tinjau dan setujui.",
+    in_production: "Penawaran sudah disetujui dan pekerjaan sedang dikerjakan oleh tim kami.",
+    done: "Pekerjaan untuk permintaan ini sudah selesai dikerjakan. Cek email Anda atau dashboard untuk melihat hasilnya.",
+    stopped: "Permintaan ini tidak lagi berjalan.",
+  };
 
   return (
     <Layout>
@@ -75,23 +109,14 @@ export default function RequestPricingPage() {
         </p>
 
         {/* Status card */}
-        <div className={`rounded-2xl border p-6 mb-6 ${hasQuotation ? "bg-primary/5 border-primary/20" : "bg-card border-border"}`}>
+        <div className={`rounded-2xl border p-6 mb-6 ${isPositiveStage ? "bg-primary/5 border-primary/20" : "bg-card border-border"}`}>
           <div className="flex items-start gap-4">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${hasQuotation ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-              {hasQuotation ? <CheckCircle2 className="w-5 h-5" /> : <Clock className="w-5 h-5 text-muted-foreground" />}
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isPositiveStage ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+              {isPositiveStage ? <CheckCircle2 className="w-5 h-5" /> : <Clock className="w-5 h-5 text-muted-foreground" />}
             </div>
             <div>
               <p className="font-medium">{STATUS_LABEL[request.status] ?? request.status}</p>
-              {hasQuotation ? (
-                <p className="text-sm text-muted-foreground mt-1">
-                  Penawaran harga sudah siap untuk Anda tinjau dan setujui.
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground mt-1">
-                  Tim kami sedang menyiapkan penawaran harga berdasarkan brief yang Anda kirimkan.
-                  Anda akan dihubungi via email saat penawaran siap.
-                </p>
-              )}
+              <p className="text-sm text-muted-foreground mt-1">{STAGE_COPY[stage]}</p>
             </div>
           </div>
         </div>
@@ -136,7 +161,7 @@ export default function RequestPricingPage() {
         )}
 
         {/* CTA */}
-        {hasQuotation ? (
+        {stage === "quotation_pending" && (
           <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center">
             <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-3" />
             <p className="font-medium mb-1">Penawaran Siap Ditinjau</p>
@@ -144,7 +169,35 @@ export default function RequestPricingPage() {
               Tim kami telah mengirimkan link penawaran ke <strong>{request.customerEmail}</strong>. Jika belum menerima link, hubungi tim kami.
             </p>
           </div>
-        ) : (
+        )}
+        {stage === "in_production" && (
+          <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center">
+            <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-3" />
+            <p className="font-medium mb-1">Sedang Dikerjakan</p>
+            <p className="text-sm text-muted-foreground">
+              Tim kami sedang memproduksi hasil untuk permintaan ini. Anda akan dihubungi via email begitu hasilnya siap ditinjau.
+            </p>
+          </div>
+        )}
+        {stage === "done" && (
+          <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center">
+            <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-3" />
+            <p className="font-medium mb-1">Pekerjaan Selesai</p>
+            <p className="text-sm text-muted-foreground">
+              Hasil untuk permintaan ini telah selesai dikerjakan. Cek email di <strong>{request.customerEmail}</strong> atau dashboard Anda untuk melihat hasilnya. Belum menerima apa pun? Hubungi tim kami.
+            </p>
+          </div>
+        )}
+        {stage === "stopped" && (
+          <div className="bg-muted/30 border border-border rounded-2xl p-6 text-center">
+            <Clock className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+            <p className="font-medium mb-1">Permintaan Tidak Berlanjut</p>
+            <p className="text-sm text-muted-foreground">
+              Permintaan ini berstatus "{STATUS_LABEL[request.status] ?? request.status}". Hubungi tim kami jika ini tidak sesuai harapan Anda.
+            </p>
+          </div>
+        )}
+        {stage === "awaiting_quotation" && (
           <div className="bg-muted/30 border border-border rounded-2xl p-6 text-center">
             <Clock className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
             <p className="font-medium mb-1">Menunggu Penawaran Resmi</p>
