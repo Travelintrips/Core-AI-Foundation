@@ -51,6 +51,10 @@ tags:
     description: AI Service Catalog & Pricing Center — departments, services, packages, and customer requests
   - name: commercial-gates
     description: Commercial gate management — payment verification, waiver, and approval before project conversion
+  - name: customer-workspace
+    description: Customer Workspace — dashboard, projects, downloads, invoices, brand kit, notifications, profile, support
+  - name: customer-workspace-admin
+    description: Admin visibility into customer workspaces — impersonation, token rotation, analytics
 paths:
   /healthz:
     get:
@@ -4531,6 +4535,491 @@ paths:
           description: Bad request
         "404":
           description: Not found
+  /public/customer/workspace/{token}/summary:
+    get:
+      operationId: getWorkspaceSummary
+      tags: [customer-workspace]
+      summary: Get KPI summary for the authenticated customer workspace
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Workspace summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSummary"
+        "401": { description: Token expired, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "404": { description: Token not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/projects:
+    get:
+      operationId: listWorkspaceProjects
+      tags: [customer-workspace]
+      summary: List all creative projects for the workspace customer
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: query, name: search, schema: { type: string } }
+        - { in: query, name: status, schema: { type: string } }
+        - { in: query, name: service, schema: { type: string } }
+        - { in: query, name: industry, schema: { type: string } }
+        - { in: query, name: sort, schema: { type: string, enum: [newest, oldest, delivery_date] } }
+      responses:
+        "200":
+          description: Paginated project list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceProjectList"
+
+  /public/customer/workspace/{token}/projects/{projectNumber}:
+    get:
+      operationId: getWorkspaceProjectDetail
+      tags: [customer-workspace]
+      summary: Get full detail for a single workspace project
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: projectNumber, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Project detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceProjectDetail"
+        "404": { description: Project not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/downloads:
+    get:
+      operationId: listWorkspaceDownloads
+      tags: [customer-workspace]
+      summary: List downloadable assets for the workspace customer
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: projectId, schema: { type: string } }
+        - { in: query, name: search, schema: { type: string } }
+      responses:
+        "200":
+          description: Download item list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceDownloadList"
+
+  /public/customer/workspace/{token}/downloads/{assetId}/sign:
+    post:
+      operationId: signWorkspaceDownload
+      tags: [customer-workspace]
+      summary: Generate a signed URL for a workspace asset download
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: assetId, required: true, schema: { type: integer } }
+      responses:
+        "201":
+          description: Signed download token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSignedDownload"
+        "402": { description: Files locked — payment required, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "404": { description: Asset not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/brand-kit:
+    get:
+      operationId: listWorkspaceBrandKit
+      tags: [customer-workspace]
+      summary: List brand kits for the workspace customer
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Brand kit list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceBrandKitList"
+
+  /public/customer/workspace/{token}/invoices:
+    get:
+      operationId: listWorkspaceInvoices
+      tags: [customer-workspace]
+      summary: List invoices for the workspace customer
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: query, name: status, schema: { type: string } }
+      responses:
+        "200":
+          description: Invoice list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceInvoiceList"
+
+  /public/customer/workspace/{token}/invoices/documents:
+    get:
+      operationId: listWorkspaceInvoiceDocuments
+      tags: [customer-workspace]
+      summary: List generated PDF documents for the workspace customer
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: query, name: projectId, schema: { type: string } }
+      responses:
+        "200":
+          description: Document list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceDocumentList"
+
+  /public/customer/workspace/{token}/invoices/{invoiceId}/generate:
+    post:
+      operationId: generateWorkspaceInvoicePdf
+      tags: [customer-workspace]
+      summary: Generate or regenerate a PDF for a workspace invoice
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: invoiceId, required: true, schema: { type: integer } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateInvoiceDocumentInput"
+      responses:
+        "201":
+          description: PDF generated with signed access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateInvoiceDocumentResult"
+        "404": { description: Invoice not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/invoices/documents/{docId}/access:
+    get:
+      operationId: getWorkspaceDocumentAccess
+      tags: [customer-workspace]
+      summary: Get a signed access token to download an existing invoice document
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: docId, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Signed access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentAccessTokenResult"
+        "404": { description: Document not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/documents/access/{docToken}:
+    get:
+      operationId: downloadWorkspaceDocument
+      tags: [customer-workspace]
+      summary: Stream a PDF document using a signed access token
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: docToken, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: PDF file stream
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401": { description: Token expired or invalid, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "404": { description: Document not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/notifications:
+    get:
+      operationId: listWorkspaceNotifications
+      tags: [customer-workspace]
+      summary: List notifications for the workspace customer
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: read, schema: { type: string, enum: [read, unread] } }
+      responses:
+        "200":
+          description: Notification list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceNotificationList"
+
+  /public/customer/workspace/{token}/notifications/read:
+    post:
+      operationId: markWorkspaceNotificationRead
+      tags: [customer-workspace]
+      summary: Mark a single notification as read
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkNotificationReadInput"
+      responses:
+        "200":
+          description: Notification marked read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /public/customer/workspace/{token}/notifications/read-all:
+    post:
+      operationId: markAllWorkspaceNotificationsRead
+      tags: [customer-workspace]
+      summary: Mark all notifications as read
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: All notifications marked read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarkAllNotificationsReadResult"
+
+  /public/customer/workspace/{token}/activity:
+    get:
+      operationId: listWorkspaceActivity
+      tags: [customer-workspace]
+      summary: List customer activity / audit log
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Activity list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceActivityList"
+
+  /public/customer/workspace/{token}/profile:
+    get:
+      operationId: getWorkspaceProfile
+      tags: [customer-workspace]
+      summary: Get customer profile
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Customer profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceProfile"
+    patch:
+      operationId: patchWorkspaceProfile
+      tags: [customer-workspace]
+      summary: Update customer profile fields
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceProfilePatch"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceProfile"
+
+  /public/customer/workspace/{token}/support/tickets:
+    get:
+      operationId: listWorkspaceSupportTickets
+      tags: [customer-workspace]
+      summary: List support tickets for the workspace customer
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Support ticket list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSupportTicketList"
+    post:
+      operationId: createWorkspaceSupportTicket
+      tags: [customer-workspace]
+      summary: Create a new support ticket
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupportTicketInput"
+      responses:
+        "201":
+          description: Support ticket created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSupportTicket"
+
+  /public/customer/workspace/{token}/projects/{projectNumber}/repeat-order:
+    post:
+      operationId: createWorkspaceRepeatOrder
+      tags: [customer-workspace]
+      summary: Build a repeat-order draft from a previous project
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: projectNumber, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepeatOrderInput"
+      responses:
+        "200":
+          description: Repeat order draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepeatOrderDraft"
+        "404": { description: Project not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /ai/customer-workspace/{email}:
+    get:
+      operationId: adminGetCustomerWorkspace
+      tags: [customer-workspace-admin]
+      summary: Admin — view a customer workspace by email
+      parameters:
+        - { in: path, name: email, required: true, schema: { type: string } }
+      security:
+        - adminKey: []
+      responses:
+        "200": { description: Customer workspace summary, content: { application/json: { schema: { type: object } } } }
+        "404": { description: Customer not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /ai/customer-workspace/{email}/downloads:
+    get:
+      operationId: adminGetCustomerDownloads
+      tags: [customer-workspace-admin]
+      summary: Admin — view a customer's downloads
+      parameters:
+        - { in: path, name: email, required: true, schema: { type: string } }
+      security: [{ adminKey: [] }]
+      responses:
+        "200": { description: Downloads list, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceDownloadList" } } } }
+
+  /ai/customer-workspace/{email}/invoices:
+    get:
+      operationId: adminGetCustomerInvoices
+      tags: [customer-workspace-admin]
+      summary: Admin — view a customer's invoices
+      parameters:
+        - { in: path, name: email, required: true, schema: { type: string } }
+      security: [{ adminKey: [] }]
+      responses:
+        "200": { description: Invoice list, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceInvoiceList" } } } }
+
+  /ai/customer-workspace/{email}/assets:
+    get:
+      operationId: adminGetCustomerAssets
+      tags: [customer-workspace-admin]
+      summary: Admin — view a customer's brand assets
+      parameters:
+        - { in: path, name: email, required: true, schema: { type: string } }
+      security: [{ adminKey: [] }]
+      responses:
+        "200": { description: Asset list, content: { application/json: { schema: { type: object } } } }
+
+  /ai/customer-workspace/{email}/activity:
+    get:
+      operationId: adminGetCustomerActivity
+      tags: [customer-workspace-admin]
+      summary: Admin — view a customer's activity log
+      parameters:
+        - { in: path, name: email, required: true, schema: { type: string } }
+      security: [{ adminKey: [] }]
+      responses:
+        "200": { description: Activity list, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceActivityList" } } } }
+
+  /ai/customer-workspace/impersonate:
+    post:
+      operationId: adminImpersonateCustomer
+      tags: [customer-workspace-admin]
+      summary: Admin — issue a short-lived impersonation token (separate from customer real token)
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImpersonateCustomerInput"
+      responses:
+        "201":
+          description: Impersonation token issued (shown once)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImpersonateCustomerResult"
+        "400": { description: Missing clientEmail or reason, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /ai/customer-workspace/impersonate/end:
+    post:
+      operationId: adminEndImpersonation
+      tags: [customer-workspace-admin]
+      summary: Admin — explicitly end an impersonation session
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EndImpersonationInput"
+      responses:
+        "200": { description: Session ended, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+
+  /ai/customer-workspace/customers/{customerId}/rotate-token:
+    post:
+      operationId: adminRotateCustomerToken
+      tags: [customer-workspace-admin]
+      summary: Admin — rotate a customer's real dashboard token (old token immediately invalid)
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: customerId, required: true, schema: { type: string }, description: URL-encoded customer email }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RotateTokenInput"
+      responses:
+        "201":
+          description: New token (shown once — old token now invalid)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RotateTokenResult"
+
+  /ai/customer-workspace-analytics:
+    get:
+      operationId: getCustomerWorkspaceAnalytics
+      tags: [customer-workspace-admin]
+      summary: Admin — aggregated workspace KPIs across all customers
+      security: [{ adminKey: [] }]
+      responses:
+        "200":
+          description: Analytics KPIs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceAnalytics"
+
+
 components:
   schemas:
     HealthStatus:
@@ -9839,3 +10328,336 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AiPaymentSchedule"
+
+    WorkspaceSummary:
+      type: object
+      required: [clientName, clientEmail, activeProjects, waitingReview, completedProjects, outstandingBalance, outstandingCurrency, invoiceCount, downloadCount, brandAssetCount, aiCredits]
+      properties:
+        clientName: { type: string }
+        clientEmail: { type: string }
+        activeProjects: { type: integer }
+        waitingReview: { type: integer }
+        completedProjects: { type: integer }
+        outstandingBalance: { type: number }
+        outstandingCurrency: { type: string }
+        invoiceCount: { type: integer }
+        downloadCount: { type: integer }
+        brandAssetCount: { type: integer }
+        aiCredits: { type: integer }
+    WorkspaceProject:
+      type: object
+      required: [projectNumber, kind, brandName, serviceName, currentStage, currentStageLabel, progressPercent, assignedAiTeam, filesUnlocked, currency, createdAt, updatedAt]
+      properties:
+        projectNumber: { type: string }
+        kind: { type: string, enum: [creative_project, service_request] }
+        brandName: { type: string }
+        serviceName: { type: string }
+        packageName: { type: string, nullable: true }
+        businessType: { type: string, nullable: true }
+        currentStage: { type: string }
+        currentStageLabel: { type: string }
+        progressPercent: { type: integer }
+        assignedAiTeam: { type: array, items: { type: string } }
+        deliveryDate: { type: string, nullable: true }
+        paymentStatus: { type: string, nullable: true }
+        filesUnlocked: { type: boolean }
+        reviewStatus: { type: string, nullable: true }
+        reviewToken: { type: string, nullable: true }
+        reviewUrl: { type: string, nullable: true }
+        portalPath: { type: string, nullable: true }
+        quotationStatus: { type: string, nullable: true }
+        quotationTotal: { type: number, nullable: true }
+        quotationCurrency: { type: string, nullable: true }
+        currency: { type: string }
+        total: { type: number, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        internalProjectId: { type: integer, nullable: true }
+    WorkspaceProjectList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/WorkspaceProject" } }
+        total: { type: integer }
+    WorkspaceProjectDetail:
+      type: object
+      required: [overview, timeline, deliverables, reviews, payments, invoices]
+      properties:
+        overview: { $ref: "#/components/schemas/WorkspaceProject" }
+        timeline: { type: array, items: { type: object, properties: { stage: { type: string }, label: { type: string }, completed: { type: boolean }, current: { type: boolean } } } }
+        deliverables: { type: array, items: { $ref: "#/components/schemas/WorkspaceDownloadItem" } }
+        reviews: { type: array, items: { type: object } }
+        payments: { type: array, items: { type: object } }
+        invoices: { type: array, items: { $ref: "#/components/schemas/WorkspaceInvoice" } }
+        recommendations: { type: array, items: { type: string } }
+    WorkspaceDownloadItem:
+      type: object
+      required: [id, title, category, projectNumber, projectName, version, status, locked, createdAt]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        category: { type: string }
+        projectNumber: { type: string }
+        projectName: { type: string }
+        version: { type: integer }
+        status: { type: string }
+        approvedBy: { type: string, nullable: true }
+        revisionNotes: { type: string, nullable: true }
+        locked: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    WorkspaceDownloadList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/WorkspaceDownloadItem" } }
+        total: { type: integer }
+    WorkspaceSignedDownload:
+      type: object
+      required: [ok, token, expiresAt, accessPath]
+      properties:
+        ok: { type: boolean }
+        token: { type: string }
+        expiresAt: { type: string, format: date-time }
+        accessPath: { type: string }
+    WorkspaceBrandKit:
+      type: object
+      required: [projectNumber, brandName]
+      properties:
+        projectNumber: { type: string }
+        brandName: { type: string }
+        colorPalette: { type: string, nullable: true }
+        typography: { type: string, nullable: true }
+        visualStyle: { type: object, nullable: true }
+        brandVoice: { type: object, nullable: true }
+        targetAudience: { type: string, nullable: true }
+        logos: { type: array, items: { $ref: "#/components/schemas/WorkspaceDownloadItem" } }
+    WorkspaceBrandKitList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/WorkspaceBrandKit" } }
+        total: { type: integer }
+    WorkspaceInvoice:
+      type: object
+      required: [id, invoiceNumber, projectNumber, invoiceType, amount, currency, status, issuedAt]
+      properties:
+        id: { type: integer }
+        invoiceNumber: { type: string }
+        projectNumber: { type: string }
+        invoiceType: { type: string }
+        amount: { type: string }
+        currency: { type: string }
+        status: { type: string, enum: [draft, issued, partially_paid, paid, overdue, cancelled, voided] }
+        issuedAt: { type: string, format: date-time }
+        paidAt: { type: string, format: date-time, nullable: true }
+        dueDate: { type: string, format: date-time, nullable: true }
+    WorkspaceInvoiceList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/WorkspaceInvoice" } }
+        total: { type: integer }
+    CustomerDocumentDto:
+      type: object
+      required: [id, documentType, documentNumber, fileName, mimeType, status]
+      properties:
+        id: { type: integer }
+        documentType: { type: string, enum: [deposit_invoice, remaining_invoice, final_invoice, payment_receipt, quotation, delivery_package] }
+        documentNumber: { type: string }
+        fileName: { type: string }
+        mimeType: { type: string }
+        fileSize: { type: integer, nullable: true }
+        status: { type: string, enum: [draft, generating, issued, voided] }
+        generatedAt: { type: string, format: date-time, nullable: true }
+        projectId: { type: string, nullable: true }
+        paymentScheduleId: { type: integer, nullable: true }
+    WorkspaceDocumentList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/CustomerDocumentDto" } }
+        total: { type: integer }
+    GenerateInvoiceDocumentInput:
+      type: object
+      properties:
+        documentType:
+          type: string
+          enum: [deposit_invoice, remaining_invoice, final_invoice, payment_receipt]
+    GenerateInvoiceDocumentResult:
+      type: object
+      required: [documentNumber, documentType, status, accessToken, expiresAt, downloadPath]
+      properties:
+        documentNumber: { type: string }
+        documentType: { type: string }
+        status: { type: string }
+        generatedAt: { type: string, format: date-time, nullable: true }
+        accessToken: { type: string }
+        expiresAt: { type: string, format: date-time }
+        downloadPath: { type: string }
+    DocumentAccessTokenResult:
+      type: object
+      required: [accessToken, expiresAt, downloadPath]
+      properties:
+        accessToken: { type: string }
+        expiresAt: { type: string, format: date-time }
+        downloadPath: { type: string }
+    WorkspaceNotification:
+      type: object
+      required: [key, category, title, message, isRead, createdAt]
+      properties:
+        key: { type: string }
+        category: { type: string, enum: [payment, project, review, revision, download, invoice, announcement] }
+        title: { type: string }
+        message: { type: string }
+        projectNumber: { type: string, nullable: true }
+        isRead: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    WorkspaceNotificationList:
+      type: object
+      required: [items, total, unreadCount]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/WorkspaceNotification" } }
+        total: { type: integer }
+        unreadCount: { type: integer }
+    MarkNotificationReadInput:
+      type: object
+      required: [key]
+      properties:
+        key: { type: string }
+    MarkAllNotificationsReadResult:
+      type: object
+      required: [ok, markedRead]
+      properties:
+        ok: { type: boolean }
+        markedRead: { type: integer }
+    WorkspaceActivityItem:
+      type: object
+      required: [action, label, status, createdAt]
+      properties:
+        action: { type: string }
+        label: { type: string }
+        resourceId: { type: string, nullable: true }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+    WorkspaceActivityList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/WorkspaceActivityItem" } }
+        total: { type: integer }
+    WorkspaceProfile:
+      type: object
+      required: [clientEmail, clientName]
+      properties:
+        clientEmail: { type: string }
+        clientName: { type: string }
+        companyName: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        picName: { type: string, nullable: true }
+        picPhone: { type: string, nullable: true }
+        billingEmail: { type: string, nullable: true }
+        taxId: { type: string, nullable: true }
+        paymentMethodNotes: { type: string, nullable: true }
+        brandPreferences: { type: object, nullable: true }
+    WorkspaceProfilePatch:
+      type: object
+      properties:
+        companyName: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        picName: { type: string, nullable: true }
+        picPhone: { type: string, nullable: true }
+        billingEmail: { type: string, nullable: true }
+        taxId: { type: string, nullable: true }
+        paymentMethodNotes: { type: string, nullable: true }
+        brandPreferences: { type: object, nullable: true }
+    WorkspaceSupportTicket:
+      type: object
+      required: [id, subject, message, category, status, createdAt]
+      properties:
+        id: { type: integer }
+        emailHash: { type: string }
+        clientEmail: { type: string }
+        clientName: { type: string }
+        projectId: { type: string, nullable: true }
+        subject: { type: string }
+        message: { type: string }
+        category: { type: string }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    WorkspaceSupportTicketList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/WorkspaceSupportTicket" } }
+        total: { type: integer }
+    CreateSupportTicketInput:
+      type: object
+      required: [subject, message]
+      properties:
+        subject: { type: string }
+        message: { type: string }
+        category: { type: string }
+        projectNumber: { type: string }
+    RepeatOrderInput:
+      type: object
+      required: [mode]
+      properties:
+        mode: { type: string, enum: [similar, duplicate, use_brief] }
+    RepeatOrderDraft:
+      type: object
+      required: [redirectPath, prefill]
+      properties:
+        redirectPath: { type: string }
+        prefill: { type: object }
+    ImpersonateCustomerInput:
+      type: object
+      required: [clientEmail, reason]
+      properties:
+        clientEmail: { type: string }
+        reason: { type: string, description: Mandatory reason for audit trail }
+    ImpersonateCustomerResult:
+      type: object
+      required: [impersonationToken, workspacePath, expiresAt, clientEmail, clientName, readonly]
+      properties:
+        impersonationToken: { type: string, description: Shown once — do not log }
+        workspacePath: { type: string }
+        expiresAt: { type: string, format: date-time }
+        clientEmail: { type: string }
+        clientName: { type: string }
+        readonly: { type: boolean }
+        warning: { type: string }
+    EndImpersonationInput:
+      type: object
+      required: [impersonationToken]
+      properties:
+        impersonationToken: { type: string }
+    RotateTokenInput:
+      type: object
+      properties:
+        reason: { type: string }
+    RotateTokenResult:
+      type: object
+      required: [newToken, workspacePath, expiresAt, auditReference]
+      properties:
+        newToken: { type: string, description: Previous token is now invalid }
+        workspacePath: { type: string }
+        expiresAt: { type: string, format: date-time }
+        auditReference: { type: string }
+        warning: { type: string }
+    WorkspaceAnalytics:
+      type: object
+      required: [repeatOrderRate, totalDownloads, averageRevisions, customerRetentionRate, customerLifetimeValuePlaceholder]
+      properties:
+        repeatOrderRate: { type: number }
+        totalDownloads: { type: integer }
+        averageProjectDays: { type: number, nullable: true }
+        averageRevisions: { type: number }
+        averageInvoiceCollectionDays: { type: number, nullable: true }
+        customerRetentionRate: { type: number }
+        customerLifetimeValuePlaceholder: { type: boolean }
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }

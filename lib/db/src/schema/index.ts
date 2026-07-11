@@ -55,3 +55,5 @@ export * from "./ai-service-portfolios";
 export * from "./customer-profiles";
 export * from "./customer-notification-reads";
 export * from "./customer-support-tickets";
+export * from "./ai-customer-documents";
+export * from "./ai-customer-impersonation-tokens";

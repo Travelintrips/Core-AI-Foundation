@@ -1,0 +1,652 @@
+Lanjutkan Customer Workspace ke Sprint P1.1:
+API Standardization, Invoice PDF, Security Audit, dan Production Migration.
+
+JANGAN mengulang atau merombak Customer Workspace yang sudah berjalan.
+
+STATUS SAAT INI:
+
+Customer Workspace live di:
+/workspace/:token
+
+Sudah tersedia:
+- Dashboard KPI
+- My Projects
+- Project Detail
+- Download Center
+- Invoice Center
+- Brand Asset Library
+- Notifications
+- Profile
+- Support
+- Repeat Order
+- Signed URL download
+- Payment file lock
+- Admin view by email
+- Admin impersonation
+- Workspace analytics
+- pnpm run verify clean
+
+KNOWN GAPS:
+
+1. Route workspace belum masuk OpenAPI/codegen.
+2. Frontend masih menggunakan manual API validation/fetch.
+3. Invoice masih browser print-to-PDF.
+4. DDL baru hanya diterapkan di development.
+5. Workspace token dan impersonation perlu audit production.
+6. Perlu memastikan tidak ada IDOR atau kebocoran data internal.
+
+=========================================================
+ATURAN IMPLEMENTASI
+=========================================================
+
+Jangan mengubah:
+
+- AI Workforce
+- Queue
+- Dispatcher
+- Event Bus
+- Scheduler
+- Workflow Runner
+- Creative AI
+- Pricing Engine
+- Payment Gate
+- Signed URL behavior
+- Customer Workspace UI yang sudah stabil
+
+Semua perubahan harus:
+
+- additive
+- backward compatible
+- OpenAPI-first
+- deterministic
+- type-safe
+- tidak edit generated file secara manual
+- pnpm run verify clean
+
+=========================================================
+1. AUDIT ROUTE AKTUAL
+=========================================================
+
+Sebelum mengubah apa pun:
+
+- baca route Customer Workspace yang benar-benar aktif
+- catat method dan path aktual
+- cek mana yang public dan admin
+- cek auth/token middleware
+- cek route registration
+- cek frontend caller
+
+Jangan membuat route duplikat hanya untuk menyesuaikan nama di spesifikasi.
+
+Gunakan route aktual sebagai source of truth untuk retrofit OpenAPI.
+
+=========================================================
+2. OPENAPI RETROFIT
+=========================================================
+
+Dokumentasikan seluruh route Workspace aktif ke:
+
+lib/api-spec/openapi.yaml
+
+Minimal cover:
+
+PUBLIC:
+
+GET dashboard
+GET projects
+GET project detail
+GET downloads
+GET assets
+GET brand kit
+GET invoices
+GET notifications
+PATCH notification read
+POST mark all notifications read
+GET activity
+GET profile
+PATCH profile
+GET support tickets
+POST support ticket
+POST repeat order
+
+ADMIN:
+
+GET customer workspace list
+GET customer workspace detail
+GET customer analytics
+POST impersonation
+POST rotate workspace token
+
+Gunakan operationId unik dan konsisten.
+
+Tambahkan:
+- path params
+- query params
+- request schemas
+- response schemas
+- documented errors
+- security requirements
+
+=========================================================
+3. CODEGEN & GENERATED CLIENT
+=========================================================
+
+Setelah OpenAPI diperbarui:
+
+- jalankan pipeline codegen resmi
+- generate api-zod schemas
+- generate api-client-react hooks
+- jangan edit file generated manual
+- jangan membuat wrapper yang menduplikasi generated hooks
+- pastikan workspace checker tidak menemukan duplicate export
+
+Migrasikan frontend secara incremental.
+
+Prioritas migrasi:
+
+1. dashboard
+2. projects
+3. project detail
+4. downloads
+5. invoices
+6. notifications
+7. profile
+8. support
+
+Jika manual fetch masih perlu dipertahankan sementara:
+
+- dokumentasikan alasannya
+- gunakan generated types
+- jangan memiliki dua implementasi aktif untuk endpoint yang sama
+
+=========================================================
+4. CUSTOMER RESPONSE DTO
+=========================================================
+
+Buat explicit mapper/DTO untuk response customer.
+
+Jangan mengembalikan database row mentah.
+
+Pastikan customer tidak menerima:
+
+- provider
+- model
+- internal system prompt
+- token usage
+- internal latency
+- AI cost
+- gross margin
+- cost per token
+- queue
+- worker
+- dispatcher
+- internal event payload
+- internal audit notes
+- storage_path asli
+- unsigned original URL
+- API key reference
+- admin-only notes
+
+Tambahkan automated test untuk field leakage.
+
+=========================================================
+5. WORKSPACE TOKEN HARDENING
+=========================================================
+
+Audit workspace token.
+
+Pastikan:
+
+- token dibuat dengan randomBytes yang kuat
+- token asli hanya ditampilkan satu kali
+- database menyimpan hash, bukan plaintext
+- expiry tersedia
+- revoke tersedia
+- rotate tersedia
+- token lama langsung invalid setelah rotate
+- token tidak masuk application log
+- token tidak masuk audit payload
+- token tidak masuk analytics URL
+- error invalid/expired/revoked aman
+
+Tambahkan admin endpoint jika belum ada:
+
+POST /api/ai/customer-workspace/customers/:customerId/rotate-token
+
+Response:
+- token baru hanya sekali
+- expiresAt
+- audit reference
+
+=========================================================
+6. IDOR / CUSTOMER ISOLATION
+=========================================================
+
+Setiap route project-level wajib memverifikasi:
+
+workspace customer
+=
+owner/customer dari project
+
+Terapkan pada:
+
+- project detail
+- deliverables
+- asset
+- downloads
+- invoices
+- notifications
+- activity
+- support
+- repeat order
+
+Test wajib:
+
+Customer A mencoba akses project Customer B.
+
+Expected:
+- 404 atau 403 aman
+- jangan membocorkan bahwa resource ada
+- audit suspicious access attempt
+
+Jangan hanya percaya projectId dari URL.
+
+=========================================================
+7. SERVER-GENERATED INVOICE PDF
+=========================================================
+
+Tambahkan PDF invoice yang benar-benar dihasilkan server.
+
+Browser print tetap boleh sebagai fallback.
+
+Buat service:
+
+customerInvoicePdfService
+
+Method:
+
+- generateDepositInvoice()
+- generateRemainingInvoice()
+- generateFinalInvoice()
+- generatePaymentReceipt()
+- buildInvoiceSnapshot()
+- saveDocumentRecord()
+- createSignedDownloadUrl()
+
+Invoice harus menggunakan snapshot transaksi.
+
+Jangan memakai current master price setelah invoice diterbitkan.
+
+Isi dokumen:
+
+- company logo dan legal identity
+- document number
+- document type
+- issue date
+- due date
+- customer identity
+- project/request number
+- service dan package
+- line items
+- subtotal
+- discount
+- tax
+- grand total
+- amount paid
+- remaining balance
+- payment status
+- payment reference
+- terms
+- generated timestamp
+
+=========================================================
+8. CUSTOMER DOCUMENT STORE
+=========================================================
+
+Reuse document table yang sudah ada jika cocok.
+
+Jika belum tersedia, buat additive table:
+
+ai_customer_documents
+
+Field:
+
+- id
+- customer_id
+- project_id nullable
+- service_request_id nullable
+- quotation_id nullable
+- payment_schedule_id nullable
+- document_type
+- document_number
+- file_name
+- storage_path
+- mime_type
+- file_size
+- status
+- generated_at
+- voided_at nullable
+- metadata_json
+- created_at
+- updated_at
+
+document_type:
+
+- deposit_invoice
+- remaining_invoice
+- final_invoice
+- payment_receipt
+- quotation
+- delivery_package
+
+Tambahkan unique/idempotency constraint agar dokumen yang sama tidak dihasilkan dua kali tanpa versioning.
+
+=========================================================
+9. INVOICE DOWNLOAD SECURITY
+=========================================================
+
+Invoice PDF tidak boleh memiliki permanent public URL.
+
+Gunakan signed URL.
+
+Aturan:
+
+- token expired
+- token revocable
+- scope token hanya ke satu dokumen
+- customer ownership diverifikasi
+- download masuk audit
+- storage path tidak tampil ke client
+
+Tambahkan endpoint berdasarkan route convention existing:
+
+GET invoice document metadata
+POST generate/regenerate invoice
+GET signed invoice access
+
+Admin-only regenerate harus memiliki alasan audit.
+
+=========================================================
+10. INVOICE CENTER UI
+=========================================================
+
+Upgrade halaman Invoice Center.
+
+Tampilkan:
+
+- Deposit Invoice
+- Remaining Invoice
+- Final Invoice
+- Receipt
+- document number
+- issued date
+- due date
+- amount
+- paid
+- remaining
+- status
+
+Action:
+
+- View
+- Download PDF
+- Download Receipt
+- Pay Remaining
+- View Payment History
+- Browser Print fallback
+
+Status:
+
+- draft
+- issued
+- partially_paid
+- paid
+- overdue
+- cancelled
+- voided
+
+=========================================================
+11. ADMIN IMPERSONATION HARDENING
+=========================================================
+
+Audit fitur impersonation.
+
+Wajib:
+
+- hanya role admin berwenang
+- reason wajib
+- token impersonation terpisah dari customer workspace token
+- token short-lived
+- readonly default
+- write mode memerlukan explicit permission
+- banner jelas di frontend
+- tombol Exit Impersonation
+- audit setiap aksi
+
+Audit events:
+
+- customer.impersonation.started
+- customer.impersonation.ended
+- customer.impersonation.action
+- customer.impersonation.denied
+
+Jangan mengembalikan token permanen customer.
+
+=========================================================
+12. NOTIFICATION PERSISTENCE
+=========================================================
+
+Notifications saat ini disintesis dari activity.
+
+Pertahankan jika bekerja, tetapi tambahkan persistent notification
+untuk event penting:
+
+- payment required
+- payment verified
+- project started
+- preview ready
+- review requested
+- revision completed
+- remaining payment required
+- files unlocked
+- invoice generated
+- receipt generated
+- project completed
+
+Gunakan idempotency key:
+
+event_id + customer_id + notification_type
+
+Jangan tampilkan synthetic dan persistent notification yang sama dua kali.
+
+=========================================================
+13. DATABASE INDEX AUDIT
+=========================================================
+
+Audit query Workspace dan tambah index hanya jika belum ada.
+
+Candidate:
+
+- customer_id
+- normalized customer_email
+- project customer relation
+- project status
+- payment status
+- created_at
+- notification customer/read/created
+- document customer/type/created
+- invoice due date
+- asset project/status
+- support ticket customer/status
+
+Pastikan:
+
+- pagination mandatory
+- page limit bounded
+- sort fields di-whitelist
+- tidak ada N+1 besar
+- endpoint detail tidak melakukan full-table scan
+
+=========================================================
+14. PRODUCTION MIGRATION PACKAGE
+=========================================================
+
+DDL baru saat ini hanya ada di development.
+
+Siapkan migration production versioned.
+
+Jangan menjalankan production migration otomatis.
+
+Buat:
+
+- migration SQL
+- preflight script
+- dry-run command
+- apply command
+- post-check command
+- rollback notes
+- backup checklist
+
+Preflight harus mendeteksi:
+
+- table/column sudah ada
+- constraint name conflict
+- duplicate row
+- invalid null
+- orphan foreign key
+- index conflict
+- migration version status
+
+Migration harus:
+
+- additive
+- non-destructive
+- tidak truncate
+- tidak drop
+- tidak overwrite existing data
+- dapat dijalankan ulang dengan aman sejauh pola repo memungkinkan
+
+Berikan perintah terpisah:
+
+DEV
+STAGING
+PRODUCTION
+
+Production apply harus memerlukan explicit confirmation/env guard.
+
+=========================================================
+15. EMPTY & ERROR STATES
+=========================================================
+
+Pastikan seluruh Workspace memiliki:
+
+- loading skeleton
+- empty project state
+- empty download state
+- empty invoice state
+- empty notification state
+- token expired page
+- token revoked page
+- invalid token page
+- locked file screen
+- invoice generation failed state
+- retry action yang aman
+- support contact fallback
+
+Jangan tampilkan stack trace atau SQL error.
+
+=========================================================
+16. AUDIT LOG
+=========================================================
+
+Log wajib:
+
+- workspace opened
+- project viewed
+- asset viewed
+- signed URL requested
+- file downloaded
+- invoice generated
+- invoice viewed
+- invoice downloaded
+- receipt generated
+- profile updated
+- notification read
+- support ticket created
+- repeat order created
+- token rotated
+- cross-customer access denied
+- impersonation started/ended/action
+
+Redact:
+
+- token
+- sensitive billing data
+- raw internal payload
+- storage credentials
+
+=========================================================
+17. TEST WAJIB
+=========================================================
+
+Jalankan test berikut:
+
+1. Valid token opens workspace.
+2. Invalid token rejected.
+3. Expired token rejected.
+4. Revoked token rejected.
+5. Token rotation invalidates old token.
+6. Customer A cannot access Customer B project.
+7. Customer A cannot access Customer B invoice.
+8. Locked file cannot download.
+9. Unlocked file returns signed URL.
+10. Expired signed URL rejected.
+11. Deposit invoice PDF generated.
+12. Remaining invoice PDF generated.
+13. Final invoice generated.
+14. Receipt generated.
+15. PDF values match pricing/payment snapshot.
+16. Invoice download audited.
+17. Internal AI cost/model fields absent.
+18. Support ticket stored.
+19. Notification read state persists.
+20. Repeat order creates draft request only.
+21. Impersonation requires reason.
+22. Impersonation token expires.
+23. OpenAPI valid.
+24. Codegen deterministic.
+25. Workspace checker clean.
+26. pnpm run verify clean.
+27. Production migration dry-run clean.
+
+=========================================================
+18. FINAL REPORT
+=========================================================
+
+Berikan final report:
+
+- actual route list
+- OpenAPI operations added
+- generated hooks used
+- manual fetch remaining
+- database tables/columns/indexes
+- invoice PDF approach
+- document storage approach
+- token lifecycle
+- IDOR test result
+- impersonation security
+- notification persistence
+- production migration commands
+- rollback notes
+- test results
+- pnpm run verify status
+- known limitations
+
+Jangan lanjut membuat Portfolio atau Live Preview baru.
+
+TARGET AKHIR:
+
+Customer Workspace memiliki API yang terdokumentasi dan type-safe,
+invoice PDF server-generated, token dan authorization production-grade,
+data customer terisolasi, serta migration siap diterapkan dengan aman
+ke staging dan production.

@@ -5853,6 +5853,107 @@ export const VerifyPaymentScheduleResponse = zod.object({
 
 
 /**
+ * @summary Payment KPIs — paid revenue, outstanding balance, pending verification count, locked/unlocked projects (P0-5)
+ */
+export const GetPaymentKpiResponse = zod.object({
+  "paidRevenue": zod.number(),
+  "outstandingBalance": zod.number(),
+  "pendingVerificationCount": zod.number(),
+  "lockedProjects": zod.number(),
+  "unlockedProjects": zod.number()
+})
+
+
+/**
+ * @summary Reject a submitted payment proof (admin) — P0-5
+ */
+export const RejectPaymentScheduleParams = zod.object({
+  "scheduleId": zod.coerce.number()
+})
+
+export const RejectPaymentScheduleBody = zod.object({
+  "rejectedBy": zod.string(),
+  "reason": zod.string()
+})
+
+export const RejectPaymentScheduleResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "paymentType": zod.string().describe('deposit | remaining_balance | full_payment | custom_installment | subscription_charge'),
+  "percentage": zod.number().nullish(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "dueDate": zod.coerce.date().nullish(),
+  "status": zod.string().describe('pending | paid | partially_paid | failed | refunded | cancelled'),
+  "reference": zod.string().nullish(),
+  "verifiedBy": zod.string().nullish(),
+  "paidAt": zod.coerce.date().nullish(),
+  "notes": zod.string().nullish(),
+  "displayOrder": zod.number().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Manually unlock a project's final files (admin override) — P0-5
+ */
+export const ManualUnlockProjectFilesParams = zod.object({
+  "projectId": zod.coerce.number()
+})
+
+export const ManualUnlockProjectFilesBody = zod.object({
+  "unlockedBy": zod.string(),
+  "reason": zod.string().optional()
+})
+
+export const ManualUnlockProjectFilesResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "projectId": zod.number().optional(),
+  "filesUnlocked": zod.boolean().optional(),
+  "unlockedBy": zod.string().optional()
+})
+
+
+/**
+ * @summary Generate a signed download token for a project file (admin) — P0-2
+ */
+export const generateFileDownloadTokenBodyTtlSecondsDefault = 3600;
+
+export const GenerateFileDownloadTokenBody = zod.object({
+  "projectId": zod.number(),
+  "fileUrl": zod.string(),
+  "ttlSeconds": zod.number().default(generateFileDownloadTokenBodyTtlSecondsDefault)
+})
+
+export const GenerateFileDownloadTokenResponse = zod.object({
+  "token": zod.string(),
+  "expiresAt": zod.coerce.date(),
+  "projectId": zod.number()
+})
+
+
+/**
+ * @summary Revoke a previously issued signed download token (admin) — P0-2
+ */
+export const RevokeFileDownloadTokenBody = zod.object({
+  "token": zod.string()
+})
+
+export const RevokeFileDownloadTokenResponse = zod.unknown()
+
+
+/**
+ * @summary Verify signed token and redirect to protected file — P0-2
+ */
+export const AccessSignedFileParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const AccessSignedFileResponse = zod.void()
+
+
+/**
  * @summary Generate an invoice for a payment installment (admin)
  */
 export const GenerateInvoiceForPaymentScheduleParams = zod.object({
@@ -6000,6 +6101,707 @@ export const WaiveCommercialGateResponse = zod.object({
   "notes": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get KPI summary for the authenticated customer workspace
+ */
+export const GetWorkspaceSummaryParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetWorkspaceSummaryResponse = zod.object({
+  "clientName": zod.string(),
+  "clientEmail": zod.string(),
+  "activeProjects": zod.number(),
+  "waitingReview": zod.number(),
+  "completedProjects": zod.number(),
+  "outstandingBalance": zod.number(),
+  "outstandingCurrency": zod.string(),
+  "invoiceCount": zod.number(),
+  "downloadCount": zod.number(),
+  "brandAssetCount": zod.number(),
+  "aiCredits": zod.number()
+})
+
+
+/**
+ * @summary List all creative projects for the workspace customer
+ */
+export const ListWorkspaceProjectsParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const ListWorkspaceProjectsQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional(),
+  "service": zod.coerce.string().optional(),
+  "industry": zod.coerce.string().optional(),
+  "sort": zod.enum(['newest', 'oldest', 'delivery_date']).optional()
+})
+
+export const ListWorkspaceProjectsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "projectNumber": zod.string(),
+  "kind": zod.enum(['creative_project', 'service_request']),
+  "brandName": zod.string(),
+  "serviceName": zod.string(),
+  "packageName": zod.string().nullish(),
+  "businessType": zod.string().nullish(),
+  "currentStage": zod.string(),
+  "currentStageLabel": zod.string(),
+  "progressPercent": zod.number(),
+  "assignedAiTeam": zod.array(zod.string()),
+  "deliveryDate": zod.string().nullish(),
+  "paymentStatus": zod.string().nullish(),
+  "filesUnlocked": zod.boolean(),
+  "reviewStatus": zod.string().nullish(),
+  "reviewToken": zod.string().nullish(),
+  "reviewUrl": zod.string().nullish(),
+  "portalPath": zod.string().nullish(),
+  "quotationStatus": zod.string().nullish(),
+  "quotationTotal": zod.number().nullish(),
+  "quotationCurrency": zod.string().nullish(),
+  "currency": zod.string(),
+  "total": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "internalProjectId": zod.number().nullish()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Get full detail for a single workspace project
+ */
+export const GetWorkspaceProjectDetailParams = zod.object({
+  "token": zod.coerce.string(),
+  "projectNumber": zod.coerce.string()
+})
+
+export const GetWorkspaceProjectDetailResponse = zod.object({
+  "overview": zod.object({
+  "projectNumber": zod.string(),
+  "kind": zod.enum(['creative_project', 'service_request']),
+  "brandName": zod.string(),
+  "serviceName": zod.string(),
+  "packageName": zod.string().nullish(),
+  "businessType": zod.string().nullish(),
+  "currentStage": zod.string(),
+  "currentStageLabel": zod.string(),
+  "progressPercent": zod.number(),
+  "assignedAiTeam": zod.array(zod.string()),
+  "deliveryDate": zod.string().nullish(),
+  "paymentStatus": zod.string().nullish(),
+  "filesUnlocked": zod.boolean(),
+  "reviewStatus": zod.string().nullish(),
+  "reviewToken": zod.string().nullish(),
+  "reviewUrl": zod.string().nullish(),
+  "portalPath": zod.string().nullish(),
+  "quotationStatus": zod.string().nullish(),
+  "quotationTotal": zod.number().nullish(),
+  "quotationCurrency": zod.string().nullish(),
+  "currency": zod.string(),
+  "total": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "internalProjectId": zod.number().nullish()
+}),
+  "timeline": zod.array(zod.object({
+  "stage": zod.string().optional(),
+  "label": zod.string().optional(),
+  "completed": zod.boolean().optional(),
+  "current": zod.boolean().optional()
+})),
+  "deliverables": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "category": zod.string(),
+  "projectNumber": zod.string(),
+  "projectName": zod.string(),
+  "version": zod.number(),
+  "status": zod.string(),
+  "approvedBy": zod.string().nullish(),
+  "revisionNotes": zod.string().nullish(),
+  "locked": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})),
+  "reviews": zod.array(zod.object({
+
+}).passthrough()),
+  "payments": zod.array(zod.object({
+
+}).passthrough()),
+  "invoices": zod.array(zod.object({
+  "id": zod.number(),
+  "invoiceNumber": zod.string(),
+  "projectNumber": zod.string(),
+  "invoiceType": zod.string(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "status": zod.enum(['draft', 'issued', 'partially_paid', 'paid', 'overdue', 'cancelled', 'voided']),
+  "issuedAt": zod.coerce.date(),
+  "paidAt": zod.coerce.date().nullish(),
+  "dueDate": zod.coerce.date().nullish()
+})),
+  "recommendations": zod.array(zod.string()).optional()
+})
+
+
+/**
+ * @summary List downloadable assets for the workspace customer
+ */
+export const ListWorkspaceDownloadsParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const ListWorkspaceDownloadsQueryParams = zod.object({
+  "category": zod.coerce.string().optional(),
+  "projectId": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional()
+})
+
+export const ListWorkspaceDownloadsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "category": zod.string(),
+  "projectNumber": zod.string(),
+  "projectName": zod.string(),
+  "version": zod.number(),
+  "status": zod.string(),
+  "approvedBy": zod.string().nullish(),
+  "revisionNotes": zod.string().nullish(),
+  "locked": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Generate a signed URL for a workspace asset download
+ */
+export const SignWorkspaceDownloadParams = zod.object({
+  "token": zod.coerce.string(),
+  "assetId": zod.coerce.number()
+})
+
+export const SignWorkspaceDownloadResponse = zod.object({
+  "ok": zod.boolean(),
+  "token": zod.string(),
+  "expiresAt": zod.coerce.date(),
+  "accessPath": zod.string()
+})
+
+
+/**
+ * @summary List brand kits for the workspace customer
+ */
+export const ListWorkspaceBrandKitParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const ListWorkspaceBrandKitResponse = zod.object({
+  "items": zod.array(zod.object({
+  "projectNumber": zod.string(),
+  "brandName": zod.string(),
+  "colorPalette": zod.string().nullish(),
+  "typography": zod.string().nullish(),
+  "visualStyle": zod.object({
+
+}).passthrough().nullish(),
+  "brandVoice": zod.object({
+
+}).passthrough().nullish(),
+  "targetAudience": zod.string().nullish(),
+  "logos": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "category": zod.string(),
+  "projectNumber": zod.string(),
+  "projectName": zod.string(),
+  "version": zod.number(),
+  "status": zod.string(),
+  "approvedBy": zod.string().nullish(),
+  "revisionNotes": zod.string().nullish(),
+  "locked": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})).optional()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary List invoices for the workspace customer
+ */
+export const ListWorkspaceInvoicesParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const ListWorkspaceInvoicesQueryParams = zod.object({
+  "status": zod.coerce.string().optional()
+})
+
+export const ListWorkspaceInvoicesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "invoiceNumber": zod.string(),
+  "projectNumber": zod.string(),
+  "invoiceType": zod.string(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "status": zod.enum(['draft', 'issued', 'partially_paid', 'paid', 'overdue', 'cancelled', 'voided']),
+  "issuedAt": zod.coerce.date(),
+  "paidAt": zod.coerce.date().nullish(),
+  "dueDate": zod.coerce.date().nullish()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary List generated PDF documents for the workspace customer
+ */
+export const ListWorkspaceInvoiceDocumentsParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const ListWorkspaceInvoiceDocumentsQueryParams = zod.object({
+  "projectId": zod.coerce.string().optional()
+})
+
+export const ListWorkspaceInvoiceDocumentsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "documentType": zod.enum(['deposit_invoice', 'remaining_invoice', 'final_invoice', 'payment_receipt', 'quotation', 'delivery_package']),
+  "documentNumber": zod.string(),
+  "fileName": zod.string(),
+  "mimeType": zod.string(),
+  "fileSize": zod.number().nullish(),
+  "status": zod.enum(['draft', 'generating', 'issued', 'voided']),
+  "generatedAt": zod.coerce.date().nullish(),
+  "projectId": zod.string().nullish(),
+  "paymentScheduleId": zod.number().nullish()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Generate or regenerate a PDF for a workspace invoice
+ */
+export const GenerateWorkspaceInvoicePdfParams = zod.object({
+  "token": zod.coerce.string(),
+  "invoiceId": zod.coerce.number()
+})
+
+export const GenerateWorkspaceInvoicePdfBody = zod.object({
+  "documentType": zod.enum(['deposit_invoice', 'remaining_invoice', 'final_invoice', 'payment_receipt']).optional()
+})
+
+export const GenerateWorkspaceInvoicePdfResponse = zod.object({
+  "documentNumber": zod.string(),
+  "documentType": zod.string(),
+  "status": zod.string(),
+  "generatedAt": zod.coerce.date().nullish(),
+  "accessToken": zod.string(),
+  "expiresAt": zod.coerce.date(),
+  "downloadPath": zod.string()
+})
+
+
+/**
+ * @summary Get a signed access token to download an existing invoice document
+ */
+export const GetWorkspaceDocumentAccessParams = zod.object({
+  "token": zod.coerce.string(),
+  "docId": zod.coerce.number()
+})
+
+export const GetWorkspaceDocumentAccessResponse = zod.object({
+  "accessToken": zod.string(),
+  "expiresAt": zod.coerce.date(),
+  "downloadPath": zod.string()
+})
+
+
+/**
+ * @summary Stream a PDF document using a signed access token
+ */
+export const DownloadWorkspaceDocumentParams = zod.object({
+  "token": zod.coerce.string(),
+  "docToken": zod.coerce.string()
+})
+
+export const DownloadWorkspaceDocumentResponse = zod.unknown()
+
+
+/**
+ * @summary List notifications for the workspace customer
+ */
+export const ListWorkspaceNotificationsParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const ListWorkspaceNotificationsQueryParams = zod.object({
+  "category": zod.coerce.string().optional(),
+  "read": zod.enum(['read', 'unread']).optional()
+})
+
+export const ListWorkspaceNotificationsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "key": zod.string(),
+  "category": zod.enum(['payment', 'project', 'review', 'revision', 'download', 'invoice', 'announcement']),
+  "title": zod.string(),
+  "message": zod.string(),
+  "projectNumber": zod.string().nullish(),
+  "isRead": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "unreadCount": zod.number()
+})
+
+
+/**
+ * @summary Mark a single notification as read
+ */
+export const MarkWorkspaceNotificationReadParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const MarkWorkspaceNotificationReadBody = zod.object({
+  "key": zod.string()
+})
+
+export const MarkWorkspaceNotificationReadResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Mark all notifications as read
+ */
+export const MarkAllWorkspaceNotificationsReadParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const MarkAllWorkspaceNotificationsReadResponse = zod.object({
+  "ok": zod.boolean(),
+  "markedRead": zod.number()
+})
+
+
+/**
+ * @summary List customer activity / audit log
+ */
+export const ListWorkspaceActivityParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const ListWorkspaceActivityResponse = zod.object({
+  "items": zod.array(zod.object({
+  "action": zod.string(),
+  "label": zod.string(),
+  "resourceId": zod.string().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Get customer profile
+ */
+export const GetWorkspaceProfileParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetWorkspaceProfileResponse = zod.object({
+  "clientEmail": zod.string(),
+  "clientName": zod.string(),
+  "companyName": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "picName": zod.string().nullish(),
+  "picPhone": zod.string().nullish(),
+  "billingEmail": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "paymentMethodNotes": zod.string().nullish(),
+  "brandPreferences": zod.object({
+
+}).passthrough().nullish()
+})
+
+
+/**
+ * @summary Update customer profile fields
+ */
+export const PatchWorkspaceProfileParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const PatchWorkspaceProfileBody = zod.object({
+  "companyName": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "picName": zod.string().nullish(),
+  "picPhone": zod.string().nullish(),
+  "billingEmail": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "paymentMethodNotes": zod.string().nullish(),
+  "brandPreferences": zod.object({
+
+}).passthrough().nullish()
+})
+
+export const PatchWorkspaceProfileResponse = zod.object({
+  "clientEmail": zod.string(),
+  "clientName": zod.string(),
+  "companyName": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "picName": zod.string().nullish(),
+  "picPhone": zod.string().nullish(),
+  "billingEmail": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "paymentMethodNotes": zod.string().nullish(),
+  "brandPreferences": zod.object({
+
+}).passthrough().nullish()
+})
+
+
+/**
+ * @summary List support tickets for the workspace customer
+ */
+export const ListWorkspaceSupportTicketsParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const ListWorkspaceSupportTicketsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "emailHash": zod.string().optional(),
+  "clientEmail": zod.string().optional(),
+  "clientName": zod.string().optional(),
+  "projectId": zod.string().nullish(),
+  "subject": zod.string(),
+  "message": zod.string(),
+  "category": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().optional()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Create a new support ticket
+ */
+export const CreateWorkspaceSupportTicketParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const CreateWorkspaceSupportTicketBody = zod.object({
+  "subject": zod.string(),
+  "message": zod.string(),
+  "category": zod.string().optional(),
+  "projectNumber": zod.string().optional()
+})
+
+export const CreateWorkspaceSupportTicketResponse = zod.object({
+  "id": zod.number(),
+  "emailHash": zod.string().optional(),
+  "clientEmail": zod.string().optional(),
+  "clientName": zod.string().optional(),
+  "projectId": zod.string().nullish(),
+  "subject": zod.string(),
+  "message": zod.string(),
+  "category": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Build a repeat-order draft from a previous project
+ */
+export const CreateWorkspaceRepeatOrderParams = zod.object({
+  "token": zod.coerce.string(),
+  "projectNumber": zod.coerce.string()
+})
+
+export const CreateWorkspaceRepeatOrderBody = zod.object({
+  "mode": zod.enum(['similar', 'duplicate', 'use_brief'])
+})
+
+export const CreateWorkspaceRepeatOrderResponse = zod.object({
+  "redirectPath": zod.string(),
+  "prefill": zod.object({
+
+}).passthrough()
+})
+
+
+/**
+ * @summary Admin — view a customer workspace by email
+ */
+export const AdminGetCustomerWorkspaceParams = zod.object({
+  "email": zod.coerce.string()
+})
+
+export const AdminGetCustomerWorkspaceResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Admin — view a customer's downloads
+ */
+export const AdminGetCustomerDownloadsParams = zod.object({
+  "email": zod.coerce.string()
+})
+
+export const AdminGetCustomerDownloadsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "category": zod.string(),
+  "projectNumber": zod.string(),
+  "projectName": zod.string(),
+  "version": zod.number(),
+  "status": zod.string(),
+  "approvedBy": zod.string().nullish(),
+  "revisionNotes": zod.string().nullish(),
+  "locked": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Admin — view a customer's invoices
+ */
+export const AdminGetCustomerInvoicesParams = zod.object({
+  "email": zod.coerce.string()
+})
+
+export const AdminGetCustomerInvoicesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "invoiceNumber": zod.string(),
+  "projectNumber": zod.string(),
+  "invoiceType": zod.string(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "status": zod.enum(['draft', 'issued', 'partially_paid', 'paid', 'overdue', 'cancelled', 'voided']),
+  "issuedAt": zod.coerce.date(),
+  "paidAt": zod.coerce.date().nullish(),
+  "dueDate": zod.coerce.date().nullish()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Admin — view a customer's brand assets
+ */
+export const AdminGetCustomerAssetsParams = zod.object({
+  "email": zod.coerce.string()
+})
+
+export const AdminGetCustomerAssetsResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Admin — view a customer's activity log
+ */
+export const AdminGetCustomerActivityParams = zod.object({
+  "email": zod.coerce.string()
+})
+
+export const AdminGetCustomerActivityResponse = zod.object({
+  "items": zod.array(zod.object({
+  "action": zod.string(),
+  "label": zod.string(),
+  "resourceId": zod.string().nullish(),
+  "status": zod.string(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Admin — issue a short-lived impersonation token (separate from customer real token)
+ */
+export const AdminImpersonateCustomerBody = zod.object({
+  "clientEmail": zod.string(),
+  "reason": zod.string().describe('Mandatory reason for audit trail')
+})
+
+export const AdminImpersonateCustomerResponse = zod.object({
+  "impersonationToken": zod.string().describe('Shown once — do not log'),
+  "workspacePath": zod.string(),
+  "expiresAt": zod.coerce.date(),
+  "clientEmail": zod.string(),
+  "clientName": zod.string(),
+  "readonly": zod.boolean(),
+  "warning": zod.string().optional()
+})
+
+
+/**
+ * @summary Admin — explicitly end an impersonation session
+ */
+export const AdminEndImpersonationBody = zod.object({
+  "impersonationToken": zod.string()
+})
+
+export const AdminEndImpersonationResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Admin — rotate a customer's real dashboard token (old token immediately invalid)
+ */
+export const AdminRotateCustomerTokenParams = zod.object({
+  "customerId": zod.coerce.string().describe('URL-encoded customer email')
+})
+
+export const AdminRotateCustomerTokenBody = zod.object({
+  "reason": zod.string().optional()
+})
+
+export const AdminRotateCustomerTokenResponse = zod.object({
+  "newToken": zod.string().describe('Previous token is now invalid'),
+  "workspacePath": zod.string(),
+  "expiresAt": zod.coerce.date(),
+  "auditReference": zod.string(),
+  "warning": zod.string().optional()
+})
+
+
+/**
+ * @summary Admin — aggregated workspace KPIs across all customers
+ */
+export const GetCustomerWorkspaceAnalyticsResponse = zod.object({
+  "repeatOrderRate": zod.number(),
+  "totalDownloads": zod.number(),
+  "averageProjectDays": zod.number().nullish(),
+  "averageRevisions": zod.number(),
+  "averageInvoiceCollectionDays": zod.number().nullish(),
+  "customerRetentionRate": zod.number(),
+  "customerLifetimeValuePlaceholder": zod.boolean()
 })
 
 

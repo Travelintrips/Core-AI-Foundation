@@ -3261,6 +3261,36 @@ export interface AiInvoice {
   updatedAt: string;
 }
 
+export interface PaymentKpi {
+  paidRevenue: number;
+  outstandingBalance: number;
+  pendingVerificationCount: number;
+  lockedProjects: number;
+  unlockedProjects: number;
+}
+
+export interface PaymentRejectInput {
+  rejectedBy: string;
+  reason: string;
+}
+
+export interface ManualUnlockInput {
+  unlockedBy: string;
+  reason?: string;
+}
+
+export interface GenerateTokenInput {
+  projectId: number;
+  fileUrl: string;
+  ttlSeconds?: number;
+}
+
+export interface GenerateTokenResponse {
+  token: string;
+  expiresAt: string;
+  projectId: number;
+}
+
 export interface PaymentVerifyInput {
   verifiedBy: string;
   reference?: string;
@@ -3283,6 +3313,402 @@ export interface CheckoutResponse {
   paymentPolicy?: string;
   status?: string;
   schedule?: AiPaymentSchedule[];
+}
+
+export interface WorkspaceSummary {
+  clientName: string;
+  clientEmail: string;
+  activeProjects: number;
+  waitingReview: number;
+  completedProjects: number;
+  outstandingBalance: number;
+  outstandingCurrency: string;
+  invoiceCount: number;
+  downloadCount: number;
+  brandAssetCount: number;
+  aiCredits: number;
+}
+
+export type WorkspaceProjectKind = typeof WorkspaceProjectKind[keyof typeof WorkspaceProjectKind];
+
+
+export const WorkspaceProjectKind = {
+  creative_project: 'creative_project',
+  service_request: 'service_request',
+} as const;
+
+export interface WorkspaceProject {
+  projectNumber: string;
+  kind: WorkspaceProjectKind;
+  brandName: string;
+  serviceName: string;
+  packageName?: string | null;
+  businessType?: string | null;
+  currentStage: string;
+  currentStageLabel: string;
+  progressPercent: number;
+  assignedAiTeam: string[];
+  deliveryDate?: string | null;
+  paymentStatus?: string | null;
+  filesUnlocked: boolean;
+  reviewStatus?: string | null;
+  reviewToken?: string | null;
+  reviewUrl?: string | null;
+  portalPath?: string | null;
+  quotationStatus?: string | null;
+  quotationTotal?: number | null;
+  quotationCurrency?: string | null;
+  currency: string;
+  total?: number | null;
+  createdAt: string;
+  updatedAt: string;
+  internalProjectId?: number | null;
+}
+
+export interface WorkspaceProjectList {
+  items: WorkspaceProject[];
+  total: number;
+}
+
+export type WorkspaceProjectDetailTimelineItem = {
+  stage?: string;
+  label?: string;
+  completed?: boolean;
+  current?: boolean;
+};
+
+export type WorkspaceProjectDetailReviewsItem = { [key: string]: unknown };
+
+export type WorkspaceProjectDetailPaymentsItem = { [key: string]: unknown };
+
+export interface WorkspaceDownloadItem {
+  id: number;
+  title: string;
+  category: string;
+  projectNumber: string;
+  projectName: string;
+  version: number;
+  status: string;
+  approvedBy?: string | null;
+  revisionNotes?: string | null;
+  locked: boolean;
+  createdAt: string;
+}
+
+export type WorkspaceInvoiceStatus = typeof WorkspaceInvoiceStatus[keyof typeof WorkspaceInvoiceStatus];
+
+
+export const WorkspaceInvoiceStatus = {
+  draft: 'draft',
+  issued: 'issued',
+  partially_paid: 'partially_paid',
+  paid: 'paid',
+  overdue: 'overdue',
+  cancelled: 'cancelled',
+  voided: 'voided',
+} as const;
+
+export interface WorkspaceInvoice {
+  id: number;
+  invoiceNumber: string;
+  projectNumber: string;
+  invoiceType: string;
+  amount: string;
+  currency: string;
+  status: WorkspaceInvoiceStatus;
+  issuedAt: string;
+  paidAt?: string | null;
+  dueDate?: string | null;
+}
+
+export interface WorkspaceProjectDetail {
+  overview: WorkspaceProject;
+  timeline: WorkspaceProjectDetailTimelineItem[];
+  deliverables: WorkspaceDownloadItem[];
+  reviews: WorkspaceProjectDetailReviewsItem[];
+  payments: WorkspaceProjectDetailPaymentsItem[];
+  invoices: WorkspaceInvoice[];
+  recommendations?: string[];
+}
+
+export interface WorkspaceDownloadList {
+  items: WorkspaceDownloadItem[];
+  total: number;
+}
+
+export interface WorkspaceSignedDownload {
+  ok: boolean;
+  token: string;
+  expiresAt: string;
+  accessPath: string;
+}
+
+export type WorkspaceBrandKitVisualStyle = { [key: string]: unknown } | null;
+
+export type WorkspaceBrandKitBrandVoice = { [key: string]: unknown } | null;
+
+export interface WorkspaceBrandKit {
+  projectNumber: string;
+  brandName: string;
+  colorPalette?: string | null;
+  typography?: string | null;
+  visualStyle?: WorkspaceBrandKitVisualStyle;
+  brandVoice?: WorkspaceBrandKitBrandVoice;
+  targetAudience?: string | null;
+  logos?: WorkspaceDownloadItem[];
+}
+
+export interface WorkspaceBrandKitList {
+  items: WorkspaceBrandKit[];
+  total: number;
+}
+
+export interface WorkspaceInvoiceList {
+  items: WorkspaceInvoice[];
+  total: number;
+}
+
+export type CustomerDocumentDtoDocumentType = typeof CustomerDocumentDtoDocumentType[keyof typeof CustomerDocumentDtoDocumentType];
+
+
+export const CustomerDocumentDtoDocumentType = {
+  deposit_invoice: 'deposit_invoice',
+  remaining_invoice: 'remaining_invoice',
+  final_invoice: 'final_invoice',
+  payment_receipt: 'payment_receipt',
+  quotation: 'quotation',
+  delivery_package: 'delivery_package',
+} as const;
+
+export type CustomerDocumentDtoStatus = typeof CustomerDocumentDtoStatus[keyof typeof CustomerDocumentDtoStatus];
+
+
+export const CustomerDocumentDtoStatus = {
+  draft: 'draft',
+  generating: 'generating',
+  issued: 'issued',
+  voided: 'voided',
+} as const;
+
+export interface CustomerDocumentDto {
+  id: number;
+  documentType: CustomerDocumentDtoDocumentType;
+  documentNumber: string;
+  fileName: string;
+  mimeType: string;
+  fileSize?: number | null;
+  status: CustomerDocumentDtoStatus;
+  generatedAt?: string | null;
+  projectId?: string | null;
+  paymentScheduleId?: number | null;
+}
+
+export interface WorkspaceDocumentList {
+  items: CustomerDocumentDto[];
+  total: number;
+}
+
+export type GenerateInvoiceDocumentInputDocumentType = typeof GenerateInvoiceDocumentInputDocumentType[keyof typeof GenerateInvoiceDocumentInputDocumentType];
+
+
+export const GenerateInvoiceDocumentInputDocumentType = {
+  deposit_invoice: 'deposit_invoice',
+  remaining_invoice: 'remaining_invoice',
+  final_invoice: 'final_invoice',
+  payment_receipt: 'payment_receipt',
+} as const;
+
+export interface GenerateInvoiceDocumentInput {
+  documentType?: GenerateInvoiceDocumentInputDocumentType;
+}
+
+export interface GenerateInvoiceDocumentResult {
+  documentNumber: string;
+  documentType: string;
+  status: string;
+  generatedAt?: string | null;
+  accessToken: string;
+  expiresAt: string;
+  downloadPath: string;
+}
+
+export interface DocumentAccessTokenResult {
+  accessToken: string;
+  expiresAt: string;
+  downloadPath: string;
+}
+
+export type WorkspaceNotificationCategory = typeof WorkspaceNotificationCategory[keyof typeof WorkspaceNotificationCategory];
+
+
+export const WorkspaceNotificationCategory = {
+  payment: 'payment',
+  project: 'project',
+  review: 'review',
+  revision: 'revision',
+  download: 'download',
+  invoice: 'invoice',
+  announcement: 'announcement',
+} as const;
+
+export interface WorkspaceNotification {
+  key: string;
+  category: WorkspaceNotificationCategory;
+  title: string;
+  message: string;
+  projectNumber?: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface WorkspaceNotificationList {
+  items: WorkspaceNotification[];
+  total: number;
+  unreadCount: number;
+}
+
+export interface MarkNotificationReadInput {
+  key: string;
+}
+
+export interface MarkAllNotificationsReadResult {
+  ok: boolean;
+  markedRead: number;
+}
+
+export interface WorkspaceActivityItem {
+  action: string;
+  label: string;
+  resourceId?: string | null;
+  status: string;
+  createdAt: string;
+}
+
+export interface WorkspaceActivityList {
+  items: WorkspaceActivityItem[];
+  total: number;
+}
+
+export type WorkspaceProfileBrandPreferences = { [key: string]: unknown } | null;
+
+export interface WorkspaceProfile {
+  clientEmail: string;
+  clientName: string;
+  companyName?: string | null;
+  address?: string | null;
+  picName?: string | null;
+  picPhone?: string | null;
+  billingEmail?: string | null;
+  taxId?: string | null;
+  paymentMethodNotes?: string | null;
+  brandPreferences?: WorkspaceProfileBrandPreferences;
+}
+
+export type WorkspaceProfilePatchBrandPreferences = { [key: string]: unknown } | null;
+
+export interface WorkspaceProfilePatch {
+  companyName?: string | null;
+  address?: string | null;
+  picName?: string | null;
+  picPhone?: string | null;
+  billingEmail?: string | null;
+  taxId?: string | null;
+  paymentMethodNotes?: string | null;
+  brandPreferences?: WorkspaceProfilePatchBrandPreferences;
+}
+
+export interface WorkspaceSupportTicket {
+  id: number;
+  emailHash?: string;
+  clientEmail?: string;
+  clientName?: string;
+  projectId?: string | null;
+  subject: string;
+  message: string;
+  category: string;
+  status: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface WorkspaceSupportTicketList {
+  items: WorkspaceSupportTicket[];
+  total: number;
+}
+
+export interface CreateSupportTicketInput {
+  subject: string;
+  message: string;
+  category?: string;
+  projectNumber?: string;
+}
+
+export type RepeatOrderInputMode = typeof RepeatOrderInputMode[keyof typeof RepeatOrderInputMode];
+
+
+export const RepeatOrderInputMode = {
+  similar: 'similar',
+  duplicate: 'duplicate',
+  use_brief: 'use_brief',
+} as const;
+
+export interface RepeatOrderInput {
+  mode: RepeatOrderInputMode;
+}
+
+export type RepeatOrderDraftPrefill = { [key: string]: unknown };
+
+export interface RepeatOrderDraft {
+  redirectPath: string;
+  prefill: RepeatOrderDraftPrefill;
+}
+
+export interface ImpersonateCustomerInput {
+  clientEmail: string;
+  /** Mandatory reason for audit trail */
+  reason: string;
+}
+
+export interface ImpersonateCustomerResult {
+  /** Shown once — do not log */
+  impersonationToken: string;
+  workspacePath: string;
+  expiresAt: string;
+  clientEmail: string;
+  clientName: string;
+  readonly: boolean;
+  warning?: string;
+}
+
+export interface EndImpersonationInput {
+  impersonationToken: string;
+}
+
+export interface RotateTokenInput {
+  reason?: string;
+}
+
+export interface RotateTokenResult {
+  /** Previous token is now invalid */
+  newToken: string;
+  workspacePath: string;
+  expiresAt: string;
+  auditReference: string;
+  warning?: string;
+}
+
+export interface WorkspaceAnalytics {
+  repeatOrderRate: number;
+  totalDownloads: number;
+  averageProjectDays?: number | null;
+  averageRevisions: number;
+  averageInvoiceCollectionDays?: number | null;
+  customerRetentionRate: number;
+  customerLifetimeValuePlaceholder: boolean;
+}
+
+export interface OkResponse {
+  ok: boolean;
 }
 
 export type ListModelsParams = {
@@ -3512,8 +3938,67 @@ export type ListCommercialGatesParams = {
 quotationId?: number;
 };
 
+export type ManualUnlockProjectFiles200 = {
+  ok?: boolean;
+  projectId?: number;
+  filesUnlocked?: boolean;
+  unlockedBy?: string;
+};
+
+export type RevokeFileDownloadTokenBody = {
+  token: string;
+};
+
 export type SubmitPaymentProof200 = {
   ok?: boolean;
   schedule?: AiPaymentSchedule;
 };
+
+export type ListWorkspaceProjectsParams = {
+search?: string;
+status?: string;
+service?: string;
+industry?: string;
+sort?: ListWorkspaceProjectsSort;
+};
+
+export type ListWorkspaceProjectsSort = typeof ListWorkspaceProjectsSort[keyof typeof ListWorkspaceProjectsSort];
+
+
+export const ListWorkspaceProjectsSort = {
+  newest: 'newest',
+  oldest: 'oldest',
+  delivery_date: 'delivery_date',
+} as const;
+
+export type ListWorkspaceDownloadsParams = {
+category?: string;
+projectId?: string;
+search?: string;
+};
+
+export type ListWorkspaceInvoicesParams = {
+status?: string;
+};
+
+export type ListWorkspaceInvoiceDocumentsParams = {
+projectId?: string;
+};
+
+export type ListWorkspaceNotificationsParams = {
+category?: string;
+read?: ListWorkspaceNotificationsRead;
+};
+
+export type ListWorkspaceNotificationsRead = typeof ListWorkspaceNotificationsRead[keyof typeof ListWorkspaceNotificationsRead];
+
+
+export const ListWorkspaceNotificationsRead = {
+  read: 'read',
+  unread: 'unread',
+} as const;
+
+export type AdminGetCustomerWorkspace200 = { [key: string]: unknown };
+
+export type AdminGetCustomerAssets200 = { [key: string]: unknown };
 

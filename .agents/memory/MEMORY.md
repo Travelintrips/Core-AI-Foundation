@@ -30,3 +30,4 @@
 - [service-request-gate-status-sync](service-request-gate-status-sync.md) — generic status-PATCH must guard against skipping an unverified commercial gate; customer portal must read real status, not infer from quotation.status alone
 - [p0-sprint-complete](p0-sprint-complete.md) — All 6 P0 blockers fixed: payment gate, file lock (signed URLs), rate limiting, Helmet+CORS, SSRF guard, payment admin (reject/KPI/unlock)
 - [customer-workspace](customer-workspace.md) — /workspace/:token portal: synthesized notifications, filesUnlocked is the canonical lock flag, public routes skip api-zod by convention
+- [pdfkit-esbuild-external](pdfkit-esbuild-external.md) — pdfkit must be in esbuild externals list; fontkit dep requires @swc/helpers at runtime which pnpm doesn't symlink to node_modules/@swc/

@@ -40,6 +40,7 @@ import paymentsRouter from "./payments";
 import portfolioRouter from "./portfolio";
 import filesRouter from "./files";
 import customerWorkspaceRouter from "./customer-workspace";
+import customerWorkspaceDocumentsRouter from "./customer-workspace-documents";
 import adminCustomerWorkspaceRouter from "./admin-customer-workspace";
 
 const router: IRouter = Router();
@@ -83,6 +84,7 @@ router.use(paymentsRouter);
 router.use(portfolioRouter);
 router.use(filesRouter);
 router.use(customerWorkspaceRouter);
+router.use(customerWorkspaceDocumentsRouter);
 router.use(adminCustomerWorkspaceRouter);
 
 export default router;

@@ -2,10 +2,10 @@
  * admin-customer-workspace.ts — Admin visibility into the Customer Workspace.
  *
  * Admin (adminAuth-protected) read access to a customer's workspace by email,
- * plus an audit-logged "view as customer" impersonation link generator and
- * workspace-wide analytics KPIs. Read-only aggregation on top of existing
- * data — does not modify any existing module.
+ * plus hardened impersonation (separate token table, mandatory reason, audit events),
+ * workspace-wide analytics KPIs, and token rotation for customers.
  */
+import { randomBytes } from "crypto";
 import { Router } from "express";
 import { logAudit } from "../services/aiAuditService.js";
 import {
@@ -17,10 +17,15 @@ import {
   listBrandKits,
   listWorkspaceActivity,
   computeWorkspaceAnalytics,
+  hashEmail,
 } from "../services/customerWorkspaceService.js";
-import { generateReviewToken } from "../services/clientReviewService.js";
-import { db, customerDashboardTokensTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { hashToken } from "../services/clientReviewService.js";
+import {
+  db,
+  customerDashboardTokensTable,
+  aiCustomerImpersonationTokensTable,
+} from "@workspace/db";
+import { eq, and, lt } from "drizzle-orm";
 
 const router = Router();
 
@@ -43,7 +48,7 @@ router.get("/ai/customer-workspace/:email", async (req, res): Promise<void> => {
     listWorkspaceProjectsFiltered(req, session.clientEmail, {}),
   ]);
   await logAudit("admin", "view_customer_workspace", session.emailHash, "customer_workspace", "success", {
-    adminActor: (req.headers["x-admin-key"] ? "admin" : "unknown"),
+    adminActor: req.headers["x-admin-key"] ? "admin" : "unknown",
     clientEmail: session.clientEmail,
   });
   res.json({ session, summary, projects });
@@ -82,13 +87,19 @@ router.get("/ai/customer-workspace/:email/activity", async (req, res): Promise<v
 });
 
 // ── POST /ai/customer-workspace/impersonate ───────────────────────────────────
-// Issues a fresh dashboard token for the given customer so support staff can
-// open their workspace, and writes an audit log entry for the action.
+// Issues a SEPARATE short-lived impersonation token — does NOT overwrite
+// the customer's real dashboard token. Requires mandatory reason.
 router.post("/ai/customer-workspace/impersonate", async (req, res): Promise<void> => {
   const body = req.body as Record<string, unknown>;
   const clientEmail = typeof body["clientEmail"] === "string" ? body["clientEmail"].trim() : "";
+  const reason = typeof body["reason"] === "string" ? body["reason"].trim() : "";
+
   if (!clientEmail) {
     res.status(400).json({ error: "clientEmail is required" });
+    return;
+  }
+  if (!reason) {
+    res.status(400).json({ error: "reason is required — document why you are accessing this customer workspace" });
     return;
   }
 
@@ -98,25 +109,117 @@ router.post("/ai/customer-workspace/impersonate", async (req, res): Promise<void
     return;
   }
 
-  const { plaintext, hash } = generateReviewToken();
-  const expiresAt = new Date(Date.now() + 1 * 60 * 60 * 1000); // short-lived: 1 hour, admin-issued
+  // Generate a separate impersonation token (plaintext shown once to admin)
+  const plaintext = randomBytes(32).toString("hex");
+  const tokenHash = hashToken(plaintext);
+  const expiresAt = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hour
 
+  // Clean up any expired impersonation tokens for this customer
   await db
-    .update(customerDashboardTokensTable)
-    .set({ tokenHash: hash, expiresAt })
-    .where(eq(customerDashboardTokensTable.emailHash, session.emailHash));
+    .delete(aiCustomerImpersonationTokensTable)
+    .where(
+      and(
+        eq(aiCustomerImpersonationTokensTable.emailHash, session.emailHash),
+        lt(aiCustomerImpersonationTokensTable.expiresAt, new Date()),
+      ),
+    );
 
-  await logAudit("admin", "impersonate_customer", session.emailHash, "customer_workspace", "success", {
+  await db.insert(aiCustomerImpersonationTokensTable).values({
+    emailHash: session.emailHash,
     clientEmail: session.clientEmail,
-    note: "Admin-issued 1-hour workspace link (view-as-customer)",
+    tokenHash,
+    issuedBy: "admin",
+    reason,
+    readonly: true,
+    expiresAt,
+  });
+
+  await logAudit("admin", "customer.impersonation.started", session.emailHash, "customer_workspace", "success", {
+    clientEmail: session.clientEmail,
+    reason,
+    note: "Separate impersonation token issued — customer real token NOT affected",
   });
 
   res.status(201).json({
-    dashboardToken: plaintext,
+    impersonationToken: plaintext,
     workspacePath: `/workspace/${plaintext}`,
     expiresAt: expiresAt.toISOString(),
     clientEmail: session.clientEmail,
     clientName: session.clientName,
+    readonly: true,
+    warning: "This token grants read-only workspace access. Store securely and do not log.",
+  });
+});
+
+// ── POST /ai/customer-workspace/impersonate/end ───────────────────────────────
+// Admin explicitly ends an impersonation session.
+router.post("/ai/customer-workspace/impersonate/end", async (req, res): Promise<void> => {
+  const body = req.body as Record<string, unknown>;
+  const impersonationToken = typeof body["impersonationToken"] === "string" ? body["impersonationToken"].trim() : "";
+  if (!impersonationToken) {
+    res.status(400).json({ error: "impersonationToken is required" });
+    return;
+  }
+
+  const tokenHash = hashToken(impersonationToken);
+  const [row] = await db
+    .select()
+    .from(aiCustomerImpersonationTokensTable)
+    .where(eq(aiCustomerImpersonationTokensTable.tokenHash, tokenHash));
+
+  if (!row) {
+    res.status(404).json({ error: "Impersonation token not found or already ended" });
+    return;
+  }
+
+  await db
+    .update(aiCustomerImpersonationTokensTable)
+    .set({ endedAt: new Date() })
+    .where(eq(aiCustomerImpersonationTokensTable.id, row.id));
+
+  await logAudit("admin", "customer.impersonation.ended", row.emailHash, "customer_workspace", "success", {
+    clientEmail: row.clientEmail,
+  });
+
+  res.json({ ok: true, endedAt: new Date().toISOString() });
+});
+
+// ── POST /ai/customer-workspace/customers/:customerId/rotate-token ────────────
+// Rotate a customer's real dashboard token. Invalidates the old token.
+// customerId = email (URL-encoded)
+router.post("/ai/customer-workspace/customers/:customerId/rotate-token", async (req, res): Promise<void> => {
+  const { customerId } = req.params as { customerId: string };
+  const body = req.body as Record<string, unknown>;
+  const reason = typeof body["reason"] === "string" ? body["reason"].trim() : "";
+
+  const decodedEmail = decodeURIComponent(customerId);
+  const session = await resolveCustomerByEmail(decodedEmail);
+  if (!session) {
+    res.status(404).json({ error: "Customer not found" });
+    return;
+  }
+
+  // Generate new token
+  const plaintext = randomBytes(32).toString("hex");
+  const tokenHash = hashToken(plaintext);
+  const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000); // 90 days
+
+  await db
+    .update(customerDashboardTokensTable)
+    .set({ tokenHash, expiresAt })
+    .where(eq(customerDashboardTokensTable.emailHash, session.emailHash));
+
+  await logAudit("admin", "token_rotated", session.emailHash, "customer_dashboard_token", "success", {
+    clientEmail: session.clientEmail,
+    reason: reason || "Admin-initiated token rotation",
+  });
+
+  res.status(201).json({
+    newToken: plaintext,
+    workspacePath: `/workspace/${plaintext}`,
+    expiresAt: expiresAt.toISOString(),
+    auditReference: `token_rotated:${session.emailHash.slice(0, 12)}`,
+    warning: "Previous token is now invalid. Share new token securely — shown once only.",
   });
 });
 
