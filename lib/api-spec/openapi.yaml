@@ -4277,6 +4277,133 @@ paths:
                 $ref: "#/components/schemas/PaymentVerifyResult"
         "404":
           description: Not found or already verified
+  /ai/payments/kpi:
+    get:
+      operationId: getPaymentKpi
+      tags: [payments]
+      summary: Payment KPIs — paid revenue, outstanding balance, pending verification count, locked/unlocked projects (P0-5)
+      responses:
+        "200":
+          description: Payment KPI metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentKpi"
+  /ai/payments/{scheduleId}/reject:
+    post:
+      operationId: rejectPaymentSchedule
+      tags: [payments]
+      summary: Reject a submitted payment proof (admin) — P0-5
+      parameters:
+        - in: path
+          name: scheduleId
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentRejectInput"
+      responses:
+        "200":
+          description: Payment rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiPaymentSchedule"
+        "404":
+          description: Not found or already in terminal state
+  /ai/payments/project/{projectId}/unlock:
+    post:
+      operationId: manualUnlockProjectFiles
+      tags: [payments]
+      summary: Manually unlock a project's final files (admin override) — P0-5
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualUnlockInput"
+      responses:
+        "200":
+          description: Files unlocked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  projectId:
+                    type: integer
+                  filesUnlocked:
+                    type: boolean
+                  unlockedBy:
+                    type: string
+  /ai/files/generate-token:
+    post:
+      operationId: generateFileDownloadToken
+      tags: [files]
+      summary: Generate a signed download token for a project file (admin) — P0-2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateTokenInput"
+      responses:
+        "201":
+          description: Token generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateTokenResponse"
+        "402":
+          description: Files not yet unlocked
+  /ai/files/revoke-token:
+    post:
+      operationId: revokeFileDownloadToken
+      tags: [files]
+      summary: Revoke a previously issued signed download token (admin) — P0-2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        "200":
+          description: Token revoked
+  /public/files/access/{token}:
+    get:
+      operationId: accessSignedFile
+      tags: [files]
+      summary: Verify signed token and redirect to protected file — P0-2
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to actual file URL
+        "401":
+          description: Invalid or expired token
+        "402":
+          description: Files locked — remaining payment required
   /ai/payments/{scheduleId}/invoice:
     post:
       operationId: generateInvoiceForPaymentSchedule
@@ -9612,6 +9739,58 @@ components:
         updatedAt:
           type: string
           format: date-time
+    PaymentKpi:
+      type: object
+      required: [paidRevenue, outstandingBalance, pendingVerificationCount, lockedProjects, unlockedProjects]
+      properties:
+        paidRevenue:
+          type: number
+        outstandingBalance:
+          type: number
+        pendingVerificationCount:
+          type: integer
+        lockedProjects:
+          type: integer
+        unlockedProjects:
+          type: integer
+    PaymentRejectInput:
+      type: object
+      required: [rejectedBy, reason]
+      properties:
+        rejectedBy:
+          type: string
+        reason:
+          type: string
+    ManualUnlockInput:
+      type: object
+      required: [unlockedBy]
+      properties:
+        unlockedBy:
+          type: string
+        reason:
+          type: string
+    GenerateTokenInput:
+      type: object
+      required: [projectId, fileUrl]
+      properties:
+        projectId:
+          type: integer
+        fileUrl:
+          type: string
+        ttlSeconds:
+          type: integer
+          default: 3600
+    GenerateTokenResponse:
+      type: object
+      required: [token, expiresAt, projectId]
+      properties:
+        token:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        projectId:
+          type: integer
     PaymentVerifyInput:
       type: object
       required:

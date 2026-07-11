@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { eq, desc, and, sql } from "drizzle-orm";
+import { aiGenerationLimiter } from "../middleware/rateLimiter.js";
 import { randomUUID } from "crypto";
 import { db, creativeProjectsTable, creativeProjectStepsTable, creativeAiAssetsTable } from "@workspace/db";
 import {
@@ -32,8 +33,19 @@ import { runImageDesignerPipeline } from "../services/imageDesignerService.js";
 
 const router = Router();
 
-/** POST /creative-ai/brief — create project and start 4-agent workflow in background */
-router.post("/creative-ai/brief", async (req, res): Promise<void> => {
+/** POST /creative-ai/brief — create project.
+ * P0-3 rate limited: 10 req / 10 min per IP.
+ *
+ * P0-1 PAYMENT GATE: The workflow is NOT auto-started here.
+ * Projects are created in "waiting_payment" status.
+ * AI production starts only after an admin verifies payment via
+ * POST /ai/payments/:scheduleId/verify, which calls verifyPayment()
+ * in paymentScheduleService — the single authoritative production gate.
+ *
+ * To run AI immediately (e.g. internal testing), use the admin seed/test-run
+ * endpoints which are explicitly scoped to non-production data.
+ */
+router.post("/creative-ai/brief", aiGenerationLimiter, async (req, res): Promise<void> => {
   const parsed = CreateCreativeBriefBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -45,7 +57,7 @@ router.post("/creative-ai/brief", async (req, res): Promise<void> => {
     stylePreference, goal, notes,
   } = parsed.data;
 
-  // Create project record
+  // Create project record in waiting_payment — no workflow yet.
   const [project] = await db
     .insert(creativeProjectsTable)
     .values({
@@ -57,23 +69,13 @@ router.post("/creative-ai/brief", async (req, res): Promise<void> => {
       stylePreference: stylePreference ?? null,
       goal,
       notes: notes ?? null,
-      status: "pending",
+      status: "waiting_payment",
     })
     .returning();
 
-  await logAudit("creative-ai", "create_project", project.projectId, "creative_project", "success", { brandName });
+  await logAudit("creative-ai", "create_project", project.projectId, "creative_project", "success", { brandName, gated: true });
   publishSafe({ eventType: "creative.project.created", sourceModule: "creative-ai", sourceId: project.projectId,
     payload: { projectId: project.projectId, brandName, businessType, goal } });
-
-  // Start workflow in background — don't await
-  runCreativeBriefWorkflow(project.id).catch(async (err) => {
-    console.error(`[creative-ai] Workflow failed for project ${project.projectId}:`, err);
-    await db
-      .update(creativeProjectsTable)
-      .set({ status: "failed" })
-      .where(eq(creativeProjectsTable.id, project.id));
-    await logAudit("creative-ai", "workflow_error", project.projectId, "creative_project", "failure", { error: String(err) });
-  });
 
   res.status(201).json(
     CreateCreativeBriefResponse.parse({

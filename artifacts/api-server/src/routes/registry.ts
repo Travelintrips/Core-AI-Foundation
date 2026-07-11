@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, aiProvidersTable, aiModelsTable } from "@workspace/db";
+import { ssrfGuard } from "../middleware/ssrfGuard.js";
 import {
   CreateProviderBody,
   UpdateProviderBody,
@@ -88,7 +89,7 @@ router.get("/ai/providers", async (_req, res): Promise<void> => {
   res.json(result);
 });
 
-router.post("/ai/providers", async (req, res): Promise<void> => {
+router.post("/ai/providers", ssrfGuard(["baseUrl"]), async (req, res): Promise<void> => {
   const parsed = CreateProviderBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -114,7 +115,7 @@ router.get("/ai/providers/:id", async (req, res): Promise<void> => {
   res.json(GetProviderResponse.parse(provider));
 });
 
-router.patch("/ai/providers/:id", async (req, res): Promise<void> => {
+router.patch("/ai/providers/:id", ssrfGuard(["baseUrl"]), async (req, res): Promise<void> => {
   const params = UpdateProviderParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateProviderBody.safeParse(req.body);

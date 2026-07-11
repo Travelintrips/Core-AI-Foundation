@@ -13,7 +13,7 @@
  * GET        /ai/catalog/analytics
  */
 import { Router } from "express";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, ne } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import {
   db,
@@ -25,6 +25,7 @@ import {
   aiQuotationsTable,
   aiQuotationItemsTable,
   creativeProjectsTable,
+  aiPaymentScheduleTable,
   insertAiServiceCategorySchema,
   insertAiServiceSchema,
   insertAiServicePackageSchema,
@@ -882,6 +883,49 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
     .where(eq(aiServicesTable.id, row.serviceId))
     .limit(1);
 
+  // P0-2: Fetch payment/unlock status from the linked creative project (if any).
+  // createdProjectId is TEXT storing the creative_projects.project_id (UUID).
+  let filesUnlocked = false;
+  let paymentStatus: string = "pending";
+  let remainingBalance: number | null = null;
+
+  if (row.createdProjectId) {
+    const [project] = await db
+      .select({
+        id: creativeProjectsTable.id,
+        filesUnlocked: creativeProjectsTable.filesUnlocked,
+        paymentStatus: creativeProjectsTable.paymentStatus,
+      })
+      .from(creativeProjectsTable)
+      .where(eq(creativeProjectsTable.projectId, row.createdProjectId))
+      .limit(1);
+
+    if (project) {
+      filesUnlocked = project.filesUnlocked ?? false;
+      paymentStatus = project.paymentStatus ?? paymentStatus;
+
+      // Sum unpaid installments for remaining balance display
+      const unpaid = await db
+        .select({ amount: aiPaymentScheduleTable.amount })
+        .from(aiPaymentScheduleTable)
+        .where(
+          and(
+            eq(aiPaymentScheduleTable.projectId, project.id),
+            ne(aiPaymentScheduleTable.status, "paid"),
+            ne(aiPaymentScheduleTable.status, "cancelled"),
+          ),
+        );
+
+      if (unpaid.length > 0) {
+        remainingBalance = unpaid.reduce((sum, r) => sum + parseFloat(String(r.amount ?? "0")), 0);
+      }
+    }
+  }
+
+  // P0-2: completionLinks are only visible once files are unlocked.
+  // Before that, customer sees the lock state + remaining balance.
+  const safeCompletionLinks = filesUnlocked ? (row.completionLinks ?? null) : null;
+
   // Return customer-safe fields only (no margin/cost/internal pricing)
   const snapshot = row.pricingSnapshotJson as Record<string, unknown> | null;
   res.json({
@@ -907,7 +951,10 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
     status: row.status,
     briefJson: row.briefJson,
     completionNotes: row.completionNotes ?? null,
-    completionLinks: row.completionLinks ?? null,
+    completionLinks: safeCompletionLinks,         // P0-2: gated
+    filesUnlocked,                                // P0-6: for portal lock screen
+    paymentStatus,                                // P0-6: current payment status
+    remainingBalance,                             // P0-6: how much is owed
     createdAt: row.createdAt,
     // Customer-facing breakdown: lineItems + basePrice from snapshot so
     // the portal can render an accurate itemised breakdown without

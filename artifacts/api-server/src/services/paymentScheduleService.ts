@@ -341,3 +341,48 @@ export async function generateInvoiceForSchedule(scheduleId: number) {
 export function isProjectUnlocked(project: Pick<CreativeProject, "filesUnlocked">): boolean {
   return project.filesUnlocked === true;
 }
+
+// ── rejectPayment ──────────────────────────────────────────────────────────────
+// P0-5 Admin action: reject a submitted payment proof. Transitions status back
+// to "pending" and logs the reason. Does not start/stop AI production.
+
+export async function rejectPayment(
+  scheduleId: number,
+  rejectedBy: string,
+  reason: string,
+): Promise<AiPaymentSchedule | null> {
+  const [schedule] = await db
+    .update(aiPaymentScheduleTable)
+    .set({
+      status: "failed",
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(aiPaymentScheduleTable.id, scheduleId),
+        ne(aiPaymentScheduleTable.status, "paid"),
+        ne(aiPaymentScheduleTable.status, "cancelled"),
+      ),
+    )
+    .returning();
+
+  if (!schedule) return null;
+
+  await logAudit(
+    "payments",
+    "payment_rejected",
+    String(schedule.id),
+    "ai_payment_schedule",
+    "success",
+    { rejectedBy, reason, projectId: schedule.projectId },
+  );
+
+  publishSafe({
+    eventType: "payment.rejected",
+    sourceModule: "payments",
+    sourceId: String(schedule.id),
+    payload: { scheduleId: schedule.id, projectId: schedule.projectId, rejectedBy, reason },
+  });
+
+  return schedule;
+}

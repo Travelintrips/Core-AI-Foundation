@@ -1,12 +1,74 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import pinoHttp from "pino-http";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
 import { adminAuthWithExceptions } from "./middleware/adminAuth.js";
+import { globalLimiter } from "./middleware/rateLimiter.js";
 
 const app: Express = express();
 
+// ── Security headers (P0-4) ──────────────────────────────────────────────────
+// helmet sets X-Frame-Options, X-Content-Type-Options, X-XSS-Protection,
+// Referrer-Policy, Content-Security-Policy, and more.
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'", "https:"],
+        fontSrc: ["'self'", "https:"],
+        objectSrc: ["'none'"],
+        frameSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+    crossOriginEmbedderPolicy: false, // allow embedding in Replit preview
+  }),
+);
+
+// ── CORS whitelist (P0-4) ────────────────────────────────────────────────────
+// Allow origins from environment variable (comma-separated list), or fall back
+// to the Replit dev domain and localhost for development.
+const rawAllowedOrigins = process.env["ALLOWED_ORIGINS"] ?? "";
+const replitDomain = process.env["REPLIT_DEV_DOMAIN"]
+  ? `https://${process.env["REPLIT_DEV_DOMAIN"]}`
+  : null;
+
+const allowedOrigins: string[] = [
+  ...rawAllowedOrigins.split(",").map((s) => s.trim()).filter(Boolean),
+  ...(replitDomain ? [replitDomain] : []),
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://localhost:5174",
+];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (server-to-server, curl, Postman)
+      if (!origin) { callback(null, true); return; }
+      if (allowedOrigins.some((o) => origin.startsWith(o))) {
+        callback(null, true);
+      } else if (process.env["NODE_ENV"] === "development") {
+        // In development, be permissive to allow Vite HMR and previews
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin '${origin}' is not allowed`));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Admin-Api-Key", "x-admin-api-key"],
+    credentials: true,
+    maxAge: 86400,
+  }),
+);
+
+// ── Request logging ──────────────────────────────────────────────────────────
 app.use(
   pinoHttp({
     logger,
@@ -26,11 +88,16 @@ app.use(
     },
   }),
 );
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Apply admin API key auth to all /api routes except health checks
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// ── Global rate limiting (P0-3) ───────────────────────────────────────────────
+// 200 requests per IP per 15 minutes on all /api routes.
+// Individual sensitive routes apply stricter per-route limits on top of this.
+app.use("/api", globalLimiter);
+
+// ── Auth + routing ────────────────────────────────────────────────────────────
 app.use("/api", adminAuthWithExceptions, router);
 
 export default app;

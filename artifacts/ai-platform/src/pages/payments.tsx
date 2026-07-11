@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, CheckCircle2, Receipt, Clock, Wallet } from "lucide-react";
+import {
+  Loader2, CheckCircle2, Receipt, Clock, Wallet,
+  XCircle, Unlock, TrendingUp, AlertTriangle, DollarSign, Lock,
+} from "lucide-react";
 
-// Same pattern as service-requests.tsx — empty base so fetch goes through the
-// Vite /api proxy, plus the admin API key header.
 const API_BASE = "";
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -14,7 +15,10 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if (key) headers["x-admin-api-key"] = key;
   if (init?.body) headers["Content-Type"] = "application/json";
 
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers: { ...headers, ...((init?.headers as Record<string, string>) ?? {}) } });
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: { ...headers, ...((init?.headers as Record<string, string>) ?? {}) },
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as Record<string, unknown>;
     throw new Error((body?.error as string) ?? `HTTP ${res.status}`);
@@ -47,6 +51,14 @@ type CreativeProject = {
 
 type PendingGroup = { project: CreativeProject; schedule: PaymentSchedule[] };
 
+type PaymentKpi = {
+  paidRevenue: number;
+  outstandingBalance: number;
+  pendingVerificationCount: number;
+  lockedProjects: number;
+  unlockedProjects: number;
+};
+
 const PAYMENT_TYPE_LABEL: Record<string, string> = {
   deposit: "Deposit",
   remaining_balance: "Sisa Pembayaran",
@@ -61,14 +73,27 @@ function fmt(amount: string, currency: string) {
   return `${currency} ${n.toLocaleString()}`;
 }
 
+function fmtNum(n: number, currency = "IDR") {
+  if (currency === "IDR") return `Rp${Math.round(n).toLocaleString("id-ID")}`;
+  return n.toLocaleString();
+}
+
 export default function Payments() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [verifiedBy, setVerifiedBy] = useState("admin");
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [unlockingId, setUnlockingId] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["payments", "pending"],
     queryFn: () => apiFetch<PendingGroup[]>("/api/ai/payments/pending"),
+  });
+
+  const { data: kpi, isLoading: kpiLoading } = useQuery({
+    queryKey: ["payments", "kpi"],
+    queryFn: () => apiFetch<PaymentKpi>("/api/ai/payments/kpi"),
   });
 
   const verify = useMutation({
@@ -78,29 +103,109 @@ export default function Payments() {
         body: JSON.stringify({ verifiedBy, reference }),
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["payments", "pending"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
       toast({ title: "Pembayaran diverifikasi." });
     },
-    onError: (err: Error) => toast({ title: "Gagal memverifikasi", description: err.message, variant: "destructive" }),
+    onError: (err: Error) =>
+      toast({ title: "Gagal memverifikasi", description: err.message, variant: "destructive" }),
+  });
+
+  const reject = useMutation({
+    mutationFn: ({ scheduleId, reason }: { scheduleId: number; reason: string }) =>
+      apiFetch(`/api/ai/payments/${scheduleId}/reject`, {
+        method: "POST",
+        body: JSON.stringify({ rejectedBy: verifiedBy, reason }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      setRejectingId(null);
+      setRejectReason("");
+      toast({ title: "Pembayaran ditolak." });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Gagal menolak", description: err.message, variant: "destructive" }),
   });
 
   const invoice = useMutation({
     mutationFn: (scheduleId: number) =>
       apiFetch(`/api/ai/payments/${scheduleId}/invoice`, { method: "POST" }),
     onSuccess: () => toast({ title: "Invoice dibuat." }),
-    onError: (err: Error) => toast({ title: "Gagal membuat invoice", description: err.message, variant: "destructive" }),
+    onError: (err: Error) =>
+      toast({ title: "Gagal membuat invoice", description: err.message, variant: "destructive" }),
+  });
+
+  const unlock = useMutation({
+    mutationFn: ({ projectId, reason }: { projectId: number; reason: string }) =>
+      apiFetch(`/api/ai/payments/project/${projectId}/unlock`, {
+        method: "POST",
+        body: JSON.stringify({ unlockedBy: verifiedBy, reason }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      setUnlockingId(null);
+      toast({ title: "File proyek berhasil dibuka." });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Gagal membuka file", description: err.message, variant: "destructive" }),
   });
 
   return (
     <Layout>
       <div className="p-6 max-w-5xl mx-auto space-y-6">
+        {/* Header */}
         <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2"><Wallet className="w-6 h-6" /> Verifikasi Pembayaran</h1>
+          <h1 className="text-2xl font-semibold flex items-center gap-2">
+            <Wallet className="w-6 h-6" /> Verifikasi Pembayaran
+          </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Daftar proyek dengan cicilan/pembayaran yang belum lunas. Produksi AI hanya akan berjalan setelah pembayaran (deposit atau penuh) diverifikasi di sini.
+            Daftar proyek dengan cicilan/pembayaran yang belum lunas. Produksi AI hanya
+            berjalan setelah pembayaran (deposit atau penuh) diverifikasi di sini.
           </p>
         </div>
 
+        {/* P0-5 KPI Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {kpiLoading ? (
+            <div className="col-span-5 flex justify-center py-4">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : kpi ? (
+            <>
+              <div className="border rounded-xl p-4 bg-card">
+                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                  <DollarSign className="w-3.5 h-3.5" /> Paid Revenue
+                </div>
+                <p className="font-semibold text-lg">{fmtNum(kpi.paidRevenue)}</p>
+              </div>
+              <div className="border rounded-xl p-4 bg-card">
+                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                  <TrendingUp className="w-3.5 h-3.5" /> Outstanding
+                </div>
+                <p className="font-semibold text-lg">{fmtNum(kpi.outstandingBalance)}</p>
+              </div>
+              <div className="border rounded-xl p-4 bg-card">
+                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                  <AlertTriangle className="w-3.5 h-3.5" /> Pending Verif.
+                </div>
+                <p className="font-semibold text-lg">{kpi.pendingVerificationCount}</p>
+              </div>
+              <div className="border rounded-xl p-4 bg-card">
+                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                  <Lock className="w-3.5 h-3.5" /> Locked
+                </div>
+                <p className="font-semibold text-lg">{kpi.lockedProjects}</p>
+              </div>
+              <div className="border rounded-xl p-4 bg-card">
+                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-green-500" /> Unlocked
+                </div>
+                <p className="font-semibold text-lg text-green-600">{kpi.unlockedProjects}</p>
+              </div>
+            </>
+          ) : null}
+        </div>
+
+        {/* Verifier identity */}
         <div className="flex items-center gap-2 text-sm">
           <label className="text-muted-foreground">Diverifikasi oleh:</label>
           <input
@@ -111,7 +216,9 @@ export default function Payments() {
         </div>
 
         {isLoading && (
-          <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          <div className="flex justify-center py-16">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
         )}
 
         {!isLoading && (data?.length ?? 0) === 0 && (
@@ -124,42 +231,127 @@ export default function Payments() {
         <div className="space-y-4">
           {data?.map(({ project, schedule }) => (
             <div key={project.id} className="border rounded-xl p-4 bg-card">
+              {/* Project header */}
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <p className="font-medium">{project.brandName}</p>
                   <p className="text-xs text-muted-foreground font-mono">{project.projectId}</p>
                 </div>
-                <span className="text-xs px-2 py-1 rounded-full bg-muted">{project.status}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs px-2 py-1 rounded-full bg-muted">{project.status}</span>
+                  {project.filesUnlocked ? (
+                    <span className="text-xs px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 flex items-center gap-1">
+                      <Unlock className="w-3 h-3" /> Unlocked
+                    </span>
+                  ) : (
+                    <span className="text-xs px-2 py-1 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 flex items-center gap-1">
+                      <Lock className="w-3 h-3" /> Locked
+                    </span>
+                  )}
+                </div>
               </div>
+
+              {/* Schedule rows */}
               <div className="space-y-2">
                 {schedule.map((s) => (
-                  <div key={s.id} className="flex items-center justify-between border-t pt-2 text-sm">
-                    <div>
-                      <p className="font-medium">{PAYMENT_TYPE_LABEL[s.paymentType] ?? s.paymentType} — {fmt(s.amount, s.currency)}</p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> Status: {s.status}
-                        {s.reference && <> · Referensi: <span className="font-mono">{s.reference}</span></>}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        className="text-xs px-3 py-1.5 rounded-lg bg-primary text-primary-foreground disabled:opacity-50"
-                        disabled={s.status === "paid" || verify.isPending}
-                        onClick={() => verify.mutate({ scheduleId: s.id, reference: s.reference ?? undefined })}
-                      >
-                        Verifikasi
-                      </button>
-                      <button
-                        className="text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1 disabled:opacity-50"
-                        disabled={invoice.isPending}
-                        onClick={() => invoice.mutate(s.id)}
-                      >
-                        <Receipt className="w-3 h-3" /> Buat Invoice
-                      </button>
+                  <div key={s.id} className="border-t pt-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-sm">
+                        <p className="font-medium">
+                          {PAYMENT_TYPE_LABEL[s.paymentType] ?? s.paymentType} — {fmt(s.amount, s.currency)}
+                        </p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <Clock className="w-3 h-3" /> Status: <strong>{s.status}</strong>
+                          {s.reference && (
+                            <> · Ref: <span className="font-mono">{s.reference}</span></>
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="flex gap-1.5 flex-wrap justify-end">
+                        {/* Verify */}
+                        <button
+                          className="text-xs px-3 py-1.5 rounded-lg bg-primary text-primary-foreground disabled:opacity-50"
+                          disabled={s.status === "paid" || verify.isPending}
+                          onClick={() => verify.mutate({ scheduleId: s.id, reference: s.reference ?? undefined })}
+                        >
+                          Verifikasi
+                        </button>
+
+                        {/* Reject */}
+                        {rejectingId === s.id ? (
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              className="border rounded px-2 py-1 text-xs bg-background w-36"
+                              placeholder="Alasan penolakan..."
+                              value={rejectReason}
+                              onChange={(e) => setRejectReason(e.target.value)}
+                            />
+                            <button
+                              className="text-xs px-2 py-1.5 rounded-lg bg-destructive text-destructive-foreground disabled:opacity-50"
+                              disabled={!rejectReason.trim() || reject.isPending}
+                              onClick={() => reject.mutate({ scheduleId: s.id, reason: rejectReason })}
+                            >
+                              Konfirmasi
+                            </button>
+                            <button
+                              className="text-xs px-2 py-1.5 rounded-lg border"
+                              onClick={() => setRejectingId(null)}
+                            >
+                              Batal
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className="text-xs px-3 py-1.5 rounded-lg border border-destructive text-destructive flex items-center gap-1 disabled:opacity-50"
+                            disabled={s.status === "paid" || s.status === "cancelled" || reject.isPending}
+                            onClick={() => setRejectingId(s.id)}
+                          >
+                            <XCircle className="w-3 h-3" /> Tolak
+                          </button>
+                        )}
+
+                        {/* Invoice */}
+                        <button
+                          className="text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1 disabled:opacity-50"
+                          disabled={invoice.isPending}
+                          onClick={() => invoice.mutate(s.id)}
+                        >
+                          <Receipt className="w-3 h-3" /> Invoice
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
+
+              {/* Manual unlock (P0-5) */}
+              {!project.filesUnlocked && (
+                <div className="mt-3 pt-3 border-t">
+                  {unlockingId === project.id ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Override unlock:</span>
+                      <button
+                        className="text-xs px-3 py-1.5 rounded-lg bg-green-600 text-white disabled:opacity-50 flex items-center gap-1"
+                        disabled={unlock.isPending}
+                        onClick={() => unlock.mutate({ projectId: project.id, reason: "Manual admin override" })}
+                      >
+                        <Unlock className="w-3 h-3" /> Konfirmasi Buka File
+                      </button>
+                      <button className="text-xs px-2 py-1.5 rounded-lg border" onClick={() => setUnlockingId(null)}>
+                        Batal
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="text-xs px-3 py-1.5 rounded-lg border border-green-600 text-green-600 flex items-center gap-1"
+                      onClick={() => setUnlockingId(project.id)}
+                    >
+                      <Unlock className="w-3 h-3" /> Buka File Manual
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

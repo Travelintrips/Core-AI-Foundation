@@ -28,3 +28,4 @@
 - [smtp-email-service](smtp-email-service.md) — real email sending added via nodemailer/emailService.ts; resend reuses issue-quotation re-issue endpoint; Hostinger 535 errors need username double-checked, not just port/TLS
 - [dual-commercial-flow](dual-commercial-flow.md) — service_flow (fixed_price vs custom/enterprise) picks checkout-only vs quotation-gated path; payment verification is the sole gate for AI production start
 - [service-request-gate-status-sync](service-request-gate-status-sync.md) — generic status-PATCH must guard against skipping an unverified commercial gate; customer portal must read real status, not infer from quotation.status alone
+- [p0-sprint-complete](p0-sprint-complete.md) — All 6 P0 blockers fixed: payment gate, file lock (signed URLs), rate limiting, Helmet+CORS, SSRF guard, payment admin (reject/KPI/unlock)

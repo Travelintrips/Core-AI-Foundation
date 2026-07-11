@@ -1,0 +1,498 @@
+Berdasarkan hasil Enterprise Readiness Audit 360, JANGAN membuat fitur baru.
+
+Mulai sekarang fokus utama adalah menyiapkan platform agar benar-benar siap menerima customer berbayar.
+
+=========================================================
+ATURAN
+=========================================================
+
+JANGAN mengubah:
+
+- AI Workforce
+- Queue
+- Dispatcher
+- Event Bus
+- Workflow Runner
+- Creative AI
+- Pricing Engine
+- Marketplace
+- Human Task
+- Analytics
+- Portfolio
+- Live Preview
+
+Semua perubahan harus:
+
+- additive
+- backward compatible
+- OpenAPI-first
+- TypeScript clean
+- pnpm run verify clean
+
+=========================================================
+TUJUAN
+=========================================================
+
+Menyelesaikan seluruh blocker P0 sebelum platform menerima customer berbayar.
+
+Prioritas:
+
+1 Payment Gate
+
+2 Final File Protection
+
+3 Rate Limiting
+
+4 Security Hardening
+
+5 Payment Verification
+
+6 Download Protection
+
+JANGAN membuat fitur baru selain yang berkaitan dengan Production Readiness.
+
+=========================================================
+P0-1
+PAYMENT GATE
+=========================================================
+
+Audit menunjukkan masih ada legacy flow yang bisa membuat project tanpa payment.
+
+Perbaiki seluruh entry point.
+
+Semua workflow AI harus melewati:
+
+Payment Policy
+
+↓
+
+Payment Status
+
+↓
+
+Commercial Verification
+
+↓
+
+Project Created
+
+↓
+
+AI Build
+
+Tidak boleh ada endpoint yang dapat menjalankan:
+
+Brand Strategy
+
+Creative Workflow
+
+Image Generation
+
+Copywriting
+
+QC
+
+sebelum:
+
+payment_verified
+
+ATAU
+
+deposit_paid
+
+=========================================================
+PAYMENT POLICY
+=========================================================
+
+Support:
+
+Full Payment
+
+Deposit
+
+Subscription
+
+Purchase Order
+
+Implementasikan middleware reusable.
+
+=========================================================
+P0-2
+FINAL FILE LOCK
+=========================================================
+
+Implementasikan Final Asset Protection.
+
+Seluruh asset:
+
+PNG HD
+
+SVG
+
+PSD
+
+AI
+
+ZIP
+
+Brand Guideline
+
+Company Profile
+
+Presentation
+
+Editable Source
+
+HARUS terkunci.
+
+Customer hanya dapat mengakses apabila:
+
+remaining_payment_verified
+
+ATAU
+
+full_payment_verified
+
+=========================================================
+PREVIEW
+=========================================================
+
+Sebelum pelunasan.
+
+Customer hanya melihat:
+
+Watermarked Images
+
+Low Resolution
+
+Draft PDF
+
+Preview Gallery
+
+Tidak dapat:
+
+Download
+
+Copy Link
+
+Access Original URL
+
+=========================================================
+SIGNED URL
+=========================================================
+
+Gunakan signed URL.
+
+File final tidak boleh public.
+
+Support:
+
+expiration
+
+download token
+
+revocation
+
+=========================================================
+P0-3
+RATE LIMITING
+=========================================================
+
+Tambahkan rate limiting.
+
+Global API
+
+Preview API
+
+Login
+
+Payment
+
+Client Review
+
+AI Generation
+
+Image Generation
+
+Upload
+
+Per-IP
+
+Per-user
+
+Per-tenant
+
+Per-minute
+
+Per-hour
+
+=========================================================
+P0-4
+SECURITY HARDENING
+=========================================================
+
+Tambahkan:
+
+Helmet
+
+CORS whitelist
+
+Origin validation
+
+Content Security Policy
+
+XSS protection
+
+Clickjacking protection
+
+Security headers
+
+=========================================================
+SSRF
+=========================================================
+
+Semua URL user input harus divalidasi.
+
+Block:
+
+localhost
+
+127.*
+
+10.*
+
+172.*
+
+192.168.*
+
+169.254.*
+
+IPv6 local
+
+Metadata endpoints
+
+=========================================================
+FILE VALIDATION
+=========================================================
+
+Validasi:
+
+mime type
+
+extension
+
+size
+
+virus hook placeholder
+
+=========================================================
+P0-5
+PAYMENT VERIFICATION
+=========================================================
+
+Pastikan admin dapat:
+
+Approve Payment
+
+Reject Payment
+
+Verify Deposit
+
+Verify Remaining Payment
+
+Generate Receipt
+
+Unlock Project
+
+Seluruh aksi memiliki:
+
+Audit Log
+
+Timestamp
+
+User
+
+Reason
+
+=========================================================
+PAYMENT STATUS
+=========================================================
+
+pending
+
+verification
+
+verified
+
+rejected
+
+deposit_paid
+
+remaining_paid
+
+completed
+
+=========================================================
+P0-6
+DOWNLOAD CENTER PROTECTION
+=========================================================
+
+Download Center hanya menampilkan:
+
+Unlocked Files
+
+Locked Files
+
+Watermarked Preview
+
+Progress
+
+Reason Locked
+
+Payment Remaining
+
+=========================================================
+LOCK SCREEN
+=========================================================
+
+Jika belum lunas.
+
+Tampilkan:
+
+Remaining Balance
+
+Pay Remaining
+
+Estimated Unlock
+
+=========================================================
+NOTIFICATION
+=========================================================
+
+Tambahkan notifikasi:
+
+Payment Required
+
+Deposit Received
+
+Payment Verified
+
+Remaining Payment Required
+
+Final Files Ready
+
+=========================================================
+AUDIT LOG
+=========================================================
+
+Semua aksi:
+
+Payment
+
+Unlock
+
+Download
+
+Generate Signed URL
+
+Verification
+
+harus masuk Audit Log.
+
+=========================================================
+ANALYTICS
+=========================================================
+
+Tambahkan KPI:
+
+Outstanding Balance
+
+Paid Revenue
+
+Pending Verification
+
+Locked Projects
+
+Unlocked Projects
+
+Average Payment Time
+
+=========================================================
+TESTING
+=========================================================
+
+Verifikasi:
+
+Customer tidak dapat build project tanpa payment.
+
+Customer tidak dapat download sebelum lunas.
+
+Signed URL expired.
+
+Rate limiting bekerja.
+
+Security header aktif.
+
+Helmet aktif.
+
+CORS benar.
+
+SSRF terblokir.
+
+Payment verification bekerja.
+
+Admin unlock bekerja.
+
+Audit log tercatat.
+
+=========================================================
+OUTPUT
+=========================================================
+
+Berikan laporan:
+
+1.
+
+Yang diperbaiki
+
+2.
+
+Yang masih menjadi blocker
+
+3.
+
+Risk Remaining
+
+4.
+
+Production Readiness Score
+
+5.
+
+Apakah platform sudah aman menerima customer berbayar.
+
+=========================================================
+PENTING
+=========================================================
+
+JANGAN membuat:
+
+Marketplace baru
+
+Portfolio baru
+
+Asset Management baru
+
+Multi Tenant
+
+White Label
+
+AI CEO
+
+Fokus hanya pada:
+
+Production Readiness.
+
+Target akhir:
+
+Platform siap menerima transaksi customer nyata dengan aman tanpa kebocoran file, tanpa AI berjalan sebelum pembayaran, dan tanpa risiko keamanan yang diketahui.

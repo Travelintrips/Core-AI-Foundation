@@ -13,6 +13,7 @@
  */
 
 import { Router } from "express";
+import { ssrfGuard } from "../middleware/ssrfGuard.js";
 import {
   CreateHumanTaskBody,
   AssignHumanTaskBody,
@@ -90,7 +91,7 @@ router.get("/ai/human-tasks/:id", async (req, res): Promise<void> => {
 
 // ── Create ─────────────────────────────────────────────────────────────────────
 
-router.post("/ai/human-tasks", async (req, res): Promise<void> => {
+router.post("/ai/human-tasks", ssrfGuard(["notificationHookUrl", "webhookUrl"]), async (req, res): Promise<void> => {
   const body = CreateHumanTaskBody.safeParse(req.body);
   if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
   try {

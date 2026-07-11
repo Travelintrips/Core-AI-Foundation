@@ -23,8 +23,9 @@ import {
 import { generateReviewToken, hashToken } from "../services/clientReviewService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
 import { logAudit } from "../services/aiAuditService.js";
-import { runCreativeBriefWorkflow } from "../services/creativeWorkflowRunner.js";
-import { runImageDesignerPipeline } from "../services/imageDesignerService.js";
+// P0-1: runCreativeBriefWorkflow and runImageDesignerPipeline intentionally
+// NOT imported here — autoGenerate is gated behind payment verification.
+// AI production starts only via POST /ai/payments/:id/verify.
 
 
 const router = Router();
@@ -118,7 +119,9 @@ router.post("/public/customer/submit", async (req, res): Promise<void> => {
       goal,
       notes: notes ?? null,
       deadline: deadline ?? null,
-      status: "pending",
+      // P0-1: project starts in waiting_payment — AI workflow fires only after
+      // an admin verifies payment via POST /ai/payments/:scheduleId/verify.
+      status: "waiting_payment",
     })
     .returning();
 
@@ -175,24 +178,14 @@ router.post("/public/customer/submit", async (req, res): Promise<void> => {
     },
   });
 
-  // 5. Kick off AI generation in the background if requested.
-  // Text workflow (brand strategist -> creative director -> copywriter -> QC) first,
-  // then chain into image concept generation so the client's review page has visual
-  // assets ready, not just copy.
-  if (autoGenerate) {
-    runCreativeBriefWorkflow(project.id)
-      .then(() => runImageDesignerPipeline(project.id, projectId, 2))
-      .catch(async (err) => {
-        console.error(`[customer-portal] Workflow failed for project ${projectId}:`, err);
-        await db
-          .update(creativeProjectsTable)
-          .set({ status: "failed" })
-          .where(eq(creativeProjectsTable.id, project.id));
-        await logAudit("customer-portal", "workflow_error", projectId, "creative_project", "failure", {
-          error: String(err),
-        });
-      });
-  }
+  // 5. P0-1 PAYMENT GATE: autoGenerate is disabled — AI production must not start
+  // before payment is verified. The project is created in "waiting_payment" status.
+  // Production starts automatically when an admin calls POST /ai/payments/:id/verify.
+  // Left as a commented reference so the intent is clear.
+  //
+  // if (autoGenerate) {
+  //   runCreativeBriefWorkflow(project.id) ...
+  // }
 
   await logAudit("customer-portal", "project_submitted", projectId, "creative_project", "success", {
     clientName,
@@ -200,20 +193,11 @@ router.post("/public/customer/submit", async (req, res): Promise<void> => {
     brandName,
   });
 
-  // 5. Kick off the 4-agent creative workflow in the background (unless the
-  // client opted to submit the brief for manual handling only).
-  if (autoGenerate ?? true) {
-    runCreativeBriefWorkflow(project.id).catch(async (err) => {
-      console.error(`[customer-portal] Workflow failed for project ${projectId}:`, err);
-      await db
-        .update(creativeProjectsTable)
-        .set({ status: "failed" })
-        .where(eq(creativeProjectsTable.id, project.id));
-      await logAudit("customer-portal", "workflow_error", projectId, "creative_project", "failure", {
-        error: String(err),
-      });
-    });
-  }
+  // 5. P0-1: autoGenerate removed — AI cannot start without payment verification.
+  // The autoGenerate parameter is intentionally ignored.
+  // Production is triggered automatically by verifyPayment() once admin
+  // marks the payment installment as paid.
+  void autoGenerate; // acknowledge parameter without acting on it
 
   const base = buildBaseUrl(req);
   const reviewUrl = `${base}/review/${reviewToken}`;
@@ -225,7 +209,7 @@ router.post("/public/customer/submit", async (req, res): Promise<void> => {
     reviewUrl,
     dashboardToken,
     dashboardUrl,
-    status: "pending",
+    status: "waiting_payment",
     brandName,
     clientName,
     createdAt: new Date().toISOString(),
