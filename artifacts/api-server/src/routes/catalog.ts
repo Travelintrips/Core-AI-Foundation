@@ -526,7 +526,9 @@ router.post("/ai/catalog/requests/:id/issue-quotation", async (req, res): Promis
   });
 
   const base = buildBaseUrl(req);
-  const quotationUrl = `${base}/request-service/${serviceReq.requestId}/quotation?token=${token}`;
+  // Customer portal is served under /customer-portal/ base path on Replit
+  const portalBase = `${base}/customer-portal`;
+  const quotationUrl = `${portalBase}/request-service/${serviceReq.requestId}/quotation?token=${token}`;
 
   const emailResult = await sendEmail({
     to: serviceReq.customerEmail,
