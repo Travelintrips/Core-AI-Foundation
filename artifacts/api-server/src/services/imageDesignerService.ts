@@ -349,6 +349,130 @@ const FLUX_SCHNELL = "black-forest-labs/flux-schnell";
 const FLUX_DEV = "black-forest-labs/flux-dev";
 const IMAGE_COST_SCHNELL = 0.003; // ~$0.003/image for FLUX.1 Schnell
 
+// ── Named-asset generation (reused by demoPortfolioGeneratorService) ──────────
+// Same Replicate call + QC review primitives as runImageDesignerPipeline above,
+// but driven by an explicit list of named asset roles (e.g. "logo_concept",
+// "social_visual_1") instead of N generic variations. This is NOT a parallel
+// image pipeline — it calls the exact same generateReplicateImage/reviewImage
+// functions used by the manual creative-project flow.
+
+export interface NamedAssetRole {
+  role: string;
+  label: string;
+  promptHint: string;
+  aspectRatio?: string;
+}
+
+export interface GeneratedNamedAsset {
+  role: string;
+  label: string;
+  prompt: string;
+  imageUrl: string | null;
+  status: "completed" | "failed";
+  qcScore: number;
+  qcNotes: string;
+  cost: number;
+  retries: number;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Replicate's rate limiter (observed on low-credit accounts: 6 req/min) returns
+ * 429 with a `retry_after` (seconds) field in the JSON body. Parse it so we back
+ * off exactly as long as needed instead of guessing. */
+function parseRetryAfterMs(err: unknown): number | null {
+  if (!(err instanceof Error)) return null;
+  const match = err.message.match(/"retry_after"\s*:\s*([\d.]+)/);
+  if (!match) return null;
+  return Math.ceil(parseFloat(match[1]) * 1000) + 500; // small safety margin
+}
+
+function isRateLimitError(err: unknown): boolean {
+  return err instanceof Error && /Replicate create error 429/.test(err.message);
+}
+
+// Minimum spacing between successive Replicate calls — pre-empts hitting the
+// documented 6 requests/minute throttle that low-credit Replicate accounts hit.
+const MIN_INTER_REQUEST_MS = 10500;
+
+export async function generateNamedAssetSet(
+  brief: Record<string, unknown>,
+  roles: NamedAssetRole[],
+  opts?: { maxRetryPerAsset?: number },
+): Promise<GeneratedNamedAsset[]> {
+  const guardrails = await readGuardrails();
+  const maxRetry = Math.max(0, opts?.maxRetryPerAsset ?? Math.min(guardrails.maxRetryPerProvider, 2));
+  const replicateKey = getProviderApiKey("replicate");
+
+  const results: GeneratedNamedAsset[] = [];
+  let lastRequestAt = 0;
+
+  for (const role of roles) {
+    const brandName = String(brief["brandName"] ?? "the brand");
+    const industry = String(brief["businessType"] ?? brief["industry"] ?? "");
+    const style = String(brief["stylePreference"] ?? "");
+    const prompt = `${role.promptHint}. Brand: ${brandName}. Industry: ${industry}. Visual style: ${style}. Professional quality, on-brand, clean composition. No readable text or logos of real companies.`;
+    const negativePrompt = "text, watermark, low quality, blurry, distorted, real company logo, trademark, nsfw, signature";
+
+    let attempt = 0;
+    let imageUrl: string | null = null;
+    let lastError: unknown = null;
+
+    if (!replicateKey) {
+      results.push({
+        role: role.role, label: role.label, prompt, imageUrl: null, status: "failed",
+        qcScore: 0, qcNotes: "REPLICATE_API_TOKEN not configured", cost: 0, retries: 0,
+      });
+      continue;
+    }
+
+    while (attempt <= maxRetry && !imageUrl) {
+      attempt++;
+
+      // Pace requests to stay under Replicate's throttle window.
+      const waitMs = MIN_INTER_REQUEST_MS - (Date.now() - lastRequestAt);
+      if (waitMs > 0) await sleep(waitMs);
+      lastRequestAt = Date.now();
+
+      try {
+        const modelId = attempt > maxRetry && guardrails.fallbackEnabled ? FLUX_DEV : FLUX_SCHNELL;
+        const r = await generateReplicateImage(
+          modelId,
+          { prompt, negativePrompt, aspectRatio: role.aspectRatio ?? "1:1" },
+          replicateKey,
+          guardrails.providerTimeoutMs,
+        );
+        imageUrl = r.imageUrl;
+      } catch (err) {
+        lastError = err;
+        if (isRateLimitError(err) && attempt <= maxRetry) {
+          const backoff = parseRetryAfterMs(err) ?? 15000;
+          await sleep(backoff);
+        }
+      }
+    }
+
+    if (!imageUrl) {
+      results.push({
+        role: role.role, label: role.label, prompt, imageUrl: null, status: "failed",
+        qcScore: 0, qcNotes: String(lastError instanceof Error ? lastError.message : lastError ?? "generation failed"),
+        cost: 0, retries: attempt - 1,
+      });
+      continue;
+    }
+
+    const qc = await reviewImage(brief, prompt, imageUrl);
+    results.push({
+      role: role.role, label: role.label, prompt, imageUrl, status: "completed",
+      qcScore: qc.score, qcNotes: qc.notes, cost: IMAGE_COST_SCHNELL, retries: attempt - 1,
+    });
+  }
+
+  return results;
+}
+
 export async function runImageDesignerPipeline(
   projectDbId: number,
   projectUuid: string,

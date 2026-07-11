@@ -1,29 +1,37 @@
 /**
  * demoPortfolioGeneratorService — AI-powered demo portfolio batch generation.
  *
- * Uses the existing AI OS (Brand Strategist via intelligentRouter + executeAI,
- * event bus, audit log) to produce fictional, safety-checked demo portfolios.
+ * Uses the existing AI OS (Brand Strategist / Creative Director / Copywriter via
+ * intelligentRouter + executeAI, Image Designer + Image QC via imageDesignerService,
+ * event bus, audit log) to produce fictional, safety-checked demo portfolios with
+ * real generated assets.
  *
  * ALL demo portfolios:
- *   - use fictional brand names (not real companies)
+ *   - use fictional brand names (not real companies), duplicate-name checked
  *   - are labeled "AI Demo Project"
- *   - carry trademark_risk scoring (high risk → cannot auto-publish)
+ *   - carry trademark_risk scoring (high/medium risk → cannot auto-publish, goes to review)
  *   - require manual admin approval by default (autoPublish = false)
  *   - are subject to a max_cost budget guardrail per batch
+ *   - have real generated assets (logo, palette, typography, mockup, social visuals,
+ *     + industry-specific extras) stored in ai_portfolio_assets
  *
  * Does NOT create a new AI pipeline — reuses routeForAgent, executeAI,
- * aiEventBusService, aiAuditService, creativeAiService.
+ * aiEventBusService, aiAuditService, creativeAiService (Creative Director /
+ * Copywriter prompt builders), and imageDesignerService's Replicate + QC primitives
+ * via generateNamedAssetSet.
  */
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, ilike } from "drizzle-orm";
 import {
   db,
   aiPortfolioGenerationBatchesTable,
+  aiPortfolioAssetsTable,
   aiServicePortfoliosTable,
   aiServicesTable,
 } from "@workspace/db";
 import { routeForAgent } from "./intelligentRouter.js";
 import { executeAI, type ExecutionInput } from "./aiExecutionService.js";
-import { parseJsonResponse } from "./creativeAiService.js";
+import { buildCreativeDirectorPrompt, buildCopywriterPrompt, parseJsonResponse, type CreativeBriefInput } from "./creativeAiService.js";
+import { generateNamedAssetSet, type NamedAssetRole } from "./imageDesignerService.js";
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
 
@@ -31,13 +39,104 @@ const WORKFLOW_STANDARD = [
   { step: "brief", label: "Brief" },
   { step: "brand-strategy", label: "Brand Strategy" },
   { step: "creative-direction", label: "Creative Direction" },
-  { step: "generation", label: "AI Generation" },
+  { step: "copywriting", label: "Copywriting" },
+  { step: "generation", label: "AI Image Generation" },
   { step: "qc", label: "Quality Check" },
   { step: "delivery", label: "Final Delivery" },
 ];
 
 function makeBatchCode(): string {
   return `BATCH-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+}
+
+// ── Asset role configuration (Sprint P2.1) ─────────────────────────────────────
+
+const BASE_ASSET_ROLES: NamedAssetRole[] = [
+  { role: "logo_concept", label: "Logo Concept", aspectRatio: "1:1",
+    promptHint: "A clean, modern logo concept mark on a plain background, professional branding presentation" },
+  { role: "color_palette", label: "Color Palette", aspectRatio: "16:9",
+    promptHint: "A stylish brand color palette board showing primary and secondary colors as clean geometric swatches, minimal graphic design layout" },
+  { role: "typography_direction", label: "Typography Direction", aspectRatio: "16:9",
+    promptHint: "A typography moodboard showing an elegant font-pairing direction as abstract lettering shapes, graphic design layout, no readable words" },
+  { role: "main_brand_mockup", label: "Main Brand Mockup", aspectRatio: "3:2",
+    promptHint: "A realistic brand identity application mockup (stationery, signage, or product) shown in a real-world setting" },
+  { role: "social_visual_1", label: "Social Media Visual 1", aspectRatio: "1:1",
+    promptHint: "A polished social media post visual promoting the brand, lifestyle photography style" },
+  { role: "social_visual_2", label: "Social Media Visual 2", aspectRatio: "1:1",
+    promptHint: "A second distinct social media post visual for the brand, different composition and angle from the first" },
+];
+
+const INDUSTRY_EXTRA_ROLES: Record<string, NamedAssetRole[]> = {
+  coffee: [
+    { role: "packaging_mockup", label: "Cup/Packaging Mockup", aspectRatio: "3:2", promptHint: "A branded coffee cup and packaging mockup, product photography" },
+    { role: "menu_mockup", label: "Menu Mockup", aspectRatio: "3:2", promptHint: "A café menu design mockup layout, elegant food & beverage graphic design" },
+  ],
+  restaurant: [
+    { role: "packaging_mockup", label: "Packaging Mockup", aspectRatio: "3:2", promptHint: "Branded food packaging/takeaway box mockup, product photography" },
+    { role: "menu_mockup", label: "Menu Mockup", aspectRatio: "3:2", promptHint: "A restaurant menu design mockup layout, appetizing food graphic design" },
+  ],
+  logistics: [
+    { role: "company_profile_cover", label: "Company Profile Cover", aspectRatio: "3:2", promptHint: "A corporate company profile document cover design, logistics industry, professional" },
+    { role: "presentation_cover", label: "Presentation Cover", aspectRatio: "16:9", promptHint: "A corporate presentation title slide cover design, logistics industry" },
+    { role: "corporate_social_post", label: "Corporate Social Post", aspectRatio: "1:1", promptHint: "A professional corporate social media post visual, logistics industry" },
+  ],
+  mining: [
+    { role: "company_profile_cover", label: "Company Profile Cover", aspectRatio: "3:2", promptHint: "A corporate company profile document cover design, mining industry, industrial professional" },
+    { role: "presentation_cover", label: "Presentation Cover", aspectRatio: "16:9", promptHint: "A corporate presentation title slide cover design, mining industry" },
+    { role: "corporate_social_post", label: "Corporate Social Post", aspectRatio: "1:1", promptHint: "A professional corporate social media post visual, mining industry" },
+  ],
+  trading: [
+    { role: "company_profile_cover", label: "Company Profile Cover", aspectRatio: "3:2", promptHint: "A corporate company profile document cover design, trading industry, professional" },
+    { role: "presentation_cover", label: "Presentation Cover", aspectRatio: "16:9", promptHint: "A corporate presentation title slide cover design, trading industry" },
+    { role: "corporate_social_post", label: "Corporate Social Post", aspectRatio: "1:1", promptHint: "A professional corporate social media post visual, trading industry" },
+  ],
+  palm_oil: [
+    { role: "company_profile_cover", label: "Company Profile Cover", aspectRatio: "3:2", promptHint: "A corporate company profile document cover design, palm oil plantation industry, professional natural tones" },
+    { role: "presentation_cover", label: "Presentation Cover", aspectRatio: "16:9", promptHint: "A corporate presentation title slide cover design, palm oil industry" },
+    { role: "corporate_social_post", label: "Corporate Social Post", aspectRatio: "1:1", promptHint: "A professional corporate social media post visual, palm oil industry" },
+  ],
+  fashion: [
+    { role: "packaging_tag_mockup", label: "Packaging/Tag Mockup", aspectRatio: "3:2", promptHint: "A fashion brand packaging and hang-tag mockup, product photography" },
+    { role: "apparel_mockup", label: "Apparel Mockup", aspectRatio: "3:2", promptHint: "A branded apparel mockup on a garment, fashion product photography" },
+  ],
+  medical: [
+    { role: "clinic_signage", label: "Clinic Signage", aspectRatio: "3:2", promptHint: "A modern medical clinic signage mockup, professional healthcare branding" },
+    { role: "social_post", label: "Social Post", aspectRatio: "1:1", promptHint: "A professional healthcare social media post visual" },
+    { role: "brochure_cover", label: "Brochure Cover", aspectRatio: "3:2", promptHint: "A medical clinic brochure cover design, clean healthcare graphic design" },
+  ],
+  property: [
+    { role: "brochure", label: "Brochure", aspectRatio: "3:2", promptHint: "A real estate property brochure cover design, premium property marketing" },
+    { role: "banner", label: "Banner", aspectRatio: "16:9", promptHint: "A real estate marketing banner design, premium property visual" },
+    { role: "social_ad", label: "Social Ad", aspectRatio: "1:1", promptHint: "A real estate social media advertisement visual" },
+  ],
+  technology: [
+    { role: "landing_page_hero", label: "Landing Page Hero", aspectRatio: "16:9", promptHint: "A modern SaaS landing page hero section mockup, technology product design" },
+    { role: "dashboard_mockup", label: "Dashboard Mockup", aspectRatio: "16:9", promptHint: "A modern software dashboard UI mockup, technology product design" },
+    { role: "presentation_cover", label: "Presentation Cover", aspectRatio: "16:9", promptHint: "A technology company pitch deck presentation cover design" },
+  ],
+};
+
+const MAX_ASSETS_PER_PORTFOLIO = 8;
+
+function buildAssetRoles(industry: string): NamedAssetRole[] {
+  const extras = INDUSTRY_EXTRA_ROLES[industry.toLowerCase()] ?? [];
+  const budget = Math.max(0, MAX_ASSETS_PER_PORTFOLIO - BASE_ASSET_ROLES.length);
+  return [...BASE_ASSET_ROLES, ...extras.slice(0, budget)];
+}
+
+// ── Duplicate brand-name check ─────────────────────────────────────────────────
+
+async function isDuplicateBrandName(brandName: string): Promise<boolean> {
+  const normalized = brandName.trim().toLowerCase();
+  if (!normalized) return false;
+  const rows = await db
+    .select({ id: aiServicePortfoliosTable.id })
+    .from(aiServicePortfoliosTable)
+    .where(
+      sql`(${aiServicePortfoliosTable.metadataJson}->>'brandName') ILIKE ${normalized} OR ${aiServicePortfoliosTable.title} ILIKE ${`%${normalized}%`}`,
+    )
+    .limit(1);
+  return rows.length > 0;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -210,44 +309,127 @@ interface SingleGenConfig {
   autoPublish: boolean;
   qcThreshold: number;
   batchId: number;
+  maxRetryPerAsset?: number;
 }
 
-/** Returns an estimated cost (token-based heuristic since ExecutionOutput has no cost field). */
-async function generateOneDemoPortfolio(config: SingleGenConfig): Promise<number> {
-  // Route to brand_strategist
-  const routing = await routeForAgent("brand_strategist", { prompt: "portfolio-demo-generation", requiredContextTokens: 900 });
-  if (!routing) throw new Error("No active AI model for brand_strategist");
+function tokenCost(tokensUsed: number): number {
+  // heuristic: ~$0.002 per 1K tokens for GPT-4o-mini class LLM steps
+  return (tokensUsed / 1000) * 0.002;
+}
 
-  const userPrompt = `Create a fictional brand concept (for demo portfolio purposes only, NOT a real company) for:
+async function runLlmStep(
+  agentSlug: string,
+  systemPrompt: string,
+  userPrompt: string,
+  temperature: number,
+  maxTokens: number,
+): Promise<{ output: Record<string, unknown>; cost: number }> {
+  const routing = await routeForAgent(agentSlug, { prompt: `portfolio-demo-${agentSlug}`, requiredContextTokens: 900 });
+  if (!routing) throw new Error(`No active AI model for ${agentSlug}`);
+
+  const execInput: ExecutionInput = {
+    prompt: userPrompt,
+    systemPrompt,
+    model: routing.selected.model,
+    provider: routing.selected.provider,
+    temperature,
+    maxTokens,
+  };
+
+  const result = await executeAI(execInput);
+  const output = parseJsonResponse(result.content) as Record<string, unknown>;
+  return { output, cost: tokenCost(result.tokensUsed) };
+}
+
+/** Generates one demo portfolio end-to-end: Brand Strategist -> Creative Director ->
+ *  Copywriter -> Image Designer (real assets) -> Image QC -> insert + gate for review.
+ *  Returns the actual cost incurred (LLM steps + image generation). */
+async function generateOneDemoPortfolio(config: SingleGenConfig): Promise<number> {
+  let totalCost = 0;
+
+  // ── Step 1: Brand Strategist (with duplicate-name avoidance, up to 3 attempts) ──
+  let concept: Record<string, unknown> = {};
+  let brandName = `Demo ${config.industry}`;
+  const avoidNames: string[] = [];
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const avoidClause = avoidNames.length
+      ? `\nThe following brand names are already in use — you MUST pick a different fictional name: ${avoidNames.join(", ")}.`
+      : "";
+
+    const userPrompt = `Create a fictional brand concept (for demo portfolio purposes only, NOT a real company) for:
 Industry: ${config.industry}
 Visual style: ${config.style}
 Package: ${config.packageLevel}
 
-Rules: fictional Indonesian-sounding name, must NOT resemble any trademark.
+Rules: fictional Indonesian-sounding name, must NOT resemble any real trademark or existing company.${avoidClause}
 
 Return ONLY JSON (no markdown):
-{"brandName":"string","tagline":"string","shortDescription":"string (max 60 words)","fullDescription":"string (max 180 words)","businessType":"string","primaryColor":"#hex","secondaryColor":"#hex","trademarkRisk":"low|medium|high","qcScore":number,"deliverables":["string"],"toolsUsed":["string"]}`;
+{"brandName":"string","tagline":"string","shortDescription":"string (max 60 words)","fullDescription":"string (max 180 words)","businessType":"string","targetMarket":"string","primaryColor":"#hex","secondaryColor":"#hex","trademarkRisk":"low|medium|high"}`;
 
-  const execInput: ExecutionInput = {
-    prompt: userPrompt,
-    systemPrompt: "You are a senior Brand Strategist creating fictional demo brand concepts for an AI creative agency portfolio showcase. Output strict JSON only — no markdown, no commentary.",
-    model: routing.selected.model,
-    provider: routing.selected.provider,
-    temperature: 0.85,
-    maxTokens: 800,
+    const step = await runLlmStep(
+      "brand-strategist",
+      "You are a senior Brand Strategist creating fictional demo brand concepts for an AI creative agency portfolio showcase. Output strict JSON only — no markdown, no commentary.",
+      userPrompt, 0.85, 800,
+    );
+    totalCost += step.cost;
+    concept = step.output;
+    brandName = String(concept["brandName"] ?? brandName);
+
+    if (!(await isDuplicateBrandName(brandName))) break;
+    avoidNames.push(brandName);
+  }
+
+  const duplicateNameUnresolved = avoidNames.includes(brandName) || (await isDuplicateBrandName(brandName));
+  let trademarkRisk = ["low", "medium", "high"].includes(String(concept["trademarkRisk"]))
+    ? String(concept["trademarkRisk"]) : "medium";
+  if (duplicateNameUnresolved) trademarkRisk = trademarkRisk === "low" ? "medium" : trademarkRisk;
+
+  const brief: CreativeBriefInput = {
+    brandName,
+    businessType: String(concept["businessType"] ?? config.industry),
+    targetMarket: String(concept["targetMarket"] ?? "Indonesian SME / consumer market"),
+    productOrService: String(concept["shortDescription"] ?? config.industry),
+    stylePreference: config.style,
+    goal: "Showcase a high-quality fictional brand identity for the public demo portfolio gallery",
+    notes: "This is a synthetic AI Demo Project — not a real client. Avoid any resemblance to real trademarks or logos.",
   };
 
-  const result = await executeAI(execInput);
-  const concept = parseJsonResponse(result.content) as Record<string, unknown>;
+  // ── Step 2: Creative Director ──────────────────────────────────────────────
+  const cdPrompt = buildCreativeDirectorPrompt(brief, concept);
+  const cdStep = await runLlmStep("creative-director", cdPrompt.systemPrompt, cdPrompt.userPrompt, 0.8, 900);
+  totalCost += cdStep.cost;
+  const creativeDirection = cdStep.output;
 
-  // Estimate cost from token usage (heuristic: ~$0.002 per 1K tokens for GPT-4o-mini class)
-  const estimatedCost = (result.tokensUsed / 1000) * 0.002;
+  // ── Step 3: Copywriter ──────────────────────────────────────────────────────
+  const cwPrompt = buildCopywriterPrompt(brief, concept, creativeDirection);
+  const cwStep = await runLlmStep("copywriter", cwPrompt.systemPrompt, cwPrompt.userPrompt, 0.8, 900);
+  totalCost += cwStep.cost;
+  const copy = cwStep.output;
 
-  const brandName = String(concept["brandName"] ?? `Demo ${config.industry}`);
-  const trademarkRisk = ["low", "medium", "high"].includes(String(concept["trademarkRisk"]))
-    ? String(concept["trademarkRisk"]) : "medium";
-  const qcScore = Math.min(100, Math.max(0, Number(concept["qcScore"] ?? 55)));
-  const canAutoPublish = config.autoPublish && qcScore >= config.qcThreshold && trademarkRisk === "low";
+  // ── Step 4+5: Image Designer + Image QC (real generated assets) ────────────
+  const assetRoles = buildAssetRoles(config.industry);
+  const imageBrief: Record<string, unknown> = {
+    brandName, businessType: brief.businessType, targetMarket: brief.targetMarket,
+    stylePreference: config.style, goal: brief.goal,
+    visualStyle: (creativeDirection as { visual_style?: unknown }).visual_style,
+    colorDirection: (creativeDirection as { color_direction?: unknown }).color_direction,
+  };
+  const generatedAssets = await generateNamedAssetSet(imageBrief, assetRoles, { maxRetryPerAsset: config.maxRetryPerAsset ?? 2 });
+  totalCost += generatedAssets.reduce((sum, a) => sum + a.cost, 0);
+
+  const completedAssets = generatedAssets.filter((a) => a.status === "completed");
+  const failedAssets = generatedAssets.filter((a) => a.status === "failed");
+  const allRequiredAssetsPresent = failedAssets.length === 0;
+  const avgQcScore = completedAssets.length
+    ? Math.round(completedAssets.reduce((sum, a) => sum + a.qcScore, 0) / completedAssets.length)
+    : 0;
+
+  const canAutoPublish =
+    config.autoPublish &&
+    avgQcScore >= config.qcThreshold &&
+    trademarkRisk === "low" &&
+    allRequiredAssetsPresent;
 
   let serviceId = config.serviceId;
   if (!serviceId) {
@@ -258,6 +440,13 @@ Return ONLY JSON (no markdown):
 
   const portfolioCode = `DEMO-${config.industry.toUpperCase().replace(/\s+/g, "-")}-${Date.now().toString(36).toUpperCase()}`;
   const slug = `${config.industry.toLowerCase()}-${brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`.substring(0, 100);
+
+  const mainMockup = completedAssets.find((a) => a.role === "main_brand_mockup") ?? completedAssets[0];
+  const galleryJson = completedAssets.map((a) => ({ role: a.role, label: a.label, url: a.imageUrl, altText: `${a.label} — ${brandName} (${config.industry}, ${config.style} style, AI Demo Project)` }));
+
+  const publishStatus = !allRequiredAssetsPresent
+    ? "review" // any failed asset always forces manual review, regardless of autoPublish
+    : canAutoPublish ? "published" : "review";
 
   const insertValues: Record<string, unknown> = {
     serviceId,
@@ -272,19 +461,68 @@ Return ONLY JSON (no markdown):
     packageLevel: config.packageLevel,
     portfolioCode, slug,
     isDemo: true, trademarkRisk,
-    qcScore: String(qcScore),
-    publishStatus: canAutoPublish ? "published" : "review",
-    status: canAutoPublish ? "published" : "draft",
+    qcScore: String(avgQcScore),
+    coverImage: mainMockup?.imageUrl ?? null,
+    galleryJson,
+    publishStatus,
+    status: publishStatus === "published" ? "published" : "draft",
     featured: false,
-    deliverablesJson: Array.isArray(concept["deliverables"]) ? concept["deliverables"] : [],
-    toolsUsedJson: Array.isArray(concept["toolsUsed"]) ? concept["toolsUsed"] : ["Brand Strategist AI", "Creative Director AI"],
+    deliverablesJson: Array.isArray(concept["deliverables"]) ? concept["deliverables"] : generatedAssets.map((a) => a.label),
+    toolsUsedJson: ["Brand Strategist AI", "Creative Director AI", "Copywriter AI", "Image Designer AI (FLUX.1)", "Image QC AI"],
     workflowJson: WORKFLOW_STANDARD,
-    metadataJson: { batchId: config.batchId, generated: new Date().toISOString(), disclaimer: "AI Demo Project — Conceptual example only. Not a real client." },
+    metadataJson: {
+      batchId: config.batchId,
+      generated: new Date().toISOString(),
+      disclaimer: "AI Demo Project — Conceptual example only. Not a real client.",
+      synthetic: true,
+      brandName,
+      tagline: concept["tagline"] ?? null,
+      copy,
+      creativeDirection,
+      duplicateNameCheck: duplicateNameUnresolved ? "unresolved_after_retries" : "ok",
+      assetSummary: { requested: assetRoles.length, completed: completedAssets.length, failed: failedAssets.length },
+    },
     completedProjects: 0, displayOrder: 0,
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [portfolio] = await db.insert(aiServicePortfoliosTable).values(insertValues as any).returning();
-  await publishSafe({ eventType: "portfolio_generated", sourceModule: "portfolio-generator", sourceId: String(portfolio!.id), payload: { batchId: config.batchId, qcScore } });
-  return estimatedCost;
+
+  // Insert structured asset registry rows (both completed and failed, for admin visibility)
+  if (generatedAssets.length) {
+    await db.insert(aiPortfolioAssetsTable).values(
+      generatedAssets.map((a, i) => ({
+        portfolioId: portfolio!.id,
+        assetType: "image",
+        assetRole: a.role,
+        title: a.label,
+        altText: a.status === "completed" ? `${a.label} — ${brandName} (AI Demo Project)` : null,
+        thumbnailUrl: a.imageUrl,
+        previewUrl: a.imageUrl,
+        storagePath: null, // Replicate-hosted URL only; no separate private-original storage layer exists yet
+        mimeType: a.status === "completed" ? "image/webp" : null,
+        displayOrder: i,
+        downloadable: false,
+        watermarkRequired: false,
+        metadataJson: { status: a.status, qcScore: a.qcScore, qcNotes: a.qcNotes, cost: a.cost, retries: a.retries, prompt: a.prompt },
+      })),
+    );
+  }
+
+  await logAudit(
+    "portfolio-generator",
+    avgQcScore >= config.qcThreshold && allRequiredAssetsPresent ? "portfolio_qc_passed" : "portfolio_qc_failed",
+    String(portfolio!.id), "ai_service_portfolio",
+    avgQcScore >= config.qcThreshold && allRequiredAssetsPresent ? "success" : "failure",
+    { qcScore: avgQcScore, trademarkRisk, failedAssets: failedAssets.length, duplicateNameUnresolved },
+  );
+
+  await publishSafe({
+    eventType: allRequiredAssetsPresent ? "portfolio_qc_passed" : "portfolio_qc_failed",
+    sourceModule: "portfolio-generator", sourceId: String(portfolio!.id),
+    payload: { batchId: config.batchId, qcScore: avgQcScore, failedAssets: failedAssets.length },
+  });
+  await publishSafe({ eventType: "portfolio_generated", sourceModule: "portfolio-generator", sourceId: String(portfolio!.id), payload: { batchId: config.batchId, qcScore: avgQcScore } });
+
+  return totalCost;
 }
