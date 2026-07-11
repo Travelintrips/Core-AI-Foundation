@@ -14,7 +14,17 @@ import {
   useApproveServiceQuotation,
   useRequestChangeServiceQuotation,
   useRejectServiceQuotation,
+  useRequestDetail,
 } from "@/hooks/use-catalog";
+
+/** Map service-request status → flow-stepper key */
+function requestStatusToStep(status: string): string {
+  if (["completed", "converted_to_project"].includes(status)) return "selesai";
+  if (["waiting_review", "revision_requested"].includes(status)) return "review";
+  if (["pending", "orchestrating", "in_progress"].includes(status)) return "produksi";
+  if (["approved", "verifikasi_komersial"].includes(status)) return "verifikasi";
+  return "persetujuan";
+}
 import { Loader2, CheckCircle2, XCircle, MessageSquare, FileText, Clock, ShieldCheck } from "lucide-react";
 
 function formatMoney(amount: number, currency = "IDR") {
