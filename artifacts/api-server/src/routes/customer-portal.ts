@@ -216,10 +216,8 @@ router.post("/public/customer/submit", async (req, res): Promise<void> => {
   }
 
   const base = buildBaseUrl(req);
-  // Customer portal is served under /customer-portal/ base path on Replit
-  const portalBase = `${base}/customer-portal`;
-  const reviewUrl = `${portalBase}/review/${reviewToken}`;
-  const dashboardUrl = `${portalBase}/dashboard/${dashboardToken}`;
+  const reviewUrl = `${base}/review/${reviewToken}`;
+  const dashboardUrl = `${base}/dashboard/${dashboardToken}`;
 
   res.status(201).json({
     projectId,
@@ -320,8 +318,7 @@ router.post("/public/customer/request-access", async (req, res): Promise<void> =
   }
 
   const base = buildBaseUrl(req);
-  const portalBase = `${base}/customer-portal`;
-  const dashboardUrl = `${portalBase}/dashboard/${dashboardToken}`;
+  const dashboardUrl = `${base}/dashboard/${dashboardToken}`;
 
   res.json({
     dashboardToken,
@@ -422,7 +419,6 @@ router.get("/public/customer/dashboard/:dashboardToken", async (req, res): Promi
 
       const plainToken = review.reviewTokenPlain ?? "";
       const base = buildBaseUrl(req);
-      const portalBase = `${base}/customer-portal`;
       return {
         projectId: project.projectId,
         brandName: project.brandName,
@@ -432,7 +428,7 @@ router.get("/public/customer/dashboard/:dashboardToken", async (req, res): Promi
         status: project.status,
         reviewStatus: review.status,
         reviewToken: plainToken,
-        reviewUrl: plainToken ? `${portalBase}/review/${plainToken}` : "",
+        reviewUrl: plainToken ? `${base}/review/${plainToken}` : "",
         deadline: project.deadline ?? null,
         hasResult: !!project.result,
         assetCount: assets.length,
