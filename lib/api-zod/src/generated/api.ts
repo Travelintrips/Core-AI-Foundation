@@ -1403,7 +1403,11 @@ export const CreateCreativeBriefResponse = zod.object({
   "stylePreference": zod.string().nullish(),
   "goal": zod.string(),
   "notes": zod.string().nullish(),
-  "status": zod.enum(['pending', 'running', 'completed', 'failed']),
+  "status": zod.string().describe('Legacy: pending | running | completed | failed. Dual Commercial Flow adds: waiting_payment | deposit_paid | waiting_payment_verification | payment_verified | waiting_remaining_payment | remaining_paid | ready_to_build | building | internal_review | waiting_client_review | revision | approved | completed\n'),
+  "paymentPolicy": zod.string().optional(),
+  "depositPercentage": zod.number().optional(),
+  "paymentStatus": zod.string().optional(),
+  "filesUnlocked": zod.boolean().optional(),
   "result": zod.object({
 
 }).passthrough().nullish().describe('Aggregated final output from all agents'),
@@ -1425,7 +1429,11 @@ export const ListCreativeProjectsResponseItem = zod.object({
   "stylePreference": zod.string().nullish(),
   "goal": zod.string(),
   "notes": zod.string().nullish(),
-  "status": zod.enum(['pending', 'running', 'completed', 'failed']),
+  "status": zod.string().describe('Legacy: pending | running | completed | failed. Dual Commercial Flow adds: waiting_payment | deposit_paid | waiting_payment_verification | payment_verified | waiting_remaining_payment | remaining_paid | ready_to_build | building | internal_review | waiting_client_review | revision | approved | completed\n'),
+  "paymentPolicy": zod.string().optional(),
+  "depositPercentage": zod.number().optional(),
+  "paymentStatus": zod.string().optional(),
+  "filesUnlocked": zod.boolean().optional(),
   "result": zod.object({
 
 }).passthrough().nullish().describe('Aggregated final output from all agents'),
@@ -1452,7 +1460,11 @@ export const GetCreativeProjectResponse = zod.object({
   "stylePreference": zod.string().nullish(),
   "goal": zod.string(),
   "notes": zod.string().nullish(),
-  "status": zod.enum(['pending', 'running', 'completed', 'failed']),
+  "status": zod.string().describe('Legacy: pending | running | completed | failed. Dual Commercial Flow adds: waiting_payment | deposit_paid | waiting_payment_verification | payment_verified | waiting_remaining_payment | remaining_paid | ready_to_build | building | internal_review | waiting_client_review | revision | approved | completed\n'),
+  "paymentPolicy": zod.string().optional(),
+  "depositPercentage": zod.number().optional(),
+  "paymentStatus": zod.string().optional(),
+  "filesUnlocked": zod.boolean().optional(),
   "result": zod.object({
 
 }).passthrough().nullish(),
@@ -1502,7 +1514,11 @@ export const UpdateCreativeProjectStatusResponse = zod.object({
   "stylePreference": zod.string().nullish(),
   "goal": zod.string(),
   "notes": zod.string().nullish(),
-  "status": zod.enum(['pending', 'running', 'completed', 'failed']),
+  "status": zod.string().describe('Legacy: pending | running | completed | failed. Dual Commercial Flow adds: waiting_payment | deposit_paid | waiting_payment_verification | payment_verified | waiting_remaining_payment | remaining_paid | ready_to_build | building | internal_review | waiting_client_review | revision | approved | completed\n'),
+  "paymentPolicy": zod.string().optional(),
+  "depositPercentage": zod.number().optional(),
+  "paymentStatus": zod.string().optional(),
+  "filesUnlocked": zod.boolean().optional(),
   "result": zod.object({
 
 }).passthrough().nullish().describe('Aggregated final output from all agents'),
@@ -4278,6 +4294,7 @@ export const ListServicesResponseItem = zod.object({
   "shortDescription": zod.string().nullish(),
   "fullDescription": zod.string().nullish(),
   "serviceType": zod.string(),
+  "serviceFlow": zod.string().optional().describe('fixed_price (Standard checkout, no quotation) | custom_project | enterprise'),
   "pricingModel": zod.string(),
   "startingPrice": zod.string().nullish(),
   "currency": zod.string(),
@@ -4332,6 +4349,7 @@ export const CreateServiceResponse = zod.object({
   "shortDescription": zod.string().nullish(),
   "fullDescription": zod.string().nullish(),
   "serviceType": zod.string(),
+  "serviceFlow": zod.string().optional().describe('fixed_price (Standard checkout, no quotation) | custom_project | enterprise'),
   "pricingModel": zod.string(),
   "startingPrice": zod.string().nullish(),
   "currency": zod.string(),
@@ -4366,6 +4384,7 @@ export const GetServiceResponse = zod.object({
   "shortDescription": zod.string().nullish(),
   "fullDescription": zod.string().nullish(),
   "serviceType": zod.string(),
+  "serviceFlow": zod.string().optional().describe('fixed_price (Standard checkout, no quotation) | custom_project | enterprise'),
   "pricingModel": zod.string(),
   "startingPrice": zod.string().nullish(),
   "currency": zod.string(),
@@ -4391,6 +4410,8 @@ export const GetServiceResponse = zod.object({
   "monthlyPrice": zod.string().nullish(),
   "yearlyPrice": zod.string().nullish(),
   "oneTimePrice": zod.string().nullish(),
+  "paymentPolicy": zod.string().optional().describe('full_payment | deposit | subscription | purchase_order'),
+  "depositPercentage": zod.number().optional(),
   "featuresJson": zod.array(zod.string()).nullish(),
   "limitsJson": zod.object({
 
@@ -4443,6 +4464,7 @@ export const UpdateServiceResponse = zod.object({
   "shortDescription": zod.string().nullish(),
   "fullDescription": zod.string().nullish(),
   "serviceType": zod.string(),
+  "serviceFlow": zod.string().optional().describe('fixed_price (Standard checkout, no quotation) | custom_project | enterprise'),
   "pricingModel": zod.string(),
   "startingPrice": zod.string().nullish(),
   "currency": zod.string(),
@@ -4503,6 +4525,8 @@ export const CreateServicePackageResponse = zod.object({
   "monthlyPrice": zod.string().nullish(),
   "yearlyPrice": zod.string().nullish(),
   "oneTimePrice": zod.string().nullish(),
+  "paymentPolicy": zod.string().optional().describe('full_payment | deposit | subscription | purchase_order'),
+  "depositPercentage": zod.number().optional(),
   "featuresJson": zod.array(zod.string()).nullish(),
   "limitsJson": zod.object({
 
@@ -4811,6 +4835,8 @@ export const UpdateServicePackageResponse = zod.object({
   "monthlyPrice": zod.string().nullish(),
   "yearlyPrice": zod.string().nullish(),
   "oneTimePrice": zod.string().nullish(),
+  "paymentPolicy": zod.string().optional().describe('full_payment | deposit | subscription | purchase_order'),
+  "depositPercentage": zod.number().optional(),
   "featuresJson": zod.array(zod.string()).nullish(),
   "limitsJson": zod.object({
 
@@ -5087,6 +5113,209 @@ export const FailCommercialGateResponse = zod.object({
   "notes": zod.string().nullish(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List a project's payment schedule (admin)
+ */
+export const ListPaymentScheduleForProjectParams = zod.object({
+  "projectId": zod.coerce.number()
+})
+
+export const ListPaymentScheduleForProjectResponseItem = zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "paymentType": zod.string().describe('deposit | remaining_balance | full_payment | custom_installment | subscription_charge'),
+  "percentage": zod.number().nullish(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "dueDate": zod.coerce.date().nullish(),
+  "status": zod.string().describe('pending | paid | partially_paid | failed | refunded | cancelled'),
+  "reference": zod.string().nullish(),
+  "verifiedBy": zod.string().nullish(),
+  "paidAt": zod.coerce.date().nullish(),
+  "notes": zod.string().nullish(),
+  "displayOrder": zod.number().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListPaymentScheduleForProjectResponse = zod.array(ListPaymentScheduleForProjectResponseItem)
+
+
+/**
+ * @summary Verify a submitted payment installment (admin)
+ */
+export const VerifyPaymentScheduleParams = zod.object({
+  "scheduleId": zod.coerce.number()
+})
+
+export const VerifyPaymentScheduleBody = zod.object({
+  "verifiedBy": zod.string(),
+  "reference": zod.string().optional()
+})
+
+export const VerifyPaymentScheduleResponse = zod.object({
+  "schedule": zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "paymentType": zod.string().describe('deposit | remaining_balance | full_payment | custom_installment | subscription_charge'),
+  "percentage": zod.number().nullish(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "dueDate": zod.coerce.date().nullish(),
+  "status": zod.string().describe('pending | paid | partially_paid | failed | refunded | cancelled'),
+  "reference": zod.string().nullish(),
+  "verifiedBy": zod.string().nullish(),
+  "paidAt": zod.coerce.date().nullish(),
+  "notes": zod.string().nullish(),
+  "displayOrder": zod.number().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "project": zod.object({
+  "id": zod.number(),
+  "projectId": zod.string().describe('UUID string — use this as the client-facing ID'),
+  "brandName": zod.string(),
+  "businessType": zod.string(),
+  "targetMarket": zod.string(),
+  "productOrService": zod.string(),
+  "stylePreference": zod.string().nullish(),
+  "goal": zod.string(),
+  "notes": zod.string().nullish(),
+  "status": zod.string().describe('Legacy: pending | running | completed | failed. Dual Commercial Flow adds: waiting_payment | deposit_paid | waiting_payment_verification | payment_verified | waiting_remaining_payment | remaining_paid | ready_to_build | building | internal_review | waiting_client_review | revision | approved | completed\n'),
+  "paymentPolicy": zod.string().optional(),
+  "depositPercentage": zod.number().optional(),
+  "paymentStatus": zod.string().optional(),
+  "filesUnlocked": zod.boolean().optional(),
+  "result": zod.object({
+
+}).passthrough().nullish().describe('Aggregated final output from all agents'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "productionStarted": zod.boolean()
+})
+
+
+/**
+ * @summary Generate an invoice for a payment installment (admin)
+ */
+export const GenerateInvoiceForPaymentScheduleParams = zod.object({
+  "scheduleId": zod.coerce.number()
+})
+
+export const GenerateInvoiceForPaymentScheduleResponse = zod.object({
+  "id": zod.number(),
+  "invoiceNumber": zod.string(),
+  "projectId": zod.number(),
+  "paymentScheduleId": zod.number().nullish(),
+  "invoiceType": zod.string().describe('deposit | remaining | final | credit_note | receipt'),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "status": zod.string().describe('draft | issued | paid | void'),
+  "lineItemsJson": zod.array(zod.object({
+  "label": zod.string().optional(),
+  "amount": zod.number().optional()
+})).nullish(),
+  "issuedAt": zod.coerce.date(),
+  "paidAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List a project's invoices (admin)
+ */
+export const ListInvoicesForProjectParams = zod.object({
+  "projectId": zod.coerce.number()
+})
+
+export const ListInvoicesForProjectResponseItem = zod.object({
+  "id": zod.number(),
+  "invoiceNumber": zod.string(),
+  "projectId": zod.number(),
+  "paymentScheduleId": zod.number().nullish(),
+  "invoiceType": zod.string().describe('deposit | remaining | final | credit_note | receipt'),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "status": zod.string().describe('draft | issued | paid | void'),
+  "lineItemsJson": zod.array(zod.object({
+  "label": zod.string().optional(),
+  "amount": zod.number().optional()
+})).nullish(),
+  "issuedAt": zod.coerce.date(),
+  "paidAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListInvoicesForProjectResponse = zod.array(ListInvoicesForProjectResponseItem)
+
+
+/**
+ * @summary Customer submits a payment reference for an installment
+ */
+export const SubmitPaymentProofParams = zod.object({
+  "scheduleId": zod.coerce.number()
+})
+
+export const SubmitPaymentProofBody = zod.object({
+  "reference": zod.string()
+})
+
+export const SubmitPaymentProofResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "schedule": zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "paymentType": zod.string().describe('deposit | remaining_balance | full_payment | custom_installment | subscription_charge'),
+  "percentage": zod.number().nullish(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "dueDate": zod.coerce.date().nullish(),
+  "status": zod.string().describe('pending | paid | partially_paid | failed | refunded | cancelled'),
+  "reference": zod.string().nullish(),
+  "verifiedBy": zod.string().nullish(),
+  "paidAt": zod.coerce.date().nullish(),
+  "notes": zod.string().nullish(),
+  "displayOrder": zod.number().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).optional()
+})
+
+
+/**
+ * @summary Standard (fixed_price) checkout — creates a project + payment schedule, no quotation
+ */
+export const CheckoutServiceRequestParams = zod.object({
+  "requestId": zod.coerce.string()
+})
+
+export const CheckoutServiceRequestResponse = zod.object({
+  "ok": zod.boolean(),
+  "alreadyCreated": zod.boolean().optional(),
+  "createdProjectId": zod.string().optional(),
+  "paymentPolicy": zod.string().optional(),
+  "status": zod.string().optional(),
+  "schedule": zod.array(zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "paymentType": zod.string().describe('deposit | remaining_balance | full_payment | custom_installment | subscription_charge'),
+  "percentage": zod.number().nullish(),
+  "amount": zod.string(),
+  "currency": zod.string(),
+  "dueDate": zod.coerce.date().nullish(),
+  "status": zod.string().describe('pending | paid | partially_paid | failed | refunded | cancelled'),
+  "reference": zod.string().nullish(),
+  "verifiedBy": zod.string().nullish(),
+  "paidAt": zod.coerce.date().nullish(),
+  "notes": zod.string().nullish(),
+  "displayOrder": zod.number().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})).optional()
 })
 
 

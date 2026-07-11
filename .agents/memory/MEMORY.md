@@ -25,3 +25,4 @@
 - [service-catalog-commercial-flow](service-catalog-commercial-flow.md) — Status transitions, conversion path, status enum in OpenAPI, admin enum cast pattern
 - [service-request-status-vocabulary](service-request-status-vocabulary.md) — full status list lives in admin NEXT_ACTIONS/dashboard maps, not schema comment; "completed" must be server-guarded
 - [smtp-email-service](smtp-email-service.md) — real email sending added via nodemailer/emailService.ts; resend reuses issue-quotation re-issue endpoint; Hostinger 535 errors need username double-checked, not just port/TLS
+- [dual-commercial-flow](dual-commercial-flow.md) — service_flow (fixed_price vs custom/enterprise) picks checkout-only vs quotation-gated path; payment verification is the sole gate for AI production start

@@ -150,6 +150,7 @@ function ServicesTab() {
   const [form, setForm] = useState({
     categoryId: 0, serviceCode: "", serviceName: "", shortDescription: "",
     pricingModel: "one_time", startingPrice: "", estimatedDelivery: "", status: "active",
+    serviceFlow: "custom_project" as "fixed_price" | "custom_project" | "enterprise",
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListServicesQueryKey() });
@@ -159,7 +160,7 @@ function ServicesTab() {
 
   function openCreate() {
     setEditing(null);
-    setForm({ categoryId: categories[0]?.id ?? 0, serviceCode: "", serviceName: "", shortDescription: "", pricingModel: "one_time", startingPrice: "", estimatedDelivery: "", status: "active" });
+    setForm({ categoryId: categories[0]?.id ?? 0, serviceCode: "", serviceName: "", shortDescription: "", pricingModel: "one_time", startingPrice: "", estimatedDelivery: "", status: "active", serviceFlow: "custom_project" });
     setOpen(true);
   }
   function openEdit(s: AiService) {
@@ -168,6 +169,7 @@ function ServicesTab() {
       categoryId: s.categoryId, serviceCode: s.serviceCode, serviceName: s.serviceName,
       shortDescription: s.shortDescription ?? "", pricingModel: s.pricingModel, startingPrice: s.startingPrice ?? "",
       estimatedDelivery: s.estimatedDelivery ?? "", status: s.status,
+      serviceFlow: (s.serviceFlow ?? "custom_project") as "fixed_price" | "custom_project" | "enterprise",
     });
     setOpen(true);
   }
@@ -175,7 +177,7 @@ function ServicesTab() {
     const data = {
       categoryId: form.categoryId, serviceCode: form.serviceCode, serviceName: form.serviceName,
       shortDescription: form.shortDescription, pricingModel: form.pricingModel, startingPrice: form.startingPrice || undefined,
-      estimatedDelivery: form.estimatedDelivery, status: form.status,
+      estimatedDelivery: form.estimatedDelivery, status: form.status, serviceFlow: form.serviceFlow,
     };
     if (editing) updateMutation.mutate({ id: editing.id, data });
     else createMutation.mutate({ data });
@@ -202,7 +204,12 @@ function ServicesTab() {
             <TableRow key={s.id} data-testid={`row-service-${s.serviceCode}`}>
               <TableCell className="font-medium">{s.serviceName}</TableCell>
               <TableCell className="text-xs text-muted-foreground">{categories.find((c) => c.id === s.categoryId)?.name ?? "—"}</TableCell>
-              <TableCell className="text-xs">{s.startingPrice ? `$${Number(s.startingPrice).toLocaleString()}` : "—"} · {s.pricingModel}</TableCell>
+              <TableCell className="text-xs">{s.startingPrice ? `${Number(s.startingPrice).toLocaleString()}` : "—"} · {s.pricingModel}</TableCell>
+              <TableCell>
+                <Badge variant={s.serviceFlow === "fixed_price" ? "default" : "outline"} className="text-xs capitalize">
+                  {s.serviceFlow === "fixed_price" ? "Standard (checkout)" : s.serviceFlow === "enterprise" ? "Enterprise" : "Custom project"}
+                </Badge>
+              </TableCell>
               <TableCell><Badge variant="outline" className="text-xs capitalize">{s.status}</Badge></TableCell>
               <TableCell className="text-right space-x-1">
                 <Button size="icon" variant="ghost" className="size-7" onClick={() => openEdit(s)} data-testid={`button-edit-service-${s.serviceCode}`}><Pencil className="size-3.5" /></Button>
@@ -237,6 +244,19 @@ function ServicesTab() {
             </Select>
             <Input placeholder="Starting price (USD)" value={form.startingPrice} onChange={(e) => setForm({ ...form, startingPrice: e.target.value })} data-testid="input-service-price" />
             <Input placeholder="Estimated delivery (e.g. 3-5 days)" value={form.estimatedDelivery} onChange={(e) => setForm({ ...form, estimatedDelivery: e.target.value })} data-testid="input-service-delivery" />
+            <div>
+              <Select value={form.serviceFlow} onValueChange={(v) => setForm({ ...form, serviceFlow: v as typeof form.serviceFlow })}>
+                <SelectTrigger data-testid="select-service-flow"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fixed_price">Standard — fixed price, checkout only (no quotation)</SelectItem>
+                  <SelectItem value="custom_project">Custom project — requirement form → quotation → approval</SelectItem>
+                  <SelectItem value="enterprise">Enterprise — same as custom, higher-touch</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                "Standard" skips the quotation step entirely — customers pay directly from their package price and production starts once payment is verified.
+              </p>
+            </div>
             <Button className="w-full" onClick={save} disabled={createMutation.isPending || updateMutation.isPending} data-testid="button-save-service">Save</Button>
           </div>
         </DialogContent>

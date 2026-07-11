@@ -34,6 +34,8 @@ import {
 import { logAudit } from "../services/aiAuditService.js";
 import { sendEmail } from "../services/emailService.js";
 import { generatePricingSnapshot, toCustomerFacingBreakdown, type PricingSelections } from "../services/aiPricingService.js";
+import { generateScheduleForProject, type PaymentPolicy } from "../services/paymentScheduleService.js";
+import { publishSafe } from "../services/aiEventBusService.js";
 import { createHash, randomBytes } from "crypto";
 
 function escapeHtml(s: string): string {
@@ -814,12 +816,20 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
     return;
   }
 
+  const [service] = await db
+    .select({ serviceFlow: aiServicesTable.serviceFlow })
+    .from(aiServicesTable)
+    .where(eq(aiServicesTable.id, row.serviceId))
+    .limit(1);
+
   // Return customer-safe fields only (no margin/cost/internal pricing)
   const snapshot = row.pricingSnapshotJson as Record<string, unknown> | null;
   res.json({
     id: row.id,
     requestId: row.requestId,
     serviceId: row.serviceId,
+    serviceFlow: service?.serviceFlow ?? "custom_project",
+    createdProjectId: row.createdProjectId ?? null,
     packageId: row.packageId,
     customerName: row.customerName,
     customerEmail: row.customerEmail,
@@ -898,6 +908,120 @@ router.put("/public/catalog/requests/:requestId/brief", async (req, res): Promis
   await logAudit("catalog", "brief_updated", requestId, "ai_service_request", "success", {});
 
   res.json({ ok: true, status: updated.status });
+});
+
+// ── Public: Standard (fixed_price) checkout ───────────────────────────────────
+// POST /public/catalog/requests/:requestId/checkout
+//
+// Only valid for services with service_flow = 'fixed_price'. Never creates an
+// ai_quotations row (the enterprise/custom flow owns quotations). Creates the
+// creative_project immediately (status: waiting_payment) plus its payment
+// schedule (full_payment or deposit+remaining_balance per the package's
+// payment_policy) — actual AI production only starts once payment clears,
+// see paymentScheduleService.verifyPayment().
+
+router.post("/public/catalog/requests/:requestId/checkout", async (req, res): Promise<void> => {
+  const { requestId } = req.params as { requestId: string };
+  if (!requestId || requestId.length < 8) {
+    res.status(400).json({ error: "Invalid requestId" });
+    return;
+  }
+
+  const [request] = await db
+    .select()
+    .from(aiServiceRequestsTable)
+    .where(eq(aiServiceRequestsTable.requestId, requestId))
+    .limit(1);
+  if (!request) { res.status(404).json({ error: "Service request not found" }); return; }
+
+  if (request.createdProjectId) {
+    res.json({ ok: true, alreadyCreated: true, createdProjectId: request.createdProjectId, status: request.status });
+    return;
+  }
+
+  const TERMINAL = new Set(["completed", "cancelled", "converted_to_project", "rejected", "expired"]);
+  if (TERMINAL.has(request.status)) {
+    res.status(409).json({ error: `Cannot checkout a ${request.status} request` });
+    return;
+  }
+  if (request.status !== "brief_completed" && request.status !== "pricing_calculated") {
+    res.status(409).json({ error: "Complete the brief before checkout" });
+    return;
+  }
+
+  const [service] = await db.select().from(aiServicesTable).where(eq(aiServicesTable.id, request.serviceId)).limit(1);
+  if (!service) { res.status(404).json({ error: "Service not found" }); return; }
+  if (service.serviceFlow !== "fixed_price") {
+    res.status(409).json({ error: "This service requires a quotation — use the Enterprise/Custom flow" });
+    return;
+  }
+
+  let pkg: typeof aiServicePackagesTable.$inferSelect | null = null;
+  if (request.packageId != null) {
+    const [row] = await db.select().from(aiServicePackagesTable).where(eq(aiServicePackagesTable.id, request.packageId)).limit(1);
+    pkg = row ?? null;
+  }
+  const paymentPolicy = (pkg?.paymentPolicy ?? "full_payment") as PaymentPolicy;
+  const depositPercentage = pkg?.depositPercentage ?? 50;
+
+  const brief = (request.briefJson ?? {}) as Record<string, string>;
+  const newProjectId = randomUUID();
+  const now = new Date();
+  const [project] = await db
+    .insert(creativeProjectsTable)
+    .values({
+      projectId: newProjectId,
+      sourceType: "service_catalog",
+      serviceRequestId: request.id,
+      brandName: request.companyName ?? request.customerName,
+      businessType: brief.companyIndustry ?? service.department ?? "general",
+      targetMarket: brief.audienceDemographics ?? "general",
+      productOrService: brief.outputFormats ?? service.serviceName,
+      stylePreference: brief.stylePreference ?? null,
+      colorPreference: brief.colorPalette ?? null,
+      referenceLinks: brief.referenceLinks ?? null,
+      goal: brief.primaryGoal ?? `${service.serviceName} — Standard checkout`,
+      notes: request.notes ?? null,
+      deadline: brief.deadline ?? null,
+      status: "waiting_payment",
+      paymentPolicy,
+      depositPercentage,
+      paymentStatus: "pending",
+    })
+    .returning();
+
+  const schedule = await generateScheduleForProject({
+    projectId: project.id,
+    paymentPolicy,
+    depositPercentage,
+    totalAmount: Number(request.total) || 0,
+    currency: request.currency,
+  });
+
+  await db
+    .update(aiServiceRequestsTable)
+    .set({ status: "waiting_commercial_gate", createdProjectId: newProjectId, updatedAt: now })
+    .where(eq(aiServiceRequestsTable.id, request.id));
+
+  await logAudit("catalog", "checkout_created", String(request.id), "ai_service_request", "success", {
+    projectId: newProjectId,
+    paymentPolicy,
+    total: request.total,
+  });
+
+  publishSafe({
+    eventType: "project.checkout_created",
+    sourceModule: "catalog",
+    sourceId: newProjectId,
+    payload: { serviceRequestId: request.id, projectId: newProjectId, paymentPolicy },
+  });
+
+  res.status(201).json({
+    ok: true,
+    createdProjectId: newProjectId,
+    paymentPolicy,
+    schedule,
+  });
 });
 
 export default router;

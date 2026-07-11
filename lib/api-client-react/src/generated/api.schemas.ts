@@ -782,16 +782,6 @@ export interface CreativeBriefInput {
   notes?: string | null;
 }
 
-export type CreativeProjectStatus = typeof CreativeProjectStatus[keyof typeof CreativeProjectStatus];
-
-
-export const CreativeProjectStatus = {
-  pending: 'pending',
-  running: 'running',
-  completed: 'completed',
-  failed: 'failed',
-} as const;
-
 /**
  * Aggregated final output from all agents
  * @nullable
@@ -811,7 +801,12 @@ export interface CreativeProject {
   goal: string;
   /** @nullable */
   notes?: string | null;
-  status: CreativeProjectStatus;
+  /** Legacy: pending | running | completed | failed. Dual Commercial Flow adds: waiting_payment | deposit_paid | waiting_payment_verification | payment_verified | waiting_remaining_payment | remaining_paid | ready_to_build | building | internal_review | waiting_client_review | revision | approved | completed */
+  status: string;
+  paymentPolicy?: string;
+  depositPercentage?: number;
+  paymentStatus?: string;
+  filesUnlocked?: boolean;
   /**
      * Aggregated final output from all agents
      * @nullable
@@ -865,16 +860,6 @@ export interface CreativeProjectStep {
   updatedAt?: string;
 }
 
-export type CreativeProjectDetailStatus = typeof CreativeProjectDetailStatus[keyof typeof CreativeProjectDetailStatus];
-
-
-export const CreativeProjectDetailStatus = {
-  pending: 'pending',
-  running: 'running',
-  completed: 'completed',
-  failed: 'failed',
-} as const;
-
 /**
  * @nullable
  */
@@ -892,7 +877,12 @@ export interface CreativeProjectDetail {
   goal: string;
   /** @nullable */
   notes?: string | null;
-  status: CreativeProjectDetailStatus;
+  /** Legacy: pending | running | completed | failed. Dual Commercial Flow adds: waiting_payment | deposit_paid | waiting_payment_verification | payment_verified | waiting_remaining_payment | remaining_paid | ready_to_build | building | internal_review | waiting_client_review | revision | approved | completed */
+  status: string;
+  paymentPolicy?: string;
+  depositPercentage?: number;
+  paymentStatus?: string;
+  filesUnlocked?: boolean;
   /** @nullable */
   result?: CreativeProjectDetailResult;
   steps: CreativeProjectStep[];
@@ -2613,6 +2603,8 @@ export interface AiService {
   /** @nullable */
   fullDescription?: string | null;
   serviceType: string;
+  /** fixed_price (Standard checkout, no quotation) | custom_project | enterprise */
+  serviceFlow?: string;
   pricingModel: string;
   /** @nullable */
   startingPrice?: string | null;
@@ -2682,6 +2674,9 @@ export interface AiServicePackage {
   yearlyPrice?: string | null;
   /** @nullable */
   oneTimePrice?: string | null;
+  /** full_payment | deposit | subscription | purchase_order */
+  paymentPolicy?: string;
+  depositPercentage?: number;
   /** @nullable */
   featuresJson?: string[] | null;
   /** @nullable */
@@ -2989,6 +2984,82 @@ export const QuotationStatus = {
   cancelled: 'cancelled',
 } as const;
 
+export interface AiPaymentSchedule {
+  id: number;
+  projectId: number;
+  /** deposit | remaining_balance | full_payment | custom_installment | subscription_charge */
+  paymentType: string;
+  /** @nullable */
+  percentage?: number | null;
+  amount: string;
+  currency: string;
+  /** @nullable */
+  dueDate?: string | null;
+  /** pending | paid | partially_paid | failed | refunded | cancelled */
+  status: string;
+  /** @nullable */
+  reference?: string | null;
+  /** @nullable */
+  verifiedBy?: string | null;
+  /** @nullable */
+  paidAt?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  displayOrder?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AiInvoiceLineItemsJsonItem = {
+  label?: string;
+  amount?: number;
+};
+
+export interface AiInvoice {
+  id: number;
+  invoiceNumber: string;
+  projectId: number;
+  /** @nullable */
+  paymentScheduleId?: number | null;
+  /** deposit | remaining | final | credit_note | receipt */
+  invoiceType: string;
+  amount: string;
+  currency: string;
+  /** draft | issued | paid | void */
+  status: string;
+  /** @nullable */
+  lineItemsJson?: AiInvoiceLineItemsJsonItem[] | null;
+  issuedAt: string;
+  /** @nullable */
+  paidAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentVerifyInput {
+  verifiedBy: string;
+  reference?: string;
+}
+
+export interface PaymentVerifyResult {
+  schedule: AiPaymentSchedule;
+  project: CreativeProject;
+  productionStarted: boolean;
+}
+
+export interface PaymentProofInput {
+  reference: string;
+}
+
+export interface CheckoutResponse {
+  ok: boolean;
+  alreadyCreated?: boolean;
+  createdProjectId?: string;
+  paymentPolicy?: string;
+  status?: string;
+  schedule?: AiPaymentSchedule[];
+}
+
 export type ListModelsParams = {
 /**
  * @nullable
@@ -3186,5 +3257,10 @@ export type StartBrief200 = {
 
 export type ListCommercialGatesParams = {
 quotationId?: number;
+};
+
+export type SubmitPaymentProof200 = {
+  ok?: boolean;
+  schedule?: AiPaymentSchedule;
 };
 

@@ -1,0 +1,810 @@
+Lanjutkan AI Enterprise Platform dengan mengubah Customer Journey menjadi Dual Commercial Flow.
+
+PENTING:
+
+Jangan mengubah Queue, Dispatcher, Event Bus, Workflow Runner, Workforce, Human Task, Client Review, Pricing Engine, Analytics, Marketplace, maupun Multi Tenant yang sudah berjalan.
+
+Semua perubahan harus:
+
+- additive
+- backward compatible
+- OpenAPI-first
+- TypeScript clean
+- lolos pnpm run verify
+
+==========================================================
+TUJUAN
+==========================================================
+
+Customer harus memiliki 2 jenis alur:
+
+1.
+STANDARD SERVICE
+(Fixed Price)
+
+2.
+CUSTOM / ENTERPRISE SERVICE
+
+Kedua flow harus berjalan berdampingan.
+
+==========================================================
+FLOW 1
+STANDARD SERVICE
+==========================================================
+
+Flow:
+
+Browse Service
+
+↓
+
+Choose Service
+
+↓
+
+Choose Package
+
+↓
+
+Package Comparison
+
+↓
+
+Brief Wizard
+
+↓
+
+AI Brief Validation
+
+↓
+
+Pricing Calculator
+
+↓
+
+Checkout
+
+↓
+
+Payment
+
+↓
+
+Project Created
+
+↓
+
+AI Team Assigned
+
+↓
+
+Production
+
+↓
+
+Internal QC
+
+↓
+
+Client Review
+
+↓
+
+Revision
+
+↓
+
+Final Approval
+
+↓
+
+Download Deliverables
+
+↓
+
+Project Archive
+
+==========================================================
+FLOW 2
+CUSTOM / ENTERPRISE
+==========================================================
+
+Browse Service
+
+↓
+
+Request Consultation
+
+↓
+
+Requirement Form
+
+↓
+
+AI Requirement Analysis
+
+↓
+
+Meeting (optional)
+
+↓
+
+Quotation
+
+↓
+
+Customer Approval
+
+↓
+
+DP / PO
+
+↓
+
+Commercial Verification
+
+↓
+
+Project Created
+
+↓
+
+Production
+
+↓
+
+Internal QC
+
+↓
+
+Client Review
+
+↓
+
+Revision
+
+↓
+
+Final Delivery
+
+==========================================================
+SERVICE TYPE
+==========================================================
+
+Tambahkan pada ai_services:
+
+service_flow
+
+enum:
+
+fixed_price
+
+custom_project
+
+enterprise
+
+==========================================================
+STANDARD SERVICE
+==========================================================
+
+Jika service_flow = fixed_price
+
+JANGAN membuat quotation.
+
+Customer cukup:
+
+Pilih Paket
+
+↓
+
+Isi Brief
+
+↓
+
+AI Validasi Brief
+
+↓
+
+Checkout
+
+↓
+
+Bayar
+
+↓
+
+Build
+
+==========================================================
+CHECKOUT
+==========================================================
+
+Halaman Checkout menampilkan:
+
+Service
+
+Package
+
+Deliverables
+
+Revision
+
+Estimated Delivery
+
+Base Price
+
+Additional Services
+
+Rush Fee
+
+Revision Fee
+
+Human Review Fee
+
+Tax
+
+Grand Total
+
+Payment Method
+
+Coupon
+
+Terms
+
+==========================================================
+PAYMENT MODEL
+==========================================================
+
+Support:
+
+1.
+Full Payment
+
+2.
+Deposit (DP)
+
+3.
+Subscription
+
+4.
+Enterprise PO
+
+==========================================================
+PAYMENT RULE
+==========================================================
+
+Tambahkan field:
+
+payment_policy
+
+enum
+
+full_payment
+
+deposit
+
+subscription
+
+purchase_order
+
+Tambahkan field:
+
+deposit_percentage
+
+Default:
+
+50
+
+==========================================================
+STANDARD PAYMENT
+==========================================================
+
+Jika payment_policy = full_payment
+
+Flow:
+
+Checkout
+
+↓
+
+Pay
+
+↓
+
+Verified
+
+↓
+
+Project Created
+
+==========================================================
+DEPOSIT PAYMENT
+==========================================================
+
+Jika payment_policy = deposit
+
+Flow:
+
+Checkout
+
+↓
+
+Pay Deposit
+
+↓
+
+Payment Verified
+
+↓
+
+Project Created
+
+↓
+
+AI Production
+
+↓
+
+Preview
+
+↓
+
+Client Revision
+
+↓
+
+Client Approve
+
+↓
+
+Pay Remaining Balance
+
+↓
+
+Final Files Unlocked
+
+==========================================================
+SUBSCRIPTION
+==========================================================
+
+Flow:
+
+Subscription Valid
+
+↓
+
+Project Created
+
+↓
+
+Deduct Credits
+
+↓
+
+Production
+
+==========================================================
+PURCHASE ORDER
+==========================================================
+
+Flow:
+
+Customer Upload PO
+
+↓
+
+Admin Verification
+
+↓
+
+Project Created
+
+==========================================================
+PROJECT STATUS
+==========================================================
+
+Tambahkan status:
+
+waiting_payment
+
+deposit_paid
+
+waiting_payment_verification
+
+payment_verified
+
+waiting_remaining_payment
+
+remaining_paid
+
+ready_to_build
+
+building
+
+internal_review
+
+waiting_client_review
+
+revision
+
+approved
+
+completed
+
+==========================================================
+PAYMENT STATUS
+==========================================================
+
+Tambahkan:
+
+pending
+
+paid
+
+partially_paid
+
+failed
+
+refunded
+
+cancelled
+
+==========================================================
+PAYMENT TABLE
+==========================================================
+
+Tambahkan:
+
+payment_schedule
+
+Field:
+
+project_id
+
+payment_type
+
+percentage
+
+amount
+
+due_date
+
+status
+
+paid_at
+
+reference
+
+==========================================================
+PAYMENT INSTALLMENT
+==========================================================
+
+Support:
+
+Deposit
+
+Remaining Balance
+
+Custom Installment
+
+==========================================================
+FILE ACCESS
+==========================================================
+
+Jika:
+
+remaining payment belum lunas
+
+Customer hanya dapat melihat:
+
+Preview
+
+Watermark Images
+
+Low Resolution
+
+Draft PDF
+
+Tidak dapat download:
+
+AI
+
+PSD
+
+SVG
+
+ZIP
+
+Source Files
+
+Editable Files
+
+==========================================================
+SETELAH PELUNASAN
+==========================================================
+
+Unlock otomatis:
+
+PNG HD
+
+SVG
+
+AI
+
+PSD
+
+Editable
+
+ZIP
+
+Commercial Rights
+
+==========================================================
+CUSTOMER DASHBOARD
+==========================================================
+
+Dashboard:
+
+My Projects
+
+Payment Progress
+
+Current Step
+
+Invoices
+
+Deliverables
+
+Revision Remaining
+
+Download Center
+
+==========================================================
+PROJECT PROGRESS
+==========================================================
+
+Stepper:
+
+Package Selected
+
+↓
+
+Brief Completed
+
+↓
+
+Payment
+
+↓
+
+Project Created
+
+↓
+
+AI Strategy
+
+↓
+
+Creative Production
+
+↓
+
+Internal QC
+
+↓
+
+Client Review
+
+↓
+
+Revision
+
+↓
+
+Completed
+
+==========================================================
+CUSTOM PROJECT
+==========================================================
+
+Jika service_flow = custom_project
+
+Gunakan:
+
+Requirement Form
+
+↓
+
+AI Analysis
+
+↓
+
+Quotation
+
+↓
+
+Approve
+
+↓
+
+DP
+
+↓
+
+Production
+
+==========================================================
+ADMIN
+==========================================================
+
+Admin dapat:
+
+Approve Payment
+
+Verify DP
+
+Request Remaining Payment
+
+Unlock Files
+
+Override Price
+
+Generate Invoice
+
+Generate Receipt
+
+Generate Remaining Invoice
+
+==========================================================
+INVOICE
+==========================================================
+
+Support:
+
+Deposit Invoice
+
+Remaining Invoice
+
+Final Invoice
+
+Credit Note
+
+Receipt
+
+==========================================================
+NOTIFICATION
+==========================================================
+
+Customer menerima notifikasi:
+
+Package Selected
+
+Brief Completed
+
+Payment Required
+
+Deposit Received
+
+Project Started
+
+Preview Ready
+
+Revision Requested
+
+Remaining Payment Required
+
+Files Ready
+
+Project Completed
+
+==========================================================
+AI BUILD
+==========================================================
+
+AI Production TIDAK boleh berjalan jika:
+
+payment belum verified
+
+atau
+
+deposit belum diterima
+
+==========================================================
+CLIENT REVIEW
+==========================================================
+
+Client hanya dapat:
+
+Comment
+
+Approve
+
+Revision
+
+==========================================================
+DOWNLOAD CENTER
+==========================================================
+
+Setelah lunas:
+
+Download:
+
+Images
+
+Source Files
+
+Brand Guideline
+
+Company Profile
+
+Presentation
+
+ZIP Package
+
+==========================================================
+ANALYTICS
+==========================================================
+
+Tambahkan KPI:
+
+Conversion Rate
+
+Checkout Rate
+
+Payment Rate
+
+Deposit Rate
+
+Completion Rate
+
+Average Revenue
+
+Outstanding Balance
+
+Pending Payment
+
+==========================================================
+VERIFICATION
+==========================================================
+
+Pastikan:
+
+Standard Service tidak membuat quotation.
+
+Custom Service membuat quotation.
+
+Deposit flow berjalan.
+
+Remaining payment berjalan.
+
+Preview terkunci sebelum pelunasan.
+
+Download terkunci sebelum pelunasan.
+
+AI Build hanya berjalan setelah pembayaran sesuai policy diverifikasi.
+
+Project lama tetap berjalan.
+
+OpenAPI clean.
+
+Codegen clean.
+
+TypeScript clean.
+
+pnpm run verify clean.
+
+==========================================================
+TARGET
+==========================================================
+
+AI Enterprise Platform memiliki dua alur bisnis profesional:
+
+1.
+Standard Fixed Price
+(Customer langsung membeli paket dengan harga tetap.)
+
+2.
+Enterprise Custom Project
+(Customer melalui proses quotation sebelum project dimulai.)
+
+Kedua flow harus dapat berjalan bersamaan tanpa saling mengganggu.

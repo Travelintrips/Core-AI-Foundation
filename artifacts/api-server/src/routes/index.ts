@@ -36,6 +36,7 @@ import quotationsRouter from "./quotations";
 import catalogRouter from "./catalog";
 import commercialGatesRouter from "./commercialGates";
 import aiQuotationsRouter from "./aiQuotations";
+import paymentsRouter from "./payments";
 
 const router: IRouter = Router();
 
@@ -74,5 +75,6 @@ router.use(quotationsRouter);
 router.use(catalogRouter);
 router.use(commercialGatesRouter);
 router.use(aiQuotationsRouter);
+router.use(paymentsRouter);
 
 export default router;

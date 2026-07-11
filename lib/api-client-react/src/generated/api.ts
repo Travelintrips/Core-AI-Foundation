@@ -33,10 +33,12 @@ import type {
   AiCommercialGate,
   AiEvent,
   AiEventSubscription,
+  AiInvoice,
   AiJob,
   AiModel,
   AiModelInput,
   AiModelUpdate,
+  AiPaymentSchedule,
   AiPrompt,
   AiPromptInput,
   AiPromptUpdate,
@@ -76,6 +78,7 @@ import type {
   AuditLogPage,
   CancelJobBody,
   CatalogAnalytics,
+  CheckoutResponse,
   ClientActionResult,
   ClientApprovalInput,
   ClientComment,
@@ -153,6 +156,9 @@ import type {
   OrchestratorResult,
   OrchestratorSession,
   PauseQueue200,
+  PaymentProofInput,
+  PaymentVerifyInput,
+  PaymentVerifyResult,
   ProviderBreakdown,
   PublicProjectReview,
   PublishEventBody,
@@ -171,6 +177,7 @@ import type {
   SchedulerSettings,
   SchedulerStatus,
   StartBrief200,
+  SubmitPaymentProof200,
   SubscriptionListResponse,
   TickDispatcher200,
   UpdateScheduleBody,
@@ -13366,6 +13373,442 @@ export const useFailCommercialGate = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getFailCommercialGateMutationOptions(options));
+    }
+
+export const getListPaymentScheduleForProjectUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/ai/payments/project/${projectId}`
+}
+
+/**
+ * @summary List a project's payment schedule (admin)
+ */
+export const listPaymentScheduleForProject = async (projectId: number, options?: RequestInit): Promise<AiPaymentSchedule[]> => {
+
+  return customFetch<AiPaymentSchedule[]>(getListPaymentScheduleForProjectUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPaymentScheduleForProjectQueryKey = (projectId: number,) => {
+    return [
+    `/api/ai/payments/project/${projectId}`
+    ] as const;
+    }
+
+
+export const getListPaymentScheduleForProjectQueryOptions = <TData = Awaited<ReturnType<typeof listPaymentScheduleForProject>>, TError = ErrorType<unknown>>(projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPaymentScheduleForProject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPaymentScheduleForProjectQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPaymentScheduleForProject>>> = ({ signal }) => listPaymentScheduleForProject(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPaymentScheduleForProject>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPaymentScheduleForProjectQueryResult = NonNullable<Awaited<ReturnType<typeof listPaymentScheduleForProject>>>
+export type ListPaymentScheduleForProjectQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List a project's payment schedule (admin)
+ */
+
+export function useListPaymentScheduleForProject<TData = Awaited<ReturnType<typeof listPaymentScheduleForProject>>, TError = ErrorType<unknown>>(
+ projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPaymentScheduleForProject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPaymentScheduleForProjectQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getVerifyPaymentScheduleUrl = (scheduleId: number,) => {
+
+
+
+
+  return `/api/ai/payments/${scheduleId}/verify`
+}
+
+/**
+ * @summary Verify a submitted payment installment (admin)
+ */
+export const verifyPaymentSchedule = async (scheduleId: number,
+    paymentVerifyInput: PaymentVerifyInput, options?: RequestInit): Promise<PaymentVerifyResult> => {
+
+  return customFetch<PaymentVerifyResult>(getVerifyPaymentScheduleUrl(scheduleId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(paymentVerifyInput)
+  }
+);}
+
+
+
+
+export const getVerifyPaymentScheduleMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyPaymentSchedule>>, TError,{scheduleId: number;data: BodyType<PaymentVerifyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyPaymentSchedule>>, TError,{scheduleId: number;data: BodyType<PaymentVerifyInput>}, TContext> => {
+
+const mutationKey = ['verifyPaymentSchedule'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyPaymentSchedule>>, {scheduleId: number;data: BodyType<PaymentVerifyInput>}> = (props) => {
+          const {scheduleId,data} = props ?? {};
+
+          return  verifyPaymentSchedule(scheduleId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyPaymentScheduleMutationResult = NonNullable<Awaited<ReturnType<typeof verifyPaymentSchedule>>>
+    export type VerifyPaymentScheduleMutationBody = BodyType<PaymentVerifyInput>
+    export type VerifyPaymentScheduleMutationError = ErrorType<void>
+
+    /**
+ * @summary Verify a submitted payment installment (admin)
+ */
+export const useVerifyPaymentSchedule = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyPaymentSchedule>>, TError,{scheduleId: number;data: BodyType<PaymentVerifyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyPaymentSchedule>>,
+        TError,
+        {scheduleId: number;data: BodyType<PaymentVerifyInput>},
+        TContext
+      > => {
+      return useMutation(getVerifyPaymentScheduleMutationOptions(options));
+    }
+
+export const getGenerateInvoiceForPaymentScheduleUrl = (scheduleId: number,) => {
+
+
+
+
+  return `/api/ai/payments/${scheduleId}/invoice`
+}
+
+/**
+ * @summary Generate an invoice for a payment installment (admin)
+ */
+export const generateInvoiceForPaymentSchedule = async (scheduleId: number, options?: RequestInit): Promise<AiInvoice> => {
+
+  return customFetch<AiInvoice>(getGenerateInvoiceForPaymentScheduleUrl(scheduleId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getGenerateInvoiceForPaymentScheduleMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateInvoiceForPaymentSchedule>>, TError,{scheduleId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateInvoiceForPaymentSchedule>>, TError,{scheduleId: number}, TContext> => {
+
+const mutationKey = ['generateInvoiceForPaymentSchedule'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateInvoiceForPaymentSchedule>>, {scheduleId: number}> = (props) => {
+          const {scheduleId} = props ?? {};
+
+          return  generateInvoiceForPaymentSchedule(scheduleId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateInvoiceForPaymentScheduleMutationResult = NonNullable<Awaited<ReturnType<typeof generateInvoiceForPaymentSchedule>>>
+
+    export type GenerateInvoiceForPaymentScheduleMutationError = ErrorType<void>
+
+    /**
+ * @summary Generate an invoice for a payment installment (admin)
+ */
+export const useGenerateInvoiceForPaymentSchedule = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateInvoiceForPaymentSchedule>>, TError,{scheduleId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateInvoiceForPaymentSchedule>>,
+        TError,
+        {scheduleId: number},
+        TContext
+      > => {
+      return useMutation(getGenerateInvoiceForPaymentScheduleMutationOptions(options));
+    }
+
+export const getListInvoicesForProjectUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/ai/payments/invoices/project/${projectId}`
+}
+
+/**
+ * @summary List a project's invoices (admin)
+ */
+export const listInvoicesForProject = async (projectId: number, options?: RequestInit): Promise<AiInvoice[]> => {
+
+  return customFetch<AiInvoice[]>(getListInvoicesForProjectUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListInvoicesForProjectQueryKey = (projectId: number,) => {
+    return [
+    `/api/ai/payments/invoices/project/${projectId}`
+    ] as const;
+    }
+
+
+export const getListInvoicesForProjectQueryOptions = <TData = Awaited<ReturnType<typeof listInvoicesForProject>>, TError = ErrorType<unknown>>(projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInvoicesForProject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListInvoicesForProjectQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInvoicesForProject>>> = ({ signal }) => listInvoicesForProject(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listInvoicesForProject>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListInvoicesForProjectQueryResult = NonNullable<Awaited<ReturnType<typeof listInvoicesForProject>>>
+export type ListInvoicesForProjectQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List a project's invoices (admin)
+ */
+
+export function useListInvoicesForProject<TData = Awaited<ReturnType<typeof listInvoicesForProject>>, TError = ErrorType<unknown>>(
+ projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInvoicesForProject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListInvoicesForProjectQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSubmitPaymentProofUrl = (scheduleId: number,) => {
+
+
+
+
+  return `/api/public/payments/${scheduleId}/submit-proof`
+}
+
+/**
+ * @summary Customer submits a payment reference for an installment
+ */
+export const submitPaymentProof = async (scheduleId: number,
+    paymentProofInput: PaymentProofInput, options?: RequestInit): Promise<SubmitPaymentProof200> => {
+
+  return customFetch<SubmitPaymentProof200>(getSubmitPaymentProofUrl(scheduleId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(paymentProofInput)
+  }
+);}
+
+
+
+
+export const getSubmitPaymentProofMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitPaymentProof>>, TError,{scheduleId: number;data: BodyType<PaymentProofInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitPaymentProof>>, TError,{scheduleId: number;data: BodyType<PaymentProofInput>}, TContext> => {
+
+const mutationKey = ['submitPaymentProof'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitPaymentProof>>, {scheduleId: number;data: BodyType<PaymentProofInput>}> = (props) => {
+          const {scheduleId,data} = props ?? {};
+
+          return  submitPaymentProof(scheduleId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitPaymentProofMutationResult = NonNullable<Awaited<ReturnType<typeof submitPaymentProof>>>
+    export type SubmitPaymentProofMutationBody = BodyType<PaymentProofInput>
+    export type SubmitPaymentProofMutationError = ErrorType<void>
+
+    /**
+ * @summary Customer submits a payment reference for an installment
+ */
+export const useSubmitPaymentProof = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitPaymentProof>>, TError,{scheduleId: number;data: BodyType<PaymentProofInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitPaymentProof>>,
+        TError,
+        {scheduleId: number;data: BodyType<PaymentProofInput>},
+        TContext
+      > => {
+      return useMutation(getSubmitPaymentProofMutationOptions(options));
+    }
+
+export const getCheckoutServiceRequestUrl = (requestId: string,) => {
+
+
+
+
+  return `/api/public/catalog/requests/${requestId}/checkout`
+}
+
+/**
+ * @summary Standard (fixed_price) checkout — creates a project + payment schedule, no quotation
+ */
+export const checkoutServiceRequest = async (requestId: string, options?: RequestInit): Promise<CheckoutResponse> => {
+
+  return customFetch<CheckoutResponse>(getCheckoutServiceRequestUrl(requestId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getCheckoutServiceRequestMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof checkoutServiceRequest>>, TError,{requestId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof checkoutServiceRequest>>, TError,{requestId: string}, TContext> => {
+
+const mutationKey = ['checkoutServiceRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof checkoutServiceRequest>>, {requestId: string}> = (props) => {
+          const {requestId} = props ?? {};
+
+          return  checkoutServiceRequest(requestId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CheckoutServiceRequestMutationResult = NonNullable<Awaited<ReturnType<typeof checkoutServiceRequest>>>
+
+    export type CheckoutServiceRequestMutationError = ErrorType<void>
+
+    /**
+ * @summary Standard (fixed_price) checkout — creates a project + payment schedule, no quotation
+ */
+export const useCheckoutServiceRequest = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof checkoutServiceRequest>>, TError,{requestId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof checkoutServiceRequest>>,
+        TError,
+        {requestId: string},
+        TContext
+      > => {
+      return useMutation(getCheckoutServiceRequestMutationOptions(options));
     }
 
 export const getWaiveCommercialGateUrl = (id: number,) => {

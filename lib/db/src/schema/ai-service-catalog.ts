@@ -50,6 +50,10 @@ export const aiServicesTable = appSchema.table("ai_services", {
   shortDescription: text("short_description"),
   fullDescription: text("full_description"),
   serviceType: text("service_type").notNull().default("project"), // project | ongoing | consultation
+  // Dual Commercial Flow: fixed_price = Standard Service (no quotation, straight to checkout),
+  // custom_project / enterprise = goes through Requirement Form -> AI Analysis -> Quotation -> Approval.
+  // Defaults to custom_project to preserve the existing (pre-dual-flow) quotation-first behavior.
+  serviceFlow: text("service_flow").notNull().default("custom_project"), // fixed_price | custom_project | enterprise
   pricingModel: text("pricing_model").notNull().default("one_time"), // one_time | monthly_subscription | yearly_subscription | enterprise_custom
   startingPrice: numeric("starting_price", { precision: 12, scale: 2 }),
   currency: text("currency").notNull().default("USD"),
@@ -86,6 +90,10 @@ export const aiServicePackagesTable = appSchema.table("ai_service_packages", {
   yearlyPrice: numeric("yearly_price", { precision: 14, scale: 2 }),
   oneTimePrice: numeric("one_time_price", { precision: 14, scale: 2 }),
   setupFee: numeric("setup_fee", { precision: 14, scale: 2 }),
+  // Commercial terms used when this package is purchased through the Standard
+  // (fixed_price) checkout flow — full_payment | deposit | subscription | purchase_order.
+  paymentPolicy: text("payment_policy").notNull().default("full_payment"),
+  depositPercentage: integer("deposit_percentage").notNull().default(50),
   includedRevisions: integer("included_revisions"),
   deliverablesJson: jsonb("deliverables_json").$type<string[]>(),
   featuresJson: jsonb("features_json").$type<string[]>(),

@@ -29,6 +29,8 @@ export type CatalogService = {
   serviceName: string;
   shortDescription: string;
   fullDescription: string;
+  // fixed_price = Standard checkout (no quotation) | custom_project | enterprise
+  serviceFlow: 'fixed_price' | 'custom_project' | 'enterprise';
   pricingModel: string;
   startingPrice: string;
   currency: string;
@@ -46,6 +48,9 @@ export type ServicePackage = {
   yearlyPrice: string | null;
   oneTimePrice: string | null;
   featuresJson: string[] | null;
+  // full_payment | deposit | subscription | purchase_order
+  paymentPolicy: string;
+  depositPercentage: number;
 };
 
 export type ServiceDetail = CatalogService & { packages: ServicePackage[] };
@@ -148,6 +153,8 @@ export type ServiceRequestDetail = {
   id: number;
   requestId: string;
   serviceId: number;
+  serviceFlow: 'fixed_price' | 'custom_project' | 'enterprise';
+  createdProjectId: string | null;
   packageId: number | null;
   customerName: string;
   customerEmail: string;
@@ -196,6 +203,52 @@ export function useSaveBrief() {
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['catalog', 'request', vars.requestId] });
     },
+  });
+}
+
+// ── Checkout (Standard / fixed_price flow — no quotation) ─────────────────────
+
+export type PaymentScheduleRow = {
+  id: number;
+  projectId: number;
+  paymentType: string;
+  percentage: number | null;
+  amount: string;
+  currency: string;
+  status: string;
+  reference: string | null;
+};
+
+export type CheckoutResponse = {
+  ok: boolean;
+  alreadyCreated?: boolean;
+  createdProjectId: string;
+  paymentPolicy: string;
+  schedule: PaymentScheduleRow[];
+};
+
+export function useCheckout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ requestId }: { requestId: string }) =>
+      customFetch<CheckoutResponse>(`/api/public/catalog/requests/${requestId}/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['catalog', 'request', vars.requestId] });
+    },
+  });
+}
+
+export function useSubmitPaymentProof() {
+  return useMutation({
+    mutationFn: ({ scheduleId, reference }: { scheduleId: number; reference: string }) =>
+      customFetch<{ ok: boolean; schedule: PaymentScheduleRow }>(`/api/public/payments/${scheduleId}/submit-proof`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference }),
+      }),
   });
 }
 

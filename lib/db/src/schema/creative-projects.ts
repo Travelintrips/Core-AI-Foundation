@@ -1,5 +1,5 @@
 import { appSchema } from "./_pg-schema";
-import { serial, text, timestamp, jsonb, integer } from "drizzle-orm/pg-core";
+import { serial, text, timestamp, jsonb, integer, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -21,7 +21,19 @@ export const creativeProjectsTable = appSchema.table("creative_projects", {
   goal: text("goal").notNull(),
   notes: text("notes"),
   deadline: text("deadline"),
-  status: text("status").notNull().default("pending"), // pending | running | completed | failed
+  // Legacy values: pending | running | completed | failed.
+  // Dual Commercial Flow adds (both Standard & Enterprise reuse these where applicable):
+  // waiting_payment | deposit_paid | waiting_payment_verification | payment_verified |
+  // waiting_remaining_payment | remaining_paid | ready_to_build | building | internal_review |
+  // waiting_client_review | revision | approved | completed
+  status: text("status").notNull().default("pending"),
+  // Commercial terms — full_payment | deposit | subscription | purchase_order
+  paymentPolicy: text("payment_policy").notNull().default("full_payment"),
+  depositPercentage: integer("deposit_percentage").notNull().default(50),
+  // pending | paid | partially_paid | failed | refunded | cancelled
+  paymentStatus: text("payment_status").notNull().default("pending"),
+  // True once payment has cleared enough to release full-resolution / source deliverables.
+  filesUnlocked: boolean("files_unlocked").notNull().default(false),
   result: jsonb("result"), // aggregated final output from all agents
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

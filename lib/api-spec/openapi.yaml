@@ -3835,6 +3835,151 @@ paths:
           description: Bad request
         "404":
           description: Not found
+  /ai/payments/project/{projectId}:
+    get:
+      operationId: listPaymentScheduleForProject
+      tags: [payments]
+      summary: List a project's payment schedule (admin)
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Payment schedule rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiPaymentSchedule"
+  /ai/payments/{scheduleId}/verify:
+    post:
+      operationId: verifyPaymentSchedule
+      tags: [payments]
+      summary: Verify a submitted payment installment (admin)
+      parameters:
+        - in: path
+          name: scheduleId
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentVerifyInput"
+      responses:
+        "200":
+          description: Payment verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentVerifyResult"
+        "404":
+          description: Not found or already verified
+  /ai/payments/{scheduleId}/invoice:
+    post:
+      operationId: generateInvoiceForPaymentSchedule
+      tags: [payments]
+      summary: Generate an invoice for a payment installment (admin)
+      parameters:
+        - in: path
+          name: scheduleId
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Invoice created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiInvoice"
+        "404":
+          description: Not found
+  /ai/payments/invoices/project/{projectId}:
+    get:
+      operationId: listInvoicesForProject
+      tags: [payments]
+      summary: List a project's invoices (admin)
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiInvoice"
+  /public/payments/{scheduleId}/submit-proof:
+    post:
+      operationId: submitPaymentProof
+      tags: [payments]
+      summary: Customer submits a payment reference for an installment
+      parameters:
+        - in: path
+          name: scheduleId
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentProofInput"
+      responses:
+        "200":
+          description: Proof recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  schedule:
+                    $ref: "#/components/schemas/AiPaymentSchedule"
+        "404":
+          description: Not found or already paid
+  /public/catalog/requests/{requestId}/checkout:
+    post:
+      operationId: checkoutServiceRequest
+      tags: [catalog, payments]
+      summary: Standard (fixed_price) checkout — creates a project + payment schedule, no quotation
+      parameters:
+        - in: path
+          name: requestId
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Checkout created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutResponse"
+        "200":
+          description: Already checked out (idempotent)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutResponse"
+        "404":
+          description: Service request not found
+        "409":
+          description: Wrong flow, wrong status, or already terminal
   /commercial-gates/{id}/waive:
     post:
       operationId: waiveCommercialGate
@@ -5123,11 +5268,19 @@ components:
             - "null"
         status:
           type: string
-          enum:
-            - pending
-            - running
-            - completed
-            - failed
+          description: >
+            Legacy: pending | running | completed | failed. Dual Commercial Flow adds:
+            waiting_payment | deposit_paid | waiting_payment_verification | payment_verified |
+            waiting_remaining_payment | remaining_paid | ready_to_build | building |
+            internal_review | waiting_client_review | revision | approved | completed
+        paymentPolicy:
+          type: string
+        depositPercentage:
+          type: integer
+        paymentStatus:
+          type: string
+        filesUnlocked:
+          type: boolean
         result:
           type:
             - object
@@ -5237,11 +5390,19 @@ components:
             - "null"
         status:
           type: string
-          enum:
-            - pending
-            - running
-            - completed
-            - failed
+          description: >
+            Legacy: pending | running | completed | failed. Dual Commercial Flow adds:
+            waiting_payment | deposit_paid | waiting_payment_verification | payment_verified |
+            waiting_remaining_payment | remaining_paid | ready_to_build | building |
+            internal_review | waiting_client_review | revision | approved | completed
+        paymentPolicy:
+          type: string
+        depositPercentage:
+          type: integer
+        paymentStatus:
+          type: string
+        filesUnlocked:
+          type: boolean
         result:
           type:
             - object
@@ -7954,6 +8115,9 @@ components:
           type: [string, "null"]
         serviceType:
           type: string
+        serviceFlow:
+          type: string
+          description: fixed_price (Standard checkout, no quotation) | custom_project | enterprise
         pricingModel:
           type: string
         startingPrice:
@@ -8068,6 +8232,11 @@ components:
           type: [string, "null"]
         oneTimePrice:
           type: [string, "null"]
+        paymentPolicy:
+          type: string
+          description: full_payment | deposit | subscription | purchase_order
+        depositPercentage:
+          type: integer
         featuresJson:
           type: [array, "null"]
           items:
@@ -8522,3 +8691,152 @@ components:
         - revision_requested
         - expired
         - cancelled
+    AiPaymentSchedule:
+      type: object
+      required:
+        - id
+        - projectId
+        - paymentType
+        - amount
+        - currency
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        paymentType:
+          type: string
+          description: deposit | remaining_balance | full_payment | custom_installment | subscription_charge
+        percentage:
+          type: [integer, "null"]
+        amount:
+          type: string
+        currency:
+          type: string
+        dueDate:
+          type: [string, "null"]
+          format: date-time
+        status:
+          type: string
+          description: pending | paid | partially_paid | failed | refunded | cancelled
+        reference:
+          type: [string, "null"]
+        verifiedBy:
+          type: [string, "null"]
+        paidAt:
+          type: [string, "null"]
+          format: date-time
+        notes:
+          type: [string, "null"]
+        displayOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AiInvoice:
+      type: object
+      required:
+        - id
+        - invoiceNumber
+        - projectId
+        - invoiceType
+        - amount
+        - currency
+        - status
+        - issuedAt
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        invoiceNumber:
+          type: string
+        projectId:
+          type: integer
+        paymentScheduleId:
+          type: [integer, "null"]
+        invoiceType:
+          type: string
+          description: deposit | remaining | final | credit_note | receipt
+        amount:
+          type: string
+        currency:
+          type: string
+        status:
+          type: string
+          description: draft | issued | paid | void
+        lineItemsJson:
+          type: [array, "null"]
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              amount:
+                type: number
+        issuedAt:
+          type: string
+          format: date-time
+        paidAt:
+          type: [string, "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PaymentVerifyInput:
+      type: object
+      required:
+        - verifiedBy
+      properties:
+        verifiedBy:
+          type: string
+        reference:
+          type: string
+    PaymentVerifyResult:
+      type: object
+      required:
+        - schedule
+        - project
+        - productionStarted
+      properties:
+        schedule:
+          $ref: "#/components/schemas/AiPaymentSchedule"
+        project:
+          $ref: "#/components/schemas/CreativeProject"
+        productionStarted:
+          type: boolean
+    PaymentProofInput:
+      type: object
+      required:
+        - reference
+      properties:
+        reference:
+          type: string
+    CheckoutResponse:
+      type: object
+      required:
+        - ok
+      properties:
+        ok:
+          type: boolean
+        alreadyCreated:
+          type: boolean
+        createdProjectId:
+          type: string
+        paymentPolicy:
+          type: string
+        status:
+          type: string
+        schedule:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiPaymentSchedule"

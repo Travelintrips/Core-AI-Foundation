@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { FlowStepper, type FlowStep } from "@/components/flow-stepper";
-import { useRequestDetail } from "@/hooks/use-catalog";
-import { Loader2, Clock, CheckCircle2, ArrowRight, Info } from "lucide-react";
+import { useRequestDetail, useCheckout, useSubmitPaymentProof } from "@/hooks/use-catalog";
+import { Loader2, Clock, CheckCircle2, ArrowRight, Info, CreditCard, Send } from "lucide-react";
 
 function formatMoney(amount: number | string, currency = "IDR") {
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
@@ -79,6 +80,15 @@ function stageFor(status: string): Stage {
   if (["approved", "waiting_commercial_gate"].includes(status)) {
     return "quotation_approved";
   }
+  // Dual Commercial Flow (Standard/fixed_price) lifecycle states — rendered via
+  // the dedicated checkout/payment-schedule block above, but still need a
+  // sensible fallback stage/copy here in case that block isn't shown.
+  if (["waiting_payment", "waiting_payment_verification"].includes(status)) {
+    return "quotation_pending";
+  }
+  if (["deposit_paid", "payment_verified", "waiting_remaining_payment", "remaining_paid", "ready_to_build", "building", "internal_review", "waiting_client_review", "revision"].includes(status)) {
+    return "in_production";
+  }
   if (["ready_to_build", "in_progress", "orchestrating", "waiting_review", "converted_to_project"].includes(status)) {
     return "in_production";
   }
@@ -91,6 +101,10 @@ export default function RequestPricingPage() {
   const { requestId } = useParams<{ requestId: string }>();
   const [, setLocation] = useLocation();
   const { data: request, isLoading, error } = useRequestDetail(requestId);
+  const checkout = useCheckout();
+  const submitProof = useSubmitPaymentProof();
+  const [reference, setReference] = useState("");
+  const [submittedScheduleId, setSubmittedScheduleId] = useState<number | null>(null);
 
   if (isLoading) {
     return (
@@ -193,8 +207,86 @@ export default function RequestPricingPage() {
           </div>
         )}
 
-        {/* CTA */}
-        {stage === "quotation_pending" && (
+        {/* Standard (fixed_price) checkout — no quotation step */}
+        {request.serviceFlow === "fixed_price" && (
+          <>
+            {!request.createdProjectId && (request.status === "brief_completed" || request.status === "pricing_calculated") && (
+              <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center">
+                <CreditCard className="w-8 h-8 text-primary mx-auto mb-3" />
+                <p className="font-medium mb-1">Siap Checkout</p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Layanan ini tidak memerlukan penawaran khusus — lanjutkan langsung ke pembayaran untuk memulai pengerjaan.
+                </p>
+                <button
+                  onClick={() => checkout.mutate({ requestId: request.requestId })}
+                  disabled={checkout.isPending}
+                  className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-full text-sm font-medium disabled:opacity-50"
+                >
+                  {checkout.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+                  Lanjut ke Pembayaran
+                </button>
+                {checkout.isError && (
+                  <p className="text-sm text-destructive mt-3">{(checkout.error as Error).message}</p>
+                )}
+              </div>
+            )}
+
+            {(request.createdProjectId || checkout.data) && (
+              <div className="bg-card border border-border rounded-2xl p-6">
+                <h2 className="font-serif text-lg font-medium mb-4 flex items-center gap-2">
+                  <CreditCard className="w-5 h-5" /> Jadwal Pembayaran
+                </h2>
+                <div className="space-y-4">
+                  {(checkout.data?.schedule ?? []).map((s) => (
+                    <div key={s.id} className="border border-border rounded-xl p-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="font-medium text-sm">
+                          {s.paymentType === "deposit" ? "Deposit" : s.paymentType === "remaining_balance" ? "Sisa Pembayaran" : "Pembayaran"}
+                          {s.percentage != null ? ` (${s.percentage}%)` : ""}
+                        </span>
+                        <span className="text-sm font-semibold">{formatMoney(s.amount, s.currency)}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Status: <span className="font-medium">{s.status === "pending" ? "Menunggu Pembayaran" : s.status}</span>
+                        {s.reference && <> · Referensi terkirim: <span className="font-mono">{s.reference}</span></>}
+                      </p>
+                      {s.status === "pending" && (
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Kode/referensi transfer"
+                            className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-background"
+                            value={submittedScheduleId === s.id ? reference : ""}
+                            onChange={(e) => { setSubmittedScheduleId(s.id); setReference(e.target.value); }}
+                          />
+                          <button
+                            className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground disabled:opacity-50 flex items-center gap-1"
+                            disabled={submitProof.isPending || !reference || submittedScheduleId !== s.id}
+                            onClick={() => submitProof.mutate({ scheduleId: s.id, reference })}
+                          >
+                            <Send className="w-3.5 h-3.5" /> Kirim
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {!checkout.data && (
+                    <p className="text-sm text-muted-foreground">
+                      Project sudah dibuat. Buka dashboard Anda untuk melihat status dan jadwal pembayaran lengkap.
+                    </p>
+                  )}
+                </div>
+                <div className="mt-4 flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
+                  <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>Setelah kami memverifikasi pembayaran, tim AI kami akan langsung mulai mengerjakan proyek Anda.</span>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* CTA (custom_project / enterprise — quotation-based flow) */}
+        {request.serviceFlow !== "fixed_price" && stage === "quotation_pending" && (
           <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center">
             <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-3" />
             <p className="font-medium mb-1">Penawaran Siap Ditinjau</p>
@@ -203,7 +295,7 @@ export default function RequestPricingPage() {
             </p>
           </div>
         )}
-        {stage === "quotation_approved" && (
+        {request.serviceFlow !== "fixed_price" && stage === "quotation_approved" && (
           <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center">
             <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-3" />
             <p className="font-medium mb-1">Penawaran Disetujui</p>
@@ -212,7 +304,7 @@ export default function RequestPricingPage() {
             </p>
           </div>
         )}
-        {stage === "in_production" && (
+        {request.serviceFlow !== "fixed_price" && stage === "in_production" && (
           <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center">
             <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-3" />
             <p className="font-medium mb-1">Sedang Dikerjakan</p>
@@ -221,7 +313,7 @@ export default function RequestPricingPage() {
             </p>
           </div>
         )}
-        {stage === "done" && (
+        {request.serviceFlow !== "fixed_price" && stage === "done" && (
           <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center">
             <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-3" />
             <p className="font-medium mb-1">Pekerjaan Selesai</p>
@@ -230,7 +322,7 @@ export default function RequestPricingPage() {
             </p>
           </div>
         )}
-        {stage === "stopped" && (
+        {request.serviceFlow !== "fixed_price" && stage === "stopped" && (
           <div className="bg-muted/30 border border-border rounded-2xl p-6 text-center">
             <Clock className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
             <p className="font-medium mb-1">Permintaan Tidak Berlanjut</p>
@@ -239,7 +331,7 @@ export default function RequestPricingPage() {
             </p>
           </div>
         )}
-        {stage === "awaiting_quotation" && (
+        {request.serviceFlow !== "fixed_price" && stage === "awaiting_quotation" && (
           <div className="bg-muted/30 border border-border rounded-2xl p-6 text-center">
             <Clock className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
             <p className="font-medium mb-1">Menunggu Penawaran Resmi</p>

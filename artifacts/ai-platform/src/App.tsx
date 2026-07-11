@@ -31,6 +31,7 @@ import Services from "@/pages/services";
 import ServiceDetail from "@/pages/service-detail";
 import CatalogAdmin from "@/pages/catalog-admin";
 import ServiceRequests from "@/pages/service-requests";
+import Payments from "@/pages/payments";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +63,7 @@ function AdminRouter() {
         <Route path="/services/:id" component={ServiceDetail} />
         <Route path="/catalog-admin" component={CatalogAdmin} />
         <Route path="/service-requests" component={ServiceRequests} />
+        <Route path="/payments" component={Payments} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
