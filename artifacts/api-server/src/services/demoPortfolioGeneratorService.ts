@@ -313,7 +313,8 @@ async function runBatch(batch: typeof aiPortfolioGenerationBatchesTable.$inferSe
         .update(aiPortfolioGenerationBatchesTable)
         .set({ generatedCount: sql`${aiPortfolioGenerationBatchesTable.generatedCount} + 1`, actualCost: String(actualCost), updatedAt: new Date() })
         .where(eq(aiPortfolioGenerationBatchesTable.id, batch.id));
-    } catch {
+    } catch (err) {
+      console.error("[portfolio-batch] portfolio generation failed", { batchId: batch.id, industry: batch.industry, err });
       await db
         .update(aiPortfolioGenerationBatchesTable)
         .set({ failedCount: sql`${aiPortfolioGenerationBatchesTable.failedCount} + 1`, updatedAt: new Date() })
