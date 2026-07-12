@@ -427,7 +427,10 @@ export default function LandingPage() {
                 <Link href="/services" className="btn-primary text-base py-3 px-6">
                   Mulai Sekarang <ArrowRight className="w-5 h-5" />
                 </Link>
-                <button className="btn-ghost text-base py-3 px-6">
+                <button
+                  className="btn-ghost text-base py-3 px-6"
+                  onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                >
                   <Play className="w-4 h-4" /> Lihat Demo
                 </button>
               </motion.div>
@@ -668,7 +671,7 @@ export default function LandingPage() {
       {/* ════════════════════════════════════
           HOW IT WORKS
       ════════════════════════════════════ */}
-      <section className="py-24 px-4" style={{ background: "hsl(var(--background))" }}>
+      <section id="how-it-works" className="py-24 px-4" style={{ background: "hsl(var(--background))" }}>
         <div className="container mx-auto max-w-6xl">
           <motion.div className="text-center mb-16 space-y-3" initial="hidden" whileInView="show" viewport={{ once: true }} variants={stagger(0.1)}>
             <motion.h2 className="font-display font-bold tracking-tight" style={{ fontSize: "clamp(1.75rem, 3.5vw, 2.75rem)", color: "#F0F4FF" }} variants={fadeUp}>
