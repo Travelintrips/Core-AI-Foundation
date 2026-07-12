@@ -1,4 +1,3 @@
-import { Storage, type File } from "@google-cloud/storage";
 import { Storage, File } from "@google-cloud/storage";
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
@@ -38,20 +37,6 @@ export class ObjectNotFoundError extends Error {
   }
 }
 
-function parseObjectPath(path: string): { bucketName: string; objectName: string } {
-  if (!path.startsWith("/")) path = `/${path}`;
-  const parts = path.split("/");
-  if (parts.length < 3) throw new Error("Invalid object path: must contain at least a bucket name");
-  return { bucketName: parts[1], objectName: parts.slice(2).join("/") };
-}
-
-export class ObjectStorageService {
-  getPublicObjectSearchPaths(): string[] {
-    const raw = process.env.PUBLIC_OBJECT_SEARCH_PATHS || "";
-    const paths = Array.from(new Set(raw.split(",").map((p) => p.trim()).filter(Boolean)));
-    if (paths.length === 0) {
-      throw new Error(
-        "PUBLIC_OBJECT_SEARCH_PATHS not set. Provision object storage first.",
 export class ObjectStorageService {
   constructor() {}
 
@@ -92,6 +77,8 @@ export class ObjectStorageService {
     const file = bucket.file(objectName);
     await file.save(buffer, { contentType, resumable: false });
     return { objectPath: `/storage/public-objects/${relativePath}`, relativePath };
+  }
+
   getPrivateObjectDir(): string {
     const dir = process.env.PRIVATE_OBJECT_DIR || "";
     if (!dir) {
@@ -127,41 +114,6 @@ export class ObjectStorageService {
     if (metadata.size) headers["Content-Length"] = String(metadata.size);
     return new Response(webStream, { headers });
   }
-}
-
-export const objectStorageService = new ObjectStorageService();
-
-      const { bucketName, objectName } = parseObjectPath(fullPath);
-      const bucket = objectStorageClient.bucket(bucketName);
-      const file = bucket.file(objectName);
-
-      const [exists] = await file.exists();
-      if (exists) {
-        return file;
-      }
-    }
-
-    return null;
-  }
-
-  async downloadObject(file: File, cacheTtlSec: number = 3600): Promise<Response> {
-    const [metadata] = await file.getMetadata();
-    const aclPolicy = await getObjectAclPolicy(file);
-    const isPublic = aclPolicy?.visibility === "public";
-
-    const nodeStream = file.createReadStream();
-    const webStream = Readable.toWeb(nodeStream) as ReadableStream;
-
-    const headers: Record<string, string> = {
-      "Content-Type": (metadata.contentType as string) || "application/octet-stream",
-      "Cache-Control": `${isPublic ? "public" : "private"}, max-age=${cacheTtlSec}`,
-    };
-    if (metadata.size) {
-      headers["Content-Length"] = String(metadata.size);
-    }
-
-    return new Response(webStream, { headers });
-  }
 
   async getObjectEntityUploadURL(): Promise<string> {
     const privateObjectDir = this.getPrivateObjectDir();
@@ -174,7 +126,6 @@ export const objectStorageService = new ObjectStorageService();
 
     const objectId = randomUUID();
     const fullPath = `${privateObjectDir}/uploads/${objectId}`;
-
     const { bucketName, objectName } = parseObjectPath(fullPath);
 
     return signObjectURL({
@@ -262,6 +213,8 @@ export const objectStorageService = new ObjectStorageService();
     });
   }
 }
+
+export const objectStorageService = new ObjectStorageService();
 
 function parseObjectPath(path: string): {
   bucketName: string;
