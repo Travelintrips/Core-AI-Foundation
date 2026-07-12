@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Play, Ban, CheckCircle, XCircle, Loader2, RefreshCcw, Images, Star, TrendingUp, BarChart3, Settings, ListChecks, Layers, Archive, RotateCcw, AlertTriangle, Eye, ExternalLink, X, FileImage } from "lucide-react";
+import { Plus, Play, Ban, CheckCircle, XCircle, Loader2, RefreshCcw, Images, Star, TrendingUp, BarChart3, Settings, ListChecks, Layers, Archive, RotateCcw, AlertTriangle, ChevronDown, ChevronUp, Eye } from "lucide-react";
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
@@ -550,21 +551,45 @@ function PortfoliosTab({ onView }: { onView: (p: Portfolio) => void }) {
 // ── Review Queue Tab ──────────────────────────────────────────────────────────
 
 function ReviewQueueTab({ onView }: { onView: (p: Portfolio) => void }) {
+function getAssetImageUrl(asset: PortfolioAsset): string | null {
+  if (asset.storagePath?.startsWith("/storage/")) return `/api${asset.storagePath}`;
+  return asset.sourceUrl ?? asset.previewUrl ?? null;
+}
+
+function ReviewQueueTab() {
   const qc = useQueryClient();
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
   const { data: queue = [], isLoading, refetch } = useQuery<Portfolio[]>({
     queryKey: ["portfolio-review-queue"],
     queryFn: () => apiFetch("/ai/portfolio/review-queue"),
     refetchInterval: 15000,
   });
 
+  const { data: assets = [], isLoading: assetsLoading } = useQuery<PortfolioAsset[]>({
+    queryKey: ["portfolio-assets", selectedId],
+    queryFn: () => apiFetch(`/ai/portfolio/portfolios/${selectedId}/assets`),
+    enabled: selectedId !== null,
+  });
+
   const approveMutation = useMutation({
     mutationFn: (id: number) => apiFetch(`/ai/portfolio/portfolios/${id}/approve`, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["portfolio-review-queue"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["portfolio-review-queue"] });
+      setSelectedId(null);
+    },
   });
   const rejectMutation = useMutation({
     mutationFn: (id: number) => apiFetch(`/ai/portfolio/portfolios/${id}/reject`, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["portfolio-review-queue"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["portfolio-review-queue"] });
+      setSelectedId(null);
+    },
   });
+
+  function toggleRow(id: number) {
+    setSelectedId((prev) => (prev === id ? null : id));
+  }
 
   return (
     <div>
@@ -584,22 +609,102 @@ function ReviewQueueTab({ onView }: { onView: (p: Portfolio) => void }) {
         </div>
       ) : (
         <div className="space-y-3">
-          {queue.map((p) => (
-            <div key={p.id} className="p-4 rounded-xl border border-border bg-card">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-sm">{p.title}</span>
-                    {p.isDemo && <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-50 text-amber-600">demo</span>}
+          {queue.map((p) => {
+            const isExpanded = selectedId === p.id;
+            return (
+              <div key={p.id} className={`rounded-xl border bg-card transition-colors ${isExpanded ? "border-primary/40" : "border-border"}`}>
+                {/* ── Row header — click to expand ── */}
+                <div
+                  className="p-4 flex items-start justify-between gap-3 cursor-pointer select-none"
+                  onClick={() => toggleRow(p.id)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-medium text-sm">{p.title}</span>
+                      {p.isDemo && <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-50 text-amber-600">demo</span>}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>{p.industry} · {p.style}</span>
+                      {p.qcScore && <span className="text-blue-600">QC: {p.qcScore}</span>}
+                      {p.trademarkRisk && (
+                        <span className={p.trademarkRisk === "high" ? "text-red-600" : p.trademarkRisk === "medium" ? "text-amber-600" : "text-green-600"}>
+                          TM risk: {p.trademarkRisk}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>{p.industry} · {p.style}</span>
-                    {p.qcScore && <span className="text-blue-600">QC: {p.qcScore}</span>}
-                    {p.trademarkRisk && (
-                      <span className={p.trademarkRisk === "high" ? "text-red-600" : p.trademarkRisk === "medium" ? "text-amber-600" : "text-green-600"}>
-                        TM risk: {p.trademarkRisk}
-                      </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Eye className="w-3 h-3" /> Review
+                    </span>
+                    {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                  </div>
+                </div>
+
+                {/* ── Expanded detail panel ── */}
+                {isExpanded && (
+                  <div className="px-4 pb-4 border-t border-border pt-4">
+                    {assetsLoading ? (
+                      <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                    ) : assets.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-4 text-center">No assets found for this portfolio.</p>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-4">
+                        {assets.map((a) => {
+                          const imgUrl = getAssetImageUrl(a);
+                          return (
+                            <div key={a.id} className="rounded-lg overflow-hidden border border-border bg-muted/30">
+                              {imgUrl ? (
+                                <a href={imgUrl} target="_blank" rel="noreferrer">
+                                  <img
+                                    src={imgUrl}
+                                    alt={a.assetRole}
+                                    className="w-full aspect-video object-cover hover:opacity-90 transition-opacity"
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                                  />
+                                </a>
+                              ) : (
+                                <div className="w-full aspect-video flex items-center justify-center bg-muted">
+                                  <Images className="w-6 h-6 text-muted-foreground/40" />
+                                </div>
+                              )}
+                              <div className="px-2 py-1.5">
+                                <p className="text-[10px] font-medium text-foreground capitalize">{a.assetRole.replace(/_/g, " ")}</p>
+                                <p className={`text-[10px] ${STATUS_COLORS[a.status] ? "" : "text-muted-foreground"}`}>
+                                  <span className={`inline-block px-1 rounded ${STATUS_COLORS[a.status] ?? "bg-gray-100 text-gray-500"}`}>{a.status}</span>
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
+
+                    {/* Approve / Reject actions */}
+                    <div className="flex items-center gap-3 pt-2 border-t border-border">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); approveMutation.mutate(p.id); }}
+                        disabled={approveMutation.isPending}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-60"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        {approveMutation.isPending ? "Approving…" : "Approve & Publish"}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); rejectMutation.mutate(p.id); }}
+                        disabled={rejectMutation.isPending}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-destructive/40 text-destructive text-sm font-medium hover:bg-destructive/5 transition-colors disabled:opacity-60"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        {rejectMutation.isPending ? "Rejecting…" : "Reject"}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setSelectedId(null); }}
+                        className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Close
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -627,9 +732,10 @@ function ReviewQueueTab({ onView }: { onView: (p: Portfolio) => void }) {
                     <XCircle className="w-4 h-4" />
                   </button>
                 </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
