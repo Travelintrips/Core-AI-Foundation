@@ -1,126 +1,332 @@
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { Layout } from "@/components/layout";
-import { CheckCircle2, ArrowRight, Copy, Check } from "lucide-react";
-import { useState } from "react";
+import { motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import {
+  CheckCircle2, ArrowRight, Sparkles, Copy, Check,
+  LayoutDashboard, FileText, Clock, Users, Bell, Star, Headphones,
+} from "lucide-react";
 
-export default function SuccessPage() {
-  // useLocation() returns only the pathname in Wouter — query params must be
-  // read from window.location.search directly.
-  const searchParams = new URLSearchParams(window.location.search);
-  const reviewToken = searchParams.get('review') || "";
-  const dashboardToken = searchParams.get('dashboard') || "";
-  const requestId = searchParams.get('request') || "";
+/* ─── Confetti ─────────────────────────────────────────────── */
+type Particle = { id: number; x: number; y: number; size: number; color: string; rotation: number; drift: number; speed: number; shape: "rect" | "circle" | "triangle" };
 
-  const [copiedReview, setCopiedReview] = useState(false);
-  const [copiedDashboard, setCopiedDashboard] = useState(false);
+const CONFETTI_COLORS = ["#F97316", "#EA580C", "#F59E0B", "#10B981", "#22D3EE", "#0F172A", "#FFFFFF"];
 
-  const copyToClipboard = (text: string, type: 'review' | 'dashboard') => {
-    navigator.clipboard.writeText(text);
-    if (type === 'review') {
-      setCopiedReview(true);
-      setTimeout(() => setCopiedReview(false), 2000);
-    } else {
-      setCopiedDashboard(true);
-      setTimeout(() => setCopiedDashboard(false), 2000);
-    }
-  };
+function Confetti({ active }: { active: boolean }) {
+  const [particles, setParticles] = useState<Particle[]>([]);
 
-  const reviewUrl = `${window.location.origin}/review/${reviewToken}`;
-  const dashboardUrl = `${window.location.origin}/dashboard/${dashboardToken}`;
-
-  if (requestId) {
-    return (
-      <Layout>
-        <div className="flex-1 flex items-center justify-center p-4 py-12 md:py-24">
-          <div className="w-full max-w-xl bg-card border border-card-border p-8 md:p-12 rounded-[2rem] shadow-sm text-center">
-            <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-8">
-              <CheckCircle2 className="w-10 h-10" />
-            </div>
-            <h1 className="text-3xl md:text-4xl font-serif font-medium mb-4">Request Received!</h1>
-            <p className="text-lg text-muted-foreground mb-8 max-w-lg mx-auto">
-              Thanks — our team will review your request and reach out by email shortly to confirm details and kick things off.
-            </p>
-            <div className="bg-accent/30 border border-accent rounded-2xl p-4 mb-8 text-sm font-mono text-foreground break-all">
-              Request ID: {requestId}
-            </div>
-            <Link href="/services" className="inline-flex px-8 py-4 bg-primary text-primary-foreground rounded-full font-medium text-lg hover:bg-primary/90 transition-all items-center gap-2">
-              Browse more services <ArrowRight className="w-5 h-5" />
-            </Link>
-          </div>
-        </div>
-      </Layout>
+  useEffect(() => {
+    if (!active) return;
+    const shapes: Particle["shape"][] = ["rect", "circle", "triangle"];
+    setParticles(
+      Array.from({ length: 64 }, (_, i) => ({
+        id: i,
+        x: Math.random() * 100,
+        y: -10 - Math.random() * 20,
+        size: 6 + Math.random() * 10,
+        color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+        rotation: Math.random() * 360,
+        drift: -30 + Math.random() * 60,
+        speed: 2 + Math.random() * 4,
+        shape: shapes[Math.floor(Math.random() * shapes.length)],
+      }))
     );
-  }
+  }, [active]);
+
+  if (!active || !particles.length) return null;
+
+  return (
+    <div className="fixed inset-0 pointer-events-none overflow-hidden z-50">
+      {particles.map((p) => (
+        <motion.div
+          key={p.id}
+          className="absolute"
+          initial={{ x: `${p.x}vw`, y: `${p.y}vh`, rotate: p.rotation, opacity: 1 }}
+          animate={{
+            y: "110vh",
+            x: `calc(${p.x}vw + ${p.drift}px)`,
+            rotate: p.rotation + 360 * (2 + Math.random()),
+            opacity: [1, 1, 0],
+          }}
+          transition={{ duration: p.speed + 1.5, ease: "linear", delay: Math.random() * 1.2 }}
+          style={{
+            width: p.size,
+            height: p.shape === "circle" ? p.size : p.shape === "rect" ? p.size * 0.5 : p.size,
+            background: p.color,
+            borderRadius: p.shape === "circle" ? "50%" : p.shape === "rect" ? 2 : 0,
+            clipPath: p.shape === "triangle" ? "polygon(50% 0%, 0% 100%, 100% 100%)" : undefined,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ─── Copy button ───────────────────────────────────────────── */
+function CopyBtn({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    await navigator.clipboard.writeText(text).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="flex items-center gap-2 p-3 rounded-xl bg-gray-50 border border-gray-100">
+      <div className="flex-1 min-w-0">
+        <div className="text-xs text-gray-400 mb-0.5">{label}</div>
+        <div className="text-sm font-mono text-gray-700 truncate">{text}</div>
+      </div>
+      <button onClick={copy}
+        className="w-8 h-8 rounded-lg flex items-center justify-center transition-all"
+        style={{
+          background: copied ? "rgba(16,185,129,0.10)" : "rgba(249,115,22,0.08)",
+          border: `1px solid ${copied ? "rgba(16,185,129,0.25)" : "rgba(249,115,22,0.20)"}`,
+          color: copied ? "#10B981" : "#F97316",
+        }}>
+        {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+      </button>
+    </div>
+  );
+}
+
+/* ─── NEXT STEPS ────────────────────────────────────────────── */
+const NEXT_STEPS = [
+  {
+    icon: Clock, color: "#F97316",
+    title: "Tim sedang mereview brief Anda",
+    desc: "AI kami menganalisis kebutuhan Anda. Estimasi selesai dalam 1-4 jam.",
+    time: "Sekarang",
+  },
+  {
+    icon: FileText, color: "#F59E0B",
+    title: "Quotation akan dikirim ke email Anda",
+    desc: "Anda akan menerima penawaran harga beserta scope pekerjaan yang detail.",
+    time: "1-4 jam",
+  },
+  {
+    icon: Users, color: "#22D3EE",
+    title: "Review & setujui penawaran",
+    desc: "Cek link yang kami kirim, tinjau scope, dan setujui untuk memulai produksi.",
+    time: "Sesuai Anda",
+  },
+  {
+    icon: Star, color: "#10B981",
+    title: "Produksi dimulai!",
+    desc: "Tim AI profesional kami langsung bekerja. Pantau progres di workspace.",
+    time: "Setelah disetujui",
+  },
+];
+
+/* ─── QUICK ACTIONS ─────────────────────────────────────────── */
+const QUICK_ACTIONS = [
+  { icon: LayoutDashboard, label: "Buka Workspace",      desc: "Pantau proyek Anda",      primary: true  },
+  { icon: FileText,        label: "Submit Proyek Lain",  desc: "Buat proyek baru",         href: "/submit" },
+  { icon: Headphones,      label: "Hubungi Support",     desc: "Tim kami siap membantu",   href: "#"       },
+];
+
+/* ═══════════════════════════════════════
+   MAIN EXPORT
+═══════════════════════════════════════ */
+export default function SuccessPage() {
+  const searchStr = useSearch();
+  const params = new URLSearchParams(searchStr);
+  const reviewToken     = params.get("review");
+  const dashboardToken  = params.get("dashboard");
+  const requestId       = params.get("requestId");
+  const [confettiOn, setConfettiOn] = useState(false);
+  const fired = useRef(false);
+
+  useEffect(() => {
+    if (fired.current) return;
+    fired.current = true;
+    setTimeout(() => setConfettiOn(true), 300);
+    setTimeout(() => setConfettiOn(false), 5000);
+  }, []);
+
+  const reviewLink    = reviewToken    ? `${window.location.origin}/review/${reviewToken}`    : null;
+  const dashboardLink = dashboardToken ? `${window.location.origin}/workspace/${dashboardToken}` : null;
+
+  const steps = [
+    { label: "Brief Diterima",  done: true  },
+    { label: "AI Analysis",     done: true  },
+    { label: "Quotation",       done: false },
+    { label: "Produksi",        done: false },
+    { label: "Delivery",        done: false },
+  ];
 
   return (
     <Layout>
-      <div className="flex-1 flex items-center justify-center p-4 py-12 md:py-24">
-        <div className="w-full max-w-2xl bg-card border border-card-border p-8 md:p-12 rounded-[2rem] shadow-sm text-center">
-          <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-8">
-            <CheckCircle2 className="w-10 h-10" />
-          </div>
-          
-          <h1 className="text-3xl md:text-4xl font-serif font-medium mb-4">Project Submitted!</h1>
-          <p className="text-lg text-muted-foreground mb-10 max-w-lg mx-auto">
-            We're reviewing your brief and preparing a price quotation. You'll receive a link to approve it — production only begins once you confirm.
-          </p>
+      <Confetti active={confettiOn} />
 
-          <div className="bg-accent/30 border border-accent rounded-2xl p-6 mb-8 text-left">
-            <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-              <span className="bg-primary text-primary-foreground w-6 h-6 rounded-full inline-flex items-center justify-center text-xs">!</span>
-              Save these important links
-            </h3>
-            
-            <div className="space-y-6">
-              <div>
-                <label className="text-sm font-medium text-muted-foreground block mb-2">Your Dashboard (All Projects)</label>
-                <div className="flex items-center gap-2">
-                  <div className="bg-background border border-border px-4 py-3 rounded-xl text-sm font-mono text-foreground flex-1 truncate overflow-hidden">
-                    {dashboardUrl}
-                  </div>
-                  <button 
-                    onClick={() => copyToClipboard(dashboardUrl, 'dashboard')}
-                    className="p-3 bg-secondary/10 hover:bg-secondary/20 text-secondary-foreground rounded-xl transition-colors shrink-0"
-                    title="Copy to clipboard"
-                  >
-                    {copiedDashboard ? <Check className="w-5 h-5 text-green-600" /> : <Copy className="w-5 h-5" />}
-                  </button>
-                  <Link href={`/dashboard/${dashboardToken}`} className="px-4 py-3 bg-foreground text-background rounded-xl text-sm font-medium shrink-0 hover:bg-foreground/90 transition-colors">
-                    Open
-                  </Link>
-                </div>
-              </div>
+      <section className="relative min-h-screen py-16 px-4"
+        style={{ background: "linear-gradient(160deg, #FAFAF7 0%, #FFF7ED 50%, #FAFAF7 100%)" }}>
+        {/* Ambient glows */}
+        <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] rounded-full blur-[100px] opacity-30"
+          style={{ background: "radial-gradient(ellipse, rgba(249,115,22,0.3) 0%, transparent 70%)" }} />
 
-              <div>
-                <label className="text-sm font-medium text-muted-foreground block mb-2">Direct Review Link (This Project)</label>
-                <div className="flex items-center gap-2">
-                  <div className="bg-background border border-border px-4 py-3 rounded-xl text-sm font-mono text-foreground flex-1 truncate overflow-hidden">
-                    {reviewUrl}
-                  </div>
-                  <button 
-                    onClick={() => copyToClipboard(reviewUrl, 'review')}
-                    className="p-3 bg-secondary/10 hover:bg-secondary/20 text-secondary-foreground rounded-xl transition-colors shrink-0"
-                    title="Copy to clipboard"
-                  >
-                    {copiedReview ? <Check className="w-5 h-5 text-green-600" /> : <Copy className="w-5 h-5" />}
-                  </button>
-                  <Link href={`/review/${reviewToken}`} className="px-4 py-3 bg-foreground text-background rounded-xl text-sm font-medium shrink-0 hover:bg-foreground/90 transition-colors">
-                    Open
-                  </Link>
-                </div>
-              </div>
+        <div className="relative container mx-auto max-w-2xl text-center">
+
+          {/* Big checkmark */}
+          <motion.div
+            initial={{ scale: 0.4, opacity: 0 }}
+            animate={{ scale: 1,   opacity: 1 }}
+            transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.1 }}
+            className="mx-auto w-24 h-24 rounded-full flex items-center justify-center mb-8"
+            style={{
+              background: "linear-gradient(135deg, #F97316, #EA580C)",
+              boxShadow: "0 16px 48px rgba(249,115,22,0.35)",
+            }}>
+            <CheckCircle2 className="w-12 h-12 text-white" />
+          </motion.div>
+
+          {/* Heading */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25, duration: 0.5 }}>
+            <div className="section-chip mx-auto mb-4">
+              <Sparkles className="w-3 h-3 animate-pulse" />
+              Brief Berhasil Dikirim!
             </div>
-            
-            <p className="text-xs text-muted-foreground mt-4 text-center">
-              * Bookmark your dashboard link to check status anytime without logging in.
+            <h1 className="font-display font-bold text-3xl md:text-4xl text-navy mb-4">
+              Selamat! Brief Anda Sedang Diproses.
+            </h1>
+            <p className="text-gray-500 text-base max-w-lg mx-auto">
+              Tim AI dan spesialis kami sudah menerima permintaan Anda. Kami akan mengirimkan
+              quotation harga ke email Anda dalam <strong>1-4 jam</strong>.
             </p>
-          </div>
+          </motion.div>
 
-          <Link href={`/dashboard/${dashboardToken}`} className="inline-flex px-8 py-4 bg-primary text-primary-foreground rounded-full font-medium text-lg hover:bg-primary/90 transition-all items-center gap-2">
-            Go to Dashboard <ArrowRight className="w-5 h-5" />
-          </Link>
+          {/* Progress tracker */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, duration: 0.5 }}
+            className="mt-8 bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <h2 className="font-display font-semibold text-base text-navy mb-4">Progress Proyek Anda</h2>
+            <div className="flex items-center gap-0">
+              {steps.map((s, i) => (
+                <div key={s.label} className="flex items-center flex-1 last:flex-none">
+                  <div className="flex flex-col items-center gap-1.5 shrink-0">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                      s.done ? "text-white" : "text-gray-300 border-2 border-gray-200"
+                    }`}
+                      style={s.done ? { background: "linear-gradient(135deg,#F97316,#EA580C)" } : {}}>
+                      {s.done ? <CheckCircle2 className="w-4 h-4" /> : i + 1}
+                    </div>
+                    <span className={`text-[10px] font-semibold whitespace-nowrap ${s.done ? "text-orange-600" : "text-gray-300"}`}>
+                      {s.label}
+                    </span>
+                  </div>
+                  {i < steps.length - 1 && (
+                    <div className="flex-1 h-0.5 mx-1 rounded-full" style={{ background: s.done ? "#F97316" : "#E5E7EB" }} />
+                  )}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* Access links */}
+          {(dashboardLink || reviewLink) && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.5 }}
+              className="mt-5 bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-left">
+              <h2 className="font-display font-semibold text-base text-navy mb-3 flex items-center gap-2">
+                <Bell className="w-4 h-4 text-orange-500" />
+                Simpan link penting berikut
+              </h2>
+              <div className="space-y-2">
+                {dashboardLink && (
+                  <CopyBtn text={dashboardLink} label="🏠 Link Workspace (pantau semua proyek)" />
+                )}
+                {reviewLink && (
+                  <CopyBtn text={reviewLink} label="📋 Link Review (untuk persetujuan quotation)" />
+                )}
+                {requestId && (
+                  <CopyBtn text={requestId} label="🔖 Request ID" />
+                )}
+              </div>
+              <p className="text-xs text-gray-400 mt-3">
+                ✉️ Link ini juga dikirim ke email Anda. Simpan sebagai bookmark untuk kemudahan akses.
+              </p>
+            </motion.div>
+          )}
+
+          {/* Next steps timeline */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.5 }}
+            className="mt-5 bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-left">
+            <h2 className="font-display font-semibold text-base text-navy mb-4">Apa yang terjadi selanjutnya?</h2>
+            <div className="space-y-4">
+              {NEXT_STEPS.map((s, i) => {
+                const Icon = s.icon;
+                return (
+                  <motion.div
+                    key={s.title}
+                    initial={{ opacity: 0, x: -16 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.65 + i * 0.1, duration: 0.4 }}
+                    className="flex items-start gap-4">
+                    <div className="relative shrink-0">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                        style={{ background: `${s.color}12`, border: `1px solid ${s.color}20` }}>
+                        <Icon className="w-4.5 h-4.5" style={{ color: s.color }} />
+                      </div>
+                      {i < NEXT_STEPS.length - 1 && (
+                        <div className="absolute left-1/2 top-10 bottom-0 w-px -translate-x-1/2 mt-1"
+                          style={{ background: "rgba(15,23,42,0.06)", height: "calc(100% + 16px)" }} />
+                      )}
+                    </div>
+                    <div className="flex-1 pb-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-semibold text-sm text-navy">{s.title}</h3>
+                        <span className="text-xs shrink-0 px-2 py-0.5 rounded-full font-semibold"
+                          style={{ background: `${s.color}10`, color: s.color }}>
+                          {s.time}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{s.desc}</p>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+
+          {/* Quick actions */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.75, duration: 0.5 }}
+            className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {QUICK_ACTIONS.map((a) => {
+              const Icon = a.icon;
+              const href = a.primary ? (dashboardLink ?? a.href ?? "/") : (a.href ?? "#");
+              return (
+                <Link key={a.label} href={href}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border text-center transition-all hover:-translate-y-0.5 hover:shadow-sm ${
+                    a.primary
+                      ? "text-white"
+                      : "bg-white border-gray-100 text-navy hover:border-orange-200"
+                  }`}
+                  style={a.primary ? {
+                    background: "linear-gradient(135deg,#F97316,#EA580C)",
+                    border: "none",
+                    boxShadow: "0 4px 20px rgba(249,115,22,0.25)",
+                  } : {}}>
+                  <Icon className={`w-5 h-5 ${a.primary ? "text-white" : "text-orange-500"}`} />
+                  <div>
+                    <div className={`text-xs font-semibold ${a.primary ? "text-white" : "text-navy"}`}>{a.label}</div>
+                    <div className={`text-[10px] ${a.primary ? "text-orange-100" : "text-gray-400"}`}>{a.desc}</div>
+                  </div>
+                </Link>
+              );
+            })}
+          </motion.div>
+
+          {/* Footer note */}
+          <motion.p
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1, duration: 0.5 }}
+            className="text-xs text-gray-400 mt-6">
+            Butuh bantuan segera?{" "}
+            <Link href="#" className="text-orange-500 hover:underline font-medium">Hubungi tim kami</Link>
+            {" "}— kami online 24/7.
+          </motion.p>
         </div>
-      </div>
+      </section>
     </Layout>
   );
 }

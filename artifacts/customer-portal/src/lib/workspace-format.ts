@@ -9,7 +9,7 @@ export function fmtMoney(amount: string | number | null | undefined, currency = 
 export function fmtDate(date: string | null | undefined) {
   if (!date) return "—";
   try {
-    return new Date(date).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+    return new Date(date).toLocaleDateString("id-ID", { year: "numeric", month: "short", day: "numeric" });
   } catch {
     return "—";
   }
@@ -18,7 +18,7 @@ export function fmtDate(date: string | null | undefined) {
 export function fmtDateTime(date: string | null | undefined) {
   if (!date) return "—";
   try {
-    return new Date(date).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    return new Date(date).toLocaleString("id-ID", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   } catch {
     return "—";
   }
@@ -26,10 +26,30 @@ export function fmtDateTime(date: string | null | undefined) {
 
 export function stageColor(stage: string) {
   if (["completed", "converted_to_project", "delivered"].includes(stage))
-    return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+    return "bg-emerald-100 text-emerald-800 border border-emerald-200";
   if (["waiting_customer_approval", "quotation_ready", "waiting_review", "revision_requested"].includes(stage))
-    return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300";
+    return "bg-amber-100 text-amber-800 border border-amber-200";
   if (["cancelled"].includes(stage))
-    return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
-  return "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300";
+    return "bg-red-100 text-red-800 border border-red-200";
+  if (["running", "in_progress", "generating"].includes(stage))
+    return "bg-orange-100 text-orange-800 border border-orange-200";
+  return "bg-sky-100 text-sky-800 border border-sky-200";
+}
+
+export function stageLabel(stage: string) {
+  const map: Record<string, string> = {
+    pending: "Menunggu",
+    running: "Berjalan",
+    in_progress: "Dalam Proses",
+    generating: "Generating",
+    waiting_customer_approval: "Menunggu Persetujuan",
+    quotation_ready: "Quotation Siap",
+    waiting_review: "Menunggu Review",
+    revision_requested: "Revisi Diminta",
+    completed: "Selesai",
+    converted_to_project: "Proyek Aktif",
+    delivered: "Delivered",
+    cancelled: "Dibatalkan",
+  };
+  return map[stage] ?? stage.replace(/_/g, " ");
 }
