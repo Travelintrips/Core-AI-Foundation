@@ -47,13 +47,13 @@ function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-semibold text-gray-700">
-        {label} {required && <span className="text-orange-500">*</span>}
+      <label className="text-sm font-semibold text-[#F0F4FF]">
+        {label} {required && <span className="text-[#7C6EFA]">*</span>}
       </label>
       {children}
       {error && (
-        <p className="text-xs text-red-500 flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full bg-red-100 text-red-500 flex items-center justify-center text-[10px]">!</span>
+        <p className="text-xs text-[#F43F5E] flex items-center gap-1">
+          <span className="w-3 h-3 rounded-full bg-[#F43F5E]/20 text-[#F43F5E] flex items-center justify-center text-[10px]">!</span>
           {error}
         </p>
       )}
@@ -65,7 +65,7 @@ function Input({ ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className="input-field transition-all"
+      className="input-field transition-all bg-[#131E35] border-[#243352] text-[#F0F4FF] placeholder:text-[#4F6494] focus:border-[#7C6EFA] focus:ring-1 focus:ring-[#7C6EFA] outline-none"
     />
   );
 }
@@ -74,7 +74,7 @@ function Textarea({ ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement
   return (
     <textarea
       {...props}
-      className="input-field resize-none"
+      className="input-field resize-none bg-[#131E35] border-[#243352] text-[#F0F4FF] placeholder:text-[#4F6494] focus:border-[#7C6EFA] focus:ring-1 focus:ring-[#7C6EFA] outline-none"
     />
   );
 }
@@ -91,23 +91,23 @@ function StepperBar({ current }: { current: number }) {
           <div key={s.num} className="flex items-center flex-1 last:flex-none">
             <div className="flex flex-col items-center gap-1.5">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
-                done   ? "bg-emerald-500" :
-                active ? "shadow-lg" : "bg-gray-100 border-2 border-gray-200"
+                done   ? "bg-[#10B981]" :
+                active ? "shadow-lg shadow-[#7C6EFA]/20" : "bg-[#131E35] border-2 border-[#243352]"
               }`}
-                style={active ? { background: "linear-gradient(135deg,#F97316,#EA580C)" } : {}}>
+                style={active ? { background: "linear-gradient(135deg,#7C6EFA,#5F52D0)" } : {}}>
                 {done ? (
                   <CheckCircle2 className="w-5 h-5 text-white" />
                 ) : (
-                  <Icon className={`w-4 h-4 ${active ? "text-white" : "text-gray-400"}`} />
+                  <Icon className={`w-4 h-4 ${active ? "text-white" : "text-[#4F6494]"}`} />
                 )}
               </div>
               <span className={`text-[10px] font-semibold whitespace-nowrap hidden md:block ${
-                active ? "text-orange-600" : done ? "text-emerald-600" : "text-gray-400"
+                active ? "text-[#9D91FB]" : done ? "text-[#10B981]" : "text-[#4F6494]"
               }`}>{s.label}</span>
             </div>
             {i < STEPS.length - 1 && (
               <div className="flex-1 h-0.5 mx-2 rounded-full transition-all duration-300"
-                style={{ background: current > s.num ? "#10B981" : "#E5E7EB" }} />
+                style={{ background: current > s.num ? "#10B981" : "#243352" }} />
             )}
           </div>
         );
@@ -181,35 +181,35 @@ export default function SubmitPage() {
 
   return (
     <Layout>
-      <section className="relative min-h-screen py-16 px-4" style={{ background: "linear-gradient(135deg,#FAFAF7 0%,#FFF7ED 60%,#FAFAF7 100%)" }}>
+      <section className="relative min-h-screen py-16 px-4 bg-[#060B18]">
         {/* Ambient glow */}
-        <div className="pointer-events-none absolute top-0 right-1/4 w-96 h-96 bg-orange-100 rounded-full blur-[80px] opacity-40" />
+        <div className="pointer-events-none absolute top-0 right-1/4 w-96 h-96 bg-[#7C6EFA] rounded-full blur-[100px] opacity-20" />
 
         <div className="relative container mx-auto max-w-2xl">
           {/* Back */}
           <Link href="/services"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 mb-10 group transition-colors">
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-[#8B9BC4] hover:text-[#F0F4FF] mb-10 group transition-colors">
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
             Kembali ke Layanan
           </Link>
 
           {/* Header */}
           <div className="text-center mb-10">
-            <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg"
-              style={{ background: "linear-gradient(135deg,#F97316,#EA580C)" }}>
+            <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg shadow-[#7C6EFA]/20"
+              style={{ background: "linear-gradient(135deg,#7C6EFA,#5F52D0)" }}>
               <Sparkles className="w-6 h-6 text-white" />
             </div>
-            <h1 className="font-display font-bold text-3xl md:text-4xl text-navy mb-2">
+            <h1 className="font-display font-bold text-3xl md:text-4xl text-[#F0F4FF] mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               Mulai Proyek Baru
             </h1>
-            <p className="text-gray-500">Isi brief Anda dan tim AI kami akan segera bekerja.</p>
+            <p className="text-[#8B9BC4]">Isi brief Anda dan tim AI kami akan segera bekerja.</p>
           </div>
 
           {/* Stepper */}
           <StepperBar current={step} />
 
           {/* Card */}
-          <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
+          <div className="bg-[#0D1526] rounded-2xl shadow-xl border border-[#243352] overflow-hidden">
             <form onSubmit={form.handleSubmit(onSubmit)}>
               <AnimatePresence mode="wait" initial={false} custom={1}>
                 <motion.div
@@ -225,8 +225,8 @@ export default function SubmitPage() {
                   {/* ── Step 1: Contact ── */}
                   {step === 1 && (
                     <>
-                      <h2 className="font-display font-bold text-xl text-navy mb-4 flex items-center gap-2">
-                        <User className="w-5 h-5 text-orange-500" />
+                      <h2 className="font-display font-bold text-xl text-[#F0F4FF] mb-4 flex items-center gap-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        <User className="w-5 h-5 text-[#7C6EFA]" />
                         Informasi Kontak Anda
                       </h2>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -240,10 +240,9 @@ export default function SubmitPage() {
                           <Input {...form.register("clientPhone")} placeholder="+62 812 3456 7890" />
                         </Field>
                       </div>
-                      <div className="mt-4 p-4 rounded-xl flex items-start gap-3"
-                        style={{ background: "rgba(249,115,22,0.06)", border: "1px solid rgba(249,115,22,0.15)" }}>
-                        <Sparkles className="w-4 h-4 text-orange-500 shrink-0 mt-0.5" />
-                        <p className="text-sm text-gray-600">
+                      <div className="mt-4 p-4 rounded-xl flex items-start gap-3 bg-[#7C6EFA]/[0.08] border border-[#7C6EFA]/20">
+                        <Sparkles className="w-4 h-4 text-[#7C6EFA] shrink-0 mt-0.5" />
+                        <p className="text-sm text-[#8B9BC4]">
                           AI kami akan menggunakan informasi ini untuk mempersonalisasi brief dan quotation Anda.
                         </p>
                       </div>
@@ -253,8 +252,8 @@ export default function SubmitPage() {
                   {/* ── Step 2: Brand Context ── */}
                   {step === 2 && (
                     <>
-                      <h2 className="font-display font-bold text-xl text-navy mb-4 flex items-center gap-2">
-                        <Building2 className="w-5 h-5 text-orange-500" />
+                      <h2 className="font-display font-bold text-xl text-[#F0F4FF] mb-4 flex items-center gap-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        <Building2 className="w-5 h-5 text-[#7C6EFA]" />
                         Brand Context
                       </h2>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -281,8 +280,8 @@ export default function SubmitPage() {
                   {/* ── Step 3: Creative Brief ── */}
                   {step === 3 && (
                     <>
-                      <h2 className="font-display font-bold text-xl text-navy mb-4 flex items-center gap-2">
-                        <Target className="w-5 h-5 text-orange-500" />
+                      <h2 className="font-display font-bold text-xl text-[#F0F4FF] mb-4 flex items-center gap-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        <Target className="w-5 h-5 text-[#7C6EFA]" />
                         Detail Proyek
                       </h2>
                       <Field label="Tujuan Proyek" required error={e.goal?.message}>
@@ -309,7 +308,7 @@ export default function SubmitPage() {
                         </div>
                         <Field label="Deadline (Opsional)" error={e.deadline?.message}>
                           <Input {...form.register("deadline")} placeholder="Selasa depan, 2 minggu..." />
-                          <div className="flex items-center gap-1 mt-1 text-xs text-gray-400">
+                          <div className="flex items-center gap-1 mt-1 text-xs text-[#4F6494]">
                             <Clock className="w-3 h-3" /> Opsional, tapi membantu kami memprioritaskan
                           </div>
                         </Field>
@@ -320,8 +319,8 @@ export default function SubmitPage() {
                   {/* ── Step 4: Confirm ── */}
                   {step === 4 && (
                     <>
-                      <h2 className="font-display font-bold text-xl text-navy mb-4 flex items-center gap-2">
-                        <FileText className="w-5 h-5 text-orange-500" />
+                      <h2 className="font-display font-bold text-xl text-[#F0F4FF] mb-4 flex items-center gap-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        <FileText className="w-5 h-5 text-[#7C6EFA]" />
                         Konfirmasi Brief
                       </h2>
 
@@ -335,19 +334,18 @@ export default function SubmitPage() {
                           { label: "Tujuan Proyek",  value: v.goal },
                           ...(v.deadline ? [{ label: "Deadline", value: v.deadline }] : []),
                         ].map((row) => (
-                          <div key={row.label} className="flex gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
-                            <span className="text-xs font-semibold text-gray-400 w-28 shrink-0 pt-0.5">{row.label}</span>
-                            <span className="text-sm text-navy font-medium">{row.value}</span>
+                          <div key={row.label} className="flex gap-3 p-3 rounded-xl bg-[#131E35] border border-[#243352]">
+                            <span className="text-xs font-semibold text-[#8B9BC4] w-28 shrink-0 pt-0.5">{row.label}</span>
+                            <span className="text-sm text-[#F0F4FF] font-medium">{row.value}</span>
                           </div>
                         ))}
                       </div>
 
-                      <div className="mt-5 p-4 rounded-xl flex items-start gap-3"
-                        style={{ background: "rgba(249,115,22,0.06)", border: "1px solid rgba(249,115,22,0.15)" }}>
-                        <Sparkles className="w-4 h-4 text-orange-500 shrink-0 mt-0.5 animate-pulse" />
+                      <div className="mt-5 p-4 rounded-xl flex items-start gap-3 bg-[#7C6EFA]/[0.08] border border-[#7C6EFA]/20">
+                        <Sparkles className="w-4 h-4 text-[#7C6EFA] shrink-0 mt-0.5 animate-pulse" />
                         <div>
-                          <p className="text-sm font-semibold text-navy mb-0.5">Proses selanjutnya</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-sm font-semibold text-[#F0F4FF] mb-0.5">Proses selanjutnya</p>
+                          <p className="text-xs text-[#8B9BC4]">
                             Tim kami akan mereview brief Anda dan mengirimkan quotation harga dalam 1-4 jam.
                             Produksi dimulai setelah Anda menyetujui penawaran.
                           </p>
@@ -359,7 +357,7 @@ export default function SubmitPage() {
               </AnimatePresence>
 
               {/* Footer buttons */}
-              <div className="px-6 md:px-8 pb-6 md:pb-8 pt-4 border-t border-gray-100 flex items-center justify-between gap-3">
+              <div className="px-6 md:px-8 pb-6 md:pb-8 pt-4 border-t border-[#243352] flex items-center justify-between gap-3">
                 {step > 1 ? (
                   <button type="button" onClick={() => setStep(s => s - 1)}
                     className="btn-ghost text-sm py-2.5 px-5">
@@ -388,11 +386,11 @@ export default function SubmitPage() {
           </div>
 
           {/* Progress indicator */}
-          <div className="mt-4 text-center text-xs text-gray-400">
+          <div className="mt-4 text-center text-xs text-[#4F6494]">
             Langkah {step} dari {STEPS.length}
-            <div className="mt-2 h-1 bg-gray-100 rounded-full max-w-xs mx-auto overflow-hidden">
+            <div className="mt-2 h-1 bg-[#131E35] rounded-full max-w-xs mx-auto overflow-hidden">
               <motion.div className="h-full rounded-full"
-                style={{ background: "linear-gradient(90deg,#F97316,#EA580C)" }}
+                style={{ background: "linear-gradient(90deg,#7C6EFA,#5F52D0)" }}
                 animate={{ width: `${(step / STEPS.length) * 100}%` }}
                 transition={{ duration: 0.4 }} />
             </div>
