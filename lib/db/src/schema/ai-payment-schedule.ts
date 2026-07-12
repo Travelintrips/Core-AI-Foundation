@@ -26,6 +26,7 @@ export const aiPaymentScheduleTable = appSchema.table("ai_payment_schedule", {
   dueDate: timestamp("due_date", { withTimezone: true }),
   status: text("status").notNull().default("pending"),
   reference: text("reference"), // customer-submitted proof reference (bank transfer id, PO number, etc.)
+  proofImageUrl: text("proof_image_url"), // URL to uploaded bank transfer screenshot
   verifiedBy: text("verified_by"),
   paidAt: timestamp("paid_at", { withTimezone: true }),
   notes: text("notes"),
