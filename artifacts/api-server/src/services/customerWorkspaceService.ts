@@ -738,6 +738,9 @@ export interface WorkspaceInvoice {
   issuedAt: string;
   paidAt: string | null;
   dueDate: string | null;
+  paymentScheduleId: number | null;
+  scheduleStatus: string | null;
+  scheduleReference: string | null;
 }
 
 async function listInvoicesForProjects(projects: WorkspaceProject[]): Promise<WorkspaceInvoice[]> {
@@ -749,27 +752,33 @@ async function listInvoicesForProjects(projects: WorkspaceProject[]): Promise<Wo
     .where(inArray(aiInvoicesTable.projectId, internalIds))
     .orderBy(desc(aiInvoicesTable.issuedAt));
 
-  const bySchedule = new Map<number, { dueDate: Date | null }>();
+  const bySchedule = new Map<number, { dueDate: Date | null; status: string; reference: string | null }>();
   const scheduleIds = invoices.map((i) => i.paymentScheduleId).filter((v): v is number => v !== null);
   if (scheduleIds.length > 0) {
     const schedules = await db.select().from(aiPaymentScheduleTable).where(inArray(aiPaymentScheduleTable.id, scheduleIds));
-    for (const s of schedules) bySchedule.set(s.id, { dueDate: s.dueDate });
+    for (const s of schedules) bySchedule.set(s.id, { dueDate: s.dueDate, status: s.status, reference: s.reference ?? null });
   }
 
   const byInternalId = new Map(projects.filter((p) => p.internalProjectId !== null).map((p) => [p.internalProjectId!, p]));
 
-  return invoices.map((inv) => ({
-    id: inv.id,
-    invoiceNumber: inv.invoiceNumber,
-    projectNumber: byInternalId.get(inv.projectId)?.projectNumber ?? String(inv.projectId),
-    invoiceType: inv.invoiceType,
-    amount: inv.amount,
-    currency: inv.currency,
-    status: inv.status,
-    issuedAt: inv.issuedAt.toISOString(),
-    paidAt: inv.paidAt?.toISOString() ?? null,
-    dueDate: inv.paymentScheduleId ? bySchedule.get(inv.paymentScheduleId)?.dueDate?.toISOString() ?? null : null,
-  }));
+  return invoices.map((inv) => {
+    const sched = inv.paymentScheduleId ? bySchedule.get(inv.paymentScheduleId) : undefined;
+    return {
+      id: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      projectNumber: byInternalId.get(inv.projectId)?.projectNumber ?? String(inv.projectId),
+      invoiceType: inv.invoiceType,
+      amount: inv.amount,
+      currency: inv.currency,
+      status: inv.status,
+      issuedAt: inv.issuedAt.toISOString(),
+      paidAt: inv.paidAt?.toISOString() ?? null,
+      dueDate: sched?.dueDate?.toISOString() ?? null,
+      paymentScheduleId: inv.paymentScheduleId ?? null,
+      scheduleStatus: sched?.status ?? null,
+      scheduleReference: sched?.reference ?? null,
+    };
+  });
 }
 
 export async function listWorkspaceInvoices(

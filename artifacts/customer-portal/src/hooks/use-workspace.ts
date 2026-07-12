@@ -101,13 +101,16 @@ export type WorkspaceInvoice = {
   id: number;
   invoiceNumber: string;
   projectNumber: string | null;
-  brandName: string | null;
+  invoiceType: string;
   currency: string;
-  total: string;
+  amount: string;
   status: string;
   issuedAt: string | null;
-  dueAt: string | null;
+  dueDate: string | null;
   paidAt: string | null;
+  paymentScheduleId: number | null;
+  scheduleStatus: string | null;
+  scheduleReference: string | null;
 };
 
 export type WorkspaceBrandKit = {
@@ -302,6 +305,22 @@ export function useCreateSupportTicket(token: string) {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['workspace-support-tickets', token] }),
+  });
+}
+
+export function useSubmitPaymentProof(token: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ scheduleId, reference }: { scheduleId: number; reference: string }) =>
+      customFetch<{ ok: boolean; schedule: unknown }>(`/api/public/payments/${scheduleId}/submit-proof`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['workspace-invoices', token] });
+      qc.invalidateQueries({ queryKey: ['workspace-summary', token] });
+    },
   });
 }
 
