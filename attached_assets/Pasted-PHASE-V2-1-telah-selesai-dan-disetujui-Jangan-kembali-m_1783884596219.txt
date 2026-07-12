@@ -1,0 +1,501 @@
+PHASE V2.1 telah selesai dan disetujui.
+
+Jangan kembali mengubah Landing Page kecuali menemukan bug kritis.
+
+Mulai sekarang fokus hanya pada AI Marketplace.
+
+==================================================
+
+ROLE
+
+==================================================
+
+Anda bertindak sebagai:
+
+• Principal Product Designer
+
+• Enterprise UX Architect
+
+• Frontend Architect
+
+• Product Growth Designer
+
+Berpikirlah seperti tim desain:
+
+- OpenAI GPT Store
+- Apple Store
+- Canva Marketplace
+- Linear
+- Stripe
+
+Bukan marketplace e-commerce.
+
+Bukan dashboard admin.
+
+==================================================
+
+LANGKAH 1
+
+AUDIT
+
+==================================================
+
+Sebelum mengubah kode.
+
+Audit terlebih dahulu halaman Marketplace.
+
+Periksa:
+
+- visual hierarchy
+- typography
+- spacing
+- responsive
+- empty state
+- loading state
+- accessibility
+- motion
+- CTA
+- search UX
+- filter UX
+- sorting UX
+- service card
+- hover interaction
+- category navigation
+- recommendation
+- conversion flow
+
+Jangan langsung coding.
+
+Buat daftar semua UX Gap.
+
+Kelompokkan:
+
+Critical
+
+High
+
+Medium
+
+Low
+
+==================================================
+
+LANGKAH 2
+
+IMPLEMENTASI
+
+==================================================
+
+Setelah audit selesai.
+
+Implementasikan hanya UX refinement.
+
+Jangan mengubah backend.
+
+Jangan mengubah API.
+
+Jangan mengubah database.
+
+==================================================
+
+1.
+
+Marketplace Hero
+
+Perbaiki hero.
+
+Tambahkan:
+
+- total AI Services
+- enterprise badge
+- search lebih dominan
+- quick categories
+- subtle animated background
+
+==================================================
+
+2.
+
+Search Experience
+
+Saya ingin search terasa premium.
+
+Tambahkan:
+
+recent search
+
+popular search
+
+search shortcut
+
+clear search
+
+loading state
+
+empty search
+
+==================================================
+
+3.
+
+Category Navigation
+
+Perbaiki category.
+
+Gunakan:
+
+icon
+
+hover
+
+active indicator
+
+smooth scrolling
+
+sticky category bar
+
+selected animation
+
+==================================================
+
+4.
+
+Featured Services
+
+Buat hierarchy.
+
+Featured Service lebih besar.
+
+Service lain lebih kecil.
+
+Tambahkan:
+
+Most Popular
+
+New
+
+Enterprise
+
+Trending
+
+Human Reviewed
+
+Commercial Ready
+
+==================================================
+
+5.
+
+Service Card
+
+Audit seluruh card.
+
+Perbaiki:
+
+spacing
+
+hover
+
+shadow
+
+border
+
+button
+
+rating
+
+price
+
+delivery
+
+preview
+
+CTA
+
+Tambahkan:
+
+hover lift
+
+gradient border
+
+animated icon
+
+soft glow
+
+==================================================
+
+6.
+
+Quick Preview
+
+Saat hover desktop.
+
+Munculkan panel kecil.
+
+Misalnya:
+
+Deliverables
+
+Delivery Time
+
+Human Review
+
+Commercial License
+
+View Detail
+
+==================================================
+
+7.
+
+Recommendation
+
+Tambahkan section.
+
+Recommended For You
+
+Popular
+
+Recently Viewed
+
+Enterprise Favorite
+
+AI Suggestion
+
+==================================================
+
+8.
+
+Filter Sidebar
+
+Audit filter.
+
+Perbaiki UX.
+
+Gunakan:
+
+accordion
+
+clear filter
+
+selected badge
+
+filter count
+
+sticky sidebar
+
+==================================================
+
+9.
+
+Sorting
+
+Perbaiki dropdown.
+
+Gunakan modern dropdown.
+
+Tambahkan icon.
+
+==================================================
+
+10.
+
+Empty State
+
+Buat lebih menarik.
+
+Tambahkan:
+
+illustration
+
+CTA
+
+reset filter
+
+==================================================
+
+11.
+
+Loading
+
+Audit Skeleton.
+
+Pastikan skeleton mengikuti ukuran card.
+
+Tidak membuat layout shift.
+
+==================================================
+
+12.
+
+Pagination
+
+Audit.
+
+Jika Load More digunakan.
+
+Tambahkan:
+
+loading
+
+button state
+
+smooth append animation
+
+==================================================
+
+13.
+
+Micro Interaction
+
+Tambahkan:
+
+card lift
+
+fade
+
+slide
+
+icon rotation
+
+button ripple
+
+count animation
+
+section reveal
+
+Gunakan Framer Motion.
+
+Jangan berlebihan.
+
+==================================================
+
+14.
+
+Performance
+
+Pastikan:
+
+lazy image
+
+memo
+
+bundle
+
+motion ringan
+
+CLS kecil
+
+==================================================
+
+15.
+
+Accessibility
+
+Audit:
+
+contrast
+
+focus state
+
+tab navigation
+
+aria
+
+keyboard
+
+==================================================
+
+YANG DILARANG
+
+==================================================
+
+Jangan membuat redesign total.
+
+Jangan mengubah route.
+
+Jangan mengubah API.
+
+Jangan mengubah database.
+
+Jangan mengubah business flow.
+
+Jangan menghapus fitur.
+
+==================================================
+
+VERIFIKASI
+
+==================================================
+
+Setelah selesai.
+
+Jalankan:
+
+npm run typecheck
+
+npm run build
+
+==================================================
+
+OUTPUT
+
+==================================================
+
+Berikan:
+
+1.
+
+UX Audit Marketplace
+
+Critical
+
+High
+
+Medium
+
+Low
+
+2.
+
+Daftar file berubah
+
+3.
+
+Screenshot Desktop
+
+4.
+
+Screenshot Tablet
+
+5.
+
+Screenshot Mobile
+
+6.
+
+Perubahan UX
+
+7.
+
+Perubahan Visual
+
+8.
+
+Performance Improvement
+
+9.
+
+Accessibility Improvement
+
+10.
+
+Build Result
+
+11.
+
+Typecheck Result
+
+Jangan lanjut ke halaman lain.
+
+Selesaikan Marketplace hingga kualitasnya setara produk SaaS enterprise sebelum masuk ke halaman berikutnya.
