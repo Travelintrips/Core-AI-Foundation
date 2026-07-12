@@ -1,86 +1,65 @@
 # AI Enterprise Platform
 
-A full-stack AI agency management platform built as a pnpm monorepo.
+A full-stack AI agency management platform — pnpm monorepo with three live artifacts and a shared library layer.
 
 ## Architecture
 
-| Artifact | Path | Preview |
-|---|---|---|
-| **API Server** | `artifacts/api-server` | `/api` |
-| **Admin Dashboard** | `artifacts/ai-platform` | `/admin/` |
-| **Customer Portal** | `artifacts/customer-portal` | `/` |
-| **Mockup Sandbox** | `artifacts/mockup-sandbox` | `/__mockup` |
+| Artifact | Path | Preview | Port | Description |
+|---|---|---|---|---|
+| **API Server** | `artifacts/api-server` | `/api` | 8080 | Express + Node.js backend, Supabase/PostgreSQL, job engine, scheduler, event bus, worker cluster |
+| **AI Platform** | `artifacts/ai-platform` | `/admin/` | 20785 | React/Vite admin dashboard — providers, agents, orchestration, analytics |
+| **Customer Portal** | `artifacts/customer-portal` | `/` | 23434 | React/Vite client-facing portal — service catalog, submissions, workspace |
+| **Mockup Sandbox** | `artifacts/mockup-sandbox` | `/__mockup` | 8081 | Vite dev server for UI component mockups on canvas |
 
-### Shared Libraries
-- `lib/db` — Drizzle ORM schema targeting Supabase PostgreSQL (`ai_platform` schema)
-- `lib/api-spec` — OpenAPI spec + orval codegen pipeline
-- `lib/api-zod` — Generated Zod schemas (output of codegen)
-- `lib/api-client-react` — Generated React Query hooks (output of codegen)
+## Shared Libraries
 
-## Stack
-- **Backend:** Node.js + Express + Drizzle ORM + PostgreSQL (Supabase)
-- **Frontend:** React 19 + Vite + TailwindCSS v4 + Wouter
-- **Database:** Supabase PostgreSQL, `ai_platform` schema
-- **Background:** Built-in job dispatcher + AI scheduler with cron
+- `lib/api-spec` — OpenAPI spec + orval codegen
+- `lib/api-client-react` — Generated React Query hooks
+- `lib/api-zod` — Generated Zod validation schemas
 
-## Running the Project
+## How to Run
+
+All workflows are configured and start automatically. To manually restart:
 
 ```bash
-# Install dependencies
+# Install dependencies (only needed after fresh clone/import)
 pnpm install
 
-# Regenerate API types (after editing lib/api-spec/openapi.yaml)
-pnpm run build:generated
+# Build api-server
+pnpm --filter @workspace/api-server run build
 
-# Build shared libraries
-pnpm run build:libs
-
-# Individual services (each runs automatically via Replit workflows)
+# Run individual services
 pnpm --filter @workspace/api-server run dev
 pnpm --filter @workspace/ai-platform run dev
 pnpm --filter @workspace/customer-portal run dev
 ```
 
-## Environment Variables
+## Environment & Secrets
 
-All secrets are managed in Replit Secrets / environment variables:
+All secrets are configured in the Replit environment (`.replit` `[userenv]` sections):
 
-| Variable | Env | Purpose |
-|---|---|---|
-| `SUPABASE_DEV_DATABASE_URL` | development | Dev Supabase connection string |
-| `SUPABASE_PROD_DATABASE_URL` | production | Prod Supabase connection string |
-| `ADMIN_API_KEY` | shared | Protects admin API routes (fail-open in dev if unset) |
-| `VITE_ADMIN_API_KEY` | shared | Same value — exposes key to the admin frontend |
-| `OPENAI_API_KEY` | shared | OpenAI completions |
-| `ANTHROPIC_API_KEY` | shared | Anthropic Claude |
-| `GEMINI_API_KEY` | shared | Google Gemini |
-| `MISTRAL_API_KEY` | shared | Mistral AI |
-| `REPLICATE_API_TOKEN` | shared | Replicate image generation |
+- **AI Providers**: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `COHERE_API_KEY`, `REPLICATE_API_TOKEN`
+- **Database (dev)**: `SUPABASE_DEV_DATABASE_URL` / `SUPABASE_DATABASE_URL_DEV`
+- **Database (prod)**: `SUPABASE_PROD_DATABASE_URL` / `SUPABASE_DATABASE_URL`
+- **Supabase**: `SUPABASE_URL_DEV`, `SUPABASE_ANON_KEY_DEV`, `SUPABASE_SERVICE_ROLE_KEY_DEV` (and prod equivalents)
+- **Email (SMTP)**: `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_PORT`, `SMTP_FROM`
+- **Fonnte (WhatsApp)**: `FONNTE_TOKEN`
+- **Admin auth**: `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY` (same value, used by middleware + frontend)
+- **Session**: `SESSION_SECRET`
 
-## Database
+Database uses a dedicated `ai_platform` schema in Supabase (not `public`). The environment is picked via `NODE_ENV`: development → dev credentials, production → prod credentials.
 
-- Schema lives in `lib/db/src/schema/`
-- Uses `ai_platform` PostgreSQL schema (not `public`) — search_path set at connection pool level
-- **Do not use `drizzle-kit push`** for schema changes — it will propose dropping the entire `ai_platform` schema. Write DDL migrations by hand instead.
-- Seed data: `pnpm --filter @workspace/api-server run seed` (idempotent; seeds providers, models, and a starter agent)
+## Key Technical Notes
 
-## Codegen Pipeline
-
-After editing `lib/api-spec/openapi.yaml`:
-```bash
-pnpm run build:generated
-```
-This runs orval to regenerate `lib/api-zod` and `lib/api-client-react`.
-
-**Note:** orval 8.18.0 has a `@scalar/json-magic` bug — the generate script pre-parses YAML as an object to bypass it.
-
-## Setup Status (2026-07-11)
-
-Project was re-imported from GitHub and set up on Replit:
-- `pnpm install` run, shared libs + generated codegen (`lib/api-zod`, `lib/api-client-react`) rebuilt.
-- All 4 workflows (API Server, Admin Dashboard, Customer Portal, Canvas/mockup sandbox) start cleanly.
-- Verified DB connectivity: Admin Dashboard renders live data (5 providers, 14 models, 3 workflows) from the dev Supabase DB.
-- All secrets/env vars referenced in this file (Supabase URLs, AI provider keys, SMTP, `SESSION_SECRET`) were already present in the environment from the import — nothing new had to be requested.
-- `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY` are still unset. This is safe in development (the admin auth middleware fails open only when `NODE_ENV=development`) but must be set before deploying to production, where it fails closed (401s on all admin routes).
+- **GitHub re-import**: restores all artifacts/workflows automatically via `scripts/post-merge.sh`
+- **Concatenated file bug**: GitHub imports can merge old+new versions of files end-to-end — fix by keeping v2 and removing v1 (affected `src/routes/storage.ts` and `src/lib/objectStorage.ts`)
+- **Zod imports**: never import `zod` or `zod/v4` directly in `api-server` routes — use `@workspace/api-zod` schemas only
+- **agentId**: DB column is `number`, API schema is `string|null` — always `parseInt(agentId, 10)` before querying
+- **Seed**: run `pnpm --filter @workspace/api-server run seed` (or POST `/api/ai/seed/all`) to populate providers, models, and the Brand Strategist agent
+- **drizzle-kit push**: proposes dropping the entire `ai_platform` schema even for additive changes — hand-write DDL for new tables instead
 
 ## User Preferences
+
+- Keep the project's existing structure and stack
+- Maintain the `ai_platform` Supabase schema (not `public`)
+- Do not use `drizzle-kit push` for production migrations — hand-write DDL

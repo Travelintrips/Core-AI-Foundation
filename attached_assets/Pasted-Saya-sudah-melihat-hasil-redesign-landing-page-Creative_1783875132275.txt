@@ -1,0 +1,438 @@
+Saya sudah melihat hasil redesign landing page Creative Studio.
+
+Secara keseluruhan hasilnya sudah sangat baik dan arahnya sudah sesuai.
+
+Saya TIDAK ingin mengganti konsep yang sudah ada.
+
+Saya hanya ingin meningkatkan kualitas visual dan user experience agar setara dengan website SaaS enterprise kelas dunia seperti:
+
+- Stripe
+- Linear
+- OpenAI
+- Vercel
+- Canva Enterprise
+- Framer
+- Notion AI
+
+Jangan melakukan redesign total.
+
+Lakukan refinement terhadap desain yang sudah ada.
+
+==================================================
+
+TARGET
+
+==================================================
+
+Saya ingin tampilan ini terasa lebih premium, lebih hidup, lebih eksklusif, dan lebih meyakinkan untuk target market B2B Enterprise.
+
+Target user:
+
+• CEO
+• Finance Director
+• Marketing Director
+• Procurement Manager
+• Logistic Company
+• Enterprise Client
+
+Saya ingin orang membuka website ini langsung berpikir:
+
+"Wah ini platform AI Enterprise kelas dunia."
+
+==================================================
+1. HERO SECTION
+==================================================
+
+Pertahankan layout sekarang.
+
+Tetapi lakukan improvement berikut.
+
+Dashboard AI di sisi kanan jangan terlihat seperti gambar statis.
+
+Buat dashboard terasa hidup.
+
+Tambahkan animasi ringan:
+
+- progress bar bergerak
+- AI status berubah
+- angka bertambah
+- glow halus
+- pulse indicator
+
+Tambahkan activity feed kecil seperti:
+
+AI Creative
+Generating...
+
+Finance AI
+Completed
+
+Legal AI
+Reviewing...
+
+Marketing AI
+Processing...
+
+Gunakan animasi yang elegan.
+
+Jangan berlebihan.
+
+==================================================
+2. SERVICE CATEGORY
+==================================================
+
+Saat ini semua card terlihat memiliki prioritas visual yang sama.
+
+Saya ingin dibuat hierarchy.
+
+Buat:
+
+Featured Service
+
+lebih besar.
+
+Service lain tetap ukuran normal.
+
+Tambahkan badge:
+
+Most Popular
+
+New
+
+Fast Delivery
+
+Enterprise
+
+Human Review
+
+Commercial Ready
+
+Tambahkan icon yang lebih menarik.
+
+Hover card harus terasa premium.
+
+Saat hover:
+
+- sedikit naik
+- shadow bertambah
+- border berubah
+- icon sedikit membesar
+- CTA muncul lebih jelas
+
+==================================================
+3. HOW IT WORKS
+==================================================
+
+Saat ini masih terlalu sederhana.
+
+Tambahkan ilustrasi/icon pada setiap langkah.
+
+Contoh:
+
+01
+
+📝
+
+Submit Brief
+
+↓
+
+02
+
+🤖
+
+AI Analysis
+
+↓
+
+03
+
+👨‍💼
+
+Human Review
+
+↓
+
+04
+
+📦
+
+Delivery
+
+Tambahkan garis progress yang lebih menarik.
+
+Tambahkan animasi ketika section muncul.
+
+==================================================
+4. TESTIMONIAL
+==================================================
+
+Saat ini testimonial masih terasa seperti card biasa.
+
+Saya ingin lebih premium.
+
+Tambahkan:
+
+foto/avatar
+
+logo perusahaan
+
+jabatan
+
+Verified Client
+
+rating
+
+hasil yang didapat.
+
+Contoh:
+
+Saved 120 Hours
+
+ROI +38%
+
+Cost Reduction 24%
+
+==================================================
+5. PRICING
+==================================================
+
+Pricing sudah bagus.
+
+Tetapi saya ingin:
+
+Recommended Package
+
+lebih menonjol.
+
+Tambahkan:
+
+Best Value
+
+Most Chosen
+
+Enterprise Choice
+
+Gunakan glow yang sangat halus.
+
+Jangan terlalu mencolok.
+
+==================================================
+6. CTA SECTION
+==================================================
+
+CTA sudah bagus.
+
+Tambahkan trust indicator di bawah tombol.
+
+Contoh:
+
+150+ AI Specialists
+
+500+ Projects
+
+98% Client Satisfaction
+
+24/7 Support
+
+Commercial Ready
+
+==================================================
+7. FOOTER
+==================================================
+
+Footer masih terlalu kosong.
+
+Tambahkan:
+
+Product
+
+Solutions
+
+Resources
+
+Developers
+
+API
+
+Documentation
+
+Privacy
+
+Security
+
+Compliance
+
+ISO
+
+SLA
+
+Partner
+
+Newsletter
+
+Social Media
+
+==================================================
+8. MICRO INTERACTION
+==================================================
+
+Tambahkan animasi kecil pada seluruh halaman.
+
+Misalnya:
+
+hover
+
+fade
+
+slide
+
+count up
+
+button ripple
+
+card lift
+
+gradient movement
+
+loading skeleton
+
+section reveal
+
+Gunakan Framer Motion jika sudah tersedia.
+
+==================================================
+9. BACKGROUND
+==================================================
+
+Background masih terasa terlalu polos.
+
+Tambahkan:
+
+mesh gradient
+
+noise texture
+
+blur layer
+
+light glow
+
+soft vignette
+
+floating particles yang sangat halus.
+
+Jangan membuat website terasa ramai.
+
+==================================================
+10. TRUST
+==================================================
+
+Tambahkan section baru.
+
+Trusted by
+
+logo perusahaan
+
+jumlah project
+
+jumlah AI Specialist
+
+jumlah jam kerja yang dihemat
+
+Jumlah deliverables.
+
+==================================================
+11. AI WORKFORCE
+==================================================
+
+Ini bagian terpenting.
+
+Saat ini website masih terasa menjual layanan.
+
+Saya ingin website terasa menjual AI Workforce.
+
+Tambahkan section baru.
+
+Headline:
+
+Meet Your AI Workforce
+
+Tampilkan beberapa AI Specialist.
+
+Creative Director AI
+
+Finance Analyst AI
+
+Tax Consultant AI
+
+Legal Advisor AI
+
+Marketing Strategist AI
+
+Procurement Specialist AI
+
+Supply Chain Planner AI
+
+Executive Assistant AI
+
+Setiap AI memiliki status.
+
+Available
+
+Working
+
+Thinking
+
+Review
+
+Completed
+
+Dengan begitu user merasa mereka sedang merekrut tim AI, bukan membeli jasa.
+
+==================================================
+12. PERFORMANCE
+==================================================
+
+Pastikan seluruh animasi tetap ringan.
+
+Gunakan lazy loading.
+
+Gunakan reusable component.
+
+Jangan menambah dependency yang tidak diperlukan.
+
+==================================================
+13. JANGAN UBAH
+==================================================
+
+Jangan mengubah:
+
+• routing
+• backend
+• API
+• database
+• business flow
+• struktur halaman
+• urutan section
+
+Lakukan hanya visual refinement.
+
+==================================================
+OUTPUT
+==================================================
+
+Setelah selesai berikan:
+
+1. daftar file yang berubah
+
+2. screenshot desktop
+
+3. screenshot tablet
+
+4. screenshot mobile
+
+5. hasil npm run typecheck
+
+6. hasil npm run build
+
+7. ringkasan semua improvement yang dilakukan.
