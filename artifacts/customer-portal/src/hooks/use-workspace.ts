@@ -111,6 +111,7 @@ export type WorkspaceInvoice = {
   paymentScheduleId: number | null;
   scheduleStatus: string | null;
   scheduleReference: string | null;
+  proofImageUrl: string | null;
 };
 
 export type WorkspaceBrandKit = {
@@ -311,11 +312,16 @@ export function useCreateSupportTicket(token: string) {
 export function useSubmitPaymentProof(token: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ scheduleId, reference }: { scheduleId: number; reference: string }) =>
-      customFetch<{ ok: boolean; schedule: unknown }>(`/api/public/payments/${scheduleId}/submit-proof`, {
+    mutationFn: ({ scheduleId, reference, proofImageBase64, proofImageMimeType }: {
+      scheduleId: number;
+      reference: string;
+      proofImageBase64?: string | null;
+      proofImageMimeType?: string;
+    }) =>
+      customFetch<{ ok: boolean; schedule: unknown; proofImageUrl: string | null }>(`/api/public/payments/${scheduleId}/submit-proof`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reference }),
+        body: JSON.stringify({ reference, proofImageBase64: proofImageBase64 ?? null, proofImageMimeType: proofImageMimeType ?? 'image/jpeg' }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workspace-invoices', token] });

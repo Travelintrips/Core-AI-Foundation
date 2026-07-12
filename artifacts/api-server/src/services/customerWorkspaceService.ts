@@ -741,6 +741,7 @@ export interface WorkspaceInvoice {
   paymentScheduleId: number | null;
   scheduleStatus: string | null;
   scheduleReference: string | null;
+  proofImageUrl: string | null;
 }
 
 async function listInvoicesForProjects(projects: WorkspaceProject[]): Promise<WorkspaceInvoice[]> {
@@ -752,11 +753,12 @@ async function listInvoicesForProjects(projects: WorkspaceProject[]): Promise<Wo
     .where(inArray(aiInvoicesTable.projectId, internalIds))
     .orderBy(desc(aiInvoicesTable.issuedAt));
 
-  const bySchedule = new Map<number, { dueDate: Date | null; status: string; reference: string | null }>();
+  const bySchedule = new Map<number, { dueDate: Date | null; status: string; reference: string | null; proofImageUrl: string | null }>();
   const scheduleIds = invoices.map((i) => i.paymentScheduleId).filter((v): v is number => v !== null);
   if (scheduleIds.length > 0) {
     const schedules = await db.select().from(aiPaymentScheduleTable).where(inArray(aiPaymentScheduleTable.id, scheduleIds));
-    for (const s of schedules) bySchedule.set(s.id, { dueDate: s.dueDate, status: s.status, reference: s.reference ?? null });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const s of schedules) bySchedule.set(s.id, { dueDate: s.dueDate, status: s.status, reference: s.reference ?? null, proofImageUrl: (s as any).proofImageUrl ?? null });
   }
 
   const byInternalId = new Map(projects.filter((p) => p.internalProjectId !== null).map((p) => [p.internalProjectId!, p]));
@@ -777,6 +779,7 @@ async function listInvoicesForProjects(projects: WorkspaceProject[]): Promise<Wo
       paymentScheduleId: inv.paymentScheduleId ?? null,
       scheduleStatus: sched?.status ?? null,
       scheduleReference: sched?.reference ?? null,
+      proofImageUrl: sched?.proofImageUrl ?? null,
     };
   });
 }

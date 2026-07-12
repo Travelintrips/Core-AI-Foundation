@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ArrowRight, Menu, X, Sparkles, Twitter, Linkedin, Github, Mail, Shield, FileText, Globe } from "lucide-react";
+import { ArrowRight, Menu, X, Diamond, Twitter, Linkedin, Github, Mail, Shield, FileText, Globe } from "lucide-react";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -51,26 +51,36 @@ export function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => { setMobileOpen(false); }, [location]);
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-background">
+    <div className="min-h-[100dvh] flex flex-col" style={{ background: '#060B18' }}>
       {/* ── TOP NAV ── */}
       <header
         className="sticky top-0 z-50 w-full transition-all duration-300"
         style={{
-          background: scrolled ? "rgba(250,250,247,0.95)" : "rgba(250,250,247,0.80)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          borderBottom: scrolled ? "1px solid hsl(220 18% 88%)" : "1px solid transparent",
-          boxShadow: scrolled ? "0 2px 16px rgba(15,23,42,0.06)" : "none",
+          background: scrolled
+            ? 'rgba(6,11,24,0.96)'
+            : 'rgba(6,11,24,0.78)',
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          borderBottom: scrolled ? '1px solid rgba(30,48,87,0.80)' : '1px solid transparent',
+          boxShadow: scrolled ? '0 4px 32px rgba(6,11,24,0.65), 0 1px 0 rgba(124,110,250,0.06)' : 'none',
         }}
       >
+        {/* Rainbow top accent line */}
+        <div className="absolute top-0 inset-x-0 h-px pointer-events-none"
+          style={{ background: 'linear-gradient(to right, transparent 0%, rgba(124,110,250,0.60) 25%, rgba(34,211,238,0.40) 60%, rgba(16,185,129,0.30) 85%, transparent 100%)', opacity: scrolled ? 1 : 0.5, transition: 'opacity 300ms' }} />
         <div className="container mx-auto px-4 md:px-8 h-16 flex items-center justify-between max-w-7xl">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-80">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm"
-              style={{ background: "linear-gradient(135deg, #F97316 0%, #EA580C 100%)" }}>
-              <Sparkles className="w-4 h-4 text-white" />
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg, #7C6EFA 0%, #5F52D0 100%)', boxShadow: '0 2px 12px rgba(124,110,250,0.40)' }}
+            >
+              <Diamond className="w-4 h-4 text-white" />
             </div>
-            <span className="font-display font-bold text-lg tracking-tight text-foreground">
+            <span
+              className="font-semibold text-base tracking-tight"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", color: '#F0F4FF' }}
+            >
               Creative Studio
             </span>
           </Link>
@@ -78,13 +88,30 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-6" aria-label="Main navigation">
             {NAV_LINKS.map((l) => (
-              <Link key={l.href} href={l.href} className="nav-link">{l.label}</Link>
+              <Link
+                key={l.href}
+                href={l.href}
+                className="text-sm font-medium transition-colors"
+                style={{ color: '#8B9BC4' }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = '#F0F4FF')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = '#8B9BC4')}
+              >
+                {l.label}
+              </Link>
             ))}
           </nav>
 
           {/* Desktop CTAs */}
           <div className="hidden md:flex items-center gap-3">
-            <Link href="/access" className="nav-link">Client Login</Link>
+            <Link
+              href="/access"
+              className="text-sm font-medium transition-colors"
+              style={{ color: '#8B9BC4' }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#F0F4FF')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = '#8B9BC4')}
+            >
+              Client Login
+            </Link>
             <Link href="/services" className="btn-primary text-sm py-2 px-4">
               Mulai Proyek <ArrowRight className="w-4 h-4" />
             </Link>
@@ -92,7 +119,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           {/* Mobile toggle */}
           <button
-            className="md:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-surface-1 transition-colors"
+            className="md:hidden p-2 rounded-lg transition-colors"
+            style={{ color: '#8B9BC4' }}
             onClick={() => setMobileOpen((v) => !v)}
             aria-label="Toggle menu"
             aria-expanded={mobileOpen}
@@ -109,21 +137,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.2 }}
-              className="md:hidden border-t border-border overflow-hidden"
-              style={{ background: "rgba(250,250,247,0.98)", backdropFilter: "blur(20px)" }}
+              className="md:hidden overflow-hidden"
+              style={{ background: 'rgba(6,11,24,0.98)', backdropFilter: 'blur(20px)', borderTop: '1px solid #1E3057' }}
             >
               <div className="container mx-auto px-4 py-4 flex flex-col gap-1">
                 {NAV_LINKS.map((l) => (
-                  <Link key={l.href} href={l.href}
-                    className="px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-surface-1 transition-colors">
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    className="px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                    style={{ color: '#8B9BC4' }}
+                  >
                     {l.label}
                   </Link>
                 ))}
-                <Link href="/access"
-                  className="px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-surface-1 transition-colors">
+                <Link
+                  href="/access"
+                  className="px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                  style={{ color: '#8B9BC4' }}
+                >
                   Client Login
                 </Link>
-                <div className="pt-2 border-t border-border mt-1">
+                <div className="pt-2 mt-1" style={{ borderTop: '1px solid #1E3057' }}>
                   <Link href="/services" className="btn-primary w-full justify-center">
                     Mulai Proyek <ArrowRight className="w-4 h-4" />
                   </Link>
@@ -138,7 +173,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 flex flex-col">{children}</main>
 
       {/* ── FOOTER ── */}
-      <footer className="mt-auto" style={{ background: "#0F172A", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+      <footer className="mt-auto" style={{ background: '#0A1020', borderTop: '1px solid #1E3057' }}>
         <div className="container mx-auto px-4 md:px-8 max-w-7xl">
 
           {/* Top: brand + cols */}
@@ -146,21 +181,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {/* Brand column */}
             <div className="col-span-2 md:col-span-1 space-y-4">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-md flex items-center justify-center"
-                  style={{ background: "linear-gradient(135deg,#F97316,#EA580C)" }}>
-                  <Sparkles className="w-3.5 h-3.5 text-white" />
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center"
+                  style={{ background: 'linear-gradient(135deg, #7C6EFA 0%, #5F52D0 100%)' }}
+                >
+                  <Diamond className="w-3.5 h-3.5 text-white" />
                 </div>
-                <span className="font-display font-bold text-sm text-white">Creative Studio</span>
+                <span
+                  className="font-semibold text-sm"
+                  style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", color: '#F0F4FF' }}
+                >
+                  Creative Studio
+                </span>
               </div>
-              <p className="text-xs leading-relaxed" style={{ color: "#94A3B8" }}>
+              <p className="text-xs leading-relaxed" style={{ color: '#4F6494' }}>
                 Platform AI Enterprise terdepan untuk layanan profesional bisnis di Indonesia.
               </p>
               <div className="flex flex-col gap-1.5">
                 {TRUST_BADGES.map((b) => {
                   const Icon = b.icon;
                   return (
-                    <div key={b.label} className="flex items-center gap-1.5 text-xs" style={{ color: "#64748B" }}>
-                      <Icon className="w-3 h-3 text-orange-400" />
+                    <div key={b.label} className="flex items-center gap-1.5 text-xs" style={{ color: '#4F6494' }}>
+                      <Icon className="w-3 h-3" style={{ color: '#7C6EFA' }} />
                       {b.label}
                     </div>
                   );
@@ -171,15 +213,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {/* Footer link columns */}
             {FOOTER_COLS.map((col) => (
               <div key={col.heading}>
-                <h4 className="text-xs font-semibold uppercase tracking-wider mb-4" style={{ color: "#94A3B8" }}>
+                <h4 className="text-xs font-semibold uppercase tracking-wider mb-4" style={{ color: '#8B9BC4' }}>
                   {col.heading}
                 </h4>
                 <ul className="space-y-2.5">
                   {col.links.map((link) => (
                     <li key={link}>
-                      <span className="text-xs cursor-pointer hover:text-white transition-colors" style={{ color: "#64748B" }}>
+                      <a
+                        href="#"
+                        className="text-xs transition-colors"
+                        style={{ color: '#4F6494', textDecoration: 'none' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = '#8B9BC4')}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = '#4F6494')}
+                      >
                         {link}
-                      </span>
+                      </a>
                     </li>
                   ))}
                 </ul>
@@ -188,21 +236,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Newsletter strip */}
-          <div className="py-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8"
-            style={{ borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+          <div
+            className="py-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8"
+            style={{ borderTop: '1px solid #1E3057', borderBottom: '1px solid #1E3057' }}
+          >
             <div className="shrink-0">
-              <div className="text-xs font-semibold mb-0.5 text-white">AI Insight Newsletter</div>
-              <div className="text-xs" style={{ color: "#64748B" }}>Update terbaru AI enterprise, tips, dan case study</div>
+              <div className="text-xs font-semibold mb-0.5" style={{ color: '#F0F4FF' }}>AI Insight Newsletter</div>
+              <div className="text-xs" style={{ color: '#4F6494' }}>Update terbaru AI enterprise, tips, dan case study</div>
             </div>
             <div className="flex gap-2 flex-1 max-w-sm">
               <input
                 type="email"
                 placeholder="email@perusahaan.com"
-                className="flex-1 text-xs rounded-lg px-3 py-2 outline-none text-white"
-                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)" }}
+                className="flex-1 text-xs rounded-lg px-3 py-2 outline-none"
+                style={{
+                  background: 'rgba(240,244,255,0.04)',
+                  border: '1px solid #1E3057',
+                  color: '#F0F4FF',
+                }}
               />
-              <button className="px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap"
-                style={{ background: "linear-gradient(135deg,#F97316,#EA580C)", color: "#fff" }}>
+              <button
+                className="px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap"
+                style={{ background: 'linear-gradient(135deg, #7C6EFA 0%, #5F52D0 100%)', color: '#fff' }}
+              >
                 Subscribe
               </button>
             </div>
@@ -210,21 +266,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           {/* Bottom bar */}
           <div className="py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <p className="text-xs" style={{ color: "#64748B" }}>
+            <p className="text-xs" style={{ color: '#4F6494' }}>
               © {new Date().getFullYear()} Creative Studio · All rights reserved · PT Creative Studio Indonesia
             </p>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-3">
                 {[Twitter, Linkedin, Github, Mail].map((Icon, i) => (
-                  <button key={i} className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/10"
-                    style={{ color: "#64748B" }}>
+                  <button
+                    key={i}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
+                    style={{ color: '#4F6494' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(240,244,255,0.06)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
                     <Icon className="w-3.5 h-3.5" />
                   </button>
                 ))}
               </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                style={{ background: "rgba(16,185,129,0.12)", color: "#10B981", border: "1px solid rgba(16,185,129,0.20)" }}>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                style={{ background: 'rgba(16,185,129,0.10)', color: '#10B981', border: '1px solid rgba(16,185,129,0.20)' }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#10B981' }} />
                 Sistem Online
               </div>
             </div>

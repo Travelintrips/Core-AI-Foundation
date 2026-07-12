@@ -1,0 +1,526 @@
+Kita memasuki milestone baru.
+
+Creative Studio Customer Portal sudah selesai secara arsitektur.
+
+Berdasarkan audit terakhir:
+
+- Landing Page selesai
+- Marketplace selesai
+- Service Detail selesai
+- Brief Wizard selesai
+- AI Analysis selesai
+- Commercial selesai
+- Workspace selesai
+- Dashboard selesai
+- Billing selesai
+- Profile selesai
+
+Artinya roadmap utama sudah selesai.
+
+==================================================
+
+MISI BARU
+
+==================================================
+
+Mulai sekarang JANGAN fokus menambah halaman baru.
+
+JANGAN fokus membuat fitur baru.
+
+JANGAN mengubah backend.
+
+JANGAN mengubah database.
+
+JANGAN mengubah API.
+
+JANGAN mengubah business flow.
+
+Saya ingin Creative Studio naik kelas menjadi AI Enterprise Platform kelas dunia.
+
+Mulai sekarang fokus hanya pada:
+
+PREMIUM UX
+
+PREMIUM UI
+
+MICRO INTERACTION
+
+ENTERPRISE EXPERIENCE
+
+==================================================
+
+PERAN ANDA
+
+==================================================
+
+Anda bukan lagi programmer.
+
+Anda sekarang bertindak sebagai:
+
+• Principal Product Designer
+
+• Creative Director
+
+• UX Architect
+
+• Enterprise SaaS Consultant
+
+• Product Growth Specialist
+
+Anda harus berpikir seperti tim desain:
+
+Stripe
+
+Linear
+
+OpenAI
+
+Vercel
+
+Notion
+
+Canva Enterprise
+
+Framer
+
+Bukan seperti dashboard admin.
+
+==================================================
+
+ATURAN
+
+==================================================
+
+Jangan membuat halaman baru.
+
+Gunakan halaman yang sudah ada.
+
+Lakukan refinement.
+
+Jangan mengubah struktur project.
+
+Jangan mengubah route.
+
+Jangan mengubah API.
+
+Jangan mengubah database.
+
+==================================================
+
+TARGET
+
+==================================================
+
+Saya ingin user berkata:
+
+"Wah ini benar-benar platform AI Enterprise."
+
+Bukan:
+
+"Ini aplikasi CRUD."
+
+==================================================
+PHASE V2.1
+
+LANDING POLISH
+==================================================
+
+Audit ulang landing.
+
+Perbaiki semua detail visual.
+
+Contoh:
+
+Hero
+
+Typography
+
+Spacing
+
+Card
+
+Gradient
+
+Glass effect
+
+Icon
+
+Motion
+
+CTA
+
+Footer
+
+Partner Logo
+
+Trust Badge
+
+Background
+
+Glow
+
+Noise
+
+Mesh
+
+Responsiveness
+
+Accessibility
+
+Loading
+
+Animation
+
+==================================================
+PHASE V2.2
+
+MARKETPLACE POLISH
+==================================================
+
+Perbaiki Marketplace.
+
+Saya ingin tampil seperti:
+
+OpenAI GPT Store
+
++
+
+Apple Store
+
++
+
+Canva Template
+
+Tambahkan:
+
+Featured hierarchy
+
+Better hover
+
+Quick preview
+
+Better filters
+
+Better recommendation
+
+Recently viewed
+
+Recently purchased
+
+AI recommendation
+
+Smart search UX
+
+Card hierarchy
+
+Micro interaction
+
+==================================================
+PHASE V2.3
+
+DETAIL PAGE POLISH
+==================================================
+
+Perbaiki:
+
+Package selector
+
+Quote summary
+
+Sticky panel
+
+Preview gallery
+
+Portfolio
+
+FAQ
+
+Workflow
+
+Related service
+
+CTA
+
+==================================================
+PHASE V2.4
+
+WORKSPACE EXPERIENCE
+==================================================
+
+Workspace sekarang masih terasa dashboard.
+
+Saya ingin terasa seperti:
+
+Linear
+
+ClickUp
+
+Notion
+
+Monday
+
+Tambah:
+
+Live activity
+
+Animated timeline
+
+AI working indicator
+
+Progress animation
+
+Status pulse
+
+Recent AI action
+
+Workspace insight
+
+==================================================
+PHASE V2.5
+
+AI WORKFORCE EXPERIENCE
+==================================================
+
+Ini adalah pembeda terbesar.
+
+Saya tidak ingin customer merasa membeli jasa.
+
+Saya ingin customer merasa memiliki tim AI.
+
+Tambahkan section di berbagai halaman.
+
+Meet Your AI Workforce
+
+Creative Director AI
+
+Finance Analyst AI
+
+Legal Advisor AI
+
+Marketing Strategist AI
+
+Supply Chain Planner AI
+
+Executive Assistant AI
+
+Setiap AI memiliki:
+
+Status
+
+Working
+
+Thinking
+
+Review
+
+Completed
+
+ETA
+
+Current Task
+
+Confidence
+
+Skill
+
+Model
+
+Jangan fake.
+
+Gunakan data yang ada jika tersedia.
+
+Jika belum tersedia gunakan placeholder yang jelas diberi label demo.
+
+==================================================
+PHASE V2.6
+
+MICRO INTERACTION
+==================================================
+
+Audit seluruh aplikasi.
+
+Tambahkan:
+
+Hover
+
+Ripple
+
+Fade
+
+Slide
+
+Count Up
+
+Button Press
+
+Skeleton
+
+Loading
+
+Success
+
+Error
+
+Empty State
+
+Section Reveal
+
+Card Lift
+
+Floating Glow
+
+Smooth Transition
+
+Gunakan Framer Motion bila sudah tersedia.
+
+Jangan berlebihan.
+
+==================================================
+PHASE V2.7
+
+TRUST
+==================================================
+
+Tambahkan:
+
+Enterprise Badge
+
+Security
+
+Privacy
+
+Compliance
+
+Commercial Ready
+
+Verified
+
+Human Reviewed
+
+ISO Placeholder
+
+Audit Ready
+
+==================================================
+PHASE V2.8
+
+PERFORMANCE
+==================================================
+
+Audit:
+
+Lazy loading
+
+Image optimization
+
+Motion performance
+
+Bundle
+
+Code splitting
+
+Accessibility
+
+Keyboard navigation
+
+Contrast
+
+CLS
+
+LCP
+
+Loading
+
+==================================================
+IMPLEMENTASI
+==================================================
+
+Kerjakan satu fase demi satu fase.
+
+Setelah selesai setiap fase:
+
+1.
+
+Jalankan:
+
+npm run typecheck
+
+2.
+
+Jalankan:
+
+npm run build
+
+3.
+
+Perbaiki error akibat perubahan.
+
+4.
+
+Berikan:
+
+- daftar file berubah
+
+- screenshot desktop
+
+- screenshot tablet
+
+- screenshot mobile
+
+- UX improvement yang dilakukan
+
+- alasan setiap perubahan
+
+==================================================
+YANG DILARANG
+==================================================
+
+Jangan membuat redesign total.
+
+Jangan mengganti business flow.
+
+Jangan mengubah API.
+
+Jangan mengubah backend.
+
+Jangan mengubah database.
+
+Jangan menghapus fitur.
+
+Jangan membuat UI hanya demi terlihat keren.
+
+Setiap perubahan harus meningkatkan:
+
+- usability
+- trust
+- conversion
+- enterprise feel
+- consistency
+
+==================================================
+GOAL AKHIR
+==================================================
+
+Saya ingin Creative Studio memiliki kualitas visual dan UX setara dengan:
+
+Stripe
+
+Linear
+
+OpenAI
+
+Vercel
+
+Canva Enterprise
+
+Notion
+
+Framer
+
+Gunakan Design Master yang sudah ada sebagai acuan.
+
+Kerjakan secara bertahap.
+
+Jangan berhenti untuk bertanya.
+
+Audit halaman yang sedang dikerjakan, implementasikan refinement, verifikasi hasil, lalu laporkan sebelum lanjut ke fase berikutnya.

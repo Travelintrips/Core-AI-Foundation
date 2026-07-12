@@ -31,6 +31,8 @@ description: Files in this project were imported from GitHub with two versions c
 - `lib/api-spec/openapi.yaml` — removed duplicate YAML keys in 4 dispatcher paths + DispatcherStatus schema (yaml parser throws "Map keys must be unique")
 - `artifacts/customer-portal/src/App.tsx` — removed duplicate static `import X from ...` block that duplicated the earlier `lazy(() => import(...))` consts, and a duplicate `<Switch>` block glued inside `NotFound()`
 - `artifacts/api-server/src/services/aiExecutionService.ts` — file ended mid-function (`Unexpected end of file`); removed a second concatenated copy of the `switch (slug)` dispatch block inside the catch clause of `executeAI`
+- `artifacts/customer-portal/src/App.tsx` — old direct-import block (v1) concatenated after new lazy-import block (v2); also a stray `<Switch>...</Switch>` from an old Router() spliced mid-`NotFound()` after its closing `</div>`. Kept lazy/Suspense version, merged the one route (`workspace/:token/settings`) that only existed in v1 into the real `Router()`.
+- `artifacts/api-server/src/services/aiExecutionService.ts` — `executeAI`'s catch block had an old duplicate unreachable `switch(slug)` block spliced in right after `throw err;`, eating the catch's closing brace and causing "Unexpected end of file". Deleted the duplicate switch, kept the catch block's `throw err; }`.
 
 **Orval codegen note:** `orval.config.ts` could not be loaded by jiti in this environment; replaced with `orval.config.mjs` (ESM with `import.meta.url`). Codegen script in `lib/api-spec/package.json` now points to `.mjs`.
 
