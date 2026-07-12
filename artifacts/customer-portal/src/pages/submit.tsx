@@ -175,7 +175,7 @@ export default function SubmitPage() {
 
   const slideVariants = {
     enter: (dir: number) => ({ opacity: 0, x: dir > 0 ? 32 : -32 }),
-    center: { opacity: 1, x: 0, transition: { duration: 0.35, ease: [0.25, 0.1, 0.25, 1] } },
+    center: { opacity: 1, x: 0, transition: { duration: 0.35, ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number] } },
     exit:  (dir: number) => ({ opacity: 0, x: dir > 0 ? -32 : 32, transition: { duration: 0.25 } }),
   };
 
