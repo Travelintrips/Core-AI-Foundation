@@ -45,6 +45,23 @@ export const aiPortfolioAssetsTable = appSchema.table("ai_portfolio_assets", {
   downloadable: boolean("downloadable").notNull().default(false),
   watermarkRequired: boolean("watermark_required").notNull().default(false),
   metadataJson: jsonb("metadata_json").$type<Record<string, unknown>>(),
+
+  // ── Sprint P2.1.1 — Asset lifecycle / background archiving pipeline ─────────
+  // Overall lifecycle: queued | generating | generated | archiving | archived |
+  //                     optimized | published
+  // Failure states:     archive_failed | optimize_failed | thumbnail_failed
+  status: text("status").notNull().default("generated"),
+  sourceUrl: text("source_url"), // original Replicate delivery URL (kept for retry/audit)
+  archiveStatus: text("archive_status").notNull().default("pending"), // pending|running|completed|failed
+  archiveStartedAt: timestamp("archive_started_at", { withTimezone: true }),
+  archiveCompletedAt: timestamp("archive_completed_at", { withTimezone: true }),
+  archiveAttempts: integer("archive_attempts").notNull().default(0),
+  archiveError: text("archive_error"),
+  storageProvider: text("storage_provider"), // e.g. "gcs"
+  storageBucket: text("storage_bucket"),
+  thumbnailStatus: text("thumbnail_status").notNull().default("pending"), // pending|running|completed|failed
+  optimizationStatus: text("optimization_status").notNull().default("pending"), // pending|running|completed|failed
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -12,13 +12,16 @@
  */
 
 import { eq, and, inArray, sql } from "drizzle-orm";
-import { db, aiJobsTable, aiWorkersTable, aiModelsTable, aiProvidersTable } from "@workspace/db";
+import { db, aiJobsTable, aiWorkersTable, aiModelsTable, aiProvidersTable, aiPortfolioAssetsTable } from "@workspace/db";
 import type { AiJob, AiWorker } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
 import { executeAI } from "./aiExecutionService.js";
 import { routeToModel } from "./aiModelRouter.js";
 import { getProviderApiKey } from "./aiSecretService.js";
+import { archiveReplicateAsset, optimizeArchivedAsset, generateAssetThumbnail } from "./portfolioStorageService.js";
+import { maybeFinalizePortfolioPublish } from "./demoPortfolioGeneratorService.js";
+import { logger } from "../lib/logger.js";
 
 // ── Real AI execution helpers ───────────────────────────────────────────────
 
@@ -141,6 +144,150 @@ async function executeImageJob(job: AiJob): Promise<Record<string, unknown>> {
   };
 }
 
+// ── Sprint P2.1.1 — Asset lifecycle background job handlers ───────────────────
+// These run on the dedicated "storage_worker" so archiving/optimizing/
+// thumbnailing never blocks (or is blocked by) image generation.
+
+interface ArchiveAssetPayload {
+  portfolioAssetId: number;
+  sourceUrl: string;
+  brandSlug: string;
+  role: string;
+}
+
+/** archive_asset — download the Replicate delivery URL and persist it permanently. */
+async function executeArchiveAssetJob(job: AiJob): Promise<Record<string, unknown>> {
+  const payload = (job.payloadJson as unknown as ArchiveAssetPayload) ?? ({} as ArchiveAssetPayload);
+  const { portfolioAssetId, sourceUrl, brandSlug, role } = payload;
+  if (!portfolioAssetId || !sourceUrl) {
+    throw new Error("archive_asset job payload missing portfolioAssetId/sourceUrl");
+  }
+
+  await db.update(aiPortfolioAssetsTable)
+    .set({ status: "archiving", archiveStatus: "running", archiveStartedAt: new Date() })
+    .where(eq(aiPortfolioAssetsTable.id, portfolioAssetId));
+  publishSafe({ eventType: "asset.archiving", sourceModule: "asset-lifecycle", sourceId: String(portfolioAssetId), payload: { portfolioAssetId } });
+
+  try {
+    const result = await archiveReplicateAsset({ sourceUrl, brandSlug, role });
+
+    await db.update(aiPortfolioAssetsTable)
+      .set({
+        status: "archived",
+        archiveStatus: "completed",
+        archiveCompletedAt: new Date(),
+        archiveError: null,
+        thumbnailUrl: result.permanentUrl,
+        previewUrl: result.permanentUrl,
+        storagePath: result.storagePath,
+        storageProvider: result.storageProvider,
+        storageBucket: result.storageBucket,
+      })
+      .where(eq(aiPortfolioAssetsTable.id, portfolioAssetId));
+
+    publishSafe({
+      eventType: "asset.archived", sourceModule: "asset-lifecycle", sourceId: String(portfolioAssetId),
+      payload: { portfolioAssetId, brandSlug, role, permanentUrl: result.permanentUrl, storagePath: result.storagePath },
+    });
+
+    return { portfolioAssetId, permanentUrl: result.permanentUrl, storagePath: result.storagePath };
+  } catch (err) {
+    const isFinalAttempt = job.retryCount >= job.maxRetry;
+    await db.update(aiPortfolioAssetsTable)
+      .set({
+        archiveStatus: isFinalAttempt ? "failed" : "pending",
+        status: isFinalAttempt ? "archive_failed" : "generated",
+        archiveAttempts: sql`${aiPortfolioAssetsTable.archiveAttempts} + 1`,
+        archiveError: err instanceof Error ? err.message : String(err),
+      })
+      .where(eq(aiPortfolioAssetsTable.id, portfolioAssetId));
+
+    if (isFinalAttempt) {
+      publishSafe({ eventType: "asset.archive_failed", sourceModule: "asset-lifecycle", sourceId: String(portfolioAssetId), payload: { portfolioAssetId, error: String(err) } });
+      await maybeFinalizePortfolioPublish(portfolioAssetId).catch(() => undefined);
+    }
+    throw err;
+  }
+}
+
+interface OptimizeAssetPayload {
+  portfolioAssetId: number;
+  storagePath: string;
+  brandSlug: string;
+  role: string;
+}
+
+/** optimize_asset — re-encode the archived original into a smaller WebP master. */
+async function executeOptimizeAssetJob(job: AiJob): Promise<Record<string, unknown>> {
+  const payload = (job.payloadJson as unknown as OptimizeAssetPayload) ?? ({} as OptimizeAssetPayload);
+  const { portfolioAssetId, storagePath, brandSlug, role } = payload;
+  if (!portfolioAssetId || !storagePath) {
+    throw new Error("optimize_asset job payload missing portfolioAssetId/storagePath");
+  }
+
+  await db.update(aiPortfolioAssetsTable).set({ optimizationStatus: "running" }).where(eq(aiPortfolioAssetsTable.id, portfolioAssetId));
+
+  try {
+    const result = await optimizeArchivedAsset({ sourceStoragePath: storagePath, brandSlug, role });
+
+    await db.update(aiPortfolioAssetsTable)
+      .set({
+        status: "optimized",
+        optimizationStatus: "completed",
+        previewUrl: result.permanentUrl,
+        width: result.width,
+        height: result.height,
+      })
+      .where(eq(aiPortfolioAssetsTable.id, portfolioAssetId));
+
+    publishSafe({ eventType: "asset.optimized", sourceModule: "asset-lifecycle", sourceId: String(portfolioAssetId), payload: { portfolioAssetId, permanentUrl: result.permanentUrl } });
+    await maybeFinalizePortfolioPublish(portfolioAssetId).catch(() => undefined);
+    return { portfolioAssetId, permanentUrl: result.permanentUrl };
+  } catch (err) {
+    const isFinalAttempt = job.retryCount >= job.maxRetry;
+    if (isFinalAttempt) {
+      await db.update(aiPortfolioAssetsTable).set({ optimizationStatus: "failed" }).where(eq(aiPortfolioAssetsTable.id, portfolioAssetId));
+    }
+    throw err;
+  }
+}
+
+interface ThumbnailPayload {
+  portfolioAssetId: number;
+  storagePath: string;
+  brandSlug: string;
+  role: string;
+}
+
+/** generate_thumbnail — create a small gallery-grid thumbnail from the archived original. */
+async function executeGenerateThumbnailJob(job: AiJob): Promise<Record<string, unknown>> {
+  const payload = (job.payloadJson as unknown as ThumbnailPayload) ?? ({} as ThumbnailPayload);
+  const { portfolioAssetId, storagePath, brandSlug, role } = payload;
+  if (!portfolioAssetId || !storagePath) {
+    throw new Error("generate_thumbnail job payload missing portfolioAssetId/storagePath");
+  }
+
+  await db.update(aiPortfolioAssetsTable).set({ thumbnailStatus: "running" }).where(eq(aiPortfolioAssetsTable.id, portfolioAssetId));
+
+  try {
+    const result = await generateAssetThumbnail({ sourceStoragePath: storagePath, brandSlug, role });
+
+    await db.update(aiPortfolioAssetsTable)
+      .set({ thumbnailStatus: "completed", thumbnailUrl: result.permanentUrl })
+      .where(eq(aiPortfolioAssetsTable.id, portfolioAssetId));
+
+    publishSafe({ eventType: "asset.thumbnail_created", sourceModule: "asset-lifecycle", sourceId: String(portfolioAssetId), payload: { portfolioAssetId, permanentUrl: result.permanentUrl } });
+    return { portfolioAssetId, permanentUrl: result.permanentUrl };
+  } catch (err) {
+    const isFinalAttempt = job.retryCount >= job.maxRetry;
+    if (isFinalAttempt) {
+      await db.update(aiPortfolioAssetsTable).set({ thumbnailStatus: "failed" }).where(eq(aiPortfolioAssetsTable.id, portfolioAssetId));
+      publishSafe({ eventType: "asset.thumbnail_created", sourceModule: "asset-lifecycle", sourceId: String(portfolioAssetId), payload: { portfolioAssetId, failed: true } });
+    }
+    throw err;
+  }
+}
+
 // ── Retry delay helpers ───────────────────────────────────────────────────────
 
 function exponentialBackoffMs(retryCount: number): number {
@@ -254,6 +401,7 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
  * Extend this switch to add new job types as the platform grows.
  */
 export async function executeJob(job: AiJob, workerId: number): Promise<Record<string, unknown>> {
+  logger.info({ jobId: job.id, jobType: job.jobType, jobTypeJson: JSON.stringify(job.jobType) }, "[executeJob] dispatching");
   switch (job.jobType) {
     case "llm_inference":
       return executeTextJob(job, "LLM inference");
@@ -272,6 +420,16 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
 
     case "image_qc":
       return { message: "Image QC dispatched", jobId: job.id };
+
+    // ── Sprint P2.1.1 — background asset lifecycle jobs ──────────────────────
+    case "archive_asset":
+      return executeArchiveAssetJob(job);
+
+    case "optimize_asset":
+      return executeOptimizeAssetJob(job);
+
+    case "generate_thumbnail":
+      return executeGenerateThumbnailJob(job);
 
     case "pdf_export":
       return { message: "PDF export dispatched", jobId: job.id };

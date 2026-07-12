@@ -108,5 +108,6 @@ router.use(referralsRouter);
 router.use(affiliatesRouter);
 router.use(customerHealthRouter);
 router.use(commercialAnalyticsRouter);
+router.use(storageRouter);
 
 export default router;

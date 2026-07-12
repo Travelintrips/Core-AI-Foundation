@@ -252,10 +252,84 @@ export async function cancelBatch(batchId: number): Promise<void> {
   await logAudit("portfolio-generator", "batch_cancelled", String(batchId), "ai_portfolio_generation_batch", "success");
 }
 
+/** Terminal per-asset states — archiving has finished one way or another. */
+const ASSET_TERMINAL_STATES = ["archived", "optimized", "archive_failed"];
+
+/**
+ * Rebuild a portfolio's coverImage/galleryJson from its ai_portfolio_assets rows
+ * — the ONLY source of permanent storage URLs. Never writes a Replicate URL.
+ */
+async function rebuildGalleryFromAssets(portfolioId: number): Promise<{ coverImage: string | null; galleryJson: Array<Record<string, unknown>> }> {
+  const assets = await db
+    .select()
+    .from(aiPortfolioAssetsTable)
+    .where(eq(aiPortfolioAssetsTable.portfolioId, portfolioId))
+    .orderBy(aiPortfolioAssetsTable.displayOrder);
+
+  const usable = assets.filter((a) => a.status !== "archive_failed" && a.previewUrl && !a.previewUrl.includes("replicate.delivery"));
+  const mainMockup = usable.find((a) => a.assetRole === "main_brand_mockup") ?? usable[0];
+
+  return {
+    coverImage: mainMockup?.previewUrl ?? null,
+    galleryJson: usable.map((a) => ({ role: a.assetRole, label: a.title, url: a.previewUrl, thumbnailUrl: a.thumbnailUrl, altText: a.altText })),
+  };
+}
+
+/**
+ * Called after every archive_asset / optimize_asset job completion (success or
+ * terminal failure). If ALL assets for the portfolio have reached a terminal
+ * archiving state, rebuilds the gallery from permanent URLs and — for
+ * portfolios that were auto-publish-eligible — flips publishStatus to
+ * "published". This guarantees the public Gallery NEVER serves a Replicate
+ * temporary URL, even though generation and archiving are decoupled.
+ */
+export async function maybeFinalizePortfolioPublish(portfolioAssetId: number): Promise<void> {
+  const [asset] = await db.select({ portfolioId: aiPortfolioAssetsTable.portfolioId })
+    .from(aiPortfolioAssetsTable).where(eq(aiPortfolioAssetsTable.id, portfolioAssetId)).limit(1);
+  if (!asset) return;
+  const portfolioId = asset.portfolioId;
+
+  const siblings = await db.select({ status: aiPortfolioAssetsTable.status })
+    .from(aiPortfolioAssetsTable).where(eq(aiPortfolioAssetsTable.portfolioId, portfolioId));
+  const allTerminal = siblings.every((s) => ASSET_TERMINAL_STATES.includes(s.status));
+  if (!allTerminal) return;
+
+  const [portfolio] = await db.select().from(aiServicePortfoliosTable).where(eq(aiServicePortfoliosTable.id, portfolioId)).limit(1);
+  if (!portfolio) return;
+
+  const { coverImage, galleryJson } = await rebuildGalleryFromAssets(portfolioId);
+  const meta = (portfolio.metadataJson as Record<string, unknown> | null) ?? {};
+  const shouldAutoPublish = meta["pendingAutoPublish"] === true && portfolio.publishStatus === "pending_archive";
+
+  await db.update(aiServicePortfoliosTable)
+    .set({
+      coverImage, galleryJson,
+      publishStatus: shouldAutoPublish ? "published" : portfolio.publishStatus,
+      status: shouldAutoPublish ? "published" : portfolio.status,
+      updatedAt: new Date(),
+    } as Record<string, unknown>)
+    .where(eq(aiServicePortfoliosTable.id, portfolioId));
+
+  await logAudit("portfolio-generator", "portfolio_archiving_finalized", String(portfolioId), "ai_service_portfolio", "success", { autoPublished: shouldAutoPublish });
+
+  if (shouldAutoPublish) {
+    await publishSafe({ eventType: "portfolio_approved", sourceModule: "portfolio-generator", sourceId: String(portfolioId), payload: { autoPublished: true } });
+  }
+}
+
 export async function approvePortfolio(portfolioId: number, approvedBy?: string) {
+  const assets = await db.select({ status: aiPortfolioAssetsTable.status })
+    .from(aiPortfolioAssetsTable).where(eq(aiPortfolioAssetsTable.portfolioId, portfolioId));
+  const stillArchiving = assets.some((a) => !ASSET_TERMINAL_STATES.includes(a.status));
+  if (stillArchiving) {
+    throw new Error("Cannot approve — one or more assets are still archiving. Wait for archiving to finish or retry failed assets first.");
+  }
+
+  const { coverImage, galleryJson } = await rebuildGalleryFromAssets(portfolioId);
+
   const [row] = await db
     .update(aiServicePortfoliosTable)
-    .set({ publishStatus: "published", status: "published", updatedAt: new Date() } as Record<string, unknown>)
+    .set({ publishStatus: "published", status: "published", coverImage, galleryJson, updatedAt: new Date() } as Record<string, unknown>)
     .where(eq(aiServicePortfoliosTable.id, portfolioId))
     .returning();
 
@@ -481,14 +555,22 @@ Return ONLY JSON (no markdown):
   if (!serviceId) throw new Error("No active service for portfolio");
 
   const portfolioCode = `DEMO-${config.industry.toUpperCase().replace(/\s+/g, "-")}-${Date.now().toString(36).toUpperCase()}`;
-  const slug = `${config.industry.toLowerCase()}-${brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`.substring(0, 100);
+  const brandSlug = brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-").substring(0, 40);
+  const slug = `${config.industry.toLowerCase()}-${brandSlug}-${Date.now().toString(36)}`.substring(0, 100);
 
-  const mainMockup = completedAssets.find((a) => a.role === "main_brand_mockup") ?? completedAssets[0];
-  const galleryJson = completedAssets.map((a) => ({ role: a.role, label: a.label, url: a.imageUrl, altText: `${a.label} — ${brandName} (${config.industry}, ${config.style} style, AI Demo Project)` }));
+  // Insert immediately with the Replicate URLs — they are ONLY ever a transient
+  // placeholder inside this one DB row until the background archive_asset jobs
+  // finish and maybeFinalizePortfolioPublish() rewrites coverImage/galleryJson
+  // with permanent storage URLs. The Gallery/public API MUST NEVER serve this
+  // row while publishStatus is "published" and assets aren't archived yet —
+  // that's why auto-publish-eligible portfolios get the interim
+  // "pending_archive" status instead of "published" here.
+  const completedForGallery = completedAssets;
+  const mainMockup = completedForGallery.find((a) => a.role === "main_brand_mockup") ?? completedForGallery[0];
 
   const publishStatus = !allRequiredAssetsPresent
     ? "review" // any failed asset always forces manual review, regardless of autoPublish
-    : canAutoPublish ? "published" : "review";
+    : canAutoPublish ? "pending_archive" : "review";
 
   const insertValues: Record<string, unknown> = {
     serviceId,
@@ -504,10 +586,12 @@ Return ONLY JSON (no markdown):
     portfolioCode, slug,
     isDemo: true, trademarkRisk,
     qcScore: String(avgQcScore),
+    // Transient placeholder — overwritten with permanent storage URLs by
+    // maybeFinalizePortfolioPublish() once archiving completes.
     coverImage: mainMockup?.imageUrl ?? null,
-    galleryJson,
+    galleryJson: completedForGallery.map((a) => ({ role: a.role, label: a.label, url: a.imageUrl, altText: `${a.label} — ${brandName} (${config.industry}, ${config.style} style, AI Demo Project)` })),
     publishStatus,
-    status: publishStatus === "published" ? "published" : "draft",
+    status: "draft",
     featured: false,
     deliverablesJson: Array.isArray(concept["deliverables"]) ? concept["deliverables"] : generatedAssets.map((a) => a.label),
     toolsUsedJson: ["Brand Strategist AI", "Creative Director AI", "Copywriter AI", "Image Designer AI (FLUX.1)", "Image QC AI"],
@@ -518,23 +602,29 @@ Return ONLY JSON (no markdown):
       disclaimer: "AI Demo Project — Conceptual example only. Not a real client.",
       synthetic: true,
       brandName,
+      brandSlug,
       tagline: concept["tagline"] ?? null,
       copy,
       creativeDirection,
       duplicateNameCheck: duplicateNameUnresolved ? "unresolved_after_retries" : "ok",
       assetSummary: { requested: assetRoles.length, completed: completedAssets.length, failed: failedAssets.length },
+      pendingAutoPublish: publishStatus === "pending_archive",
     },
     completedProjects: 0, displayOrder: 0,
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [portfolio] = await db.insert(aiServicePortfoliosTable).values(insertValues as any).returning();
+  const portfolioId = portfolio!.id;
 
-  // Insert structured asset registry rows (both completed and failed, for admin visibility)
+  // Insert structured asset registry rows immediately — generation is DONE the
+  // moment these rows exist. Archiving/optimizing/thumbnailing happen entirely
+  // in the background via the existing job queue (Sprint P2.1.1); this insert
+  // never waits on storage I/O.
   if (generatedAssets.length) {
-    await db.insert(aiPortfolioAssetsTable).values(
+    const insertedAssets = await db.insert(aiPortfolioAssetsTable).values(
       generatedAssets.map((a, i) => ({
-        portfolioId: portfolio!.id,
+        portfolioId,
         assetType: "image",
         assetRole: a.role,
         title: a.label,
@@ -545,6 +635,7 @@ Return ONLY JSON (no markdown):
         // re-hosted in object storage; null only if persistence failed and imageUrl still
         // points at the temporary provider URL (see sourceProviderUrl in metadata for provenance).
         storagePath: a.sourceProviderUrl && a.imageUrl !== a.sourceProviderUrl ? a.imageUrl : null,
+        storagePath: null, // set once archive_asset job completes
         mimeType: a.status === "completed" ? "image/webp" : null,
         displayOrder: i,
         downloadable: false,
@@ -554,8 +645,28 @@ Return ONLY JSON (no markdown):
           prompt: a.prompt, sourceProviderUrl: a.sourceProviderUrl ?? null,
           persisted: Boolean(a.sourceProviderUrl && a.imageUrl !== a.sourceProviderUrl),
         },
+        status: a.status === "completed" ? "generated" : "archive_failed",
+        sourceUrl: a.imageUrl,
+        metadataJson: { status: a.status, qcScore: a.qcScore, qcNotes: a.qcNotes, cost: a.cost, retries: a.retries, prompt: a.prompt },
       })),
-    );
+    ).returning({ id: aiPortfolioAssetsTable.id, assetRole: aiPortfolioAssetsTable.assetRole });
+
+    // Publish asset.generated for every successfully generated asset — the
+    // existing event bus + create_job subscription (seeded once, see
+    // seedAssetLifecycleSubscriptions) enqueues the archive_asset job. No new
+    // orchestration code: this reuses the Queue/Dispatcher/Worker
+    // Cluster/Event Bus exactly as they exist today.
+    for (const a of generatedAssets) {
+      if (a.status !== "completed" || !a.imageUrl) continue;
+      const row = insertedAssets.find((r) => r.assetRole === a.role);
+      if (!row) continue;
+      publishSafe({
+        eventType: "asset.generated",
+        sourceModule: "portfolio-generator",
+        sourceId: String(row.id),
+        payload: { portfolioAssetId: row.id, sourceUrl: a.imageUrl, brandSlug, role: a.role, portfolioId },
+      });
+    }
   }
 
   await logAudit(

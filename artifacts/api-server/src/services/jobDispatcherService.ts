@@ -92,6 +92,14 @@ const DISPATCHER_WORKERS: WorkerConfig[] = [
     ],
     maxConcurrentJobs: 3,
   },
+  {
+    // Sprint P2.1.1 — dedicated worker for background archiving / optimization /
+    // thumbnailing so these never wait behind (or compete with) image generation.
+    suffix:            "3",
+    workerType:        "storage_worker",
+    capabilities:      WORKER_TYPE_CAPABILITIES["storage_worker"]!,
+    maxConcurrentJobs: 4,
+  },
 ];
 
 // ── Module state ──────────────────────────────────────────────────────────────
