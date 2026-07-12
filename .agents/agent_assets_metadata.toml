@@ -18,3 +18,9 @@ id = "5mGQhfC7-MVulweOKGOBY"
 uri = "file://attached_assets/kopi-logo-2.png"
 type = "image"
 title = "Kopi Nusantara Logo — Variasi 2"
+
+[[outputs]]
+id = "bELvdlcHWqyH44j1LiKYB"
+uri = "file://attached_assets/DESIGN_MASTER_CreativeStudio.md"
+type = "text"
+title = "Design Master — Creative Studio AI Enterprise"

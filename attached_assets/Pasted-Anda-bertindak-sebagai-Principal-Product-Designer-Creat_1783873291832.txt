@@ -1,0 +1,175 @@
+Anda bertindak sebagai Principal Product Designer, Creative Director, Senior UI/UX Designer, dan Frontend Architect.
+
+JANGAN langsung mengubah kode.
+
+Tugas Anda pada fase ini hanya membuat DESIGN MASTER untuk seluruh Creative Studio.
+
+Creative Studio adalah marketplace AI Enterprise yang menjual layanan profesional seperti:
+
+• Creative AI
+• Marketing AI
+• Sales AI
+• Finance AI
+• Accounting AI
+• Tax AI
+• HR & Payroll AI
+• Legal AI
+• Logistics AI
+• Customs & PPJK AI
+• Procurement AI
+• Trading AI
+• Data Analytics AI
+• Executive AI
+• Customer Service AI
+
+Target market:
+
+- Corporate
+- B2B
+- CEO
+- Finance Director
+- Marketing Manager
+- Logistic Company
+- Enterprise Client
+
+Saya ingin UI yang setara dengan:
+
+Apple
+Linear
+Stripe
+Notion AI
+OpenAI
+Vercel
+Canva Enterprise
+
+Jangan membuat tampilan seperti dashboard admin biasa.
+
+Saya ingin tampilan terasa seperti SaaS premium.
+
+================================================
+
+OUTPUT YANG DIINGINKAN
+
+================================================
+
+Buat DESIGN MASTER terlebih dahulu.
+
+Jangan coding.
+
+Buat proposal lengkap yang berisi:
+
+1. Color System
+
+2. Typography
+
+3. Spacing System
+
+4. Radius
+
+5. Shadow
+
+6. Icon Style
+
+7. Illustration Style
+
+8. Animation Style
+
+9. Button Style
+
+10. Form Style
+
+11. Card Style
+
+12. Pricing Card
+
+13. Package Card
+
+14. Stepper
+
+15. Navigation
+
+16. Sidebar
+
+17. Hero
+
+18. CTA
+
+19. Empty State
+
+20. Loading State
+
+21. Skeleton
+
+22. Success Screen
+
+23. Error Screen
+
+24. AI Widget Style
+
+25. Mobile Design Guideline
+
+================================================
+
+Selanjutnya buat Sitemap UI.
+
+Jelaskan seluruh halaman yang akan dibuat.
+
+Mulai dari:
+
+Landing
+
+↓
+
+Marketplace
+
+↓
+
+Detail Service
+
+↓
+
+Brief
+
+↓
+
+AI Analysis
+
+↓
+
+Commercial
+
+↓
+
+Production
+
+↓
+
+Review
+
+↓
+
+Completed
+
+↓
+
+Dashboard
+
+↓
+
+Order History
+
+↓
+
+Profile
+
+↓
+
+Billing
+
+↓
+
+Settings
+
+Jangan coding.
+
+Saya ingin approval design dahulu.
