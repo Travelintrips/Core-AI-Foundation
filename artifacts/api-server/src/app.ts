@@ -92,6 +92,11 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
+// ── Trust proxy (Replit reverse proxy injects X-Forwarded-For) ───────────────
+// Without this express-rate-limit cannot identify individual client IPs and
+// buckets all traffic together, causing false 429s.
+app.set("trust proxy", 1);
+
 // ── Global rate limiting (P0-3) ───────────────────────────────────────────────
 // 200 requests per IP per 15 minutes on all /api routes.
 // Individual sensitive routes apply stricter per-route limits on top of this.
