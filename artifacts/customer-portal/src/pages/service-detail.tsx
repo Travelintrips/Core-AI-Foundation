@@ -15,6 +15,7 @@ import { ServiceFaqSection } from "@/components/service-faq";
 import { RelatedServices } from "@/components/related-services";
 import { LiveAiPreview } from "@/components/live-ai-preview";
 import { ServiceWorkflow } from "@/components/service-workflow";
+import { AiWorkforceSection } from "@/components/ai-workforce";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, ArrowLeft, CheckCircle2, Sparkles, Star, Clock, Shield,
@@ -305,6 +306,9 @@ export default function ServiceDetailPage() {
           </div>
         </div>
       </section>
+
+      {/* ── AI Workforce ──────────────────────────────────────────────── */}
+      <AiWorkforceSection />
 
       {/* ── In-page nav ───────────────────────────────────────────────── */}
       <nav className="sticky top-0 z-20 bg-background/90 backdrop-blur-md border-b border-border/40">

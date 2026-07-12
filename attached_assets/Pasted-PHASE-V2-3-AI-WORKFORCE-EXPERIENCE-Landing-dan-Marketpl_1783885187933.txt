@@ -1,0 +1,185 @@
+PHASE V2.3
+
+AI WORKFORCE EXPERIENCE
+
+Landing dan Marketplace telah selesai.
+
+Sekarang jangan membuat halaman baru.
+
+Jangan mengubah backend.
+
+Jangan mengubah API.
+
+Jangan mengubah database.
+
+Jangan mengubah business flow.
+
+==================================================
+
+TUJUAN
+
+==================================================
+
+Saya ingin customer merasa sedang merekrut AI Team.
+
+Bukan membeli jasa.
+
+==================================================
+
+Saat user membuka Service Detail.
+
+Di bagian atas.
+
+Tambahkan section.
+
+Meet Your AI Workforce
+
+==================================================
+
+Creative Director AI
+
+Status
+
+Working
+
+Confidence
+
+98%
+
+Model
+
+GPT-5 + Claude
+
+Speciality
+
+Brand Positioning
+
+==================================================
+
+Brand Strategist AI
+
+Status
+
+Available
+
+==================================================
+
+Senior Copywriter AI
+
+Status
+
+Thinking
+
+==================================================
+
+Visual Designer AI
+
+Status
+
+Preparing
+
+==================================================
+
+Human Quality Reviewer
+
+Status
+
+Ready
+
+==================================================
+
+Setiap AI tampil dalam card premium.
+
+Gunakan:
+
+glass
+
+gradient
+
+soft glow
+
+status pulse
+
+ETA
+
+confidence
+
+skill
+
+model
+
+Jangan fake.
+
+Jika backend belum memiliki data.
+
+Gunakan placeholder yang jelas diberi label:
+
+Demo Preview
+
+==================================================
+
+Tambahkan AI Team Timeline.
+
+Misalnya:
+
+Creative Director
+
+↓
+
+Brand Strategy
+
+↓
+
+Copywriting
+
+↓
+
+Visual Design
+
+↓
+
+Human Review
+
+↓
+
+Delivery
+
+==================================================
+
+Tambahkan:
+
+Estimated Completion
+
+Current Progress
+
+Current AI Working
+
+Queue
+
+==================================================
+
+Tambahkan animasi.
+
+Card muncul satu per satu.
+
+Status pulse.
+
+Confidence counter.
+
+==================================================
+
+Jangan mengubah flow checkout.
+
+Ini hanya memperkaya pengalaman visual.
+
+==================================================
+
+Setelah selesai.
+
+Jalankan build.
+
+Jalankan typecheck.
+
+Berikan screenshot.
+
+Berikan daftar file berubah.
