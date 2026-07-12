@@ -29,6 +29,8 @@ description: Files in this project were imported from GitHub with two versions c
 - `artifacts/ai-platform/src/pages/queue.tsx` — removed concatenated v1 DispatcherPanel function + stale no-props call site + leftover JSX elements in header (Bot, duplicate spans that caused premature `</div>`)
 - `lib/api-client-react/src/index.ts` — removed `export * from "./dispatcher"` (conflicts with generated)
 - `lib/api-spec/openapi.yaml` — removed duplicate YAML keys in 4 dispatcher paths + DispatcherStatus schema (yaml parser throws "Map keys must be unique")
+- `artifacts/customer-portal/src/App.tsx` — old direct-import block (v1) concatenated after new lazy-import block (v2); also a stray `<Switch>...</Switch>` from an old Router() spliced mid-`NotFound()` after its closing `</div>`. Kept lazy/Suspense version, merged the one route (`workspace/:token/settings`) that only existed in v1 into the real `Router()`.
+- `artifacts/api-server/src/services/aiExecutionService.ts` — `executeAI`'s catch block had an old duplicate unreachable `switch(slug)` block spliced in right after `throw err;`, eating the catch's closing brace and causing "Unexpected end of file". Deleted the duplicate switch, kept the catch block's `throw err; }`.
 
 **Orval codegen note:** `orval.config.ts` could not be loaded by jiti in this environment; replaced with `orval.config.mjs` (ESM with `import.meta.url`). Codegen script in `lib/api-spec/package.json` now points to `.mjs`.
 
