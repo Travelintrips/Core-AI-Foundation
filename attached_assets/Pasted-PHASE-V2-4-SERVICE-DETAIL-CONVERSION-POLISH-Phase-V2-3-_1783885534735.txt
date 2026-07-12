@@ -1,0 +1,582 @@
+PHASE V2.4 — SERVICE DETAIL & CONVERSION POLISH
+
+Phase V2.3 AI Workforce Experience telah selesai dan disetujui.
+
+File baru:
+- artifacts/customer-portal/src/components/ai-workforce.tsx
+
+File terintegrasi:
+- artifacts/customer-portal/src/pages/service-detail.tsx
+
+Jangan mengubah atau menghapus AI Workforce section yang baru dibuat.
+
+Sekarang fokus hanya pada refinement halaman Service Detail agar lebih mudah dipahami, lebih premium, dan lebih kuat dalam mendorong customer memilih paket dan melanjutkan order.
+
+==================================================
+PERAN
+==================================================
+
+Bertindak sebagai:
+
+- Principal Product Designer
+- Conversion UX Designer
+- Enterprise SaaS Architect
+- Senior Frontend Engineer
+- Accessibility Reviewer
+
+Gunakan standar kualitas seperti:
+
+- Stripe
+- Linear
+- OpenAI
+- Apple
+- Canva Enterprise
+- Vercel
+
+Jangan membuat halaman seperti marketplace e-commerce biasa.
+
+==================================================
+ATURAN UTAMA
+==================================================
+
+Jangan mengubah:
+
+- backend
+- database
+- API contract
+- route
+- authentication
+- calculation logic
+- quotation logic
+- preview generation logic
+- business flow
+- existing AI Workforce section
+
+Gunakan data dan mutation yang sudah tersedia.
+
+Jangan membuat harga, review, rating, atau status palsu.
+
+Jika data tertentu belum tersedia, tampilkan state yang jujur dan jangan membuat angka fiktif.
+
+==================================================
+LANGKAH 1 — AUDIT HALAMAN AKTUAL
+==================================================
+
+Sebelum mengubah kode, audit seluruh halaman:
+
+- service hero
+- service metadata
+- rating
+- package selector
+- package comparison
+- quote calculator
+- customization options
+- portfolio showcase
+- before/after slider
+- AI preview
+- workforce section
+- FAQ
+- reviews
+- related services
+- sticky CTA
+- mobile CTA
+- loading
+- error
+- empty state
+- accessibility
+- responsiveness
+- conversion flow
+
+Kelompokkan temuan menjadi:
+
+- Critical
+- High
+- Medium
+- Low
+
+Setelah audit, langsung implementasikan perbaikannya.
+
+==================================================
+1. SERVICE HERO
+==================================================
+
+Pertahankan informasi utama, tetapi perbaiki hierarchy.
+
+Hero harus menampilkan dengan jelas:
+
+- breadcrumb
+- category
+- service name
+- concise value proposition
+- delivery estimate
+- human review availability
+- commercial usage status
+- package starting price
+- rating hanya jika benar-benar tersedia
+- project count hanya jika benar-benar tersedia
+
+Tambahkan trust pills seperti:
+
+- Human Reviewed
+- Commercial Ready
+- Secure Project
+- Transparent Pricing
+
+Jangan menampilkan badge yang tidak sesuai data aktual.
+
+Tambahkan CTA utama:
+
+- Choose Package
+
+CTA sekunder:
+
+- Preview Sample
+
+CTA Choose Package harus scroll halus ke package selector.
+
+CTA Preview Sample harus scroll ke portfolio atau AI preview.
+
+==================================================
+2. IN-PAGE NAVIGATION
+==================================================
+
+Audit navigation section yang sudah ada.
+
+Buat sticky in-page navigation yang memuat:
+
+- Overview
+- AI Workforce
+- Deliverables
+- Packages
+- Portfolio
+- Reviews
+- FAQ
+
+Persyaratan:
+
+- active section indicator berdasarkan scroll
+- smooth scroll
+- keyboard accessible
+- tidak menutup konten
+- mobile horizontal scroll
+- respects reduced motion
+
+==================================================
+3. WHAT YOU WILL RECEIVE
+==================================================
+
+Buat section deliverables yang sangat jelas.
+
+Tampilkan hasil konkret yang akan diterima customer.
+
+Contoh struktur:
+
+- Primary deliverables
+- Editable files
+- Strategy documentation
+- Output formats
+- Number of concepts
+- Included revisions
+- Commercial usage
+- Human review
+
+Gunakan data existing dari service detail/package.
+
+Jangan hardcode deliverables generik bila data dinamis tersedia.
+
+Tampilkan sebagai card atau checklist premium dengan icon yang relevan.
+
+Tambahkan section:
+
+“Not Included”
+
+hanya jika datanya tersedia atau dapat diturunkan secara aman dari package rules.
+
+==================================================
+4. PACKAGE SELECTOR
+==================================================
+
+Refine package cards agar customer dapat membandingkan dengan cepat.
+
+Setiap package harus menampilkan:
+
+- package name
+- price
+- short description
+- delivery time
+- included revisions
+- human review
+- deliverable count
+- output formats
+- recommended state bila memang ada dari data/configuration
+- selected state yang jelas
+
+Buat hierarchy:
+
+- selected package paling jelas
+- recommended package menonjol secara elegan
+- package lain tetap mudah dibandingkan
+
+Tambahkan package comparison toggle atau comparison row jika struktur data mendukung.
+
+Jangan membuat data perbandingan palsu.
+
+==================================================
+5. QUOTE CALCULATOR
+==================================================
+
+Pertahankan mutation quote existing.
+
+Perbaiki experience:
+
+- harga diperbarui dengan transisi halus
+- tampilkan loading calculation state
+- tampilkan error state yang jelas
+- jangan menghapus harga lama sebelum hasil baru tersedia
+- hindari layout shift
+- disable CTA saat quote belum valid
+- tampilkan breakdown lengkap
+- base price
+- quantity
+- delivery adjustment
+- revision adjustment
+- add-ons
+- discount
+- tax
+- final total
+
+Tambahkan microcopy:
+
+- No hidden fees
+- Final commercial verification before production
+- Price may depend on submitted brief
+
+Hanya tampilkan pernyataan yang benar terhadap business flow existing.
+
+==================================================
+6. STICKY QUOTE SUMMARY
+==================================================
+
+Desktop:
+
+Buat quote summary sticky di sisi kanan bila layout memungkinkan.
+
+Isi:
+
+- service name
+- selected package
+- quantity
+- delivery
+- revisions
+- add-ons
+- subtotal
+- tax
+- total
+- estimated completion
+- CTA
+
+Mobile:
+
+Gunakan sticky bottom bar yang ringkas:
+
+- selected package
+- total
+- Continue button
+
+Saat dibuka, gunakan bottom sheet untuk rincian quote.
+
+Pastikan sticky elements tidak menutup footer, form, atau tombol lain.
+
+==================================================
+7. CUSTOMIZATION & ADD-ONS
+==================================================
+
+Refine delivery speed, quantity, revisions, dan add-ons.
+
+Gunakan:
+
+- segmented controls
+- steppers
+- check cards
+- helper text
+- additional price
+- selected state
+- disabled state
+
+Tambahkan tooltip atau explanation pada pilihan yang berpotensi membingungkan.
+
+Jangan mengubah formula harga.
+
+==================================================
+8. PORTFOLIO & SAMPLE OUTPUT
+==================================================
+
+Portfolio harus menjawab:
+
+“Seperti apa hasil yang akan saya dapatkan?”
+
+Perbaiki:
+
+- image hierarchy
+- preview quality
+- captions
+- industry tag
+- style tag
+- deliverables
+- before/after interaction
+- open gallery modal
+- keyboard control
+- image loading state
+- image error fallback
+
+Tambahkan lazy loading pada gambar.
+
+Gunakan aspect ratio stabil agar tidak terjadi layout shift.
+
+Jangan menyamarkan demo sebagai proyek customer nyata.
+
+Jika item bersifat demo, pertahankan label “AI Demo”.
+
+==================================================
+9. LIVE AI PREVIEW
+==================================================
+
+Audit flow preview existing.
+
+Perbaiki:
+
+- explanation sebelum generate
+- remaining generation allowance
+- generation loading state
+- progress copy
+- error and retry
+- concept A/B comparison
+- selected state
+- continue action
+
+Jangan mengubah rate limit atau API behavior.
+
+Berikan copy yang jujur bahwa output adalah preview konseptual bila memang demikian.
+
+==================================================
+10. REVIEWS & SOCIAL PROOF
+==================================================
+
+Hanya gunakan review nyata dari API.
+
+Perbaiki visual:
+
+- reviewer identity sesuai data
+- company/role bila tersedia
+- verified status bila benar-benar terverifikasi
+- rating
+- date
+- service/package
+- helpful quote hierarchy
+
+Jika belum ada review:
+
+Tampilkan empty state yang jujur.
+
+Jangan membuat testimoni dummy.
+
+==================================================
+11. FAQ
+==================================================
+
+Refine FAQ menjadi accordion yang mudah dipindai.
+
+Pastikan:
+
+- keyboard accessible
+- aria-expanded
+- animated height tanpa layout glitch
+- hanya satu atau banyak accordion terbuka sesuai existing behavior
+- deep linking tidak diperlukan kecuali sudah tersedia
+
+Tambahkan FAQ penting bila data/API/config existing mendukung:
+
+- Apa yang perlu disiapkan?
+- Apakah tersedia revisi?
+- Apakah hasil dapat digunakan secara komersial?
+- Bagaimana human review bekerja?
+- Apa yang terjadi setelah request dikirim?
+
+Jangan membuat jawaban yang bertentangan dengan business flow.
+
+==================================================
+12. RELATED SERVICES
+==================================================
+
+Refine related service cards.
+
+Tampilkan:
+
+- category
+- service name
+- short value
+- starting price
+- delivery time
+- relevant badge
+- View Detail
+
+Pastikan recommendation berasal dari API atau logic existing, bukan random palsu.
+
+==================================================
+13. MOBILE EXPERIENCE
+==================================================
+
+Lakukan mobile-first sanity check pada 390px dan 430px.
+
+Periksa:
+
+- headline wrapping
+- workforce horizontal scroll
+- sticky navigation
+- package cards
+- quote bottom bar
+- bottom sheet
+- portfolio modal
+- preview controls
+- FAQ
+- related services
+- tap target minimal 44px
+- no horizontal page overflow
+
+==================================================
+14. ACCESSIBILITY
+==================================================
+
+Audit dan perbaiki:
+
+- heading hierarchy
+- labels
+- aria-label
+- aria-expanded
+- aria-selected
+- role tab/tablist bila relevan
+- focus-visible
+- keyboard package selection
+- keyboard modal close
+- color contrast
+- reduced motion
+- alt text
+- disabled state announcement
+- loading state announcement dengan aria-live bila relevan
+
+==================================================
+15. PERFORMANCE
+==================================================
+
+Periksa:
+
+- lazy image
+- dynamic import bila layak
+- portfolio image optimization
+- unnecessary rerender
+- memoization hanya jika berguna
+- Framer Motion overhead
+- IntersectionObserver cleanup
+- event listener cleanup
+- bundle size
+
+Jangan menambahkan dependency baru tanpa kebutuhan nyata.
+
+AiWorkforceSection sekarang cukup besar.
+
+Jika aman dan tidak merusak UX, pertimbangkan lazy loading section tersebut karena posisinya berada di bawah hero.
+
+Jangan lakukan lazy loading bila menyebabkan flicker atau layout shift.
+
+==================================================
+16. CONVERSION SAFETY
+==================================================
+
+Pastikan user selalu memahami:
+
+- layanan yang dipilih
+- package yang dipilih
+- harga
+- apa yang didapat
+- waktu pengerjaan
+- langkah berikutnya
+- apakah pembayaran langsung atau menunggu quotation
+- apakah brief dapat diedit
+
+CTA tidak boleh ambigu.
+
+Gunakan copy yang konsisten seperti:
+
+- Choose Package
+- Update Quote
+- Continue to Brief
+- Request This Service
+
+Sesuaikan dengan flow existing. Jangan membuat CTA yang melewati tahap bisnis.
+
+==================================================
+VERIFIKASI
+==================================================
+
+Setelah implementasi:
+
+1. Jalankan typecheck.
+2. Jalankan build.
+3. Jalankan test bila tersedia.
+4. Verifikasi route service detail dengan minimal dua jenis layanan:
+   - fixed-price
+   - custom project atau enterprise
+5. Verifikasi desktop 1440px.
+6. Verifikasi tablet 768px.
+7. Verifikasi mobile 390px.
+8. Verifikasi keyboard navigation.
+9. Verifikasi API quote tetap bekerja.
+10. Verifikasi AI preview tetap bekerja.
+
+==================================================
+OUTPUT WAJIB
+==================================================
+
+Berikan laporan:
+
+# Phase V2.4 Service Detail Polish
+
+## UX Audit
+- Critical
+- High
+- Medium
+- Low
+
+## Files Changed
+
+## Components Added or Refactored
+
+## Conversion Improvements
+
+## Visual Improvements
+
+## Accessibility Improvements
+
+## Performance Improvements
+
+## API and Business Flow Verification
+
+## Desktop Screenshot
+
+## Tablet Screenshot
+
+## Mobile Screenshot
+
+## Bundle Comparison
+
+Tampilkan ukuran bundle sebelum dan sesudah.
+
+## Typecheck Result
+
+## Build Result
+
+## Remaining Non-Blocking Gaps
+
+Jangan lanjut ke Brief Wizard atau Workspace.
+
+Selesaikan dan laporkan hanya Phase V2.4.
