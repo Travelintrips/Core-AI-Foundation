@@ -30,6 +30,7 @@ import WorkspaceBrandKitPage from '@/pages/workspace/brand-kit';
 import WorkspaceNotificationsPage from '@/pages/workspace/notifications';
 import WorkspaceProfilePage from '@/pages/workspace/profile';
 import WorkspaceSupportPage from '@/pages/workspace/support';
+import WorkspaceSettingsPage from '@/pages/workspace/settings';
 import PortfolioPage from '@/pages/portfolio';
 
 const queryClient = new QueryClient();
@@ -76,6 +77,7 @@ function Router() {
       <Route path="/workspace/:token/notifications" component={WorkspaceNotificationsPage} />
       <Route path="/workspace/:token/profile" component={WorkspaceProfilePage} />
       <Route path="/workspace/:token/support" component={WorkspaceSupportPage} />
+      <Route path="/workspace/:token/settings" component={WorkspaceSettingsPage} />
       <Route component={NotFound} />
     </Switch>
   );
