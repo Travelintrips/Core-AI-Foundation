@@ -1,35 +1,7 @@
-import { Router, type IRouter } from "express";
-import { objectStorageService } from "../lib/objectStorage.js";
-
-const router: IRouter = Router();
-
-// Serves permanently-stored portfolio assets (and any other public objects) that
-// were downloaded from ephemeral provider URLs (e.g. Replicate) and persisted here.
-// Unconditionally public, no auth — matches the object-storage skill's
-// public-objects convention.
-router.get("/storage/public-objects/*splat", async (req, res) => {
-  const filePath = (req.params as unknown as { splat: string[] }).splat.join("/");
-  try {
-    const file = await objectStorageService.searchPublicObject(filePath);
-    if (!file) {
-      res.status(404).json({ error: "Object not found" });
-      return;
-    }
-    const response = await objectStorageService.downloadObject(file);
-    res.status(response.status);
-    response.headers.forEach((value, key) => res.setHeader(key, value));
-    if (response.body) {
-      const { Readable } = await import("node:stream");
-      Readable.fromWeb(response.body as import("stream/web").ReadableStream).pipe(res);
-    } else {
-      res.end();
-    }
-  } catch (err) {
-    req.log?.error({ err, filePath }, "[storage] Failed to serve public object");
 import { Router, type IRouter, type Request, type Response } from "express";
 import { Readable } from "stream";
-import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
-import { ObjectPermission } from "../lib/objectAcl";
+import { objectStorageService, ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage.js";
+import { ObjectPermission } from "../lib/objectAcl.js";
 
 function parseUploadUrlBody(body: unknown): { name: string; size: number; contentType: string } | null {
   if (!body || typeof body !== "object") return null;
@@ -39,7 +11,6 @@ function parseUploadUrlBody(body: unknown): { name: string; size: number; conten
 }
 
 const router: IRouter = Router();
-const objectStorageService = new ObjectStorageService();
 
 /**
  * POST /storage/uploads/request-url
@@ -57,10 +28,8 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
 
   try {
     const { name, size, contentType } = parsed;
-
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
-
     res.json({ uploadURL, objectPath, metadata: { name, size, contentType } });
   } catch (error) {
     req.log.error({ err: error }, "Error generating upload URL");
@@ -72,8 +41,7 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
  * GET /storage/public-objects/*
  *
  * Serve public assets from PUBLIC_OBJECT_SEARCH_PATHS.
- * These are unconditionally public — no authentication or ACL checks.
- * IMPORTANT: Always provide this endpoint when object storage is set up.
+ * Unconditionally public — no authentication or ACL checks.
  */
 router.get("/storage/public-objects/*filePath", async (req: Request, res: Response) => {
   try {
@@ -86,7 +54,6 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
     }
 
     const response = await objectStorageService.downloadObject(file);
-
     res.status(response.status);
     response.headers.forEach((value, key) => res.setHeader(key, value));
 
@@ -106,8 +73,7 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
  * GET /storage/objects/*
  *
  * Serve object entities from PRIVATE_OBJECT_DIR.
- * These are served from a separate path from /public-objects and can optionally
- * be protected with authentication or ACL checks based on the use case.
+ * Can be protected with auth/ACL checks — see commented example below.
  */
 router.get("/storage/objects/*path", async (req: Request, res: Response) => {
   try {
@@ -132,7 +98,6 @@ router.get("/storage/objects/*path", async (req: Request, res: Response) => {
     // }
 
     const response = await objectStorageService.downloadObject(objectFile);
-
     res.status(response.status);
     response.headers.forEach((value, key) => res.setHeader(key, value));
 
