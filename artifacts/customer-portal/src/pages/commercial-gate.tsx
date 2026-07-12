@@ -11,6 +11,7 @@ import {
   Clock,
   ArrowRight,
 } from "lucide-react";
+import { CommercialErrorState } from "@/components/commercial/commercial-error-state";
 
 export default function CommercialGatePage({
   params,
@@ -40,8 +41,8 @@ export default function CommercialGatePage({
   if (isLoading) {
     return (
       <Layout>
-        <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh]">
-          <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+        <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh]" role="status" aria-live="polite">
+          <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" aria-hidden="true" />
           <p className="text-lg font-serif animate-pulse">Loading status…</p>
         </div>
       </Layout>
@@ -51,14 +52,12 @@ export default function CommercialGatePage({
   if (error || !quotation) {
     return (
       <Layout>
-        <div className="flex-1 flex items-center justify-center p-4">
-          <div className="max-w-md text-center">
-            <h2 className="text-2xl font-serif mb-4">Not Found</h2>
-            <p className="text-muted-foreground">
-              This link may be invalid or expired.
-            </p>
-          </div>
-        </div>
+        <CommercialErrorState
+          title="Status Not Found"
+          description="This link may be invalid or expired. Please use the link from your latest email, or contact us for a new one."
+          backHref="/"
+          backLabel="Back to home"
+        />
       </Layout>
     );
   }
@@ -176,8 +175,8 @@ export default function CommercialGatePage({
               </div>
             </div>
 
-            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <Loader2 className="w-3 h-3 animate-spin" />
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5" role="status" aria-live="polite">
+              <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
               This page refreshes automatically every few seconds.
             </p>
           </>

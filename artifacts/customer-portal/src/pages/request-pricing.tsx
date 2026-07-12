@@ -3,7 +3,12 @@ import { useParams, useLocation, Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { FlowStepper, type FlowStep } from "@/components/flow-stepper";
 import { useRequestDetail, useCheckout, useSubmitPaymentProof } from "@/hooks/use-catalog";
-import { Loader2, Clock, CheckCircle2, ArrowRight, Info, CreditCard, Send } from "lucide-react";
+import { Loader2, Clock, CheckCircle2, Info, CreditCard, Send } from "lucide-react";
+import { CommercialStatusBadge } from "@/components/commercial/commercial-status-badge";
+import { ActionRequiredPanel, NoActionRequiredPanel } from "@/components/commercial/action-required-panel";
+import { PriceBreakdown } from "@/components/commercial/price-breakdown";
+import { PaymentInstructionCard } from "@/components/commercial/payment-instruction-card";
+import { CommercialErrorState } from "@/components/commercial/commercial-error-state";
 
 function formatMoney(amount: number | string, currency = "IDR") {
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
@@ -109,8 +114,8 @@ export default function RequestPricingPage() {
   if (isLoading) {
     return (
       <Layout>
-        <div className="flex justify-center py-32">
-          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        <div className="flex justify-center py-32" role="status" aria-live="polite">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" aria-hidden="true" />
         </div>
       </Layout>
     );
@@ -119,12 +124,12 @@ export default function RequestPricingPage() {
   if (error || !request) {
     return (
       <Layout>
-        <div className="flex items-center justify-center min-h-[50vh]">
-          <div className="text-center max-w-sm">
-            <h2 className="text-xl font-serif mb-2">Permintaan Tidak Ditemukan</h2>
-            <p className="text-muted-foreground text-sm">Link ini mungkin tidak valid.</p>
-          </div>
-        </div>
+        <CommercialErrorState
+          title="Permintaan Tidak Ditemukan"
+          description="Link ini mungkin tidak valid atau sudah tidak berlaku. Silakan hubungi tim kami untuk bantuan."
+          backHref="/"
+          backLabel="Kembali ke beranda"
+        />
       </Layout>
     );
   }
@@ -150,16 +155,19 @@ export default function RequestPricingPage() {
       </div>
 
       <div className="container mx-auto px-4 md:px-8 py-12 max-w-3xl">
-        <h1 className="text-3xl font-serif font-medium mb-2">Kalkulasi Harga</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+          <h1 className="text-3xl font-serif font-medium">Kalkulasi Harga</h1>
+          <CommercialStatusBadge status={request.status} />
+        </div>
         <p className="text-muted-foreground mb-8">
           Kode permintaan: <span className="font-mono text-sm">{request.requestId}</span>
         </p>
 
         {/* Status card */}
-        <div className={`rounded-2xl border p-6 mb-6 ${isPositiveStage ? "bg-primary/5 border-primary/20" : "bg-card border-border"}`}>
+        <div className={`rounded-2xl border p-6 mb-6 ${isPositiveStage ? "bg-primary/5 border-primary/20" : "bg-card border-border"}`} aria-live="polite">
           <div className="flex items-start gap-4">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isPositiveStage ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-              {isPositiveStage ? <CheckCircle2 className="w-5 h-5" /> : <Clock className="w-5 h-5 text-muted-foreground" />}
+              {isPositiveStage ? <CheckCircle2 className="w-5 h-5" aria-hidden="true" /> : <Clock className="w-5 h-5 text-muted-foreground" aria-hidden="true" />}
             </div>
             <div>
               <p className="font-medium">{STATUS_LABEL[request.status] ?? request.status}</p>
@@ -168,122 +176,126 @@ export default function RequestPricingPage() {
           </div>
         </div>
 
+        {/* Action required: fixed-price checkout waiting */}
+        {request.serviceFlow === "fixed_price" &&
+          !request.createdProjectId &&
+          (request.status === "brief_completed" || request.status === "pricing_calculated") && (
+            <ActionRequiredPanel
+              title="Lanjutkan ke pembayaran"
+              description="Layanan ini tidak memerlukan penawaran khusus — checkout langsung untuk memulai pengerjaan."
+              primary={{
+                label: checkout.isPending ? "Memproses..." : "Lanjut ke Pembayaran",
+                onClick: () => checkout.mutate({ requestId: request.requestId }),
+                loading: checkout.isPending,
+                disabled: checkout.isPending,
+              }}
+              consequence={checkout.isError ? (checkout.error as Error).message : "Pengerjaan dimulai setelah pembayaran diverifikasi."}
+            />
+          )}
+
         {/* Pricing breakdown (from service request) */}
         {parseFloat(String(request.total ?? "0")) > 0 && (
-          <div className="bg-card border border-border rounded-2xl p-6 mb-6">
+          <div className="mb-6">
             <h2 className="font-serif text-lg font-medium mb-4">Estimasi Harga</h2>
-            <div className="space-y-3">
-              {request.pricingBreakdown?.lineItems && request.pricingBreakdown.lineItems.length > 0 ? (
-                // Use itemised line items from pricing snapshot for accurate display
-                request.pricingBreakdown.lineItems.map((item) => (
-                  <PriceRow key={item.code} label={item.label} amount={item.amount} currency={request.currency} />
-                ))
-              ) : (
-                // Fallback: show base price from snapshot or subtotal
-                <PriceRow
-                  label="Harga Dasar"
-                  amount={request.pricingBreakdown?.basePrice ?? request.subtotal}
-                  currency={request.currency}
-                />
-              )}
-              {parseFloat(String(request.discount ?? "0")) > 0 && (
-                <PriceRow label="Diskon" amount={-parseFloat(String(request.discount))} currency={request.currency} highlight="text-green-600" />
-              )}
-              {(request.pricingBreakdown?.taxPercent ?? 0) > 0 && parseFloat(String(request.tax ?? "0")) > 0 && (
-                <PriceRow label={`Pajak (PPN ${request.pricingBreakdown!.taxPercent}%)`} amount={request.tax} currency={request.currency} />
-              )}
-              <div className="border-t border-border pt-3 flex justify-between items-center">
-                <span className="font-semibold">Total</span>
-                <span className="text-xl font-bold text-primary">
-                  {formatMoney(request.total ?? "0", request.currency)}
-                </span>
-              </div>
-            </div>
-
+            <PriceBreakdown
+              currency={request.currency}
+              lineItems={
+                request.pricingBreakdown?.lineItems && request.pricingBreakdown.lineItems.length > 0
+                  ? request.pricingBreakdown.lineItems.map((item) => ({ key: item.code, label: item.label, amount: item.amount }))
+                  : [
+                      {
+                        key: "base",
+                        label: "Harga Dasar",
+                        amount: Number(request.pricingBreakdown?.basePrice ?? request.subtotal),
+                      },
+                    ]
+              }
+              subtotal={parseFloat(String(request.subtotal ?? "0"))}
+              discount={parseFloat(String(request.discount ?? "0"))}
+              taxLabel={`Pajak (PPN ${request.pricingBreakdown?.taxPercent ?? 0}%)`}
+              taxAmount={parseFloat(String(request.tax ?? "0"))}
+              total={parseFloat(String(request.total ?? "0"))}
+              formatMoney={formatMoney}
+            />
             <div className="mt-4 flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
-              <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
               <span>Harga di atas adalah estimasi. Penawaran resmi akan dikirimkan melalui email dengan detail dan syarat-syarat yang berlaku.</span>
             </div>
           </div>
         )}
 
         {/* Standard (fixed_price) checkout — no quotation step */}
-        {request.serviceFlow === "fixed_price" && (
-          <>
-            {!request.createdProjectId && (request.status === "brief_completed" || request.status === "pricing_calculated") && (
-              <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center">
-                <CreditCard className="w-8 h-8 text-primary mx-auto mb-3" />
-                <p className="font-medium mb-1">Siap Checkout</p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Layanan ini tidak memerlukan penawaran khusus — lanjutkan langsung ke pembayaran untuk memulai pengerjaan.
-                </p>
-                <button
-                  onClick={() => checkout.mutate({ requestId: request.requestId })}
-                  disabled={checkout.isPending}
-                  className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-full text-sm font-medium disabled:opacity-50"
-                >
-                  {checkout.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-                  Lanjut ke Pembayaran
-                </button>
-                {checkout.isError && (
-                  <p className="text-sm text-destructive mt-3">{(checkout.error as Error).message}</p>
-                )}
-              </div>
-            )}
-
-            {(request.createdProjectId || checkout.data) && (
-              <div className="bg-card border border-border rounded-2xl p-6">
-                <h2 className="font-serif text-lg font-medium mb-4 flex items-center gap-2">
-                  <CreditCard className="w-5 h-5" /> Jadwal Pembayaran
-                </h2>
-                <div className="space-y-4">
-                  {(checkout.data?.schedule ?? []).map((s) => (
-                    <div key={s.id} className="border border-border rounded-xl p-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="font-medium text-sm">
-                          {s.paymentType === "deposit" ? "Deposit" : s.paymentType === "remaining_balance" ? "Sisa Pembayaran" : "Pembayaran"}
-                          {s.percentage != null ? ` (${s.percentage}%)` : ""}
-                        </span>
-                        <span className="text-sm font-semibold">{formatMoney(s.amount, s.currency)}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mb-3">
-                        Status: <span className="font-medium">{s.status === "pending" ? "Menunggu Pembayaran" : s.status}</span>
-                        {s.reference && <> · Referensi terkirim: <span className="font-mono">{s.reference}</span></>}
-                      </p>
-                      {s.status === "pending" && (
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            placeholder="Kode/referensi transfer"
-                            className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-background"
-                            value={submittedScheduleId === s.id ? reference : ""}
-                            onChange={(e) => { setSubmittedScheduleId(s.id); setReference(e.target.value); }}
-                          />
-                          <button
-                            className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground disabled:opacity-50 flex items-center gap-1"
-                            disabled={submitProof.isPending || !reference || submittedScheduleId !== s.id}
-                            onClick={() => submitProof.mutate({ scheduleId: s.id, reference })}
-                          >
-                            <Send className="w-3.5 h-3.5" /> Kirim
-                          </button>
-                        </div>
-                      )}
+        {request.serviceFlow === "fixed_price" && (request.createdProjectId || checkout.data) && (
+          <div className="bg-card border border-border rounded-2xl p-6 mb-6">
+            <h2 className="font-serif text-lg font-medium mb-4 flex items-center gap-2">
+              <CreditCard className="w-5 h-5" aria-hidden="true" /> Jadwal Pembayaran
+            </h2>
+            <div className="space-y-4">
+              {(checkout.data?.schedule ?? []).map((s) => (
+                <div key={s.id} className="border border-border rounded-xl p-4">
+                  <div className="flex justify-between items-center mb-2 gap-2 flex-wrap">
+                    <span className="font-medium text-sm">
+                      {s.paymentType === "deposit" ? "Deposit" : s.paymentType === "remaining_balance" ? "Sisa Pembayaran" : "Pembayaran"}
+                      {s.percentage != null ? ` (${s.percentage}%)` : ""}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold">{formatMoney(s.amount, s.currency)}</span>
+                      <CommercialStatusBadge status={s.status} />
                     </div>
-                  ))}
-                  {!checkout.data && (
-                    <p className="text-sm text-muted-foreground">
-                      Project sudah dibuat. Buka dashboard Anda untuk melihat status dan jadwal pembayaran lengkap.
+                  </div>
+                  {s.reference && (
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Referensi terkirim: <span className="font-mono">{s.reference}</span>
                     </p>
                   )}
+                  {s.status === "pending" && (
+                    <div className="space-y-3">
+                      <PaymentInstructionCard />
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <label className="sr-only" htmlFor={`ref-${s.id}`}>Kode/referensi transfer</label>
+                        <input
+                          id={`ref-${s.id}`}
+                          type="text"
+                          placeholder="Kode/referensi transfer"
+                          className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-background"
+                          value={submittedScheduleId === s.id ? reference : ""}
+                          onChange={(e) => { setSubmittedScheduleId(s.id); setReference(e.target.value); }}
+                        />
+                        <button
+                          className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1 shrink-0"
+                          disabled={submitProof.isPending || !reference.trim() || submittedScheduleId !== s.id}
+                          onClick={() => submitProof.mutate({ scheduleId: s.id, reference: reference.trim() })}
+                        >
+                          {submitProof.isPending && submittedScheduleId === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Send className="w-3.5 h-3.5" aria-hidden="true" />}
+                          Kirim
+                        </button>
+                      </div>
+                      {submitProof.isSuccess && submittedScheduleId === s.id && (
+                        <p className="text-xs text-green-600 flex items-center gap-1" role="status">
+                          <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> Referensi terkirim — menunggu verifikasi tim kami.
+                        </p>
+                      )}
+                      {submitProof.isError && submittedScheduleId === s.id && (
+                        <p className="text-xs text-destructive" role="alert">{(submitProof.error as Error).message}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="mt-4 flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
-                  <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                  <span>Setelah kami memverifikasi pembayaran, tim AI kami akan langsung mulai mengerjakan proyek Anda.</span>
-                </div>
-              </div>
-            )}
-          </>
+              ))}
+              {!checkout.data && (
+                <p className="text-sm text-muted-foreground">
+                  Project sudah dibuat. Buka dashboard Anda untuk melihat status dan jadwal pembayaran lengkap.
+                </p>
+              )}
+            </div>
+            <div className="mt-4 flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
+              <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+              <span>Setelah kami memverifikasi pembayaran, tim AI kami akan langsung mulai mengerjakan proyek Anda.</span>
+            </div>
+          </div>
         )}
+
+        {stage === "in_production" || stage === "done" ? <NoActionRequiredPanel /> : null}
 
         {/* CTA (custom_project / enterprise — quotation-based flow) */}
         {request.serviceFlow !== "fixed_price" && stage === "quotation_pending" && (
@@ -342,26 +354,5 @@ export default function RequestPricingPage() {
         )}
       </div>
     </Layout>
-  );
-}
-
-function PriceRow({
-  label,
-  amount,
-  currency,
-  highlight,
-}: {
-  label: string;
-  amount: string | number;
-  currency: string;
-  highlight?: string;
-}) {
-  return (
-    <div className="flex justify-between items-center py-1">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className={`text-sm font-medium ${highlight ?? ""}`}>
-        {formatMoney(amount, currency)}
-      </span>
-    </div>
   );
 }

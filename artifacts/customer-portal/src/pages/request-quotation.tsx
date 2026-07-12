@@ -26,6 +26,10 @@ export function requestStatusToStep(status: string): string {
   return "persetujuan";
 }
 import { Loader2, CheckCircle2, XCircle, MessageSquare, FileText, Clock, ShieldCheck } from "lucide-react";
+import { CommercialStatusBadge } from "@/components/commercial/commercial-status-badge";
+import { ActionRequiredPanel } from "@/components/commercial/action-required-panel";
+import { PriceBreakdown } from "@/components/commercial/price-breakdown";
+import { CommercialErrorState } from "@/components/commercial/commercial-error-state";
 
 /** Message shown under the "Penawaran telah disetujui!" banner, based on real backend progress. */
 function postApproveMessage(requestStatus: string | null): string {
@@ -69,13 +73,17 @@ export default function RequestQuotationPage() {
   const [rejectNotes, setRejectNotes] = useState("");
   const [showChange, setShowChange] = useState(false);
   const [showReject, setShowReject] = useState(false);
+  const [confirmChecked, setConfirmChecked] = useState(false);
 
   if (!token) {
     return (
       <Layout>
-        <div className="flex items-center justify-center min-h-[50vh]">
-          <p className="text-muted-foreground">Link penawaran tidak valid.</p>
-        </div>
+        <CommercialErrorState
+          title="Link Penawaran Tidak Valid"
+          description="Tautan yang Anda buka tidak menyertakan kode akses yang sah. Silakan gunakan tautan dari email terakhir kami."
+          backHref="/"
+          backLabel="Kembali ke beranda"
+        />
       </Layout>
     );
   }
@@ -83,8 +91,8 @@ export default function RequestQuotationPage() {
   if (isLoading) {
     return (
       <Layout>
-        <div className="flex justify-center py-32">
-          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        <div className="flex justify-center py-32" role="status" aria-live="polite">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" aria-hidden="true" />
         </div>
       </Layout>
     );
@@ -93,12 +101,12 @@ export default function RequestQuotationPage() {
   if (error || !data) {
     return (
       <Layout>
-        <div className="flex items-center justify-center min-h-[50vh]">
-          <div className="text-center max-w-sm">
-            <h2 className="text-xl font-serif mb-2">Penawaran Tidak Ditemukan</h2>
-            <p className="text-sm text-muted-foreground">Link mungkin sudah kedaluwarsa atau tidak valid.</p>
-          </div>
-        </div>
+        <CommercialErrorState
+          title="Penawaran Tidak Ditemukan"
+          description="Link mungkin sudah kedaluwarsa atau tidak valid. Silakan hubungi kami untuk penawaran baru."
+          backHref="/"
+          backLabel="Kembali ke beranda"
+        />
       </Layout>
     );
   }
@@ -148,82 +156,94 @@ export default function RequestQuotationPage() {
       </div>
 
       <div className="container mx-auto px-4 md:px-8 py-12 max-w-3xl">
-        <div className="flex items-start justify-between mb-8">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
           <div>
             <p className="text-xs text-muted-foreground mb-1">Penawaran Resmi</p>
             <h1 className="text-3xl font-serif font-medium">{quotation.quotationCode}</h1>
             <p className="text-muted-foreground text-sm mt-1">untuk {quotation.customerName}</p>
           </div>
-          {terminal && (
-            <div className={`flex items-center gap-2 text-sm font-medium ${terminal.color}`}>
-              <terminal.icon className="w-4 h-4" />
-              {terminal.label}
-            </div>
-          )}
+          <CommercialStatusBadge status={quotation.status} />
         </div>
 
+        {isActive && (
+          <ActionRequiredPanel
+            title="Tinjau dan tanggapi penawaran ini"
+            description="Setujui untuk memulai verifikasi komersial, atau minta perubahan / tolak jika belum sesuai."
+            {...(quotation.validUntil
+              ? {
+                  deadline: new Date(quotation.validUntil).toLocaleDateString("id-ID", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  }),
+                }
+              : {})}
+            consequence="Produksi belum dimulai sebelum Anda menyetujui penawaran ini."
+            className="mb-6"
+          />
+        )}
+
         {/* Line items */}
-        {items && items.length > 0 && (
-          <div className="bg-card border border-border rounded-2xl overflow-hidden mb-6">
-            <div className="p-4 border-b border-border bg-muted/30">
-              <h2 className="font-medium flex items-center gap-2"><FileText className="w-4 h-4" /> Rincian Layanan</h2>
-            </div>
-            <div className="divide-y divide-border">
-              {items.map((item) => (
-                <div key={item.id} className="flex items-start justify-between p-4">
-                  <div>
-                    <p className="text-sm font-medium">{item.description}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {item.quantity} × {formatMoney(item.unitPrice, quotation.currency)}
-                    </p>
-                  </div>
-                  <span className="text-sm font-semibold whitespace-nowrap ml-4">
-                    {formatMoney(item.amount, quotation.currency)}
-                  </span>
-                </div>
-              ))}
+        {items && items.length > 0 ? (
+          <div className="mb-6">
+            <PriceBreakdown
+              currency={quotation.currency}
+              lineItems={items.map((item) => ({
+                key: item.id,
+                label: item.description,
+                meta: `${item.quantity} × ${formatMoney(item.unitPrice, quotation.currency)}`,
+                amount: item.amount,
+              }))}
+              subtotal={quotation.subtotal}
+              discount={quotation.discount}
+              taxLabel="Pajak"
+              taxAmount={quotation.tax}
+              total={quotation.total}
+              formatMoney={formatMoney}
+            />
+            {quotation.validUntil && (
+              <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
+                <Clock className="w-3 h-3" aria-hidden="true" />
+                Berlaku hingga {new Date(quotation.validUntil).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="bg-card border border-border rounded-2xl p-6 mb-6">
+            <div className="border-t border-border pt-3 flex justify-between items-center">
+              <span className="font-bold text-lg">Total</span>
+              <span className="text-2xl font-bold text-primary">
+                {formatMoney(quotation.total, quotation.currency)}
+              </span>
             </div>
           </div>
         )}
-
-        {/* Totals */}
-        <div className="bg-card border border-border rounded-2xl p-6 mb-6">
-          <div className="space-y-2">
-            <TotalRow label="Subtotal" amount={quotation.subtotal} currency={quotation.currency} />
-            {quotation.discount > 0 && (
-              <TotalRow label="Diskon" amount={-quotation.discount} currency={quotation.currency} className="text-green-600" />
-            )}
-            {quotation.tax > 0 && (
-              <TotalRow label="Pajak" amount={quotation.tax} currency={quotation.currency} />
-            )}
-          </div>
-          <div className="border-t border-border mt-3 pt-3 flex justify-between items-center">
-            <span className="font-bold text-lg">Total</span>
-            <span className="text-2xl font-bold text-primary">
-              {formatMoney(quotation.total, quotation.currency)}
-            </span>
-          </div>
-          {quotation.validUntil && (
-            <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              Berlaku hingga {new Date(quotation.validUntil).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
-            </p>
-          )}
-        </div>
 
         {/* Actions (only if quotation is active) */}
         {isActive && (
           <div className="space-y-4">
             {/* Approve */}
             {!showChange && !showReject && (
-              <button
-                onClick={handleApprove}
-                disabled={approve.isPending}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-primary text-primary-foreground font-medium rounded-xl hover:bg-primary/90 disabled:opacity-60 transition-colors"
-              >
-                {approve.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                Setujui Penawaran
-              </button>
+              <>
+                <label className="flex items-start gap-2.5 text-sm text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={confirmChecked}
+                    onChange={(e) => setConfirmChecked(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded border-border"
+                  />
+                  Saya sudah meninjau rincian harga di atas dan setuju untuk melanjutkan.
+                </label>
+                <button
+                  onClick={handleApprove}
+                  disabled={approve.isPending || !confirmChecked}
+                  aria-disabled={!confirmChecked}
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-primary text-primary-foreground font-medium rounded-xl hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                >
+                  {approve.isPending ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <ShieldCheck className="w-4 h-4" aria-hidden="true" />}
+                  Setujui Penawaran
+                </button>
+              </>
             )}
 
             {/* Request change */}
@@ -312,14 +332,5 @@ export default function RequestQuotationPage() {
         )}
       </div>
     </Layout>
-  );
-}
-
-function TotalRow({ label, amount, currency, className = "" }: { label: string; amount: number; currency: string; className?: string }) {
-  return (
-    <div className="flex justify-between text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`font-medium ${className}`}>{formatMoney(Math.abs(amount), currency)}</span>
-    </div>
   );
 }
