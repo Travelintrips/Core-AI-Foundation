@@ -38,29 +38,6 @@ export class ObjectNotFoundError extends Error {
 }
 
 export class ObjectStorageService {
-  constructor() {}
-
-  getPublicObjectSearchPaths(): Array<string> {
-function parseObjectPath(path: string): { bucketName: string; objectName: string } {
-  if (!path.startsWith("/")) path = `/${path}`;
-  const parts = path.split("/");
-  if (parts.length < 3) throw new Error("Invalid object path: must contain at least a bucket name");
-  return { bucketName: parts[1], objectName: parts.slice(2).join("/") };
-}
-
-export class ObjectStorageService {
-  getPublicObjectSearchPaths(): string[] {
-    const pathsStr = process.env.PUBLIC_OBJECT_SEARCH_PATHS || "";
-    const paths = Array.from(
-      new Set(
-        pathsStr
-          .split(",")
-          .map((p) => p.trim())
-          .filter((p) => p.length > 0)
-      )
-export class ObjectStorageService {
-  constructor() {}
-
   getPublicObjectSearchPaths(): string[] {
     const raw = process.env["PUBLIC_OBJECT_SEARCH_PATHS"] || "";
     const paths = Array.from(
@@ -76,11 +53,6 @@ export class ObjectStorageService {
   }
 
   getPrivateObjectDir(): string {
-    const dir = process.env.PRIVATE_OBJECT_DIR || "";
-    if (!dir) {
-      throw new Error(
-        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
-          "tool and set PRIVATE_OBJECT_DIR env var."
     const dir = process.env["PRIVATE_OBJECT_DIR"] || "";
     if (!dir) {
       throw new Error(
@@ -91,12 +63,6 @@ export class ObjectStorageService {
     return dir;
   }
 
-  /**
-   * Server-side (non-presigned) upload used by internal pipelines — e.g. downloading
-   * a Replicate-generated image and persisting a permanent copy. Writes to the first
-   * public search path so the asset is served unconditionally via
-   * GET /api/storage/public-objects/<relativePath>.
-   */
   async uploadPublicAsset(
     relativePath: string,
     buffer: Buffer,
@@ -117,20 +83,12 @@ export class ObjectStorageService {
       const { bucketName, objectName } = parseObjectPath(fullPath);
       const bucket = objectStorageClient.bucket(bucketName);
       const file = bucket.file(objectName);
-
-      const [exists] = await file.exists();
-      if (exists) {
-        return file;
-      }
-    }
-
       const [exists] = await file.exists();
       if (exists) return file;
     }
     return null;
   }
 
-  async downloadObject(file: File, cacheTtlSec: number = 3600): Promise<Response> {
   async downloadObject(file: File, cacheTtlSec = 3600): Promise<Response> {
     const [metadata] = await file.getMetadata();
     const aclPolicy = await getObjectAclPolicy(file);
@@ -250,5 +208,3 @@ async function signObjectURL({
   const { signed_url: signedURL } = (await response.json()) as { signed_url: string };
   return signedURL;
 }
-
-export const objectStorageService = new ObjectStorageService();
