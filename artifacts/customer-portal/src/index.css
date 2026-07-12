@@ -182,6 +182,24 @@
   0%, 100% { box-shadow: 0 0 0 0 rgba(124,110,250,0); }
   50%       { box-shadow: 0 0 40px 8px rgba(124,110,250,0.12); }
 }
+@keyframes float-orb {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(10px, -14px) scale(1.04); }
+  66%       { transform: translate(-8px, 8px) scale(0.97); }
+}
+@keyframes float-orb-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  40%       { transform: translate(-12px, 10px) scale(1.06); }
+  75%       { transform: translate(8px, -8px) scale(0.96); }
+}
+@keyframes float-orb-c {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%       { transform: translate(6px, 12px) scale(1.03); }
+}
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
 
 /* ─── UTILITY CLASSES ─── */
 @layer utilities {
@@ -268,12 +286,16 @@
   }
 
   /* Animation utilities */
-  .animate-float-up    { animation: float-up 0.4s ease-out forwards; }
-  .animate-pulse-ring  { animation: pulse-ring 2s ease-in-out infinite; }
-  .animate-glow-pulse  { animation: glow-pulse 2.5s ease-in-out infinite; }
-  .animate-spin-slow   { animation: spin-slow 3s linear infinite; }
-  .animate-fade-in-up  { animation: fade-in-up 0.5s ease-out forwards; }
-  .animate-scale-in    { animation: scale-in 0.3s ease-out forwards; }
+  .animate-float-up      { animation: float-up 0.4s ease-out forwards; }
+  .animate-pulse-ring    { animation: pulse-ring 2s ease-in-out infinite; }
+  .animate-glow-pulse    { animation: glow-pulse 2.5s ease-in-out infinite; }
+  .animate-spin-slow     { animation: spin-slow 3s linear infinite; }
+  .animate-fade-in-up    { animation: fade-in-up 0.5s ease-out forwards; }
+  .animate-scale-in      { animation: scale-in 0.3s ease-out forwards; }
+  .animate-float-orb     { animation: float-orb 9s ease-in-out infinite; }
+  .animate-float-orb-b   { animation: float-orb-b 12s ease-in-out infinite; }
+  .animate-float-orb-c   { animation: float-orb-c 15s ease-in-out 2s infinite; }
+  .animate-marquee       { animation: marquee 28s linear infinite; }
 
   /* Dot wave for AI thinking */
   .dot-wave span:nth-child(1) { animation: dot-wave 1.2s ease-in-out infinite 0ms; }
@@ -455,6 +477,33 @@
     background: hsl(var(--surface-2));
     color: hsl(var(--muted-foreground));
     border: 2px solid hsl(var(--border));
+  }
+
+  /* Service cards */
+  .service-card-featured {
+    background: #0D1526;
+    border: 1px solid #1C2A40;
+    box-shadow: 0 2px 8px rgba(6,11,24,0.50);
+    border-radius: 1rem;
+    transition: transform 220ms cubic-bezier(0.22,1,0.36,1), box-shadow 220ms cubic-bezier(0.22,1,0.36,1), border-color 220ms ease;
+    text-decoration: none;
+  }
+  .service-card-featured:hover {
+    transform: translateY(-5px);
+    border-color: rgba(124,110,250,0.38);
+    box-shadow: 0 16px 40px rgba(6,11,24,0.70), 0 0 0 1px rgba(124,110,250,0.12), 0 0 28px rgba(124,110,250,0.10);
+  }
+  .service-card-sm {
+    background: #0D1526;
+    border: 1px solid #1C2A40;
+    border-radius: 0.875rem;
+    transition: transform 180ms cubic-bezier(0.22,1,0.36,1), border-color 180ms ease, background 180ms ease;
+    text-decoration: none;
+  }
+  .service-card-sm:hover {
+    transform: translateY(-3px);
+    border-color: rgba(124,110,250,0.30);
+    background: rgba(124,110,250,0.05);
   }
 
   /* Section label chip */
