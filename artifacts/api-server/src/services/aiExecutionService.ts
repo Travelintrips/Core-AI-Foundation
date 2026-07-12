@@ -415,6 +415,28 @@ export async function executeAI(input: ExecutionInput): Promise<ExecutionOutput>
       });
     }
     throw err;
+  switch (slug) {
+    case "openai":
+      result = await executeWithQuotaFallback(input, () => executeOpenAI(input, apiKey));
+      break;
+    case "anthropic":
+      result = await executeAnthropic(input, apiKey);
+      break;
+    case "google":
+    case "google-gemini":
+    case "gemini":
+      result = await executeWithQuotaFallback(input, () => executeGemini(input, apiKey));
+      break;
+    case "replicate":
+      result = await executeReplicate(input, apiKey);
+      break;
+    case "mistral":
+      result = await executeWithQuotaFallback(input, () => executeMistral(input, apiKey));
+      break;
+    default:
+      throw new Error(
+        `Unsupported provider slug '${input.provider.slug}'. Add a handler in aiExecutionService.`,
+      );
   }
 
   if (input.observability) {
