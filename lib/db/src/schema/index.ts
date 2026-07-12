@@ -67,3 +67,6 @@ export * from "./ai-customer-health-scores";
 export * from "./ai-ab-tests";
 export * from "./ai-customer-segments";
 export * from "./ai-automation-rules";
+export * from "./ai-execution-logs";
+export * from "./ai-workflow-costs";
+export * from "./ai-provider-pricing";

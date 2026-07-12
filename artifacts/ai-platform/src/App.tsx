@@ -41,6 +41,7 @@ import CouponsPage from "@/pages/coupons";
 import AffiliatesPage from "@/pages/affiliates";
 import HealthScoresPage from "@/pages/health-scores";
 import ReferralsPage from "@/pages/referrals";
+import ObservabilityPage from "@/pages/observability";
 
 const queryClient = new QueryClient();
 
@@ -82,6 +83,7 @@ function AdminRouter() {
         <Route path="/affiliates" component={AffiliatesPage} />
         <Route path="/referrals" component={ReferralsPage} />
         <Route path="/health-scores" component={HealthScoresPage} />
+        <Route path="/observability" component={ObservabilityPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

@@ -70,6 +70,7 @@ const NAV_ITEMS = [
   { href: "/automation", label: "Automation Center", icon: Zap },
   { href: "/ai-insights", label: "AI Insights", icon: Lightbulb },
   { href: "/portfolio", label: "Portfolio", icon: Store },
+  { href: "/observability", label: "Observability", icon: Activity },
   { href: "/audit", label: "Audit Log", icon: ShieldAlert },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
