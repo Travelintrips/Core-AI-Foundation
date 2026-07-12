@@ -28,10 +28,14 @@ import {
   aiPortfolioGenerationBatchesTable,
   aiPortfolioPermissionsTable,
   aiServicePortfoliosTable,
+  aiPortfolioAssetsTable,
+  aiJobsTable,
   insertAiPortfolioGenerationBatchSchema,
   insertAiPortfolioPermissionSchema,
 } from "@workspace/db";
+import { sql, inArray } from "drizzle-orm";
 import { logAudit } from "../services/aiAuditService.js";
+import { publishSafe } from "../services/aiEventBusService.js";
 import {
   createGenerationBatch,
   startBatch,
@@ -40,6 +44,8 @@ import {
   rejectPortfolio,
   type BatchConfig,
 } from "../services/demoPortfolioGeneratorService.js";
+
+const LIFECYCLE_JOB_TYPES = ["archive_asset", "optimize_asset", "generate_thumbnail"] as const;
 
 const router = Router();
 
@@ -155,7 +161,7 @@ router.patch("/ai/portfolio/portfolios/:id/publish-status", async (req, res): Pr
   if (id === null) return;
 
   const { publishStatus } = req.body as { publishStatus?: string };
-  const ALLOWED = ["draft", "review", "published", "hidden", "archived"] as const;
+  const ALLOWED = ["draft", "review", "pending_archive", "published", "hidden", "archived"] as const;
   if (!publishStatus || !ALLOWED.includes(publishStatus as typeof ALLOWED[number])) {
     res.status(400).json({ error: `publishStatus must be one of: ${ALLOWED.join(", ")}` });
     return;
@@ -171,6 +177,97 @@ router.patch("/ai/portfolio/portfolios/:id/publish-status", async (req, res): Pr
   if (!row) { res.status(404).json({ error: "Portfolio not found" }); return; }
   await logAudit("portfolio-admin", "publish_status_changed", String(id), "ai_service_portfolio", "success", { publishStatus });
   res.json(row);
+});
+
+// ── Asset Lifecycle / Background Archiving (Sprint P2.1.1) ─────────────────────
+
+/**
+ * Monitoring: archive-queue health. Counts by job type × job status, plus
+ * per-asset lifecycle-stage counts and average archive duration.
+ */
+router.get("/ai/portfolio/archive-queue/stats", async (_req, res): Promise<void> => {
+  const jobRows = await db
+    .select({ jobType: aiJobsTable.jobType, status: aiJobsTable.status, count: sql<number>`count(*)::int` })
+    .from(aiJobsTable)
+    .where(inArray(aiJobsTable.jobType, [...LIFECYCLE_JOB_TYPES]))
+    .groupBy(aiJobsTable.jobType, aiJobsTable.status);
+
+  const assetStatusRows = await db
+    .select({ status: aiPortfolioAssetsTable.status, count: sql<number>`count(*)::int` })
+    .from(aiPortfolioAssetsTable)
+    .groupBy(aiPortfolioAssetsTable.status);
+
+  const [avgDuration] = await db
+    .select({
+      avgSeconds: sql<number>`avg(extract(epoch from (archive_completed_at - archive_started_at)))::float`,
+    })
+    .from(aiPortfolioAssetsTable)
+    .where(sql`${aiPortfolioAssetsTable.archiveCompletedAt} IS NOT NULL AND ${aiPortfolioAssetsTable.archiveStartedAt} IS NOT NULL`);
+
+  const byJobType: Record<string, Record<string, number>> = {};
+  for (const r of jobRows) {
+    byJobType[r.jobType] ??= {};
+    byJobType[r.jobType]![r.status] = r.count;
+  }
+
+  const byAssetStatus: Record<string, number> = {};
+  for (const r of assetStatusRows) byAssetStatus[r.status] = r.count;
+
+  res.json({
+    jobsByTypeAndStatus: byJobType,
+    assetsByLifecycleStatus: byAssetStatus,
+    avgArchiveDurationSeconds: avgDuration?.avgSeconds ?? null,
+  });
+});
+
+/** List assets for a portfolio with full lifecycle detail (admin monitoring). */
+router.get("/ai/portfolio/portfolios/:id/assets", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
+  const rows = await db
+    .select()
+    .from(aiPortfolioAssetsTable)
+    .where(eq(aiPortfolioAssetsTable.portfolioId, id))
+    .orderBy(aiPortfolioAssetsTable.displayOrder);
+  res.json(rows);
+});
+
+/** Manually retry a failed archive/optimize/thumbnail stage for one asset. */
+router.post("/ai/portfolio/assets/:id/retry-archive", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
+
+  const [asset] = await db.select().from(aiPortfolioAssetsTable).where(eq(aiPortfolioAssetsTable.id, id)).limit(1);
+  if (!asset) { res.status(404).json({ error: "Asset not found" }); return; }
+
+  const [portfolio] = await db.select().from(aiServicePortfoliosTable).where(eq(aiServicePortfoliosTable.id, asset.portfolioId)).limit(1);
+  const brandSlug = (portfolio?.metadataJson as Record<string, unknown> | null)?.["brandSlug"] as string | undefined;
+  if (!brandSlug) { res.status(500).json({ error: "Portfolio brandSlug missing — cannot retry" }); return; }
+
+  if (asset.status === "archive_failed" || asset.archiveStatus === "failed") {
+    await db.update(aiPortfolioAssetsTable)
+      .set({ status: "generated", archiveStatus: "pending", archiveError: null })
+      .where(eq(aiPortfolioAssetsTable.id, id));
+    publishSafe({
+      eventType: "asset.generated", sourceModule: "portfolio-admin", sourceId: String(id),
+      payload: { portfolioAssetId: id, sourceUrl: asset.sourceUrl, brandSlug, role: asset.assetRole, portfolioId: asset.portfolioId },
+    });
+  } else if (asset.optimizationStatus === "failed" || asset.thumbnailStatus === "failed") {
+    if (asset.optimizationStatus === "failed") {
+      await db.update(aiPortfolioAssetsTable).set({ optimizationStatus: "pending" }).where(eq(aiPortfolioAssetsTable.id, id));
+      publishSafe({ eventType: "asset.archived", sourceModule: "portfolio-admin", sourceId: String(id), payload: { portfolioAssetId: id, storagePath: asset.storagePath, brandSlug, role: asset.assetRole } });
+    }
+    if (asset.thumbnailStatus === "failed") {
+      await db.update(aiPortfolioAssetsTable).set({ thumbnailStatus: "pending" }).where(eq(aiPortfolioAssetsTable.id, id));
+      publishSafe({ eventType: "asset.archived", sourceModule: "portfolio-admin", sourceId: String(id), payload: { portfolioAssetId: id, storagePath: asset.storagePath, brandSlug, role: asset.assetRole } });
+    }
+  } else {
+    res.status(409).json({ error: "Asset is not in a failed state — nothing to retry" });
+    return;
+  }
+
+  await logAudit("portfolio-admin", "asset_archive_retry", String(id), "ai_portfolio_asset", "success", {});
+  res.json({ ok: true, message: `Retry re-queued for asset ${id}` });
 });
 
 // ── Portfolio Permissions ─────────────────────────────────────────────────────

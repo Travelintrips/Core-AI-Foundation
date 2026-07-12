@@ -33,6 +33,7 @@ import { computePriorityScore } from "./services/priorityEngine.js";
 import { createSchedule } from "./services/aiSchedulerService.js";
 import { seedServiceCatalog } from "./seedCatalog.js";
 import { seedPortfolioShowcase } from "./seedPortfolio.js";
+import { seedAssetLifecycleSubscriptions } from "./seedAssetLifecycle.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1078,6 +1079,9 @@ async function main() {
 
   // Service Showcase: Portfolio / Reviews / FAQ (pre-purchase creative showcase)
   await seedPortfolioShowcase();
+
+  // Sprint P2.1.1: background asset-archiving pipeline event subscriptions
+  await seedAssetLifecycleSubscriptions();
 
   console.log("\n✅ Seed complete!\n");
   process.exit(0);

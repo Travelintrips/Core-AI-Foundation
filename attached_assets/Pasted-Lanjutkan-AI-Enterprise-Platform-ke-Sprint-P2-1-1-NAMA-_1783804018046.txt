@@ -1,0 +1,594 @@
+Lanjutkan AI Enterprise Platform ke Sprint P2.1.1
+
+NAMA SPRINT
+
+Background Asset Archiving
+Storage Pipeline
+Asset Lifecycle
+Production Hardening
+
+==========================================================
+STATUS SAAT INI
+==========================================================
+
+Sprint P2 Portfolio System
+✅ Complete
+
+Sprint P2.1 Demo Portfolio Production
+✅ Sedang berjalan
+
+Smoke Test:
+
+- Replicate berhasil menghasilkan gambar
+- Portfolio berhasil dibuat
+- Asset berhasil dibuat
+- QC berjalan
+- Batch berjalan
+
+Masalah utama:
+
+Storage archiving masih synchronous.
+
+Akibatnya:
+
+Replicate selesai
+
+↓
+
+Generator menunggu download
+
+↓
+
+Generator menunggu upload Object Storage
+
+↓
+
+Portfolio belum selesai dibuat
+
+↓
+
+Queue Worker tetap busy
+
+↓
+
+Dispatcher tidak dapat mengambil job berikutnya
+
+↓
+
+Batch menjadi sangat lama.
+
+==========================================================
+WAJIB DILAKUKAN TERLEBIH DAHULU
+==========================================================
+
+Audit seluruh image pipeline.
+
+Cari:
+
+- Image Generator
+- Asset Registry
+- Storage Service
+- Queue
+- Dispatcher
+- Worker Cluster
+- Thumbnail Service
+- Signed URL
+- Gallery
+
+JANGAN membuat pipeline kedua.
+
+Gunakan:
+
+Queue
+
+Dispatcher
+
+Worker Cluster
+
+Event Bus
+
+Storage
+
+yang SUDAH ADA.
+
+==========================================================
+TUJUAN
+==========================================================
+
+Generation tidak boleh menunggu upload storage.
+
+Storage harus berjalan di background.
+
+Target:
+
+Generate selesai dalam hitungan detik.
+
+Archiving berjalan asynchronous.
+
+==========================================================
+ARSITEKTUR BARU
+==========================================================
+
+Ubah flow menjadi:
+
+AI Generate
+
+↓
+
+Replicate
+
+↓
+
+Portfolio INSERT
+
+↓
+
+Asset INSERT
+
+status = generated
+
+↓
+
+Queue selesai
+
+↓
+
+Background Archive Job
+
+↓
+
+Download Replicate Image
+
+↓
+
+Upload Object Storage
+
+↓
+
+Update Asset URL
+
+↓
+
+Delete Temporary URL (optional)
+
+↓
+
+status = archived
+
+==========================================================
+ASSET LIFECYCLE
+==========================================================
+
+Tambahkan lifecycle:
+
+queued
+
+↓
+
+generating
+
+↓
+
+generated
+
+↓
+
+archiving
+
+↓
+
+archived
+
+↓
+
+optimized
+
+↓
+
+published
+
+Jika gagal:
+
+archive_failed
+
+optimize_failed
+
+thumbnail_failed
+
+==========================================================
+BACKGROUND ARCHIVE WORKER
+==========================================================
+
+Buat worker baru:
+
+archive-worker
+
+Tugas:
+
+Download image
+
+Upload storage
+
+Update DB
+
+Retry
+
+Tidak boleh menghambat image generation.
+
+==========================================================
+THUMBNAIL WORKER
+==========================================================
+
+Buat worker:
+
+thumbnail-worker
+
+Generate:
+
+thumbnail
+
+medium
+
+large
+
+webp optimization
+
+Semua berjalan background.
+
+==========================================================
+QUEUE
+==========================================================
+
+Gunakan Queue yang sudah ada.
+
+Tambahkan job type:
+
+archive_asset
+
+optimize_asset
+
+generate_thumbnail
+
+==========================================================
+EVENT BUS
+==========================================================
+
+Gunakan Event Bus existing.
+
+Publish event:
+
+asset.generated
+
+asset.archiving
+
+asset.archived
+
+asset.archive_failed
+
+asset.optimized
+
+asset.thumbnail_created
+
+==========================================================
+RETRY POLICY
+==========================================================
+
+Gunakan exponential backoff.
+
+Retry:
+
+3 kali
+
+Jika gagal:
+
+status = archive_failed
+
+Admin dapat:
+
+Retry Archive
+
+==========================================================
+OBJECT STORAGE
+==========================================================
+
+Replicate URL
+
+↓
+
+download
+
+↓
+
+upload object storage
+
+↓
+
+permanent url
+
+↓
+
+temporary replicate url expired
+
+Storage path internal.
+
+Customer hanya melihat:
+
+Signed URL
+
+atau
+
+Public CDN URL
+
+==========================================================
+SIGNED URL
+==========================================================
+
+Original image:
+
+Private
+
+Preview:
+
+Public
+
+Download:
+
+Signed URL
+
+Expired:
+
+Configurable
+
+==========================================================
+DATABASE
+==========================================================
+
+Tambahkan jika belum ada:
+
+archive_status
+
+archive_started_at
+
+archive_completed_at
+
+archive_attempts
+
+archive_error
+
+storage_provider
+
+storage_bucket
+
+storage_key
+
+thumbnail_status
+
+optimization_status
+
+==========================================================
+ADMIN UI
+==========================================================
+
+Portfolio Review Queue tampilkan:
+
+Generation
+
+Archiving
+
+Thumbnail
+
+Optimization
+
+Publishing
+
+Progress Bar
+
+==========================================================
+BATCH STATUS
+==========================================================
+
+Contoh:
+
+Portfolio
+
+✔ Generated
+
+⏳ Archiving
+
+✔ Archived
+
+✔ Thumbnail
+
+✔ Optimized
+
+✔ Published
+
+==========================================================
+GALLERY
+==========================================================
+
+Gallery hanya memakai:
+
+Permanent URL
+
+Tidak boleh memakai:
+
+Replicate temporary URL
+
+==========================================================
+CLEANUP
+==========================================================
+
+Jika archive sukses:
+
+Optional:
+
+hapus temporary url
+
+atau
+
+tetap simpan sebagai backup
+
+Policy configurable.
+
+==========================================================
+MONITORING
+==========================================================
+
+Dashboard baru:
+
+Archive Queue
+
+Waiting
+
+Running
+
+Retrying
+
+Failed
+
+Completed
+
+Average Time
+
+Storage Usage
+
+==========================================================
+METRICS
+==========================================================
+
+Hitung:
+
+Generation Time
+
+Archive Time
+
+Optimization Time
+
+Thumbnail Time
+
+Publish Time
+
+Total Pipeline Time
+
+==========================================================
+SECURITY
+==========================================================
+
+Pastikan:
+
+Storage path tidak bocor
+
+Original tidak public
+
+Signed URL aman
+
+Tidak ada path traversal
+
+==========================================================
+TEST
+==========================================================
+
+Test:
+
+1. Generate portfolio.
+
+2. Portfolio langsung selesai tanpa menunggu archive.
+
+3. Archive berjalan background.
+
+4. Thumbnail dibuat.
+
+5. Optimization dibuat.
+
+6. Asset URL berubah menjadi permanent.
+
+7. Gallery memakai permanent URL.
+
+8. Replicate URL tidak dipakai lagi setelah archive.
+
+9. Retry archive berhasil.
+
+10. Archive failure tidak membuat portfolio gagal.
+
+11. Queue tetap berjalan.
+
+12. Dispatcher tetap mengambil job lain.
+
+13. Worker tidak blocking.
+
+14. Batch 30 portfolio bisa berjalan paralel.
+
+15. Signed URL bekerja.
+
+16. Storage aman.
+
+17. OpenAPI clean.
+
+18. pnpm run verify clean.
+
+==========================================================
+PERFORMANCE TARGET
+==========================================================
+
+Smoke Test:
+
+Portfolio generation:
+
+< 15 detik
+
+Archive:
+
+Background
+
+Thumbnail:
+
+Background
+
+Worker tidak pernah idle karena upload.
+
+==========================================================
+FINAL REPORT
+==========================================================
+
+Berikan laporan:
+
+Reuse Audit
+
+Storage Architecture
+
+Queue Flow
+
+Worker Flow
+
+Asset Lifecycle
+
+Retry Policy
+
+Performance
+
+Monitoring
+
+Testing
+
+Known Limitations
+
+Production Readiness Score
+
+==========================================================
+TARGET AKHIR
+==========================================================
+
+Pipeline image production-ready.
+
+Generation cepat.
+
+Storage asynchronous.
+
+Queue tidak blocking.
+
+Dispatcher tetap bekerja.
+
+Gallery menggunakan permanent storage.
+
+Batch 30 portfolio siap dijalankan tanpa bottleneck.
