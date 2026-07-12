@@ -69,7 +69,7 @@ export function ProjectDetail() {
                 <span className="cp-badge" style={{ background: "rgba(249,115,22,0.1)", color: "var(--cp-orange)", border: "1px solid rgba(249,115,22,0.25)" }}>Creative AI</span>
                 <span className="cp-badge" style={{ background: "rgba(34,211,238,0.1)", color: "#22D3EE", border: "1px solid rgba(34,211,238,0.25)" }}>Human Review</span>
               </div>
-              <h1 className="cp-h2" style={{ marginBottom: 8, fontSize: 30 }}>Brand Refresh Q1 — 2025</html>
+              <h1 className="cp-h2" style={{ marginBottom: 8, fontSize: 30 }}>Brand Refresh Q1 — 2025</h1>
               <div style={{ display: "flex", gap: 20, fontSize: 13, color: "var(--cp-navy-lt)", alignItems: "center" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 5 }}><Clock size={13} /> Dimulai 10 Des 2024</span>
                 <span style={{ display: "flex", alignItems: "center", gap: 5 }}><CheckCircle2 size={13} color="#10B981" /> Estimasi 15 Des 2024</span>
