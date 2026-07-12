@@ -1,5 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { Readable } from "stream";
+import { objectStorageService, ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage.js";
+import { ObjectPermission } from "../lib/objectAcl.js";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage.js";
 
 function parseUploadUrlBody(body: unknown): { name: string; size: number; contentType: string } | null {
@@ -10,7 +12,6 @@ function parseUploadUrlBody(body: unknown): { name: string; size: number; conten
 }
 
 const router: IRouter = Router();
-const objectStorageService = new ObjectStorageService();
 
 router.post("/storage/uploads/request-url", async (req: Request, res: Response) => {
   const parsed = parseUploadUrlBody(req.body);
@@ -29,6 +30,12 @@ router.post("/storage/uploads/request-url", async (req: Request, res: Response) 
   }
 });
 
+/**
+ * GET /storage/public-objects/*
+ *
+ * Serve public assets from PUBLIC_OBJECT_SEARCH_PATHS.
+ * Unconditionally public — no authentication or ACL checks.
+ */
 router.get("/storage/public-objects/*filePath", async (req: Request, res: Response) => {
   try {
     const raw = req.params.filePath;
@@ -53,6 +60,12 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
   }
 });
 
+/**
+ * GET /storage/objects/*
+ *
+ * Serve object entities from PRIVATE_OBJECT_DIR.
+ * Can be protected with auth/ACL checks — see commented example below.
+ */
 router.get("/storage/objects/*path", async (req: Request, res: Response) => {
   try {
     const raw = req.params.path;

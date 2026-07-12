@@ -17,6 +17,7 @@ import type { AiJob, AiWorker } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
 import { executeAI } from "./aiExecutionService.js";
+import { finalizeWorkflowCost } from "./observabilityService.js";
 import { routeToModel } from "./aiModelRouter.js";
 import { getProviderApiKey } from "./aiSecretService.js";
 import { archiveReplicateAsset, optimizeArchivedAsset, generateAssetThumbnail } from "./portfolioStorageService.js";
@@ -89,6 +90,13 @@ async function executeTextJob(job: AiJob, dispatchedLabel: string): Promise<Reco
     provider: resolved.provider,
     temperature: coerceNumber(payload.temperature),
     maxTokens: coerceNumber(payload.maxTokens),
+    observability: {
+      jobId:        job.id,
+      agentName:    dispatchedLabel,
+      providerName: resolved.provider.slug,
+      modelName:    resolved.model.modelId,
+      requestType:  "text",
+    },
   });
 
   return {
@@ -132,6 +140,13 @@ async function executeImageJob(job: AiJob): Promise<Record<string, unknown>> {
     prompt,
     model: finalResolved.model,
     provider: finalResolved.provider,
+    observability: {
+      jobId:        job.id,
+      agentName:    "image-generation",
+      providerName: finalResolved.provider.slug,
+      modelName:    finalResolved.model.modelId,
+      requestType:  "image",
+    },
   });
 
   return {

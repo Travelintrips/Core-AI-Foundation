@@ -1,0 +1,309 @@
+Sekarang kita masuk ke PHASE 2.
+
+Jangan bertanya lagi.
+
+Jangan memberikan saran.
+
+Jangan membuat proposal.
+
+Langsung implementasikan seluruh perubahan frontend.
+
+Yang dikerjakan HANYA halaman AI Marketplace (Service Catalog).
+
+Landing Page Phase 1 sudah selesai dan sudah saya approve.
+
+================================================
+
+TUJUAN
+
+================================================
+
+Halaman Marketplace harus terasa seperti gabungan:
+
+- OpenAI GPT Store
+- Canva Template Marketplace
+- Apple Store
+- Stripe Dashboard
+- Linear
+
+Bukan seperti katalog biasa.
+
+Saya ingin user merasa sedang memilih AI Specialist Enterprise.
+
+================================================
+
+JANGAN UBAH
+
+================================================
+
+Jangan ubah:
+
+- backend
+- API
+- database
+- routing
+- business flow
+- authentication
+
+Hanya frontend.
+
+================================================
+
+IMPLEMENTASI
+
+================================================
+
+1.
+
+Tambahkan Hero Marketplace.
+
+Headline:
+
+Choose Your AI Specialist
+
+Subheadline:
+
+Explore 150+ AI services across Creative, Finance, Legal, Logistics, Procurement, Trading, HR, Marketing, Executive and more.
+
+Tambahkan Search Bar besar.
+
+Placeholder:
+
+Search AI service...
+
+================================================
+
+2.
+
+Redesign Category Filter.
+
+Gunakan icon.
+
+Creative AI
+
+Marketing AI
+
+Finance AI
+
+Accounting AI
+
+Tax AI
+
+HR AI
+
+Legal AI
+
+Logistics AI
+
+Customs
+
+Trading
+
+Executive
+
+Customer Service
+
+Data Analytics
+
+Gunakan horizontal scroll.
+
+================================================
+
+3.
+
+Tambahkan Featured Services.
+
+Minimal 4 card.
+
+Badge:
+
+Most Popular
+
+New
+
+Enterprise
+
+Fast Delivery
+
+================================================
+
+4.
+
+Redesign Service Card.
+
+Isi card:
+
+Icon
+
+Category
+
+Service Name
+
+Description
+
+Rating
+
+Completed Projects
+
+Delivery Time
+
+Human Review Badge
+
+Starting Price
+
+View Detail
+
+Hover:
+
+- card lift
+- shadow
+- border glow
+- icon animation
+
+================================================
+
+5.
+
+Tambahkan Filter Sidebar.
+
+Price
+
+Delivery Time
+
+Human Review
+
+Industry
+
+Department
+
+Rating
+
+Commercial Ready
+
+Reset Filter
+
+================================================
+
+6.
+
+Tambahkan Sort.
+
+Most Popular
+
+Newest
+
+Fastest
+
+Lowest Price
+
+Highest Rating
+
+================================================
+
+7.
+
+Tambahkan AI Recommendation Section.
+
+Recommended For You
+
+Berdasarkan:
+
+Industry
+
+Previous Order
+
+Popular
+
+================================================
+
+8.
+
+Tambahkan Recently Viewed.
+
+================================================
+
+9.
+
+Tambahkan Empty State.
+
+================================================
+
+10.
+
+Tambahkan Skeleton Loading.
+
+================================================
+
+11.
+
+Tambahkan Pagination atau Load More.
+
+================================================
+
+12.
+
+Responsive.
+
+Desktop
+
+Tablet
+
+Mobile
+
+================================================
+
+13.
+
+Micro Interaction.
+
+Hover
+
+Fade
+
+Card Lift
+
+Smooth Transition
+
+================================================
+
+14.
+
+Gunakan Design System yang sudah dibuat pada Phase 1.
+
+================================================
+
+15.
+
+Setelah selesai.
+
+Jalankan:
+
+npm run typecheck
+
+npm run build
+
+Perbaiki semua error akibat perubahan.
+
+================================================
+
+OUTPUT
+
+================================================
+
+Berikan:
+
+- daftar file yang berubah
+
+- screenshot desktop
+
+- screenshot tablet
+
+- screenshot mobile
+
+- hasil build
+
+- hasil typecheck
+
+Jangan bertanya lagi.
+
+Langsung implementasikan seluruh Phase 2.

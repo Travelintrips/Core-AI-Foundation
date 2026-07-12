@@ -25,7 +25,7 @@ import {
   creativeProjectStepsTable,
   aiAgentsTable,
 } from "@workspace/db";
-import { executeAI, type ExecutionInput, type ExecutionOutput } from "./aiExecutionService.js";
+import { executeAI, type ExecutionInput, type ExecutionOutput, type ObservabilityContext } from "./aiExecutionService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
 import { logAudit } from "./aiAuditService.js";
 import {
@@ -312,6 +312,14 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
       const memoryContext = formatContextForPrompt(executionContext);
       const systemPrompt = baseSystemPrompt + memoryContext;
 
+      const stepObservability: ObservabilityContext = {
+        agentId:      agent?.id     ?? null,
+        agentName:    step.slug,
+        providerName: selectedModel.provider.slug,
+        modelName:    selectedModel.model.modelId,
+        requestType:  "text",
+      };
+
       const primaryInput: ExecutionInput = {
         prompt: userPrompt,
         systemPrompt,
@@ -319,6 +327,7 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
         provider: selectedModel.provider,
         temperature,
         maxTokens,
+        observability: stepObservability,
       };
 
       const fallbackInputs: ExecutionInput[] = fallbackModels.map((m) => ({
@@ -328,6 +337,7 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
         provider: m.provider,
         temperature,
         maxTokens,
+        observability: { ...stepObservability, providerName: m.provider.slug, modelName: m.model.modelId },
       }));
 
       // ── Execute AI with retry + timeout (Phase 4.5) ───────────────────────
