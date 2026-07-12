@@ -1,4 +1,3 @@
-import { Storage, type File } from "@google-cloud/storage";
 import { Storage, File } from "@google-cloud/storage";
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
@@ -38,20 +37,6 @@ export class ObjectNotFoundError extends Error {
   }
 }
 
-function parseObjectPath(path: string): { bucketName: string; objectName: string } {
-  if (!path.startsWith("/")) path = `/${path}`;
-  const parts = path.split("/");
-  if (parts.length < 3) throw new Error("Invalid object path: must contain at least a bucket name");
-  return { bucketName: parts[1], objectName: parts.slice(2).join("/") };
-}
-
-export class ObjectStorageService {
-  getPublicObjectSearchPaths(): string[] {
-    const raw = process.env.PUBLIC_OBJECT_SEARCH_PATHS || "";
-    const paths = Array.from(new Set(raw.split(",").map((p) => p.trim()).filter(Boolean)));
-    if (paths.length === 0) {
-      throw new Error(
-        "PUBLIC_OBJECT_SEARCH_PATHS not set. Provision object storage first.",
 export class ObjectStorageService {
   constructor() {}
 
@@ -74,6 +59,17 @@ export class ObjectStorageService {
     return paths;
   }
 
+  getPrivateObjectDir(): string {
+    const dir = process.env.PRIVATE_OBJECT_DIR || "";
+    if (!dir) {
+      throw new Error(
+        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
+          "tool and set PRIVATE_OBJECT_DIR env var."
+      );
+    }
+    return dir;
+  }
+
   /**
    * Server-side (non-presigned) upload used by internal pipelines — e.g. downloading
    * a Replicate-generated image and persisting a permanent copy. Writes to the first
@@ -92,45 +88,11 @@ export class ObjectStorageService {
     const file = bucket.file(objectName);
     await file.save(buffer, { contentType, resumable: false });
     return { objectPath: `/storage/public-objects/${relativePath}`, relativePath };
-  getPrivateObjectDir(): string {
-    const dir = process.env.PRIVATE_OBJECT_DIR || "";
-    if (!dir) {
-      throw new Error(
-        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
-          "tool and set PRIVATE_OBJECT_DIR env var."
-      );
-    }
-    return dir;
   }
 
   async searchPublicObject(filePath: string): Promise<File | null> {
     for (const searchPath of this.getPublicObjectSearchPaths()) {
       const fullPath = `${searchPath}/${filePath}`;
-      const { bucketName, objectName } = parseObjectPath(fullPath);
-      const bucket = objectStorageClient.bucket(bucketName);
-      const file = bucket.file(objectName);
-      const [exists] = await file.exists();
-      if (exists) return file;
-    }
-    return null;
-  }
-
-  async downloadObject(file: File, cacheTtlSec = 3600): Promise<Response> {
-    const [metadata] = await file.getMetadata();
-    const { Readable } = await import("node:stream");
-    const nodeStream = file.createReadStream();
-    const webStream = Readable.toWeb(nodeStream) as ReadableStream;
-    const headers: Record<string, string> = {
-      "Content-Type": (metadata.contentType as string) || "application/octet-stream",
-      "Cache-Control": `public, max-age=${cacheTtlSec}`,
-    };
-    if (metadata.size) headers["Content-Length"] = String(metadata.size);
-    return new Response(webStream, { headers });
-  }
-}
-
-export const objectStorageService = new ObjectStorageService();
-
       const { bucketName, objectName } = parseObjectPath(fullPath);
       const bucket = objectStorageClient.bucket(bucketName);
       const file = bucket.file(objectName);
