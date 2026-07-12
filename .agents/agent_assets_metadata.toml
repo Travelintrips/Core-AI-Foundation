@@ -24,3 +24,9 @@ id = "bELvdlcHWqyH44j1LiKYB"
 uri = "file://attached_assets/DESIGN_MASTER_CreativeStudio.md"
 type = "text"
 title = "Design Master — Creative Studio AI Enterprise"
+
+[[outputs]]
+id = "viWn9kTQz4wRLXL9k1whr"
+uri = "file://attached_assets/UX_BLUEPRINT_v2_CreativeStudio.md"
+type = "text"
+title = "Creative Studio — UX Blueprint v2.0"
