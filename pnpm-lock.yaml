@@ -2873,7 +2873,6 @@ packages:
     resolution: {integrity: sha512-eAmLkjDjAFCVXg7A1unxHsLf961m6y17QFqXqAXGj/gVkKFrEICfStRfwUlGNfeCEjNRa32JEWOUTlYXPyyKvA==}
     engines: {node: '>=14'}
 
-
   gopd@1.2.0:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
     engines: {node: '>= 0.4'}
@@ -5967,7 +5966,7 @@ snapshots:
       - encoding
       - supports-color
 
-  gcp-metadta@8.1.2:
+  gcp-metadata@8.1.2:
     dependencies:
       gaxios: 7.2.0
       google-logging-utils: 1.1.3
