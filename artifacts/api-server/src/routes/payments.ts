@@ -202,9 +202,46 @@ router.post("/public/payments/:scheduleId/submit-proof", paymentLimiter, async (
   const reference = typeof body.reference === "string" ? body.reference.trim() : "";
   if (!reference) { res.status(400).json({ error: "reference is required" }); return; }
 
-  const schedule = await submitPaymentProof(scheduleId, reference);
+  // Optional: base64-encoded image of bank transfer proof
+  let proofImageUrl: string | null = null;
+  const proofImageBase64 = typeof body.proofImageBase64 === "string" ? body.proofImageBase64 : null;
+  const proofImageMimeType = typeof body.proofImageMimeType === "string" ? body.proofImageMimeType : "image/jpeg";
+
+  if (proofImageBase64) {
+    try {
+      const { uploadPaymentProofImage } = await import("../lib/supabaseStorage.js");
+      proofImageUrl = await uploadPaymentProofImage(proofImageBase64, proofImageMimeType, scheduleId);
+    } catch (err) {
+      console.warn("[payments] Proof image upload failed (proceeding without image):", err);
+    }
+  }
+
+  const schedule = await submitPaymentProof(scheduleId, reference, proofImageUrl);
   if (!schedule) { res.status(404).json({ error: "Payment schedule not found or already paid" }); return; }
-  res.json({ ok: true, schedule });
+  res.json({ ok: true, schedule, proofImageUrl });
+});
+
+// ── GET /public/payments/:scheduleId/status ───────────────────────────────────
+// Lightweight polling endpoint for real-time payment status updates.
+
+router.get("/public/payments/:scheduleId/status", async (req, res): Promise<void> => {
+  const scheduleId = parseId(req.params.scheduleId);
+  if (scheduleId === null) { res.status(400).json({ error: "Invalid scheduleId" }); return; }
+
+  const [schedule] = await db
+    .select({
+      id: aiPaymentScheduleTable.id,
+      status: aiPaymentScheduleTable.status,
+      reference: aiPaymentScheduleTable.reference,
+      paidAt: aiPaymentScheduleTable.paidAt,
+      updatedAt: aiPaymentScheduleTable.updatedAt,
+    })
+    .from(aiPaymentScheduleTable)
+    .where(eq(aiPaymentScheduleTable.id, scheduleId))
+    .limit(1);
+
+  if (!schedule) { res.status(404).json({ error: "Schedule not found" }); return; }
+  res.json({ scheduleId, status: schedule.status, reference: schedule.reference, paidAt: schedule.paidAt, updatedAt: schedule.updatedAt });
 });
 
 export default router;

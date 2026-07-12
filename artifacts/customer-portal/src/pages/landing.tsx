@@ -3,7 +3,7 @@ import { Layout } from "@/components/layout";
 import { motion, useInView } from "framer-motion";
 import { useRef, useEffect, useState } from "react";
 import {
-  ArrowRight, Sparkles, ChevronRight, Star, CheckCircle,
+  ArrowRight, Sparkles, ChevronRight, Star,
   Palette, TrendingUp, DollarSign, Scale, Truck, BarChart3,
   Users, ShoppingCart, FileText, Headphones, Globe, Package,
   Cpu, Briefcase, Shield, Play, Quote, Brain,
@@ -59,10 +59,10 @@ const SERVICES = [
 
 /* ─── HOW IT WORKS ─── */
 const STEPS = [
-  { num: "01", icon: FileText,   title: "Submit Brief",   desc: "Ceritakan proyek Anda melalui formulir terstruktur. AI kami akan membaca dan memahami konteks bisnis Anda.",  time: "< 5 menit"  },
-  { num: "02", icon: Brain,      title: "AI Analysis",    desc: "Sistem AI menganalisis brief, menyusun tim virtual, dan memberikan estimasi scope dan biaya secara otomatis.", time: "< 2 jam"    },
-  { num: "03", icon: Users,      title: "Human Review",   desc: "Spesialis manusia kami mereview hasil AI, memastikan kualitas dan akurasi sebelum dikirim ke Anda.",         time: "Termonitor" },
-  { num: "04", icon: Boxes,      title: "Delivery",       desc: "Hasil kerja dikirim ke workspace Anda. Review, setujui, dan download aset siap pakai.",                      time: "On time"    },
+  { num: "01", icon: FileText, title: "Submit Brief",  desc: "Ceritakan proyek Anda melalui formulir terstruktur. AI kami akan membaca dan memahami konteks bisnis Anda.",  time: "< 5 menit"  },
+  { num: "02", icon: Brain,    title: "AI Analysis",   desc: "Sistem AI menganalisis brief, menyusun tim virtual, dan memberikan estimasi scope dan biaya secara otomatis.", time: "< 2 jam"    },
+  { num: "03", icon: Users,    title: "Human Review",  desc: "Spesialis manusia kami mereview hasil AI, memastikan kualitas dan akurasi sebelum dikirim ke Anda.",         time: "Termonitor" },
+  { num: "04", icon: Boxes,    title: "Delivery",      desc: "Hasil kerja dikirim ke workspace Anda. Review, setujui, dan download aset siap pakai.",                      time: "On time"    },
 ];
 
 /* ─── TESTIMONIALS ─── */
@@ -92,14 +92,15 @@ const TRUST_STATS = [
   { value: 48000, suffix: "+", label: "Jam kerja dihemat/bulan", icon: Clock      },
 ];
 
-/* ─── DASHBOARD MOCKUP ─── */
+/* ─── ACTIVITY FEED DATA ─── */
 const ACTIVITY_FEED = [
-  { agent: "Creative AI",   status: "Generating...", dot: "#F97316" },
-  { agent: "Finance AI",    status: "Completed",     dot: "#10B981" },
-  { agent: "Legal AI",      status: "Reviewing...",  dot: "#F59E0B" },
-  { agent: "Marketing AI",  status: "Processing...", dot: "#22D3EE" },
+  { agent: "Creative AI",  status: "Generating...", dot: "#F97316" },
+  { agent: "Finance AI",   status: "Completed",     dot: "#10B981" },
+  { agent: "Legal AI",     status: "Reviewing...",  dot: "#F59E0B" },
+  { agent: "Marketing AI", status: "Processing...", dot: "#22D3EE" },
 ];
 
+/* ─── DASHBOARD MOCKUP (dark) ─── */
 function DashboardMockup() {
   const [progressA, setProgressA] = useState(62);
   const [progressC, setProgressC] = useState(35);
@@ -117,9 +118,9 @@ function DashboardMockup() {
   }, []);
 
   const PROJECTS = [
-    { name: "Brand Refresh Q1",    status: "PRODUKSI", pct: progressA, color: "#F97316" },
-    { name: "Marketing Campaign",  status: "REVIEW",   pct: 92,        color: "#22D3EE" },
-    { name: "Finance Report Q4",   status: "ANALISIS", pct: progressC, color: "#F59E0B" },
+    { name: "Brand Refresh Q1",   status: "PRODUKSI", pct: progressA, color: "#F97316" },
+    { name: "Marketing Campaign", status: "REVIEW",   pct: 92,        color: "#22D3EE" },
+    { name: "Finance Report Q4",  status: "ANALISIS", pct: progressC, color: "#F59E0B" },
   ];
 
   return (
@@ -127,32 +128,32 @@ function DashboardMockup() {
       initial={{ opacity: 0, y: 32, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.8, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
-      className="relative w-full max-w-lg mx-auto rounded-2xl overflow-hidden shadow-2xl"
+      className="relative w-full max-w-lg mx-auto rounded-2xl overflow-hidden"
       style={{
-        background: "#FFFFFF",
-        border: "1px solid rgba(15,23,42,0.10)",
-        boxShadow: "0 24px 80px rgba(15,23,42,0.15), 0 0 0 1px rgba(249,115,22,0.08)",
+        background: "#0D1526",
+        border: "1px solid rgba(124,110,250,0.20)",
+        boxShadow: "0 24px 80px rgba(6,11,24,0.70), 0 0 0 1px rgba(124,110,250,0.10), 0 0 60px rgba(124,110,250,0.08)",
         transform: "perspective(1200px) rotateX(2deg)",
       }}
     >
       {/* Window chrome */}
-      <div className="flex items-center gap-1.5 px-4 py-3 border-b border-gray-100">
-        <div className="w-3 h-3 rounded-full bg-red-400" />
-        <div className="w-3 h-3 rounded-full bg-amber-400" />
-        <div className="w-3 h-3 rounded-full bg-emerald-400" />
-        <div className="ml-3 h-5 rounded flex-1 bg-gray-100" style={{ maxWidth: 180 }} />
+      <div className="flex items-center gap-1.5 px-4 py-3" style={{ borderBottom: "1px solid rgba(36,51,82,0.80)", background: "#060B18" }}>
+        <div className="w-3 h-3 rounded-full bg-red-500/70" />
+        <div className="w-3 h-3 rounded-full bg-amber-400/70" />
+        <div className="w-3 h-3 rounded-full bg-emerald-400/70" />
+        <div className="ml-3 h-5 rounded flex-1" style={{ maxWidth: 180, background: "rgba(36,51,82,0.60)" }} />
         <div className="flex items-center gap-1">
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-xs text-gray-400">Live</span>
+          <span className="text-xs" style={{ color: "#8B9BC4" }}>Live</span>
         </div>
       </div>
 
-      <div className="p-5 space-y-4 bg-[#FAFAF7]">
-        {/* Greeting */}
+      <div className="p-5 space-y-4">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm font-display font-bold text-gray-900">Project Overview</div>
-            <div className="text-xs text-gray-500">Aktif & terkini</div>
+            <div className="text-sm font-display font-bold" style={{ color: "#F0F4FF" }}>Project Overview</div>
+            <div className="text-xs" style={{ color: "#8B9BC4" }}>Aktif & terkini</div>
           </div>
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
         </div>
@@ -164,8 +165,8 @@ function DashboardMockup() {
             { label: "Selesai Bulan Ini", value: "7",             color: "#10B981" },
             { label: "Jam Dihemat",       value: String(savedHours), color: "#F59E0B" },
           ].map((s) => (
-            <div key={s.label} className="rounded-xl p-3 bg-white border border-gray-100">
-              <div className="text-xs mb-1 text-gray-500">{s.label}</div>
+            <div key={s.label} className="rounded-xl p-3" style={{ background: "#131E35", border: "1px solid #243352" }}>
+              <div className="text-xs mb-1" style={{ color: "#8B9BC4" }}>{s.label}</div>
               <div className="text-xl font-display font-bold" style={{ color: s.color }}>{s.value}</div>
             </div>
           ))}
@@ -174,18 +175,19 @@ function DashboardMockup() {
         {/* Projects */}
         <div className="space-y-2">
           {PROJECTS.map((p) => (
-            <div key={p.name} className="flex items-center gap-3 rounded-xl px-3 py-2.5 bg-white border border-gray-100">
+            <div key={p.name} className="flex items-center gap-3 rounded-xl px-3 py-2.5"
+              style={{ background: "#131E35", border: "1px solid #243352" }}>
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium truncate mb-1.5 text-gray-900">{p.name}</div>
+                <div className="text-xs font-medium truncate mb-1.5" style={{ color: "#F0F4FF" }}>{p.name}</div>
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 h-1.5 rounded-full bg-gray-100">
+                  <div className="flex-1 h-1.5 rounded-full" style={{ background: "#243352" }}>
                     <div className="h-full rounded-full transition-all duration-500" style={{ width: `${p.pct}%`, background: p.color }} />
                   </div>
-                  <span className="text-xs font-mono text-gray-400 min-w-8 text-right">{Math.round(p.pct)}%</span>
+                  <span className="text-xs font-mono min-w-8 text-right" style={{ color: "#8B9BC4" }}>{Math.round(p.pct)}%</span>
                 </div>
               </div>
               <span className="text-[10px] px-2 py-0.5 rounded-full shrink-0 font-semibold"
-                style={{ background: `${p.color}15`, color: p.color, border: `1px solid ${p.color}25` }}>
+                style={{ background: `${p.color}18`, color: p.color, border: `1px solid ${p.color}30` }}>
                 {p.status}
               </span>
             </div>
@@ -193,15 +195,15 @@ function DashboardMockup() {
         </div>
 
         {/* Activity feed */}
-        <div className="rounded-xl overflow-hidden border border-gray-100">
-          <div className="px-3 py-2 flex items-center gap-2 bg-white border-b border-gray-100">
+        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #243352" }}>
+          <div className="px-3 py-2 flex items-center gap-2" style={{ background: "#060B18", borderBottom: "1px solid #243352" }}>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Activity Feed</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "#8B9BC4" }}>Activity Feed</span>
           </div>
           {ACTIVITY_FEED.map((item, i) => (
             <div key={i} className="flex items-center justify-between px-3 py-2 transition-all duration-700"
-              style={{ background: i === activityIdx ? "rgba(249,115,22,0.04)" : "#FFFFFF", opacity: i === activityIdx ? 1 : 0.5 }}>
-              <span className="text-xs text-gray-500">{item.agent}</span>
+              style={{ background: i === activityIdx ? "rgba(124,110,250,0.06)" : "#0D1526", opacity: i === activityIdx ? 1 : 0.5 }}>
+              <span className="text-xs" style={{ color: "#8B9BC4" }}>{item.agent}</span>
               <div className="flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full" style={{ background: item.dot }} />
                 <span className="text-xs font-medium" style={{ color: item.dot }}>{item.status}</span>
@@ -212,9 +214,9 @@ function DashboardMockup() {
 
         {/* AI insight */}
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
-          style={{ background: "rgba(249,115,22,0.06)", border: "1px solid rgba(249,115,22,0.15)" }}>
-          <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#F97316" }} />
-          <span className="text-xs" style={{ color: "#EA580C" }}>✦ AI: Campaign Anda memiliki potensi 2.3× lebih tinggi jika diluncurkan Selasa…</span>
+          style={{ background: "rgba(124,110,250,0.08)", border: "1px solid rgba(124,110,250,0.18)" }}>
+          <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#7C6EFA" }} />
+          <span className="text-xs" style={{ color: "#9D91FB" }}>✦ AI: Campaign Anda memiliki potensi 2.3× lebih tinggi jika diluncurkan Selasa…</span>
         </div>
       </div>
     </motion.div>
@@ -234,11 +236,12 @@ function TrustStats() {
   return (
     <motion.section
       ref={ref}
-      className="py-20 px-4 bg-white border-y border-gray-100"
+      className="py-20 px-4"
+      style={{ background: "#0D1526", borderTop: "1px solid #243352", borderBottom: "1px solid #243352" }}
       initial="hidden" whileInView="show" viewport={{ once: true }} variants={stagger(0.12)}
     >
       <div className="container mx-auto max-w-5xl">
-        <motion.p className="text-center text-xs font-semibold uppercase tracking-widest mb-10 text-gray-400" variants={fadeUp}>
+        <motion.p className="text-center text-xs font-semibold uppercase tracking-widest mb-10" style={{ color: "#8B9BC4" }} variants={fadeUp}>
           Hasil nyata yang sudah kami capai bersama klien
         </motion.p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
@@ -247,14 +250,14 @@ function TrustStats() {
             return (
               <motion.div key={s.label} className="flex flex-col items-center text-center gap-3" variants={fadeUp}>
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center"
-                  style={{ background: "rgba(249,115,22,0.08)", border: "1px solid rgba(249,115,22,0.15)" }}>
-                  <Icon className="w-6 h-6 text-orange-500" />
+                  style={{ background: "rgba(124,110,250,0.10)", border: "1px solid rgba(124,110,250,0.20)" }}>
+                  <Icon className="w-6 h-6" style={{ color: "#7C6EFA" }} />
                 </div>
                 <div>
-                  <div className="font-display font-bold text-3xl text-navy">
+                  <div className="font-display font-bold text-3xl" style={{ color: "#F0F4FF" }}>
                     {vals[i].toLocaleString("id-ID")}{s.suffix}
                   </div>
-                  <div className="text-xs mt-1 text-gray-500">{s.label}</div>
+                  <div className="text-xs mt-1" style={{ color: "#8B9BC4" }}>{s.label}</div>
                 </div>
               </motion.div>
             );
@@ -273,19 +276,19 @@ export default function LandingPage() {
     <Layout>
 
       {/* ── HERO ──────────────────────────────────── */}
-      <section className="relative overflow-hidden" style={{ minHeight: "100vh", display: "flex", alignItems: "center" }}>
-        {/* Warm gradient background */}
+      <section className="relative overflow-hidden" style={{ minHeight: "100vh", display: "flex", alignItems: "center", background: "#060B18" }}>
+        {/* Violet aura top-right */}
         <div className="pointer-events-none absolute inset-0"
-          style={{ background: "linear-gradient(135deg, #FAFAF7 0%, #FFF7ED 55%, #FAFAF7 100%)" }} />
-        {/* Subtle orange glow top-right */}
+          style={{ background: "radial-gradient(ellipse 60% 50% at 85% 20%, rgba(124,110,250,0.12) 0%, transparent 70%)" }} />
+        {/* Subtle blue glow bottom-left */}
         <div className="pointer-events-none absolute inset-0"
-          style={{ background: "radial-gradient(ellipse 60% 50% at 85% 20%, rgba(249,115,22,0.10) 0%, transparent 70%)" }} />
-        {/* Subtle gold glow bottom-left */}
+          style={{ background: "radial-gradient(ellipse 40% 40% at 10% 80%, rgba(34,211,238,0.05) 0%, transparent 60%)" }} />
+        {/* Grid texture */}
         <div className="pointer-events-none absolute inset-0"
-          style={{ background: "radial-gradient(ellipse 40% 40% at 10% 80%, rgba(245,158,11,0.06) 0%, transparent 60%)" }} />
-        {/* Subtle grid texture */}
-        <div className="pointer-events-none absolute inset-0 opacity-[0.03]"
-          style={{ backgroundImage: "linear-gradient(rgba(15,23,42,1) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,1) 1px, transparent 1px)", backgroundSize: "72px 72px" }} />
+          style={{
+            backgroundImage: "linear-gradient(rgba(240,244,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(240,244,255,0.03) 1px, transparent 1px)",
+            backgroundSize: "72px 72px",
+          }} />
 
         <div className="relative z-10 container mx-auto px-4 md:px-8 max-w-7xl py-24 lg:py-32">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
@@ -294,8 +297,9 @@ export default function LandingPage() {
             <motion.div className="space-y-8 text-center lg:text-left" initial="hidden" animate="show" variants={stagger(0.12)}>
               {/* Announcement pill */}
               <motion.div variants={fadeUp}>
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-white border border-orange-200 text-orange-600 shadow-sm">
-                  <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold"
+                  style={{ background: "rgba(124,110,250,0.10)", border: "1px solid rgba(124,110,250,0.25)", color: "#9D91FB" }}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
                   ✦ Baru: Customs &amp; PPJK AI kini tersedia
                   <ChevronRight className="w-3 h-3 opacity-60" />
                 </div>
@@ -304,12 +308,12 @@ export default function LandingPage() {
               {/* Heading */}
               <motion.div className="space-y-4" variants={fadeUp}>
                 <h1 className="font-display font-bold leading-[1.08] tracking-tight text-balance"
-                  style={{ fontSize: "clamp(2.5rem, 5vw, 4rem)", color: "#0F172A" }}>
+                  style={{ fontSize: "clamp(2.5rem, 5vw, 4rem)", color: "#F0F4FF" }}>
                   Transformasi Bisnis Anda dengan{" "}
                   <span className="text-gradient-primary italic">AI Enterprise</span>{" "}
                   yang Bekerja untuk Anda.
                 </h1>
-                <p className="text-lg leading-relaxed max-w-xl mx-auto lg:mx-0 text-gray-600">
+                <p className="text-lg leading-relaxed max-w-xl mx-auto lg:mx-0" style={{ color: "#8B9BC4" }}>
                   Dari kampanye kreatif hingga dokumen kepabeanan — tim AI profesional kami
                   menangani semuanya, dengan kualitas enterprise dan kecepatan yang belum pernah ada.
                 </p>
@@ -329,8 +333,11 @@ export default function LandingPage() {
               </motion.div>
 
               {/* Trust bar */}
-              <motion.div className="flex flex-wrap justify-center lg:justify-start gap-x-7 gap-y-2 pt-4 border-t border-gray-200"
-                variants={fadeUp}>
+              <motion.div
+                className="flex flex-wrap justify-center lg:justify-start gap-x-7 gap-y-2 pt-4"
+                style={{ borderTop: "1px solid rgba(36,51,82,0.80)" }}
+                variants={fadeUp}
+              >
                 {[
                   { icon: "⭐", value: "2,400+", label: "Klien enterprise" },
                   { icon: "⚡", value: "15",     label: "Layanan AI" },
@@ -338,8 +345,8 @@ export default function LandingPage() {
                   { icon: "📈", value: "4.8×",   label: "Rata-rata ROI" },
                 ].map((s) => (
                   <div key={s.label} className="flex items-center gap-1.5">
-                    <span className="font-display font-bold text-xl text-navy">{s.value}</span>
-                    <span className="text-xs text-gray-500">{s.label}</span>
+                    <span className="font-display font-bold text-xl" style={{ color: "#F0F4FF" }}>{s.value}</span>
+                    <span className="text-xs" style={{ color: "#8B9BC4" }}>{s.label}</span>
                   </div>
                 ))}
               </motion.div>
@@ -354,14 +361,14 @@ export default function LandingPage() {
       </section>
 
       {/* ── PARTNER LOGOS ─────────────────────────── */}
-      <section className="py-8 border-y border-gray-100 bg-white">
+      <section className="py-8" style={{ background: "#0D1526", borderTop: "1px solid #243352", borderBottom: "1px solid #243352" }}>
         <div className="container mx-auto px-4 md:px-8 max-w-7xl">
-          <p className="text-center text-xs font-semibold uppercase tracking-widest mb-6 text-gray-400">
+          <p className="text-center text-xs font-semibold uppercase tracking-widest mb-6" style={{ color: "#8B9BC4" }}>
             Dipercaya oleh perusahaan terkemuka di Indonesia
           </p>
           <div className="flex flex-wrap justify-center items-center gap-8 md:gap-14 opacity-40">
             {["PT Pertamina", "Bank Mandiri", "Unilever ID", "Astra Group", "Tokopedia", "BCA"].map((name) => (
-              <span key={name} className="font-display font-bold text-sm tracking-tight text-gray-500">{name}</span>
+              <span key={name} className="font-display font-bold text-sm tracking-tight" style={{ color: "#8B9BC4" }}>{name}</span>
             ))}
           </div>
         </div>
@@ -371,22 +378,22 @@ export default function LandingPage() {
       <TrustStats />
 
       {/* ── SERVICES GRID ─────────────────────────── */}
-      <section className="py-24 px-4 bg-[#FAFAF7]">
+      <section className="py-24 px-4" style={{ background: "#060B18" }}>
         <div className="container mx-auto max-w-7xl">
           <motion.div className="text-center mb-16 space-y-4"
             initial="hidden" whileInView="show" viewport={{ once: true }} variants={stagger(0.1)}>
             <motion.div variants={fadeUp}>
-              <div className="section-chip">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
+                style={{ background: "rgba(124,110,250,0.10)", border: "1px solid rgba(124,110,250,0.20)", color: "#9D91FB" }}>
                 <Sparkles className="w-3 h-3" />
                 15 Layanan AI Profesional
               </div>
             </motion.div>
-            <motion.h2 className="font-display font-bold tracking-tight text-navy"
-              style={{ fontSize: "clamp(1.75rem, 3.5vw, 2.75rem)" }} variants={fadeUp}>
+            <motion.h2 className="font-display font-bold tracking-tight" style={{ fontSize: "clamp(1.75rem, 3.5vw, 2.75rem)", color: "#F0F4FF" }} variants={fadeUp}>
               Semua layanan AI yang Anda butuhkan,<br className="hidden md:block" />
               dalam satu platform.
             </motion.h2>
-            <motion.p className="text-base max-w-xl mx-auto text-gray-500" variants={fadeUp}>
+            <motion.p className="text-base max-w-xl mx-auto" style={{ color: "#8B9BC4" }} variants={fadeUp}>
               Dari kreatif hingga kepatuhan — setiap vertikal bisnis punya tim AI profesionalnya sendiri.
             </motion.p>
           </motion.div>
@@ -399,25 +406,34 @@ export default function LandingPage() {
               return (
                 <motion.div key={svc.name} variants={fadeUp}>
                   <Link href="/services"
-                    className="group relative flex flex-col gap-4 p-6 rounded-2xl bg-white border border-gray-100 shadow-sm cursor-pointer transition-all duration-200 hover:border-orange-200 hover:shadow-md hover:-translate-y-1"
-                    style={{ display: "flex" }}>
+                    className="group relative flex flex-col gap-4 p-6 rounded-2xl cursor-pointer transition-all duration-200 hover:-translate-y-1"
+                    style={{
+                      display: "flex",
+                      background: "#0D1526",
+                      border: "1px solid #243352",
+                      boxShadow: "0 2px 8px rgba(6,11,24,0.50)",
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(124,110,250,0.35)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 24px rgba(6,11,24,0.60), 0 0 0 1px rgba(124,110,250,0.10)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#243352"; (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 8px rgba(6,11,24,0.50)"; }}
+                  >
                     {svc.badge && (
                       <div className="absolute top-4 right-4 px-2 py-0.5 rounded-full text-xs font-semibold"
                         style={{ background: `${svc.badgeColor}14`, color: svc.badgeColor, border: `1px solid ${svc.badgeColor}30` }}>
                         {svc.badge}
                       </div>
                     )}
-                    <div className="w-11 h-11 rounded-xl flex items-center justify-center shadow-sm"
-                      style={{ background: "rgba(249,115,22,0.08)", border: "1px solid rgba(249,115,22,0.15)" }}>
-                      <Icon className="w-5 h-5 text-orange-500" />
+                    <div className="w-11 h-11 rounded-xl flex items-center justify-center"
+                      style={{ background: "rgba(124,110,250,0.10)", border: "1px solid rgba(124,110,250,0.18)" }}>
+                      <Icon className="w-5 h-5" style={{ color: "#7C6EFA" }} />
                     </div>
                     <div>
-                      <h3 className="font-display font-semibold text-base mb-1 text-navy group-hover:text-orange-600 transition-colors">
+                      <h3 className="font-display font-semibold text-base mb-1 transition-colors" style={{ color: "#F0F4FF" }}>
                         {svc.name}
                       </h3>
-                      <p className="text-sm text-gray-500">{svc.desc}</p>
+                      <p className="text-sm" style={{ color: "#8B9BC4" }}>{svc.desc}</p>
                     </div>
-                    <div className="mt-auto pt-3 border-t border-gray-100 flex items-center gap-1 text-xs font-semibold text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="mt-auto pt-3 flex items-center gap-1 text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity"
+                      style={{ borderTop: "1px solid #243352", color: "#7C6EFA" }}>
                       Lihat Layanan <ArrowRight className="w-3 h-3" />
                     </div>
                   </Link>
@@ -434,14 +450,17 @@ export default function LandingPage() {
               return (
                 <motion.div key={svc.name} variants={fadeUp}>
                   <Link href="/services"
-                    className="group flex flex-col items-center gap-2 p-4 rounded-xl bg-white border border-gray-100 text-center cursor-pointer transition-all duration-150 hover:border-orange-200 hover:shadow-sm hover:-translate-y-0.5"
-                    style={{ display: "flex" }}>
+                    className="group flex flex-col items-center gap-2 p-4 rounded-xl text-center cursor-pointer transition-all duration-150 hover:-translate-y-0.5"
+                    style={{ display: "flex", background: "#0D1526", border: "1px solid #243352" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(124,110,250,0.30)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#243352"; }}
+                  >
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-                      style={{ background: "rgba(249,115,22,0.06)" }}>
-                      <Icon className="w-4.5 h-4.5 text-orange-500" />
+                      style={{ background: "rgba(124,110,250,0.08)" }}>
+                      <Icon className="w-4.5 h-4.5" style={{ color: "#7C6EFA" }} />
                     </div>
                     <div>
-                      <div className="text-xs font-semibold text-navy leading-snug">{svc.name}</div>
+                      <div className="text-xs font-semibold leading-snug" style={{ color: "#F0F4FF" }}>{svc.name}</div>
                       {svc.badge && (
                         <div className="mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full inline-block"
                           style={{ background: `${svc.badgeColor}12`, color: svc.badgeColor }}>
@@ -464,14 +483,17 @@ export default function LandingPage() {
       </section>
 
       {/* ── HOW IT WORKS ──────────────────────────── */}
-      <section id="how-it-works" className="py-24 px-4 bg-white">
+      <section id="how-it-works" className="py-24 px-4" style={{ background: "#0D1526", borderTop: "1px solid #243352" }}>
         <div className="container mx-auto max-w-5xl">
           <motion.div className="text-center mb-16 space-y-4"
             initial="hidden" whileInView="show" viewport={{ once: true }} variants={stagger(0.1)}>
             <motion.div variants={fadeUp}>
-              <div className="section-chip"><Zap className="w-3 h-3" />Cara Kerja</div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
+                style={{ background: "rgba(34,211,238,0.08)", border: "1px solid rgba(34,211,238,0.20)", color: "#22D3EE" }}>
+                <Zap className="w-3 h-3" />Cara Kerja
+              </div>
             </motion.div>
-            <motion.h2 className="font-display font-bold text-navy" style={{ fontSize: "clamp(1.75rem, 3.5vw, 2.75rem)" }} variants={fadeUp}>
+            <motion.h2 className="font-display font-bold" style={{ fontSize: "clamp(1.75rem, 3.5vw, 2.75rem)", color: "#F0F4FF" }} variants={fadeUp}>
               Dari Brief ke Hasil dalam Hitungan Jam
             </motion.h2>
           </motion.div>
@@ -485,16 +507,18 @@ export default function LandingPage() {
                   transition={{ delay: i * 0.12, duration: 0.5 }} viewport={{ once: true }}
                   className="relative text-center">
                   {i < STEPS.length - 1 && (
-                    <div className="hidden md:block absolute top-8 left-[calc(50%+28px)] right-0 h-px border-t-2 border-dashed border-orange-200" />
+                    <div className="hidden md:block absolute top-8 left-[calc(50%+28px)] right-0 h-px"
+                      style={{ borderTop: "2px dashed rgba(124,110,250,0.25)" }} />
                   )}
-                  <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-sm"
-                    style={{ background: "rgba(249,115,22,0.08)", border: "1px solid rgba(249,115,22,0.15)" }}>
-                    <Icon className="w-7 h-7 text-orange-500" />
+                  <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
+                    style={{ background: "rgba(124,110,250,0.10)", border: "1px solid rgba(124,110,250,0.20)" }}>
+                    <Icon className="w-7 h-7" style={{ color: "#7C6EFA" }} />
                   </div>
-                  <div className="text-xs font-bold text-orange-500 mb-1">{step.num}</div>
-                  <h3 className="font-display font-bold text-base text-navy mb-2">{step.title}</h3>
-                  <p className="text-sm text-gray-500 leading-relaxed">{step.desc}</p>
-                  <div className="mt-3 inline-flex items-center gap-1 text-xs font-semibold px-3 py-1 rounded-full bg-orange-50 text-orange-600">
+                  <div className="text-xs font-bold mb-1" style={{ color: "#7C6EFA" }}>{step.num}</div>
+                  <h3 className="font-display font-bold text-base mb-2" style={{ color: "#F0F4FF" }}>{step.title}</h3>
+                  <p className="text-sm leading-relaxed" style={{ color: "#8B9BC4" }}>{step.desc}</p>
+                  <div className="mt-3 inline-flex items-center gap-1 text-xs font-semibold px-3 py-1 rounded-full"
+                    style={{ background: "rgba(124,110,250,0.08)", color: "#9D91FB", border: "1px solid rgba(124,110,250,0.15)" }}>
                     <Clock className="w-3 h-3" /> {step.time}
                   </div>
                 </motion.div>
@@ -505,14 +529,17 @@ export default function LandingPage() {
       </section>
 
       {/* ── TESTIMONIALS ──────────────────────────── */}
-      <section className="py-24 px-4 bg-[#FAFAF7]">
+      <section className="py-24 px-4" style={{ background: "#060B18", borderTop: "1px solid #243352" }}>
         <div className="container mx-auto max-w-5xl">
           <motion.div className="text-center mb-14 space-y-4"
             initial="hidden" whileInView="show" viewport={{ once: true }} variants={stagger(0.1)}>
             <motion.div variants={fadeUp}>
-              <div className="section-chip"><Quote className="w-3 h-3" />Testimoni</div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
+                style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.20)", color: "#F59E0B" }}>
+                <Quote className="w-3 h-3" />Testimoni
+              </div>
             </motion.div>
-            <motion.h2 className="font-display font-bold text-navy" style={{ fontSize: "clamp(1.75rem, 3vw, 2.5rem)" }} variants={fadeUp}>
+            <motion.h2 className="font-display font-bold" style={{ fontSize: "clamp(1.75rem, 3vw, 2.5rem)", color: "#F0F4FF" }} variants={fadeUp}>
               Apa Kata Klien Enterprise Kami
             </motion.h2>
           </motion.div>
@@ -521,28 +548,30 @@ export default function LandingPage() {
             initial="hidden" whileInView="show" viewport={{ once: true }} variants={stagger(0.12)}>
             {TESTIMONIALS.map((t) => (
               <motion.div key={t.name} variants={fadeUp}
-                className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-200">
+                className="rounded-2xl p-6 transition-all duration-200 hover:-translate-y-1"
+                style={{ background: "#0D1526", border: "1px solid #243352", boxShadow: "0 2px 8px rgba(6,11,24,0.50)" }}>
                 <div className="flex gap-0.5 mb-4">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
                   ))}
                 </div>
-                <p className="text-sm text-gray-600 leading-relaxed mb-5 italic">"{t.quote}"</p>
-                <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
+                <p className="text-sm leading-relaxed mb-5 italic" style={{ color: "#8B9BC4" }}>"{t.quote}"</p>
+                <div className="flex items-center gap-3 pt-4" style={{ borderTop: "1px solid #243352" }}>
                   <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white"
-                    style={{ background: "linear-gradient(135deg,#F97316,#EA580C)" }}>
+                    style={{ background: "linear-gradient(135deg, #7C6EFA, #5F52D0)" }}>
                     {t.name.charAt(0)}
                   </div>
                   <div>
-                    <div className="font-semibold text-sm text-navy">{t.name}</div>
-                    <div className="text-xs text-gray-500">{t.title} · {t.company}</div>
+                    <div className="font-semibold text-sm" style={{ color: "#F0F4FF" }}>{t.name}</div>
+                    <div className="text-xs" style={{ color: "#8B9BC4" }}>{t.title} · {t.company}</div>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 mt-4">
                   {t.metrics.map((m) => (
-                    <div key={m.label} className="text-center rounded-xl p-2.5 bg-orange-50">
-                      <div className="font-display font-bold text-lg text-orange-600">{m.value}</div>
-                      <div className="text-xs text-gray-500">{m.label}</div>
+                    <div key={m.label} className="text-center rounded-xl p-2.5"
+                      style={{ background: "rgba(124,110,250,0.06)", border: "1px solid rgba(124,110,250,0.12)" }}>
+                      <div className="font-display font-bold text-lg" style={{ color: "#9D91FB" }}>{m.value}</div>
+                      <div className="text-xs" style={{ color: "#8B9BC4" }}>{m.label}</div>
                     </div>
                   ))}
                 </div>
@@ -553,28 +582,35 @@ export default function LandingPage() {
       </section>
 
       {/* ── CTA FINAL ─────────────────────────────── */}
-      <section className="py-24 px-4" style={{ background: "#0F172A" }}>
-        <div className="container mx-auto max-w-3xl text-center">
+      <section className="py-24 px-4 relative overflow-hidden" style={{ background: "#0D1526", borderTop: "1px solid #243352" }}>
+        {/* Violet glow */}
+        <div className="pointer-events-none absolute inset-0"
+          style={{ background: "radial-gradient(ellipse 50% 60% at 50% 100%, rgba(124,110,250,0.12) 0%, transparent 70%)" }} />
+        <div className="relative z-10 container mx-auto max-w-3xl text-center">
           <motion.div
             initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }} viewport={{ once: true }}
             className="space-y-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border"
-              style={{ background: "rgba(249,115,22,0.10)", border: "1px solid rgba(249,115,22,0.25)", color: "#FB923C" }}>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold"
+              style={{ background: "rgba(124,110,250,0.10)", border: "1px solid rgba(124,110,250,0.25)", color: "#9D91FB" }}>
               <Sparkles className="w-3.5 h-3.5 animate-pulse" />
               Mulai transformasi bisnis Anda hari ini
             </div>
-            <h2 className="font-display font-bold text-white" style={{ fontSize: "clamp(2rem, 4vw, 3rem)" }}>
+            <h2 className="font-display font-bold" style={{ fontSize: "clamp(2rem, 4vw, 3rem)", color: "#F0F4FF" }}>
               Siap Merasakan Kekuatan <span className="text-gradient-primary italic">AI Enterprise?</span>
             </h2>
-            <p className="text-lg text-slate-400 max-w-xl mx-auto">
+            <p className="text-lg max-w-xl mx-auto" style={{ color: "#8B9BC4" }}>
               Bergabung dengan 500+ enterprise yang telah menghemat ribuan jam kerja dengan platform kami.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
               <Link href="/services" className="btn-primary text-base py-3.5 px-8">
                 Mulai Proyek Sekarang <ArrowRight className="w-5 h-5" />
               </Link>
-              <Link href="/access" className="inline-flex items-center gap-2 py-3.5 px-8 rounded-lg font-semibold text-base text-white border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all">
+              <Link href="/access" className="inline-flex items-center gap-2 py-3.5 px-8 rounded-lg font-semibold text-base transition-all"
+                style={{ color: "#F0F4FF", border: "1px solid rgba(240,244,255,0.15)" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(240,244,255,0.30)"; (e.currentTarget as HTMLElement).style.background = "rgba(240,244,255,0.04)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(240,244,255,0.15)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+              >
                 <ExternalLink className="w-4 h-4" />
                 Client Login
               </Link>
@@ -588,8 +624,8 @@ export default function LandingPage() {
                 { icon: Star,         label: "98% Satisfaction" },
                 { icon: BadgeCheck,   label: "Commercial Ready" },
               ].map(({ icon: Icon, label }) => (
-                <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <Icon className="w-3.5 h-3.5 text-orange-500" />
+                <div key={label} className="flex items-center gap-1.5 text-xs" style={{ color: "#8B9BC4" }}>
+                  <Icon className="w-3.5 h-3.5" style={{ color: "#7C6EFA" }} />
                   {label}
                 </div>
               ))}

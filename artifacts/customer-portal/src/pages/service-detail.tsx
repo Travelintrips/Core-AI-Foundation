@@ -49,7 +49,7 @@ function SectionHead({ icon: Icon, title }: { icon: React.ElementType; title: st
       <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet/20 to-cyan/10 border border-violet/20 flex items-center justify-center">
         <Icon className="w-4 h-4 text-violet" />
       </div>
-      <h2 className="font-display font-bold text-lg">{title}</h2>
+      <h2 className="font-display font-bold text-lg" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{title}</h2>
       <div className="flex-1 h-px bg-border/50" />
     </div>
   );
@@ -223,7 +223,7 @@ export default function ServiceDetailPage() {
                 </span>
               </div>
 
-              <h1 className="font-display font-bold text-3xl md:text-4xl lg:text-5xl leading-tight mb-4">
+              <h1 className="font-display font-bold text-3xl md:text-4xl lg:text-5xl leading-tight mb-4" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 {service.serviceName}
               </h1>
 
@@ -277,7 +277,7 @@ export default function ServiceDetailPage() {
             <div className="lg:col-span-1">
               <div className="glass rounded-2xl p-5 border border-border/60">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Starting from</p>
-                <p className="font-display font-bold text-3xl mb-3">
+                <p className="font-display font-bold text-3xl mb-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   {formatMoney(Number(service.startingPrice), currency)}
                 </p>
                 <div className="space-y-1.5 mb-4">
@@ -344,7 +344,7 @@ export default function ServiceDetailPage() {
               {/* Deliverables */}
               {service.deliverables && service.deliverables.length > 0 && (
                 <div className="card-base p-6">
-                  <p className="font-display font-semibold text-sm mb-4 flex items-center gap-2">
+                  <p className="font-display font-semibold text-sm mb-4 flex items-center gap-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                     What's included
                   </p>
@@ -403,7 +403,7 @@ export default function ServiceDetailPage() {
                             <Check className="w-3 h-3 text-white" />
                           </div>
                         )}
-                        <p className="font-display font-semibold mb-2 pr-6 group-hover:text-violet transition-colors">
+                        <p className="font-display font-semibold mb-2 pr-6 group-hover:text-violet transition-colors" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                           {p.packageName}
                         </p>
                         {price && (
@@ -586,7 +586,7 @@ export default function ServiceDetailPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Receipt className="w-4 h-4 text-violet" />
-                    <h3 className="font-display font-semibold text-base">Your Quote</h3>
+                    <h3 className="font-display font-semibold text-base" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Your Quote</h3>
                   </div>
                   {!breakdown && (
                     <button
@@ -625,7 +625,7 @@ export default function ServiceDetailPage() {
                     )}
                     <div className="border-t border-border pt-3 flex justify-between items-baseline">
                       <span className="font-semibold">Total</span>
-                      <span className="font-display font-bold text-xl text-gradient-primary">
+                      <span className="font-display font-bold text-xl text-gradient-primary" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                         {formatMoney(breakdown.total, breakdown.currency)}
                       </span>
                     </div>
@@ -649,7 +649,7 @@ export default function ServiceDetailPage() {
               <div className="card-base p-6 space-y-4">
                 <div className="flex items-center gap-2 mb-1">
                   <Sparkles className="w-4 h-4 text-violet" />
-                  <h3 className="font-display font-semibold text-base">Request This Service</h3>
+                  <h3 className="font-display font-semibold text-base" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Request This Service</h3>
                 </div>
 
                 <div className="space-y-3">

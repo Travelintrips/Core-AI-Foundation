@@ -125,10 +125,14 @@ export async function getScheduleForProject(projectId: number): Promise<AiPaymen
 export async function submitPaymentProof(
   scheduleId: number,
   reference: string,
+  proofImageUrl?: string | null,
 ): Promise<AiPaymentSchedule | null> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const setPayload: any = { reference, updatedAt: new Date() };
+  if (proofImageUrl) setPayload.proofImageUrl = proofImageUrl;
   const [row] = await db
     .update(aiPaymentScheduleTable)
-    .set({ reference, updatedAt: new Date() })
+    .set(setPayload)
     .where(and(eq(aiPaymentScheduleTable.id, scheduleId), eq(aiPaymentScheduleTable.status, "pending")))
     .returning();
   if (!row) return null;

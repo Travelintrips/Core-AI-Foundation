@@ -38,101 +38,197 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
-const NAV_ITEMS = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/analytics", label: "Analytics", icon: BarChart2 },
-  { href: "/workforce", label: "AI Workforce", icon: Building2 },
-  { href: "/operations", label: "Operations Center", icon: Crown },
-  { href: "/queue", label: "Queue Center", icon: ListOrdered },
-  { href: "/registry", label: "Registry", icon: Box },
-  { href: "/agents", label: "Agents", icon: Users },
-  { href: "/orchestrator", label: "Orchestrator", icon: Play },
-  { href: "/creative-ai", label: "Creative AI", icon: Sparkles },
-  { href: "/workflows", label: "Workflows", icon: GitMerge },
-  { href: "/workflow-executions", label: "Executions", icon: Activity },
-  { href: "/prompts", label: "Prompts", icon: FileText },
-  { href: "/knowledge", label: "Knowledge", icon: Database },
-  { href: "/memory", label: "Memory", icon: Cpu },
-  { href: "/human-tasks", label: "Human Tasks", icon: ClipboardCheck },
-  { href: "/events", label: "AI Events", icon: Zap },
-  { href: "/scheduler", label: "Scheduler", icon: CalendarClock },
-  { href: "/marketplace", label: "Marketplace", icon: Store },
-  { href: "/services", label: "Service Catalog", icon: Tags },
-  { href: "/service-requests", label: "Service Requests", icon: ClipboardList },
-  { href: "/payments", label: "Payments", icon: Wallet },
-  { href: "/catalog-admin", label: "Catalog Admin", icon: LayoutGrid },
-  { href: "/commercial", label: "Commercial", icon: TrendingUp },
-  { href: "/promotions", label: "Promotions", icon: Tags },
-  { href: "/coupons", label: "Coupons", icon: Ticket },
-  { href: "/referrals", label: "Referrals", icon: Share2 },
-  { href: "/affiliates", label: "Affiliates", icon: Users2 },
-  { href: "/health-scores", label: "Health Scores", icon: Heart },
-  { href: "/automation", label: "Automation Center", icon: Zap },
-  { href: "/ai-insights", label: "AI Insights", icon: Lightbulb },
-  { href: "/portfolio", label: "Portfolio", icon: Store },
-  { href: "/observability", label: "Observability", icon: Activity },
-  { href: "/audit", label: "Audit Log", icon: ShieldAlert },
-  { href: "/settings", label: "Settings", icon: Settings },
+const NAV_SECTIONS = [
+  {
+    label: "Overview",
+    items: [
+      { href: "/", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/analytics", label: "Analytics", icon: BarChart2 },
+    ],
+  },
+  {
+    label: "AI Workforce",
+    items: [
+      { href: "/workforce", label: "AI Workforce", icon: Building2 },
+      { href: "/operations", label: "Operations Center", icon: Crown },
+      { href: "/agents", label: "Agents", icon: Users },
+      { href: "/orchestrator", label: "Orchestrator", icon: Play },
+      { href: "/creative-ai", label: "Creative AI", icon: Sparkles },
+    ],
+  },
+  {
+    label: "Automation",
+    items: [
+      { href: "/workflows", label: "Workflows", icon: GitMerge },
+      { href: "/workflow-executions", label: "Executions", icon: Activity },
+      { href: "/scheduler", label: "Scheduler", icon: CalendarClock },
+      { href: "/automation", label: "Automation Center", icon: Zap },
+      { href: "/events", label: "AI Events", icon: Zap },
+    ],
+  },
+  {
+    label: "Knowledge",
+    items: [
+      { href: "/prompts", label: "Prompts", icon: FileText },
+      { href: "/knowledge", label: "Knowledge", icon: Database },
+      { href: "/memory", label: "Memory", icon: Cpu },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { href: "/queue", label: "Queue Center", icon: ListOrdered },
+      { href: "/human-tasks", label: "Human Tasks", icon: ClipboardCheck },
+      { href: "/registry", label: "Registry", icon: Box },
+    ],
+  },
+  {
+    label: "Commerce",
+    items: [
+      { href: "/marketplace", label: "Marketplace", icon: Store },
+      { href: "/services", label: "Service Catalog", icon: Tags },
+      { href: "/service-requests", label: "Service Requests", icon: ClipboardList },
+      { href: "/payments", label: "Payments", icon: Wallet },
+      { href: "/commercial", label: "Commercial", icon: TrendingUp },
+      { href: "/promotions", label: "Promotions", icon: Tags },
+      { href: "/coupons", label: "Coupons", icon: Ticket },
+    ],
+  },
+  {
+    label: "Growth",
+    items: [
+      { href: "/referrals", label: "Referrals", icon: Share2 },
+      { href: "/affiliates", label: "Affiliates", icon: Users2 },
+      { href: "/health-scores", label: "Health Scores", icon: Heart },
+      { href: "/ai-insights", label: "AI Insights", icon: Lightbulb },
+    ],
+  },
+  {
+    label: "Platform",
+    items: [
+      { href: "/catalog-admin", label: "Catalog Admin", icon: LayoutGrid },
+      { href: "/portfolio", label: "Portfolio", icon: Store },
+      { href: "/observability", label: "Observability", icon: Activity },
+      { href: "/audit", label: "Audit Log", icon: ShieldAlert },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
 ];
 
 export function Layout({ children }: LayoutProps) {
   const [location] = useLocation();
   const { data: health, isLoading } = useHealthCheck();
 
+  const isOnline = !isLoading && health?.status === 'ok';
+
   return (
-    <div className="flex h-screen w-full bg-background overflow-hidden selection:bg-primary/20">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-border bg-sidebar flex flex-col flex-shrink-0 z-10">
-        <div className="h-14 flex items-center px-4 border-b border-border">
+    <div className="flex h-screen w-full overflow-hidden" style={{ background: '#060B18' }}>
+      {/* ── SIDEBAR ── */}
+      <aside
+        className="w-60 flex flex-col flex-shrink-0 z-10"
+        style={{
+          background: '#0A1020',
+          borderRight: '1px solid #1E3057',
+        }}
+      >
+        {/* Logo */}
+        <div className="h-14 flex items-center px-4 flex-shrink-0" style={{ borderBottom: '1px solid #1E3057' }}>
+          <div className="flex items-center gap-2.5">
+            <div
+              className="size-7 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg, #7C6EFA 0%, #5F52D0 100%)', boxShadow: '0 2px 10px rgba(124,110,250,0.40)' }}
+            >
+              <Cpu className="size-3.5 text-white" />
+            </div>
+            <span
+              className="font-semibold tracking-tight text-sm"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", color: '#F0F4FF' }}
+            >
+              AI Platform
+            </span>
+            <span
+              className="text-[9px] font-mono tracking-widest px-1.5 py-0.5 rounded"
+              style={{ background: 'rgba(124,110,250,0.15)', color: '#9D91FB', border: '1px solid rgba(124,110,250,0.20)' }}
+            >
+              ENT
+            </span>
+          </div>
+        </div>
+
+        {/* Nav sections */}
+        <div className="flex-1 overflow-y-auto py-3 scrollbar-none">
+          {NAV_SECTIONS.map((section) => (
+            <div key={section.label} className="mb-1">
+              <div
+                className="px-4 py-1 text-[10px] font-semibold uppercase tracking-widest"
+                style={{ color: '#4F6494' }}
+              >
+                {section.label}
+              </div>
+              <div className="px-2 space-y-0.5">
+                {section.items.map((item) => {
+                  const isActive = location === item.href;
+                  return (
+                    <Link key={item.href} href={item.href}>
+                      <div
+                        className={cn(
+                          "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors cursor-pointer group relative",
+                        )}
+                        style={
+                          isActive
+                            ? {
+                                background: 'rgba(124,110,250,0.12)',
+                                color: '#9D91FB',
+                                borderLeft: '2px solid #7C6EFA',
+                                paddingLeft: '8px',
+                              }
+                            : {
+                                color: '#6B82B0',
+                                borderLeft: '2px solid transparent',
+                              }
+                        }
+                        data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                      >
+                        <item.icon
+                          className="size-3.5 flex-shrink-0"
+                          style={{ color: isActive ? '#7C6EFA' : '#4F6494' }}
+                        />
+                        <span className="truncate">{item.label}</span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* System status */}
+        <div className="px-4 py-3 flex-shrink-0" style={{ borderTop: '1px solid #1E3057' }}>
           <div className="flex items-center gap-2">
-            <div className="size-6 bg-primary/10 rounded border border-primary/30 flex items-center justify-center">
-              <Cpu className="size-4 text-primary" />
-            </div>
-            <span className="font-bold tracking-tight text-sidebar-foreground">AI Platform</span>
-            <span className="text-[10px] uppercase tracking-widest font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded ml-2">ENT</span>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto py-4 px-2 space-y-1">
-          <div className="px-2 mb-2">
-            <span className="text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider">Modules</span>
-          </div>
-          {NAV_ITEMS.map((item) => {
-            const isActive = location === item.href;
-            return (
-              <Link key={item.href} href={item.href}>
-                <div
-                  className={cn(
-                    "flex items-center gap-3 px-2 py-1.5 rounded-md text-sm font-medium transition-colors cursor-pointer group",
-                    isActive 
-                      ? "bg-primary/10 text-primary" 
-                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-                  )}
-                  data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
-                >
-                  <item.icon className={cn("size-4", isActive ? "text-primary" : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground")} />
-                  {item.label}
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-
-        <div className="p-4 border-t border-border">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className={cn("size-2 rounded-full", isLoading ? "bg-muted-foreground animate-pulse" : (health?.status === 'ok' ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" : "bg-destructive shadow-[0_0_8px_rgba(239,68,68,0.5)]"))} />
-              <span className="text-xs font-mono text-muted-foreground uppercase">System {isLoading ? 'Pinging...' : (health?.status === 'ok' ? 'Online' : 'Degraded')}</span>
-            </div>
+            <div
+              className={cn("size-1.5 rounded-full flex-shrink-0", isLoading ? "animate-pulse" : "")}
+              style={{
+                background: isLoading ? '#4F6494' : isOnline ? '#10B981' : '#F43F5E',
+                boxShadow: isLoading ? 'none' : isOnline ? '0 0 6px rgba(16,185,129,0.6)' : '0 0 6px rgba(244,63,94,0.6)',
+              }}
+            />
+            <span
+              className="text-[10px] font-mono uppercase tracking-widest"
+              style={{ color: '#4F6494' }}
+            >
+              {isLoading ? 'Pinging…' : isOnline ? 'System Online' : 'Degraded'}
+            </span>
           </div>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 bg-background relative z-0">
-        <div className="flex-1 overflow-auto">
-          {children}
-        </div>
+      {/* ── MAIN CONTENT ── */}
+      <main
+        className="flex-1 flex flex-col min-w-0 relative z-0 overflow-auto"
+        style={{ background: '#060B18' }}
+      >
+        {children}
       </main>
     </div>
   );
