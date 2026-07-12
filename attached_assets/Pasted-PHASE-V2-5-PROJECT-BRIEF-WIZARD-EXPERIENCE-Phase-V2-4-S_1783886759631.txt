@@ -1,0 +1,689 @@
+PHASE V2.5 — PROJECT BRIEF WIZARD EXPERIENCE
+
+Phase V2.4 Service Detail & Conversion Polish telah selesai dan disetujui.
+
+Sekarang fokus hanya pada seluruh alur Project Brief.
+
+Halaman yang harus diaudit meliputi:
+
+- /submit
+- /request-service/:id/brief
+- komponen stepper
+- upload file
+- autosave
+- review brief
+- confirmation
+- redirect ke pricing/commercial
+
+Jangan mengubah Landing, Marketplace, Service Detail, AI Workforce, Workspace, atau halaman lain kecuali ada dependency langsung yang benar-benar diperlukan.
+
+==================================================
+PERAN
+==================================================
+
+Bertindak sebagai:
+
+- Principal Product Designer
+- Conversational UX Designer
+- Enterprise Form Architect
+- AI Brief Strategist
+- Senior Frontend Engineer
+- Accessibility Auditor
+
+Gunakan standar pengalaman seperti:
+
+- Typeform
+- Linear onboarding
+- Stripe setup flows
+- Notion onboarding
+- Canva brief creation
+- Apple setup assistant
+
+Brief wizard harus terasa:
+
+- dipandu
+- ringan
+- cerdas
+- profesional
+- tidak melelahkan
+- aman untuk data perusahaan
+
+Bukan seperti formulir panjang administrasi.
+
+==================================================
+ATURAN UTAMA
+==================================================
+
+Jangan mengubah:
+
+- backend
+- database
+- API contract
+- route
+- status transition
+- autosave API behavior
+- localStorage key behavior
+- validation business rules
+- request payload
+- redirect destination
+- pricing flow
+- authentication
+- existing quotation logic
+
+Jangan menghapus field yang dibutuhkan backend.
+
+Jangan mengganti nama payload field tanpa verifikasi.
+
+Jangan membuat AI analysis palsu.
+
+Jika belum ada API bantuan AI untuk brief, gunakan hanya UX guidance statis atau label “Guided Suggestions”, bukan respons AI palsu.
+
+==================================================
+LANGKAH 1 — AUDIT AKTUAL
+==================================================
+
+Sebelum mengubah kode, audit:
+
+- /submit
+- /request-service/:id/brief
+- step count
+- field grouping
+- validation
+- autosave
+- restoration from localStorage
+- upload
+- mobile experience
+- keyboard navigation
+- error handling
+- progress visibility
+- step transitions
+- review summary
+- confirmation
+- loading
+- empty state
+- accessibility
+- data persistence
+- refresh behavior
+- back navigation
+- status mutation startBrief
+
+Kelompokkan temuan menjadi:
+
+- Critical
+- High
+- Medium
+- Low
+
+Setelah audit, langsung implementasikan perbaikan.
+
+==================================================
+1. EXPERIENCE PRINCIPLE
+==================================================
+
+Customer harus selalu memahami:
+
+- sedang berada di langkah ke berapa
+- mengapa informasi ini dibutuhkan
+- berapa lama proses tersisa
+- apakah jawaban sudah tersimpan
+- field mana yang wajib
+- apakah jawaban dapat diedit nanti
+- apa yang terjadi setelah brief dikirim
+
+Tambahkan estimasi ringan:
+
+“Sekitar 4–6 menit”
+
+Hanya sebagai estimasi UX, bukan janji sistem.
+
+==================================================
+2. WIZARD HEADER
+==================================================
+
+Buat header brief yang konsisten.
+
+Tampilkan:
+
+- service name
+- selected package bila tersedia
+- step number
+- step title
+- short explanation
+- overall progress
+- estimated remaining steps
+- autosave state
+
+Contoh autosave state:
+
+- Saving…
+- Saved just now
+- Saved 2 minutes ago
+- Offline — changes saved locally
+- Save failed — retry
+
+Jangan menampilkan status sukses jika penyimpanan belum benar-benar berhasil.
+
+==================================================
+3. PROGRESS STEPPER
+==================================================
+
+Audit stepper existing.
+
+Desktop:
+
+- horizontal stepper
+- current step jelas
+- completed step memiliki check
+- upcoming step muted
+- label pendek
+- connector progress
+
+Mobile:
+
+- compact progress bar
+- “Step 3 of 7”
+- current title
+- dropdown atau sheet untuk melihat semua langkah bila berguna
+
+Persyaratan:
+
+- aria-current="step"
+- keyboard accessible
+- completed step hanya clickable jika flow mengizinkan kembali
+- jangan izinkan lompat ke step yang belum valid
+- respects reduced motion
+
+==================================================
+4. STEP STRUCTURE
+==================================================
+
+Kelompokkan brief menjadi alur yang terasa logis.
+
+Gunakan struktur aktual yang sudah ada, tetapi refine urutan visual seperti:
+
+1. Business Information
+2. Project Goals
+3. Target Audience
+4. Brand & Visual Direction
+5. Deliverables
+6. Timeline & Constraints
+7. Review & Submit
+
+Untuk /submit yang memiliki 4 step, pertahankan jumlah step existing tetapi gunakan prinsip UX yang sama.
+
+Jangan menggabungkan atau menghapus payload tanpa verifikasi.
+
+==================================================
+5. QUESTION DESIGN
+==================================================
+
+Setiap step harus memiliki:
+
+- satu tujuan jelas
+- heading
+- penjelasan singkat
+- maksimal satu kelompok utama pertanyaan per layar
+- helper text yang berguna
+- contoh jawaban
+- required indicator yang konsisten
+- optional indicator yang jelas
+
+Ganti label yang terlalu teknis menjadi bahasa customer-friendly tanpa mengubah field key.
+
+Contoh:
+
+Sebelum:
+“Target audience”
+
+Sesudah:
+“Siapa target utama proyek ini?”
+“Contoh: pemilik bisnis F&B usia 25–40 tahun di Jakarta.”
+
+==================================================
+6. GUIDED SUGGESTIONS
+==================================================
+
+Tambahkan guided suggestion chips pada field yang relevan.
+
+Contoh:
+
+Project goal:
+- Increase brand awareness
+- Generate leads
+- Launch a new product
+- Improve conversion
+- Build investor trust
+
+Tone:
+- Professional
+- Premium
+- Friendly
+- Bold
+- Minimal
+- Corporate
+
+Audience:
+- B2B decision-makers
+- Consumers
+- Investors
+- Government
+- Distributors
+- Internal employees
+
+Suggestion chip hanya mengisi atau membantu field.
+
+Jangan mengirim data otomatis tanpa tindakan user.
+
+Jangan menyebutnya AI-generated bila tidak ada API AI.
+
+Gunakan label:
+
+“Suggested options”
+
+atau
+
+“Quick suggestions”
+
+==================================================
+7. SMART CONDITIONAL UX
+==================================================
+
+Audit apakah ada field yang hanya relevan untuk kondisi tertentu.
+
+Contoh:
+
+- upload brand guideline hanya muncul jika user sudah punya guideline
+- competitor reference muncul jika user memilih “has competitor reference”
+- bilingual option membuka pilihan bahasa
+- deadline urgent menampilkan warning
+- commercial usage menampilkan explanation
+
+Gunakan conditional rendering hanya jika tidak mengubah payload dan business logic.
+
+Jangan menyembunyikan field wajib tanpa alternatif input.
+
+==================================================
+8. FORM CONTROLS
+==================================================
+
+Refine komponen:
+
+- input
+- textarea
+- select
+- radio
+- checkbox
+- chips
+- date picker
+- file upload
+- steppers
+- multi-select bila sudah digunakan
+
+Persyaratan:
+
+- min touch target 44px
+- focus-visible
+- error message dekat field
+- helper text tidak hilang saat error
+- selected state sangat jelas
+- disabled state jelas
+- mobile keyboard type sesuai input
+- autocomplete sesuai field
+
+Textarea:
+
+- character guidance bila relevan
+- auto-grow bila aman
+- jangan membatasi terlalu pendek tanpa backend rule
+
+==================================================
+9. FILE UPLOAD EXPERIENCE
+==================================================
+
+Audit upload.
+
+Tambahkan:
+
+- drag-and-drop desktop
+- browse button
+- supported file type
+- maximum size berdasarkan rule existing
+- upload progress jika API mendukung
+- preview nama file
+- file size
+- remove
+- retry
+- failed state
+- duplicate warning bila relevan
+- mobile file picker
+
+Jika upload sebenarnya baru dilakukan saat submit, jangan menampilkan progress palsu.
+
+Tampilkan status yang jujur seperti:
+
+“Ready to upload”
+
+atau
+
+“Attached locally”
+
+Pastikan file data tidak hilang tanpa warning saat refresh, bila browser memang tidak dapat memulihkannya.
+
+==================================================
+10. AUTOSAVE & RESTORE
+==================================================
+
+Autosave adalah fitur penting.
+
+Perbaiki:
+
+- debounce yang aman
+- jangan menyimpan setiap keystroke secara agresif
+- timestamp akurat
+- restore prompt saat draft ditemukan
+- pilihan:
+  - Continue draft
+  - Start over
+- confirmation sebelum menghapus draft
+- clear localStorage hanya setelah submit API sukses
+- jangan clear saat submit gagal
+- no duplicate startBrief call bila status sudah brief_in_progress atau lebih lanjut
+
+Tambahkan client-side guard terhadap startBrief mutation agar tidak dipanggil berulang pada refresh jika status tidak lagi draft.
+
+Jangan hanya mengandalkan server guard.
+
+==================================================
+11. VALIDATION EXPERIENCE
+==================================================
+
+Pertahankan Zod dan validation existing.
+
+Refine UX:
+
+- validasi saat next
+- tidak menampilkan semua error terlalu dini
+- scroll/focus ke field error pertama
+- summary error di atas step bila banyak error
+- error message mudah dipahami
+- preserve input setelah error
+- success state ringan untuk step valid
+
+Jangan hanya menampilkan “Invalid input”.
+
+Gunakan copy yang spesifik.
+
+==================================================
+12. NAVIGATION
+==================================================
+
+Tombol:
+
+- Back
+- Continue
+- Save & Exit bila flow mendukung
+- Review Brief
+- Submit Brief
+
+Persyaratan:
+
+- CTA utama konsisten di kanan
+- Back sebagai secondary
+- sticky footer actions pada mobile
+- disable state dengan alasan yang jelas
+- loading state saat submit
+- prevent double submit
+- warning sebelum meninggalkan halaman jika ada perubahan belum tersimpan
+
+Jangan menambahkan Save & Exit bila tidak ada route atau persistence yang mendukung.
+
+==================================================
+13. REVIEW BRIEF
+==================================================
+
+Review step harus menjadi ringkasan yang mudah diverifikasi.
+
+Kelompokkan:
+
+- Business
+- Goals
+- Audience
+- Brand Direction
+- Deliverables
+- Timeline
+- Files
+- Notes
+
+Setiap section memiliki:
+
+- value
+- Edit link kembali ke step terkait
+- empty optional value ditampilkan sebagai “Not provided”, bukan kosong
+- file list
+- package/service summary
+- privacy note
+
+Tambahkan checklist konfirmasi:
+
+- Informasi sudah benar
+- Saya memahami bahwa brief akan digunakan untuk analisis dan quotation
+
+Hanya jika sesuai legal/business flow existing.
+
+Jangan membuat persetujuan hukum baru tanpa dasar.
+
+==================================================
+14. SUBMISSION STATE
+==================================================
+
+Saat brief dikirim:
+
+- disable controls
+- tampilkan progress
+- gunakan copy bertahap yang jujur
+
+Contoh:
+
+- Validating brief…
+- Saving project information…
+- Preparing next step…
+
+Jangan menyatakan AI sedang menganalisis jika API belum melakukan proses tersebut pada saat itu.
+
+Jika berhasil:
+
+- tampilkan success state singkat
+- redirect ke route existing
+
+Jika gagal:
+
+- jangan hilangkan draft
+- tampilkan retry
+- tampilkan support reference bila API memberikan request ID
+- jangan reset form
+
+==================================================
+15. MOBILE EXPERIENCE
+==================================================
+
+Verifikasi pada 390px dan 430px.
+
+Periksa:
+
+- input tidak terpotong
+- sticky CTA tidak menutup field
+- mobile keyboard tidak menutup tombol aktif
+- suggestion chip horizontal scroll atau wrap
+- stepper compact
+- textarea usable
+- upload usable
+- date picker usable
+- review cards tidak overflow
+- modal/bottom sheet accessible
+- no horizontal page overflow
+
+==================================================
+16. ACCESSIBILITY
+==================================================
+
+Audit dan perbaiki:
+
+- label htmlFor
+- fieldset dan legend
+- aria-describedby
+- aria-invalid
+- aria-live untuk save state
+- aria-live untuk submit state
+- aria-current pada step
+- focus management saat pindah step
+- focus ke heading step baru
+- focus ke error pertama
+- keyboard chip selection
+- keyboard upload
+- color contrast
+- reduced motion
+- screen-reader-friendly required state
+
+==================================================
+17. PERFORMANCE
+==================================================
+
+Audit:
+
+- unnecessary rerender saat typing
+- localStorage writes
+- watch() terlalu luas
+- large form component
+- validation recalculation
+- motion overhead
+- file preview memory leak
+- object URL cleanup
+- event listener cleanup
+- dynamic imports bila layak
+
+Gunakan memoization hanya jika benar-benar berguna.
+
+Jangan memecah komponen secara berlebihan hanya demi jumlah file.
+
+==================================================
+18. DATA SAFETY & PRIVACY UX
+==================================================
+
+Tambahkan microcopy yang sesuai:
+
+- Files are used only for this project
+- Your draft is saved on this device
+- Confidential project information is protected
+
+Hanya tampilkan klaim yang benar berdasarkan implementasi.
+
+Jangan mengklaim encryption, ISO, atau compliance yang belum diverifikasi.
+
+Jelaskan jika autosave localStorage hanya tersimpan di perangkat/browser tersebut.
+
+==================================================
+19. CONSISTENCY
+==================================================
+
+Pastikan /submit dan /request-service/:id/brief terasa sebagai satu sistem.
+
+Gunakan konsisten:
+
+- typography
+- button
+- stepper
+- field styling
+- save state
+- review style
+- success state
+- spacing
+- mobile actions
+
+Refactor reusable component bila memang mengurangi duplikasi, misalnya:
+
+- BriefProgress
+- BriefStepHeader
+- AutosaveStatus
+- WizardActions
+- GuidedChips
+- BriefReviewSection
+- FileUploadField
+
+Jangan memaksakan refactor jika risiko terlalu besar.
+
+==================================================
+VERIFIKASI
+==================================================
+
+Setelah implementasi:
+
+1. Jalankan typecheck.
+2. Jalankan build.
+3. Jalankan test bila tersedia.
+4. Verifikasi /submit.
+5. Verifikasi /request-service/:id/brief.
+6. Verifikasi fresh brief.
+7. Verifikasi restored draft.
+8. Verifikasi invalid step.
+9. Verifikasi submit gagal tidak menghapus draft.
+10. Verifikasi refresh tidak memanggil startBrief berulang secara tidak perlu.
+11. Verifikasi desktop 1440px.
+12. Verifikasi tablet 768px.
+13. Verifikasi mobile 390px.
+14. Verifikasi keyboard-only navigation.
+15. Verifikasi screen reader semantics secara statis.
+16. Verifikasi payload dan API mutation tidak berubah.
+
+==================================================
+OUTPUT WAJIB
+==================================================
+
+Berikan laporan:
+
+# Phase V2.5 Project Brief Wizard Polish
+
+## UX Audit
+- Critical
+- High
+- Medium
+- Low
+
+## Files Changed
+
+## Components Added or Refactored
+
+## Form Experience Improvements
+
+## Autosave & Restore Improvements
+
+## Validation Improvements
+
+## File Upload Improvements
+
+## Accessibility Improvements
+
+## Mobile Improvements
+
+## Performance Improvements
+
+## API and Payload Verification
+
+## Desktop Screenshot
+
+## Tablet Screenshot
+
+## Mobile Screenshot
+
+## Bundle Comparison
+
+Tampilkan ukuran bundle sebelum dan sesudah.
+
+## Typecheck Result
+
+## Build Result
+
+## Remaining Non-Blocking Gaps
+
+Jangan lanjut ke Commercial, Workspace, atau Review.
+
+Selesaikan dan laporkan hanya Phase V2.5.
