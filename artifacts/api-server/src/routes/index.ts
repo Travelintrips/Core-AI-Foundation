@@ -53,6 +53,7 @@ import affiliatesRouter from "./affiliates";
 import customerHealthRouter from "./customerHealth";
 import commercialAnalyticsRouter from "./commercialAnalytics";
 import storageRouter from "./storage";
+import observabilityRouter from "./observability";
 
 const router: IRouter = Router();
 
@@ -109,5 +110,6 @@ router.use(affiliatesRouter);
 router.use(customerHealthRouter);
 router.use(commercialAnalyticsRouter);
 router.use(storageRouter);
+router.use(observabilityRouter);
 
 export default router;

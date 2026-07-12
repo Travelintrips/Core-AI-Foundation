@@ -1,4 +1,7 @@
 import { getProviderApiKey } from "./aiSecretService.js";
+import { logExecutionSafe, type ObservabilityContext } from "./observabilityService.js";
+
+export type { ObservabilityContext };
 
 export interface ExecutionInput {
   prompt: string;
@@ -18,6 +21,8 @@ export interface ExecutionInput {
   /** Optional image to attach as vision input (OpenAI/Gemini only). Ignored by
    * providers/models without vision support — callers should check before relying on it. */
   imageUrl?: string | null;
+  /** Optional: when present, every call is fire-and-forget logged to ai_execution_logs. */
+  observability?: ObservabilityContext;
 }
 
 export interface ExecutionOutput {
@@ -303,6 +308,7 @@ async function executeReplicate(input: ExecutionInput, apiKey: string): Promise<
 /**
  * Execute an AI call against the appropriate provider.
  * Throws on failure — callers handle fallback logic.
+ * When input.observability is set, fires-and-forgets a log to ai_execution_logs.
  */
 export async function executeAI(input: ExecutionInput): Promise<ExecutionOutput> {
   const apiKey = getProviderApiKey(input.provider.slug);
@@ -316,23 +322,68 @@ export async function executeAI(input: ExecutionInput): Promise<ExecutionOutput>
   }
 
   const slug = input.provider.slug.toLowerCase();
+  const startedAt = new Date();
 
-  switch (slug) {
-    case "openai":
-      return executeOpenAI(input, apiKey);
-    case "anthropic":
-      return executeAnthropic(input, apiKey);
-    case "google":
-    case "google-gemini":
-    case "gemini":
-      return executeGemini(input, apiKey);
-    case "replicate":
-      return executeReplicate(input, apiKey);
-    case "mistral":
-      return executeMistral(input, apiKey);
-    default:
-      throw new Error(
-        `Unsupported provider slug '${input.provider.slug}'. Add a handler in aiExecutionService.`,
-      );
+  let result: ExecutionOutput;
+  try {
+    switch (slug) {
+      case "openai":
+        result = await executeOpenAI(input, apiKey);
+        break;
+      case "anthropic":
+        result = await executeAnthropic(input, apiKey);
+        break;
+      case "google":
+      case "google-gemini":
+      case "gemini":
+        result = await executeGemini(input, apiKey);
+        break;
+      case "replicate":
+        result = await executeReplicate(input, apiKey);
+        break;
+      case "mistral":
+        result = await executeMistral(input, apiKey);
+        break;
+      default:
+        throw new Error(
+          `Unsupported provider slug '${input.provider.slug}'. Add a handler in aiExecutionService.`,
+        );
+    }
+  } catch (err) {
+    // Log failure (fire-and-forget)
+    if (input.observability) {
+      logExecutionSafe({
+        ...input.observability,
+        providerName: input.observability.providerName ?? input.provider.slug,
+        modelName:    input.observability.modelName    ?? input.model.modelId,
+        requestType:  input.observability.requestType  ?? "text",
+        promptTokens:     0,
+        completionTokens: 0,
+        latencyMs:   Date.now() - startedAt.getTime(),
+        startedAt,
+        finishedAt:  new Date(),
+        status:      "failed",
+        errorMessage: String(err),
+      });
+    }
+    throw err;
   }
+
+  // Log success (fire-and-forget)
+  if (input.observability) {
+    logExecutionSafe({
+      ...input.observability,
+      providerName: input.observability.providerName ?? input.provider.slug,
+      modelName:    input.observability.modelName    ?? input.model.modelId,
+      requestType:  input.observability.requestType  ?? "text",
+      promptTokens:     result.promptTokens,
+      completionTokens: result.completionTokens,
+      latencyMs:   result.latencyMs,
+      startedAt,
+      finishedAt:  new Date(),
+      status:      "success",
+    });
+  }
+
+  return result;
 }
