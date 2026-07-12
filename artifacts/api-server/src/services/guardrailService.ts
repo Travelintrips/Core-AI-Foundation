@@ -19,7 +19,12 @@ const DEFAULTS: GuardrailConfig = {
   maxCostPerWorkflow: 5.0,
   maxCostPerRequest: 0.5,
   maxRetryPerProvider: 3,
-  providerTimeoutMs: 30000,
+  // Replicate FLUX generations occasionally take >30s to complete under load; a string
+  // of otherwise-clean assets was being marked "failed" purely on timeout, dragging down
+  // portfolio QC averages with $0 assets rather than real quality problems. 60s gives
+  // slow-but-legitimate completions room without materially changing cost (still billed
+  // per generation, not per second).
+  providerTimeoutMs: 60000,
   disableOnErrorRate: 0.5,
   fallbackEnabled: true,
 };

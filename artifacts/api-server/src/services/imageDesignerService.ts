@@ -29,6 +29,7 @@ import { getProviderApiKey } from "./aiSecretService.js";
 import { logAudit } from "./aiAuditService.js";
 import { recordCost, getProjectCosts } from "./costService.js";
 import { readGuardrails } from "./guardrailService.js";
+import { applyTextOverlay, type OverlaySpec, type OverlayContext } from "../lib/textOverlay.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -366,6 +367,10 @@ export interface NamedAssetRole {
    * paragraphs). Diffusion models reliably produce gibberish for this kind of text,
    * so these roles get a hardened anti-text prompt/negative-prompt (Sprint P2.1 policy). */
   noText?: boolean;
+  /** When set, real vector text (brand name/tagline/menu) is composited onto the
+   * (text-free) generated background after generation — see lib/textOverlay.ts.
+   * This is the actual fix for legible copy, not just a softer prompt. */
+  overlay?: OverlaySpec;
 }
 
 export interface GeneratedNamedAsset {
@@ -394,24 +399,21 @@ function getServiceBaseUrl(): string {
 }
 
 /**
- * Downloads a (typically ephemeral) provider-hosted image and persists a
- * permanent copy in object storage. Returns the new absolute public URL, or
- * null if persistence isn't available/fails — callers should fall back to the
- * original URL in that case rather than losing the asset entirely.
+ * Persists an already-in-memory image buffer as a permanent object-storage
+ * copy. Returns the new absolute public URL, or null if persistence isn't
+ * available/fails — callers should fall back to the ephemeral provider URL in
+ * that case rather than losing the asset entirely.
  */
-async function persistGeneratedImage(
-  providerUrl: string,
+async function persistImageBuffer(
+  buffer: Buffer,
+  contentType: string,
   brandSlug: string,
   role: string,
 ): Promise<string | null> {
   if (!process.env["PUBLIC_OBJECT_SEARCH_PATHS"]) return null; // object storage not provisioned
   try {
     const { objectStorageService } = await import("../lib/objectStorage.js");
-    const res = await fetch(providerUrl);
-    if (!res.ok) return null;
-    const contentType = res.headers.get("content-type") || "image/webp";
     const ext = contentType.includes("png") ? "png" : contentType.includes("jpeg") ? "jpg" : "webp";
-    const buffer = Buffer.from(await res.arrayBuffer());
     const relativePath = `demo-portfolios/${brandSlug}/${role}-${Date.now()}.${ext}`;
     const { objectPath } = await objectStorageService.uploadPublicAsset(relativePath, buffer, contentType);
     return `${getServiceBaseUrl()}/api${objectPath}`;
@@ -442,17 +444,41 @@ function isRateLimitError(err: unknown): boolean {
 // documented 6 requests/minute throttle that low-credit Replicate accounts hit.
 const MIN_INTER_REQUEST_MS = 10500;
 
+/** FLUX Schnell is stochastic — even with hardened noText prompts it sometimes
+ * hallucinates gibberish lettering somewhere in frame (a known model limitation,
+ * not something prompt wording alone fixes). Below this score, spend one more
+ * $0.003 generation to try for a cleaner draw before accepting the result —
+ * cheaper and more honest than lowering the QC bar. */
+const QUALITY_RETRY_THRESHOLD = 65;
+
+interface AssetAttemptResult {
+  imageUrl: string | null;
+  persistedUrl: string | null;
+  qcScore: number;
+  qcNotes: string;
+  cost: number;
+  providerRetries: number;
+  failureReason?: string;
+}
+
 export async function generateNamedAssetSet(
   brief: Record<string, unknown>,
   roles: NamedAssetRole[],
-  opts?: { maxRetryPerAsset?: number },
+  opts?: { maxRetryPerAsset?: number; maxQualityRetryPerAsset?: number },
 ): Promise<GeneratedNamedAsset[]> {
   const guardrails = await readGuardrails();
   const maxRetry = Math.max(0, opts?.maxRetryPerAsset ?? Math.min(guardrails.maxRetryPerProvider, 2));
+  const maxQualityRetry = Math.max(0, opts?.maxQualityRetryPerAsset ?? 1);
   const replicateKey = getProviderApiKey("replicate");
 
   const results: GeneratedNamedAsset[] = [];
   let lastRequestAt = 0;
+
+  const pace = async () => {
+    const waitMs = MIN_INTER_REQUEST_MS - (Date.now() - lastRequestAt);
+    if (waitMs > 0) await sleep(waitMs);
+    lastRequestAt = Date.now();
+  };
 
   for (const role of roles) {
     const brandName = String(brief["brandName"] ?? "the brand");
@@ -462,13 +488,25 @@ export async function generateNamedAssetSet(
       ? "Do NOT render any readable words, labels, price lists, menus, paragraphs, or body copy — diffusion models cannot spell reliably. Keep it purely visual: colors, shapes, layout, imagery only, no legible letters anywhere."
       : "Keep any lettering minimal (short brand name only, at most 1-2 words) — do not attempt full sentences, price lists, or body copy.";
     const prompt = `${role.promptHint}. Brand: ${brandName}. Industry: ${industry}. Visual style: ${style}. Professional quality, on-brand, clean composition. ${textPolicy} No logos of real companies.`;
+    // What QC is shown as "the prompt used to generate the image" — for overlay roles this
+    // must NOT include the noText directive, or QC penalizes the (intentional, correctly
+    // spelled) baked-in text for "violating" a generation instruction that no longer applies
+    // to the final composited asset.
+    // Strip any "no lettering / icon only / no wordmark" phrasing from the promptHint
+    // itself before showing it to QC — that instruction was only ever meant to stop the
+    // diffusion model from hallucinating gibberish letters into the *background*. It does
+    // not apply to the final asset, which intentionally has real text composited on top.
+    const qcSafePromptHint = role.overlay
+      ? role.promptHint.replace(/,?\s*no (wordmark|lettering|text)[^,.]*/gi, "")
+      : role.promptHint;
+    const qcPrompt = role.overlay
+      ? `${qcSafePromptHint}. Brand: ${brandName}. Industry: ${industry}. Visual style: ${style}. Professional quality, on-brand, clean composition. No logos of real companies. NOTE: a real brand name/tagline/menu overlay was added programmatically AFTER generation as correctly-spelled vector text — this is intentional and desired. Do not penalize the image for containing text or for "violating" any no-lettering instruction; judge the overlay purely on legibility, correct spelling, and how well it's integrated with the background.`
+      : prompt;
     const negativePrompt = role.noText
       ? "text, words, letters, typography, gibberish text, misspelled words, illegible text, price list, menu text, labels, captions, paragraphs, watermark, low quality, blurry, distorted, real company logo, trademark, nsfw, signature"
       : "gibberish text, misspelled words, illegible text, extra letters, watermark, low quality, blurry, distorted, real company logo, trademark, nsfw, signature";
-
-    let attempt = 0;
-    let imageUrl: string | null = null;
-    let lastError: unknown = null;
+    const brandSlug = String(brief["brandName"] ?? "brand")
+      .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "brand";
 
     if (!replicateKey) {
       results.push({
@@ -478,51 +516,110 @@ export async function generateNamedAssetSet(
       continue;
     }
 
-    while (attempt <= maxRetry && !imageUrl) {
-      attempt++;
+    // One full generate → overlay → QC pass. Provider-level retries (API errors,
+    // rate limits) happen inside this function; the outer loop below only retries
+    // for *quality* (a clean generation that still scored low).
+    const attemptOnce = async (): Promise<AssetAttemptResult> => {
+      let providerAttempt = 0;
+      let imageUrl: string | null = null;
+      let lastError: unknown = null;
 
-      // Pace requests to stay under Replicate's throttle window.
-      const waitMs = MIN_INTER_REQUEST_MS - (Date.now() - lastRequestAt);
-      if (waitMs > 0) await sleep(waitMs);
-      lastRequestAt = Date.now();
-
-      try {
-        const modelId = attempt > maxRetry && guardrails.fallbackEnabled ? FLUX_DEV : FLUX_SCHNELL;
-        const r = await generateReplicateImage(
-          modelId,
-          { prompt, negativePrompt, aspectRatio: role.aspectRatio ?? "1:1" },
-          replicateKey,
-          guardrails.providerTimeoutMs,
-        );
-        imageUrl = r.imageUrl;
-      } catch (err) {
-        lastError = err;
-        if (isRateLimitError(err) && attempt <= maxRetry) {
-          const backoff = parseRetryAfterMs(err) ?? 15000;
-          await sleep(backoff);
+      while (providerAttempt <= maxRetry && !imageUrl) {
+        providerAttempt++;
+        await pace();
+        try {
+          const modelId = providerAttempt > maxRetry && guardrails.fallbackEnabled ? FLUX_DEV : FLUX_SCHNELL;
+          const r = await generateReplicateImage(
+            modelId,
+            { prompt, negativePrompt, aspectRatio: role.aspectRatio ?? "1:1" },
+            replicateKey,
+            guardrails.providerTimeoutMs,
+          );
+          imageUrl = r.imageUrl;
+        } catch (err) {
+          lastError = err;
+          if (isRateLimitError(err) && providerAttempt <= maxRetry) {
+            const backoff = parseRetryAfterMs(err) ?? 15000;
+            await sleep(backoff);
+          }
         }
+      }
+
+      if (!imageUrl) {
+        return {
+          imageUrl: null, persistedUrl: null, qcScore: 0,
+          qcNotes: String(lastError instanceof Error ? lastError.message : lastError ?? "generation failed"),
+          cost: 0, providerRetries: providerAttempt - 1, failureReason: "generation_failed",
+        };
+      }
+
+      // Download the raw provider image so we can (a) bake real text onto it when
+      // configured, (b) persist a permanent copy, and (c) hand exact final pixels
+      // to QC — all from one buffer instead of re-fetching the ephemeral URL 3x.
+      let finalBuffer: Buffer | null = null;
+      let contentType = "image/webp";
+      try {
+        const raw = await fetch(imageUrl);
+        if (raw.ok) {
+          contentType = raw.headers.get("content-type") || "image/webp";
+          finalBuffer = Buffer.from(await raw.arrayBuffer());
+          if (role.overlay) {
+            const overlayCtx: OverlayContext = {
+              brandName,
+              tagline: String(brief["tagline"] ?? ""),
+              menuItems: role.overlay.kind === "menu"
+                ? (await import("../lib/textOverlay.js")).buildPlaceholderMenu(industry)
+                : undefined,
+            };
+            finalBuffer = await applyTextOverlay(finalBuffer, role.overlay, overlayCtx);
+            contentType = "image/webp";
+          }
+        }
+      } catch (err) {
+        console.error(`[imageDesigner] Failed to download/overlay ${role.role}:`, err);
+      }
+
+      const qcImageRef = finalBuffer ? `data:${contentType};base64,${finalBuffer.toString("base64")}` : imageUrl;
+      const qc = await reviewImage(brief, qcPrompt, qcImageRef);
+      const persistedUrl = finalBuffer
+        ? await persistImageBuffer(finalBuffer, contentType, brandSlug, role.role)
+        : null;
+
+      return {
+        imageUrl, persistedUrl, qcScore: qc.score, qcNotes: qc.notes,
+        cost: IMAGE_COST_SCHNELL, providerRetries: providerAttempt - 1,
+      };
+    };
+
+    let best = await attemptOnce();
+    let qualityRetries = 0;
+    let totalCost = best.cost;
+    let totalProviderRetries = best.providerRetries;
+
+    while (best.imageUrl && best.qcScore < QUALITY_RETRY_THRESHOLD && qualityRetries < maxQualityRetry) {
+      qualityRetries++;
+      const retryResult = await attemptOnce();
+      totalCost += retryResult.cost;
+      totalProviderRetries += retryResult.providerRetries;
+      if (retryResult.imageUrl && retryResult.qcScore > best.qcScore) {
+        best = retryResult;
       }
     }
 
-    if (!imageUrl) {
+    if (!best.imageUrl) {
       results.push({
         role: role.role, label: role.label, prompt, imageUrl: null, status: "failed",
-        qcScore: 0, qcNotes: String(lastError instanceof Error ? lastError.message : lastError ?? "generation failed"),
-        cost: 0, retries: attempt - 1,
+        qcScore: 0, qcNotes: best.qcNotes, cost: totalCost, retries: totalProviderRetries,
       });
       continue;
     }
 
-    const qc = await reviewImage(brief, prompt, imageUrl);
-    const brandSlug = String(brief["brandName"] ?? "brand")
-      .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "brand";
-    const persistedUrl = await persistGeneratedImage(imageUrl, brandSlug, role.role);
     results.push({
       role: role.role, label: role.label, prompt,
-      imageUrl: persistedUrl ?? imageUrl,
-      sourceProviderUrl: imageUrl,
+      imageUrl: best.persistedUrl ?? best.imageUrl,
+      sourceProviderUrl: best.imageUrl,
       status: "completed",
-      qcScore: qc.score, qcNotes: qc.notes, cost: IMAGE_COST_SCHNELL, retries: attempt - 1,
+      qcScore: best.qcScore, qcNotes: best.qcNotes, cost: totalCost, retries: totalProviderRetries + qualityRetries,
     });
   }
 
