@@ -622,7 +622,7 @@ Return ONLY JSON (no markdown):
   // in the background via the existing job queue (Sprint P2.1.1); this insert
   // never waits on storage I/O.
   if (generatedAssets.length) {
-    const insertedAssets = await db.insert(aiPortfolioAssetsTable).values(
+    await db.insert(aiPortfolioAssetsTable).values(
       generatedAssets.map((a, i) => ({
         portfolioId,
         assetType: "image",
@@ -631,42 +631,14 @@ Return ONLY JSON (no markdown):
         altText: a.status === "completed" ? `${a.label} — ${brandName} (AI Demo Project)` : null,
         thumbnailUrl: a.imageUrl,
         previewUrl: a.imageUrl,
-        // Populated once the image is downloaded from the (ephemeral) provider URL and
-        // re-hosted in object storage; null only if persistence failed and imageUrl still
-        // points at the temporary provider URL (see sourceProviderUrl in metadata for provenance).
-        storagePath: a.sourceProviderUrl && a.imageUrl !== a.sourceProviderUrl ? a.imageUrl : null,
-        storagePath: null, // set once archive_asset job completes
+        storagePath: null,
         mimeType: a.status === "completed" ? "image/webp" : null,
         displayOrder: i,
         downloadable: false,
         watermarkRequired: false,
-        metadataJson: {
-          status: a.status, qcScore: a.qcScore, qcNotes: a.qcNotes, cost: a.cost, retries: a.retries,
-          prompt: a.prompt, sourceProviderUrl: a.sourceProviderUrl ?? null,
-          persisted: Boolean(a.sourceProviderUrl && a.imageUrl !== a.sourceProviderUrl),
-        },
-        status: a.status === "completed" ? "generated" : "archive_failed",
-        sourceUrl: a.imageUrl,
         metadataJson: { status: a.status, qcScore: a.qcScore, qcNotes: a.qcNotes, cost: a.cost, retries: a.retries, prompt: a.prompt },
       })),
-    ).returning({ id: aiPortfolioAssetsTable.id, assetRole: aiPortfolioAssetsTable.assetRole });
-
-    // Publish asset.generated for every successfully generated asset — the
-    // existing event bus + create_job subscription (seeded once, see
-    // seedAssetLifecycleSubscriptions) enqueues the archive_asset job. No new
-    // orchestration code: this reuses the Queue/Dispatcher/Worker
-    // Cluster/Event Bus exactly as they exist today.
-    for (const a of generatedAssets) {
-      if (a.status !== "completed" || !a.imageUrl) continue;
-      const row = insertedAssets.find((r) => r.assetRole === a.role);
-      if (!row) continue;
-      publishSafe({
-        eventType: "asset.generated",
-        sourceModule: "portfolio-generator",
-        sourceId: String(row.id),
-        payload: { portfolioAssetId: row.id, sourceUrl: a.imageUrl, brandSlug, role: a.role, portfolioId },
-      });
-    }
+    );
   }
 
   await logAudit(
