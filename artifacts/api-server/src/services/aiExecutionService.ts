@@ -303,13 +303,8 @@ async function executeReplicate(input: ExecutionInput, apiKey: string): Promise<
   return { content: output, promptTokens: 0, completionTokens: 0, tokensUsed: 0, latencyMs };
 }
 
-// ─── Main dispatcher ─────────────────────────────────────────────────────────
+// ─── Quota fallback ───────────────────────────────────────────────────────────
 
-/**
- * Execute an AI call against the appropriate provider.
- * Throws on failure — callers handle fallback logic.
- * When input.observability is set, fires-and-forgets a log to ai_execution_logs.
- */
 /** Error message patterns that signal quota/billing exhaustion (not transient errors). */
 const QUOTA_ERROR_PATTERNS = [
   "insufficient_quota",
@@ -357,6 +352,13 @@ async function executeWithQuotaFallback(
   }
 }
 
+// ─── Main dispatcher ──────────────────────────────────────────────────────────
+
+/**
+ * Execute an AI call against the appropriate provider.
+ * Throws on failure — callers handle fallback logic.
+ * When input.observability is set, fires-and-forgets a log to ai_execution_logs.
+ */
 export async function executeAI(input: ExecutionInput): Promise<ExecutionOutput> {
   const apiKey = getProviderApiKey(input.provider.slug);
 
@@ -375,7 +377,7 @@ export async function executeAI(input: ExecutionInput): Promise<ExecutionOutput>
   try {
     switch (slug) {
       case "openai":
-        result = await executeOpenAI(input, apiKey);
+        result = await executeWithQuotaFallback(input, () => executeOpenAI(input, apiKey));
         break;
       case "anthropic":
         result = await executeAnthropic(input, apiKey);
@@ -383,13 +385,13 @@ export async function executeAI(input: ExecutionInput): Promise<ExecutionOutput>
       case "google":
       case "google-gemini":
       case "gemini":
-        result = await executeGemini(input, apiKey);
+        result = await executeWithQuotaFallback(input, () => executeGemini(input, apiKey));
         break;
       case "replicate":
         result = await executeReplicate(input, apiKey);
         break;
       case "mistral":
-        result = await executeMistral(input, apiKey);
+        result = await executeWithQuotaFallback(input, () => executeMistral(input, apiKey));
         break;
       default:
         throw new Error(
@@ -397,7 +399,6 @@ export async function executeAI(input: ExecutionInput): Promise<ExecutionOutput>
         );
     }
   } catch (err) {
-    // Log failure (fire-and-forget)
     if (input.observability) {
       logExecutionSafe({
         ...input.observability,
@@ -416,24 +417,28 @@ export async function executeAI(input: ExecutionInput): Promise<ExecutionOutput>
     throw err;
   switch (slug) {
     case "openai":
-      return executeWithQuotaFallback(input, () => executeOpenAI(input, apiKey));
+      result = await executeWithQuotaFallback(input, () => executeOpenAI(input, apiKey));
+      break;
     case "anthropic":
-      return executeAnthropic(input, apiKey);
+      result = await executeAnthropic(input, apiKey);
+      break;
     case "google":
     case "google-gemini":
     case "gemini":
-      return executeWithQuotaFallback(input, () => executeGemini(input, apiKey));
+      result = await executeWithQuotaFallback(input, () => executeGemini(input, apiKey));
+      break;
     case "replicate":
-      return executeReplicate(input, apiKey);
+      result = await executeReplicate(input, apiKey);
+      break;
     case "mistral":
-      return executeWithQuotaFallback(input, () => executeMistral(input, apiKey));
+      result = await executeWithQuotaFallback(input, () => executeMistral(input, apiKey));
+      break;
     default:
       throw new Error(
         `Unsupported provider slug '${input.provider.slug}'. Add a handler in aiExecutionService.`,
       );
   }
 
-  // Log success (fire-and-forget)
   if (input.observability) {
     logExecutionSafe({
       ...input.observability,

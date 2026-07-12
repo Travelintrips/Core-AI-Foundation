@@ -2,6 +2,20 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, FolderKanban, Download, Receipt, Palette,
   Bell, UserCircle, LifeBuoy, Sparkles, Menu, X, Award, Gift,
+  LayoutDashboard,
+  FolderKanban,
+  Download,
+  Receipt,
+  Palette,
+  Bell,
+  UserCircle,
+  LifeBuoy,
+  Sparkles,
+  Menu,
+  X,
+  Award,
+  Gift,
+  Settings,
 } from "lucide-react";
 import { useState } from "react";
 import { useWorkspaceNotifications } from "@/hooks/use-workspace";
@@ -18,6 +32,11 @@ const NAV_ITEMS = [
   { href: "/referral",    label: "Referral",       icon: Gift },
   { href: "/profile",     label: "Profile",        icon: UserCircle },
   { href: "/support",     label: "Support",        icon: LifeBuoy },
+  { href: "/affiliate", label: "Afiliasi", icon: Award },
+  { href: "/referral", label: "Referral", icon: Gift },
+  { href: "/profile", label: "Profile", icon: UserCircle },
+  { href: "/support", label: "Support", icon: LifeBuoy },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function WorkspaceLayout({ token, children }: { token: string; children: React.ReactNode }) {
