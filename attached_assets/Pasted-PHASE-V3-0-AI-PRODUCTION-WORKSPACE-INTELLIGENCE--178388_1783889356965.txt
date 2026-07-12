@@ -1,0 +1,698 @@
+PHASE V3.0
+
+AI PRODUCTION WORKSPACE INTELLIGENCE
+
+==================================================
+
+CONTEXT
+
+==================================================
+
+Seluruh milestone sebelumnya telah selesai.
+
+Landing
+
+Marketplace
+
+Service Detail
+
+Project Brief
+
+Commercial
+
+Quotation
+
+Checkout
+
+sudah selesai.
+
+Mulai sekarang saya TIDAK ingin menambah halaman baru.
+
+Saya ingin meningkatkan EXPERIENCE.
+
+==================================================
+
+MISSION
+
+==================================================
+
+Saya ingin Workspace menjadi pembeda utama Creative Studio.
+
+Customer harus merasa:
+
+"Saya sedang bekerja bersama tim AI profesional."
+
+Bukan:
+
+"Saya sedang menunggu progress."
+
+Workspace harus terasa hidup.
+
+==================================================
+
+ROLE
+
+==================================================
+
+Anda bertindak sebagai:
+
+Principal Product Designer
+
+Creative Director
+
+Enterprise UX Architect
+
+Realtime Dashboard Specialist
+
+Senior React Engineer
+
+Frontend Performance Engineer
+
+Berpikirlah seperti tim:
+
+Linear
+
+Notion
+
+GitHub Projects
+
+OpenAI
+
+Canva
+
+ClickUp
+
+Monday.com
+
+Stripe Dashboard
+
+==================================================
+
+JANGAN UBAH
+
+==================================================
+
+Backend
+
+API
+
+Database
+
+Business Flow
+
+Status Transition
+
+Authentication
+
+Project Logic
+
+AI Job Logic
+
+Worker Assignment
+
+Route
+
+==================================================
+
+Hanya frontend.
+
+==================================================
+
+LANGKAH 1
+
+AUDIT
+
+==================================================
+
+Audit Workspace saat ini.
+
+Periksa:
+
+Visual Hierarchy
+
+Timeline
+
+Progress
+
+Activity Feed
+
+Worker Status
+
+Comments
+
+Version
+
+Files
+
+Notifications
+
+Loading
+
+Accessibility
+
+Mobile
+
+Responsiveness
+
+Error State
+
+Empty State
+
+Animation
+
+Keyboard
+
+Performance
+
+==================================================
+
+Kelompokkan:
+
+Critical
+
+High
+
+Medium
+
+Low
+
+==================================================
+
+Setelah audit.
+
+Implementasikan refinement.
+
+==================================================
+1.
+
+AI WORKFORCE DASHBOARD
+
+==================================================
+
+Saya ingin dashboard utama menampilkan AI Team.
+
+Misalnya:
+
+Creative Director AI
+
+Working
+
+████████
+
+98%
+
+Brand Strategist AI
+
+Thinking
+
+██████
+
+Copywriter AI
+
+Generating
+
+██████
+
+Visual Designer AI
+
+Rendering
+
+██████
+
+Human Reviewer
+
+Reviewing
+
+██████
+
+==================================================
+
+Setiap AI Card memiliki:
+
+Avatar
+
+Department
+
+Model
+
+Current Task
+
+Status
+
+ETA
+
+Confidence
+
+Progress
+
+==================================================
+
+Status harus menggunakan data existing.
+
+Jika belum ada.
+
+Gunakan placeholder yang jelas:
+
+Demo Preview
+
+==================================================
+2.
+
+LIVE AI ACTIVITY
+
+==================================================
+
+Tambahkan Activity Feed.
+
+Misalnya:
+
+09:21
+
+Creative Director
+
+Completed
+
+Brief Analysis
+
+------------------------------------------------
+
+09:26
+
+Brand Strategist
+
+Started
+
+Market Positioning
+
+------------------------------------------------
+
+09:33
+
+Copywriter
+
+Generating
+
+Headline
+
+------------------------------------------------
+
+09:41
+
+Designer
+
+Rendering
+
+Preview
+
+------------------------------------------------
+
+09:49
+
+Human Reviewer
+
+Reviewing
+
+==================================================
+
+Gunakan timeline vertikal.
+
+Card.
+
+Smooth animation.
+
+==================================================
+3.
+
+PROJECT TIMELINE
+
+==================================================
+
+Buat Timeline.
+
+Brief
+
+↓
+
+Research
+
+↓
+
+Strategy
+
+↓
+
+Writing
+
+↓
+
+Design
+
+↓
+
+Review
+
+↓
+
+Delivery
+
+==================================================
+
+Current Step
+
+Completed
+
+Upcoming
+
+==================================================
+4.
+
+CURRENT AI TASK
+
+==================================================
+
+Tambahkan panel.
+
+Current AI Working
+
+Task
+
+Started
+
+ETA
+
+Files
+
+Dependencies
+
+==================================================
+5.
+
+PROJECT HEALTH
+
+==================================================
+
+Tambahkan panel.
+
+Overall Progress
+
+AI Progress
+
+Human Progress
+
+Pending Review
+
+Blocked
+
+Queue
+
+Risk
+
+==================================================
+6.
+
+PROJECT INSIGHT
+
+==================================================
+
+Tambahkan Insight.
+
+Misalnya:
+
+AI mendeteksi:
+
+Brief sudah lengkap.
+
+Tidak ada blocker.
+
+Estimated completion:
+
+2 hari.
+
+Atau:
+
+Menunggu Human Review.
+
+Gunakan data existing.
+
+Jika belum ada.
+
+Gunakan:
+
+Insight Preview
+
+==================================================
+7.
+
+FILES
+
+==================================================
+
+Audit file panel.
+
+Tambahkan:
+
+Preview
+
+Type
+
+Size
+
+Status
+
+Uploaded
+
+Generated
+
+Reviewed
+
+==================================================
+8.
+
+COMMENTS
+
+==================================================
+
+Audit komentar.
+
+Perbaiki.
+
+Mention
+
+Resolve
+
+Unread
+
+Timestamp
+
+Thread
+
+==================================================
+9.
+
+VERSION
+
+==================================================
+
+Audit version.
+
+Perbaiki.
+
+Version
+
+Compare
+
+Latest
+
+Approved
+
+==================================================
+10.
+
+NOTIFICATION
+
+==================================================
+
+Audit notification.
+
+Perbaiki.
+
+Unread
+
+Priority
+
+Filter
+
+Mark Read
+
+==================================================
+11.
+
+MICRO INTERACTION
+
+==================================================
+
+Tambahkan:
+
+Fade
+
+Slide
+
+Card Lift
+
+Progress Animation
+
+Pulse
+
+Glow
+
+Timeline Reveal
+
+Skeleton
+
+Loading
+
+==================================================
+12.
+
+MOBILE
+
+==================================================
+
+Audit.
+
+Desktop
+
+Tablet
+
+Mobile
+
+==================================================
+13.
+
+ACCESSIBILITY
+
+==================================================
+
+Audit.
+
+aria
+
+focus
+
+keyboard
+
+contrast
+
+screen reader
+
+==================================================
+14.
+
+PERFORMANCE
+
+==================================================
+
+Audit.
+
+Bundle
+
+Motion
+
+Memo
+
+Virtualization bila diperlukan
+
+Cleanup
+
+Observer
+
+Lazy Loading
+
+==================================================
+15.
+
+VISUAL STYLE
+
+==================================================
+
+Saya ingin Workspace terasa seperti:
+
+Linear
+
++
+
+OpenAI
+
++
+
+Notion
+
++
+
+Stripe
+
+Bukan dashboard admin.
+
+==================================================
+OUTPUT
+
+==================================================
+
+Berikan:
+
+UX Audit
+
+Critical
+
+High
+
+Medium
+
+Low
+
+File berubah
+
+Component baru
+
+Desktop Screenshot
+
+Tablet Screenshot
+
+Mobile Screenshot
+
+Performance
+
+Accessibility
+
+Bundle
+
+Build
+
+Typecheck
+
+Jangan membuat backend baru.
+
+Jangan membuat API baru.
+
+Gunakan seluruh data existing.
+
+Jika data tidak tersedia.
+
+Gunakan placeholder yang jelas diberi label:
+
+Demo Preview
+
+Jangan membuat data palsu yang terlihat seperti data produksi.
+
+==================================================
+SUCCESS CRITERIA
+
+==================================================
+
+Workspace harus membuat customer merasa:
+
+"Ada tim AI profesional yang sedang bekerja untuk proyek saya secara real-time."
+
+Bukan sekadar melihat progress bar atau status sederhana.
+
+Jangan lanjut ke fase berikutnya sebelum Workspace mencapai kualitas enterprise.
