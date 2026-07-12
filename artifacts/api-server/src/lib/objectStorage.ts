@@ -1,5 +1,4 @@
 import { Storage, type File } from "@google-cloud/storage";
-import { Storage, File } from "@google-cloud/storage";
 import { Readable } from "stream";
 import { randomUUID } from "crypto";
 import {
@@ -47,22 +46,13 @@ function parseObjectPath(path: string): { bucketName: string; objectName: string
 
 export class ObjectStorageService {
   getPublicObjectSearchPaths(): string[] {
-    const raw = process.env.PUBLIC_OBJECT_SEARCH_PATHS || "";
-    const paths = Array.from(new Set(raw.split(",").map((p) => p.trim()).filter(Boolean)));
-    if (paths.length === 0) {
-      throw new Error(
-        "PUBLIC_OBJECT_SEARCH_PATHS not set. Provision object storage first.",
-export class ObjectStorageService {
-  constructor() {}
-
-  getPublicObjectSearchPaths(): Array<string> {
     const pathsStr = process.env.PUBLIC_OBJECT_SEARCH_PATHS || "";
     const paths = Array.from(
       new Set(
         pathsStr
           .split(",")
-          .map((path) => path.trim())
-          .filter((path) => path.length > 0)
+          .map((p) => p.trim())
+          .filter((p) => p.length > 0)
       )
     );
     if (paths.length === 0) {
@@ -72,6 +62,17 @@ export class ObjectStorageService {
       );
     }
     return paths;
+  }
+
+  getPrivateObjectDir(): string {
+    const dir = process.env.PRIVATE_OBJECT_DIR || "";
+    if (!dir) {
+      throw new Error(
+        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
+          "tool and set PRIVATE_OBJECT_DIR env var."
+      );
+    }
+    return dir;
   }
 
   /**
@@ -92,15 +93,6 @@ export class ObjectStorageService {
     const file = bucket.file(objectName);
     await file.save(buffer, { contentType, resumable: false });
     return { objectPath: `/storage/public-objects/${relativePath}`, relativePath };
-  getPrivateObjectDir(): string {
-    const dir = process.env.PRIVATE_OBJECT_DIR || "";
-    if (!dir) {
-      throw new Error(
-        "PRIVATE_OBJECT_DIR not set. Create a bucket in 'Object Storage' " +
-          "tool and set PRIVATE_OBJECT_DIR env var."
-      );
-    }
-    return dir;
   }
 
   async searchPublicObject(filePath: string): Promise<File | null> {
@@ -112,35 +104,6 @@ export class ObjectStorageService {
       const [exists] = await file.exists();
       if (exists) return file;
     }
-    return null;
-  }
-
-  async downloadObject(file: File, cacheTtlSec = 3600): Promise<Response> {
-    const [metadata] = await file.getMetadata();
-    const { Readable } = await import("node:stream");
-    const nodeStream = file.createReadStream();
-    const webStream = Readable.toWeb(nodeStream) as ReadableStream;
-    const headers: Record<string, string> = {
-      "Content-Type": (metadata.contentType as string) || "application/octet-stream",
-      "Cache-Control": `public, max-age=${cacheTtlSec}`,
-    };
-    if (metadata.size) headers["Content-Length"] = String(metadata.size);
-    return new Response(webStream, { headers });
-  }
-}
-
-export const objectStorageService = new ObjectStorageService();
-
-      const { bucketName, objectName } = parseObjectPath(fullPath);
-      const bucket = objectStorageClient.bucket(bucketName);
-      const file = bucket.file(objectName);
-
-      const [exists] = await file.exists();
-      if (exists) {
-        return file;
-      }
-    }
-
     return null;
   }
 
@@ -263,27 +226,6 @@ export const objectStorageService = new ObjectStorageService();
   }
 }
 
-function parseObjectPath(path: string): {
-  bucketName: string;
-  objectName: string;
-} {
-  if (!path.startsWith("/")) {
-    path = `/${path}`;
-  }
-  const pathParts = path.split("/");
-  if (pathParts.length < 3) {
-    throw new Error("Invalid path: must contain at least a bucket name");
-  }
-
-  const bucketName = pathParts[1];
-  const objectName = pathParts.slice(2).join("/");
-
-  return {
-    bucketName,
-    objectName,
-  };
-}
-
 async function signObjectURL({
   bucketName,
   objectName,
@@ -322,3 +264,5 @@ async function signObjectURL({
   const { signed_url: signedURL } = (await response.json()) as { signed_url: string };
   return signedURL;
 }
+
+export const objectStorageService = new ObjectStorageService();
