@@ -1,0 +1,455 @@
+Anda bertindak sebagai Senior Product Auditor, UI/UX Auditor, Frontend Architect, dan Technical Lead.
+
+Tugas Anda sekarang BUKAN langsung membuat fitur baru.
+
+Lakukan AUDIT MENYELURUH terhadap implementasi Creative Studio Customer Portal agar diketahui:
+
+1. Phase mana yang sudah selesai.
+2. Phase mana yang baru sebagian.
+3. Phase mana yang belum dikerjakan.
+4. Apakah implementasi sudah sesuai Design Master.
+5. Apakah ada fitur yang hanya terlihat di UI tetapi belum benar-benar berfungsi.
+6. Apa yang harus dikerjakan selanjutnya.
+
+Jangan menebak.
+
+Baca codebase, route, komponen, API call, state management, data source, styling, dan hasil build secara langsung.
+
+==================================================
+KONTEKS PROYEK
+==================================================
+
+Creative Studio adalah AI Enterprise Marketplace dengan rencana fase:
+
+PHASE 1 — Landing Page
+PHASE 2 — AI Marketplace / Service Catalog
+PHASE 3 — Service Detail & Pricing
+PHASE 4 — Project Brief Wizard
+PHASE 5 — AI Analysis & Recommendation
+PHASE 6 — Commercial Verification
+PHASE 7 — Production Workspace
+PHASE 8 — Review & Revision
+PHASE 9 — Completed & Delivery
+PHASE 10 — Customer Dashboard
+PHASE 11 — Billing & Invoices
+PHASE 12 — Profile, Team, Security, Settings
+
+Design direction yang sudah disetujui:
+
+- Dark-first enterprise interface
+- Obsidian / dark navy background
+- Violet sebagai primary accent
+- Cyan sebagai secondary accent
+- Amber untuk enterprise tier
+- Plus Jakarta Sans untuk heading
+- Inter untuk body
+- Lucide Icons
+- Tailwind CSS
+- Radix atau shadcn/ui
+- Motion elegan dan ringan
+- B2B enterprise
+- AI Workforce positioning
+- Bukan marketplace umum
+- Bukan dashboard admin biasa
+
+==================================================
+TUJUAN AUDIT
+==================================================
+
+Saya ingin mengetahui kondisi aktual implementasi, bukan hanya daftar file.
+
+Audit harus menjawab:
+
+- Apa yang sudah benar-benar live?
+- Apa yang hanya berupa komponen statis?
+- Apa yang masih memakai dummy data?
+- Apa yang sudah terhubung ke backend/API?
+- Apa yang belum responsif?
+- Apa yang belum sesuai Design Master?
+- Apakah Phase 1 selesai?
+- Apakah Phase 2 selesai?
+- Fase mana yang aman dikerjakan selanjutnya?
+
+==================================================
+LANGKAH AUDIT
+==================================================
+
+1. IDENTIFIKASI STRUKTUR PROYEK
+
+Cari dan laporkan:
+
+- lokasi frontend Creative Studio
+- framework yang digunakan
+- entry point
+- route utama
+- layout utama
+- design system
+- komponen reusable
+- state management
+- API client
+- source data service catalog
+- auth guard
+- build command
+- typecheck command
+
+2. AUDIT ROUTING
+
+Buat daftar semua route frontend yang berhubungan dengan Creative Studio.
+
+Contoh format:
+
+| Route | Halaman | Status | Data Source | Catatan |
+|------|---------|--------|-------------|---------|
+| / | Landing | Implemented | Static/API | ... |
+| /services | Marketplace | Partial | API | ... |
+| /services/:slug | Detail | Partial | API | ... |
+
+Pastikan route dibaca langsung dari codebase.
+
+3. AUDIT PHASE 1 — LANDING PAGE
+
+Periksa apakah sudah ada dan benar-benar berfungsi:
+
+- Header/navigation
+- Hero
+- AI workforce visual
+- Service department section
+- How it works
+- Testimonials
+- Pricing
+- CTA
+- Footer
+- responsive desktop/tablet/mobile
+- animation
+- accessibility
+- navigation ke marketplace
+- navigation ke login
+- button Start Project
+- light/dark consistency
+- SEO metadata jika ada
+
+Beri status untuk setiap item:
+
+- COMPLETE
+- PARTIAL
+- MISSING
+- BROKEN
+- STATIC ONLY
+
+4. AUDIT PHASE 2 — AI MARKETPLACE
+
+Periksa apakah sudah ada dan berfungsi:
+
+- Marketplace hero
+- Search service
+- Category filter
+- Category icons
+- Featured services
+- Service card
+- Rating
+- project count
+- delivery time
+- human review badge
+- starting price
+- View Detail action
+- Filter sidebar
+- Price filter
+- Delivery filter
+- Rating filter
+- Human review filter
+- Commercial-ready filter
+- Industry filter
+- Sort
+- Recommended for You
+- Recently Viewed
+- Empty state
+- Loading skeleton
+- Pagination / Load More
+- responsive desktop/tablet/mobile
+- route ke service detail
+- data dari backend/API
+- fallback/error state
+
+Untuk setiap fitur, jelaskan:
+
+- file implementasi
+- status
+- apakah fungsional
+- apakah memakai dummy data
+- masalah yang ditemukan
+
+5. AUDIT PHASE 3 DAN SETERUSNYA
+
+Walaupun belum diminta implementasi, cek apakah sebagian halaman sudah ada.
+
+Audit:
+
+- Service Detail
+- Brief
+- AI Analysis
+- Commercial
+- Production
+- Review
+- Completed
+- Dashboard
+- Billing
+- Profile
+- Settings
+
+Jangan menilai hanya berdasarkan nama route. Buka komponen dan cek fungsinya.
+
+6. AUDIT DESIGN SYSTEM
+
+Bandingkan implementasi dengan Design Master.
+
+Periksa:
+
+- CSS variables
+- warna utama
+- typography
+- spacing
+- radius
+- shadow
+- button variants
+- card variants
+- form variants
+- badges
+- stepper
+- navigation
+- sidebar
+- responsive breakpoints
+- animation
+- prefers-reduced-motion
+- loading states
+- empty states
+- error states
+
+Buat tabel:
+
+| Area | Design Master | Implementasi Aktual | Gap | Severity |
+|------|---------------|----------------------|-----|----------|
+
+Severity:
+
+- CRITICAL
+- HIGH
+- MEDIUM
+- LOW
+
+7. AUDIT DATA DAN INTEGRASI
+
+Periksa:
+
+- apakah service catalog dari database/API
+- apakah kategori dari database/API
+- apakah price dari database/API
+- apakah detail service dinamis
+- apakah package dinamis
+- apakah service slug berfungsi
+- apakah search query benar-benar memfilter
+- apakah filter dikirim ke backend atau hanya lokal
+- apakah loading dan error ditangani
+- apakah ada hardcoded data
+- apakah ada duplicate source of truth
+
+Buat daftar semua dummy/mock/hardcoded data yang masih ditemukan.
+
+8. AUDIT UX
+
+Periksa:
+
+- apakah CTA jelas
+- apakah user tahu langkah berikutnya
+- apakah klik service menuju detail
+- apakah back navigation konsisten
+- apakah filter mudah digunakan
+- apakah mobile usable
+- apakah font terlalu kecil
+- apakah contrast cukup
+- apakah state selected jelas
+- apakah focus state tersedia
+- apakah form label jelas
+- apakah sticky element menutupi konten
+- apakah loading membuat layout shift
+- apakah motion berlebihan
+
+9. AUDIT KUALITAS KODE
+
+Periksa:
+
+- duplicate component
+- component terlalu besar
+- inline style berlebihan
+- hardcoded color
+- hardcoded array
+- unused import
+- dead code
+- missing key
+- missing memoization bila relevan
+- accessibility issue
+- TypeScript any
+- broken import
+- console log
+- lint warning
+- route mismatch
+- API type mismatch
+
+10. JALANKAN VERIFIKASI
+
+Jalankan command yang benar berdasarkan package.json:
+
+- typecheck
+- build
+- lint jika tersedia
+- test jika tersedia
+
+Jangan mengubah banyak file hanya untuk membuat audit terlihat bersih.
+
+Jika ada error, kelompokkan:
+
+- error existing sebelum audit
+- error terkait Creative Studio
+- warning non-blocking
+
+11. VISUAL VERIFICATION
+
+Buka halaman aktual dan lakukan sanity check minimal pada:
+
+- Landing desktop
+- Landing mobile
+- Marketplace desktop
+- Marketplace mobile
+- Service detail bila tersedia
+
+Periksa:
+
+- overflow
+- broken layout
+- clipped text
+- spacing
+- contrast
+- clickable states
+- responsive behavior
+
+Jika alat screenshot tersedia, sertakan screenshot.
+
+==================================================
+FORMAT LAPORAN WAJIB
+==================================================
+
+Berikan laporan dengan struktur berikut.
+
+# CREATIVE STUDIO IMPLEMENTATION AUDIT
+
+## 1. Executive Summary
+
+Berikan ringkasan singkat:
+
+- Overall completion percentage
+- Phase terakhir yang benar-benar selesai
+- Phase yang sedang berlangsung
+- Risiko utama
+- Rekomendasi fase berikutnya
+
+## 2. Phase Completion Matrix
+
+Gunakan tabel:
+
+| Phase | Scope | Completion | Status | Evidence |
+|------|-------|------------|--------|----------|
+| 1 | Landing | 0–100% | Complete/Partial/Missing | File/route |
+| 2 | Marketplace | 0–100% | ... | ... |
+| 3 | Service Detail | ... | ... | ... |
+
+Audit semua Phase 1–12.
+
+## 3. Phase 1 Detailed Audit
+
+Gunakan tabel fitur per fitur.
+
+## 4. Phase 2 Detailed Audit
+
+Gunakan tabel fitur per fitur.
+
+## 5. Existing Work Beyond Phase 2
+
+Jelaskan halaman atau fitur lanjutan yang ternyata sudah tersedia.
+
+## 6. Routing Map
+
+Daftar route aktual.
+
+## 7. Data & API Integration
+
+Jelaskan sumber data dan integrasi nyata.
+
+## 8. Design System Compliance
+
+Berikan score 0–100%.
+
+## 9. Responsive & Accessibility Findings
+
+Pisahkan critical dan non-critical.
+
+## 10. Code Quality Findings
+
+Sertakan file terkait.
+
+## 11. Build, Typecheck, Lint, Test Results
+
+Tampilkan command dan hasil aktual.
+
+## 12. Critical Bugs
+
+Hanya masalah yang benar-benar menghambat user atau fase selanjutnya.
+
+## 13. Gap List
+
+Kelompokkan:
+
+- Must fix before next phase
+- Can fix during next phase
+- Nice to have
+
+## 14. Recommended Next Phase
+
+Pilih hanya satu rekomendasi utama:
+
+- lanjut Phase 2
+- selesaikan Phase 2 dahulu
+- lanjut Phase 3
+- lakukan stabilization sprint
+- perbaiki integration dahulu
+
+Jelaskan alasannya berdasarkan audit.
+
+## 15. Next Implementation Prompt Input
+
+Di bagian paling akhir, berikan ringkasan singkat yang bisa digunakan sebagai input prompt fase berikutnya:
+
+- current completed phase
+- unfinished items
+- relevant files
+- relevant routes
+- API constraints
+- design constraints
+- recommended work scope
+
+==================================================
+ATURAN KERJA
+==================================================
+
+- Jangan langsung melakukan redesign.
+- Jangan membuat fitur baru.
+- Jangan mengubah backend.
+- Jangan mengubah database.
+- Jangan mengubah API contract.
+- Jangan menghapus fitur.
+- Audit harus berdasarkan bukti dari codebase.
+- Cantumkan path file untuk setiap temuan penting.
+- Bila tidak yakin, tulis “not verified”, jangan menebak.
+- Jangan berhenti setelah melihat satu file.
+- Audit seluruh alur yang relevan.
+- Jangan hanya memberi komentar visual dari screenshot.
+- Jangan bertanya kepada saya.
+- Langsung lakukan audit sampai selesai.

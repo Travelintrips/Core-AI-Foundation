@@ -57,14 +57,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
         className="sticky top-0 z-50 w-full transition-all duration-300"
         style={{
           background: scrolled
-            ? 'rgba(6,11,24,0.95)'
-            : 'rgba(6,11,24,0.75)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          borderBottom: scrolled ? '1px solid #1E3057' : '1px solid transparent',
-          boxShadow: scrolled ? '0 4px 24px rgba(6,11,24,0.60)' : 'none',
+            ? 'rgba(6,11,24,0.96)'
+            : 'rgba(6,11,24,0.78)',
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          borderBottom: scrolled ? '1px solid rgba(30,48,87,0.80)' : '1px solid transparent',
+          boxShadow: scrolled ? '0 4px 32px rgba(6,11,24,0.65), 0 1px 0 rgba(124,110,250,0.06)' : 'none',
         }}
       >
+        {/* Rainbow top accent line */}
+        <div className="absolute top-0 inset-x-0 h-px pointer-events-none"
+          style={{ background: 'linear-gradient(to right, transparent 0%, rgba(124,110,250,0.60) 25%, rgba(34,211,238,0.40) 60%, rgba(16,185,129,0.30) 85%, transparent 100%)', opacity: scrolled ? 1 : 0.5, transition: 'opacity 300ms' }} />
         <div className="container mx-auto px-4 md:px-8 h-16 flex items-center justify-between max-w-7xl">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-80">
@@ -216,14 +219,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <ul className="space-y-2.5">
                   {col.links.map((link) => (
                     <li key={link}>
-                      <span
-                        className="text-xs cursor-pointer transition-colors"
-                        style={{ color: '#4F6494' }}
+                      <a
+                        href="#"
+                        className="text-xs transition-colors"
+                        style={{ color: '#4F6494', textDecoration: 'none' }}
                         onMouseEnter={(e) => (e.currentTarget.style.color = '#8B9BC4')}
                         onMouseLeave={(e) => (e.currentTarget.style.color = '#4F6494')}
                       >
                         {link}
-                      </span>
+                      </a>
                     </li>
                   ))}
                 </ul>

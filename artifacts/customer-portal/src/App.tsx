@@ -35,6 +35,10 @@ const WorkspaceProfilePage       = lazy(() => import('@/pages/workspace/profile'
 const WorkspaceSupportPage       = lazy(() => import('@/pages/workspace/support'));
 const WorkspaceSettingsPage      = lazy(() => import('@/pages/workspace/settings'));
 const PortfolioPage              = lazy(() => import('@/pages/portfolio'));
+const WorkspaceProfilePage   = lazy(() => import('@/pages/workspace/profile'));
+const WorkspaceSupportPage   = lazy(() => import('@/pages/workspace/support'));
+const WorkspaceSettingsPage  = lazy(() => import('@/pages/workspace/settings'));
+const PortfolioPage          = lazy(() => import('@/pages/portfolio'));
 
 /* ─── Loading fallback ─── */
 function PageLoader() {
