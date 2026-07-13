@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import * as jobDispatcher from "./services/jobDispatcherService.js";
 import * as scheduler from "./services/aiSchedulerService.js";
 import { ensureObservabilityTables } from "./services/observabilityService.js";
+import { ensureStorageBucket } from "./lib/supabaseStorage.js";
 
 const rawPort = process.env["PORT"];
 
@@ -29,6 +30,11 @@ app.listen(port, (err) => {
   // ── Observability tables (additive DDL, idempotent) ──────────────────────
   ensureObservabilityTables().catch((err) =>
     logger.warn({ err }, "[observability] Table init failed (non-blocking)"),
+  );
+
+  // ── Supabase Storage bucket (create ai-assets if missing) ────────────────
+  ensureStorageBucket().catch((err) =>
+    logger.warn({ err }, "[supabaseStorage] Bucket init failed (non-blocking)"),
   );
 
   // ── Dispatcher auto-start (Phase 5.1) ───────────────────────────────────

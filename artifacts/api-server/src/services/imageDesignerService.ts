@@ -399,10 +399,9 @@ function getServiceBaseUrl(): string {
 }
 
 /**
- * Persists an already-in-memory image buffer as a permanent object-storage
- * copy. Returns the new absolute public URL, or null if persistence isn't
- * available/fails — callers should fall back to the ephemeral provider URL in
- * that case rather than losing the asset entirely.
+ * Persists an already-in-memory image buffer to Supabase Storage.
+ * Returns the permanent Supabase CDN URL, or null if storage isn't
+ * available/fails — callers fall back to the ephemeral provider URL.
  */
 async function persistImageBuffer(
   buffer: Buffer,
@@ -410,13 +409,12 @@ async function persistImageBuffer(
   brandSlug: string,
   role: string,
 ): Promise<string | null> {
-  if (!process.env["PUBLIC_OBJECT_SEARCH_PATHS"]) return null; // object storage not provisioned
   try {
-    const { objectStorageService } = await import("../lib/objectStorage.js");
+    const { isSupabaseStorageAvailable, uploadToSupabase } = await import("../lib/supabaseStorage.js");
+    if (!isSupabaseStorageAvailable()) return null;
     const ext = contentType.includes("png") ? "png" : contentType.includes("jpeg") ? "jpg" : "webp";
-    const relativePath = `demo-portfolios/${brandSlug}/${role}-${Date.now()}.${ext}`;
-    const { objectPath } = await objectStorageService.uploadPublicAsset(relativePath, buffer, contentType);
-    return `${getServiceBaseUrl()}/api${objectPath}`;
+    const storagePath = `demo-portfolios/${brandSlug}/${role}-${Date.now()}.${ext}`;
+    return await uploadToSupabase(storagePath, buffer, contentType);
   } catch {
     return null;
   }
