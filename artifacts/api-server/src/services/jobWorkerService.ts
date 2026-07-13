@@ -28,21 +28,8 @@ import { archiveReplicateAsset, optimizeArchivedAsset, generateAssetThumbnail } 
 import { maybeFinalizePortfolioPublish } from "./demoPortfolioGeneratorService.js";
 import { logger } from "../lib/logger.js";
 import { WorkerNotImplementedError } from "./jobCompletionGuard.js";
-import {
-  generateCompanyProfileContent,
-  mapCompanyProfileToDocumentSpec,
-  type CompanyProfileBrief,
-} from "./companyProfileDocumentMapper.js";
-import {
-  renderDocument,
-  validateGeneratedPdf,
-  sanitizeStorageFilename,
-} from "./creativeDocumentService.js";
-import {
-  uploadToSupabase,
-  storageObjectExists,
-  getSupabasePublicUrl,
-} from "../lib/supabaseStorage.js";
+import { resolveProjectDocumentType } from "./creativeProjectDocumentType.js";
+import { executeCompanyProfilePdfExportJob } from "./companyProfilePdfWorkerService.js";
 
 // ── Real AI execution helpers ───────────────────────────────────────────────
 
@@ -497,8 +484,17 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
     case "generate_thumbnail":
       return executeGenerateThumbnailJob(job);
 
-    case "pdf_export":
-      return executePdfExportJob(job);
+    case "pdf_export": {
+      const pdfProjectId = (job.payloadJson as { projectId?: number } | null)?.projectId;
+      const [pdfProject] = typeof pdfProjectId === "number"
+        ? await db.select().from(creativeProjectsTable).where(eq(creativeProjectsTable.id, pdfProjectId))
+        : [];
+      const documentType = pdfProject ? await resolveProjectDocumentType(pdfProject) : null;
+      if (documentType === "company_profile") {
+        return executeCompanyProfilePdfExportJob(job);
+      }
+      throw new WorkerNotImplementedError(`pdf_export for document type '${documentType ?? "unknown"}'`);
+    }
 
     case "csv_export":
       throw new WorkerNotImplementedError("csv_export");
@@ -621,6 +617,16 @@ export async function retryJob(
       completedAt:  now,
       updatedAt:    now,
     };
+
+    if (job.jobType === "pdf_export") {
+      const pdfProjectId = (job.payloadJson as { projectId?: number } | null)?.projectId;
+      if (typeof pdfProjectId === "number") {
+        const { markProjectDocumentFailed } = await import("./companyProfilePdfWorkerService.js");
+        await markProjectDocumentFailed(pdfProjectId, errorMessage).catch((err) => {
+          logger.warn({ err, pdfProjectId }, "[jobWorker] Failed to flag project as failed after exhausted pdf_export retries");
+        });
+      }
+    }
   } else {
     let nextRetryAt: Date | null = null;
     if (job.retryStrategy === "exponential") {

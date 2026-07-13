@@ -1,0 +1,503 @@
+Lanjutkan pekerjaan Phase 2 — Creative Document Engine dan Company Profile PDF dari kondisi repository saat ini.
+
+Pekerjaan sebelumnya berhenti karena daily quota limit setelah:
+
+* seluruh audit file selesai
+* beberapa file baru sudah dibuat
+* implementasi worker PDF mulai ditambahkan ke `jobWorkerService.ts`
+* workflow runner mulai diperbarui
+* customer portal mulai diperbarui
+* beberapa test mulai dibuat
+
+Jangan mengulang audit panjang dari awal dan jangan membuang perubahan yang sudah ada.
+
+## 1. Recovery dan pemeriksaan kondisi saat ini
+
+Sebelum menulis kode baru:
+
+1. Jalankan `git status`.
+2. Jalankan `git diff --stat`.
+3. Baca seluruh `git diff`.
+4. Identifikasi:
+
+   * file baru yang sudah lengkap
+   * file baru yang masih setengah jadi
+   * perubahan yang belum selesai
+   * import yang belum terpakai
+   * fungsi yang direferensikan tetapi belum dibuat
+   * test yang belum dapat dikompilasi
+   * TODO, placeholder, atau stub yang tersisa
+5. Bandingkan perubahan saat ini dengan acceptance criteria Phase 2.
+
+Jangan reset, revert, checkout, atau menghapus perubahan sebelumnya.
+
+Jangan menimpa implementasi yang sudah benar hanya untuk membuat ulang dengan pola berbeda.
+
+Buat ringkasan recovery singkat sebelum melanjutkan:
+
+* completed
+* partial
+* missing
+* broken
+* next actions
+
+## 2. Fokus penyelesaian
+
+Selesaikan hanya Phase 2:
+
+* Creative Document Engine generik
+* Company Profile document mapper
+* PDF rendering nyata
+* `pdf_export` worker nyata untuk Company Profile
+* PDF validation
+* Supabase Storage upload
+* `creative_ai_assets` record
+* completion guard integration
+* workflow status propagation
+* secure customer preview/download
+* metadata file di customer workspace
+* admin production metadata jika perubahan sebelumnya sudah dimulai
+* automated tests
+* end-to-end smoke test
+
+Jangan mengerjakan:
+
+* Pitch Deck
+* PPTX
+* DOCX
+* ZIP
+* Video
+* Brand Strategy
+* Copywriting export
+* Brand Guideline
+* Logo batch
+* Social Media batch
+
+## 3. Periksa file baru yang sudah dibuat
+
+Cari file yang sebelumnya mulai dibuat, terutama yang berkaitan dengan:
+
+* Creative Document Engine
+* Company Profile mapper
+* PDF validator
+* PDF worker
+* PDF rendering helpers
+* filename sanitizer
+* document schema
+* tests
+* customer deliverable UI
+
+Untuk setiap file:
+
+* pastikan export/import konsisten
+* pastikan tidak ada kode mati
+* pastikan tidak ada placeholder
+* pastikan error handling memakai pola codebase
+* pastikan type tidak menggunakan `any` tanpa alasan
+* pastikan dependency yang dipakai memang terinstall
+* pastikan build config mendukung dependency tersebut
+
+## 4. Selesaikan `pdf_export` worker
+
+Pastikan `executeJob()` tidak lagi selalu melempar `WorkerNotImplementedError` untuk semua `pdf_export`.
+
+Dispatch harus dibatasi berdasarkan service atau document type.
+
+Contoh perilaku:
+
+```ts
+if (job.type === "pdf_export") {
+  if (documentType === "company_profile") {
+    return executeCompanyProfilePdfExportJob(job);
+  }
+
+  throw new WorkerNotImplementedError(
+    `PDF export is not implemented for document type: ${documentType}`
+  );
+}
+```
+
+Jangan membuat seluruh jenis PDF memakai Company Profile mapper.
+
+Worker Company Profile harus:
+
+1. Memvalidasi payload.
+2. Memuat project.
+3. Memuat service request.
+4. Memuat brief dan structured AI output.
+5. Memuat asset gambar yang relevan.
+6. Membentuk `CreativeDocumentSpec`.
+7. Merender PDF.
+8. Memvalidasi PDF.
+9. Meng-upload ke storage.
+10. Membuat atau memperbarui asset record.
+11. Memastikan object storage benar-benar tersedia.
+12. Return hasil terstruktur yang lulus `validateJobCompletion()`.
+13. Baru mengizinkan dispatcher menandai job completed.
+
+## 5. Completion guard compatibility
+
+Periksa contract hasil worker dengan `jobCompletionGuard.ts`.
+
+Pastikan return value memiliki seluruh field yang diminta oleh completion guard, misalnya:
+
+* asset ID
+* storage path
+* file size
+* MIME type
+* project ownership
+* final deliverable marker
+
+Jangan melewati completion guard dan jangan menambahkan special-case yang melemahkan validasi.
+
+Tambahkan requirement `application/pdf` untuk `pdf_export` jika belum ada.
+
+## 6. Idempotency dan retry
+
+Pastikan retry aman.
+
+Gunakan identitas stabil berdasarkan:
+
+* job ID
+* project ID
+* document type
+* version
+
+Perilaku:
+
+* asset valid dan storage object ada → reuse
+* asset ada tetapi storage object hilang → regenerate
+* render selesai tetapi upload gagal → jangan buat asset final
+* upload berhasil tetapi DB insert gagal → cleanup atau recovery yang aman
+* retry tidak membuat banyak final asset untuk versi yang sama
+* revision sah membuat versi baru
+
+Tambahkan unique lookup atau deterministic storage path bila sesuai dengan schema saat ini.
+
+## 7. PDF nyata
+
+Pastikan Document Engine menghasilkan PDF multi-halaman, bukan sekadar cover.
+
+Minimum fixture harus menghasilkan section:
+
+1. Cover
+2. About
+3. Company Overview
+4. Vision
+5. Mission
+6. Core Values
+7. Services
+8. Competitive Advantages
+9. Operational Capabilities
+10. Contact
+11. Closing
+
+Section kosong dilewati.
+
+Jangan mengarang data yang tidak ada.
+
+PDF harus memiliki:
+
+* A4 portrait
+* margin konsisten
+* cover
+* heading hierarchy
+* paragraph wrapping
+* bullet list
+* brand colors
+* image dengan aspect ratio benar
+* automatic page break
+* footer
+* nomor halaman
+* closing page
+
+## 8. PDF validation
+
+Validator wajib memeriksa:
+
+* buffer tersedia
+* magic bytes `%PDF-`
+* file size lebih dari nol
+* MIME type `application/pdf`
+* page count valid
+* minimal tiga halaman untuk fixture standar
+* bukan placeholder
+* metadata title tersedia
+
+Jika page count parser sudah ditambahkan, pastikan dependency:
+
+* terinstall pada package yang benar
+* masuk lockfile
+* kompatibel dengan build
+* tidak diimport di frontend
+
+## 9. Storage dan asset record
+
+Gunakan storage service existing.
+
+Path final:
+
+```text
+creative-projects/{ownerId}/{projectId}/{jobId}/documents/company-profile-v{version}.pdf
+```
+
+Pastikan nama dan path disanitasi.
+
+Asset metadata minimal:
+
+* project ID
+* request ID
+* job ID
+* owner ID
+* asset type document
+* document type company_profile
+* filename
+* MIME type
+* storage path
+* file size
+* checksum
+* page count
+* version
+* final deliverable true
+* temporary preview false
+* validation status
+* generated timestamp
+
+Jangan menyimpan signed URL sebagai URL permanen apabila sistem menggunakan token dinamis.
+
+## 10. Workflow propagation
+
+Pastikan workflow Company Profile benar-benar memasukkan `pdf_export` sebagai required final step.
+
+Project tidak boleh completed hanya karena text atau image generation selesai.
+
+Project completed hanya setelah:
+
+* required content tersedia
+* required images sesuai workflow tersedia
+* PDF asset valid
+* storage object ada
+* completion guard lulus
+
+Jika workflow sebelumnya belum meng-enqueue `pdf_export`, selesaikan integrasinya.
+
+Pastikan enqueue tidak terjadi berulang setiap kali status project dibaca.
+
+## 11. Customer portal
+
+Selesaikan perubahan customer portal yang sudah dimulai.
+
+Tampilkan untuk deliverable PDF:
+
+* filename
+* PDF badge
+* page count
+* file size
+* generated date
+* version
+* preview/open
+* download
+
+Ketentuan:
+
+* hanya tampil jika final asset valid
+* jangan tampilkan storage path
+* jangan tampilkan provider cost
+* jangan tampilkan tombol kosong
+* gunakan secure file access existing
+* payment gate dan `files_unlocked` tetap berlaku
+* failed state Phase 1B tetap berfungsi
+
+Jangan membuat PDF viewer kompleks jika browser preview cukup.
+
+## 12. Database dan migration
+
+Periksa apakah implementasi sebelumnya sudah membuat migration.
+
+Jangan membuat kolom baru jika metadata JSON yang ada cukup.
+
+Migration hanya bila benar-benar diperlukan untuk:
+
+* integrity
+* ownership
+* file size querying
+* versioning
+* page count querying
+
+Jika migration dibuat:
+
+* pastikan backward-compatible
+* beri default/nullability yang aman
+* update schema Drizzle
+* update migration SQL
+* jangan menjalankan destructive migration
+
+## 13. Test recovery
+
+Baca test yang sudah ditambahkan dan selesaikan.
+
+Test minimal harus mencakup:
+
+### Document Engine
+
+* valid spec menghasilkan PDF
+* `%PDF-`
+* multi-page
+* paragraph wrapping
+* bullets
+* page number
+* optional image failure
+* invalid spec rejected
+* filename sanitized
+
+### Mapper
+
+* data masuk ke section yang benar
+* optional section dilewati
+* tidak mengarang data
+* contact hanya memakai data tersedia
+
+### Worker
+
+* Company Profile menghasilkan PDF asset
+* upload storage berhasil
+* storage object exists
+* asset ownership benar
+* file size valid
+* MIME type valid
+* page count valid
+* completion guard menerima hasil
+* missing storage ditolak
+* upload failure membuat job failed
+* validation failure membuat job failed
+* retry idempotent
+* project tidak completed terlalu awal
+* files gate tidak dibypass
+* cross-customer access ditolak
+
+### Frontend
+
+* PDF metadata muncul
+* download hanya muncul jika valid
+* failed state tetap tampil
+* storage path tidak pernah tampil
+
+Jangan menghapus test Phase 1B agar suite menjadi hijau.
+
+## 14. Jalankan verifikasi bertahap
+
+Urutan:
+
+1. Typecheck package API server.
+2. Jalankan test file baru saja.
+3. Perbaiki seluruh error.
+4. Jalankan test Phase 1B.
+5. Jalankan seluruh API test relevan.
+6. Build API server.
+7. Typecheck customer portal.
+8. Jalankan frontend test relevan.
+9. Build customer portal.
+10. Build AI platform jika terdampak.
+
+Jangan hanya menjalankan satu test terisolasi lalu mengklaim selesai.
+
+## 15. Smoke test nyata
+
+Setelah test dan build bersih, jalankan satu smoke test nyata dengan fixture Company Profile.
+
+Fixture harus realistis tetapi tidak memakai data rahasia.
+
+Verifikasi end-to-end:
+
+* project/request tersedia
+* text result tersedia
+* image tersedia atau optional fallback bekerja
+* `pdf_export` job queued
+* running
+* PDF rendered
+* validation passed
+* upload succeeded
+* asset record created
+* storage object exists
+* completion guard passed
+* job completed
+* project completed setelah PDF
+* secure file endpoint berhasil
+* PDF dapat dibuka
+
+Catat:
+
+* filename
+* file size
+* page count
+* checksum
+* version
+* render duration
+* asset ID
+* storage verification
+* HTTP result secure access
+
+Jangan menampilkan signed token atau secret.
+
+## 16. Bersihkan fixture
+
+Setelah smoke test:
+
+* hapus fixture test apabila memang disposable
+* jangan menghapus generated proof sebelum metadata hasil dicatat
+* jangan menyentuh data production customer
+* laporkan apa yang dibersihkan
+
+## 17. Final diff review
+
+Sebelum laporan akhir:
+
+1. Jalankan `git diff --check`.
+2. Jalankan `git status`.
+3. Review seluruh diff.
+4. Pastikan tidak ada:
+
+   * debug log
+   * hard-coded credential
+   * temporary token
+   * fixture production
+   * TODO kritis
+   * commented-out implementation
+   * duplicate renderer
+   * unused dependency
+   * accidental unrelated change
+
+## 18. Laporan akhir
+
+Berikan laporan lengkap:
+
+* kondisi awal recovery
+* bagian yang sudah ada sebelum resume
+* bagian yang diselesaikan sekarang
+* file baru
+* file diubah
+* dependency baru
+* migration
+* endpoint
+* Document Engine architecture
+* worker flow
+* completion guard integration
+* idempotency behavior
+* workflow propagation
+* customer portal behavior
+* security protections
+* test result
+* typecheck result
+* build result
+* smoke test result
+* filename PDF
+* size
+* page count
+* checksum
+* render duration
+* storage verification
+* risiko yang masih tersisa
+
+Jangan menyatakan Phase 2 selesai apabila smoke test PDF nyata belum berhasil.
+
+Jika implementasi belum dapat diselesaikan karena masalah environment, berikan status parsial yang jujur dan sebutkan tepat file serta error yang masih menghambat. Jangan mengganti fungsi nyata dengan stub agar build terlihat berhasil.

@@ -1,0 +1,12 @@
+---
+name: Phase 2 Company Profile PDF worker
+description: How the pdf_export job is gated, generated, and made idempotent for Company Profile documents; where document-type routing lives.
+---
+
+- `routeToModel` lives in `aiModelRouter.ts`; `intelligentRouter.ts` only wraps it via `routeForAgent` and does not re-export it. Importing `routeToModel` from `intelligentRouter.ts` is a recurring mistake — always import it from `aiModelRouter.ts`.
+- Document type is derived at runtime (no DB column): `creative_projects.serviceRequestId → ai_service_requests.serviceId → ai_services.serviceCode`. Only `serviceCode === "company-profile"` maps to a document type today; everything else returns `null` and the pdf_export job throws `WorkerNotImplementedError`.
+- **Why:** avoids an unreliable `drizzle-kit push` migration (see `drizzle-push-false-positive`) and keeps document generation strictly scoped to service-catalog projects.
+- Project lifecycle for document-producing projects: text pipeline completion sets status to `"generating_document"` (not `"completed"`) so the customer workspace never shows "done" with no deliverable. The image pipeline (fire-and-forget) must settle first — the pdf_export job is only enqueued after it resolves/rejects, so cover/inline images are available. The PDF worker itself flips the project to `"completed"` on success, or to `"failed"` once retries are exhausted (hooked into `retryJob()`'s exhausted branch).
+- Idempotency for `pdf_export`: look up the latest `creative_ai_assets` row (`assetType="document"`, `category="company_profile"`) for the project. If `status="completed"` and its `storagePath` still resolves via `storageObjectExists`, reuse it outright (no re-render). If the row exists but the storage object is gone, regenerate at the **same** version (recovery, not a new revision). Otherwise start at version 1.
+- The generic customer-workspace "downloads" mechanism (`customerWorkspaceService.ts` + `downloads.tsx`) already lists any `creative_ai_assets` row generically — inserting a completed `assetType: "document"` row is sufficient to surface it; no bespoke frontend UI needed.
+- Status strings are informal/free-text on `creative_projects.status`; any new status value (e.g. `"generating_document"`) must be added to every UI status-label/color map that switches on raw status strings (see `status-badge.tsx` in customer-portal and `statusColor`/`StatusIcon`/dot indicator in ai-platform's `creative-ai.tsx`), or it silently falls through to a default/muted look.
