@@ -83,6 +83,14 @@ export const aiServicePortfoliosTable = appSchema.table("ai_service_portfolios",
   trademarkRisk: text("trademark_risk").notNull().default("low"), // low | medium | high
   qcScore: numeric("qc_score", { precision: 5, scale: 2 }),
 
+  // ── Sprint P3 — Generation pipeline tracking ─────────────────────────────
+  // Tracks the full pipeline stage for the Portfolio Center UI.
+  // metadata_only | generating | generated | archiving | archived |
+  // optimizing | qc_review | ready_to_publish | published |
+  // archive_failed | incomplete | needs_repair
+  generationStatus: text("generation_status").notNull().default("metadata_only"),
+  coverAssetId: integer("cover_asset_id"), // FK to ai_portfolio_assets.id (set after first archive)
+
   // ── Metadata ──
   metadataJson: jsonb("metadata_json").$type<Record<string, unknown>>(),
 

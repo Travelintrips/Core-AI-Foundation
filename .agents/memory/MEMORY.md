@@ -36,4 +36,5 @@
 - [text-overlay-diffusion-fix](text-overlay-diffusion-fix.md) — diffusion models can't spell; bake real text via SVG+sharp overlay post-generation; QC must judge final composited image with an overlay-aware prompt, not the noText generation prompt
 - [commercial-status-badge](commercial-status-badge.md) — status label maps must cover every raw DB status string, not just one hook's TS union; review tokens are only recoverable plaintext at issue time
 - [phase-v40c-canonical-events](phase-v40c-canonical-events.md) — canonical event adapter; no new table; deterministic eventIds; metadata security rules; activity feed now reads events not audit_logs
+- [demo-portfolio-p3](demo-portfolio-p3.md) — publication guard (QC≥80/trademark/cover/6 assets), asset_purpose separation, audit+repair endpoints, generation_status pipeline tracking
 - [v40b-runtime-roster](v40b-runtime-roster.md) — creative_project_steps stays source of truth; lib/db needs `tsc -b` before api-server typecheck is trustworthy; no vitest existed, added minimal one

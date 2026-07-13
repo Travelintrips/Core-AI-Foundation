@@ -1,0 +1,478 @@
+Perbaiki Demo Portfolio Sample Pipeline.
+
+KONDISI SAAT INI:
+
+Pada Portfolio Center terdapat portfolio berstatus published seperti:
+
+“Kopi Senja — Coffee Shop Logo”
+
+Tetapi detail menunjukkan:
+
+- No preview image
+- No assets attached
+- QC Score kosong
+
+Sebelumnya sample image dikonfigurasi expired 1 jam.
+
+Ini tidak sesuai kebutuhan bisnis.
+
+Saya membutuhkan dua kebijakan asset yang berbeda:
+
+1. LIVE AI PREVIEW
+- temporary
+- low resolution
+- watermark
+- expired 1 jam
+- tidak boleh digunakan komersial
+
+2. DEMO PORTFOLIO SAMPLE
+- permanent
+- disimpan di Object Storage
+- tidak expired
+- tampil di public portfolio gallery
+- dapat digunakan sebagai materi pemasaran
+- original tetap private
+- public hanya memakai thumbnail/optimized preview
+
+PENTING:
+
+Jangan membuat portfolio pipeline baru.
+Reuse Portfolio Generator, Image Designer, Queue, Dispatcher,
+Archive Worker, Object Storage, QC, dan Admin Review yang sudah ada.
+
+==========================================================
+1. PISAHKAN ASSET POLICY
+==========================================================
+
+Tambahkan atau pastikan field:
+
+asset_purpose
+
+Enum:
+
+- live_preview
+- demo_portfolio
+- customer_preview
+- customer_final
+
+Policy:
+
+live_preview:
+- expires_at default 1 jam
+- watermark
+- low resolution
+- temporary
+- auto cleanup
+
+demo_portfolio:
+- expires_at null
+- permanent storage
+- optimized public preview
+- original private
+- tidak dihapus otomatis
+
+customer_preview:
+- private
+- watermark
+- signed access
+- tidak final
+
+customer_final:
+- private permanent
+- signed download
+- payment gated
+
+Jangan gunakan expiry 1 jam untuk demo_portfolio.
+
+==========================================================
+2. AUDIT PORTFOLIO TANPA ASSET
+==========================================================
+
+Cari seluruh portfolio yang:
+
+- status published
+- cover_asset_id null
+- gallery kosong
+- tidak memiliki portfolio asset
+- QC score null
+- memakai temporary provider URL yang expired
+
+Untuk setiap record:
+
+- tandai status needs_repair
+- jangan tampilkan di public gallery
+- jangan hapus record secara otomatis
+- masukkan ke Repair Queue
+
+Khusus data demo lama seperti:
+- Kopi Senja
+- Bloom & Co
+- Nusantara Freight
+
+periksa apakah hanya metadata seed tanpa gambar nyata.
+
+==========================================================
+3. PUBLICATION GUARD
+==========================================================
+
+Portfolio tidak boleh menjadi published jika:
+
+- assets count < minimum required
+- cover asset belum ada
+- asset archive status bukan archived/optimized
+- URL masih Replicate temporary URL
+- QC score null
+- QC score < 80
+- trademark risk bukan low
+- admin belum approve
+
+Tambahkan database/service state-machine guard.
+
+Jangan hanya mengandalkan frontend.
+
+==========================================================
+4. REQUIRED SAMPLE ASSETS
+==========================================================
+
+Setiap demo portfolio minimum memiliki 6 asset:
+
+1. logo_concept
+2. color_palette
+3. typography_direction
+4. main_brand_mockup
+5. social_visual_1
+6. social_visual_2
+
+Coffee/Restaurant tambahkan jika package sesuai:
+
+7. packaging_mockup
+8. menu_or_cup_mockup
+
+Setiap asset harus memiliki:
+
+- portfolio_id
+- asset_type
+- asset_role
+- title
+- alt_text
+- generation_status
+- archive_status
+- provider_temp_url internal
+- storage_key internal
+- permanent_preview_url
+- thumbnail_url
+- mime_type
+- width
+- height
+- qc_score
+- qc_notes
+
+Storage path dan provider temporary URL tidak boleh dikirim ke public API.
+
+==========================================================
+5. NON-BLOCKING ARCHIVING
+==========================================================
+
+Jangan menunggu upload storage di proses utama generation.
+
+Flow:
+
+Generate image
+→ insert portfolio asset dengan status generated
+→ enqueue archive_asset job
+→ portfolio tetap status generating_assets/review
+→ archive worker download dari Replicate
+→ upload ke Object Storage
+→ update permanent URL
+→ enqueue thumbnail/optimization
+→ QC
+→ admin review
+→ publish
+
+Archive harus berjalan melalui Queue/Dispatcher existing.
+
+Jangan memakai fire-and-forget Promise yang tidak tercatat.
+
+Gunakan durable job dengan idempotency key.
+
+==========================================================
+6. ARCHIVE JOB
+==========================================================
+
+Tambahkan/reuse job type:
+
+archive_portfolio_asset
+
+Payload:
+
+- portfolio_id
+- asset_id
+- source_url
+- destination_key
+- expected_mime_type
+
+Job harus:
+
+- validasi source URL
+- download dengan timeout
+- batasi ukuran
+- validasi MIME
+- upload ke Object Storage
+- update asset record secara transaction-safe
+- retry exponential backoff maksimal 3 kali
+- tidak menggandakan file pada replay
+- publish asset.archived event
+
+Status gagal:
+
+archive_failed
+
+Portfolio tetap tidak boleh published.
+
+==========================================================
+7. STORAGE PATH
+==========================================================
+
+Gunakan pola permanen:
+
+public/demo-portfolios/{portfolioId}/{assetId}/preview.webp
+
+private/demo-portfolios/{portfolioId}/{assetId}/original.webp
+
+thumbnail:
+
+public/demo-portfolios/{portfolioId}/{assetId}/thumb.webp
+
+Jangan menyimpan seluruh URL sebagai source of truth.
+
+Simpan storage key.
+
+Public preview URL dapat dibentuk dari storage service.
+
+==========================================================
+8. THUMBNAIL & OPTIMIZATION
+==========================================================
+
+Setelah archive:
+
+- buat thumbnail
+- buat optimized preview
+- WebP/AVIF jika supported
+- simpan width dan height
+- bersihkan EXIF jika relevan
+- original tetap private
+
+Public portfolio gallery memakai optimized preview.
+
+Modal detail memakai medium/large preview.
+
+Jangan memakai original untuk gallery.
+
+==========================================================
+9. REPAIR EXISTING PORTFOLIOS
+==========================================================
+
+Buat admin action:
+
+Repair Missing Assets
+
+Untuk portfolio metadata lama:
+
+- generate ulang required assets
+- archive ke permanent storage
+- link asset ke portfolio
+- set cover asset
+- run QC
+- masuk Review Queue
+- jangan auto publish
+
+Tambahkan bulk action:
+
+Repair All Incomplete Demo Portfolios
+
+Tampilkan:
+
+- total incomplete
+- estimated image count
+- estimated AI cost
+- estimated storage
+- admin confirmation
+
+==========================================================
+10. ADMIN UI
+==========================================================
+
+Pada Portfolio Center tampilkan asset pipeline status:
+
+- Metadata Only
+- Generating
+- Generated
+- Archiving
+- Archived
+- Optimizing
+- QC Review
+- Ready to Publish
+- Published
+- Archive Failed
+- Incomplete
+
+Jika portfolio tidak memiliki gambar:
+
+Tampilkan tombol:
+
+- Generate Assets
+- Repair Missing Assets
+- Archive Temporary Assets
+- Retry Failed Assets
+
+Jangan tampilkan badge published apabila publication guard gagal.
+
+==========================================================
+11. DEMO SAMPLE GENERATION
+==========================================================
+
+Tambahkan tombol:
+
+Generate Demo Samples
+
+Admin memilih:
+
+- industry
+- style
+- service/package
+- number of portfolios
+- assets per portfolio
+- budget cap
+
+Sebelum start tampilkan:
+
+- estimated images
+- estimated token cost
+- estimated image cost
+- estimated total cost
+- estimated storage usage
+
+Batch default:
+
+1 portfolio dulu untuk smoke test.
+
+Setelah PASS:
+
+3 portfolio pilot batch.
+
+Jangan langsung generate 30.
+
+==========================================================
+12. LIVE PREVIEW TETAP EXPIRED
+==========================================================
+
+Jangan mengubah kebijakan Live AI Preview.
+
+Live AI Preview tetap:
+
+- expired 1 jam
+- watermark
+- low resolution
+- maximum 2 attempts
+- no download
+- no commercial rights
+
+Tetapi jika customer klik Continue With This Concept:
+
+- salin/archive selected preview menjadi project seed
+- simpan permanen pada project setelah checkout/payment gate
+- jangan bergantung pada temporary URL setelah expiry
+
+==========================================================
+13. PUBLIC API
+==========================================================
+
+Public portfolio response hanya boleh mengembalikan portfolio jika:
+
+- status published
+- cover permanent tersedia
+- minimum asset terpenuhi
+- QC >= 80
+- trademark risk low
+
+Public DTO:
+
+- title
+- slug
+- industry
+- style
+- description
+- optimized cover
+- optimized gallery
+- deliverables
+- QC-approved badge jika perlu
+- demo label
+
+Jangan expose:
+
+- temporary URL
+- storage key
+- internal prompt
+- provider
+- model
+- cost
+- archive error
+- internal QC notes
+
+==========================================================
+14. TEST WAJIB
+==========================================================
+
+Test:
+
+1. Live preview expired setelah 1 jam.
+2. Demo portfolio tidak memiliki expiry.
+3. Demo portfolio asset tersimpan permanen.
+4. Temporary Replicate URL tidak digunakan public.
+5. Portfolio tanpa asset tidak bisa published.
+6. Portfolio tanpa cover tidak bisa published.
+7. QC null tidak bisa published.
+8. QC < 80 tidak bisa published.
+9. Archive job retry bekerja.
+10. Replay archive job tidak menggandakan file.
+11. Repair Missing Assets bekerja.
+12. Cover asset otomatis dipilih.
+13. Public gallery hanya menampilkan portfolio lengkap.
+14. Thumbnail dan optimized preview dapat dibuka.
+15. Original tidak public.
+16. Storage path tidak bocor.
+17. Continue live preview mengarsipkan selected concept ke project seed.
+18. pnpm run verify clean.
+19. Production build clean.
+
+==========================================================
+FINAL REPORT
+==========================================================
+
+Berikan laporan:
+
+- penyebab portfolio published tanpa asset
+- jumlah portfolio metadata-only
+- jumlah portfolio diperbaiki
+- asset policy live preview vs demo portfolio
+- archive queue implementation
+- permanent storage path pattern
+- thumbnail/optimization implementation
+- publication guard
+- smoke test result
+- generated image count
+- archived image count
+- QC result
+- total cost
+- pnpm run verify status
+- known limitations
+
+TARGET AKHIR:
+
+Live AI Preview tetap bersifat sementara dan expired 1 jam.
+
+Demo Portfolio Sample bersifat permanen,
+tersimpan di Object Storage,
+memiliki cover dan minimal 6 asset,
+lolos QC dan admin review,
+serta dapat dilihat customer tanpa URL kedaluwarsa.

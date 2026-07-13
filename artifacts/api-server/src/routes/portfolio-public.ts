@@ -87,7 +87,15 @@ router.get("/public/portfolio", async (req, res): Promise<void> => {
   const pageSize = Math.min(50, Math.max(1, parseInt(String(req.query.pageSize ?? "20"), 10)));
   const offset = (page - 1) * pageSize;
 
-  const conditions = [eq(aiServicePortfoliosTable.status, "published")];
+  const conditions = [
+    eq(aiServicePortfoliosTable.status, "published"),
+    // Sprint P3: strict public gallery guards — never serve Replicate URLs or low-quality demos
+    sql`${aiServicePortfoliosTable.coverImage} IS NOT NULL`,
+    sql`${aiServicePortfoliosTable.coverImage} NOT LIKE '%replicate.delivery%'`,
+    // Demo portfolios must also have QC >= 80 and low trademark risk;
+    // real client portfolios (is_demo = false) pass through without these extra checks.
+    sql`(NOT COALESCE(${aiServicePortfoliosTable.isDemo}, false) OR (COALESCE(${aiServicePortfoliosTable.qcScore}::numeric, 0) >= 80 AND ${aiServicePortfoliosTable.trademarkRisk} = 'low'))`,
+  ];
   if (industry) conditions.push(eq(aiServicePortfoliosTable.industry, industry));
   if (style) conditions.push(eq(aiServicePortfoliosTable.style, style));
   if (serviceId && !Number.isNaN(serviceId)) conditions.push(eq(aiServicePortfoliosTable.serviceId, serviceId));

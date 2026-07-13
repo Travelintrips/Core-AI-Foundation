@@ -121,6 +121,13 @@ const STATUS_COLORS: Record<string, string> = {
   archive_failed: "bg-red-100 text-red-700",
   optimize_failed: "bg-red-100 text-red-700",
   thumbnail_failed: "bg-red-100 text-red-700",
+  // Sprint P3 — pipeline statuses
+  needs_repair: "bg-orange-100 text-orange-700",
+  metadata_only: "bg-gray-100 text-gray-500",
+  qc_review: "bg-purple-100 text-purple-700",
+  ready_to_publish: "bg-cyan-100 text-cyan-700",
+  incomplete: "bg-red-100 text-red-700",
+  pending_archive: "bg-yellow-100 text-yellow-700",
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -146,6 +153,17 @@ function PortfolioDetailDrawer({ portfolio, onClose }: { portfolio: Portfolio; o
       refetchAssets();
       qc.invalidateQueries({ queryKey: ["portfolio-review-queue"] });
       qc.invalidateQueries({ queryKey: ["portfolios"] });
+    },
+  });
+
+  // Sprint P3: repair action — takes portfolio out of published, re-generates images
+  const repairMutation = useMutation({
+    mutationFn: () => apiFetch(`/ai/portfolio/portfolios/${portfolio.id}/repair`, { method: "POST" }),
+    onSuccess: () => {
+      refetchAssets();
+      qc.invalidateQueries({ queryKey: ["portfolio-review-queue"] });
+      qc.invalidateQueries({ queryKey: ["admin-portfolios"] });
+      qc.invalidateQueries({ queryKey: ["admin-portfolios-for-archive"] });
     },
   });
 
@@ -318,6 +336,37 @@ function PortfolioDetailDrawer({ portfolio, onClose }: { portfolio: Portfolio; o
             <div className="flex justify-between"><span>Created</span><span>{new Date(portfolio.createdAt).toLocaleString()}</span></div>
           </div>
 
+          {/* Sprint P3: Repair Missing Assets — shown when portfolio needs repair */}
+          {(portfolio.publishStatus === "needs_repair" || portfolio.trademarkRisk === "high" || portfolio.trademarkRisk === "medium") && (
+            <div className="pt-2 border-t border-border">
+              <p className="text-xs text-muted-foreground mb-2">
+                Re-generate all images using the existing brand concept. Portfolio will be taken out of the public gallery during repair.
+              </p>
+              {repairMutation.isError && (
+                <p className="text-xs text-red-600 mb-2 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                  {(repairMutation.error as Error)?.message ?? "Failed"}
+                </p>
+              )}
+              {repairMutation.isSuccess && (
+                <p className="text-xs text-green-600 mb-2 flex items-center gap-1">
+                  <CheckCircle className="w-3 h-3 shrink-0" />
+                  Repair queued — images re-generating…
+                </p>
+              )}
+              <button
+                onClick={() => { if (!repairMutation.isPending) repairMutation.mutate(); }}
+                disabled={repairMutation.isPending}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-orange-200 bg-orange-50 hover:bg-orange-100 text-sm font-medium text-orange-700 transition-colors disabled:opacity-60"
+              >
+                {repairMutation.isPending
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Repairing…</>
+                  : <><RefreshCw className="w-4 h-4" /> Repair Missing Assets</>
+                }
+              </button>
+            </div>
+          )}
+
           {/* Re-generate Images */}
           <div className="pt-2 border-t border-border">
             <p className="text-xs text-muted-foreground mb-2">
@@ -355,12 +404,13 @@ function PortfolioDetailDrawer({ portfolio, onClose }: { portfolio: Portfolio; o
 
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 
-type Tab = "portfolios" | "batches" | "review" | "archive" | "permissions" | "analytics";
+type Tab = "portfolios" | "batches" | "review" | "archive" | "audit" | "permissions" | "analytics";
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "portfolios", label: "Portfolio", icon: <Images className="w-4 h-4" /> },
   { id: "batches", label: "Generation Batches", icon: <Layers className="w-4 h-4" /> },
   { id: "review", label: "Review Queue", icon: <ListChecks className="w-4 h-4" /> },
   { id: "archive", label: "Archive Queue", icon: <Archive className="w-4 h-4" /> },
+  { id: "audit", label: "Audit & Repair", icon: <AlertTriangle className="w-4 h-4" /> },
   { id: "permissions", label: "Permissions", icon: <Settings className="w-4 h-4" /> },
   { id: "analytics", label: "Analytics", icon: <BarChart3 className="w-4 h-4" /> },
 ];
@@ -447,11 +497,60 @@ function CreateBatchPanel({ onCreated }: { onCreated: () => void }) {
         <label htmlFor="autoPublish" className="text-sm">Auto-publish if QC passes & trademark risk is low</label>
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {/* Sprint P3: cost estimate */}
+      <CostEstimateRow industry={form.industry} requestedCount={form.requestedCount} />
+
       <button onClick={handleCreate} disabled={creating}
         className="w-full px-4 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-60 flex items-center justify-center gap-2"
       >
         {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
         Create Batch
+      </button>
+    </div>
+  );
+}
+
+interface CostEstimate {
+  estimatedPortfolioCount: number;
+  perPortfolio: { totalCostUsd: number; assetCount: number; storageMb: number };
+  total: { estimatedCostUsd: number; minCostUsd: number; maxCostUsd: number };
+}
+
+function CostEstimateRow({ industry, requestedCount }: { industry: string; requestedCount: number }) {
+  const [estimate, setEstimate] = useState<CostEstimate | null>(null);
+  const [fetching, setFetching] = useState(false);
+
+  const fetchEstimate = async () => {
+    setFetching(true);
+    try {
+      const data = await apiFetch<CostEstimate>("/ai/portfolio/batch/estimate", {
+        method: "POST",
+        body: JSON.stringify({ requestedCount, industry }),
+      });
+      setEstimate(data);
+    } catch { /* ignore */ } finally { setFetching(false); }
+  };
+
+  return (
+    <div className="space-y-2">
+      {estimate && (
+        <div className="p-3 rounded-lg border border-border bg-muted/30 text-xs space-y-1">
+          <p className="font-medium text-foreground">Cost Estimate</p>
+          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted-foreground">
+            <span>~${estimate.total.estimatedCostUsd.toFixed(3)} est.</span>
+            <span>{estimate.perPortfolio.assetCount} assets × {estimate.estimatedPortfolioCount} portfolios</span>
+            <span>~{(estimate.perPortfolio.storageMb * estimate.estimatedPortfolioCount).toFixed(0)} MB storage</span>
+          </div>
+          <p className="text-muted-foreground/70">Range: ${estimate.total.minCostUsd.toFixed(3)} – ${estimate.total.maxCostUsd.toFixed(3)}</p>
+        </div>
+      )}
+      <button
+        onClick={fetchEstimate}
+        disabled={fetching}
+        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted text-xs font-medium transition-colors disabled:opacity-60"
+      >
+        {fetching ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Estimating…</> : <><BarChart3 className="w-3.5 h-3.5" /> Preview Cost &amp; Storage</>}
       </button>
     </div>
   );
@@ -917,6 +1016,178 @@ function ArchiveQueueTab({ onView }: { onView: (p: Portfolio) => void }) {
   );
 }
 
+// ── Audit & Repair Tab (Sprint P3) ────────────────────────────────────────────
+
+interface AuditItem {
+  id: number;
+  title: string;
+  publish_status: string;
+  qc_score: string | null;
+  trademark_risk: string;
+  cover_image: string | null;
+  is_demo: boolean;
+  asset_count: number;
+  failed_asset_count: number;
+  replicate_url_count: number;
+}
+
+function AuditTab() {
+  const qc = useQueryClient();
+  const [hasRun, setHasRun] = useState(false);
+  const [markResult, setMarkResult] = useState<{ markedCount: number } | null>(null);
+  const [repairResult, setRepairResult] = useState<{ triggered: number; message: string } | null>(null);
+
+  const { data: audit, isFetching: auditing, refetch: runAudit } = useQuery<{
+    count: number; broken: AuditItem[]; minQcScore: number; minAssets: number;
+  }>({
+    queryKey: ["portfolio-audit"],
+    queryFn: () => apiFetch("/ai/portfolio/audit"),
+    enabled: hasRun,
+  });
+
+  const markMutation = useMutation({
+    mutationFn: () => apiFetch<{ ok: boolean; markedCount: number; message: string }>("/ai/portfolio/audit/mark-needs-repair", { method: "POST" }),
+    onSuccess: (data) => {
+      setMarkResult(data);
+      runAudit();
+      qc.invalidateQueries({ queryKey: ["admin-portfolios"] });
+    },
+  });
+
+  const repairAllMutation = useMutation({
+    mutationFn: () => apiFetch<{ ok: boolean; triggered: number; message: string }>("/ai/portfolio/repair-all", {
+      method: "POST",
+      body: JSON.stringify({ confirm: true }),
+    }),
+    onSuccess: (data) => setRepairResult(data),
+  });
+
+  return (
+    <div className="space-y-5">
+      <div className="p-4 rounded-xl border border-border bg-card space-y-3">
+        <h3 className="font-medium text-sm">Portfolio Integrity Audit</h3>
+        <p className="text-xs text-muted-foreground">
+          Scans all published portfolios for quality violations: QC score below 80, temporary Replicate URLs
+          still live, missing cover image, insufficient assets ({"<"} 6), or trademark risk not "low".
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => { setHasRun(true); runAudit(); }}
+            disabled={auditing}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-60"
+          >
+            {auditing
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Scanning…</>
+              : <><RefreshCcw className="w-3.5 h-3.5" /> Scan for Issues</>}
+          </button>
+
+          {audit && audit.count > 0 && (
+            <button
+              onClick={() => markMutation.mutate()}
+              disabled={markMutation.isPending}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-100 text-orange-700 hover:bg-orange-200 text-xs font-medium transition-colors disabled:opacity-60 border border-orange-200"
+            >
+              {markMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+              Mark {audit.count} as Needs Repair
+            </button>
+          )}
+
+          <button
+            onClick={() => repairAllMutation.mutate()}
+            disabled={repairAllMutation.isPending}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-border text-xs font-medium hover:bg-muted transition-colors disabled:opacity-60"
+          >
+            {repairAllMutation.isPending
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Repairing…</>
+              : <><RotateCcw className="w-3.5 h-3.5" /> Repair All (needs_repair)</>}
+          </button>
+        </div>
+
+        {markResult && (
+          <p className="text-xs text-orange-600 flex items-center gap-1">
+            <CheckCircle className="w-3 h-3 shrink-0" />
+            {markResult.markedCount} portfolio(s) marked as needs_repair and removed from public gallery.
+          </p>
+        )}
+        {repairResult && (
+          <p className="text-xs text-blue-600 flex items-center gap-1">
+            <CheckCircle className="w-3 h-3 shrink-0" />
+            {repairResult.message}
+          </p>
+        )}
+        {markMutation.isError && (
+          <p className="text-xs text-red-600 flex items-center gap-1">
+            <AlertTriangle className="w-3 h-3 shrink-0" />
+            {(markMutation.error as Error)?.message ?? "Failed"}
+          </p>
+        )}
+        {repairAllMutation.isError && (
+          <p className="text-xs text-red-600 flex items-center gap-1">
+            <AlertTriangle className="w-3 h-3 shrink-0" />
+            {(repairAllMutation.error as Error)?.message ?? "Failed"}
+          </p>
+        )}
+      </div>
+
+      {audit && (
+        <div className="p-3 rounded-lg border border-border bg-muted/30">
+          <p className="text-xs text-muted-foreground">
+            Guard thresholds: QC ≥ {audit.minQcScore} · Min. {audit.minAssets} assets · No Replicate URLs · Cover required · Trademark risk = low
+          </p>
+        </div>
+      )}
+
+      {hasRun && !auditing ? (
+        audit && audit.count > 0 ? (
+          <div>
+            <h4 className="text-sm font-medium mb-2">{audit.count} Published Portfolio(s) Failing Guard</h4>
+            <div className="divide-y divide-border rounded-xl border border-border overflow-hidden">
+              {audit.broken.map((item) => (
+                <div key={item.id} className="p-3 bg-card">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium text-sm truncate">{item.title}</span>
+                    {item.is_demo && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-50 text-amber-600 border border-amber-200 shrink-0">demo</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-3 text-[11px]">
+                    <span className={!item.qc_score || parseFloat(item.qc_score) < 80 ? "text-red-600 font-medium" : "text-green-600"}>
+                      QC: {item.qc_score ?? "null"}
+                    </span>
+                    <span className={item.trademark_risk !== "low" ? "text-red-600 font-medium" : "text-green-600"}>
+                      TM: {item.trademark_risk}
+                    </span>
+                    <span className={item.asset_count < 6 ? "text-red-600 font-medium" : "text-green-600"}>
+                      Assets: {item.asset_count}
+                    </span>
+                    {item.replicate_url_count > 0 && (
+                      <span className="text-red-600 font-medium">{item.replicate_url_count} Replicate URL(s)</span>
+                    )}
+                    {!item.cover_image && <span className="text-red-600 font-medium">No cover</span>}
+                    {item.cover_image?.includes("replicate.delivery") && (
+                      <span className="text-red-600 font-medium">Replicate cover</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-border p-10 text-center">
+            <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">All published portfolios pass the quality guard. 🎉</p>
+          </div>
+        )
+      ) : !hasRun ? (
+        <div className="rounded-2xl border border-dashed border-border p-10 text-center">
+          <AlertTriangle className="w-8 h-8 text-muted-foreground/40 mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">Click <strong>Scan for Issues</strong> to audit published portfolios.</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // ── Permissions Tab ───────────────────────────────────────────────────────────
 
 function PermissionsTab() {
@@ -1099,6 +1370,7 @@ export default function PortfolioAdminPage() {
       {activeTab === "batches" && <BatchesTab />}
       {activeTab === "review" && <ReviewQueueTab onView={setViewingPortfolio} />}
       {activeTab === "archive" && <ArchiveQueueTab onView={setViewingPortfolio} />}
+      {activeTab === "audit" && <AuditTab />}
       {activeTab === "permissions" && <PermissionsTab />}
       {activeTab === "analytics" && <AnalyticsTab onView={setViewingPortfolio} />}
 

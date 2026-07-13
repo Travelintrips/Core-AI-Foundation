@@ -43,6 +43,9 @@ import {
   approvePortfolio,
   rejectPortfolio,
   seedDemoPortfolios,
+  checkPublicationGuard,
+  PUBLICATION_MIN_ASSETS,
+  PUBLICATION_MIN_QC,
   type BatchConfig,
 } from "../services/demoPortfolioGeneratorService.js";
 
@@ -135,17 +138,6 @@ router.get("/ai/portfolio/review-queue", async (req, res): Promise<void> => {
   res.json(rows);
 });
 
-router.post("/ai/portfolio/portfolios/:id/approve", async (req, res): Promise<void> => {
-  const id = parseId(req.params.id, res);
-  if (id === null) return;
-  try {
-    const row = await approvePortfolio(id, req.body?.approvedBy as string | undefined);
-    res.json(row);
-  } catch (err) {
-    res.status(404).json({ error: err instanceof Error ? err.message : "Not found" });
-  }
-});
-
 router.post("/ai/portfolio/portfolios/:id/reject", async (req, res): Promise<void> => {
   const id = parseId(req.params.id, res);
   if (id === null) return;
@@ -162,10 +154,19 @@ router.patch("/ai/portfolio/portfolios/:id/publish-status", async (req, res): Pr
   if (id === null) return;
 
   const { publishStatus } = req.body as { publishStatus?: string };
-  const ALLOWED = ["draft", "review", "pending_archive", "published", "hidden", "archived"] as const;
+  const ALLOWED = ["draft", "review", "pending_archive", "published", "hidden", "archived", "needs_repair"] as const;
   if (!publishStatus || !ALLOWED.includes(publishStatus as typeof ALLOWED[number])) {
     res.status(400).json({ error: `publishStatus must be one of: ${ALLOWED.join(", ")}` });
     return;
+  }
+
+  // Sprint P3: setting published directly also requires the publication guard
+  if (publishStatus === "published") {
+    const guard = await checkPublicationGuard(id);
+    if (!guard.ok) {
+      res.status(409).json({ error: "Publication guard failed", reasons: guard.reasons });
+      return;
+    }
   }
 
   const newStatus = publishStatus === "published" ? "published" : publishStatus === "hidden" ? "hidden" : "draft";
@@ -178,6 +179,214 @@ router.patch("/ai/portfolio/portfolios/:id/publish-status", async (req, res): Pr
   if (!row) { res.status(404).json({ error: "Portfolio not found" }); return; }
   await logAudit("portfolio-admin", "publish_status_changed", String(id), "ai_service_portfolio", "success", { publishStatus });
   res.json(row);
+});
+
+// Sprint P3: use 409 (conflict) for guard failures so the UI can distinguish them
+router.post("/ai/portfolio/portfolios/:id/approve", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
+  try {
+    const row = await approvePortfolio(id, req.body?.approvedBy as string | undefined);
+    res.json(row);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Not found";
+    const isGuardFailure = msg.startsWith("Publication guard failed");
+    res.status(isGuardFailure ? 409 : 404).json({ error: msg });
+  }
+});
+
+// ── Sprint P3: Batch Cost Estimate ───────────────────────────────────────────
+
+/**
+ * Estimate cost, asset count, and storage for a batch BEFORE starting it.
+ * MUST be registered before /batch/:id routes to avoid :id capturing "estimate".
+ */
+router.post("/ai/portfolio/batch/estimate", async (req, res): Promise<void> => {
+  const { requestedCount = 1, industry = "generic" } = req.body as { requestedCount?: number; industry?: string };
+  const count = Math.min(10, Math.max(1, parseInt(String(requestedCount), 10)));
+
+  // Per-industry extra asset counts (mirrors INDUSTRY_EXTRA_ROLES in generator service)
+  const INDUSTRY_EXTRAS: Record<string, number> = {
+    coffee: 2, restaurant: 2, logistics: 3, mining: 3, trading: 3,
+    palm_oil: 3, fashion: 2, medical: 3, property: 3, technology: 3,
+  };
+  const BASE_ASSETS = 6; // BASE_ASSET_ROLES.length
+  const extraAssets = Math.min(INDUSTRY_EXTRAS[industry.toLowerCase()] ?? 0, 2); // capped by MAX_ASSETS_PER_PORTFOLIO
+  const assetCount = BASE_ASSETS + extraAssets;
+
+  const llmCostPerPortfolio = 0.022;       // 3 LLM steps × ~11K tokens × $0.002/1K
+  const imageCostPerAsset = 0.015;         // Replicate FLUX per image
+  const imageCostPerPortfolio = imageCostPerAsset * assetCount;
+  const storageMbPerAsset = 1.5;           // ~1.5 MB WebP (optimized + thumb)
+  const totalPerPortfolio = llmCostPerPortfolio + imageCostPerPortfolio;
+
+  res.json({
+    estimatedPortfolioCount: count,
+    perPortfolio: {
+      llmCostUsd: Number(llmCostPerPortfolio.toFixed(4)),
+      imageCostUsd: Number(imageCostPerPortfolio.toFixed(4)),
+      totalCostUsd: Number(totalPerPortfolio.toFixed(4)),
+      assetCount,
+      storageMb: Number((storageMbPerAsset * assetCount).toFixed(1)),
+    },
+    total: {
+      minCostUsd: Number((totalPerPortfolio * count * 0.7).toFixed(4)),
+      estimatedCostUsd: Number((totalPerPortfolio * count).toFixed(4)),
+      maxCostUsd: Number((totalPerPortfolio * count * 1.5).toFixed(4)),
+    },
+    publishGuard: {
+      minQcScore: PUBLICATION_MIN_QC,
+      minAssets: PUBLICATION_MIN_ASSETS,
+      replicateUrlsAllowed: false,
+      coverImageRequired: true,
+      trademarkRiskRequired: "low",
+    },
+    note: "Estimates only — actual cost depends on LLM token usage and image complexity.",
+  });
+});
+
+// ── Sprint P3: Portfolio Audit & Repair ───────────────────────────────────────
+
+/**
+ * Audit published portfolios for broken or non-compliant entries.
+ * Returns portfolios that fail the publication guard (wrong QC, Replicate URLs, etc.)
+ */
+router.get("/ai/portfolio/audit", async (_req, res): Promise<void> => {
+  const result = await db.execute(sql`
+    SELECT
+      p.id,
+      p.title,
+      p.publish_status,
+      p.qc_score::text        AS qc_score,
+      p.trademark_risk,
+      p.cover_image,
+      p.is_demo,
+      COUNT(a.id)::int                                                              AS asset_count,
+      COUNT(CASE WHEN a.status = 'archive_failed'               THEN 1 END)::int   AS failed_asset_count,
+      COUNT(CASE WHEN a.preview_url LIKE '%replicate.delivery%' THEN 1 END)::int   AS replicate_url_count
+    FROM ai_platform.ai_service_portfolios p
+    LEFT JOIN ai_platform.ai_portfolio_assets a ON a.portfolio_id = p.id
+    WHERE p.publish_status = 'published'
+    GROUP BY p.id, p.title, p.publish_status, p.qc_score, p.trademark_risk, p.cover_image, p.is_demo
+    HAVING (
+      p.cover_image IS NULL
+      OR p.cover_image LIKE '%replicate.delivery%'
+      OR p.qc_score IS NULL
+      OR p.qc_score::numeric < ${PUBLICATION_MIN_QC}
+      OR p.trademark_risk != 'low'
+      OR COUNT(a.id) < ${PUBLICATION_MIN_ASSETS}
+      OR COUNT(CASE WHEN a.preview_url LIKE '%replicate.delivery%' THEN 1 END) > 0
+    )
+    ORDER BY p.created_at DESC
+    LIMIT 200
+  `);
+
+  const broken = result.rows ?? [];
+  res.json({ count: broken.length, minQcScore: PUBLICATION_MIN_QC, minAssets: PUBLICATION_MIN_ASSETS, broken });
+});
+
+/**
+ * Bulk-mark broken published portfolios as needs_repair and remove from the
+ * public gallery immediately. Safe to run repeatedly (idempotent).
+ */
+router.post("/ai/portfolio/audit/mark-needs-repair", async (_req, res): Promise<void> => {
+  const result = await db.execute(sql`
+    WITH broken AS (
+      SELECT p.id FROM ai_platform.ai_service_portfolios p
+      LEFT JOIN ai_platform.ai_portfolio_assets a ON a.portfolio_id = p.id
+      WHERE p.publish_status = 'published'
+      GROUP BY p.id, p.cover_image, p.qc_score, p.trademark_risk
+      HAVING (
+        p.cover_image IS NULL
+        OR p.cover_image LIKE '%replicate.delivery%'
+        OR p.qc_score IS NULL
+        OR p.qc_score::numeric < ${PUBLICATION_MIN_QC}
+        OR p.trademark_risk != 'low'
+        OR COUNT(a.id) < ${PUBLICATION_MIN_ASSETS}
+        OR COUNT(CASE WHEN a.preview_url LIKE '%replicate.delivery%' THEN 1 END) > 0
+      )
+    )
+    UPDATE ai_platform.ai_service_portfolios p
+    SET publish_status = 'needs_repair', status = 'draft', updated_at = NOW()
+    FROM broken WHERE p.id = broken.id
+    RETURNING p.id
+  `);
+
+  const count = (result.rows ?? []).length;
+  await logAudit("portfolio-admin", "bulk_needs_repair", "audit", "ai_service_portfolio", "success", { count });
+  res.json({ ok: true, markedCount: count, message: `${count} portfolio(s) marked as needs_repair and removed from public gallery.` });
+});
+
+/**
+ * Repair a single portfolio: re-generate all images using the existing brand concept,
+ * upload to Supabase Storage. Portfolio is taken out of published state during repair.
+ */
+router.post("/ai/portfolio/portfolios/:id/repair", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
+
+  try {
+    // Take portfolio out of published state before repairing
+    await db.execute(sql`
+      UPDATE ai_platform.ai_service_portfolios
+      SET publish_status = 'review', status = 'draft', generation_status = 'generating', updated_at = NOW()
+      WHERE id = ${id}
+    `);
+    const { regeneratePortfolioImages } = await import("../services/demoPortfolioGeneratorService.js");
+    const result = await regeneratePortfolioImages(id);
+    await logAudit("portfolio-admin", "portfolio_repaired", String(id), "ai_service_portfolio", "success", { count: result.count });
+    res.json({ ok: true, ...result, message: `Repair queued for portfolio ${id}` });
+  } catch (err) {
+    req.log.error({ err }, "[portfolio-admin] repair portfolio failed");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to repair portfolio" });
+  }
+});
+
+/**
+ * Bulk repair: re-generate images for all portfolios in needs_repair status.
+ * Requires explicit confirmation to prevent accidental bulk operations.
+ * Safety cap: max 20 portfolios per call (fire-and-forget, runs in background).
+ */
+router.post("/ai/portfolio/repair-all", async (req, res): Promise<void> => {
+  const { confirm } = req.body as { confirm?: boolean };
+  if (!confirm) {
+    res.status(400).json({ error: "Must confirm bulk repair by sending { \"confirm\": true }" });
+    return;
+  }
+
+  const portfolios = await db
+    .select({ id: aiServicePortfoliosTable.id })
+    .from(aiServicePortfoliosTable)
+    .where(sql`${aiServicePortfoliosTable.publishStatus} = 'needs_repair'`)
+    .limit(20); // safety cap
+
+  if (portfolios.length === 0) {
+    res.json({ ok: true, triggered: 0, message: "No portfolios need repair" });
+    return;
+  }
+
+  const { regeneratePortfolioImages } = await import("../services/demoPortfolioGeneratorService.js");
+
+  let triggered = 0;
+  for (const p of portfolios) {
+    // Mark as generating before firing repair
+    await db.execute(sql`
+      UPDATE ai_platform.ai_service_portfolios
+      SET publish_status = 'review', status = 'draft', generation_status = 'generating', updated_at = NOW()
+      WHERE id = ${p.id}
+    `);
+    regeneratePortfolioImages(p.id).catch((err: unknown) => {
+      console.error(`[portfolio-repair-all] portfolio ${p.id} repair failed:`, err);
+    });
+    triggered++;
+  }
+
+  await logAudit("portfolio-admin", "bulk_repair_triggered", "repair-all", "ai_service_portfolio", "success", { count: triggered });
+  res.json({
+    ok: true,
+    triggered,
+    message: `Repair triggered for ${triggered} portfolio(s). Monitor progress in the Archive Queue tab.`,
+  });
 });
 
 // ── Asset Lifecycle / Background Archiving (Sprint P2.1.1) ─────────────────────
