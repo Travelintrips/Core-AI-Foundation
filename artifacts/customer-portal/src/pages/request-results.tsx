@@ -12,6 +12,7 @@ import { useParams, Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { FlowStepper } from "@/components/flow-stepper";
 import { useRequestDetail } from "@/hooks/use-catalog";
+import { DashboardAccessButton } from "@/components/commercial/dashboard-access-button";
 import {
   Loader2,
   CheckCircle2,
@@ -201,6 +202,12 @@ export default function RequestResultsPage() {
                 </p>
               </div>
             )}
+
+            {/* Dashboard access — makes the "cek dashboard Anda" copy above an
+                actual link instead of a dead reference. */}
+            <div className="flex justify-center mb-6">
+              <DashboardAccessButton email={data.customerEmail} />
+            </div>
 
             {/* Contact footer */}
             <div className="mt-10 text-center text-sm text-muted-foreground">

@@ -39,3 +39,5 @@
 - [demo-portfolio-p3](demo-portfolio-p3.md) — publication guard (QC≥80/trademark/cover/6 assets), asset_purpose separation, audit+repair endpoints, generation_status pipeline tracking
 - [v40b-runtime-roster](v40b-runtime-roster.md) — creative_project_steps stays source of truth; lib/db needs `tsc -b` before api-server typecheck is trustworthy; no vitest existed, added minimal one
 - [phase-v40d-sse-runtime-stream](phase-v40d-sse-runtime-stream.md) — SSE transport: shared poller, base64url cursor, connection limits, hook+merge, graceful shutdown
+- [dashboard-token-recovery](dashboard-token-recovery.md) — dashboardToken is hashed/non-recoverable; use POST request-access to re-issue + get dashboardUrl live instead of storing a link
+- [reimport-workflow-port-conflicts](reimport-workflow-port-conflicts.md) — after a GitHub re-import + post-merge-setup, restarted workflows can EADDRINUSE against stale node/vite processes still holding old ports; kill by PID (lsof -i) before restart, not just WorkflowsRestart
