@@ -24,6 +24,8 @@ interface TagSelectorProps {
   searchable?: boolean;
   groupable?: boolean;
   max?: number;
+  /** When true, selecting a new item replaces the previous one */
+  singleSelect?: boolean;
   disabled?: boolean;
   className?: string;
 }
@@ -40,6 +42,7 @@ export const TagSelector = memo(function TagSelector({
   searchable = true,
   groupable = false,
   max,
+  singleSelect,
   disabled,
   className,
 }: TagSelectorProps) {
@@ -74,6 +77,12 @@ export const TagSelector = memo(function TagSelector({
   const toggle = useCallback(
     (val: string) => {
       if (disabled) return;
+      if (singleSelect) {
+        onChange(value.includes(val) ? [] : [val]);
+        setOpen(false);
+        setQuery("");
+        return;
+      }
       if (value.includes(val)) {
         onChange(value.filter((v) => v !== val));
       } else {
@@ -81,7 +90,7 @@ export const TagSelector = memo(function TagSelector({
         onChange([...value, val]);
       }
     },
-    [value, onChange, disabled, max],
+    [value, onChange, disabled, max, singleSelect],
   );
 
   const remove = useCallback(

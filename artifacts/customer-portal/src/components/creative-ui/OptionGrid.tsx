@@ -16,6 +16,8 @@ interface OptionGridProps {
   multiple?: boolean;
   onChange: (value: string | string[]) => void;
   columns?: 2 | 3 | 4;
+  /** Max selections when multiple=true */
+  max?: number;
   disabled?: boolean;
   className?: string;
 }
@@ -36,6 +38,7 @@ export const OptionGrid = memo(function OptionGrid({
   multiple,
   onChange,
   columns = 3,
+  max,
   disabled,
   className,
 }: OptionGridProps) {
@@ -56,6 +59,7 @@ export const OptionGrid = memo(function OptionGrid({
       if (arr.includes(val)) {
         onChange(arr.filter((v) => v !== val));
       } else {
+        if (max && arr.length >= max) return;
         onChange([...arr, val]);
       }
     },

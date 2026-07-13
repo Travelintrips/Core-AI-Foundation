@@ -7,6 +7,8 @@ export interface ChipOption {
   value: string;
   label: string;
   icon?: string;
+  /** Short description shown as a tooltip on hover */
+  description?: string;
   disabled?: boolean;
 }
 
@@ -61,6 +63,8 @@ export const ChoiceChip = memo(function ChoiceChip({
             role="radio"
             aria-checked={isSelected}
             aria-disabled={isDisabled}
+            aria-label={opt.description ? `${opt.label}: ${opt.description}` : opt.label}
+            title={opt.description}
             disabled={isDisabled}
             onClick={() => !isDisabled && onChange(opt.value)}
             onKeyDown={(e) => handleKey(e, opt.value)}
