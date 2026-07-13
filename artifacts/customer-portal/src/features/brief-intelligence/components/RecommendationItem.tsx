@@ -37,12 +37,12 @@ export const RecommendationItem = memo(function RecommendationItem({
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-start gap-2 min-w-0">
           <span
-            className={cn("w-1.5 h-1.5 rounded-full shrink-0", CONFIDENCE_DOT[recommendation.confidence])}
+            className={cn("w-1.5 h-1.5 rounded-full shrink-0 mt-1.5", CONFIDENCE_DOT[recommendation.confidence])}
             aria-hidden
           />
-          <span className="text-sm font-medium text-foreground truncate">{recommendation.label}</span>
+          <span className="text-sm font-medium text-foreground break-words">{recommendation.label}</span>
         </div>
 
         {applied ? (
