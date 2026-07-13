@@ -424,7 +424,7 @@ router.patch("/ai/catalog/requests/:id/status", async (req, res): Promise<void> 
       const [project] = await db
         .select({ status: creativeProjectsTable.status })
         .from(creativeProjectsTable)
-        .where(eq(creativeProjectsTable.id, Number(finalProjectId)))
+        .where(eq(creativeProjectsTable.projectId, finalProjectId))
         .limit(1);
       if (!project || project.status !== "completed") {
         res.status(409).json({ error: `Cannot move to "${status}": linked project ${finalProjectId} is not marked completed.` });
