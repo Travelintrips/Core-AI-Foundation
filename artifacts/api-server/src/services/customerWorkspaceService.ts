@@ -38,6 +38,7 @@ import {
 } from "@workspace/db";
 import { hashToken } from "./clientReviewService.js";
 import { generateDownloadToken } from "./signedUrlService.js";
+import { buildProjectRuntimeSnapshot, type ProjectRuntimeSnapshot } from "./runtimeRosterService.js";
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -459,6 +460,8 @@ export interface ProjectDetail {
   reviews: { status: string; sharedAt: string | null; createdAt: string }[];
   payments: { id: number; paymentType: string; amount: string; currency: string; status: string; dueDate: string | null; paidAt: string | null }[];
   invoices: WorkspaceInvoice[];
+  /** V4.0B — additive, optional-shaped runtime roster snapshot. Never breaks old clients that ignore it. */
+  runtime: ProjectRuntimeSnapshot;
 }
 
 export async function getProjectDetail(
@@ -515,6 +518,8 @@ export async function getProjectDetail(
 
   const invoices = found.internalProjectId ? await listInvoicesForProjects([found]) : [];
 
+  const runtime = await buildProjectRuntimeSnapshot(found.internalProjectId);
+
   return {
     overview: {
       ...found,
@@ -529,6 +534,7 @@ export async function getProjectDetail(
     reviews,
     payments,
     invoices,
+    runtime,
   };
 }
 

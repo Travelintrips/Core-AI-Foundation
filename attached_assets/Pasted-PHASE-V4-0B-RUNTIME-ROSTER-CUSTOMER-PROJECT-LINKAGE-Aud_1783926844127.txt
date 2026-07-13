@@ -1,0 +1,529 @@
+PHASE V4.0B — RUNTIME ROSTER & CUSTOMER PROJECT LINKAGE
+
+Audit V4.0A telah selesai dan tersimpan di:
+
+docs/phase-v4.0a-runtime-audit.md
+
+Baca dokumen audit tersebut secara menyeluruh sebelum mengubah kode.
+
+Temuan utama dari V4.0A:
+
+1. Runtime nyata customer saat ini berjalan melalui:
+   creativeWorkflowRunner
+   → creative_project_steps
+   → genuine provider/LLM executions
+
+2. Sistem ai_jobs / ai_workers / dispatcher berjalan paralel tetapi belum menerima job customer yang nyata.
+
+3. Sistem ai_agents berfungsi sebagai digital workforce/org chart dan terpisah dari runtime execution.
+
+4. Customer Workspace AI Workforce masih menggunakan roster, status, dan confidence frontend yang sebagian hardcoded/demo.
+
+5. Belum ada realtime channel.
+
+6. Cost tracking masih estimated, belum actual.
+
+==================================================
+TUJUAN V4.0B
+==================================================
+
+Hubungkan customer project dan workspace ke roster AI worker yang nyata, tanpa:
+
+- memindahkan runtime existing;
+- mengganti creativeWorkflowRunner;
+- membuat dispatcher baru;
+- mengaktifkan ai_jobs sebagai source of truth;
+- membuat SSE/WebSocket;
+- mengubah workflow execution;
+- mengubah provider invocation;
+- mengubah business flow;
+- membuat progress palsu.
+
+Fase ini hanya membangun fondasi relasi dan API snapshot worker/project yang jujur.
+
+==================================================
+PRINSIP ARSITEKTUR
+==================================================
+
+Untuk V4.0B:
+
+- creativeWorkflowRunner tetap menjadi execution engine aktif.
+- creative_project_steps tetap menjadi source of truth execution step.
+- ai_agents dapat menjadi source metadata roster/role jika datanya valid.
+- ai_jobs / ai_workers belum dijadikan source of truth.
+- jangan menyatukan ketiga sistem secara paksa pada fase ini.
+- jangan membuat migrasi besar.
+- gunakan adapter/read-model jika memungkinkan.
+- data demo frontend hanya diganti bila source runtime nyata tersedia.
+
+==================================================
+LANGKAH 1 — VERIFIKASI AUDIT
+==================================================
+
+Baca langsung file dan implementasi yang disebut dalam audit.
+
+Minimal verifikasi:
+
+- creativeWorkflowRunner
+- creative_project_steps schema
+- customer project/request tables
+- workspace project API
+- ai_agents schema/service
+- ai_jobs schema/service
+- ai_workers schema/service
+- dispatcher polling loop
+- assignedAiTeam source
+- workspace-ai-workforce.tsx
+- project-detail.tsx
+- use-workspace hooks
+- workspace project detail response type
+
+Laporkan perbedaan bila kondisi codebase berubah sejak audit.
+
+==================================================
+LANGKAH 2 — TENTUKAN SOURCE OF TRUTH V4.0B
+==================================================
+
+Gunakan model berikut:
+
+Execution source:
+creative_project_steps
+
+Worker role metadata source:
+ai_agents jika tersedia dan valid
+
+Customer project source:
+existing project/request table
+
+Workspace source:
+existing workspace API
+
+Buat mapping yang jelas:
+
+customer_project
+→ creative workflow/project
+→ creative_project_steps
+→ agent/worker role metadata
+→ workspace runtime roster
+
+Jangan membuat relasi fiktif.
+
+==================================================
+LANGKAH 3 — AUDIT RELASI PROJECT
+==================================================
+
+Pastikan dapat menjawab:
+
+- customer workspace project ID menunjuk ke tabel apa?
+- creativeWorkflowRunner menerima project/request ID apa?
+- creative_project_steps memiliki foreign key apa?
+- apakah project customer dapat ditelusuri langsung ke creative_project_steps?
+- apakah step memiliki agent role?
+- apakah step memiliki model/provider?
+- apakah step memiliki startedAt/completedAt?
+- apakah step memiliki status dan error?
+- apakah output/artifact reference tersedia?
+
+Jika linkage sudah ada, gunakan.
+
+Jika linkage belum lengkap, usulkan perubahan paling minimal.
+
+==================================================
+LANGKAH 4 — MINIMAL DATA MODEL
+==================================================
+
+Prioritaskan tanpa migration.
+
+Pertama coba membuat adapter/read-model dari data existing.
+
+Migration hanya diperbolehkan jika benar-benar diperlukan.
+
+Jika diperlukan, perubahan minimal boleh mencakup salah satu:
+
+- customerProjectId pada creative workflow record;
+- agentRoleKey pada creative_project_steps;
+- agentId nullable pada creative_project_steps;
+- metadata JSON untuk provider/model/display role;
+- index untuk project/step lookup.
+
+Jangan menambahkan tabel baru kecuali audit membuktikan tidak ada alternatif aman.
+
+Sebelum migration:
+
+- jelaskan alasan;
+- cek data existing;
+- buat rollback plan;
+- pertahankan backward compatibility.
+
+==================================================
+LANGKAH 5 — CANONICAL WORKER SNAPSHOT
+==================================================
+
+Buat internal normalized type, misalnya:
+
+RuntimeWorkerSnapshot
+
+Field yang diperbolehkan:
+
+- id
+- roleKey
+- displayName
+- department
+- specialty
+- stepId
+- stepName
+- status
+- currentTask
+- provider
+- model
+- startedAt
+- completedAt
+- outputCount
+- attempt
+- isHuman
+- source
+- isLive
+
+Status harus diturunkan dari creative_project_steps.
+
+Contoh mapping:
+
+pending → queued
+in_progress/running → working
+completed → completed
+failed → failed
+waiting_review → reviewing
+blocked → blocked
+
+Gunakan status existing yang nyata.
+
+Jangan membuat status random.
+
+==================================================
+LANGKAH 6 — CONFIDENCE DAN ETA
+==================================================
+
+Untuk fase ini:
+
+- hapus confidence demo pada worker live;
+- jangan membuat angka confidence baru;
+- jika confidence tidak tersedia, jangan tampilkan field;
+- ETA hanya ditampilkan jika ada delivery/step estimate nyata;
+- jika tidak tersedia, tampilkan “Estimating…” atau sembunyikan.
+
+Jangan memakai seed, hash ID, atau angka statis untuk confidence.
+
+==================================================
+LANGKAH 7 — WORKER ROSTER ADAPTER
+==================================================
+
+Buat service/adapter backend yang membangun roster dari:
+
+1. creative_project_steps;
+2. ai_agents metadata jika dapat dicocokkan;
+3. workflow step configuration;
+4. provider/model execution metadata.
+
+Urutan prioritas:
+
+runtime step data
+→ ai_agents metadata
+→ safe role fallback
+
+Fallback harus jujur.
+
+Contoh:
+
+Role: “Creative AI Worker”
+Source: workflow-step
+isLive: true
+
+Jangan membuat nama manusia atau avatar palsu.
+
+==================================================
+LANGKAH 8 — WORKSPACE API EXTENSION
+==================================================
+
+Audit workspace project detail endpoint existing.
+
+Jangan membuat endpoint baru jika response existing dapat diperluas dengan aman.
+
+Tambahkan runtime field, misalnya:
+
+runtime: {
+  source: "creative_workflow",
+  isLive: true,
+  workers: RuntimeWorkerSnapshot[],
+  currentWorkerId: string | null,
+  currentStepId: string | null,
+  lastUpdatedAt: string | null
+}
+
+Pastikan:
+
+- backward compatible;
+- field baru optional;
+- existing frontend tidak rusak;
+- ownership/token validation tetap sama;
+- tidak expose internal prompt/error/secret;
+- tidak expose cost/provider credential.
+
+Jika endpoint existing tidak cocok, usulkan endpoint baru hanya setelah menjelaskan alasannya.
+
+==================================================
+LANGKAH 9 — CURRENT TASK
+==================================================
+
+Current task harus berasal dari step runtime aktual.
+
+Prioritas:
+
+1. running step;
+2. waiting_review step;
+3. latest completed step;
+4. next pending step;
+5. no active task.
+
+Response minimal:
+
+- step name
+- public task label
+- worker role
+- status
+- startedAt
+- provider/model bila aman
+- lastUpdatedAt
+
+Jangan menggunakan stage-to-worker hardcoded mapping di frontend jika backend sudah mengirim current task.
+
+==================================================
+LANGKAH 10 — FRONTEND INTEGRATION
+==================================================
+
+Update hanya bagian Workspace AI Intelligence yang relevan.
+
+File kemungkinan:
+
+- workspace-ai-workforce.tsx
+- workspace-project-health.tsx
+- project-detail.tsx
+- use-workspace.ts
+- related types
+
+Perubahan:
+
+- baca runtime.workers dari API;
+- tampilkan status nyata;
+- tampilkan current task nyata;
+- tampilkan provider/model bila tersedia;
+- sembunyikan confidence jika tidak live;
+- hilangkan “Demo Preview” hanya untuk worker runtime nyata;
+- pertahankan label demo untuk fallback statis;
+- tampilkan source badge kecil bila berguna:
+  - Live Runtime
+  - Workflow Metadata
+  - Demo Preview
+
+Jangan membuat animasi status yang menyiratkan live update bila masih snapshot-only.
+
+==================================================
+LANGKAH 11 — FALLBACK BEHAVIOR
+==================================================
+
+Workspace harus tetap stabil jika:
+
+- project lama tidak memiliki creative_project_steps;
+- workflow belum dimulai;
+- ai_agents tidak memiliki mapping;
+- provider/model kosong;
+- runtime query gagal;
+- no workers assigned;
+- project sudah completed;
+- project failed.
+
+Gunakan state jujur:
+
+- “AI team will appear when production starts.”
+- “Runtime data is not available for this project.”
+- “Production has completed.”
+- “A workflow step needs attention.”
+
+Jangan menampilkan lima worker default seolah-olah mereka live.
+
+==================================================
+LANGKAH 12 — SECURITY
+==================================================
+
+Audit dan test:
+
+- workspace token ownership;
+- project belongs to token;
+- step belongs to project;
+- no cross-project worker leakage;
+- no cross-tenant leakage;
+- no raw provider response;
+- no hidden prompt;
+- no internal error stack;
+- no API key;
+- no system prompt;
+- no internal-only metadata.
+
+Runtime roster response hanya boleh berisi customer-safe fields.
+
+==================================================
+LANGKAH 13 — TESTS
+==================================================
+
+Tambahkan test minimal untuk:
+
+1. project dengan running step;
+2. project dengan completed steps;
+3. project belum memiliki steps;
+4. failed step;
+5. waiting human review;
+6. project lama tanpa runtime linkage;
+7. unauthorized token;
+8. token valid tetapi project berbeda;
+9. ai_agents metadata ditemukan;
+10. ai_agents metadata tidak ditemukan;
+11. provider/model null;
+12. no confidence returned;
+13. no duplicate workers for repeated steps;
+14. current task selection;
+15. response backward compatibility.
+
+==================================================
+LANGKAH 14 — OBSERVABILITY
+==================================================
+
+Tambahkan logging ringan:
+
+- roster snapshot generated;
+- project ID;
+- number of steps;
+- number of workers;
+- current step;
+- fallback used;
+- runtime missing.
+
+Jangan log brief content, prompt, customer file, atau sensitive output.
+
+==================================================
+LANGKAH 15 — JANGAN DIKERJAKAN
+==================================================
+
+Fase ini tidak boleh:
+
+- menghubungkan ai_jobs ke production;
+- mengubah dispatcher;
+- menghapus dispatcher;
+- membuat job trigger;
+- membuat SSE/WebSocket;
+- membuat event table;
+- memindahkan runtime;
+- membuat progress weighted baru;
+- membuat cost actual;
+- membuat artifact linkage baru;
+- membuat human review runtime baru.
+
+Hal-hal tersebut masuk fase selanjutnya.
+
+==================================================
+VERIFIKASI WAJIB
+==================================================
+
+Setelah implementasi:
+
+1. typecheck frontend;
+2. typecheck backend;
+3. build customer portal;
+4. build api-server;
+5. run relevant tests;
+6. verify project with real creative_project_steps;
+7. verify project without runtime data;
+8. verify completed project;
+9. verify failed step;
+10. verify unauthorized workspace token;
+11. verify no cross-project leakage;
+12. verify no confidence demo on live worker;
+13. verify Demo Preview remains on fallback only;
+14. verify existing workspace routes still work;
+15. verify existing production workflow still executes unchanged.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+V4.0B dianggap selesai jika:
+
+- customer project dapat ditelusuri ke creative_project_steps;
+- Workspace API mengembalikan runtime roster normalized;
+- current task berasal dari runtime nyata;
+- worker status berasal dari creative_project_steps;
+- ai_agents hanya dipakai sebagai metadata enrichment;
+- confidence palsu dihapus untuk live data;
+- fallback lama tetap aman dan jujur;
+- tidak ada perubahan execution engine;
+- tidak ada duplicate runtime;
+- tidak ada security regression;
+- build dan typecheck lulus.
+
+==================================================
+OUTPUT WAJIB
+==================================================
+
+Berikan laporan:
+
+# V4.0B Runtime Roster & Project Linkage
+
+## Audit Verification
+
+## Source of Truth Confirmed
+
+## Project-to-Step Relationship
+
+## Data Model Changes
+
+## Migration Applied
+- yes/no
+- reason
+- rollback
+
+## Adapter/Service Added
+
+## Workspace API Changes
+
+## Runtime Worker Mapping
+
+## Current Task Logic
+
+## Frontend Integration
+
+## Demo Data Removed
+
+## Honest Fallbacks Retained
+
+## Security Verification
+
+## Tests Added
+
+## Files Changed
+
+## Tables Changed
+
+## API Response Example
+
+## Frontend Screenshot
+- live runtime project
+- no-runtime fallback
+- mobile
+
+## Typecheck Results
+
+## Build Results
+
+## Remaining Gaps
+
+## Recommendation for V4.0C
+
+Jangan lanjut ke V4.0C sebelum laporan V4.0B direview.

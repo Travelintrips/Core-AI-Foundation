@@ -166,9 +166,10 @@ export default function WorkspaceProjectDetailPage({
     );
   }
 
-  const { overview } = data;
+  const { overview, runtime } = data;
   const activityItems = activityData?.items ?? [];
-  const isDemo = (overview.assignedAiTeam ?? []).length === 0;
+  const hasLiveRuntime = !!(runtime?.isLive && runtime.workers.length > 0);
+  const isDemo = !hasLiveRuntime && (overview.assignedAiTeam ?? []).length === 0;
 
   const insight = getInsight(
     overview.currentStage,
@@ -219,6 +220,7 @@ export default function WorkspaceProjectDetailPage({
             stageName={overview.currentStage}
             stageLabel={overview.currentStageLabel}
             team={overview.assignedAiTeam ?? []}
+            runtime={runtime}
             deliveryDate={overview.deliveryDate}
             filesCount={data.deliverables.length}
             startedAt={overview.createdAt}
@@ -230,6 +232,7 @@ export default function WorkspaceProjectDetailPage({
       {/* Workforce */}
       <WorkspaceAiWorkforce
         team={overview.assignedAiTeam ?? []}
+        runtime={runtime}
         isDemoPlaceholder={isDemo}
       />
 

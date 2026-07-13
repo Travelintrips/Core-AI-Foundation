@@ -81,6 +81,53 @@ export type WorkspaceProjectDetail = {
   payments: { id: number; installmentLabel: string; amount: string; status: string; dueDate: string | null }[];
   invoices: { id: number; invoiceNumber: string; total: string; status: string; issuedAt: string | null }[];
   recommendations: string[];
+  /** V4.0B — optional so older cached responses / tests without it don't break. */
+  runtime?: RuntimeSnapshot;
+};
+
+export type RuntimeWorkerStatus = 'queued' | 'working' | 'completed' | 'failed' | 'blocked';
+
+export type RuntimeWorkerSnapshot = {
+  id: string;
+  roleKey: string;
+  displayName: string;
+  department: string | null;
+  specialty: string | null;
+  stepId: number;
+  stepName: string;
+  status: RuntimeWorkerStatus;
+  currentTask: string;
+  provider: string | null;
+  model: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  outputCount: number;
+  isHuman: boolean;
+  source: 'creative_workflow';
+  isLive: true;
+};
+
+export type RuntimeCurrentTask = {
+  stepId: number;
+  stepName: string;
+  taskLabel: string;
+  workerRole: string;
+  workerDisplayName: string;
+  status: RuntimeWorkerStatus;
+  startedAt: string;
+  provider: string | null;
+  model: string | null;
+  lastUpdatedAt: string;
+};
+
+export type RuntimeSnapshot = {
+  source: 'creative_workflow' | 'unavailable';
+  isLive: boolean;
+  workers: RuntimeWorkerSnapshot[];
+  currentWorkerId: string | null;
+  currentStepId: number | null;
+  currentTask: RuntimeCurrentTask | null;
+  lastUpdatedAt: string | null;
 };
 
 export type WorkspaceDownload = {
