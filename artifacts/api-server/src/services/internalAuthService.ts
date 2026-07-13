@@ -35,9 +35,11 @@ export function issueSessionToken(userId: number): string {
 
 export function verifySessionToken(token: string): SessionPayload | null {
   try {
-    const decoded = jwt.verify(token, getSecret()) as SessionPayload;
-    if (typeof decoded.sub !== "number") return null;
-    return decoded;
+    const decoded = jwt.verify(token, getSecret());
+    if (typeof decoded !== "object" || decoded === null || typeof (decoded as { sub?: unknown }).sub !== "number") {
+      return null;
+    }
+    return { sub: (decoded as unknown as { sub: number }).sub };
   } catch {
     return null;
   }

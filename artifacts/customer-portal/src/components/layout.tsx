@@ -15,7 +15,7 @@ const FOOTER_COLS = [
   },
   {
     heading: "Solutions",
-    links: ["Creative & Marketing", "Finance & Tax", "Legal & Compliance", "HR & Payroll", "Logistics & Customs", "Enterprise Custom"],
+    links: ["Brand Identity", "Social Media Content", "Copywriting", "Pitch Deck", "Packaging & Design", "Creative Consultation"],
   },
   {
     heading: "Resources",

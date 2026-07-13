@@ -4,12 +4,11 @@ import { motion, useInView } from "framer-motion";
 import { useRef, useEffect, useState } from "react";
 import {
   ArrowRight, Sparkles, ChevronRight, Star,
-  Palette, TrendingUp, DollarSign, Scale, Truck, BarChart3,
-  Users, ShoppingCart, FileText, Headphones, Globe, Package,
-  Cpu, Briefcase, Shield, Play, Quote, Brain,
-  FileCheck, Boxes, PieChart, Building2, Zap,
+  Palette, TrendingUp, Users, FileText,
+  Cpu, Briefcase, Play, Quote, Brain,
+  Boxes, PieChart, Building2, Zap,
   CheckCircle2, Clock, BadgeCheck, ExternalLink,
-  Lock, Award,
+  Lock, Award, Image, PenTool, Presentation, Package, Instagram,
 } from "lucide-react";
 
 /* ─── ANIMATION VARIANTS ─── */
@@ -43,23 +42,23 @@ function useCountUp(target: number, duration = 1600, inView = false) {
   return val;
 }
 
-/* ─── SERVICE VERTICALS ─── */
+/* ─── CREATIVE AI SERVICES ───
+ * Only Creative AI sub-services are marketed on the public site. Every
+ * other internal category lives behind the Internal AI Portal and must
+ * never be named here — see the internal RBAC portal-separation task. */
 const SERVICES = [
-  { icon: Palette,      name: "Creative AI",        desc: "Brand, desain, konten kreatif",    badge: "Most Popular", badgeColor: "#F97316", featured: true },
-  { icon: TrendingUp,   name: "Marketing AI",        desc: "Campaign, digital, growth",        badge: "Fast Delivery", badgeColor: "#22D3EE", featured: true },
-  { icon: DollarSign,   name: "Finance AI",          desc: "Analisis, laporan, proyeksi",      badge: "Enterprise",    badgeColor: "#F59E0B", featured: true },
-  { icon: BarChart3,    name: "Sales AI",            desc: "Lead gen, proposal, CRM" },
-  { icon: FileText,     name: "Accounting AI",       desc: "Pembukuan, rekonsiliasi",          badge: "Commercial Ready", badgeColor: "#10B981" },
-  { icon: Shield,       name: "Tax AI",              desc: "Pajak, kepatuhan, SPT",            badge: "Human Review", badgeColor: "#8B5CF6" },
-  { icon: Users,        name: "HR & Payroll AI",     desc: "SDM, penggajian, kontrak" },
-  { icon: Scale,        name: "Legal AI",            desc: "Kontrak, compliance, dokumen",     badge: "Human Review", badgeColor: "#8B5CF6" },
-  { icon: Truck,        name: "Logistics AI",        desc: "Rantai pasok, ekspedisi" },
-  { icon: Globe,        name: "Customs & PPJK AI",   desc: "Kepabeanan, BC, dokumen",          badge: "New", badgeColor: "#22D3EE" },
-  { icon: ShoppingCart, name: "Procurement AI",      desc: "Pengadaan, vendor, tender" },
-  { icon: Package,      name: "Trading AI",          desc: "Analisis pasar, arbitrase" },
-  { icon: PieChart,     name: "Data Analytics AI",   desc: "BI, dashboard, insight" },
-  { icon: Briefcase,    name: "Executive AI",        desc: "Ringkasan eksekutif, strategi",    badge: "Enterprise", badgeColor: "#F59E0B" },
-  { icon: Headphones,   name: "Customer Service AI", desc: "Support, chatbot, eskalasi" },
+  { icon: Palette,      name: "Brand Identity",        desc: "Logo, warna, tipografi, panduan pakai",      badge: "Most Popular", badgeColor: "#F97316", featured: true },
+  { icon: TrendingUp,   name: "Brand Strategy",        desc: "Positioning, USP, tone of voice",             badge: "Human Review", badgeColor: "#8B5CF6", featured: true },
+  { icon: Instagram,    name: "Social Media Content",  desc: "Konten bulanan: ide, caption, visual",        badge: "Fast Delivery", badgeColor: "#22D3EE", featured: true },
+  { icon: PenTool,      name: "Logo Concept AI",       desc: "3 konsep logo awal siap dikembangkan" },
+  { icon: FileText,     name: "Copywriting",           desc: "Copy on-brand untuk caption & landing page" },
+  { icon: Presentation, name: "Pitch Deck",             desc: "Pitch deck investor-ready" },
+  { icon: Image,        name: "Image Generation",      desc: "Gambar AI untuk kampanye dan konten" },
+  { icon: Package,      name: "Packaging Concept",     desc: "Konsep desain kemasan produk" },
+  { icon: Boxes,        name: "Poster / Banner",       desc: "Desain poster, banner, dan brosur" },
+  { icon: Briefcase,    name: "Company Profile",       desc: "Dokumen company profile profesional" },
+  { icon: PieChart,     name: "Presentation Design",   desc: "Desain presentasi untuk audiens apa pun" },
+  { icon: Users,        name: "Creative Consultation", desc: "Konsultasi kreatif strategis" },
 ];
 
 /* ─── HOW IT WORKS ─── */
@@ -79,15 +78,15 @@ const TESTIMONIALS = [
     initials: "SW",
   },
   {
-    quote: "Dokumen customs yang dulu membutuhkan 3 hari pengerjaan, kini selesai dalam 4 jam. Akurasi HS Code-nya jauh lebih baik dari tim manual kami.",
-    name: "Ahmad Fauzi", title: "Logistics Director", company: "PT Maju Freight",
-    metrics: [{ label: "Waktu Dihemat", value: "91%", color: "#22D3EE" }, { label: "Akurasi", value: "99.2%", color: "#10B981" }],
+    quote: "Pitch deck yang dulu membutuhkan 3 hari pengerjaan, kini selesai dalam 4 jam. Kualitas visual dan storytelling-nya jauh lebih baik dari tim internal kami.",
+    name: "Ahmad Fauzi", title: "Head of Growth", company: "PT Maju Freight",
+    metrics: [{ label: "Waktu Dihemat", value: "91%", color: "#22D3EE" }, { label: "Kepuasan Klien", value: "99.2%", color: "#10B981" }],
     initials: "AF",
   },
   {
-    quote: "Finance AI kami gunakan untuk menyusun laporan board setiap bulan. Analisisnya tajam, presentasinya eksekutif. CEO kami sangat terkesan.",
-    name: "Dewi Kusuma", title: "Finance Director", company: "PT Sentosa Group",
-    metrics: [{ label: "ROI", value: "+38%", color: "#F59E0B" }, { label: "Error Rate", value: "0.1%", color: "#10B981" }],
+    quote: "Social Media Content Monthly kami gunakan untuk seluruh kalender konten brand kami. Konsistensinya tinggi, dan tim kreatifnya sangat responsif.",
+    name: "Dewi Kusuma", title: "Marketing Director", company: "PT Sentosa Group",
+    metrics: [{ label: "ROI Kampanye", value: "+38%", color: "#F59E0B" }, { label: "Revisi Rework", value: "0.1%", color: "#10B981" }],
     initials: "DK",
   },
 ];
@@ -95,7 +94,7 @@ const TESTIMONIALS = [
 /* ─── TRUST STATS ─── */
 const TRUST_STATS = [
   { value: 500,   suffix: "+", label: "Enterprise clients",      icon: Building2,  color: "#7C6EFA" },
-  { value: 15,    suffix: "",  label: "Layanan AI profesional",  icon: Brain,      color: "#22D3EE" },
+  { value: 12,    suffix: "",  label: "Layanan Creative AI",     icon: Brain,      color: "#22D3EE" },
   { value: 99,    suffix: "%", label: "Tingkat kepuasan klien",  icon: Star,       color: "#F59E0B" },
   { value: 48000, suffix: "+", label: "Jam kerja dihemat/bulan", icon: Clock,      color: "#10B981" },
 ];
@@ -114,10 +113,10 @@ const PARTNERS = [
 
 /* ─── ACTIVITY FEED DATA ─── */
 const ACTIVITY_FEED = [
-  { agent: "Creative AI",  status: "Generating...", dot: "#F97316" },
-  { agent: "Finance AI",   status: "Completed",     dot: "#10B981" },
-  { agent: "Legal AI",     status: "Reviewing...",  dot: "#F59E0B" },
-  { agent: "Marketing AI", status: "Processing...", dot: "#22D3EE" },
+  { agent: "Brand Identity",   status: "Generating...", dot: "#F97316" },
+  { agent: "Social Media",     status: "Completed",     dot: "#10B981" },
+  { agent: "Pitch Deck",       status: "Reviewing...",  dot: "#F59E0B" },
+  { agent: "Copywriting",      status: "Processing...", dot: "#22D3EE" },
 ];
 
 /* ─── NOISE TEXTURE (film grain feel) ─── */
@@ -383,7 +382,7 @@ export default function LandingPage() {
                     boxShadow: "0 0 20px rgba(124,110,250,0.10)",
                   }}>
                   <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#7C6EFA" }} />
-                  ✦ Baru: Customs &amp; PPJK AI kini tersedia
+                  ✦ Baru: Image Generation AI kini tersedia
                   <ChevronRight className="w-3 h-3 opacity-50" />
                 </div>
               </motion.div>
@@ -398,7 +397,7 @@ export default function LandingPage() {
                   {" "}yang Bekerja.
                 </h1>
                 <p className="text-lg leading-relaxed max-w-xl mx-auto lg:mx-0" style={{ color: "#6B7FA8" }}>
-                  Dari kampanye kreatif hingga dokumen kepabeanan — tim AI profesional kami
+                  Dari brand identity hingga konten sosial media — tim Creative AI profesional kami
                   menangani semuanya, dengan kualitas enterprise dan kecepatan yang belum pernah ada.
                 </p>
               </motion.div>
@@ -529,15 +528,15 @@ export default function LandingPage() {
               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
                 style={{ background: "rgba(124,110,250,0.08)", border: "1px solid rgba(124,110,250,0.22)", color: "#9D91FB" }}>
                 <Sparkles className="w-3 h-3" />
-                15 Layanan AI Profesional
+                Layanan Creative AI Profesional
               </div>
             </motion.div>
             <motion.h2 className="font-display font-bold tracking-tight" style={{ fontSize: "clamp(1.75rem, 3.5vw, 2.75rem)", color: "#F0F4FF", letterSpacing: "-0.025em" }} variants={fadeUp}>
-              Semua layanan AI yang Anda butuhkan,<br className="hidden md:block" />
+              Semua kebutuhan kreatif Anda,<br className="hidden md:block" />
               dalam satu platform.
             </motion.h2>
             <motion.p className="text-base max-w-xl mx-auto leading-relaxed" style={{ color: "#6B7FA8" }} variants={fadeUp}>
-              Dari kreatif hingga kepatuhan — setiap vertikal bisnis punya tim AI profesionalnya sendiri.
+              Dari brand identity hingga konten sosial media — tim Creative AI profesional kami siap membantu.
             </motion.p>
           </motion.div>
 
