@@ -1,0 +1,929 @@
+Lanjutkan Creative AI Production Engine ke:
+
+# PHASE 3 — MULTI-SERVICE DOCUMENT EXPORT
+
+Phase 2 Company Profile PDF sudah selesai dan terverifikasi.
+
+Fondasi yang sudah tersedia:
+
+* `creativeProjectDocumentType.ts`
+* `companyProfilePdfWorkerService.ts`
+* generic `renderDocument()` pipeline
+* `mapCompanyProfileToDocumentSpec()`
+* PDF validation
+* Supabase upload
+* upload verification
+* `creative_ai_assets` recording
+* idempotent asset reuse
+* recovery ketika storage object hilang
+* project status `generating_document`
+* `pdf_export` completion guard
+* secure customer download
+* test suite 154/154
+* genuine 10-page PDF smoke test
+
+Jangan membuat Document Engine kedua.
+
+Gunakan dan perluas engine generik yang sudah ada.
+
+Scope fase ini hanya:
+
+1. Brand Strategy PDF
+2. Copywriting PDF
+3. Creative Consultation PDF
+4. Brand Identity Guideline PDF
+5. Shared PDF worker refactor apabila diperlukan
+6. Multi-service document tests
+7. Customer deliverable metadata
+8. Real smoke tests
+
+Jangan mengerjakan:
+
+* Pitch Deck
+* PPTX
+* DOCX
+* ZIP export
+* Video
+* Voice-over
+* Subtitle
+* Logo vectorization
+* Social media batch changes
+* Packaging mockup changes
+
+---
+
+# 1. Recovery dan audit singkat
+
+Sebelum mengubah kode:
+
+1. Jalankan `git status`.
+2. Baca implementasi Phase 2 yang sudah selesai.
+3. Identifikasi bagian Company Profile worker yang:
+
+   * benar-benar generic
+   * masih terlalu spesifik ke Company Profile
+   * dapat dipindahkan ke shared document worker
+4. Audit service slug aktual untuk:
+
+   * Brand Strategy
+   * Copywriting
+   * Creative Consultation
+   * Brand Identity
+5. Audit workflow output dan `result_json` masing-masing layanan.
+6. Audit asset gambar yang tersedia untuk Brand Identity.
+7. Audit entitlement dan deliverable catalog masing-masing layanan.
+
+Jangan menebak service slug atau schema output.
+
+Gunakan data katalog dan workflow aktual.
+
+---
+
+# 2. Target arsitektur
+
+Refactor secara aman menuju struktur seperti:
+
+```text
+Creative Document Engine
+├── creativeProjectDocumentType.ts
+├── creativeDocumentWorkerService.ts
+├── documentContentGenerator.ts
+├── documentAssetResolver.ts
+├── documentStorageService.ts
+├── documentValidationService.ts
+├── documentVersionService.ts
+└── mappers/
+    ├── companyProfileDocumentMapper.ts
+    ├── brandStrategyDocumentMapper.ts
+    ├── copywritingDocumentMapper.ts
+    ├── creativeConsultationDocumentMapper.ts
+    └── brandIdentityGuidelineDocumentMapper.ts
+```
+
+Nama file boleh disesuaikan dengan struktur repository.
+
+Tujuan utama:
+
+* rendering tetap generic
+* storage tetap generic
+* validation tetap generic
+* idempotency tetap generic
+* mapper tetap per layanan
+* content generation tetap per layanan
+* required asset rules tetap per layanan
+
+Jangan membuat empat salinan penuh dari `companyProfilePdfWorkerService.ts`.
+
+---
+
+# 3. Refactor Company Profile tanpa regresi
+
+Sebelum menambah layanan baru, pisahkan bagian generic dari Company Profile worker.
+
+Bagian yang sebaiknya shared:
+
+* load project
+* load service request
+* resolve service slug
+* determine document type
+* find existing valid asset
+* check storage object
+* determine version
+* render PDF
+* validate PDF
+* upload PDF
+* verify upload
+* create/update asset record
+* calculate checksum
+* record generation report
+* completion result formatting
+* project completion propagation
+* retry/idempotency handling
+
+Bagian yang tetap service-specific:
+
+* brief mapping
+* structured output schema
+* LLM prompt
+* section structure
+* asset selection rules
+* minimum section validation
+* title and filename
+* document type
+
+Pastikan seluruh test Company Profile tetap lulus setelah refactor.
+
+---
+
+# 4. Document type resolution
+
+Perluas `creativeProjectDocumentType.ts`.
+
+Document type yang harus didukung:
+
+```ts
+type CreativeDocumentType =
+  | "company_profile"
+  | "brand_strategy"
+  | "copywriting"
+  | "creative_consultation"
+  | "brand_identity_guideline";
+```
+
+Resolution harus berdasarkan service catalog/runtime join yang aktual.
+
+Jangan:
+
+* hanya mencocokkan substring bebas
+* bergantung pada nama tampilan yang bisa berubah
+* hard-code package tier
+* menganggap semua project teks menghasilkan PDF
+
+Untuk service yang belum didukung, `pdf_export` harus tetap melempar `WorkerNotImplementedError`.
+
+---
+
+# 5. Brand Strategy PDF
+
+## Struktur dokumen minimum
+
+1. Cover
+2. Executive Summary
+3. Business Context
+4. Brand Overview
+5. Market Context
+6. Target Audience
+7. Audience Needs and Pain Points
+8. Brand Positioning
+9. Value Proposition
+10. Brand Personality
+11. Brand Archetype jika tersedia
+12. Tone of Voice
+13. Messaging Pillars
+14. Key Messages
+15. Competitive Direction
+16. Channel Strategy
+17. Customer Experience Direction
+18. Implementation Priorities
+19. Roadmap
+20. Closing
+
+Section kosong harus dilewati.
+
+Jangan mengarang:
+
+* market share
+* competitor names
+* customer statistics
+* financial data
+* awards
+* certifications
+
+kecuali tersedia di brief atau structured AI result.
+
+## Output
+
+* PDF final
+* asset type `document`
+* document type `brand_strategy`
+* filename yang disanitasi
+* page count
+* file size
+* checksum
+* version
+* generation report
+
+## Minimum validation
+
+Fixture realistis Brand Strategy harus menghasilkan minimal 6 halaman.
+
+---
+
+# 6. Copywriting PDF
+
+Copywriting mungkin memiliki output lebih pendek daripada dokumen strategi.
+
+Mapper harus mendukung variasi copy, bukan memaksakan semua layanan menjadi dokumen panjang.
+
+## Struktur minimum
+
+1. Cover
+2. Creative Brief
+3. Objective
+4. Target Audience
+5. Tone and Style
+6. Core Message
+7. Headline Options
+8. Main Copy
+9. CTA Options
+10. Channel Variations
+11. Usage Notes
+12. Final Recommended Copy
+
+Bila copywriting berupa jenis spesifik seperti:
+
+* website copy
+* landing page
+* advertisement
+* social caption
+* email campaign
+* product description
+* brochure copy
+
+tampilkan struktur yang sesuai dengan output aktual.
+
+Jangan menghasilkan bagian kosong hanya untuk menambah halaman.
+
+## Output
+
+* PDF final
+* document type `copywriting`
+* structured sections
+* customer-downloadable
+
+## Minimum validation
+
+Copywriting PDF boleh lebih pendek, tetapi minimal 2 halaman untuk fixture standar.
+
+---
+
+# 7. Creative Consultation PDF
+
+## Struktur minimum
+
+1. Cover
+2. Consultation Objective
+3. Client Context
+4. Current Challenges
+5. Findings
+6. Opportunities
+7. Recommendations
+8. Priority Actions
+9. Risks and Considerations
+10. Implementation Steps
+11. Next Steps
+12. Closing
+
+Bila consultation output berasal dari beberapa agent atau step, gabungkan secara terstruktur.
+
+Jangan menempel semua `result_json` mentah.
+
+## Output
+
+* PDF final
+* document type `creative_consultation`
+* downloadable asset
+
+## Minimum validation
+
+Fixture standar minimal 3 halaman.
+
+---
+
+# 8. Brand Identity Guideline PDF
+
+Brand Identity adalah bagian paling kompleks pada fase ini.
+
+PDF harus menggunakan aset visual yang benar-benar tersedia.
+
+## Struktur minimum
+
+1. Cover
+2. Brand Overview
+3. Brand Story
+4. Brand Positioning
+5. Logo Primary
+6. Logo Variations
+7. Logo Clear Space
+8. Minimum Size
+9. Incorrect Usage
+10. Color Palette
+11. Primary Colors
+12. Secondary Colors
+13. Typography
+14. Supporting Graphic Elements
+15. Iconography Direction
+16. Photography Direction
+17. Brand Voice
+18. Applications
+19. Existing Mockups
+20. Closing
+
+## Asset usage
+
+Gunakan aset yang tersedia, misalnya:
+
+* approved logo
+* generated logo
+* color palette data
+* typography recommendations
+* mockups
+* visual direction images
+* supporting graphics
+
+Batasi jumlah image agar PDF tidak terlalu besar.
+
+Pilih hanya asset:
+
+* milik project yang benar
+* sudah completed
+* approved atau memenuhi QC policy
+* MIME type image yang valid
+* storage object tersedia
+
+Jangan mengambil gambar project lain.
+
+## Bila logo tidak tersedia
+
+Brand Identity Guideline tidak boleh completed jika katalog menjanjikan logo tetapi tidak ada logo asset valid.
+
+Gunakan error terstruktur seperti:
+
+* `REQUIRED_LOGO_ASSET_MISSING`
+* `BRAND_IDENTITY_ASSETS_INCOMPLETE`
+
+Project harus tetap gagal atau menunggu asset, bukan menghasilkan guideline tanpa logo.
+
+## Bila mockup optional tidak tersedia
+
+PDF tetap boleh dibuat, tetapi:
+
+* section mockup dilewati
+* dicatat di generation report
+* tidak menggunakan placeholder palsu
+
+## Minimum validation
+
+Fixture Brand Identity standar harus menghasilkan minimal 6 halaman dan minimal satu logo image tertanam.
+
+---
+
+# 9. Service-specific content generators
+
+Buat content generator atau output normalizer per document type.
+
+Contoh:
+
+```ts
+generateBrandStrategyContent()
+generateCopywritingDocumentContent()
+generateCreativeConsultationContent()
+generateBrandIdentityGuidelineContent()
+```
+
+Gunakan AI router existing.
+
+Jangan memanggil LLM bila structured output existing sudah cukup.
+
+Urutan prioritas:
+
+1. existing valid structured result
+2. normalize existing result
+3. additional LLM call hanya bila diperlukan
+
+Jika LLM dipanggil, catat:
+
+* provider
+* model
+* input tokens
+* output tokens
+* cost
+* latency
+* purpose
+
+Pastikan output divalidasi dengan schema.
+
+---
+
+# 10. Shared worker contract
+
+Buat konfigurasi document type, misalnya:
+
+```ts
+type DocumentDefinition = {
+  documentType: CreativeDocumentType;
+  serviceSlugs: string[];
+  filenamePrefix: string;
+  minimumPageCount: number;
+  requiresImages: boolean;
+  requiresLogo: boolean;
+  mapper: DocumentMapper;
+  contentGenerator?: DocumentContentGenerator;
+  validateInput: DocumentInputValidator;
+};
+```
+
+Gunakan registry agar worker tidak penuh dengan banyak `if/else`.
+
+Contoh:
+
+```ts
+const DOCUMENT_DEFINITIONS = {
+  company_profile: { ... },
+  brand_strategy: { ... },
+  copywriting: { ... },
+  creative_consultation: { ... },
+  brand_identity_guideline: { ... },
+};
+```
+
+Worker generic:
+
+```text
+resolve type
+→ load definition
+→ load project data
+→ validate required inputs
+→ resolve assets
+→ generate/normalize content
+→ map to document spec
+→ render
+→ validate
+→ upload
+→ verify
+→ record asset
+→ return completion result
+```
+
+---
+
+# 11. Idempotency
+
+Pertahankan perilaku Phase 2.
+
+Untuk semua document type:
+
+* valid asset + valid storage → reuse
+* asset ada, storage hilang → regenerate same version
+* render gagal → no final asset
+* upload gagal → no completed asset
+* verification gagal → failed
+* fresh generation → version 1
+* approved revision → next version
+* retry tidak membuat duplicate final row
+
+Asset uniqueness harus mempertimbangkan:
+
+* project ID
+* document type
+* version
+* final deliverable marker
+
+Company Profile behavior tidak boleh berubah.
+
+---
+
+# 12. Workflow integration
+
+Audit workflow tiap layanan.
+
+Pastikan document-producing services:
+
+* tidak completed setelah text generation
+* masuk status `generating_document`
+* enqueue `pdf_export` hanya setelah prerequisite selesai
+* enqueue hanya satu job aktif per project/document/version
+* completed hanya setelah final PDF valid
+
+Required prerequisite:
+
+## Brand Strategy
+
+* structured strategy content tersedia
+
+## Copywriting
+
+* final copy result tersedia
+
+## Creative Consultation
+
+* consultation result tersedia
+
+## Brand Identity
+
+* strategy/identity text tersedia
+* required logo asset tersedia
+* required palette/type data tersedia jika catalog menjanjikan
+* image pipeline selesai
+
+Jangan enqueue PDF berulang pada setiap workflow poll.
+
+---
+
+# 13. Project completion policy
+
+Project completed hanya jika required deliverable sesuai order snapshot tersedia.
+
+Contoh:
+
+```text
+Brand Strategy
+required:
+- brand_strategy PDF
+
+Copywriting
+required:
+- copywriting PDF
+
+Creative Consultation
+required:
+- creative_consultation PDF
+
+Brand Identity
+required:
+- logo asset
+- brand_identity_guideline PDF
+```
+
+Jangan hanya memeriksa bahwa sebuah `pdf_export` job selesai.
+
+Periksa document type dan ownership.
+
+---
+
+# 14. Asset metadata
+
+Setiap PDF asset minimal memiliki:
+
+* project ID
+* request ID
+* job ID
+* owner/tenant ID
+* asset type document
+* document type
+* MIME type application/pdf
+* filename
+* storage path
+* file size
+* checksum
+* page count
+* version
+* final deliverable true
+* temporary preview false
+* generation report
+* created timestamp
+* completed timestamp
+
+Gunakan metadata JSON apabila schema existing memang mendukungnya.
+
+Jangan membuat migration besar hanya agar metadata tersedia sebagai kolom.
+
+---
+
+# 15. Customer workspace
+
+Workspace Downloads yang sudah generic harus otomatis menampilkan PDF baru.
+
+Verifikasi untuk setiap document type:
+
+* label layanan benar
+* filename benar
+* PDF badge
+* page count
+* file size
+* version
+* generated date
+* secure download/open link
+* tidak ada storage path
+* tidak ada provider cost
+* tidak ada broken button
+
+Jika workspace membutuhkan mapping label tambahan, tambahkan secara terpusat.
+
+Jangan membuat page baru per layanan.
+
+---
+
+# 16. Admin platform
+
+Pastikan admin production monitor menampilkan:
+
+* document type
+* service type
+* output asset
+* page count
+* file size
+* version
+* render duration
+* required asset status
+* validation status
+* retry action
+* error code
+
+Brand Identity harus menunjukkan bila gagal karena required logo asset missing.
+
+---
+
+# 17. Error codes
+
+Gunakan error terstruktur.
+
+Tambahkan bila diperlukan:
+
+* `DOCUMENT_TYPE_UNSUPPORTED`
+* `DOCUMENT_CONTENT_MISSING`
+* `DOCUMENT_CONTENT_INVALID`
+* `DOCUMENT_RENDER_FAILED`
+* `DOCUMENT_VALIDATION_FAILED`
+* `DOCUMENT_UPLOAD_FAILED`
+* `DOCUMENT_UPLOAD_VERIFICATION_FAILED`
+* `REQUIRED_DOCUMENT_ASSET_MISSING`
+* `REQUIRED_LOGO_ASSET_MISSING`
+* `BRAND_IDENTITY_ASSETS_INCOMPLETE`
+
+Jangan expose stack trace kepada customer.
+
+---
+
+# 18. Security
+
+Pertahankan security Phase 2:
+
+* ownership check
+* secure signed access
+* payment gate
+* no public final deliverable
+* sanitized filename
+* sanitized metadata
+* safe remote image fetching
+* SSRF protection
+* maximum image size
+* maximum document sections
+* maximum page count
+* no prompt/API secret inside document
+
+Brand Identity asset selection harus selalu dibatasi project ownership.
+
+---
+
+# 19. Testing wajib
+
+## Regression Company Profile
+
+Semua test Phase 2 harus tetap lulus.
+
+## Shared worker tests
+
+1. Registry resolves all supported document types.
+2. Unsupported service remains `WorkerNotImplementedError`.
+3. Valid existing asset is reused.
+4. Missing storage object triggers regeneration.
+5. Upload verification failure produces failed job.
+6. Retry does not duplicate asset.
+7. Correct document type is recorded.
+8. Cross-project assets are rejected.
+9. Completion guard validates PDF output.
+
+## Brand Strategy
+
+10. Mapper creates correct sections.
+11. Missing optional data is skipped.
+12. No fabricated facts.
+13. Real PDF is multi-page.
+14. Minimum page count enforced.
+15. Asset uploaded and recorded.
+16. Project completes only after PDF.
+
+## Copywriting
+
+17. Copy variants render correctly.
+18. Empty variations are skipped.
+19. Long copy wraps correctly.
+20. Minimum page count is appropriate.
+21. File is downloadable.
+
+## Creative Consultation
+
+22. Findings and recommendations render.
+23. Action items render as bullets.
+24. No raw JSON appears.
+25. PDF is valid and downloadable.
+
+## Brand Identity
+
+26. Valid logo asset is embedded.
+27. Asset from another project is rejected.
+28. Missing logo prevents completion.
+29. Optional mockup failure does not fail whole PDF.
+30. Color palette renders.
+31. Typography section renders.
+32. PDF contains at least one embedded image.
+33. Project requires both logo and guideline PDF.
+34. Retry remains idempotent.
+
+## Workflow
+
+35. `generating_document` used correctly.
+36. Export job is enqueued once.
+37. Text completion alone does not complete project.
+38. Brand Identity image completion alone does not complete project.
+39. Failed PDF marks correct project state.
+40. Retry does not enqueue duplicate active jobs.
+
+## Frontend
+
+41. All document labels render.
+42. Download appears only for valid asset.
+43. Page count and version render.
+44. Internal paths are hidden.
+45. Failed state still renders correctly.
+
+---
+
+# 20. Smoke tests nyata
+
+Jalankan empat smoke tests dengan pipeline render nyata.
+
+## Smoke A — Brand Strategy
+
+Gunakan brief realistis perusahaan B2B.
+
+Verify:
+
+* structured content
+* PDF rendered
+* page count
+* upload
+* asset
+* checksum
+* secure access
+
+## Smoke B — Copywriting
+
+Gunakan output website atau landing-page copy.
+
+Verify:
+
+* headings
+* body copy
+* CTA
+* variations
+* PDF validity
+
+## Smoke C — Creative Consultation
+
+Gunakan consultation brief dengan findings dan recommendations.
+
+Verify:
+
+* sections
+* bullets
+* page count
+* secure download
+
+## Smoke D — Brand Identity
+
+Gunakan:
+
+* identity text
+* one valid logo image
+* palette
+* typography
+* optional mockup
+
+Verify:
+
+* logo image embedded
+* palette rendered
+* typography rendered
+* PDF valid
+* asset belongs to correct project
+* secure access
+
+Catat untuk setiap smoke test:
+
+* document type
+* filename
+* page count
+* file size
+* checksum
+* render duration
+* asset ID
+* storage verification
+* secure access result
+
+Jangan tampilkan signed token.
+
+---
+
+# 21. Verification order
+
+Jalankan:
+
+1. New mapper tests.
+2. Shared worker tests.
+3. Company Profile regression tests.
+4. Phase 1B completion guard tests.
+5. Full API suite.
+6. API typecheck.
+7. API build.
+8. Customer portal tests.
+9. Customer portal typecheck.
+10. Customer portal build.
+11. AI platform typecheck/build jika terdampak.
+12. Four real smoke tests.
+13. `git diff --check`.
+14. Final diff review.
+
+---
+
+# 22. Final review
+
+Pastikan tidak ada:
+
+* duplicate document worker
+* duplicated storage code
+* duplicated PDF validation
+* raw JSON output inside PDF
+* debug logs
+* dead stub
+* unrelated changes
+* hard-coded customer data
+* hard-coded signed token
+* destructive migration
+* public final deliverable URL
+* project completed before required document exists
+
+---
+
+# 23. Laporan akhir
+
+Laporkan:
+
+* recovery status
+* architecture refactor
+* shared components
+* mappers added
+* services supported
+* files created
+* files changed
+* dependencies
+* migrations
+* workflow changes
+* project completion rules
+* idempotency behavior
+* security checks
+* test count
+* typecheck results
+* build results
+* smoke test results
+
+Untuk setiap layanan, berikan:
+
+| Service | Filename | Pages | File Size | Checksum | Storage Verified | Secure Access |
+| ------- | -------: | ----: | --------: | -------- | ---------------- | ------------- |
+
+Jangan mengklaim Phase 3 selesai apabila salah satu dari empat layanan masih hanya menghasilkan JSON tanpa PDF final.
+
+Phase 3 selesai hanya jika:
+
+* Company Profile tetap berfungsi
+* Brand Strategy menghasilkan PDF nyata
+* Copywriting menghasilkan PDF nyata
+* Creative Consultation menghasilkan PDF nyata
+* Brand Identity menghasilkan guideline PDF nyata dengan logo asset valid
+* semua file tersimpan
+* semua asset tercatat
+* secure customer access berhasil
+* workflow tidak false-completed
+* seluruh test dan build bersih

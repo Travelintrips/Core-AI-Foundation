@@ -592,6 +592,25 @@ export interface WorkspaceDownloadItem {
   revisionNotes: string | null;
   locked: boolean;
   createdAt: string;
+  /** Present for document assets (PDF). */
+  pageCount?: number | null;
+  /** File size in bytes — present for document assets. */
+  fileSizeBytes?: number | null;
+  /** Structured document type, e.g. "brand_strategy". */
+  documentType?: string | null;
+  /** MIME type of the asset. */
+  mimeType?: string | null;
+}
+
+function formatDocumentTitle(documentType: string): string {
+  const labels: Record<string, string> = {
+    company_profile:          "Company Profile PDF",
+    brand_strategy:           "Brand Strategy PDF",
+    copywriting:              "Copywriting PDF",
+    creative_consultation:    "Creative Consultation PDF",
+    brand_identity_guideline: "Brand Identity Guideline PDF",
+  };
+  return labels[documentType] ?? documentType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function guessCategory(assetType: string, category: string | null): string {
@@ -615,9 +634,15 @@ async function listDownloadsForProjects(
   const byId = new Map(projects.map((p) => [p.projectNumber, p]));
   return assets.map((a) => {
     const proj = byId.get(a.projectId);
+    const meta = (a.metadata ?? {}) as Record<string, unknown>;
+    const isDoc = a.assetType === "document";
+    const docType = isDoc ? (a.category ?? null) : null;
+    const title = isDoc
+      ? `${proj?.brandName ?? "Asset"} — ${formatDocumentTitle(docType ?? "document")} v${a.version}`
+      : `${proj?.brandName ?? "Asset"} — ${a.assetType} #${a.id}`;
     return {
       id: a.id,
-      title: `${proj?.brandName ?? "Asset"} — ${a.assetType} #${a.id}`,
+      title,
       category: guessCategory(a.assetType, a.category),
       projectNumber: a.projectId,
       projectName: proj?.brandName ?? a.projectId,
@@ -627,6 +652,10 @@ async function listDownloadsForProjects(
       revisionNotes: a.revisionNotes,
       locked: !(proj?.filesUnlocked ?? false),
       createdAt: a.createdAt.toISOString(),
+      pageCount:    isDoc ? (typeof meta["pageCount"]    === "number" ? meta["pageCount"]    : null) : null,
+      fileSizeBytes: isDoc ? (typeof meta["fileSizeBytes"] === "number" ? meta["fileSizeBytes"] : null) : null,
+      documentType: docType,
+      mimeType:     isDoc ? (typeof meta["mimeType"] === "string" ? meta["mimeType"] : "application/pdf") : null,
     };
   });
 }

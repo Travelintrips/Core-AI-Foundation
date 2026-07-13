@@ -29,7 +29,14 @@ import { maybeFinalizePortfolioPublish } from "./demoPortfolioGeneratorService.j
 import { logger } from "../lib/logger.js";
 import { WorkerNotImplementedError } from "./jobCompletionGuard.js";
 import { resolveProjectDocumentType } from "./creativeProjectDocumentType.js";
-import { executeCompanyProfilePdfExportJob } from "./companyProfilePdfWorkerService.js";
+import {
+  executeGenericPdfExportJob,
+  getSupportedDocumentTypes,
+} from "./creativeDocumentWorkerService.js";
+import { initDocumentRegistry } from "./creativeDocumentRegistry.js";
+
+// Register all document type definitions at module load time.
+initDocumentRegistry();
 
 // ── Real AI execution helpers ───────────────────────────────────────────────
 
@@ -490,8 +497,8 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
         ? await db.select().from(creativeProjectsTable).where(eq(creativeProjectsTable.id, pdfProjectId))
         : [];
       const documentType = pdfProject ? await resolveProjectDocumentType(pdfProject) : null;
-      if (documentType === "company_profile") {
-        return executeCompanyProfilePdfExportJob(job);
+      if (documentType && getSupportedDocumentTypes().includes(documentType)) {
+        return executeGenericPdfExportJob(job, documentType);
       }
       throw new WorkerNotImplementedError(`pdf_export for document type '${documentType ?? "unknown"}'`);
     }
