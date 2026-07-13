@@ -1,0 +1,442 @@
+PHASE 1 — CREATIVE AI BRIEF UI FOUNDATION
+OBJECTIVE
+
+Saya ingin melakukan redesign total pada halaman Brief Creative AI agar menjadi lebih modern, premium, dan user-friendly.
+
+Tujuan fase ini bukan mengubah workflow, tetapi membangun pondasi UI yang nantinya dipakai oleh seluruh layanan Creative AI.
+
+Layanan yang harus menggunakan komponen yang sama:
+
+Brand Identity
+Logo Design
+Company Profile
+Pitch Deck
+Presentation Design
+Social Media Design
+Copywriting
+Brand Strategy
+Image Generation
+Creative Consultation
+Seluruh layanan Creative AI di masa depan
+
+Semua komponen harus reusable.
+
+IMPORTANT
+
+JANGAN mengubah:
+
+Backend API
+Database
+Workflow AI
+Pricing
+Validation
+Autosave
+Production Pipeline
+Order Pipeline
+
+Semua endpoint tetap sama.
+
+Yang diubah hanya UI Component dan UX.
+
+1. CREATE DESIGN SYSTEM
+
+Buat folder baru
+
+/components/creative-ui/
+
+Berisi reusable components.
+
+Minimal:
+
+ChoiceChip.tsx
+
+MultiChoiceChip.tsx
+
+SuggestionGroup.tsx
+
+SelectionCard.tsx
+
+ColorPicker.tsx
+
+UploadDropzone.tsx
+
+ProgressStepper.tsx
+
+SectionCard.tsx
+
+OptionGrid.tsx
+
+TagSelector.tsx
+
+SummaryCard.tsx
+
+FieldTitle.tsx
+
+HelperText.tsx
+
+Semua reusable.
+
+2. DESIGN STYLE
+
+Pertahankan Dark Theme.
+
+Gunakan style yang konsisten.
+
+Background:
+
+Very Dark Navy
+
+Card:
+
+Dark Purple
+
+Primary:
+
+Purple Gradient
+
+Radius:
+
+16-20px
+
+Spacing:
+
+Lebih lega
+
+Typography:
+
+Modern
+
+Hover:
+
+Smooth
+
+Transition:
+
+200-300ms
+
+Tidak mengubah branding Creative AI.
+
+3. CHOICE CHIP
+
+Buat komponen baru.
+
+Contoh
+
+Retail
+
+Technology
+
+Coffee Shop
+
+Healthcare
+
+Construction
+
+Ketika dipilih
+
+✓ background berubah
+
+✓ border berubah
+
+✓ icon check muncul
+
+Support:
+
+Single Select
+
+Multi Select
+
+Disabled
+
+Loading
+
+Hover
+
+Keyboard
+
+4. OPTION CARD
+
+Buat card selectable.
+
+Misalnya
+
+👤 Personal
+
+👥 Startup
+
+🏢 Small Business
+
+🏬 Medium Business
+
+🏙 Enterprise
+
+Saat dipilih
+
+Card glow
+
+Border highlight
+
+Scale animation kecil
+
+5. TAG SELECTOR
+
+Komponen untuk
+
+Style
+
+Goal
+
+Audience
+
+Deliverable
+
+Industry
+
+Support:
+
+Search
+
+Filter
+
+Grouping
+
+Keyboard Navigation
+
+6. COLOR PICKER
+
+Buat reusable color picker.
+
+Preset
+
+Blue
+
+Black
+
+White
+
+Gold
+
+Red
+
+Purple
+
+Green
+
+Orange
+
+Gray
+
+Brown
+
+No Preference
+
+Support Multi Select.
+
+7. SECTION CARD
+
+Setiap bagian form dibungkus component.
+
+Misalnya
+
+Business Information
+
+Project Goal
+
+Style
+
+Target Market
+
+Assets
+
+Deadline
+
+Semua tampil konsisten.
+
+8. UPLOAD COMPONENT
+
+Drag & Drop
+
+Preview
+
+Progress
+
+Replace File
+
+Delete
+
+Multiple File
+
+Image Preview
+
+PDF Preview
+
+Reuse untuk semua layanan.
+
+9. NEW PROGRESS BAR
+
+Progress saat ini masih sederhana.
+
+Buat lebih modern.
+
+Contoh
+
+STEP 2 OF 7
+
+████████░░░░░
+
+35%
+
+Estimated 3 Minutes Remaining
+
+Tetap gunakan step existing.
+
+Jangan ubah workflow.
+
+10. FIELD HEADER
+
+Semua field menggunakan component.
+
+Contoh
+
+Business Information
+
+Tell us about your business.
+
+(optional)
+
+(required)
+
+Konsisten.
+
+11. SUGGESTION GROUP
+
+Komponen untuk quick suggestion.
+
+Misalnya
+
+Coffee Shop
+
+Restaurant
+
+Hotel
+
+Technology
+
+Retail
+
+Bisa digunakan semua halaman.
+
+12. SUMMARY CARD
+
+Buat reusable component.
+
+Nanti dipakai halaman review.
+
+Belum dipasang.
+
+Hanya dibuat.
+
+13. RESPONSIVE
+
+Desktop
+
+Tablet
+
+Mobile
+
+Semua bagus.
+
+14. ACCESSIBILITY
+
+Keyboard
+
+Focus Ring
+
+ARIA
+
+Screen Reader
+
+Kontras warna tetap baik.
+
+15. ANIMATION
+
+Gunakan Framer Motion yang sudah ada di project (jika tersedia).
+
+Animation ringan:
+
+Fade
+
+Slide
+
+Scale
+
+Hover
+
+Selected
+
+Tidak berlebihan.
+
+16. PERFORMANCE
+
+Gunakan:
+
+React.memo
+
+useMemo
+
+useCallback
+
+Agar komponen tidak sering re-render.
+
+17. REUSABILITY
+
+Semua komponen harus configurable.
+
+Contoh:
+
+ChoiceChip cukup menerima props:
+
+options
+value
+multiple
+searchable
+disabled
+onChange
+
+Jangan hardcode data.
+
+18. NO BREAKING CHANGES
+
+Semua halaman tetap berjalan.
+
+Tidak boleh ada perubahan pada:
+
+API
+
+Route
+
+Form submit
+
+Autosave
+
+Validation
+
+Draft
+
+Backend
+
+Database
+
+19. OUTPUT
+
+Di akhir pekerjaan berikan laporan:
+
+Komponen baru yang dibuat
+File yang dimodifikasi
+Tidak ada backend yang berubah
+Tidak ada API yang berubah
+Tidak ada database yang berubah
+Semua komponen reusable
+Siap digunakan pada seluruh layanan Creative AI
+
+Jangan mengimplementasikan logika bisnis baru pada fase ini. Fokus hanya membangun fondasi UI reusable yang akan dipakai pada fase-fase berikutnya.
