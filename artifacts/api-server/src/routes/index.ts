@@ -55,11 +55,15 @@ import customerHealthRouter from "./customerHealth";
 import commercialAnalyticsRouter from "./commercialAnalytics";
 import storageRouter from "./storage";
 import observabilityRouter from "./observability";
+import internalAuthRouter from "./internal-auth";
+import internalCatalogRouter from "./internal-catalog";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(storageRouter);
+router.use(internalAuthRouter);
+router.use(internalCatalogRouter);
 router.use(agentsRouter);
 router.use(registryRouter);
 router.use(orchestratorRouter);

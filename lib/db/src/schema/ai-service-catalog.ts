@@ -29,6 +29,12 @@ export const aiServiceCategoriesTable = appSchema.table("ai_service_categories",
   icon: text("icon"),
   displayOrder: integer("display_order").notNull().default(0),
   status: text("status").notNull().default("active"), // active | draft | archived
+  // Customer/public vs internal-company-only visibility split. Only
+  // "public" categories are ever returned to the customer-facing catalog
+  // endpoint or shown in the customer portal. Everything else requires an
+  // authenticated internal-role session (see middleware/internalAuth.ts).
+  visibility: text("visibility").notNull().default("internal"), // public | internal | disabled
+  commercialStatus: text("commercial_status").notNull().default("internal_only"), // commercial_ready | internal_only | beta | disabled
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

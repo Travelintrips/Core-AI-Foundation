@@ -13,7 +13,7 @@
  * GET        /ai/catalog/analytics
  */
 import { Router } from "express";
-import { eq, desc, and, ne } from "drizzle-orm";
+import { eq, desc, and, ne, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import {
   db,
@@ -82,6 +82,31 @@ function parseId(raw: string | undefined, res: import("express").Response): numb
   }
   return id;
 }
+
+// ── Public catalog (customer-facing, no auth) ──────────────────────────────
+//
+// This is the ONLY catalog endpoint the customer portal may call. It never
+// returns a category whose visibility isn't "public" — currently just
+// Creative AI. Bypasses adminAuthWithExceptions via an exact-path exception
+// in middleware/adminAuth.ts (PUBLIC_PATH_PREFIXES).
+router.get("/ai/catalog/public", async (_req, res): Promise<void> => {
+  const categories = await db
+    .select()
+    .from(aiServiceCategoriesTable)
+    .where(eq(aiServiceCategoriesTable.visibility, "public"))
+    .orderBy(aiServiceCategoriesTable.displayOrder, aiServiceCategoriesTable.name);
+
+  const publicCategoryIds = categories.map((c) => c.id);
+  const services = publicCategoryIds.length
+    ? await db
+        .select()
+        .from(aiServicesTable)
+        .where(and(inArray(aiServicesTable.categoryId, publicCategoryIds), eq(aiServicesTable.status, "active")))
+        .orderBy(aiServicesTable.serviceName)
+    : [];
+
+  res.json({ categories, services });
+});
 
 // ── Categories ────────────────────────────────────────────────────────────────
 
@@ -261,6 +286,25 @@ async function loadServiceAndPackage(serviceId: number, packageId: number | null
   return { service, pkg };
 }
 
+/**
+ * Customer-facing transactional guard: a quote/order can only be placed
+ * against a service whose category is visibility='public' (Creative AI
+ * today). Blocks a customer from buying/requesting an internal-only
+ * service even if they guess a valid serviceId.
+ */
+async function assertServiceIsPubliclyRequestable(categoryId: number, res: import("express").Response): Promise<boolean> {
+  const [category] = await db
+    .select()
+    .from(aiServiceCategoriesTable)
+    .where(eq(aiServiceCategoriesTable.id, categoryId))
+    .limit(1);
+  if (!category || category.visibility !== "public") {
+    res.status(403).json({ error: "This service is not available for customer purchase." });
+    return false;
+  }
+  return true;
+}
+
 router.post("/ai/catalog/services/:id/quote", async (req, res): Promise<void> => {
   const serviceId = parseId(req.params.id, res);
   if (serviceId === null) return;
@@ -269,6 +313,7 @@ router.post("/ai/catalog/services/:id/quote", async (req, res): Promise<void> =>
   const loaded = await loadServiceAndPackage(serviceId, body.packageId, res);
   if (!loaded) return;
   const { service, pkg } = loaded;
+  if (!(await assertServiceIsPubliclyRequestable(service.categoryId, res))) return;
 
   const breakdown = await generatePricingSnapshot(
     service,
@@ -298,6 +343,7 @@ router.post("/ai/catalog/services/:id/request", async (req, res): Promise<void> 
   const loaded = await loadServiceAndPackage(serviceId, parsed.data.packageId, res);
   if (!loaded) return;
   const { service, pkg } = loaded;
+  if (!(await assertServiceIsPubliclyRequestable(service.categoryId, res))) return;
 
   const breakdown = await generatePricingSnapshot(
     service,

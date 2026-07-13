@@ -64,5 +64,14 @@ export const uploadLimiter = rateLimit({
   handler: jsonHandler("Too many upload requests. Please wait before uploading again."),
 });
 
+/** 8 req per 15 min per IP — internal staff login (brute-force guard) */
+export const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonHandler("Too many login attempts. Please wait before trying again."),
+});
+
 // Satisfy eslint unused-var warning
 void JSON_RESPONSE;

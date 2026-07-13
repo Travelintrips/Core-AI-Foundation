@@ -51,6 +51,8 @@ const PUBLIC_PATH_PREFIXES = [
   "/ai/healthz",
   "/public",   // public client review endpoints — token-protected, not admin-key-protected
   "/storage/public-objects", // unconditionally public asset serving (object-storage skill convention)
+  "/ai/catalog/public", // customer-facing catalog — must never require the admin key
+  "/internal/auth/login", // internal staff login — must be reachable before a session exists
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {

@@ -91,19 +91,26 @@ export type ServiceRequestInput = QuoteSelections & {
   notes?: string;
 };
 
-export function useCategories() {
+// Customer portal must only ever see publicly-visible categories/services
+// (Creative AI today). This hits the public, unauthenticated endpoint —
+// never the internal /api/ai/catalog/categories admin endpoint.
+export function usePublicCatalog() {
   return useQuery({
-    queryKey: ['catalog', 'categories'],
-    queryFn: ({ signal }) => customFetch<ServiceCategory[]>('/api/ai/catalog/categories', { signal }),
+    queryKey: ['catalog', 'public'],
+    queryFn: ({ signal }) =>
+      customFetch<{ categories: ServiceCategory[]; services: CatalogService[] }>('/api/ai/catalog/public', { signal }),
   });
 }
 
+export function useCategories() {
+  const { data, ...rest } = usePublicCatalog();
+  return { ...rest, data: data?.categories };
+}
+
 export function useServices(categoryId?: number) {
-  return useQuery({
-    queryKey: ['catalog', 'services', categoryId ?? 'all'],
-    queryFn: ({ signal }) =>
-      customFetch<CatalogService[]>(`/api/ai/catalog/services${categoryId ? `?categoryId=${categoryId}` : ''}`, { signal }),
-  });
+  const { data, ...rest } = usePublicCatalog();
+  const filtered = data?.services.filter((s) => !categoryId || s.categoryId === categoryId);
+  return { ...rest, data: filtered };
 }
 
 export function useServiceDetail(serviceId: number | undefined) {
