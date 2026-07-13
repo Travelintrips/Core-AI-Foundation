@@ -6,8 +6,24 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { CanonicalEvent } from "../use-runtime-event-stream";
-import { mergeEvents } from "../use-runtime-event-stream";
+import type { CanonicalEvent, ExecutionSummary } from "../use-runtime-event-stream";
+import { mergeEvents, mergeSummaries } from "../use-runtime-event-stream";
+
+function makeSummary(overrides: Partial<ExecutionSummary> = {}): ExecutionSummary {
+  return {
+    sourceEventId: "e1",
+    eventType: "step.started",
+    title: "Test Title",
+    summary: "Test summary.",
+    whyItMatters: "Test why-it-matters.",
+    nextStep: null,
+    status: "info",
+    customerAction: null,
+    isDerived: true,
+    artifactCount: 0,
+    ...overrides,
+  };
+}
 
 function makeEvent(overrides: Partial<CanonicalEvent> = {}): CanonicalEvent {
   return {
@@ -130,5 +146,41 @@ describe("mergeEvents — activity deduplication", () => {
     ];
     const result = mergeEvents(initial, duplicate);
     expect(result).toHaveLength(1); // not duplicated
+  });
+});
+
+// ─── 5. mergeSummaries (V4.1) ──────────────────────────────────────────────────
+
+describe("mergeSummaries", () => {
+  it("keys summaries by sourceEventId", () => {
+    const result = mergeSummaries({}, [makeSummary({ sourceEventId: "e1" })]);
+    expect(Object.keys(result)).toEqual(["e1"]);
+  });
+
+  it("merges without dropping previously known summaries", () => {
+    const existing = mergeSummaries({}, [makeSummary({ sourceEventId: "e1", title: "First" })]);
+    const merged = mergeSummaries(existing, [makeSummary({ sourceEventId: "e2", title: "Second" })]);
+    expect(Object.keys(merged).sort()).toEqual(["e1", "e2"]);
+    expect(merged["e1"]?.title).toBe("First");
+    expect(merged["e2"]?.title).toBe("Second");
+  });
+
+  it("incoming summary overwrites an existing one with the same sourceEventId", () => {
+    const existing = mergeSummaries({}, [makeSummary({ sourceEventId: "e1", title: "Old" })]);
+    const merged = mergeSummaries(existing, [makeSummary({ sourceEventId: "e1", title: "New" })]);
+    expect(merged["e1"]?.title).toBe("New");
+  });
+
+  it("returns the same reference when incoming is empty (no unnecessary re-render)", () => {
+    const existing = mergeSummaries({}, [makeSummary({ sourceEventId: "e1" })]);
+    expect(mergeSummaries(existing, [])).toBe(existing);
+  });
+
+  it("never contains banned fields regardless of input", () => {
+    const merged = mergeSummaries({}, [makeSummary({ sourceEventId: "e1" })]);
+    const serialized = JSON.stringify(merged).toLowerCase();
+    for (const banned of ["apikey", "systemprompt", "stacktrace", "\"cost\""]) {
+      expect(serialized).not.toContain(banned);
+    }
   });
 });

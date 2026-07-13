@@ -265,6 +265,7 @@ export function CurrentAiTask({
   deliveryDate,
   filesCount,
   startedAt,
+  summary,
 }: {
   stageName: string;
   stageLabel: string;
@@ -273,6 +274,12 @@ export function CurrentAiTask({
   deliveryDate: string | null;
   filesCount: number;
   startedAt: string;
+  /**
+   * V4.1 — deterministic, customer-safe context for the current step, derived
+   * from executionSummaryService. Optional: renders nothing extra when absent,
+   * so this never fabricates progress or an ETA that isn't already shown above.
+   */
+  summary?: { whyItMatters: string; nextStep: string | null };
 }) {
   const fmt = (d: string | null) => {
     if (!d) return "—";
@@ -341,6 +348,17 @@ export function CurrentAiTask({
             </div>
           ))}
         </div>
+
+        {summary && (
+          <div className="mt-3 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+            <p className="text-[11px] leading-snug" style={{ color: "#94A3B8" }}>{summary.whyItMatters}</p>
+            {summary.nextStep && (
+              <p className="text-[11px] leading-snug mt-1.5" style={{ color: "#FB923C" }}>
+                Next: {summary.nextStep}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     );
   }

@@ -115,12 +115,16 @@ router.get(
       return;
     }
 
-    // Return the already-computed events from the detail (no extra DB round-trip)
+    // Return the already-computed events from the detail (no extra DB round-trip).
+    // V4.1 — pair events with their pre-computed summaries (same order/length as
+    // detail.events) before filtering, so `summaries` stays index-aligned with `events`.
+    const eventIndexById = new Map(detail.events.map((e, i) => [e.eventId, i]));
     const events = (req.query["filter"] === "activity")
       ? filterForActivityFeed(detail.events)
       : detail.events;
+    const summaries = events.map((e) => detail.eventSummaries[eventIndexById.get(e.eventId)!]);
 
-    res.json({ events, total: events.length });
+    res.json({ events, summaries, total: events.length });
   },
 );
 

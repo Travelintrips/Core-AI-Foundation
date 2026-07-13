@@ -1,6 +1,18 @@
-import { motion } from "framer-motion";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import type { WorkspaceActivity } from "@/hooks/use-workspace";
-import { CheckCircle2, Clock, Loader2, AlertCircle, Zap, Activity } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, AlertCircle, Zap, Activity, ChevronDown } from "lucide-react";
+
+/**
+ * V4.1 — optional, deterministic context from executionSummaryService, keyed
+ * by the same resourceId as the base WorkspaceActivity item. Additive: items
+ * without a match simply don't expand.
+ */
+export type ActivityItemContext = {
+  whyItMatters: string;
+  nextStep: string | null;
+  customerAction: { kind: string; label: string } | null;
+};
 
 function fmtTime(iso: string) {
   try {
@@ -51,11 +63,15 @@ function StatusIcon({ status }: { status: string }) {
 export function WorkspaceActivityFeed({
   items,
   maxItems = 10,
+  contextByResourceId,
 }: {
   items: WorkspaceActivity[];
   maxItems?: number;
+  /** V4.1 — optional per-item expanded context, keyed by item.resourceId. */
+  contextByResourceId?: Record<string, ActivityItemContext>;
 }) {
   const shown = items.slice(0, maxItems);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   return (
     <div>
@@ -76,9 +92,13 @@ export function WorkspaceActivityFeed({
           <ol className="space-y-0.5">
             {shown.map((item, i) => {
               const ss = statusStyle(item.status);
+              const key = `${item.createdAt}-${i}`;
+              const context = item.resourceId ? contextByResourceId?.[item.resourceId] : undefined;
+              const hasExpandable = !!(context && (context.whyItMatters || context.nextStep));
+              const isOpen = expandedKey === key;
               return (
                 <motion.li
-                  key={`${item.createdAt}-${i}`}
+                  key={key}
                   initial={{ opacity: 0, x: -6 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.04, duration: 0.28 }}
@@ -97,9 +117,22 @@ export function WorkspaceActivityFeed({
                     className="flex-1 min-w-0 py-2 border-b"
                     style={{ borderColor: "rgba(255,255,255,0.05)" }}
                   >
-                    <p className="text-[12px] font-medium leading-snug" style={{ color: "#CBD5E1" }}>
-                      {item.label}
-                    </p>
+                    <button
+                      type="button"
+                      disabled={!hasExpandable}
+                      onClick={() => setExpandedKey((k) => (k === key ? null : key))}
+                      className={`w-full text-left flex items-start justify-between gap-2 ${hasExpandable ? "cursor-pointer" : "cursor-default"}`}
+                    >
+                      <p className="text-[12px] font-medium leading-snug" style={{ color: "#CBD5E1" }}>
+                        {item.label}
+                      </p>
+                      {hasExpandable && (
+                        <ChevronDown
+                          className="w-3.5 h-3.5 shrink-0 mt-0.5 transition-transform"
+                          style={{ color: "#475569", transform: isOpen ? "rotate(180deg)" : "none" }}
+                        />
+                      )}
+                    </button>
                     <div className="flex items-center gap-2 mt-0.5">
                       <p className="text-[10px]" style={{ color: "#475569" }}>
                         {fmtTime(item.createdAt)} · {fmtRelative(item.createdAt)}
@@ -113,6 +146,31 @@ export function WorkspaceActivityFeed({
                         </span>
                       )}
                     </div>
+
+                    <AnimatePresence initial={false}>
+                      {hasExpandable && isOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2, ease: "easeInOut" }}
+                          className="overflow-hidden"
+                        >
+                          <div className="pt-2 space-y-1">
+                            {context!.whyItMatters && (
+                              <p className="text-[11px] leading-snug" style={{ color: "#94A3B8" }}>
+                                {context!.whyItMatters}
+                              </p>
+                            )}
+                            {context!.nextStep && (
+                              <p className="text-[11px] leading-snug" style={{ color: "#FB923C" }}>
+                                Next: {context!.nextStep}
+                              </p>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </motion.li>
               );

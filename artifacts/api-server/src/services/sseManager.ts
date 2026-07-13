@@ -19,8 +19,9 @@
  */
 
 import { logger } from "../lib/logger.js";
-import { getEventsForProject } from "./canonicalEventService.js";
+import { getEventsWithSummariesForProject } from "./canonicalEventService.js";
 import type { CanonicalEvent } from "./canonicalEventService.js";
+import type { EventWithSummary, ExecutionSummary } from "./executionSummaryService.js";
 import type { Response } from "express";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -152,6 +153,8 @@ export interface Subscriber {
 interface ProjectChannel {
   readonly projectId: string;
   readonly internalProjectId: number;
+  /** V4.1 — passed through to the summary layer's next-step/customerAction derivation. Never guessed here. */
+  filesUnlocked: boolean;
   subscribers: Set<Subscriber>;
   pollTimer: ReturnType<typeof setInterval> | null;
   knownEventIds: Set<string>;
@@ -242,15 +245,21 @@ export function removeSubscriber(sub: Subscriber): void {
 // Deliver event to subscriber
 // ─────────────────────────────────────────────────────────────────────────────
 
-function deliverEvent(sub: Subscriber, event: CanonicalEvent): void {
+function deliverEvent(sub: Subscriber, pair: EventWithSummary): void {
   if (sub.res.writableEnded) return;
-  const cursorStr = encodeCursor({ createdAt: event.createdAt, eventId: event.eventId });
+  const cursorStr = encodeCursor({ createdAt: pair.event.createdAt, eventId: pair.event.eventId });
   writeSSE(sub.res, {
     id: cursorStr,
     event: "runtime.event",
-    data: { event },
+    // V4.1 — additive `summary` field. Old clients that only read `data.event`
+    // are unaffected; nothing about `event` itself changed.
+    data: { event: pair.event, summary: pair.summary },
   });
   totalDelivered++;
+}
+
+function sortPairs(pairs: EventWithSummary[]): EventWithSummary[] {
+  return [...pairs].sort((a, b) => compareByCursor(a.event, b.event));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -260,9 +269,11 @@ function deliverEvent(sub: Subscriber, event: CanonicalEvent): void {
 async function pollAndFanOut(channel: ProjectChannel): Promise<void> {
   if (channel.subscribers.size === 0) return;
 
-  let allEvents: CanonicalEvent[];
+  let allPairs: EventWithSummary[];
   try {
-    allEvents = await getEventsForProject(channel.projectId, channel.internalProjectId);
+    allPairs = await getEventsWithSummariesForProject(channel.projectId, channel.internalProjectId, {
+      filesUnlocked: channel.filesUnlocked,
+    });
     channel.queryFailCount = 0;
   } catch (err) {
     channel.queryFailCount++;
@@ -286,14 +297,15 @@ async function pollAndFanOut(channel: ProjectChannel): Promise<void> {
     return;
   }
 
-  const sorted = sortEvents(allEvents);
+  const sorted = sortPairs(allPairs);
 
-  // Find genuinely new events (not yet seen by this channel)
-  const newEvents = sorted.filter((e) => !channel.knownEventIds.has(e.eventId));
-  if (newEvents.length === 0) return;
+  // Find genuinely new events (not yet seen by this channel) — dedup is still
+  // keyed on the canonical eventId, unchanged from the pre-V4.1 behavior.
+  const newPairs = sorted.filter((p) => !channel.knownEventIds.has(p.event.eventId));
+  if (newPairs.length === 0) return;
 
   // Update known-event set (bounded dedup)
-  for (const e of newEvents) channel.knownEventIds.add(e.eventId);
+  for (const p of newPairs) channel.knownEventIds.add(p.event.eventId);
   if (channel.knownEventIds.size > DEDUP_SET_MAX) {
     const arr = Array.from(channel.knownEventIds);
     channel.knownEventIds = new Set(arr.slice(arr.length - DEDUP_SET_TRIM_TARGET));
@@ -306,8 +318,8 @@ async function pollAndFanOut(channel: ProjectChannel): Promise<void> {
       deadSubs.push(sub);
       continue;
     }
-    for (const event of newEvents) {
-      deliverEvent(sub, event);
+    for (const pair of newPairs) {
+      deliverEvent(sub, pair);
     }
     resetIdleTimer(sub);
   }
@@ -326,6 +338,8 @@ export interface RegisterOptions {
   internalProjectId: number;
   afterCursor: EventCursor | null;
   isProjectTerminal: boolean;
+  /** V4.1 — real flag from the caller; used only for ExecutionSummary derivation. */
+  filesUnlocked?: boolean;
 }
 
 export type RegisterResult =
@@ -354,12 +368,16 @@ export async function registerSubscriber(opts: RegisterOptions): Promise<Registe
     channel = {
       projectId: opts.projectId,
       internalProjectId: opts.internalProjectId,
+      filesUnlocked: opts.filesUnlocked ?? false,
       subscribers: new Set(),
       pollTimer: null,
       knownEventIds: new Set(),
       queryFailCount: 0,
     };
     channels.set(opts.projectId, channel);
+  } else {
+    // Keep the flag fresh — a later subscriber may know a more current value.
+    channel.filesUnlocked = opts.filesUnlocked ?? channel.filesUnlocked;
   }
 
   if (channel.subscribers.size >= MAX_SUBSCRIBERS_PER_PROJECT) {
@@ -389,33 +407,36 @@ export async function registerSubscriber(opts: RegisterOptions): Promise<Registe
   connectionsByToken.set(opts.token, byToken);
 
   // ── Fetch snapshot ────────────────────────────────────────────────────────
-  let allEvents: CanonicalEvent[] = [];
+  let allPairs: EventWithSummary[] = [];
   try {
-    allEvents = await getEventsForProject(opts.projectId, opts.internalProjectId);
+    allPairs = await getEventsWithSummariesForProject(opts.projectId, opts.internalProjectId, {
+      filesUnlocked: channel.filesUnlocked,
+    });
   } catch (err) {
     logger.warn({ err, projectId: opts.projectId }, "[sse] Snapshot query failed — sending empty snapshot");
   }
 
-  const sorted = sortEvents(allEvents);
+  const sorted = sortPairs(allPairs);
 
   // Seed channel's known-event set from snapshot
-  for (const e of sorted) channel.knownEventIds.add(e.eventId);
+  for (const p of sorted) channel.knownEventIds.add(p.event.eventId);
 
   // Determine events to send:
   //   reconnect (cursor present) → events after cursor only
   //   initial connect            → latest MAX_INITIAL_EVENTS
-  let snapshotEvents: CanonicalEvent[];
+  let snapshotPairs: EventWithSummary[];
   if (opts.afterCursor) {
-    snapshotEvents = filterAfterCursor(sorted, opts.afterCursor);
+    const cursor = opts.afterCursor;
+    snapshotPairs = sorted.filter((p) => isAfterCursor(p.event, cursor));
   } else {
-    snapshotEvents = sorted.slice(-MAX_INITIAL_EVENTS);
+    snapshotPairs = sorted.slice(-MAX_INITIAL_EVENTS);
   }
 
   const lastEventId =
     sorted.length > 0
       ? encodeCursor({
-          createdAt: sorted[sorted.length - 1]!.createdAt,
-          eventId: sorted[sorted.length - 1]!.eventId,
+          createdAt: sorted[sorted.length - 1]!.event.createdAt,
+          eventId: sorted[sorted.length - 1]!.event.eventId,
         })
       : null;
 
@@ -423,7 +444,10 @@ export async function registerSubscriber(opts: RegisterOptions): Promise<Registe
     id: `snapshot:${Date.now()}`,
     event: "snapshot",
     data: {
-      events: snapshotEvents,
+      // Unchanged shape — CanonicalEvent[] only. Existing clients keep working untouched.
+      events: snapshotPairs.map((p) => p.event),
+      // V4.1 — additive, same length/order as `events`. Old clients ignore this key.
+      summaries: snapshotPairs.map((p) => p.summary),
       lastEventId,
       generatedAt: new Date().toISOString(),
     },

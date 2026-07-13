@@ -11,7 +11,7 @@ import type { CanonicalEvent } from "../canonicalEventService.js";
 
 // ─── Mock canonicalEventService before importing sseManager ───────────────────
 vi.mock("../canonicalEventService.js", () => ({
-  getEventsForProject: vi.fn(),
+  getEventsWithSummariesForProject: vi.fn(),
 }));
 
 // ─── Mock logger ──────────────────────────────────────────────────────────────
@@ -33,7 +33,27 @@ import {
   MAX_SUBSCRIBERS_PER_PROJECT,
   getObservability,
 } from "../sseManager.js";
-import { getEventsForProject } from "../canonicalEventService.js";
+import { getEventsWithSummariesForProject } from "../canonicalEventService.js";
+import type { ExecutionSummary } from "../executionSummaryService.js";
+
+function makeSummary(event: CanonicalEvent): ExecutionSummary {
+  return {
+    sourceEventId: event.eventId,
+    eventType: event.eventType,
+    title: "Test Title",
+    summary: event.publicMessage,
+    whyItMatters: "Test why-it-matters.",
+    nextStep: null,
+    status: "info",
+    customerAction: null,
+    isDerived: true,
+    artifactCount: 0,
+  };
+}
+
+function wrap(events: CanonicalEvent[]): { event: CanonicalEvent; summary: ExecutionSummary }[] {
+  return events.map((event) => ({ event, summary: makeSummary(event) }));
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -198,10 +218,10 @@ describe("filterAfterCursor", () => {
 // ─── 6. registerSubscriber — invalid token / connection limits ─────────────────
 
 describe("registerSubscriber — connection limits", () => {
-  const mockGetEvents = vi.mocked(getEventsForProject);
+  const mockGetEvents = vi.mocked(getEventsWithSummariesForProject);
 
   beforeEach(() => {
-    mockGetEvents.mockResolvedValue([]);
+    mockGetEvents.mockResolvedValue(wrap([]));
     vi.useFakeTimers();
   });
 
@@ -321,7 +341,7 @@ describe("registerSubscriber — connection limits", () => {
 // ─── 7. registerSubscriber — snapshot and SSE headers ─────────────────────────
 
 describe("registerSubscriber — snapshot delivery", () => {
-  const mockGetEvents = vi.mocked(getEventsForProject);
+  const mockGetEvents = vi.mocked(getEventsWithSummariesForProject);
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -334,7 +354,7 @@ describe("registerSubscriber — snapshot delivery", () => {
   it("sends snapshot event as first message", async () => {
     const projectId = `snap-proj-${Math.random().toString(36).slice(2)}`;
     const events = [makeEvent({ eventId: "e1", createdAt: "2026-07-13T08:00:00.000Z" })];
-    mockGetEvents.mockResolvedValue(events);
+    mockGetEvents.mockResolvedValue(wrap(events));
 
     const res = makeRes();
     const result = await registerSubscriber({
@@ -364,7 +384,7 @@ describe("registerSubscriber — snapshot delivery", () => {
       makeEvent({ eventId: "e2", createdAt: "2026-07-13T09:00:00.000Z" }),
       makeEvent({ eventId: "e3", createdAt: "2026-07-13T10:00:00.000Z" }),
     ];
-    mockGetEvents.mockResolvedValue(events);
+    mockGetEvents.mockResolvedValue(wrap(events));
 
     const cursor = { createdAt: "2026-07-13T09:00:00.000Z", eventId: "e2" };
     const res = makeRes();
@@ -389,7 +409,7 @@ describe("registerSubscriber — snapshot delivery", () => {
 
   it("two subscribers on same project share one poller", async () => {
     const projectId = `shared-${Math.random().toString(36).slice(2)}`;
-    mockGetEvents.mockResolvedValue([]);
+    mockGetEvents.mockResolvedValue(wrap([]));
 
     const res1 = makeRes();
     const result1 = await registerSubscriber({
@@ -426,7 +446,7 @@ describe("registerSubscriber — snapshot delivery", () => {
 
   it("removes project poller when last subscriber disconnects", async () => {
     const projectId = `cleanup-${Math.random().toString(36).slice(2)}`;
-    mockGetEvents.mockResolvedValue([]);
+    mockGetEvents.mockResolvedValue(wrap([]));
 
     const res = makeRes();
     const result = await registerSubscriber({
@@ -454,7 +474,7 @@ describe("registerSubscriber — snapshot delivery", () => {
   it("does not send poller events with duplicate eventIds", async () => {
     const projectId = `dedup-${Math.random().toString(36).slice(2)}`;
     const event = makeEvent({ eventId: "unique-e1", createdAt: "2026-07-13T08:00:00.000Z" });
-    mockGetEvents.mockResolvedValue([event]);
+    mockGetEvents.mockResolvedValue(wrap([event]));
 
     const res = makeRes();
     const result = await registerSubscriber({
@@ -475,8 +495,10 @@ describe("registerSubscriber — snapshot delivery", () => {
     await Promise.resolve(); // flush promises
 
     const written = res._written.join("");
-    // Count occurrences of the eventId — should appear only in snapshot
-    const count = (written.match(/unique-e1/g) ?? []).length;
+    // Count occurrences of the canonical eventId field — should appear only in
+    // snapshot. (The paired summary's `sourceEventId` also equals this value,
+    // so we match the `"eventId":"..."` field specifically, not the bare string.)
+    const count = (written.match(/"eventId":"unique-e1"/g) ?? []).length;
     expect(count).toBe(1); // in snapshot only
 
     if (result.ok) removeSubscriber(result.sub);
@@ -489,7 +511,7 @@ describe("registerSubscriber — snapshot delivery", () => {
       publicMessage: "AI started.",
       metadata: { stepName: "Brand Strategy", agentRole: "brand-strategist" },
     });
-    mockGetEvents.mockResolvedValue([event]);
+    mockGetEvents.mockResolvedValue(wrap([event]));
 
     const res = makeRes();
     const result = await registerSubscriber({

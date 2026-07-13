@@ -8,7 +8,18 @@ type TimelineStep = {
   current: boolean;
 };
 
-export function WorkspaceProjectTimeline({ steps }: { steps: TimelineStep[] }) {
+export function WorkspaceProjectTimeline({
+  steps,
+  currentSummary,
+}: {
+  steps: TimelineStep[];
+  /**
+   * V4.1 — deterministic, customer-safe context for whichever step is
+   * currently `current: true`. Optional and additive: renders nothing extra
+   * when absent so existing timeline consumers are unaffected.
+   */
+  currentSummary?: { whyItMatters: string; nextStep: string | null };
+}) {
   if (!steps.length) {
     return (
       <p className="text-[12px] text-center py-6" style={{ color: "#475569" }}>
@@ -107,6 +118,18 @@ export function WorkspaceProjectTimeline({ steps }: { steps: TimelineStep[] }) {
                   <p className="text-[10px] mt-0.5" style={{ color: "rgba(251,146,60,0.6)" }}>
                     In progress
                   </p>
+                )}
+                {step.current && currentSummary && (
+                  <div className="mt-1.5 max-w-md">
+                    <p className="text-[11px] leading-snug" style={{ color: "#94A3B8" }}>
+                      {currentSummary.whyItMatters}
+                    </p>
+                    {currentSummary.nextStep && (
+                      <p className="text-[11px] leading-snug mt-1" style={{ color: "#FB923C" }}>
+                        Next: {currentSummary.nextStep}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             </motion.li>

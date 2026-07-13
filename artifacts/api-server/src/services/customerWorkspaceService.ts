@@ -40,11 +40,12 @@ import { hashToken } from "./clientReviewService.js";
 import { generateDownloadToken } from "./signedUrlService.js";
 import { buildProjectRuntimeSnapshot, type ProjectRuntimeSnapshot } from "./runtimeRosterService.js";
 import {
-  getEventsForProject,
+  getEventsWithSummariesForProject,
   getEventsForProjects,
   filterForActivityFeed,
   type CanonicalEvent,
 } from "./canonicalEventService.js";
+import type { ExecutionSummary, EventWithSummary } from "./executionSummaryService.js";
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -470,6 +471,12 @@ export interface ProjectDetail {
   runtime: ProjectRuntimeSnapshot;
   /** V4.0C — canonical event stream for this project. Sorted chronologically. */
   events: CanonicalEvent[];
+  /**
+   * V4.1 — deterministic, customer-safe summaries paired 1:1 with `events`
+   * (same length, same order, same indices). Additive only — clients that
+   * only read `events` are unaffected.
+   */
+  eventSummaries: ExecutionSummary[];
 }
 
 export async function getProjectDetail(
@@ -526,12 +533,16 @@ export async function getProjectDetail(
 
   const invoices = found.internalProjectId ? await listInvoicesForProjects([found]) : [];
 
-  const [runtime, events] = await Promise.all([
+  const [runtime, eventPairs] = await Promise.all([
     buildProjectRuntimeSnapshot(found.internalProjectId),
     found.internalProjectId
-      ? getEventsForProject(found.projectNumber, found.internalProjectId)
-      : Promise.resolve([] as CanonicalEvent[]),
+      ? getEventsWithSummariesForProject(found.projectNumber, found.internalProjectId, {
+          filesUnlocked: found.filesUnlocked,
+        })
+      : Promise.resolve([] as EventWithSummary[]),
   ]);
+  const events = eventPairs.map((p) => p.event);
+  const eventSummaries = eventPairs.map((p) => p.summary);
 
   return {
     overview: {
@@ -549,6 +560,7 @@ export async function getProjectDetail(
     invoices,
     runtime,
     events,
+    eventSummaries,
   };
 }
 

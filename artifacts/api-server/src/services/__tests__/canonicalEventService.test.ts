@@ -55,6 +55,7 @@ import {
   projectProjectRow,
   filterForActivityFeed,
   getEventsForProject,
+  getEventsWithSummariesForProject,
   CANONICAL_EVENT_TYPES,
   type RawStepRow,
   type RawAssetRow,
@@ -531,6 +532,83 @@ describe("getEventsForProject", () => {
     const ids = events.map((e) => e.eventId);
     const unique = new Set(ids);
     expect(unique.size).toBe(ids.length);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getEventsWithSummariesForProject (V4.1 — shares getEventsForProject's query)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("getEventsWithSummariesForProject", () => {
+  it("returns one summary per event, in the same order as the events", async () => {
+    resultQueue = [
+      [makeProject({ status: "completed" })],
+      [makeStep({ id: 1, status: "completed" })],
+      [],
+      [],
+    ];
+    const pairs = await getEventsWithSummariesForProject("proj-uuid", 42);
+    expect(pairs.length).toBeGreaterThan(0);
+    for (const { event, summary } of pairs) {
+      expect(summary.sourceEventId).toBe(event.eventId);
+      expect(summary.eventType).toBe(event.eventType);
+    }
+  });
+
+  it("produces the exact same events as getEventsForProject for identical input", async () => {
+    const rows = [
+      [makeProject({ status: "running" })],
+      [makeStep({ id: 1, status: "running" })],
+      [makeAsset({ status: "generating" })],
+      [makeReview({ sharedAt: T0 })],
+    ];
+    resultQueue = rows.map((r) => [...r]);
+    const plainEvents = await getEventsForProject("proj-uuid", 42);
+    resultQueue = rows.map((r) => [...r]);
+    const pairs = await getEventsWithSummariesForProject("proj-uuid", 42);
+    expect(pairs.map((p) => p.event.eventId)).toEqual(plainEvents.map((e) => e.eventId));
+  });
+
+  it("passes the real filesUnlocked flag through to the summary layer", async () => {
+    resultQueue = [
+      [makeProject({ status: "completed" })],
+      [],
+      [],
+      [],
+    ];
+    const pairsLocked = await getEventsWithSummariesForProject("proj-uuid", 42, { filesUnlocked: false });
+    resultQueue = [
+      [makeProject({ status: "completed" })],
+      [],
+      [],
+      [],
+    ];
+    const pairsUnlocked = await getEventsWithSummariesForProject("proj-uuid", 42, { filesUnlocked: true });
+
+    const completedLocked = pairsLocked.find((p) => p.event.eventType === "project.completed");
+    const completedUnlocked = pairsUnlocked.find((p) => p.event.eventType === "project.completed");
+    expect(completedLocked?.summary.nextStep).not.toBe(completedUnlocked?.summary.nextStep);
+  });
+
+  it("defaults filesUnlocked to false when not provided", async () => {
+    resultQueue = [[makeProject({ status: "completed" })], [], [], []];
+    const pairs = await getEventsWithSummariesForProject("proj-uuid", 42);
+    const completed = pairs.find((p) => p.event.eventType === "project.completed");
+    expect(completed?.summary.customerAction).toBeNull();
+  });
+
+  it("no summary in the batch contains a banned field", async () => {
+    resultQueue = [
+      [makeProject({ status: "running" })],
+      [makeStep({ status: "failed", id: 1 })],
+      [makeAsset({ status: "completed" })],
+      [makeReview({ sharedAt: T0, approvedAt: T1 })],
+    ];
+    const pairs = await getEventsWithSummariesForProject("proj-uuid", 42);
+    const serialized = JSON.stringify(pairs.map((p) => p.summary)).toLowerCase();
+    for (const banned of ["apikey", "systemprompt", "stacktrace", "\"cost\"", "\"margin\""]) {
+      expect(serialized).not.toContain(banned);
+    }
   });
 });
 
