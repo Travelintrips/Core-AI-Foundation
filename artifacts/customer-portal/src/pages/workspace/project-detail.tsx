@@ -53,7 +53,7 @@ function fileStatusBadge(status: string) {
 }
 
 /* ─── Insight banner ─────────────────────────────────────────── */
-type InsightVariant = "info" | "warning" | "success" | "action";
+type InsightVariant = "info" | "warning" | "success" | "action" | "danger";
 type Insight = { variant: InsightVariant; icon: React.ReactNode; title: string; message: string };
 
 function getInsight(
@@ -63,6 +63,14 @@ function getInsight(
   reviewStatus: string | null,
   progress: number,
 ): Insight | null {
+  if (stage === "failed") {
+    return {
+      variant: "danger",
+      icon: <AlertCircle className="w-4 h-4" />,
+      title: "Produksi Belum Berhasil",
+      message: "Dokumen belum berhasil dibuat. Tim produksi telah menerima laporan kegagalan dan proses dapat dijalankan ulang oleh admin.",
+    };
+  }
   if (stage === "completed" || stage === "delivered") {
     return { variant: "success", icon: <CheckCircle2 className="w-4 h-4" />, title: "Project Complete", message: "Your project has been delivered. Download your files below." };
   }
@@ -86,6 +94,7 @@ const INSIGHT_STYLES: Record<InsightVariant, { bg: string; border: string; text:
   warning: { bg: "bg-amber-50",    border: "border-amber-200",    text: "text-amber-700" },
   success: { bg: "bg-emerald-50",  border: "border-emerald-200",  text: "text-emerald-700" },
   action:  { bg: "bg-violet-50",   border: "border-violet-200",   text: "text-violet-700" },
+  danger:  { bg: "bg-red-50",      border: "border-red-200",      text: "text-red-700" },
 };
 
 /* ─── Right-panel divider ────────────────────────────────────── */

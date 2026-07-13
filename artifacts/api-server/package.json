@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "seed": "tsx --tsconfig tsconfig.json src/seed.ts",
     "seed:internal-admin": "tsx --tsconfig tsconfig.json src/seedInternalAdmin.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "creative:audit-false-completions": "tsx --tsconfig tsconfig.json src/scripts/auditFalseCompletions.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.21.0",
