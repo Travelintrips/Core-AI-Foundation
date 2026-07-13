@@ -1,0 +1,678 @@
+PHASE V4.0C
+
+CANONICAL RUNTIME EVENT MODEL
+
+==================================================
+CONTEXT
+==================================================
+
+V4.0A Runtime Audit
+✅ selesai
+
+V4.0B Runtime Roster & Project Linkage
+✅ selesai
+
+Source of truth yang sudah disetujui:
+
+creativeWorkflowRunner
+→ creative_project_steps
+
+Workspace sekarang membaca runtime nyata.
+
+Jangan mengubah keputusan arsitektur tersebut.
+
+==================================================
+MISSION
+==================================================
+
+Bangun satu Canonical Runtime Event Model yang akan menjadi fondasi bagi:
+
+- Workspace Timeline
+- AI Activity Feed
+- AI Workforce
+- Notifications
+- SSE
+- WebSocket (jika nanti diperlukan)
+- Audit Trail
+- Admin Monitoring
+- Customer Progress
+
+Semua harus menggunakan event yang sama.
+
+==================================================
+ATURAN WAJIB
+==================================================
+
+JANGAN:
+
+- memindahkan creativeWorkflowRunner
+- mengaktifkan ai_jobs sebagai execution engine
+- mengubah workflow execution
+- membuat progress palsu
+- membuat confidence palsu
+- membuat SSE dulu
+- membuat WebSocket dulu
+- mengubah business flow
+- mengubah API customer existing
+- membuat polling baru
+- membuat event acak di frontend
+
+==================================================
+LANGKAH 1
+
+AUDIT
+
+==================================================
+
+Audit seluruh codebase.
+
+Cari semua tempat yang menghasilkan status.
+
+Cari:
+
+creative_project_steps
+
+workflow
+
+review
+
+artifact
+
+notification
+
+audit log
+
+status transition
+
+provider callback
+
+dispatcher
+
+worker
+
+==================================================
+
+Kelompokkan:
+
+Event Existing
+
+Event Missing
+
+Duplicate Event
+
+Inconsistent Event
+
+==================================================
+LANGKAH 2
+
+EVENT INVENTORY
+
+==================================================
+
+Buat inventory lengkap.
+
+Misalnya:
+
+project.created
+
+brief.submitted
+
+commercial.approved
+
+workflow.started
+
+worker.assigned
+
+step.started
+
+step.progress
+
+step.completed
+
+artifact.created
+
+artifact.updated
+
+review.requested
+
+review.started
+
+review.approved
+
+review.revision_requested
+
+delivery.completed
+
+job.failed
+
+worker.failed
+
+retry.started
+
+retry.completed
+
+project.completed
+
+==================================================
+
+Jangan implementasi.
+
+Audit dulu.
+
+==================================================
+LANGKAH 3
+
+CANONICAL EVENT
+
+==================================================
+
+Buat satu model event.
+
+Misalnya:
+
+eventId
+
+eventType
+
+projectId
+
+workflowId
+
+stepId
+
+workerId
+
+createdAt
+
+publicMessage
+
+severity
+
+status
+
+progress
+
+metadata
+
+==================================================
+
+metadata
+
+tidak boleh
+
+mengandung:
+
+prompt
+
+reasoning
+
+API key
+
+secret
+
+system prompt
+
+stack trace
+
+==================================================
+LANGKAH 4
+
+PUBLIC MESSAGE
+
+==================================================
+
+Setiap event
+
+harus memiliki
+
+customer-safe message.
+
+Contoh:
+
+Creative Director AI started analyzing your brief.
+
+Brand Strategist AI completed market positioning.
+
+Designer AI generated visual concepts.
+
+Human Reviewer requested revision.
+
+Bukan:
+
+OpenAI returned malformed response.
+
+==================================================
+LANGKAH 5
+
+EVENT SOURCE
+
+==================================================
+
+Tentukan
+
+setiap event
+
+berasal dari mana.
+
+Contoh:
+
+creative_project_steps
+
+review table
+
+artifact table
+
+workflow
+
+payment
+
+quotation
+
+==================================================
+
+Tidak boleh
+
+dua source
+
+menghasilkan
+
+event sama.
+
+==================================================
+LANGKAH 6
+
+STEP EVENT
+
+==================================================
+
+Audit
+
+step lifecycle.
+
+Minimal:
+
+queued
+
+started
+
+running
+
+completed
+
+failed
+
+blocked
+
+waiting_review
+
+approved
+
+==================================================
+
+Gunakan
+
+status existing
+
+jika memungkinkan.
+
+==================================================
+LANGKAH 7
+
+WORKER EVENT
+
+==================================================
+
+Worker harus menghasilkan event.
+
+assigned
+
+started
+
+idle
+
+completed
+
+failed
+
+retry
+
+==================================================
+
+Bukan hanya
+
+status snapshot.
+
+==================================================
+LANGKAH 8
+
+ARTIFACT EVENT
+
+==================================================
+
+Audit artifact.
+
+Event:
+
+created
+
+updated
+
+reviewed
+
+approved
+
+published
+
+==================================================
+
+==================================================
+LANGKAH 9
+
+REVIEW EVENT
+
+==================================================
+
+Audit review.
+
+requested
+
+started
+
+commented
+
+approved
+
+revision_requested
+
+completed
+
+==================================================
+
+==================================================
+LANGKAH 10
+
+EVENT STORAGE
+
+==================================================
+
+Audit.
+
+Apakah
+
+creative_project_steps
+
+cukup
+
+untuk
+
+membentuk event.
+
+Jika ya
+
+buat adapter.
+
+Jika tidak
+
+baru usulkan
+
+tabel
+
+runtime_events
+
+dengan alasan jelas.
+
+Jangan membuat tabel baru
+
+tanpa bukti.
+
+==================================================
+LANGKAH 11
+
+SNAPSHOT BUILDER
+
+==================================================
+
+Audit.
+
+Workspace Snapshot
+
+harus dibentuk
+
+dari event.
+
+Bukan
+
+frontend.
+
+==================================================
+LANGKAH 12
+
+TIMELINE
+
+==================================================
+
+Timeline
+
+harus dibangun
+
+dari event.
+
+Bukan
+
+hardcode.
+
+==================================================
+LANGKAH 13
+
+ACTIVITY FEED
+
+==================================================
+
+Activity Feed
+
+harus
+
+membaca
+
+event.
+
+Bukan
+
+status.
+
+==================================================
+LANGKAH 14
+
+SECURITY
+
+==================================================
+
+Pastikan
+
+customer
+
+hanya
+
+membaca
+
+event
+
+project miliknya.
+
+Audit:
+
+ownership
+
+tenant
+
+token
+
+artifact
+
+==================================================
+LANGKAH 15
+
+PERFORMANCE
+
+==================================================
+
+Audit.
+
+Event Query
+
+Index
+
+Pagination
+
+Retention
+
+Cleanup
+
+==================================================
+LANGKAH 16
+
+IMPLEMENTATION
+
+==================================================
+
+Implementasikan
+
+hanya
+
+Canonical Event Layer.
+
+Bukan
+
+Realtime.
+
+Bukan
+
+SSE.
+
+Bukan
+
+WebSocket.
+
+==================================================
+LANGKAH 17
+
+TEST
+
+==================================================
+
+Tambahkan
+
+test:
+
+step event
+
+worker event
+
+artifact event
+
+review event
+
+duplicate event
+
+missing event
+
+ordering
+
+security
+
+==================================================
+LANGKAH 18
+
+TYPECHECK
+
+==================================================
+
+Frontend
+
+Backend
+
+==================================================
+LANGKAH 19
+
+BUILD
+
+==================================================
+
+Customer Portal
+
+API Server
+
+==================================================
+OUTPUT
+
+==================================================
+
+Berikan:
+
+# V4.0C Runtime Event Model
+
+Executive Summary
+
+Existing Event Sources
+
+Canonical Event Model
+
+Event Inventory
+
+Files Changed
+
+Services Added
+
+Tables Changed
+
+Migration
+
+yes/no
+
+Reason
+
+Rollback
+
+API Impact
+
+Workspace Impact
+
+Timeline Impact
+
+Activity Feed Impact
+
+Security Verification
+
+Performance Verification
+
+Tests
+
+Typecheck
+
+Build
+
+Remaining Gaps
+
+Recommendation for V4.0D
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+Tidak ada lagi logika event yang tersebar.
+
+Semua event berasal dari satu model canonical.
+
+Workspace Timeline menggunakan event.
+
+Activity Feed menggunakan event.
+
+Fondasi siap untuk:
+
+V4.0D
+
+Server-Sent Events (SSE)
+
+tanpa perlu mengubah model event lagi.
+
+Jangan mulai implementasi SSE pada fase ini.

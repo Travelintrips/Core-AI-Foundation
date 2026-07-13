@@ -39,6 +39,12 @@ import {
 import { hashToken } from "./clientReviewService.js";
 import { generateDownloadToken } from "./signedUrlService.js";
 import { buildProjectRuntimeSnapshot, type ProjectRuntimeSnapshot } from "./runtimeRosterService.js";
+import {
+  getEventsForProject,
+  getEventsForProjects,
+  filterForActivityFeed,
+  type CanonicalEvent,
+} from "./canonicalEventService.js";
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -462,6 +468,8 @@ export interface ProjectDetail {
   invoices: WorkspaceInvoice[];
   /** V4.0B — additive, optional-shaped runtime roster snapshot. Never breaks old clients that ignore it. */
   runtime: ProjectRuntimeSnapshot;
+  /** V4.0C — canonical event stream for this project. Sorted chronologically. */
+  events: CanonicalEvent[];
 }
 
 export async function getProjectDetail(
@@ -518,7 +526,12 @@ export async function getProjectDetail(
 
   const invoices = found.internalProjectId ? await listInvoicesForProjects([found]) : [];
 
-  const runtime = await buildProjectRuntimeSnapshot(found.internalProjectId);
+  const [runtime, events] = await Promise.all([
+    buildProjectRuntimeSnapshot(found.internalProjectId),
+    found.internalProjectId
+      ? getEventsForProject(found.projectNumber, found.internalProjectId)
+      : Promise.resolve([] as CanonicalEvent[]),
+  ]);
 
   return {
     overview: {
@@ -535,6 +548,7 @@ export async function getProjectDetail(
     payments,
     invoices,
     runtime,
+    events,
   };
 }
 
@@ -950,22 +964,24 @@ export async function listWorkspaceActivity(
   clientEmail: string,
 ): Promise<ActivityItem[]> {
   const projects = await listAllWorkspaceProjects(req, clientEmail);
-  const resourceIds = projects.map((p) => p.projectNumber);
-  if (resourceIds.length === 0) return [];
+  if (projects.length === 0) return [];
 
-  const logs = await db
-    .select()
-    .from(aiAuditLogsTable)
-    .where(inArray(aiAuditLogsTable.resourceId, resourceIds))
-    .orderBy(desc(aiAuditLogsTable.createdAt))
-    .limit(100);
+  // V4.0C: source is now the Canonical Runtime Event Model, not ai_audit_logs.
+  // Response shape (ActivityItem[]) is unchanged — no API break.
+  const projectsForEvents = projects.map((p) => ({
+    projectId: p.projectNumber,
+    internalProjectId: p.internalProjectId,
+  }));
 
-  return logs.map((l) => ({
-    action: l.action,
-    label: ACTIVITY_LABELS[l.action] ?? l.action,
-    resourceId: l.resourceId,
-    status: l.status,
-    createdAt: l.createdAt.toISOString(),
+  const allEvents = await getEventsForProjects(projectsForEvents, { limit: 100 });
+  const activityEvents = filterForActivityFeed(allEvents); // already sorted DESC by getEventsForProjects
+
+  return activityEvents.map((e) => ({
+    action:     e.eventType,
+    label:      e.publicMessage,
+    resourceId: e.projectId,
+    status:     e.severity === "error" ? "failure" : e.severity === "warning" ? "warning" : "success",
+    createdAt:  e.createdAt,
   }));
 }
 

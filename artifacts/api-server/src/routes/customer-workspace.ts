@@ -40,6 +40,10 @@ import {
   type ProfilePatch,
   type RepeatOrderMode,
 } from "../services/customerWorkspaceService.js";
+import {
+  getEventsForProject,
+  filterForActivityFeed,
+} from "../services/canonicalEventService.js";
 
 const router = Router();
 
@@ -91,6 +95,34 @@ router.get("/public/customer/workspace/:token/projects/:projectNumber", async (r
   }
   res.json({ ...detail, recommendations: recommendationsFor(detail.overview.serviceName) });
 });
+
+// ── GET /public/customer/workspace/:token/projects/:projectNumber/events ─────
+// V4.0C: Canonical Runtime Event stream for a single project.
+// Sorted chronologically (ASC). All events are customer-safe — no internals.
+// Optional ?filter=activity returns only activity-feed-relevant events.
+router.get(
+  "/public/customer/workspace/:token/projects/:projectNumber/events",
+  async (req, res): Promise<void> => {
+    const session = await withSession(req, res);
+    if (!session) return;
+
+    const { projectNumber } = req.params as { projectNumber: string };
+
+    // Ownership check: verify the project belongs to this session's customer
+    const detail = await getProjectDetail(req, session.clientEmail, projectNumber);
+    if (!detail) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+
+    // Return the already-computed events from the detail (no extra DB round-trip)
+    const events = (req.query["filter"] === "activity")
+      ? filterForActivityFeed(detail.events)
+      : detail.events;
+
+    res.json({ events, total: events.length });
+  },
+);
 
 // ── GET /public/customer/workspace/:token/downloads ───────────────────────────
 router.get("/public/customer/workspace/:token/downloads", async (req, res): Promise<void> => {
