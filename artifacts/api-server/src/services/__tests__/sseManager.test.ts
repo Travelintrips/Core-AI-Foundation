@@ -534,4 +534,70 @@ describe("registerSubscriber — snapshot delivery", () => {
 
     if (result.ok) removeSubscriber(result.sub);
   });
+
+  it("V4.1 — snapshot payload carries a summaries array aligned to events", async () => {
+    const projectId = `sum-snap-${Math.random().toString(36).slice(2)}`;
+    const event = makeEvent({ eventId: "sum-e1", createdAt: "2026-07-13T08:00:00.000Z" });
+    mockGetEvents.mockResolvedValue(wrap([event]));
+
+    const res = makeRes();
+    const result = await registerSubscriber({
+      res,
+      ip: "6.6.6.6",
+      token: "tok-sum-snap",
+      projectId,
+      internalProjectId: 777,
+      afterCursor: null,
+      isProjectTerminal: false,
+    });
+
+    expect(result.ok).toBe(true);
+
+    const written = res._written.join("");
+    // Snapshot must carry both events and summaries
+    expect(written).toContain('"summaries"');
+    // sourceEventId in the summary must match the event's eventId
+    expect(written).toContain('"sourceEventId":"sum-e1"');
+    // isDerived flag must be present — marks output as template-derived, never raw
+    expect(written).toContain('"isDerived":true');
+
+    if (result.ok) removeSubscriber(result.sub);
+  });
+
+  it("V4.1 — runtime.event delivery carries a summary alongside the event", async () => {
+    const projectId = `sum-rt-${Math.random().toString(36).slice(2)}`;
+    const event = makeEvent({ eventId: "rt-e1", createdAt: "2026-07-13T08:00:00.000Z" });
+    // First call: empty snapshot so the event is not in the initial snapshot
+    mockGetEvents.mockResolvedValueOnce(wrap([]));
+    // Second call (poll): returns the new event with its summary
+    mockGetEvents.mockResolvedValue(wrap([event]));
+
+    const res = makeRes();
+    const result = await registerSubscriber({
+      res,
+      ip: "7.7.7.7",
+      token: "tok-sum-rt",
+      projectId,
+      internalProjectId: 888,
+      afterCursor: null,
+      isProjectTerminal: false,
+    });
+
+    expect(result.ok).toBe(true);
+
+    // Advance timers to trigger the shared poller, which delivers runtime.event
+    vi.advanceTimersByTime(5000);
+    await Promise.resolve(); // flush async poll
+
+    const written = res._written.join("");
+    expect(written).toContain("event: runtime.event");
+    // The runtime.event data must carry a summary field
+    expect(written).toContain('"summary"');
+    // sourceEventId ties the summary back to the event
+    expect(written).toContain('"sourceEventId":"rt-e1"');
+    // isDerived marks it as safe template output
+    expect(written).toContain('"isDerived":true');
+
+    if (result.ok) removeSubscriber(result.sub);
+  });
 });

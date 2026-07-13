@@ -120,6 +120,8 @@ export function WorkspaceActivityFeed({
                     <button
                       type="button"
                       disabled={!hasExpandable}
+                      aria-expanded={hasExpandable ? isOpen : undefined}
+                      aria-controls={hasExpandable ? `activity-detail-${key}` : undefined}
                       onClick={() => setExpandedKey((k) => (k === key ? null : key))}
                       className={`w-full text-left flex items-start justify-between gap-2 ${hasExpandable ? "cursor-pointer" : "cursor-default"}`}
                     >
@@ -128,6 +130,7 @@ export function WorkspaceActivityFeed({
                       </p>
                       {hasExpandable && (
                         <ChevronDown
+                          aria-hidden="true"
                           className="w-3.5 h-3.5 shrink-0 mt-0.5 transition-transform"
                           style={{ color: "#475569", transform: isOpen ? "rotate(180deg)" : "none" }}
                         />
@@ -155,6 +158,7 @@ export function WorkspaceActivityFeed({
                           exit={{ height: 0, opacity: 0 }}
                           transition={{ duration: 0.2, ease: "easeInOut" }}
                           className="overflow-hidden"
+                          id={`activity-detail-${key}`}
                         >
                           <div className="pt-2 space-y-1">
                             {context!.whyItMatters && (
