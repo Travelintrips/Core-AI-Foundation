@@ -1,0 +1,971 @@
+PHASE V4.1 — AI EXECUTION SUMMARY LAYER
+
+V4.0A Runtime Audit
+✅ selesai
+
+V4.0B Runtime Roster & Project Linkage
+✅ selesai
+
+V4.0C Canonical Runtime Event Model
+✅ selesai
+
+V4.0D SSE Runtime Stream
+✅ selesai
+
+Sekarang fokus pada lapisan narasi publik agar customer memahami apa yang sedang dikerjakan oleh AI, mengapa hal tersebut penting, dan langkah berikutnya.
+
+==================================================
+TUJUAN
+==================================================
+
+Ubah pengalaman Workspace dari sekadar:
+
+- step.started
+- step.completed
+- worker.started
+- artifact.created
+
+menjadi narasi customer-friendly seperti:
+
+Creative Director AI selesai menganalisis brief Anda.
+
+Hasil:
+Tujuan utama proyek dan konteks bisnis telah diidentifikasi.
+
+Mengapa penting:
+Hasil ini menjadi dasar strategi dan arah eksekusi berikutnya.
+
+Selanjutnya:
+Brand Strategist AI akan menyusun positioning dan pesan utama.
+
+==================================================
+PRINSIP UTAMA
+==================================================
+
+Execution Summary bukan chain-of-thought.
+
+Jangan pernah menampilkan:
+
+- reasoning internal model;
+- hidden prompt;
+- system prompt;
+- internal instruction;
+- provider raw response;
+- stack trace;
+- API key;
+- internal cost;
+- internal scoring yang tidak tervalidasi;
+- detail debugging;
+- confidential metadata;
+- raw generated output yang belum boleh dilihat customer.
+
+Yang boleh ditampilkan:
+
+- apa yang dimulai atau selesai;
+- hasil publik tingkat tinggi;
+- dampaknya terhadap project;
+- tahap berikutnya;
+- worker berikutnya;
+- jumlah artifact jika nyata;
+- status review;
+- blocker customer-safe;
+- waktu aktual;
+- provider/model hanya jika memang diizinkan.
+
+==================================================
+PERAN
+==================================================
+
+Bertindak sebagai:
+
+- AI Product Architect
+- Customer Experience Designer
+- Runtime Systems Engineer
+- Enterprise Content Strategist
+- Senior Backend Engineer
+- Senior Frontend Engineer
+- Security Reviewer
+
+==================================================
+BATASAN
+==================================================
+
+Jangan:
+
+- mengubah creativeWorkflowRunner;
+- mengubah CanonicalEvent secara breaking;
+- mengubah source-of-truth runtime;
+- membuat model AI baru hanya untuk merangkum event;
+- membuat summary palsu;
+- membuat summary berbasis chain-of-thought;
+- menambahkan SSE model baru;
+- membuat event table baru;
+- mengaktifkan ai_jobs/dispatcher;
+- mengubah artifact/review business flow;
+- mengubah pricing/commercial flow;
+- membuat progress random.
+
+Gunakan canonical events dan metadata aman yang sudah tersedia.
+
+==================================================
+LANGKAH 1 — AUDIT CURRENT EVENT CONTENT
+==================================================
+
+Audit:
+
+- CanonicalEvent publicMessage
+- eventType
+- source
+- metadata
+- worker role
+- step name
+- artifact data
+- review data
+- project stage
+- next workflow step
+- Workspace Activity Feed
+- Current Task
+- Timeline
+- SSE hook
+- runtime snapshot
+- frontend cards
+
+Identifikasi:
+
+- event yang sudah cukup informatif;
+- event yang terlalu teknis;
+- event yang tidak memiliki konteks;
+- event yang tidak menjelaskan next step;
+- event yang berisiko mengekspos informasi internal;
+- event yang tidak bisa dirangkum secara jujur.
+
+Kelompokkan:
+
+- Critical
+- High
+- Medium
+- Low
+
+==================================================
+LANGKAH 2 — SUMMARY MODEL
+==================================================
+
+Buat normalized customer-safe model, misalnya:
+
+interface ExecutionSummary {
+  eventId: string;
+  eventType: CanonicalEventType;
+  projectId: string;
+  workerId: string | null;
+  workerName: string | null;
+  workerRole: string | null;
+  title: string;
+  summary: string;
+  whyItMatters: string | null;
+  nextStep: {
+    title: string;
+    workerRole: string | null;
+    estimatedAt: string | null;
+  } | null;
+  status: "queued" | "working" | "completed" | "reviewing" | "failed" | "blocked";
+  occurredAt: string;
+  artifactCount: number | null;
+  isCustomerActionRequired: boolean;
+  customerAction: {
+    label: string;
+    route: string | null;
+  } | null;
+  sourceEventId: string;
+  isDerived: boolean;
+}
+
+Jangan wajibkan field yang datanya tidak tersedia.
+
+Gunakan null secara jujur.
+
+==================================================
+LANGKAH 3 — DETERMINISTIC SUMMARY BUILDER
+==================================================
+
+Buat service pure dan testable, misalnya:
+
+executionSummaryService.ts
+
+Input:
+
+- CanonicalEvent;
+- workflow context;
+- runtime worker metadata;
+- next step;
+- artifact/review summary;
+- project state.
+
+Output:
+
+- ExecutionSummary.
+
+Summary harus deterministik.
+
+Jangan melakukan LLM call untuk menghasilkan summary pada fase ini.
+
+Gunakan template customer-safe berdasarkan eventType dan metadata.
+
+==================================================
+LANGKAH 4 — SUMMARY TEMPLATE LIBRARY
+==================================================
+
+Buat template per event.
+
+Contoh:
+
+project.workflow_started
+
+Title:
+“Your AI team has started working”
+
+Summary:
+“The project brief has been accepted and the production workflow has started.”
+
+Why it matters:
+“Your project is now moving from planning into active execution.”
+
+Next:
+Current first workflow step.
+
+--------------------------------------------------
+
+worker.assigned
+
+Title:
+“{Worker Role} joined the project”
+
+Summary:
+“{Worker Role} has been assigned to handle {Step Name}.”
+
+Why it matters:
+Gunakan teks berdasarkan role bila tersedia.
+
+Next:
+Step start atau current task.
+
+--------------------------------------------------
+
+step.started
+
+Title:
+“{Worker Role} started {Public Step Name}”
+
+Summary:
+“Work has started on {customer-safe step description}.”
+
+Why it matters:
+Jelaskan fungsi tahap tersebut secara singkat.
+
+Next:
+Null selama masih running, atau step berikutnya bila memang diketahui.
+
+--------------------------------------------------
+
+step.completed
+
+Title:
+“{Public Step Name} completed”
+
+Summary:
+“{Worker Role} completed this phase successfully.”
+
+Why it matters:
+Jelaskan hasil tingkat tinggi tanpa membuka reasoning atau output rahasia.
+
+Next:
+Workflow step berikutnya.
+
+--------------------------------------------------
+
+artifact.created
+
+Title:
+“New deliverable generated”
+
+Summary:
+“{Artifact Count} new output has been prepared for this project.”
+
+Why it matters:
+“The output will be reviewed before becoming available to you.”
+
+Next:
+Human review jika applicable.
+
+--------------------------------------------------
+
+review.requested
+
+Title:
+“Output entered quality review”
+
+Summary:
+“A reviewer is checking the output for quality, accuracy, and project alignment.”
+
+Why it matters:
+“This helps ensure the deliverable meets the approved brief.”
+
+Next:
+Review completion.
+
+--------------------------------------------------
+
+review.revision_requested
+
+Title:
+“Revision is in progress”
+
+Summary:
+“The reviewer requested adjustments before final delivery.”
+
+Why it matters:
+“The output is being refined to better match the approved brief.”
+
+Next:
+Relevant production step.
+
+--------------------------------------------------
+
+review.approved
+
+Title:
+“Output approved”
+
+Summary:
+“The deliverable passed quality review and is ready for the next stage.”
+
+Next:
+Customer review atau delivery.
+
+--------------------------------------------------
+
+step.failed
+
+Title:
+“An AI task needs attention”
+
+Summary:
+“The task could not be completed as expected and is being reviewed.”
+
+Why it matters:
+“The system is preventing an incomplete result from moving forward.”
+
+Next:
+Retry atau human intervention jika diketahui.
+
+Jangan menampilkan internal technical error.
+
+--------------------------------------------------
+
+step.blocked
+
+Title:
+“Project step is temporarily blocked”
+
+Summary:
+“The next step is waiting for a required dependency or approval.”
+
+Jika customer action diperlukan, tampilkan CTA nyata.
+
+==================================================
+LANGKAH 5 — PUBLIC STEP DICTIONARY
+==================================================
+
+Audit nama step existing.
+
+Buat mapping customer-friendly.
+
+Contoh:
+
+brand_analysis
+→ Brand Analysis
+
+competitor_research
+→ Market and Competitor Review
+
+copy_generation
+→ Messaging and Copy Development
+
+visual_generation
+→ Visual Concept Creation
+
+human_quality_review
+→ Human Quality Review
+
+delivery_packaging
+→ Final Delivery Preparation
+
+Jangan mengganti internal step key.
+
+Hanya tampilkan public label.
+
+Jika mapping tidak ditemukan:
+
+- gunakan safe title-case fallback;
+- jangan tampilkan raw snake_case bila dapat dihindari.
+
+==================================================
+LANGKAH 6 — WHY IT MATTERS LIBRARY
+==================================================
+
+Buat library singkat berdasarkan step/role.
+
+Contoh:
+
+Brief Analysis:
+“This confirms the project objective, audience, and constraints.”
+
+Brand Strategy:
+“This creates the strategic direction used by all later production steps.”
+
+Copywriting:
+“This turns the strategy into clear messages for the target audience.”
+
+Visual Design:
+“This converts the approved direction into usable visual output.”
+
+Human Review:
+“This ensures quality and alignment before customer delivery.”
+
+Jangan membuat klaim hasil bisnis seperti ROI atau conversion increase tanpa data.
+
+==================================================
+LANGKAH 7 — NEXT STEP DERIVATION
+==================================================
+
+Next step harus berasal dari workflow context nyata.
+
+Prioritas:
+
+1. next pending workflow step;
+2. waiting review state;
+3. customer action;
+4. delivery;
+5. completed;
+6. null.
+
+Jangan hardcode urutan universal jika workflow berbeda per service.
+
+Gunakan creative_project_steps ordering/configuration existing.
+
+Tampilkan worker role berikutnya hanya jika dapat diturunkan secara valid.
+
+==================================================
+LANGKAH 8 — CUSTOMER ACTION REQUIRED
+==================================================
+
+Execution Summary harus bisa menandai tindakan customer nyata.
+
+Contoh:
+
+- review deliverable;
+- approve output;
+- request revision;
+- submit payment proof;
+- provide missing brief information;
+- approve quotation.
+
+Namun untuk fase ini, gunakan hanya action yang sudah ada pada runtime/project response.
+
+Jangan menciptakan action baru.
+
+CTA harus memakai route existing.
+
+==================================================
+LANGKAH 9 — API INTEGRATION
+==================================================
+
+Audit endpoint existing:
+
+- project detail;
+- events;
+- SSE stream;
+- activity feed.
+
+Pilih pendekatan paling aman:
+
+A. Tambahkan executionSummary ke CanonicalEvent secara additive melalui wrapper response;
+
+atau
+
+B. Tambahkan summaries array pada project detail/events response.
+
+Disarankan:
+
+{
+  event: CanonicalEvent,
+  summary: ExecutionSummary
+}
+
+Jangan mengubah CanonicalEvent model secara breaking.
+
+SSE runtime.event dapat membawa:
+
+{
+  event: CanonicalEvent,
+  summary: ExecutionSummary
+}
+
+Snapshot SSE juga dapat membawa summary.
+
+Pertahankan backward compatibility untuk client yang hanya membaca event.
+
+==================================================
+LANGKAH 10 — SSE INTEGRATION
+==================================================
+
+SSE tetap hanya transport.
+
+Pada saat canonical event dipublikasikan:
+
+- derive ExecutionSummary server-side;
+- kirim event + summary;
+- cursor tetap berdasarkan canonical event;
+- dedup tetap memakai eventId;
+- summary tidak memengaruhi ordering;
+- reconnect tidak menghasilkan summary berbeda untuk event yang sama.
+
+Summary harus deterministik.
+
+==================================================
+LANGKAH 11 — ACTIVITY FEED UX
+==================================================
+
+Perbarui Activity Feed.
+
+Setiap item tampilkan:
+
+- worker avatar/icon;
+- worker role;
+- title;
+- summary;
+- occurred time;
+- status badge;
+- expandable “Why this matters”;
+- next step;
+- customer CTA bila diperlukan.
+
+Jangan membuat semua item panjang.
+
+Default compact:
+
+Worker Role
+Title
+Short summary
+Time
+
+Expand untuk detail.
+
+Gunakan truncation yang aman.
+
+==================================================
+LANGKAH 12 — CURRENT TASK UX
+==================================================
+
+Current Task harus menampilkan:
+
+- worker role;
+- task title;
+- public description;
+- started time;
+- status;
+- what is happening;
+- next step jika diketahui.
+
+Untuk running task:
+
+“Creative Director AI is analyzing the project brief.”
+
+Bukan:
+
+“Thinking…”
+
+tanpa konteks.
+
+Jangan tampilkan persentase jika tidak ada progress nyata.
+
+Gunakan indeterminate state.
+
+==================================================
+LANGKAH 13 — TIMELINE UX
+==================================================
+
+Timeline dapat menampilkan summary singkat pada completed/current stages.
+
+Contoh:
+
+Brand Strategy
+Completed
+“Positioning and messaging direction prepared.”
+
+Current:
+
+Visual Concept Creation
+In progress
+“Visual concepts are being generated based on the approved strategy.”
+
+Jangan membuat timeline terlalu padat.
+
+Gunakan expandable detail.
+
+==================================================
+LANGKAH 14 — ARTIFACT PREVIEW LINK
+==================================================
+
+Jika event memiliki artifact nyata dan customer sudah boleh melihatnya:
+
+Tampilkan CTA:
+
+“View Deliverable”
+
+Jika artifact belum lolos review:
+
+Tampilkan:
+
+“Under Review”
+
+Jangan expose file sebelum permission existing mengizinkan.
+
+==================================================
+LANGKAH 15 — FAILURE SUMMARY
+==================================================
+
+Failure summary harus aman.
+
+Contoh:
+
+Title:
+“A task is being retried”
+
+Summary:
+“The current step did not complete successfully and the system is preparing another attempt.”
+
+Why it matters:
+“No incomplete output will be sent for review.”
+
+Jangan tampilkan:
+
+- raw error;
+- provider name jika sensitif;
+- stack trace;
+- prompt;
+- failed response body.
+
+Jika terminal failure:
+
+“A project specialist has been notified.”
+
+Hanya bila notification/escalation benar-benar terjadi.
+
+==================================================
+LANGKAH 16 — LANGUAGE
+==================================================
+
+Audit language existing.
+
+Portal tampak menggunakan campuran Bahasa Indonesia dan Inggris.
+
+Tentukan konsistensi berdasarkan halaman existing.
+
+Gunakan Bahasa Indonesia jika Workspace utama berbahasa Indonesia.
+
+Jika portal mendukung locale, ikuti locale.
+
+Jangan campur bahasa dalam satu card.
+
+Buat template summary siap untuk i18n bila struktur aplikasi mendukung.
+
+==================================================
+LANGKAH 17 — SECURITY
+==================================================
+
+Buat allowlist metadata yang boleh dipakai untuk summary.
+
+Jangan memakai object metadata mentah.
+
+Contoh allowlist:
+
+- stepName
+- publicStepLabel
+- workerRole
+- artifactType
+- artifactCount
+- reviewStatus
+- nextStepName
+- customerActionRoute
+- startedAt
+- completedAt
+
+Banned:
+
+- prompt
+- hiddenPrompt
+- systemPrompt
+- reasoning
+- output
+- rawOutput
+- rawResponse
+- apiKey
+- secret
+- token
+- stackTrace
+- errorMessage internal
+- cost
+- margin
+- provider credentials
+
+Tambahkan test untuk mencegah leakage.
+
+==================================================
+LANGKAH 18 — PERFORMANCE
+==================================================
+
+Summary builder harus pure dan ringan.
+
+Jangan query DB per event.
+
+Fetch context secara batch.
+
+Untuk project events:
+
+- load workflow steps sekali;
+- load worker metadata sekali;
+- load artifact/review context sekali;
+- derive semua summaries in memory.
+
+Jangan membuat N+1.
+
+SSE poller tidak boleh menambah query per event.
+
+==================================================
+LANGKAH 19 — CACHING
+==================================================
+
+Karena summary deterministik:
+
+- boleh cache in-memory per eventId bila berguna;
+- bounded cache;
+- invalidate jika source event/context berubah;
+- jangan tambah distributed cache pada fase ini.
+
+Jika tidak diperlukan, jangan buat cache.
+
+==================================================
+LANGKAH 20 — TESTS BACKEND
+==================================================
+
+Tambahkan test:
+
+1. project event summary;
+2. step started summary;
+3. step completed summary;
+4. worker assigned summary;
+5. artifact created summary;
+6. review requested summary;
+7. review approved summary;
+8. revision requested summary;
+9. failed step safe summary;
+10. blocked step summary;
+11. next step derivation;
+12. no-next-step completed project;
+13. customer action derivation;
+14. no fabricated action;
+15. safe metadata allowlist;
+16. banned fields never appear;
+17. deterministic output;
+18. same event always yields same summary;
+19. unknown step safe fallback;
+20. unknown worker safe fallback;
+21. no raw snake_case in title if fallback possible;
+22. no N+1 service behavior.
+
+==================================================
+LANGKAH 21 — TESTS FRONTEND
+==================================================
+
+Tambahkan test:
+
+1. activity item compact view;
+2. expand why-it-matters;
+3. next-step display;
+4. customer action CTA;
+5. failure summary;
+6. summary missing fallback;
+7. live SSE summary merge;
+8. duplicate event summary not duplicated;
+9. locale consistency;
+10. keyboard expand/collapse;
+11. screen reader labels;
+12. mobile wrapping.
+
+==================================================
+LANGKAH 22 — MANUAL VERIFICATION
+==================================================
+
+Verifikasi minimal:
+
+A. Running project
+- current worker;
+- current summary;
+- no fake progress;
+- next step nyata;
+- SSE update tanpa refresh.
+
+B. Completed step
+- summary tampil;
+- why it matters tampil;
+- next worker tampil jika nyata.
+
+C. Artifact generated
+- summary sesuai;
+- preview hanya jika allowed.
+
+D. Human review
+- review state customer-friendly;
+- no internal reviewer metadata leakage.
+
+E. Failed/retry step
+- safe message;
+- no stack trace;
+- no technical provider error.
+
+F. No-runtime project
+- honest fallback;
+- no summary palsu.
+
+==================================================
+LANGKAH 23 — ACCESSIBILITY
+==================================================
+
+Audit:
+
+- heading hierarchy;
+- expandable summary aria-expanded;
+- aria-controls;
+- status announced;
+- timestamp semantics;
+- icon aria-hidden;
+- focus-visible;
+- keyboard interaction;
+- mobile tap target;
+- reduced motion;
+- contrast.
+
+==================================================
+LANGKAH 24 — DO NOT DO
+==================================================
+
+Jangan:
+
+- menampilkan chain-of-thought;
+- memanggil LLM untuk summary;
+- menyimpan reasoning;
+- membuat summary random;
+- mengubah CanonicalEvent secara breaking;
+- membuat table summary baru;
+- membuat event kedua;
+- mengubah SSE cursor;
+- membuat artifact/review flow baru;
+- membuat fake progress;
+- membuat fake ETA;
+- mengaktifkan ai_jobs.
+
+==================================================
+VERIFIKASI WAJIB
+==================================================
+
+Setelah implementasi:
+
+1. backend typecheck;
+2. frontend typecheck;
+3. API server build;
+4. customer portal build;
+5. canonical event tests tetap lulus;
+6. SSE tests tetap lulus;
+7. execution summary tests lulus;
+8. frontend summary tests lulus;
+9. no sensitive data leakage;
+10. reconnect/dedup tetap berfungsi;
+11. no N+1 query;
+12. existing customer workflow tidak berubah.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+V4.1 dianggap selesai jika:
+
+- setiap customer-relevant canonical event memiliki summary customer-safe;
+- summary deterministik;
+- summary tidak menggunakan LLM;
+- summary tidak mengandung chain-of-thought;
+- activity feed menampilkan what happened;
+- why it matters tersedia;
+- next step berasal dari workflow nyata;
+- customer action hanya muncul bila benar-benar ada;
+- SSE mengirim event + summary;
+- reconnect tidak menggandakan summary;
+- current task lebih informatif;
+- timeline lebih mudah dipahami;
+- failure message aman;
+- build, typecheck, dan tests lulus.
+
+==================================================
+OUTPUT WAJIB
+==================================================
+
+Berikan laporan:
+
+# V4.1 AI Execution Summary Layer
+
+## Audit Findings
+
+## Summary Architecture
+
+## ExecutionSummary Model
+
+## Deterministic Template Library
+
+## Public Step Dictionary
+
+## Why-It-Matters Mapping
+
+## Next-Step Derivation
+
+## Customer Action Logic
+
+## API Changes
+
+## SSE Changes
+
+## Activity Feed Changes
+
+## Current Task Changes
+
+## Timeline Changes
+
+## Failure Summary Safety
+
+## Security Verification
+
+## Performance Verification
+
+## Tests Added
+
+## Manual Verification
+
+## Files Changed
+
+## Typecheck Results
+
+## Build Results
+
+## Remaining Gaps
+
+## Recommendation for V4.2
+
+Jangan lanjut ke V4.2 sebelum laporan ini direview.
