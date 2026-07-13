@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "seed": "tsx --tsconfig tsconfig.json src/seed.ts",
     "seed:internal-admin": "tsx --tsconfig tsconfig.json src/seedInternalAdmin.ts",
+    "reset:admin-password": "tsx --tsconfig tsconfig.json src/resetAdminPassword.ts",
     "test": "vitest run"
   },
   "dependencies": {
