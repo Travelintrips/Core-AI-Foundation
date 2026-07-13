@@ -2,14 +2,28 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import { FlowStepper } from "@/components/flow-stepper";
-import { GuidedChips } from "@/components/brief/guided-chips";
 import { AutosaveStatus, type AutosaveState } from "@/components/brief/autosave-status";
+import {
+  SectionCard, FieldTitle, HelperText, SuggestionGroup,
+  SelectionCard, ChoiceChip, ColorPicker, ProgressStepper, SummaryCard,
+  TagSelector,
+} from "@/components/creative-ui";
+import { MultiChoiceChip } from "@/components/creative-ui/ChoiceChip";
+import { DEFAULT_COLOR_PRESETS } from "@/components/creative-ui/ColorPicker";
 import { useToast } from "@/hooks/use-toast";
 import { useRequestDetail, useSaveBrief, useStartBrief, useServiceDetail } from "@/hooks/use-catalog";
 import {
-  ArrowLeft, ArrowRight, CheckCircle2, Loader2,
-  Building2, Target, Users, Palette, Package, Calendar, ClipboardList, Pencil,
+  ArrowLeft, ArrowRight, CheckCircle2, Loader2, Plus,
+  Building2, Target, Users, Palette, Package, Calendar, ClipboardList,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
+import {
+  serializeChoices, parseChoices, serializeSingleChoice, parseSingleChoice,
+  serializeColors, parseColors, normalizeLegacyPriority, hasAnySelection,
+} from "@/lib/brief-utils";
+import { detectServiceType, getServiceConfig } from "@/config/brief-service-config";
+import type { TagOption } from "@/components/creative-ui/TagSelector";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,50 +60,306 @@ const EMPTY_BRIEF: BriefData = {
   audienceDemographics: "", audiencePainPoints: "", audienceChannels: "",
   stylePreference: "", colorPalette: "", referenceLinks: "",
   outputFormats: "", outputLanguage: "id", specialRequirements: "",
-  deadline: "", priority: "normal", milestones: "",
+  deadline: "", priority: "balanced", milestones: "",
 };
 
-/** True once the user has typed something meaningfully different from a fresh brief. */
-function hasContent(brief: BriefData) {
+function hasContent(brief: BriefData): boolean {
   return Object.entries(brief).some(([key, value]) => {
     if (key === "outputLanguage" || key === "priority") return false;
     return typeof value === "string" && value.trim().length > 0;
   });
 }
 
-// ── Step config ───────────────────────────────────────────────────────────────
+// ── Steps ─────────────────────────────────────────────────────────────────────
 
 const STEPS = [
-  { id: 1, title: "Informasi Bisnis",         description: "Ceritakan sedikit tentang bisnis Anda.", icon: Building2,    key: "business" },
-  { id: 2, title: "Tujuan Project",           description: "Apa yang ingin Anda capai dengan project ini?", icon: Target,       key: "goals" },
-  { id: 3, title: "Target Audiens",           description: "Siapa yang akan melihat hasil karya ini?", icon: Users,       key: "audience" },
-  { id: 4, title: "Gaya Visual & Referensi",  description: "Bantu tim kami memahami arah visual yang Anda mau.", icon: Palette,      key: "visual" },
-  { id: 5, title: "Deliverables",             description: "Format dan jumlah output yang Anda butuhkan.", icon: Package,      key: "deliverables" },
-  { id: 6, title: "Deadline",                 description: "Kapan Anda membutuhkan hasil akhirnya?", icon: Calendar,     key: "timeline" },
-  { id: 7, title: "Review",                   description: "Periksa kembali sebelum mengirim ke tim kami.", icon: ClipboardList, key: "review" },
+  { id: 1, title: "Informasi Bisnis",        description: "Ceritakan sedikit tentang bisnis Anda.",              icon: Building2 },
+  { id: 2, title: "Tujuan Project",          description: "Apa yang ingin Anda capai dengan project ini?",       icon: Target },
+  { id: 3, title: "Target Audiens",          description: "Siapa yang paling ingin Anda jangkau?",              icon: Users },
+  { id: 4, title: "Gaya Visual & Referensi", description: "Bantu tim kami memahami arah visual yang Anda mau.", icon: Palette },
+  { id: 5, title: "Deliverables",            description: "Format dan jumlah output yang Anda butuhkan.",       icon: Package },
+  { id: 6, title: "Deadline",                description: "Kapan Anda membutuhkan hasil akhirnya?",             icon: Calendar },
+  { id: 7, title: "Review",                  description: "Periksa kembali sebelum mengirim ke tim kami.",      icon: ClipboardList },
 ];
 
 const TOTAL_STEPS = STEPS.length;
 
-const GOAL_SUGGESTIONS = [
-  "Meningkatkan brand awareness", "Meningkatkan konversi penjualan",
-  "Memperkenalkan produk baru", "Membangun kepercayaan investor",
+// ── Static option data (defined outside component to avoid re-creation) ───────
+
+const INDUSTRY_OPTIONS: TagOption[] = [
+  // Perdagangan
+  { value: "ecommerce",          label: "E-commerce",           group: "Perdagangan" },
+  { value: "marketplace",        label: "Marketplace",          group: "Perdagangan" },
+  { value: "retail",             label: "Retail",               group: "Perdagangan" },
+  { value: "trading",            label: "Trading",              group: "Perdagangan" },
+  // Teknologi
+  { value: "technology",         label: "Technology",           group: "Teknologi" },
+  { value: "software",           label: "Software",             group: "Teknologi" },
+  { value: "ai",                 label: "Artificial Intelligence", group: "Teknologi" },
+  { value: "startup",            label: "Startup",              group: "Teknologi" },
+  // Keuangan
+  { value: "fintech",            label: "Fintech",              group: "Keuangan" },
+  { value: "banking",            label: "Banking",              group: "Keuangan" },
+  { value: "insurance",          label: "Insurance",            group: "Keuangan" },
+  // Kesehatan
+  { value: "healthcare",         label: "Healthcare",           group: "Kesehatan" },
+  { value: "hospital",           label: "Hospital",             group: "Kesehatan" },
+  { value: "clinic",             label: "Clinic",               group: "Kesehatan" },
+  { value: "pharmacy",           label: "Pharmacy",             group: "Kesehatan" },
+  // Pendidikan
+  { value: "education",          label: "Education",            group: "Pendidikan" },
+  { value: "school",             label: "School",               group: "Pendidikan" },
+  { value: "university",         label: "University",           group: "Pendidikan" },
+  // Kuliner & F&B
+  { value: "restaurant",         label: "Restaurant",           group: "Kuliner & F&B" },
+  { value: "fnb",                label: "Kuliner & F&B",        group: "Kuliner & F&B" },
+  { value: "cafe",               label: "Cafe",                 group: "Kuliner & F&B" },
+  { value: "coffee_shop",        label: "Coffee Shop",          group: "Kuliner & F&B" },
+  { value: "bakery",             label: "Bakery",               group: "Kuliner & F&B" },
+  // Perhotelan & Pariwisata
+  { value: "hotel",              label: "Hotel",                group: "Perhotelan & Pariwisata" },
+  { value: "travel",             label: "Travel",               group: "Perhotelan & Pariwisata" },
+  { value: "tourism",            label: "Tourism",              group: "Perhotelan & Pariwisata" },
+  // Logistik
+  { value: "logistics",          label: "Logistics",            group: "Logistik" },
+  { value: "freight",            label: "Freight Forwarding",   group: "Logistik" },
+  { value: "shipping",           label: "Shipping",             group: "Logistik" },
+  { value: "warehousing",        label: "Warehousing",          group: "Logistik" },
+  { value: "export_import",      label: "Export Import",        group: "Logistik" },
+  // Industri
+  { value: "manufacturing",      label: "Manufacturing",        group: "Industri" },
+  { value: "factory",            label: "Factory",              group: "Industri" },
+  { value: "construction",       label: "Construction",         group: "Industri" },
+  // Properti
+  { value: "property",           label: "Property",             group: "Properti" },
+  { value: "real_estate",        label: "Real Estate",          group: "Properti" },
+  { value: "architecture",       label: "Architecture",         group: "Properti" },
+  { value: "interior",           label: "Interior Design",      group: "Properti" },
+  // Jasa Profesional
+  { value: "consulting",         label: "Consulting",           group: "Jasa Profesional" },
+  { value: "law",                label: "Law Firm",             group: "Jasa Profesional" },
+  { value: "accounting",         label: "Accounting",           group: "Jasa Profesional" },
+  { value: "professional_svcs",  label: "Professional Services",group: "Jasa Profesional" },
+  // Kreatif & Media
+  { value: "creative_agency",    label: "Creative Agency",      group: "Kreatif & Media" },
+  { value: "marketing_agency",   label: "Marketing Agency",     group: "Kreatif & Media" },
+  { value: "media",              label: "Media",                group: "Kreatif & Media" },
+  { value: "entertainment",      label: "Entertainment",        group: "Kreatif & Media" },
+  // Fashion & Kecantikan
+  { value: "fashion",            label: "Fashion",              group: "Fashion & Kecantikan" },
+  { value: "beauty",             label: "Beauty",               group: "Fashion & Kecantikan" },
+  { value: "cosmetics",          label: "Cosmetics",            group: "Fashion & Kecantikan" },
+  { value: "jewelry",            label: "Jewelry",              group: "Fashion & Kecantikan" },
+  // Furnitur & Dekorasi
+  { value: "furniture",          label: "Furniture",            group: "Furnitur & Dekorasi" },
+  // Agribisnis
+  { value: "agriculture",        label: "Agriculture",          group: "Agribisnis" },
+  { value: "plantation",         label: "Plantation",           group: "Agribisnis" },
+  { value: "seafood",            label: "Seafood",              group: "Agribisnis" },
+  { value: "fishery",            label: "Fishery",              group: "Agribisnis" },
+  { value: "mining",             label: "Mining",               group: "Agribisnis" },
+  { value: "coal",               label: "Coal",                 group: "Agribisnis" },
+  { value: "palm_oil",           label: "Palm Oil",             group: "Agribisnis" },
+  { value: "coconut",            label: "Coconut Product",      group: "Agribisnis" },
+  { value: "charcoal",           label: "Charcoal",             group: "Agribisnis" },
+  // Otomotif
+  { value: "automotive",         label: "Automotive",           group: "Otomotif" },
+  { value: "car_dealer",         label: "Car Dealer",           group: "Otomotif" },
+  { value: "motorcycle",         label: "Motorcycle",           group: "Otomotif" },
+  // Kebugaran & Sport
+  { value: "fitness",            label: "Fitness",              group: "Kebugaran & Sport" },
+  { value: "gym",                label: "Gym",                  group: "Kebugaran & Sport" },
+  { value: "sport_center",       label: "Sport Center",         group: "Kebugaran & Sport" },
+  // Event & Fotografi
+  { value: "event_organizer",    label: "Event Organizer",      group: "Event & Fotografi" },
+  { value: "wedding",            label: "Wedding",              group: "Event & Fotografi" },
+  { value: "photography",        label: "Photography",          group: "Event & Fotografi" },
+  // Publik & Sosial
+  { value: "government",         label: "Government",           group: "Publik & Sosial" },
+  { value: "nonprofit",          label: "Nonprofit / NGO",      group: "Publik & Sosial" },
+  // Lainnya
+  { value: "other",              label: "Lainnya",              group: "Lainnya" },
 ];
-const CHANNEL_SUGGESTIONS = ["Instagram", "TikTok", "LinkedIn", "Website", "WhatsApp", "Marketplace"];
-const INDUSTRY_SUGGESTIONS = ["E-commerce", "Fintech", "Kuliner & F&B", "Properti", "Kesehatan", "Edukasi"];
+
+const INDUSTRY_QUICK_VALUES = [
+  "ecommerce", "technology", "fnb", "retail", "healthcare", "startup", "creative_agency", "property",
+];
+
+const COMPANY_SIZE_OPTIONS = [
+  { value: "solo",       label: "Personal / Individu", icon: "👤", description: "1 orang" },
+  { value: "startup",    label: "Startup / Tim Kecil", icon: "🚀", description: "2–10 orang" },
+  { value: "smb",        label: "Usaha Kecil",         icon: "🏢", description: "11–50 orang" },
+  { value: "mid",        label: "Perusahaan Menengah", icon: "🏬", description: "51–200 orang" },
+  { value: "enterprise", label: "Enterprise",          icon: "🏙", description: "Lebih dari 200 orang" },
+];
+
+const GOAL_OPTIONS = [
+  { value: "brand_awareness",   label: "Meningkatkan brand awareness" },
+  { value: "sales",             label: "Meningkatkan penjualan" },
+  { value: "leads",             label: "Mendapatkan lebih banyak leads" },
+  { value: "new_product",       label: "Memperkenalkan produk baru" },
+  { value: "rebranding",        label: "Melakukan rebranding" },
+  { value: "professional",      label: "Membuat bisnis terlihat lebih profesional" },
+  { value: "trust",             label: "Membangun kepercayaan pelanggan" },
+  { value: "engagement",        label: "Meningkatkan engagement media sosial" },
+  { value: "conversion",        label: "Meningkatkan konversi website" },
+  { value: "investor",          label: "Mencari investor" },
+  { value: "distributor",       label: "Menarik distributor atau reseller" },
+  { value: "international",     label: "Memasuki pasar internasional" },
+  { value: "promo_material",    label: "Membuat materi promosi" },
+  { value: "brand_identity",    label: "Memperkuat identitas brand" },
+  { value: "other",             label: "Lainnya" },
+];
+
+const METRIC_OPTIONS = [
+  { value: "sales_up",      label: "Peningkatan penjualan" },
+  { value: "more_leads",    label: "Peningkatan jumlah leads" },
+  { value: "inquiry",       label: "Peningkatan inquiry pelanggan" },
+  { value: "engagement_up", label: "Peningkatan engagement" },
+  { value: "followers",     label: "Peningkatan followers" },
+  { value: "traffic",       label: "Peningkatan traffic website" },
+  { value: "conversion",    label: "Peningkatan conversion rate" },
+  { value: "distributor",   label: "Lebih banyak distributor atau reseller" },
+  { value: "brand_pro",     label: "Brand terlihat lebih profesional" },
+  { value: "recognizable",  label: "Brand lebih mudah dikenali" },
+  { value: "trust",         label: "Meningkatkan kepercayaan pelanggan" },
+  { value: "investor",      label: "Mendapatkan investor" },
+  { value: "launch",        label: "Mencapai target peluncuran" },
+  { value: "unsure",        label: "Belum menentukan metrik" },
+  { value: "other",         label: "Lainnya" },
+];
+
+const ASSET_OPTIONS = [
+  { value: "logo",          label: "Logo" },
+  { value: "brand_guide",   label: "Brand guideline" },
+  { value: "company_profile",label: "Company profile" },
+  { value: "product_photo", label: "Foto produk" },
+  { value: "office_photo",  label: "Foto perusahaan / kantor" },
+  { value: "video",         label: "Video" },
+  { value: "website",       label: "Website" },
+  { value: "social_content",label: "Konten media sosial" },
+  { value: "copywriting",   label: "Copywriting" },
+  { value: "catalog",       label: "Katalog atau brosur" },
+  { value: "packaging",     label: "Packaging" },
+  { value: "presentation",  label: "Presentasi" },
+  { value: "documents",     label: "Data atau dokumen pendukung" },
+  { value: "none",          label: "Belum punya aset" },
+  { value: "other",         label: "Lainnya" },
+];
+
+const AUDIENCE_OPTIONS = [
+  { value: "general",      label: "Konsumen umum" },
+  { value: "b2c",          label: "B2C" },
+  { value: "b2b",          label: "B2B" },
+  { value: "corporate",    label: "Perusahaan" },
+  { value: "umkm",         label: "UMKM" },
+  { value: "startup",      label: "Startup" },
+  { value: "investor",     label: "Investor" },
+  { value: "government",   label: "Pemerintah" },
+  { value: "distributor",  label: "Distributor" },
+  { value: "reseller",     label: "Reseller" },
+  { value: "retail_cust",  label: "Retail customer" },
+  { value: "professional", label: "Profesional" },
+  { value: "student",      label: "Pelajar / mahasiswa" },
+  { value: "family",       label: "Keluarga" },
+  { value: "youth",        label: "Anak muda" },
+  { value: "premium",      label: "Premium market" },
+  { value: "local",        label: "Pasar lokal" },
+  { value: "international",label: "International buyer" },
+  { value: "other",        label: "Lainnya" },
+];
+
+const CHANNEL_OPTIONS = [
+  { value: "instagram",   label: "Instagram" },
+  { value: "tiktok",      label: "TikTok" },
+  { value: "facebook",    label: "Facebook" },
+  { value: "linkedin",    label: "LinkedIn" },
+  { value: "twitter",     label: "X (Twitter)" },
+  { value: "youtube",     label: "YouTube" },
+  { value: "whatsapp",    label: "WhatsApp" },
+  { value: "website",     label: "Website" },
+  { value: "marketplace", label: "Marketplace" },
+  { value: "email",       label: "Email" },
+  { value: "pinterest",   label: "Pinterest" },
+  { value: "other",       label: "Lainnya" },
+];
+
+const STYLE_OPTIONS = [
+  { value: "minimalis",   label: "Minimalis",    description: "Sederhana, bersih, dan banyak ruang kosong" },
+  { value: "modern",      label: "Modern",       description: "Kontemporer, dinamis, dan segar" },
+  { value: "corporate",   label: "Corporate",    description: "Profesional, terpercaya, dan formal" },
+  { value: "premium",     label: "Premium",      description: "Berkualitas tinggi dan eksklusif" },
+  { value: "luxury",      label: "Luxury",       description: "Eksklusif, mewah, dan berkelas" },
+  { value: "elegant",     label: "Elegant",      description: "Halus, refined, dan timeless" },
+  { value: "classic",     label: "Classic",      description: "Abadi, traditional, dan mapan" },
+  { value: "bold",        label: "Bold",         description: "Kuat, tegas, dan berani" },
+  { value: "playful",     label: "Playful",      description: "Ramah, energik, dan penuh karakter" },
+  { value: "creative",    label: "Creative",     description: "Ekspresif, unik, dan inovatif" },
+  { value: "natural",     label: "Natural",      description: "Organik, hangat, dan dekat dengan alam" },
+  { value: "industrial",  label: "Industrial",   description: "Raw, maskulin, dan tekstural" },
+  { value: "teknologi",   label: "Teknologi",    description: "Digital, futuristik, dan inovatif" },
+  { value: "monokrom",    label: "Monokrom",     description: "Elegan dalam hitam, putih, dan abu" },
+  { value: "colorful",    label: "Colorful",     description: "Cerah, berani, dan penuh warna" },
+  { value: "editorial",   label: "Editorial",    description: "Berkelas seperti majalah premium" },
+  { value: "clean",       label: "Clean",        description: "Jernih, teratur, dan mudah dibaca" },
+  { value: "futuristic",  label: "Futuristic",   description: "Hi-tech dan forward-looking" },
+  { value: "unsure",      label: "Tidak yakin — beri rekomendasi", description: "Tim kami akan merekomendasikan gaya terbaik" },
+  { value: "other",       label: "Lainnya",      description: "" },
+];
+
+const PRIORITY_OPTIONS = [
+  { value: "quality",  label: "Kualitas terbaik",               description: "Prioritaskan hasil yang sempurna" },
+  { value: "speed",    label: "Kecepatan pengerjaan",           description: "Dipercepat, mungkin ada rush fee" },
+  { value: "budget",   label: "Efisiensi anggaran",             description: "Maksimalkan hasil dalam budget" },
+  { value: "balanced", label: "Keseimbangan",                   description: "Kualitas baik dalam waktu wajar" },
+  { value: "unsure",   label: "Belum yakin",                    description: "Tim kami akan bantu tentukan" },
+];
+
+const LANGUAGE_OPTIONS = [
+  { value: "id",    label: "Bahasa Indonesia" },
+  { value: "en",    label: "English" },
+  { value: "id_en", label: "Bilingual — Indonesia & English" },
+];
+
+// ── Validation ────────────────────────────────────────────────────────────────
 
 type FieldErrors = Partial<Record<keyof BriefData, string>>;
 
-/** Field-level validation so errors can render inline and drive focus. */
 function validateStep(step: number, brief: BriefData): FieldErrors {
   const errors: FieldErrors = {};
-  if (step === 1 && !brief.companyIndustry.trim()) errors.companyIndustry = "Industri perusahaan wajib diisi";
-  if (step === 2 && !brief.primaryGoal.trim()) errors.primaryGoal = "Tujuan utama project wajib diisi";
-  if (step === 3 && !brief.audienceDemographics.trim()) errors.audienceDemographics = "Deskripsi target audiens wajib diisi";
-  if (step === 4 && !brief.stylePreference.trim()) errors.stylePreference = "Preferensi gaya visual wajib diisi";
-  if (step === 5 && !brief.outputFormats.trim()) errors.outputFormats = "Format deliverables wajib diisi";
-  if (step === 6 && !brief.deadline.trim()) errors.deadline = "Deadline wajib diisi";
+  if (step === 1) {
+    const ind = brief.companyIndustry.trim();
+    if (!ind || ind === "Lainnya")
+      errors.companyIndustry = "Pilih atau tuliskan industri bisnis Anda sebelum melanjutkan";
+  }
+  if (step === 2 && !hasAnySelection(brief.primaryGoal))
+    errors.primaryGoal = "Pilih minimal satu tujuan project sebelum melanjutkan";
+  if (step === 3 && !hasAnySelection(brief.audienceDemographics))
+    errors.audienceDemographics = "Pilih minimal satu segmen audiens sebelum melanjutkan";
+  if (step === 4 && !hasAnySelection(brief.stylePreference))
+    errors.stylePreference = "Pilih minimal satu gaya visual sebelum melanjutkan";
+  if (step === 5 && !brief.outputFormats.trim())
+    errors.outputFormats = "Jelaskan format output yang Anda butuhkan";
+  if (step === 6 && !brief.deadline.trim())
+    errors.deadline = "Tentukan deadline project Anda";
   return errors;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Split "chips; data\nExtra: text" → [chipsStr, extraText] */
+function splitExtra(raw: string, prefix: string): [string, string] {
+  const nl = raw.indexOf("\n");
+  if (nl === -1) return [raw, ""];
+  const chips = raw.slice(0, nl);
+  const rest  = raw.slice(nl + 1).replace(new RegExp(`^${prefix}: ?`), "");
+  return [chips, rest];
+}
+
+/** Build storage string from chips + optional extra line */
+function joinExtra(chipsStr: string, extra: string, prefix: string): string {
+  if (!extra.trim()) return chipsStr;
+  return `${chipsStr}\n${prefix}: ${extra.trim()}`;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -101,14 +371,18 @@ export default function BriefPage() {
 
   const { data: requestDetail, isLoading: requestLoading, isError: requestError } = useRequestDetail(requestId);
   const { data: serviceDetail } = useServiceDetail(requestDetail?.serviceId);
-  const saveBrief = useSaveBrief();
+  const saveBrief  = useSaveBrief();
   const startBrief = useStartBrief();
 
   const STORAGE_KEY = `brief_draft_${requestId}`;
 
-  // Guard startBrief so it fires at most once per mount, and never once the
-  // request has already moved past "draft" (avoids redundant status writes
-  // on refresh — client-side guard on top of the server-side one).
+  // ── Service config ──────────────────────────────────────────────────────────
+  const serviceConfig = useMemo(() => {
+    const svcType = detectServiceType(serviceDetail?.serviceName);
+    return getServiceConfig(svcType);
+  }, [serviceDetail?.serviceName]);
+
+  // ── Start brief ─────────────────────────────────────────────────────────────
   const startBriefFired = useRef(false);
   useEffect(() => {
     if (!requestId || requestLoading || startBriefFired.current) return;
@@ -118,132 +392,285 @@ export default function BriefPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestId, requestLoading, requestDetail]);
 
-  const [currentStep, setCurrentStep] = useState(1);
-  const [errors, setErrors] = useState<FieldErrors>({});
-  const [brief, setBrief] = useState<BriefData>(EMPTY_BRIEF);
-  const [isSaving, setIsSaving] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  // ── Form state ──────────────────────────────────────────────────────────────
+  const [currentStep, setCurrentStep]         = useState(1);
+  const [errors, setErrors]                   = useState<FieldErrors>({});
+  const [brief, setBrief]                     = useState<BriefData>(EMPTY_BRIEF);
+  const [isSaving, setIsSaving]               = useState(false);
+  const [submitError, setSubmitError]         = useState<string | null>(null);
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
 
+  // Autosave
   const [autosaveState, setAutosaveState] = useState<AutosaveState>("idle");
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const [now, setNow] = useState(() => Date.now());
+  const [lastSavedAt, setLastSavedAt]     = useState<Date | null>(null);
+  const [now, setNow]                     = useState(() => Date.now());
 
-  // Draft restoration prompt — never silently overwrite what's on screen.
+  // Draft restore
   const [pendingDraft, setPendingDraft] = useState<BriefData | null>(null);
   const [draftChecked, setDraftChecked] = useState(false);
 
+  // Progressive disclosure toggles (auto-expand if content exists)
+  const [showPainPoints,  setShowPainPoints]  = useState(false);
+  const [showMilestones,  setShowMilestones]  = useState(false);
+  const [showSpecialReq,  setShowSpecialReq]  = useState(false);
+  const [showAssetNotes,  setShowAssetNotes]  = useState(false);
+
+  // ── Draft check ─────────────────────────────────────────────────────────────
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = { ...EMPTY_BRIEF, ...JSON.parse(stored) } as BriefData;
-        if (hasContent(parsed)) {
-          setPendingDraft(parsed);
-          setDraftChecked(true);
-          return;
-        }
+        // Normalize legacy priority
+        parsed.priority = normalizeLegacyPriority(parsed.priority);
+        if (hasContent(parsed)) { setPendingDraft(parsed); setDraftChecked(true); return; }
       }
-    } catch {
-      // corrupt draft — ignore and start fresh
-    }
+    } catch { /* corrupt draft — ignore */ }
     setDraftChecked(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Tick every 15s so "Saved X minutes ago" stays accurate.
+  // Auto-expand collapsible sections when draft content exists
+  useEffect(() => {
+    if (!brief.audiencePainPoints) return;
+    setShowPainPoints(true);
+  }, [brief.audiencePainPoints]);
+  useEffect(() => {
+    if (!brief.milestones) return;
+    setShowMilestones(true);
+  }, [brief.milestones]);
+  useEffect(() => {
+    if (!brief.specialRequirements) return;
+    setShowSpecialReq(true);
+  }, [brief.specialRequirements]);
+  useEffect(() => {
+    const [, notes] = splitExtra(brief.existingAssets, "Catatan");
+    if (!notes) return;
+    setShowAssetNotes(true);
+  }, [brief.existingAssets]);
+
+  // ── Autosave ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(interval);
   }, []);
 
-  // Autosave to localStorage, debounced, only once the draft-restore decision is made.
   useEffect(() => {
     if (!draftChecked || pendingDraft) return;
     setAutosaveState("saving");
     const timer = setTimeout(() => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(brief));
-        setLastSavedAt(new Date());
-        setNow(Date.now());
+        setLastSavedAt(new Date()); setNow(Date.now());
         setAutosaveState(navigator.onLine ? "saved" : "offline");
-      } catch {
-        setAutosaveState("error");
-      }
+      } catch { setAutosaveState("error"); }
     }, 1200);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brief, STORAGE_KEY, draftChecked, pendingDraft]);
 
   useEffect(() => {
-    const goOffline = () => setAutosaveState((s) => (s === "saved" ? "offline" : s));
-    const goOnline = () => setAutosaveState((s) => (s === "offline" ? "saved" : s));
+    const goOffline = () => setAutosaveState((s) => s === "saved" ? "offline" : s);
+    const goOnline  = () => setAutosaveState((s) => s === "offline" ? "saved" : s);
     window.addEventListener("offline", goOffline);
     window.addEventListener("online", goOnline);
-    return () => {
-      window.removeEventListener("offline", goOffline);
-      window.removeEventListener("online", goOnline);
-    };
+    return () => { window.removeEventListener("offline", goOffline); window.removeEventListener("online", goOnline); };
   }, []);
 
-  // Warn before an accidental tab close while there's unsaved input.
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
-      if (autosaveState === "saving" || autosaveState === "error") {
-        e.preventDefault();
-        e.returnValue = "";
-      }
+      if (autosaveState === "saving" || autosaveState === "error") { e.preventDefault(); e.returnValue = ""; }
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [autosaveState]);
 
-  // Focus the step heading whenever the step changes — keyboard/SR users land
-  // in the right place instead of at the top of a long page.
   const headingRef = useRef<HTMLHeadingElement>(null);
-  useEffect(() => {
-    headingRef.current?.focus();
-  }, [currentStep]);
+  useEffect(() => { headingRef.current?.focus(); }, [currentStep]);
 
-  const handleChange = (field: keyof BriefData, value: string) => {
+  // ── Handlers ────────────────────────────────────────────────────────────────
+
+  const handleChange = useCallback((field: keyof BriefData, value: string) => {
     setBrief((prev) => ({ ...prev, [field]: value }));
-    setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
-  };
+    setErrors((prev) => prev[field] ? { ...prev, [field]: undefined } : prev);
+  }, []);
 
-  const focusField = (field: keyof BriefData) => {
-    document.getElementById(`brief-${field}`)?.focus();
-  };
+  // ── Derived state from brief fields ─────────────────────────────────────────
 
-  const handleNext = () => {
+  // Industry
+  const industryParsed = useMemo(() => parseSingleChoice(brief.companyIndustry, INDUSTRY_OPTIONS), [brief.companyIndustry]);
+  const industryTagValue = useMemo(() => industryParsed.selected ? [industryParsed.selected] : [], [industryParsed.selected]);
+
+  const handleIndustryTagChange = useCallback((newVals: string[]) => {
+    const val = newVals[0] ?? "";
+    if (!val) { handleChange("companyIndustry", ""); return; }
+    if (val === "other") {
+      // Keep existing custom text or set sentinel so "other" stays selected
+      const current = industryParsed.selected === "other" && industryParsed.custom
+        ? industryParsed.custom
+        : "Lainnya";
+      handleChange("companyIndustry", current);
+    } else {
+      handleChange("companyIndustry", serializeSingleChoice(val, INDUSTRY_OPTIONS));
+    }
+  }, [handleChange, industryParsed]);
+
+  // No website toggle
+  const noWebsite = brief.websiteUrl === "Belum punya website";
+
+  // Goals — multi-select (max 5)
+  const goalParsed = useMemo(() => parseChoices(brief.primaryGoal, GOAL_OPTIONS), [brief.primaryGoal]);
+
+  const handleGoalChange = useCallback((newSelected: string[]) => {
+    const serialized = serializeChoices(newSelected, GOAL_OPTIONS, goalParsed.custom);
+    handleChange("primaryGoal", serialized);
+  }, [handleChange, goalParsed.custom]);
+
+  const handleGoalCustom = useCallback((text: string) => {
+    const serialized = serializeChoices(goalParsed.selected, GOAL_OPTIONS, text);
+    handleChange("primaryGoal", serialized);
+  }, [handleChange, goalParsed.selected]);
+
+  // Metrics — multi-select; "unsure" exclusive; stores detail in \n suffix
+  const [metricChipsStr, metricDetail] = useMemo(
+    () => splitExtra(brief.successMetrics, "Detail"),
+    [brief.successMetrics],
+  );
+  const metricParsed = useMemo(() => parseChoices(metricChipsStr, METRIC_OPTIONS), [metricChipsStr]);
+
+  const handleMetricChange = useCallback((newSelected: string[]) => {
+    const hadUnsure = metricParsed.selected.includes("unsure");
+    const hasUnsure = newSelected.includes("unsure");
+    let final = newSelected;
+    if (!hadUnsure && hasUnsure) final = ["unsure"];
+    else if (hadUnsure && newSelected.length > 1) final = newSelected.filter((v) => v !== "unsure");
+    const chipsStr = serializeChoices(final, METRIC_OPTIONS, metricParsed.custom);
+    handleChange("successMetrics", joinExtra(chipsStr, metricDetail, "Detail"));
+  }, [handleChange, metricParsed, metricDetail]);
+
+  const handleMetricCustom = useCallback((text: string) => {
+    const chipsStr = serializeChoices(metricParsed.selected, METRIC_OPTIONS, text);
+    handleChange("successMetrics", joinExtra(chipsStr, metricDetail, "Detail"));
+  }, [handleChange, metricParsed, metricDetail]);
+
+  const handleMetricDetail = useCallback((text: string) => {
+    handleChange("successMetrics", joinExtra(metricChipsStr, text, "Detail"));
+  }, [handleChange, metricChipsStr]);
+
+  // Assets — multi-select; "none" exclusive; stores notes in \n suffix
+  const [assetChipsStr, assetNotes] = useMemo(
+    () => splitExtra(brief.existingAssets, "Catatan"),
+    [brief.existingAssets],
+  );
+  const assetParsed = useMemo(() => parseChoices(assetChipsStr, ASSET_OPTIONS), [assetChipsStr]);
+
+  const handleAssetChange = useCallback((newSelected: string[]) => {
+    const hadNone = assetParsed.selected.includes("none");
+    const hasNone = newSelected.includes("none");
+    let final = newSelected;
+    if (!hadNone && hasNone) final = ["none"];
+    else if (hadNone && newSelected.length > 1) final = newSelected.filter((v) => v !== "none");
+    const chipsStr = serializeChoices(final, ASSET_OPTIONS, assetParsed.custom);
+    handleChange("existingAssets", joinExtra(chipsStr, assetNotes, "Catatan"));
+  }, [handleChange, assetParsed, assetNotes]);
+
+  const handleAssetCustom = useCallback((text: string) => {
+    const chipsStr = serializeChoices(assetParsed.selected, ASSET_OPTIONS, text);
+    handleChange("existingAssets", joinExtra(chipsStr, assetNotes, "Catatan"));
+  }, [handleChange, assetParsed, assetNotes]);
+
+  const handleAssetNotes = useCallback((text: string) => {
+    handleChange("existingAssets", joinExtra(assetChipsStr, text, "Catatan"));
+  }, [handleChange, assetChipsStr]);
+
+  // Audience type — multi-select (max 4)
+  const audienceParsed = useMemo(() => parseChoices(brief.audienceDemographics, AUDIENCE_OPTIONS), [brief.audienceDemographics]);
+
+  const handleAudienceChange = useCallback((newSelected: string[]) => {
+    const serialized = serializeChoices(newSelected, AUDIENCE_OPTIONS, audienceParsed.custom);
+    handleChange("audienceDemographics", serialized);
+  }, [handleChange, audienceParsed.custom]);
+
+  const handleAudienceCustom = useCallback((text: string) => {
+    const serialized = serializeChoices(audienceParsed.selected, AUDIENCE_OPTIONS, text);
+    handleChange("audienceDemographics", serialized);
+  }, [handleChange, audienceParsed.selected]);
+
+  // Channels — multi-select
+  const channelParsed = useMemo(() => parseChoices(brief.audienceChannels, CHANNEL_OPTIONS), [brief.audienceChannels]);
+
+  const handleChannelChange = useCallback((newSelected: string[]) => {
+    const serialized = serializeChoices(newSelected, CHANNEL_OPTIONS, channelParsed.custom);
+    handleChange("audienceChannels", serialized);
+  }, [handleChange, channelParsed.custom]);
+
+  const handleChannelCustom = useCallback((text: string) => {
+    const serialized = serializeChoices(channelParsed.selected, CHANNEL_OPTIONS, text);
+    handleChange("audienceChannels", serialized);
+  }, [handleChange, channelParsed.selected]);
+
+  // Style — multi-select (max 3); "unsure" exclusive
+  const styleParsed = useMemo(() => parseChoices(brief.stylePreference, STYLE_OPTIONS), [brief.stylePreference]);
+
+  const handleStyleChange = useCallback((newSelected: string[]) => {
+    const hadUnsure = styleParsed.selected.includes("unsure");
+    const hasUnsure = newSelected.includes("unsure");
+    let final = newSelected;
+    if (!hadUnsure && hasUnsure) final = ["unsure"];
+    else if (hadUnsure && newSelected.length > 1) final = newSelected.filter((v) => v !== "unsure");
+    const serialized = serializeChoices(final, STYLE_OPTIONS, styleParsed.custom);
+    handleChange("stylePreference", serialized);
+  }, [handleChange, styleParsed]);
+
+  const handleStyleCustom = useCallback((text: string) => {
+    const serialized = serializeChoices(styleParsed.selected, STYLE_OPTIONS, text);
+    handleChange("stylePreference", serialized);
+  }, [handleChange, styleParsed.selected]);
+
+  // Color — multi-select (max 3)
+  const colorParsed = useMemo(() => parseColors(brief.colorPalette, DEFAULT_COLOR_PRESETS), [brief.colorPalette]);
+
+  const handleColorChange = useCallback((newSelected: string[]) => {
+    const serialized = serializeColors(newSelected, DEFAULT_COLOR_PRESETS, colorParsed.custom);
+    handleChange("colorPalette", serialized);
+  }, [handleChange, colorParsed.custom]);
+
+  const handleColorCustom = useCallback((text: string) => {
+    const serialized = serializeColors(colorParsed.selected, DEFAULT_COLOR_PRESETS, text);
+    handleChange("colorPalette", serialized);
+  }, [handleChange, colorParsed.selected]);
+
+  // ── Navigation ───────────────────────────────────────────────────────────────
+
+  const handleNext = useCallback(() => {
     const stepErrors = validateStep(currentStep, brief);
     if (Object.keys(stepErrors).length > 0) {
       setErrors(stepErrors);
       const firstField = Object.keys(stepErrors)[0] as keyof BriefData;
-      focusField(firstField);
+      document.getElementById(`brief-${firstField}`)?.focus();
       toast({ title: "Lengkapi field yang wajib diisi", description: Object.values(stepErrors)[0], variant: "destructive" });
       return;
     }
     setErrors({});
     setCurrentStep((s) => Math.min(s + 1, TOTAL_STEPS));
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  }, [currentStep, brief, toast]);
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     setErrors({});
     setCurrentStep((s) => Math.max(s - 1, 1));
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  }, []);
 
-  const jumpToStep = (step: number) => {
+  const jumpToStep = useCallback((step: number) => {
     setErrors({});
     setCurrentStep(step);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  }, []);
 
   const handleSubmit = useCallback(() => {
     if (!requestId) return;
-    setIsSaving(true);
-    setSubmitError(null);
+    setIsSaving(true); setSubmitError(null);
     saveBrief.mutate(
       { requestId, brief },
       {
@@ -257,36 +684,35 @@ export default function BriefPage() {
           setSubmitError(message);
           toast({ title: "Gagal menyimpan", description: message, variant: "destructive" });
           setIsSaving(false);
-          // Draft is intentionally NOT cleared — the user's work stays safe to retry.
         },
       },
     );
   }, [requestId, brief, saveBrief, toast, setLocation, STORAGE_KEY]);
 
-  const continueDraft = () => {
-    if (pendingDraft) setBrief(pendingDraft);
+  const continueDraft = useCallback(() => {
+    if (pendingDraft) { setBrief(pendingDraft); }
     setPendingDraft(null);
-  };
+  }, [pendingDraft]);
 
-  const startOver = () => {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // ignore
-    }
+  const startOver = useCallback(() => {
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     setBrief(EMPTY_BRIEF);
     setPendingDraft(null);
-  };
+  }, [STORAGE_KEY]);
 
   const servicePackage = useMemo(
     () => serviceDetail?.packages.find((p) => p.id === requestDetail?.packageId) ?? null,
     [serviceDetail, requestDetail],
   );
 
+  // ── Loading ──────────────────────────────────────────────────────────────────
+
   if (requestLoading || !draftChecked) {
     return (
       <Layout>
-        <div className="flex justify-center py-32"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
+        <div className="flex justify-center py-32">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
       </Layout>
     );
   }
@@ -299,7 +725,10 @@ export default function BriefPage() {
           <p className="text-sm text-muted-foreground mb-6">
             Link ini mungkin sudah tidak berlaku. Coba akses kembali dari email atau dashboard Anda.
           </p>
-          <button onClick={() => setLocation("/services")} className="px-5 py-2.5 bg-primary text-primary-foreground text-sm font-medium rounded-xl hover:bg-primary/90 transition-colors">
+          <button
+            onClick={() => setLocation("/services")}
+            className="px-5 py-2.5 bg-primary text-primary-foreground text-sm font-medium rounded-xl hover:bg-primary/90 transition-colors"
+          >
             Ke Halaman Layanan
           </button>
         </div>
@@ -307,7 +736,8 @@ export default function BriefPage() {
     );
   }
 
-  // Draft restoration prompt — blocks the form until the user decides.
+  // ── Draft restore prompt ─────────────────────────────────────────────────────
+
   if (pendingDraft) {
     return (
       <Layout>
@@ -318,13 +748,19 @@ export default function BriefPage() {
             </div>
             <h1 className="text-xl font-serif font-medium mb-2">Draft brief ditemukan</h1>
             <p className="text-sm text-muted-foreground mb-6">
-              Kami menemukan jawaban yang belum terkirim, tersimpan di perangkat ini. Lanjutkan mengisi, atau mulai dari awal?
+              Kami menemukan jawaban yang belum terkirim. Lanjutkan mengisi, atau mulai dari awal?
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <button onClick={startOver} className="px-5 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground border border-border rounded-xl transition-colors">
+              <button
+                onClick={startOver}
+                className="px-5 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground border border-border rounded-xl transition-colors"
+              >
                 Mulai dari Awal
               </button>
-              <button onClick={continueDraft} className="px-5 py-2.5 bg-primary text-primary-foreground text-sm font-medium rounded-xl hover:bg-primary/90 transition-colors">
+              <button
+                onClick={continueDraft}
+                className="px-5 py-2.5 bg-primary text-primary-foreground text-sm font-medium rounded-xl hover:bg-primary/90 transition-colors"
+              >
                 Lanjutkan Draft
               </button>
             </div>
@@ -345,306 +781,591 @@ export default function BriefPage() {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 md:px-8 py-12 pb-28 md:pb-12 max-w-3xl">
-        {/* Wizard header */}
+      <div className="container mx-auto px-4 md:px-8 py-10 pb-28 md:pb-12 max-w-3xl">
+
+        {/* ── Wizard header ───────────────────────────────────────────────── */}
         <div className="mb-6">
-          <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground mb-3">
+          <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground mb-4">
             <span className="font-medium text-foreground/80 truncate">
               {serviceDetail?.serviceName ?? "Project Brief"}
               {servicePackage ? ` · ${servicePackage.packageName}` : ""}
             </span>
-            {currentStep === 1 ? (
-              <span className="shrink-0">Sekitar 4–6 menit</span>
-            ) : (
-              <span className="shrink-0">Langkah {currentStep} dari {TOTAL_STEPS}</span>
-            )}
+            <AutosaveStatus state={autosaveState} lastSavedAt={lastSavedAt} now={now} className="shrink-0" />
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-11 h-11 rounded-2xl bg-primary/10 ring-1 ring-primary/20 flex items-center justify-center shrink-0">
               <StepIcon className="w-5 h-5 text-primary" />
             </div>
             <div className="min-w-0">
               <h2
                 ref={headingRef}
                 tabIndex={-1}
-                className="text-xl font-serif font-medium outline-none"
+                className="text-xl font-semibold text-foreground outline-none"
               >
                 {stepInfo.title}
               </h2>
-              <p className="text-xs text-muted-foreground">{stepInfo.description}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{stepInfo.description}</p>
             </div>
-            <AutosaveStatus state={autosaveState} lastSavedAt={lastSavedAt} now={now} className="ml-auto shrink-0" />
           </div>
+
+          <ProgressStepper steps={STEPS} currentStep={currentStep} estimatedMinutes={5} />
         </div>
 
-        {/* Step progress bar — accessible micro-stepper for this wizard's 7 internal steps */}
-        <nav aria-label={`Langkah brief, ${currentStep} dari ${TOTAL_STEPS}`} className="mb-10">
-          <ol className="flex gap-1">
-            {STEPS.map((s) => (
-              <li
-                key={s.id}
-                className="flex-1"
-                aria-current={s.id === currentStep ? "step" : undefined}
-              >
-                <div className={`h-1 rounded-full transition-colors motion-reduce:transition-none ${s.id <= currentStep ? "bg-primary" : "bg-border"}`} />
-              </li>
-            ))}
-          </ol>
-        </nav>
+        {/* ── Step content ────────────────────────────────────────────────── */}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={currentStep}
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -12 }}
+            transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+          >
 
-        <div className="bg-card border border-border rounded-2xl p-6 md:p-8">
-          {/* Step 1 — Business Info */}
-          {currentStep === 1 && (
-            <div className="space-y-5">
-              <FieldGroup id="companyIndustry" label="Apa industri bisnis Anda?" required hint="Contoh: E-commerce, Fintech, Kuliner, Properti" error={errors.companyIndustry}>
-                <input
-                  id="brief-companyIndustry"
-                  className="input-field"
-                  value={brief.companyIndustry}
-                  onChange={(e) => handleChange("companyIndustry", e.target.value)}
-                  placeholder="Masukkan industri perusahaan Anda"
-                  aria-invalid={!!errors.companyIndustry}
-                  aria-describedby={errors.companyIndustry ? "brief-companyIndustry-error" : undefined}
-                  autoComplete="organization"
-                />
-                <GuidedChips options={INDUSTRY_SUGGESTIONS} onSelect={(v) => handleChange("companyIndustry", v)} />
-              </FieldGroup>
-              <FieldGroup id="companySize" label="Berapa ukuran perusahaan Anda?" optional hint="Jumlah karyawan / skala bisnis">
-                <select id="brief-companySize" className="input-field" value={brief.companySize} onChange={(e) => handleChange("companySize", e.target.value)}>
-                  <option value="">Pilih ukuran</option>
-                  <option value="solo">Solo / Freelancer</option>
-                  <option value="startup">Startup (1–10 orang)</option>
-                  <option value="smb">UKM (10–50 orang)</option>
-                  <option value="mid">Menengah (50–200 orang)</option>
-                  <option value="enterprise">Enterprise (200+ orang)</option>
-                </select>
-              </FieldGroup>
-              <FieldGroup id="websiteUrl" label="Punya website atau media sosial?" optional hint="URL profil bisnis yang sudah ada">
-                <input
-                  id="brief-websiteUrl"
-                  className="input-field"
-                  type="url"
-                  value={brief.websiteUrl}
-                  onChange={(e) => handleChange("websiteUrl", e.target.value)}
-                  placeholder="https://..."
-                  autoComplete="url"
-                />
-              </FieldGroup>
-            </div>
-          )}
+            {/* ── Step 1 — Business Info ─────────────────────────────────── */}
+            {currentStep === 1 && (
+              <SectionCard icon={Building2} title="Informasi Bisnis" description="Ceritakan sedikit tentang bisnis Anda.">
 
-          {/* Step 2 — Project Goals */}
-          {currentStep === 2 && (
-            <div className="space-y-5">
-              <FieldGroup id="primaryGoal" label="Apa tujuan utama project ini?" required hint="Contoh: meningkatkan brand awareness, memperkenalkan produk baru." error={errors.primaryGoal}>
-                <textarea
-                  id="brief-primaryGoal"
-                  className="input-field min-h-[100px]"
-                  value={brief.primaryGoal}
-                  onChange={(e) => handleChange("primaryGoal", e.target.value)}
-                  placeholder="Contoh: Meningkatkan brand awareness, memperkenalkan produk baru, meningkatkan konversi penjualan..."
-                  aria-invalid={!!errors.primaryGoal}
-                  aria-describedby={errors.primaryGoal ? "brief-primaryGoal-error" : undefined}
-                />
-                <GuidedChips options={GOAL_SUGGESTIONS} onSelect={(v) => handleChange("primaryGoal", brief.primaryGoal ? `${brief.primaryGoal}. ${v}` : v)} />
-              </FieldGroup>
-              <FieldGroup id="successMetrics" label="Bagaimana Anda mengukur kesuksesan project ini?" optional>
-                <textarea
-                  id="brief-successMetrics"
-                  className="input-field min-h-[80px]"
-                  value={brief.successMetrics}
-                  onChange={(e) => handleChange("successMetrics", e.target.value)}
-                  placeholder="Contoh: 1000 engagement dalam 7 hari, 10% peningkatan click-through rate..."
-                />
-              </FieldGroup>
-              <FieldGroup id="existingAssets" label="Apakah Anda sudah punya materi yang bisa kami gunakan?" optional hint="Logo, foto, brand guideline, dll — tulis 'tidak ada' bila belum punya">
-                <textarea
-                  id="brief-existingAssets"
-                  className="input-field min-h-[80px]"
-                  value={brief.existingAssets}
-                  onChange={(e) => handleChange("existingAssets", e.target.value)}
-                  placeholder="Sebutkan aset yang dimiliki atau tulis 'tidak ada'"
-                />
-              </FieldGroup>
-            </div>
-          )}
+                {/* Industry */}
+                <FieldItem id="companyIndustry" label={serviceConfig.step1.industryLabel} required error={errors.companyIndustry}>
+                  <TagSelector
+                    options={INDUSTRY_OPTIONS}
+                    value={industryTagValue}
+                    onChange={handleIndustryTagChange}
+                    placeholder="Cari industri..."
+                    singleSelect
+                    groupable
+                    searchable
+                  />
+                  {/* Quick suggestions */}
+                  <SuggestionGroup
+                    label="Pilihan cepat"
+                    options={INDUSTRY_QUICK_VALUES.map((v) => INDUSTRY_OPTIONS.find((o) => o.value === v)?.label ?? v)}
+                    onSelect={(label) => {
+                      const opt = INDUSTRY_OPTIONS.find((o) => o.label === label);
+                      if (opt) handleChange("companyIndustry", opt.label);
+                    }}
+                  />
+                  {/* "Lainnya" custom input */}
+                  <AnimatePresence>
+                    {industryParsed.selected === "other" && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <input
+                          id="brief-companyIndustry"
+                          className="input-field mt-2"
+                          value={industryParsed.custom}
+                          onChange={(e) => handleChange("companyIndustry", e.target.value || "Lainnya")}
+                          placeholder="Tuliskan industri bisnis Anda"
+                          aria-invalid={!!errors.companyIndustry}
+                          aria-label="Tuliskan industri bisnis Anda"
+                          autoFocus
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </FieldItem>
 
-          {/* Step 3 — Target Audience */}
-          {currentStep === 3 && (
-            <div className="space-y-5">
-              <FieldGroup id="audienceDemographics" label="Siapa target utama proyek ini?" required hint="Contoh: pemilik bisnis F&B usia 25–40 tahun di Jakarta." error={errors.audienceDemographics}>
-                <textarea
-                  id="brief-audienceDemographics"
-                  className="input-field min-h-[100px]"
-                  value={brief.audienceDemographics}
-                  onChange={(e) => handleChange("audienceDemographics", e.target.value)}
-                  placeholder="Contoh: Wanita 25–35 tahun, profesional urban, penghasilan Rp 5–15 juta/bulan..."
-                  aria-invalid={!!errors.audienceDemographics}
-                  aria-describedby={errors.audienceDemographics ? "brief-audienceDemographics-error" : undefined}
-                />
-              </FieldGroup>
-              <FieldGroup id="audiencePainPoints" label="Masalah apa yang ingin diselesaikan untuk audiens ini?" optional>
-                <textarea
-                  id="brief-audiencePainPoints"
-                  className="input-field min-h-[80px]"
-                  value={brief.audiencePainPoints}
-                  onChange={(e) => handleChange("audiencePainPoints", e.target.value)}
-                  placeholder="Contoh: Kesulitan menemukan produk berkualitas dengan harga terjangkau..."
-                />
-              </FieldGroup>
-              <FieldGroup id="audienceChannels" label="Di mana audiens Anda biasanya berada?" optional hint="Platform / channel utama">
-                <input
-                  id="brief-audienceChannels"
-                  className="input-field"
-                  value={brief.audienceChannels}
-                  onChange={(e) => handleChange("audienceChannels", e.target.value)}
-                  placeholder="Contoh: Instagram, TikTok, LinkedIn, Website, WhatsApp..."
-                />
-                <GuidedChips options={CHANNEL_SUGGESTIONS} label="Suggested options" onSelect={(v) => {
-                  const parts = brief.audienceChannels.split(",").map((p) => p.trim()).filter(Boolean);
-                  if (!parts.includes(v)) parts.push(v);
-                  handleChange("audienceChannels", parts.join(", "));
-                }} />
-              </FieldGroup>
-            </div>
-          )}
-
-          {/* Step 4 — Visual Style */}
-          {currentStep === 4 && (
-            <div className="space-y-5">
-              <FieldGroup id="stylePreference" label="Gaya visual seperti apa yang Anda inginkan?" required error={errors.stylePreference}>
-                <select
-                  id="brief-stylePreference"
-                  className="input-field"
-                  value={brief.stylePreference}
-                  onChange={(e) => handleChange("stylePreference", e.target.value)}
-                  aria-invalid={!!errors.stylePreference}
-                  aria-describedby={errors.stylePreference ? "brief-stylePreference-error" : undefined}
-                >
-                  <option value="">Pilih gaya</option>
-                  <option value="modern_minimal">Modern & Minimal</option>
-                  <option value="bold_vibrant">Bold & Vibrant</option>
-                  <option value="elegant_luxury">Elegant & Luxury</option>
-                  <option value="playful_fun">Playful & Fun</option>
-                  <option value="corporate_professional">Corporate & Professional</option>
-                  <option value="natural_organic">Natural & Organic</option>
-                  <option value="tech_futuristic">Tech & Futuristic</option>
-                  <option value="cultural_traditional">Cultural & Traditional</option>
-                  <option value="other">Lainnya (deskripsikan di bawah)</option>
-                </select>
-              </FieldGroup>
-              <FieldGroup id="colorPalette" label="Ada warna brand yang sudah Anda pakai?" optional hint="Warna brand yang sudah ada atau preferensi warna">
-                <input
-                  id="brief-colorPalette"
-                  className="input-field"
-                  value={brief.colorPalette}
-                  onChange={(e) => handleChange("colorPalette", e.target.value)}
-                  placeholder="Contoh: Biru dan putih, atau #1A73E8 dan #EA4335..."
-                />
-              </FieldGroup>
-              <FieldGroup id="referenceLinks" label="Punya contoh desain yang Anda suka?" optional hint="Tempel link — opsional, tapi sangat membantu">
-                <textarea
-                  id="brief-referenceLinks"
-                  className="input-field min-h-[80px]"
-                  value={brief.referenceLinks}
-                  onChange={(e) => handleChange("referenceLinks", e.target.value)}
-                  placeholder="Tempelkan link contoh desain, iklan kompetitor, atau inspirasi visual..."
-                />
-              </FieldGroup>
-            </div>
-          )}
-
-          {/* Step 5 — Deliverables */}
-          {currentStep === 5 && (
-            <div className="space-y-5">
-              <FieldGroup id="outputFormats" label="Format output apa yang Anda butuhkan?" required error={errors.outputFormats}>
-                <textarea
-                  id="brief-outputFormats"
-                  className="input-field min-h-[100px]"
-                  value={brief.outputFormats}
-                  onChange={(e) => handleChange("outputFormats", e.target.value)}
-                  placeholder="Contoh: 3 variasi konten Instagram (1:1 + Story), 1 banner website (1200x628), PDF katalog 4 halaman..."
-                  aria-invalid={!!errors.outputFormats}
-                  aria-describedby={errors.outputFormats ? "brief-outputFormats-error" : undefined}
-                />
-              </FieldGroup>
-              <FieldGroup id="outputLanguage" label="Bahasa apa yang digunakan dalam konten?" optional>
-                <select id="brief-outputLanguage" className="input-field" value={brief.outputLanguage} onChange={(e) => handleChange("outputLanguage", e.target.value)}>
-                  <option value="id">Bahasa Indonesia</option>
-                  <option value="en">Bahasa Inggris</option>
-                  <option value="id_en">Bilingual (Indonesia + Inggris)</option>
-                </select>
-              </FieldGroup>
-              <FieldGroup id="specialRequirements" label="Ada hal khusus yang perlu kami perhatikan?" optional>
-                <textarea
-                  id="brief-specialRequirements"
-                  className="input-field min-h-[80px]"
-                  value={brief.specialRequirements}
-                  onChange={(e) => handleChange("specialRequirements", e.target.value)}
-                  placeholder="Contoh: Jangan gunakan gambar manusia, harus ada tagline tertentu, format harus editable..."
-                />
-              </FieldGroup>
-            </div>
-          )}
-
-          {/* Step 6 — Timeline */}
-          {currentStep === 6 && (
-            <div className="space-y-5">
-              <FieldGroup id="deadline" label="Kapan Anda membutuhkan deliverables ini?" required error={errors.deadline}>
-                <input
-                  id="brief-deadline"
-                  type="date"
-                  className="input-field"
-                  value={brief.deadline}
-                  min={new Date().toISOString().split("T")[0]}
-                  onChange={(e) => handleChange("deadline", e.target.value)}
-                  aria-invalid={!!errors.deadline}
-                  aria-describedby={errors.deadline ? "brief-deadline-error" : undefined}
-                />
-              </FieldGroup>
-              <FieldGroup id="priority" label="Seberapa mendesak project ini?" optional>
-                <select id="brief-priority" className="input-field" value={brief.priority} onChange={(e) => handleChange("priority", e.target.value)}>
-                  <option value="normal">Normal (sesuai jadwal)</option>
-                  <option value="high">Tinggi (dipercepat)</option>
-                  <option value="urgent">Urgent (same-day/24h)</option>
-                </select>
-                {brief.priority === "urgent" && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5">
-                    Permintaan urgent dapat memengaruhi biaya tambahan (rush fee) pada penawaran harga.
-                  </p>
+                {/* Company size */}
+                {serviceConfig.step1.showSize && (
+                  <FieldItem id="companySize" label="Berapa ukuran perusahaan Anda?" optional hint="Pilih yang paling sesuai">
+                    <SelectionCard
+                      options={COMPANY_SIZE_OPTIONS}
+                      value={brief.companySize}
+                      onChange={(v) => handleChange("companySize", v)}
+                      columns={5}
+                    />
+                  </FieldItem>
                 )}
-              </FieldGroup>
-              <FieldGroup id="milestones" label="Ada tanggal penting lain yang perlu diperhatikan?" optional>
-                <textarea
-                  id="brief-milestones"
-                  className="input-field min-h-[80px]"
-                  value={brief.milestones}
-                  onChange={(e) => handleChange("milestones", e.target.value)}
-                  placeholder="Contoh: Draft pertama dibutuhkan sebelum 20 Juli, final sebelum 31 Juli untuk launch event..."
-                />
-              </FieldGroup>
-            </div>
-          )}
 
-          {/* Step 7 — Review */}
-          {currentStep === 7 && (
-            <ReviewStep
-              brief={brief}
-              onEditStep={jumpToStep}
-              confirmed={reviewConfirmed}
-              onConfirmChange={setReviewConfirmed}
-            />
-          )}
-        </div>
+                {/* Website */}
+                <FieldItem id="websiteUrl" label={serviceConfig.step1.websiteLabel!} optional hint={serviceConfig.step1.websiteHint}>
+                  {/* "Belum punya" toggle */}
+                  <label className={cn(
+                    "inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-medium cursor-pointer transition-all duration-200 mb-2",
+                    noWebsite
+                      ? "bg-primary/10 border-primary text-primary"
+                      : "border-border/50 text-muted-foreground hover:border-primary/30 hover:text-foreground",
+                  )}>
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={noWebsite}
+                      onChange={() => handleChange("websiteUrl", noWebsite ? "" : "Belum punya website")}
+                    />
+                    Belum punya website atau media sosial
+                  </label>
+                  <AnimatePresence>
+                    {!noWebsite && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <input
+                          id="brief-websiteUrl"
+                          className="input-field"
+                          type="url"
+                          value={brief.websiteUrl}
+                          onChange={(e) => handleChange("websiteUrl", e.target.value)}
+                          placeholder="https://websiteanda.com atau @username"
+                          autoComplete="url"
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </FieldItem>
+              </SectionCard>
+            )}
 
+            {/* ── Step 2 — Project Goals ─────────────────────────────────── */}
+            {currentStep === 2 && (
+              <SectionCard icon={Target} title="Tujuan Project" description="Apa yang ingin Anda capai dengan project ini?">
+
+                {/* Primary Goal */}
+                <FieldItem id="primaryGoal" label={serviceConfig.step2.goalLabel} required error={errors.primaryGoal}>
+                  <p className="text-xs text-muted-foreground -mt-1 mb-2">{serviceConfig.step2.goalDescription}</p>
+                  <MultiSelectChips
+                    options={GOAL_OPTIONS}
+                    selected={goalParsed.selected}
+                    onChange={handleGoalChange}
+                    max={5}
+                    error={!!errors.primaryGoal}
+                  />
+                  <AnimatePresence>
+                    {goalParsed.selected.includes("other") && (
+                      <motion.textarea
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="input-field min-h-[80px] mt-2"
+                        value={goalParsed.custom}
+                        onChange={(e) => handleGoalCustom(e.target.value)}
+                        placeholder="Jelaskan tujuan lain yang ingin dicapai"
+                        aria-label="Tujuan lainnya"
+                      />
+                    )}
+                  </AnimatePresence>
+                </FieldItem>
+
+                {/* Success Metrics */}
+                {serviceConfig.step2.showSuccessMetrics && (
+                  <FieldItem id="successMetrics" label="Bagaimana Anda mengukur kesuksesan project ini?" optional>
+                    <MultiSelectChips
+                      options={METRIC_OPTIONS}
+                      selected={metricParsed.selected}
+                      onChange={handleMetricChange}
+                    />
+                    <AnimatePresence>
+                      {metricParsed.selected.includes("other") && (
+                        <motion.input
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="input-field mt-2"
+                          value={metricParsed.custom}
+                          onChange={(e) => handleMetricCustom(e.target.value)}
+                          placeholder="Metrik lain yang ingin dicapai"
+                          aria-label="Metrik lainnya"
+                        />
+                      )}
+                      {metricParsed.selected.length > 0 && !metricParsed.selected.includes("unsure") && (
+                        <motion.input
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="input-field mt-2"
+                          value={metricDetail}
+                          onChange={(e) => handleMetricDetail(e.target.value)}
+                          placeholder="Tambahkan target angka atau periode waktu — mis. 1.000 engagement dalam 7 hari"
+                          aria-label="Target angka atau waktu"
+                        />
+                      )}
+                    </AnimatePresence>
+                  </FieldItem>
+                )}
+
+                {/* Existing Assets */}
+                {serviceConfig.step2.showExistingAssets && (
+                  <FieldItem id="existingAssets" label={serviceConfig.step2.existingAssetsLabel!} optional>
+                    <MultiSelectChips
+                      options={ASSET_OPTIONS}
+                      selected={assetParsed.selected}
+                      onChange={handleAssetChange}
+                    />
+                    <AnimatePresence>
+                      {assetParsed.selected.includes("other") && (
+                        <motion.input
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="input-field mt-2"
+                          value={assetParsed.custom}
+                          onChange={(e) => handleAssetCustom(e.target.value)}
+                          placeholder="Sebutkan aset lain yang tersedia"
+                          aria-label="Aset lainnya"
+                        />
+                      )}
+                    </AnimatePresence>
+                    {/* Collapsible notes */}
+                    {!showAssetNotes ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowAssetNotes(true)}
+                        className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Tambahkan catatan aset
+                      </button>
+                    ) : (
+                      <AnimatePresence>
+                        <motion.textarea
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          transition={{ duration: 0.2 }}
+                          className="input-field min-h-[60px] mt-2"
+                          value={assetNotes}
+                          onChange={(e) => handleAssetNotes(e.target.value)}
+                          placeholder="Catatan tambahan tentang aset yang tersedia..."
+                          aria-label="Catatan aset"
+                        />
+                      </AnimatePresence>
+                    )}
+                  </FieldItem>
+                )}
+              </SectionCard>
+            )}
+
+            {/* ── Step 3 — Target Audience ───────────────────────────────── */}
+            {currentStep === 3 && (
+              <SectionCard icon={Users} title="Target Audiens" description="Siapa yang paling ingin Anda jangkau?">
+
+                {/* Audience type */}
+                <FieldItem id="audienceDemographics" label={serviceConfig.step3.audienceLabel} required error={errors.audienceDemographics}>
+                  <p className="text-xs text-muted-foreground -mt-1 mb-2">{serviceConfig.step3.audienceDescription}</p>
+                  <MultiSelectChips
+                    options={AUDIENCE_OPTIONS}
+                    selected={audienceParsed.selected}
+                    onChange={handleAudienceChange}
+                    max={4}
+                    error={!!errors.audienceDemographics}
+                  />
+                  <AnimatePresence>
+                    {audienceParsed.selected.includes("other") && (
+                      <motion.input
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="input-field mt-2"
+                        value={audienceParsed.custom}
+                        onChange={(e) => handleAudienceCustom(e.target.value)}
+                        placeholder="Segmen audiens lain yang ingin dijangkau"
+                        aria-label="Audiens lainnya"
+                      />
+                    )}
+                  </AnimatePresence>
+                </FieldItem>
+
+                {/* Pain points — collapsible */}
+                {serviceConfig.step3.showPainPoints && (
+                  <FieldItem id="audiencePainPoints" label={serviceConfig.step3.painPointsLabel!} optional>
+                    {!showPainPoints ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowPainPoints(true)}
+                        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Tambahkan detail
+                      </button>
+                    ) : (
+                      <textarea
+                        id="brief-audiencePainPoints"
+                        className="input-field min-h-[80px]"
+                        value={brief.audiencePainPoints}
+                        onChange={(e) => handleChange("audiencePainPoints", e.target.value)}
+                        placeholder="Contoh: Kesulitan menemukan produk berkualitas dengan harga terjangkau..."
+                      />
+                    )}
+                  </FieldItem>
+                )}
+
+                {/* Channels */}
+                {serviceConfig.step3.showChannels && (
+                  <FieldItem id="audienceChannels" label={serviceConfig.step3.channelsLabel!} optional>
+                    <MultiSelectChips
+                      options={CHANNEL_OPTIONS}
+                      selected={channelParsed.selected}
+                      onChange={handleChannelChange}
+                    />
+                    <AnimatePresence>
+                      {channelParsed.selected.includes("other") && (
+                        <motion.input
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="input-field mt-2"
+                          value={channelParsed.custom}
+                          onChange={(e) => handleChannelCustom(e.target.value)}
+                          placeholder="Platform atau channel lain"
+                          aria-label="Channel lainnya"
+                        />
+                      )}
+                    </AnimatePresence>
+                  </FieldItem>
+                )}
+              </SectionCard>
+            )}
+
+            {/* ── Step 4 — Visual Style & References ────────────────────── */}
+            {currentStep === 4 && (
+              <SectionCard icon={Palette} title="Gaya Visual & Referensi" description="Bantu tim kami memahami arah visual yang Anda mau.">
+
+                {/* Style */}
+                <FieldItem id="stylePreference" label={serviceConfig.step4.styleLabel!} required error={errors.stylePreference}>
+                  <MultiSelectChips
+                    options={STYLE_OPTIONS}
+                    selected={styleParsed.selected}
+                    onChange={handleStyleChange}
+                    max={3}
+                    error={!!errors.stylePreference}
+                    hint="Maks. 3 pilihan. Hover chip untuk melihat deskripsi."
+                  />
+                  <AnimatePresence>
+                    {styleParsed.selected.includes("other") && (
+                      <motion.input
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="input-field mt-2"
+                        value={styleParsed.custom}
+                        onChange={(e) => handleStyleCustom(e.target.value)}
+                        placeholder="Jelaskan gaya visual yang Anda inginkan"
+                        aria-label="Gaya visual lainnya"
+                      />
+                    )}
+                  </AnimatePresence>
+                </FieldItem>
+
+                {/* Color */}
+                {serviceConfig.step4.showColor && (
+                  <FieldItem id="colorPalette" label="Warna brand yang Anda suka?" optional hint="Maks. 3 warna">
+                    <ColorPicker
+                      value={colorParsed.selected}
+                      onChange={handleColorChange}
+                      max={3}
+                    />
+                    {/* "Warna lainnya" custom input */}
+                    <AnimatePresence>
+                      {colorParsed.selected.includes("other") && (
+                        <motion.input
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="input-field mt-2"
+                          value={colorParsed.custom}
+                          onChange={(e) => handleColorCustom(e.target.value)}
+                          placeholder="Nama warna atau kode hex — contoh: Teal, #006B75"
+                          aria-label="Warna lainnya"
+                        />
+                      )}
+                    </AnimatePresence>
+                    {/* "Warna lainnya" trigger when not yet selected */}
+                    {!colorParsed.selected.includes("other") && !colorParsed.selected.includes("none") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newSel = [...colorParsed.selected.filter(v => v !== "none"), "other"];
+                          handleColorChange(newSel);
+                        }}
+                        className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Warna lainnya
+                      </button>
+                    )}
+                  </FieldItem>
+                )}
+
+                {/* References — collapsible */}
+                {serviceConfig.step4.showReferences && (
+                  <FieldItem id="referenceLinks" label={serviceConfig.step4.referenceLabel!} optional hint={serviceConfig.step4.referenceHint}>
+                    <textarea
+                      id="brief-referenceLinks"
+                      className="input-field min-h-[80px]"
+                      value={brief.referenceLinks}
+                      onChange={(e) => handleChange("referenceLinks", e.target.value)}
+                      placeholder="Tempelkan link referensi desain, brand yang Anda suka, atau kompetitor..."
+                    />
+                  </FieldItem>
+                )}
+
+                {/* Special requirements — collapsible */}
+                {serviceConfig.step4.showSpecialReq && (
+                  <FieldItem id="specialRequirements" label={serviceConfig.step4.specialReqLabel!} optional hint={serviceConfig.step4.specialReqHint}>
+                    {!showSpecialReq ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowSpecialReq(true)}
+                        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Tambahkan detail
+                      </button>
+                    ) : (
+                      <textarea
+                        id="brief-specialRequirements"
+                        className="input-field min-h-[80px]"
+                        value={brief.specialRequirements}
+                        onChange={(e) => handleChange("specialRequirements", e.target.value)}
+                        placeholder="Contoh: Jangan gunakan gambar manusia, harus ada tagline tertentu..."
+                      />
+                    )}
+                  </FieldItem>
+                )}
+              </SectionCard>
+            )}
+
+            {/* ── Step 5 — Deliverables ──────────────────────────────────── */}
+            {currentStep === 5 && (
+              <SectionCard icon={Package} title="Deliverables" description="Format dan jumlah output yang Anda butuhkan.">
+
+                <FieldItem id="outputFormats" label={serviceConfig.step5.outputLabel} required error={errors.outputFormats}>
+                  <textarea
+                    id="brief-outputFormats"
+                    className="input-field min-h-[100px]"
+                    value={brief.outputFormats}
+                    onChange={(e) => handleChange("outputFormats", e.target.value)}
+                    placeholder={serviceConfig.step5.outputHint}
+                    aria-invalid={!!errors.outputFormats}
+                    aria-describedby={errors.outputFormats ? "brief-outputFormats-error" : undefined}
+                  />
+                </FieldItem>
+
+                {serviceConfig.step5.showLanguage && (
+                  <FieldItem id="outputLanguage" label="Bahasa konten" optional>
+                    <ChoiceChip
+                      options={LANGUAGE_OPTIONS}
+                      value={brief.outputLanguage}
+                      onChange={(v) => handleChange("outputLanguage", v)}
+                    />
+                  </FieldItem>
+                )}
+
+                {!serviceConfig.step4.showSpecialReq && (
+                  <FieldItem id="specialRequirements" label="Ada hal khusus yang perlu kami perhatikan?" optional>
+                    {!showSpecialReq ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowSpecialReq(true)}
+                        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Tambahkan detail
+                      </button>
+                    ) : (
+                      <textarea
+                        id="brief-specialRequirements"
+                        className="input-field min-h-[80px]"
+                        value={brief.specialRequirements}
+                        onChange={(e) => handleChange("specialRequirements", e.target.value)}
+                        placeholder="Contoh: Harus ada tagline tertentu, format harus editable, dll..."
+                      />
+                    )}
+                  </FieldItem>
+                )}
+              </SectionCard>
+            )}
+
+            {/* ── Step 6 — Timeline ─────────────────────────────────────── */}
+            {currentStep === 6 && (
+              <SectionCard icon={Calendar} title="Deadline" description="Kapan Anda membutuhkan hasil akhirnya?">
+
+                <FieldItem id="deadline" label="Kapan Anda membutuhkan deliverables ini?" required error={errors.deadline}>
+                  <input
+                    id="brief-deadline"
+                    type="date"
+                    className="input-field"
+                    value={brief.deadline}
+                    min={new Date().toISOString().split("T")[0]}
+                    onChange={(e) => handleChange("deadline", e.target.value)}
+                    aria-invalid={!!errors.deadline}
+                    aria-describedby={errors.deadline ? "brief-deadline-error" : undefined}
+                  />
+                </FieldItem>
+
+                {serviceConfig.step6.showPriority && (
+                  <FieldItem id="priority" label="Apa yang paling penting untuk Anda?" optional>
+                    <ChoiceChip
+                      options={PRIORITY_OPTIONS}
+                      value={normalizeLegacyPriority(brief.priority)}
+                      onChange={(v) => handleChange("priority", v)}
+                    />
+                    {brief.priority === "speed" && (
+                      <p className="text-xs text-amber-500 mt-2">
+                        ⚡ Pengerjaan dipercepat dapat memengaruhi rush fee pada penawaran harga.
+                      </p>
+                    )}
+                  </FieldItem>
+                )}
+
+                {serviceConfig.step6.showMilestones && (
+                  <FieldItem id="milestones" label="Ada tanggal penting lain yang perlu diperhatikan?" optional>
+                    {!showMilestones ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowMilestones(true)}
+                        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Tambahkan milestone
+                      </button>
+                    ) : (
+                      <textarea
+                        id="brief-milestones"
+                        className="input-field min-h-[80px]"
+                        value={brief.milestones}
+                        onChange={(e) => handleChange("milestones", e.target.value)}
+                        placeholder="Contoh: Draft pertama sebelum 20 Juli, final sebelum 31 Juli untuk launch event..."
+                      />
+                    )}
+                  </FieldItem>
+                )}
+              </SectionCard>
+            )}
+
+            {/* ── Step 7 — Review ───────────────────────────────────────── */}
+            {currentStep === 7 && (
+              <ReviewStep
+                brief={brief}
+                onEditStep={jumpToStep}
+                confirmed={reviewConfirmed}
+                onConfirmChange={setReviewConfirmed}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Submit error */}
         {submitError && currentStep === TOTAL_STEPS && (
-          <div role="alert" className="mt-4 p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-sm text-destructive">
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            role="alert"
+            className="mt-4 p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-sm text-destructive"
+          >
             Gagal mengirim brief: {submitError}. Jawaban Anda tetap tersimpan — silakan coba lagi.
-          </div>
+          </motion.div>
         )}
 
-        {/* Navigation */}
+        {/* Desktop navigation */}
         <div className="hidden md:flex items-center justify-between mt-6">
           <NavButtons
             currentStep={currentStep}
@@ -658,7 +1379,7 @@ export default function BriefPage() {
         </div>
       </div>
 
-      {/* Sticky mobile action bar — keeps CTA reachable above the on-screen keyboard */}
+      {/* Sticky mobile action bar */}
       <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-background/95 backdrop-blur border-t border-border p-3 flex items-center justify-between gap-3">
         <NavButtons
           currentStep={currentStep}
@@ -674,7 +1395,39 @@ export default function BriefPage() {
   );
 }
 
-// ── Navigation buttons (shared between desktop row and mobile sticky bar) ──────
+// ── MultiSelectChips ──────────────────────────────────────────────────────────
+// Local wrapper: renders MultiChoiceChip with optional counter + hint
+
+function MultiSelectChips({
+  options, selected, onChange, max, error, hint,
+}: {
+  options: { value: string; label: string; description?: string }[];
+  selected: string[];
+  onChange: (v: string[]) => void;
+  max?: number;
+  error?: boolean;
+  hint?: string;
+}) {
+  return (
+    <div>
+      {hint && <p className="text-xs text-muted-foreground mb-2">{hint}</p>}
+      <MultiChoiceChip
+        options={options}
+        value={selected}
+        onChange={onChange}
+        max={max}
+        aria-invalid={error}
+      />
+      {max && (
+        <p className="text-[11px] text-muted-foreground mt-1.5">
+          {selected.length} dari maks. {max} dipilih
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Navigation buttons ────────────────────────────────────────────────────────
 
 function NavButtons({
   currentStep, totalSteps, isSaving, reviewConfirmed, onBack, onNext, onSubmit,
@@ -688,107 +1441,114 @@ function NavButtons({
       <button
         onClick={onBack}
         disabled={currentStep === 1}
-        className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+        className={cn(
+          "inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 min-h-[44px]",
+          "text-muted-foreground hover:text-foreground hover:bg-surface-2",
+          "disabled:opacity-40 disabled:cursor-not-allowed",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        )}
       >
         <ArrowLeft className="w-4 h-4" /> Kembali
       </button>
 
       {!isReview ? (
-        <button
+        <motion.button
           onClick={onNext}
-          className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground text-sm font-medium rounded-xl hover:bg-primary/90 transition-colors min-h-[44px]"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className={cn(
+            "inline-flex items-center gap-2 px-6 py-2.5 text-sm font-medium rounded-xl min-h-[44px]",
+            "bg-gradient-to-r from-violet-600 to-primary text-white",
+            "hover:shadow-[0_0_20px_-4px_rgba(124,110,250,0.6)] transition-all duration-200",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+          )}
         >
           Lanjut <ArrowRight className="w-4 h-4" />
-        </button>
+        </motion.button>
       ) : (
-        <button
+        <motion.button
           onClick={onSubmit}
           disabled={isSaving || !reviewConfirmed}
+          whileHover={!isSaving && reviewConfirmed ? { scale: 1.02 } : undefined}
+          whileTap={!isSaving && reviewConfirmed ? { scale: 0.98 } : undefined}
           title={!reviewConfirmed ? "Konfirmasi bahwa informasi sudah benar untuk melanjutkan" : undefined}
-          className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground text-sm font-medium rounded-xl hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+          className={cn(
+            "inline-flex items-center gap-2 px-6 py-2.5 text-sm font-medium rounded-xl min-h-[44px]",
+            "bg-gradient-to-r from-violet-600 to-primary text-white",
+            "hover:shadow-[0_0_20px_-4px_rgba(124,110,250,0.6)] transition-all duration-200",
+            "disabled:opacity-50 disabled:cursor-not-allowed",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+          )}
         >
           {isSaving ? (
             <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan...</>
           ) : (
             <><CheckCircle2 className="w-4 h-4" /> Kirim Brief</>
           )}
-        </button>
+        </motion.button>
       )}
     </>
   );
 }
 
-// ── Review step ──────────────────────────────────────────────────────────────
+// ── Review step ───────────────────────────────────────────────────────────────
 
-const REVIEW_SECTIONS: { heading: string; step: number; rows: { label: string; key: keyof BriefData }[] }[] = [
-  { heading: "Bisnis", step: 1, rows: [
-    { label: "Industri", key: "companyIndustry" },
-    { label: "Ukuran Perusahaan", key: "companySize" },
-    { label: "Website", key: "websiteUrl" },
-  ] },
-  { heading: "Tujuan", step: 2, rows: [
-    { label: "Tujuan Utama", key: "primaryGoal" },
-    { label: "Metrik Keberhasilan", key: "successMetrics" },
-  ] },
-  { heading: "Audiens", step: 3, rows: [
-    { label: "Target Audiens", key: "audienceDemographics" },
-    { label: "Channel", key: "audienceChannels" },
-  ] },
-  { heading: "Arah Visual", step: 4, rows: [
-    { label: "Gaya Visual", key: "stylePreference" },
-    { label: "Palet Warna", key: "colorPalette" },
-  ] },
-  { heading: "Deliverables", step: 5, rows: [
-    { label: "Format Output", key: "outputFormats" },
-    { label: "Bahasa", key: "outputLanguage" },
-  ] },
-  { heading: "Timeline", step: 6, rows: [
-    { label: "Deadline", key: "deadline" },
-    { label: "Prioritas", key: "priority" },
-  ] },
+const REVIEW_SECTIONS = [
+  { heading: "Bisnis",       step: 1, icon: Building2, rows: [
+    { label: "Industri",     key: "companyIndustry"      as keyof BriefData },
+    { label: "Ukuran",       key: "companySize"           as keyof BriefData },
+    { label: "Website",      key: "websiteUrl"            as keyof BriefData },
+  ]},
+  { heading: "Tujuan",       step: 2, icon: Target, rows: [
+    { label: "Tujuan Utama", key: "primaryGoal"           as keyof BriefData },
+    { label: "Metrik",       key: "successMetrics"        as keyof BriefData },
+    { label: "Aset",         key: "existingAssets"        as keyof BriefData },
+  ]},
+  { heading: "Audiens",      step: 3, icon: Users, rows: [
+    { label: "Target",       key: "audienceDemographics"  as keyof BriefData },
+    { label: "Channel",      key: "audienceChannels"      as keyof BriefData },
+  ]},
+  { heading: "Visual",       step: 4, icon: Palette, rows: [
+    { label: "Gaya",         key: "stylePreference"       as keyof BriefData },
+    { label: "Warna",        key: "colorPalette"          as keyof BriefData },
+    { label: "Referensi",    key: "referenceLinks"        as keyof BriefData },
+  ]},
+  { heading: "Deliverables", step: 5, icon: Package, rows: [
+    { label: "Format",       key: "outputFormats"         as keyof BriefData },
+    { label: "Bahasa",       key: "outputLanguage"        as keyof BriefData },
+  ]},
+  { heading: "Timeline",     step: 6, icon: Calendar, rows: [
+    { label: "Deadline",     key: "deadline"              as keyof BriefData },
+    { label: "Prioritas",    key: "priority"              as keyof BriefData },
+  ]},
 ];
 
 function ReviewStep({
   brief, onEditStep, confirmed, onConfirmChange,
 }: {
-  brief: BriefData; onEditStep: (step: number) => void; confirmed: boolean; onConfirmChange: (v: boolean) => void;
+  brief: BriefData; onEditStep: (step: number) => void;
+  confirmed: boolean; onConfirmChange: (v: boolean) => void;
 }) {
+  const sections = REVIEW_SECTIONS.map((s) => ({
+    heading: s.heading, step: s.step, icon: s.icon,
+    rows: s.rows
+      .map((r) => ({ label: r.label, value: brief[r.key] || "" }))
+      .filter((r) => r.value),
+  })).filter((s) => s.rows.length > 0);
+
   return (
-    <div className="space-y-6">
-      <p className="text-muted-foreground text-sm">
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground leading-relaxed">
         Tinjau ringkasan brief Anda sebelum mengirim. Tim kami akan mempelajari detail ini untuk menyiapkan proposal harga yang tepat.
       </p>
 
-      {REVIEW_SECTIONS.map((section) => (
-        <div key={section.heading} className="border border-border/60 rounded-xl p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-foreground">{section.heading}</h3>
-            <button
-              type="button"
-              onClick={() => onEditStep(section.step)}
-              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-            >
-              <Pencil className="w-3 h-3" /> Edit
-            </button>
-          </div>
-          <div className="space-y-2">
-            {section.rows.map((row) => (
-              <div key={row.key} className="flex gap-4">
-                <span className="text-xs font-medium text-muted-foreground w-32 shrink-0">{row.label}</span>
-                <span className="text-sm text-foreground">
-                  {brief[row.key]?.trim() ? brief[row.key] : <em className="text-muted-foreground not-italic">Not provided</em>}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
+      <SummaryCard sections={sections} onEditStep={onEditStep} />
 
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground leading-relaxed">
         Draft ini tersimpan hanya di perangkat/browser Anda sampai dikirim. File yang Anda referensikan tidak dibagikan ke pihak lain di luar tim project ini.
       </p>
 
-      <label className="flex items-start gap-3 p-4 rounded-xl border border-border bg-muted/20 cursor-pointer">
+      <label className="flex items-start gap-3 p-4 rounded-xl border border-border/50 bg-primary/5 cursor-pointer hover:bg-primary/8 transition-colors duration-200">
         <input
           type="checkbox"
           className="mt-0.5 w-4 h-4 accent-primary shrink-0"
@@ -803,28 +1563,30 @@ function ReviewStep({
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── FieldItem ─────────────────────────────────────────────────────────────────
 
-function FieldGroup({
+function FieldItem({
   id, label, hint, required, optional, error, children,
 }: {
-  id: string; label: string; hint?: string; required?: boolean; optional?: boolean; error?: string; children: React.ReactNode;
+  id: string; label: string; hint?: string; required?: boolean;
+  optional?: boolean; error?: string; children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
-      <label htmlFor={`brief-${id}`} className="text-sm font-medium text-foreground flex items-center gap-1.5">
+    <div className="space-y-2">
+      <FieldTitle
+        as="label"
+        htmlFor={`brief-${id}`}
+        required={required}
+        optional={optional}
+      >
         {label}
-        {required && <span className="text-primary" aria-hidden="true">*</span>}
-        {optional && <span className="text-[10px] font-normal text-muted-foreground uppercase tracking-wide">Opsional</span>}
-      </label>
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      </FieldTitle>
       {children}
-      {error && (
-        <p id={`brief-${id}-error`} role="alert" className="text-xs text-destructive flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full bg-destructive/20 text-destructive flex items-center justify-center text-[10px]" aria-hidden="true">!</span>
-          {error}
-        </p>
-      )}
+      <HelperText
+        id={`brief-${id}-error`}
+        hint={!error ? hint : undefined}
+        error={error}
+      />
     </div>
   );
 }

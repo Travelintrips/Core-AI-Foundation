@@ -11,9 +11,13 @@
  * releaseJob()  — release without completing (requeue)
  */
 
-import { eq, and, inArray, sql } from "drizzle-orm";
-import { db, aiJobsTable, aiWorkersTable, aiModelsTable, aiProvidersTable, aiPortfolioAssetsTable } from "@workspace/db";
+import { eq, and, inArray, desc, sql } from "drizzle-orm";
+import {
+  db, aiJobsTable, aiWorkersTable, aiModelsTable, aiProvidersTable, aiPortfolioAssetsTable,
+  creativeProjectsTable, creativeProjectStepsTable, creativeAiAssetsTable,
+} from "@workspace/db";
 import type { AiJob, AiWorker } from "@workspace/db";
+import { createHash } from "crypto";
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
 import { executeAI } from "./aiExecutionService.js";
@@ -23,6 +27,22 @@ import { getProviderApiKey } from "./aiSecretService.js";
 import { archiveReplicateAsset, optimizeArchivedAsset, generateAssetThumbnail } from "./portfolioStorageService.js";
 import { maybeFinalizePortfolioPublish } from "./demoPortfolioGeneratorService.js";
 import { logger } from "../lib/logger.js";
+import { WorkerNotImplementedError } from "./jobCompletionGuard.js";
+import {
+  generateCompanyProfileContent,
+  mapCompanyProfileToDocumentSpec,
+  type CompanyProfileBrief,
+} from "./companyProfileDocumentMapper.js";
+import {
+  renderDocument,
+  validateGeneratedPdf,
+  sanitizeStorageFilename,
+} from "./creativeDocumentService.js";
+import {
+  uploadToSupabase,
+  storageObjectExists,
+  getSupabasePublicUrl,
+} from "../lib/supabaseStorage.js";
 
 // ── Real AI execution helpers ───────────────────────────────────────────────
 
@@ -465,7 +485,7 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
       return executeImageJob(job);
 
     case "image_qc":
-      return { message: "Image QC dispatched", jobId: job.id };
+      throw new WorkerNotImplementedError("image_qc");
 
     // ── Sprint P2.1.1 — background asset lifecycle jobs ──────────────────────
     case "archive_asset":
@@ -478,16 +498,16 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
       return executeGenerateThumbnailJob(job);
 
     case "pdf_export":
-      return { message: "PDF export dispatched", jobId: job.id };
+      return executePdfExportJob(job);
 
     case "csv_export":
-      return { message: "CSV export dispatched", jobId: job.id };
+      throw new WorkerNotImplementedError("csv_export");
 
     case "analytics":
-      return { message: "Analytics job dispatched", jobId: job.id };
+      throw new WorkerNotImplementedError("analytics");
 
     case "cleanup":
-      return { message: "Cleanup job dispatched", jobId: job.id };
+      throw new WorkerNotImplementedError("cleanup");
 
     case "noop":
       // Used for seed / testing

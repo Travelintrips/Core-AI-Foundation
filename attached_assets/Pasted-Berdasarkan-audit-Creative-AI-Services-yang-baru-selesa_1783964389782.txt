@@ -1,0 +1,420 @@
+Berdasarkan audit Creative AI Services yang baru selesai, lanjutkan ke fase implementasi berikutnya:
+
+# FASE 1B — STOP FALSE COMPLETION DAN PRODUCTION SAFETY
+
+Scope fase ini hanya memperbaiki perilaku job palsu atau placeholder yang dapat menghasilkan status completed tanpa file nyata.
+
+Jangan mengimplementasikan Pitch Deck, DOCX, ZIP, video, social media batch, atau fitur besar lain pada fase ini.
+
+## Temuan audit yang menjadi dasar
+
+Worker berikut masih berupa stub:
+
+* `pdf_export`
+* `image_qc`
+* `csv_export`
+* `analytics`
+* `cleanup`
+
+Khusus `pdf_export`, saat ini worker hanya mengembalikan pesan seperti:
+
+`PDF export dispatched`
+
+Akibatnya job Company Profile dan Pitch Deck dapat berubah menjadi completed walaupun:
+
+* tidak ada file dibuat
+* tidak ada file disimpan di Supabase Storage
+* tidak ada asset record
+* tidak ada preview
+* tidak ada download URL
+
+Ini harus diperbaiki terlebih dahulu sebelum Document Engine dibuat.
+
+## Tujuan utama
+
+Pastikan tidak ada production job yang dapat berstatus `completed` apabila deliverable yang diwajibkan belum benar-benar ada.
+
+## 1. Audit alur penyelesaian job
+
+Audit secara spesifik:
+
+* `artifacts/api-server/src/services/jobWorkerService.ts`
+* job dispatcher
+* job completion handler
+* retry handler
+* cancellation handler
+* service request conversion
+* creative project step updater
+* customer workspace status mapping
+* admin production monitor
+
+Temukan titik tempat return value worker otomatis mengubah job menjadi completed.
+
+Dokumentasikan alur:
+
+`queued → assigned → running → validating → completed / failed`
+
+Bila status `validating` belum tersedia, tidak harus langsung membuat migration jika bisa dilakukan dengan status yang sudah ada. Gunakan perubahan paling aman sesuai schema saat ini.
+
+## 2. Perbaiki stub worker
+
+Untuk worker yang belum diimplementasikan, jangan lagi mengembalikan success response.
+
+Contoh yang dilarang:
+
+```ts
+return {
+  message: "PDF export dispatched",
+  jobId: job.id
+};
+```
+
+Ubah menjadi kegagalan eksplisit, misalnya dengan typed error:
+
+```ts
+throw new JobNotImplementedError(
+  "PDF export engine is not implemented. No deliverable was generated."
+);
+```
+
+Atau pola error yang sudah digunakan codebase.
+
+Worker stub harus menghasilkan:
+
+* job status `failed`
+* error code yang jelas
+* error message yang jelas
+* `completed_at` tetap null
+* tidak ada asset record palsu
+* tidak ada project step completed palsu
+
+Gunakan error code konsisten, misalnya:
+
+* `WORKER_NOT_IMPLEMENTED`
+* `DELIVERABLE_NOT_CREATED`
+* `ASSET_UPLOAD_FAILED`
+* `ASSET_VALIDATION_FAILED`
+* `STORAGE_OBJECT_MISSING`
+
+Jangan gunakan pesan umum seperti `Something went wrong`.
+
+## 3. Tambahkan completion guard
+
+Sebelum job yang menghasilkan file diubah menjadi completed, lakukan validasi berdasarkan tipe job.
+
+Untuk job file-producing seperti:
+
+* `pdf_export`
+* `pptx_export` jika ada
+* `image_generation`
+* `generate_thumbnail`
+* `archive_asset`
+* future `video_generation`
+* future `zip_export`
+
+Validasi minimal:
+
+1. Worker menghasilkan result yang memiliki asset reference.
+2. Asset record benar-benar ada.
+3. Storage path tidak kosong.
+4. Object benar-benar ada di storage.
+5. File size lebih dari nol.
+6. MIME type sesuai jenis output.
+7. File tidak hanya berupa placeholder.
+8. Project ID dan asset owner cocok.
+9. Final deliverable tidak tertukar dengan temporary preview.
+
+Buat helper generik, misalnya:
+
+* `validateJobDeliverable()`
+* `assertGeneratedAssetExists()`
+* `assertStorageObjectExists()`
+
+Gunakan nama yang paling sesuai dengan codebase.
+
+Jangan menduplikasi validation logic di setiap worker.
+
+## 4. Kebijakan completion berdasarkan job type
+
+Buat daftar atau registry tipe job:
+
+### Non-file jobs
+
+Contoh:
+
+* `llm_inference`
+* `creative_brief`
+* `creative_text`
+* `qc_review`
+
+Job ini boleh completed berdasarkan structured result yang valid.
+
+### File-producing jobs
+
+Contoh:
+
+* `image_generation`
+* `pdf_export`
+* `pptx_export`
+* `archive_asset`
+* `generate_thumbnail`
+* future `video_generation`
+
+Job ini tidak boleh completed tanpa asset dan storage object.
+
+Gunakan registry atau configuration map, bukan rangkaian kondisi tersebar.
+
+Contoh konsep:
+
+```ts
+const JOB_COMPLETION_REQUIREMENTS = {
+  llm_inference: {
+    requiresStructuredResult: true,
+    requiresAsset: false,
+  },
+  image_generation: {
+    requiresStructuredResult: true,
+    requiresAsset: true,
+    allowedMimeTypes: ["image/png", "image/jpeg", "image/webp"],
+  },
+  pdf_export: {
+    requiresStructuredResult: true,
+    requiresAsset: true,
+    allowedMimeTypes: ["application/pdf"],
+  },
+};
+```
+
+Sesuaikan dengan type system codebase.
+
+## 5. Perbaiki project dan service request status
+
+Job gagal tidak boleh menyebabkan:
+
+* creative project completed
+* creative project step completed
+* service request delivered
+* files unlocked
+* customer melihat tombol download kosong
+* invoice atau order dianggap fulfilled hanya karena worker stub selesai
+
+Periksa seluruh status propagation.
+
+Gunakan prinsip:
+
+`Project completed hanya jika semua required deliverables pada entitlement/order snapshot tersedia dan valid.`
+
+Optional deliverable boleh gagal tanpa menggagalkan project hanya jika paket memang menandainya optional.
+
+## 6. Customer portal error state
+
+Perbaiki customer portal agar dapat menampilkan kondisi gagal secara jelas.
+
+Untuk layanan yang belum memiliki engine seperti Company Profile atau Pitch Deck, customer harus melihat:
+
+* Produksi belum berhasil
+* File belum tersedia
+* Tidak ada tombol download palsu
+* Pesan error yang aman dan mudah dipahami
+* Status dapat diproses ulang oleh admin
+* Jangan tampilkan stack trace atau informasi rahasia
+
+Contoh copy:
+
+`Dokumen belum berhasil dibuat. Tim produksi telah menerima laporan kegagalan dan proses dapat dijalankan ulang.`
+
+Bedakan:
+
+* sedang diproses
+* menunggu pembayaran
+* gagal diproses
+* file belum tersedia
+* selesai dan dapat diunduh
+
+## 7. Admin production monitor
+
+Pada admin monitor tampilkan:
+
+* job type
+* project
+* service
+* current status
+* error code
+* error message
+* attempt count
+* created time
+* started time
+* failed time
+* retry button
+* related asset count
+* storage validation result
+
+Admin harus dapat membedakan:
+
+* provider failure
+* worker not implemented
+* storage upload failure
+* asset validation failure
+* authorization failure
+* timeout
+* rate limit
+
+## 8. Existing false-completed jobs
+
+Audit existing jobs dengan kriteria:
+
+* status completed
+* job type file-producing
+* tidak mempunyai valid asset record
+* storage object tidak ditemukan
+* file size nol atau tidak diketahui
+* result hanya berisi kata `dispatched`
+
+Jangan langsung menghapus data.
+
+Buat script atau service audit yang:
+
+1. Menampilkan daftar affected jobs.
+2. Mendukung dry-run.
+3. Menyimpan alasan tiap job dianggap invalid.
+4. Setelah direview, dapat mengubah status menjadi failed.
+5. Mengembalikan project atau step ke status yang sesuai.
+6. Tidak membuka kembali files_unlocked tanpa aturan bisnis yang jelas.
+7. Menulis audit log.
+
+Buat command yang aman, misalnya:
+
+```bash
+pnpm creative:audit-false-completions --dry-run
+```
+
+Dan mode eksekusi:
+
+```bash
+pnpm creative:audit-false-completions --apply
+```
+
+Gunakan pola scripts yang sudah ada pada repository.
+
+## 9. Graceful file access error
+
+Perbaiki endpoint file access.
+
+Jika token valid tetapi asset atau storage object tidak ada:
+
+Jangan:
+
+* crash
+* return HTML kosong
+* redirect tanpa penjelasan
+* return 500 generik
+
+Return error terstruktur yang sesuai, misalnya:
+
+* HTTP 404 untuk asset yang tidak ditemukan
+* HTTP 409 apabila produksi belum menghasilkan file
+* HTTP 410 apabila file memang expired berdasarkan retention policy
+* HTTP 403 jika payment gate belum terbuka
+
+Jangan mengungkap storage path internal kepada customer.
+
+## 10. Jangan ubah payment gate
+
+Mekanisme double-gate yang sudah ada:
+
+* signed token valid
+* `files_unlocked = true`
+
+harus tetap dipertahankan.
+
+Jangan melemahkan authorization atau membuat bucket final deliverable menjadi public.
+
+## 11. Testing wajib
+
+Tambahkan automated test minimal:
+
+1. `pdf_export` stub menghasilkan failed, bukan completed.
+2. `image_qc` stub menghasilkan failed atau explicit unsupported status.
+3. File-producing job tanpa asset tidak dapat completed.
+4. File-producing job dengan asset record tetapi storage object hilang tidak dapat completed.
+5. File size nol tidak dapat completed.
+6. MIME type salah tidak dapat completed.
+7. Valid image generation tetap dapat completed.
+8. LLM text job tetap dapat completed tanpa file.
+9. Failed job tidak menyelesaikan project.
+10. Failed job tidak membuka files gate.
+11. Customer tidak melihat download button jika file tidak ada.
+12. File access endpoint memberi error terstruktur.
+13. Retry menambah attempt count dan tidak membuat duplicate asset.
+14. Audit script dry-run tidak mengubah database.
+15. Audit script apply mengubah hanya job invalid.
+16. Project dengan required deliverable belum lengkap tidak dapat completed.
+
+## 12. Verification
+
+Setelah implementasi:
+
+* jalankan typecheck
+* jalankan unit test
+* jalankan integration test
+* jalankan build API
+* jalankan build customer portal
+* jalankan build AI platform/admin bila terdampak
+* lakukan dry-run audit existing false-completed jobs
+* jangan jalankan mode apply pada production tanpa persetujuan manual
+
+Lakukan smoke test:
+
+### Test A — Company Profile
+
+Enqueue Company Profile dengan worker PDF yang masih belum diimplementasikan.
+
+Expected:
+
+* job failed
+* error code `WORKER_NOT_IMPLEMENTED` atau padanannya
+* project tidak completed
+* tidak ada asset palsu
+* customer tidak melihat tombol download
+
+### Test B — Image Generation
+
+Enqueue image generation yang sudah aktif.
+
+Expected:
+
+* image benar-benar dibuat
+* asset record ada
+* storage object ada
+* file size lebih dari nol
+* job completed
+
+### Test C — Missing Storage
+
+Gunakan fixture asset record dengan storage object yang tidak ada.
+
+Expected:
+
+* completion guard menolak completed
+* job failed dengan error storage missing
+
+## 13. Laporan akhir
+
+Laporkan:
+
+* root cause
+* file yang diubah
+* migration, jika ada
+* endpoint yang diubah
+* helper yang dibuat
+* error code baru
+* test yang ditambahkan
+* hasil typecheck
+* hasil build
+* hasil smoke test
+* jumlah existing false-completed job dari dry-run
+* risiko yang masih tersisa
+
+Jangan mulai mengimplementasikan PDF Company Profile dalam fase ini.
+
+Fase ini dianggap selesai hanya apabila tidak ada job file-producing yang dapat berstatus completed tanpa file valid di storage.
