@@ -1,0 +1,1001 @@
+PHASE V4.0 — AI RUNTIME INTEGRATION
+
+Creative Studio Customer Portal telah menyelesaikan:
+
+- Landing Page polish
+- Marketplace polish
+- Service Detail polish
+- AI Workforce preview
+- Project Brief Wizard
+- Commercial / Quotation / Checkout
+- AI Production Workspace Intelligence
+
+Workspace frontend saat ini sudah memiliki:
+
+- AI Workforce panel
+- Current AI Task
+- Live Activity
+- Project Timeline
+- Project Health
+- Progress bars
+- Insight banner
+- Mobile AI Intelligence panel
+
+Namun beberapa status AI Worker, confidence, progress, dan task masih menggunakan:
+
+“Demo Preview”
+
+Sekarang saya ingin menghubungkan Workspace tersebut ke AI Runtime yang benar-benar nyata.
+
+==================================================
+TUJUAN UTAMA
+==================================================
+
+Mengubah Workspace dari:
+
+“UI yang terlihat seperti AI sedang bekerja”
+
+menjadi:
+
+“Workspace yang benar-benar menampilkan AI Job, Worker, Dispatcher, Queue, Progress, Event, dan Output aktual.”
+
+Customer harus dapat melihat proses nyata seperti:
+
+Creative Director AI
+Reading brief…
+
+Brand Strategist AI
+Analyzing market…
+
+Copywriter AI
+Generating concepts…
+
+Visual Designer AI
+Rendering preview…
+
+Human Reviewer
+Reviewing output…
+
+Semua status harus berasal dari runtime nyata, bukan animasi atau data palsu.
+
+==================================================
+PERAN
+==================================================
+
+Bertindak sebagai:
+
+- Principal AI Platform Architect
+- Distributed Systems Engineer
+- Realtime Backend Engineer
+- AI Orchestration Specialist
+- Senior Full-Stack Engineer
+- Database Architect
+- Security Auditor
+- Product Reliability Engineer
+
+Jangan berpikir hanya sebagai frontend developer.
+
+Audit seluruh alur:
+
+Customer Request
+→ Project
+→ AI Job
+→ Dispatcher
+→ Worker
+→ Task
+→ Execution
+→ Event
+→ Artifact
+→ Human Review
+→ Delivery
+→ Workspace
+
+==================================================
+ATURAN UTAMA
+==================================================
+
+Jangan langsung menulis ulang sistem.
+
+Jangan membuat runtime kedua yang tumpang tindih.
+
+Jangan membuat tabel baru sebelum memeriksa tabel yang sudah ada.
+
+Jangan membuat job queue baru jika ai_jobs, ai_workers, dispatcher, workflow, atau queue existing sudah tersedia.
+
+Jangan menghapus Demo Preview sebelum data runtime nyata tersedia dan tervalidasi.
+
+Jangan mengubah business flow customer.
+
+Jangan merusak route atau API yang sudah berjalan.
+
+Jangan hardcode status worker.
+
+Jangan membuat progress acak.
+
+Jangan membuat confidence palsu.
+
+Jangan menampilkan chain-of-thought internal model.
+
+Yang boleh ditampilkan hanya:
+
+- status operasional
+- current task
+- progress
+- phase
+- output summary
+- event log
+- ETA jika memang dapat dihitung
+- error state
+- retry state
+- model/provider metadata yang aman
+
+==================================================
+LANGKAH 1 — AUDIT CODEBASE
+==================================================
+
+Audit seluruh monorepo untuk menemukan implementasi existing terkait:
+
+- ai_jobs
+- ai_workers
+- ai_dispatcher
+- job queue
+- workflows
+- orchestrator
+- agents
+- provider registry
+- model registry
+- execution logs
+- job attempts
+- task events
+- artifacts
+- project/request linkage
+- memory
+- audit logs
+- cost tracking
+- token usage
+- retry
+- timeout
+- guardrails
+- human review
+- notifications
+- WebSocket
+- Server-Sent Events
+- polling
+- Redis
+- BullMQ
+- background worker runtime
+
+Cari file, schema, table, route, service, hook, dan worker process yang relevan.
+
+Jangan hanya mencari berdasarkan nama file.
+
+Baca implementasinya.
+
+==================================================
+LANGKAH 2 — DATA MODEL AUDIT
+==================================================
+
+Buat peta tabel existing.
+
+Minimal periksa apakah ada:
+
+- ai_jobs
+- ai_job_steps
+- ai_job_events
+- ai_workers
+- ai_worker_assignments
+- ai_dispatcher
+- ai_workflows
+- ai_workflow_runs
+- ai_agent_runs
+- ai_artifacts
+- ai_usage_logs
+- ai_cost_logs
+- project/request tables
+- customer workspace project tables
+- human review tables
+
+Untuk setiap tabel, laporkan:
+
+- tujuan
+- primary key
+- status field
+- project/request linkage
+- timestamps
+- progress field
+- provider/model field
+- worker field
+- output/error field
+- retry field
+- tenant/company ownership
+- apakah dipakai runtime atau hanya schema mati
+
+Buat relationship map:
+
+Customer Request
+→ Project
+→ Job
+→ Worker
+→ Event
+→ Artifact
+→ Review
+→ Delivery
+
+==================================================
+LANGKAH 3 — CURRENT RUNTIME FLOW
+==================================================
+
+Dokumentasikan alur nyata yang sudah berjalan.
+
+Contoh:
+
+1. Request masuk.
+2. Brief disimpan.
+3. Commercial approved.
+4. Project status berubah.
+5. Job dibuat atau tidak dibuat.
+6. Dispatcher memilih worker.
+7. Worker mengambil job.
+8. Provider/model dipanggil.
+9. Result disimpan.
+10. Artifact dibuat.
+11. Human review berjalan.
+12. Workspace membaca status.
+
+Untuk setiap langkah, berikan:
+
+- file
+- function
+- endpoint
+- database table
+- current status
+- gap
+
+Jika runtime belum terhubung ke customer project, tulis jelas.
+
+==================================================
+LANGKAH 4 — GAP ANALYSIS
+==================================================
+
+Kelompokkan gap menjadi:
+
+CRITICAL
+- project customer tidak membuat job
+- job tidak memiliki project_id/request_id
+- worker tidak menulis event
+- output tidak disimpan
+- authorization tenant tidak aman
+- status frontend tidak dapat dipercaya
+
+HIGH
+- progress tidak tersedia
+- queue position tidak tersedia
+- retry tidak terlihat
+- failure state tidak masuk workspace
+- artifacts tidak terhubung ke job
+- provider/model metadata tidak tercatat
+
+MEDIUM
+- ETA belum tersedia
+- cost/token usage belum tampil
+- event naming tidak konsisten
+- polling terlalu berat
+- event retention belum jelas
+
+LOW
+- naming
+- formatting
+- animation
+- icon
+- non-critical metadata
+
+==================================================
+LANGKAH 5 — SOURCE OF TRUTH
+==================================================
+
+Tentukan satu source of truth untuk:
+
+- job status
+- worker status
+- task status
+- project progress
+- current stage
+- activity event
+- artifact
+- human review status
+- failure
+- retry
+- cancellation
+
+Jangan biarkan status berasal dari beberapa tabel tanpa aturan.
+
+Usulkan canonical status model.
+
+Contoh job status:
+
+queued
+assigned
+running
+waiting_dependency
+waiting_human_review
+completed
+failed
+cancelled
+retrying
+
+Contoh task event:
+
+job.created
+job.queued
+worker.assigned
+step.started
+step.progress
+step.completed
+artifact.created
+review.requested
+review.approved
+review.revision_requested
+job.completed
+job.failed
+
+Gunakan status existing bila sudah memadai.
+
+Jangan mengganti status production tanpa migration plan.
+
+==================================================
+LANGKAH 6 — PROJECT TO JOB LINKAGE
+==================================================
+
+Pastikan setiap project customer dapat ditelusuri ke runtime.
+
+Relasi minimal:
+
+customer_request_id
+project_id
+job_id
+workflow_run_id
+worker_id
+artifact_id
+
+Jika relasi belum ada:
+
+- tentukan perubahan minimal
+- hindari duplicate source of truth
+- gunakan foreign key jika sesuai
+- tambahkan index yang diperlukan
+- pastikan tenant/company ownership
+
+Jangan implementasi migration sebelum audit dan desain relasi selesai.
+
+==================================================
+LANGKAH 7 — JOB CREATION TRIGGER
+==================================================
+
+Tentukan kapan job AI dibuat.
+
+Gunakan business flow existing.
+
+Contoh:
+
+- setelah quotation approved dan commercial gate lolos
+- setelah payment condition terpenuhi
+- setelah production officially started
+
+Jangan membuat job saat brief masih draft.
+
+Trigger harus:
+
+- idempotent
+- transactional bila memungkinkan
+- memiliki idempotency key
+- tidak membuat duplicate job
+- mencatat audit log
+- aman terhadap retry webhook/request
+
+Contoh idempotency key:
+
+project:{projectId}:production:v1
+
+==================================================
+LANGKAH 8 — WORKFLOW & WORKER ASSIGNMENT
+==================================================
+
+Hubungkan project ke workflow existing.
+
+Contoh workflow:
+
+1. Brief Analysis
+2. Strategy
+3. Copywriting
+4. Visual Generation
+5. QA
+6. Human Review
+7. Delivery
+
+Setiap step harus memiliki:
+
+- step name
+- worker/agent role
+- status
+- start time
+- end time
+- progress
+- attempt
+- output reference
+- error reference
+- dependency
+
+Dispatcher harus memilih worker berdasarkan:
+
+- capability
+- model availability
+- cost
+- workload
+- latency
+- guardrail
+- department
+- service type
+
+Gunakan intelligent router existing jika tersedia.
+
+==================================================
+LANGKAH 9 — RUNTIME EVENT MODEL
+==================================================
+
+Setiap perubahan penting harus menghasilkan event yang dapat dibaca Workspace.
+
+Event minimal:
+
+- createdAt
+- projectId
+- jobId
+- stepId
+- workerId
+- eventType
+- publicMessage
+- internalMetadata
+- progress
+- severity
+
+Pisahkan:
+
+publicMessage
+untuk customer
+
+internalMetadata
+untuk admin/debug
+
+Jangan pernah menampilkan:
+
+- chain-of-thought
+- hidden prompt
+- API key
+- secret
+- raw provider payload sensitif
+- internal stack trace
+- private system instruction
+
+Contoh public event:
+
+“Creative Director AI mulai menganalisis brief.”
+
+Bukan:
+
+“Model reasoning: …”
+
+==================================================
+LANGKAH 10 — PROGRESS MODEL
+==================================================
+
+Jangan menggunakan progress random.
+
+Progress harus berasal dari:
+
+- workflow step completion
+- weighted step progress
+- real provider progress jika tersedia
+- artifact completion
+- human review state
+
+Contoh weighted workflow:
+
+Brief Analysis: 10%
+Strategy: 20%
+Copywriting: 20%
+Visual Generation: 25%
+QA: 10%
+Human Review: 10%
+Delivery: 5%
+
+Gunakan konfigurasi workflow, bukan hardcode di frontend.
+
+Jika provider tidak memberi incremental progress:
+
+- gunakan step-level progress
+- tampilkan indeterminate state saat running
+- jangan menampilkan angka palsu
+
+==================================================
+LANGKAH 11 — WORKER STATUS
+==================================================
+
+Worker card harus berasal dari runtime.
+
+Tampilkan:
+
+- role
+- display name
+- department
+- status
+- current task
+- startedAt
+- completedAt
+- model/provider jika aman
+- progress jika nyata
+- attempt
+- output count
+
+Confidence hanya ditampilkan jika benar-benar ada metric yang valid.
+
+Jika tidak ada metric confidence:
+
+- hilangkan confidence
+- jangan menggantinya dengan angka demo
+
+ETA hanya ditampilkan jika dapat dihitung dari:
+
+- historical duration
+- step duration
+- queue position
+- SLA configuration
+
+Jika tidak tersedia:
+
+“Estimating…”
+
+atau jangan tampilkan ETA.
+
+==================================================
+LANGKAH 12 — ARTIFACT LINKAGE
+==================================================
+
+Hubungkan AI output ke artifact nyata.
+
+Artifact harus memiliki:
+
+- projectId
+- jobId
+- stepId
+- type
+- filename/title
+- storage URL/reference
+- version
+- mime type
+- status
+- generatedAt
+- reviewedAt
+- approvedAt
+- visibility
+- customer access rule
+
+Workspace Files dan Review harus membaca artifact yang sama.
+
+Jangan duplikasi file ke dua sistem tanpa sinkronisasi.
+
+==================================================
+LANGKAH 13 — HUMAN REVIEW
+==================================================
+
+Runtime harus mendukung:
+
+- waiting_human_review
+- reviewer assigned
+- review started
+- approved
+- revision requested
+- rejected
+- revision job created
+
+Event customer harus menjelaskan:
+
+- output menunggu review
+- review sedang berjalan
+- revisi diminta
+- output siap dilihat
+
+Jangan menampilkan identitas reviewer jika tidak diizinkan.
+
+==================================================
+LANGKAH 14 — FAILURE, RETRY, CANCEL
+==================================================
+
+Audit mekanisme:
+
+- timeout
+- provider failure
+- invalid response
+- content policy failure
+- budget exceeded
+- worker unavailable
+- manual cancellation
+- retry
+
+Pastikan runtime menyimpan:
+
+- failure code
+- safe public message
+- internal error
+- retry count
+- next retry
+- terminal/non-terminal status
+
+Workspace harus menampilkan pesan aman seperti:
+
+“Proses visual sedang dicoba ulang.”
+
+Bukan raw stack trace.
+
+==================================================
+LANGKAH 15 — COST & TOKEN TRACKING
+==================================================
+
+Audit integrasi cost tracking existing.
+
+Setiap execution idealnya mencatat:
+
+- provider
+- model
+- input tokens
+- output tokens
+- image/video units bila relevan
+- duration
+- cost
+- retry cost
+- jobId
+- projectId
+- workerId
+- tenant/company
+
+Customer view tidak harus menampilkan biaya internal.
+
+Admin/owner dapat melihat:
+
+- total project AI cost
+- cost per worker
+- cost per job
+- margin
+- failed attempt cost
+
+Jangan expose provider cost ke customer tanpa keputusan bisnis.
+
+==================================================
+LANGKAH 16 — REALTIME DELIVERY OPTION
+==================================================
+
+Audit opsi realtime yang sudah ada.
+
+Prioritas:
+
+1. Existing WebSocket
+2. Existing SSE
+3. Efficient polling fallback
+
+Jangan menambahkan teknologi baru jika existing sudah memadai.
+
+Jika belum ada realtime:
+
+Usulkan SSE sebagai default untuk one-way runtime events karena:
+
+- server → browser
+- sederhana
+- reconnect bawaan
+- sesuai activity stream
+
+WebSocket hanya jika memang membutuhkan two-way realtime.
+
+Harus ada fallback polling.
+
+==================================================
+LANGKAH 17 — API DESIGN
+==================================================
+
+Audit endpoint Workspace existing.
+
+Usulkan endpoint minimal bila belum tersedia:
+
+GET /api/public/customer/workspace/:token/projects/:projectId/runtime
+
+Response:
+
+- project
+- job
+- workers
+- currentTask
+- timeline
+- health
+- artifacts
+- recentEvents
+- review
+- permissions
+
+Realtime:
+
+GET /api/public/customer/workspace/:token/projects/:projectId/events
+
+SSE events:
+
+- snapshot
+- job.updated
+- worker.updated
+- step.updated
+- artifact.created
+- review.updated
+- project.updated
+- heartbeat
+
+Gunakan route existing jika sudah ada.
+
+Jangan membuat endpoint duplicate.
+
+==================================================
+LANGKAH 18 — AUTHORIZATION & SECURITY
+==================================================
+
+Ini wajib.
+
+Pastikan customer hanya dapat melihat project miliknya.
+
+Audit:
+
+- workspace token validation
+- project ownership
+- tenant/company ownership
+- artifact access
+- SSE authorization
+- event filtering
+- signed file URL
+- token expiration
+- rate limiting
+- request logging
+
+Cegah:
+
+- IDOR
+- cross-tenant access
+- event leakage
+- artifact leakage
+- predictable token
+- raw internal error exposure
+
+==================================================
+LANGKAH 19 — FRONTEND INTEGRATION
+==================================================
+
+Setelah backend runtime verified, hubungkan Workspace.
+
+Ganti sumber data demo secara bertahap.
+
+Mapping:
+
+Workspace panel
+→ runtime endpoint
+
+Current Task
+→ active step
+
+AI Workforce
+→ assigned workers / agent runs
+
+Live Activity
+→ public runtime events
+
+Timeline
+→ workflow steps
+
+Project Health
+→ weighted workflow status
+
+Files
+→ artifacts
+
+Review
+→ human review state
+
+Status pulse
+→ real worker/job state
+
+Hapus “Demo Preview” hanya untuk field yang sudah live.
+
+Field yang belum live tetap diberi label jujur.
+
+==================================================
+LANGKAH 20 — RECONNECT & STALE STATE
+==================================================
+
+Realtime frontend harus menangani:
+
+- disconnected
+- reconnecting
+- stale data
+- browser sleep
+- tab restore
+- event duplication
+- out-of-order event
+- missed event
+- server restart
+
+Gunakan event id/sequence.
+
+Saat reconnect:
+
+- fetch snapshot terbaru
+- lanjutkan stream
+- deduplicate events
+
+Tampilkan status koneksi kecil:
+
+Live
+Reconnecting
+Last updated 2m ago
+
+Jangan membuat alarm berlebihan.
+
+==================================================
+LANGKAH 21 — OBSERVABILITY
+==================================================
+
+Tambahkan observability internal:
+
+- job creation count
+- queue delay
+- execution duration
+- worker failure rate
+- retry rate
+- cost per job
+- provider latency
+- event delivery delay
+- SSE connection count
+- stale project count
+
+Gunakan logging/metrics existing jika tersedia.
+
+Jangan membuat dashboard observability baru dalam fase ini kecuali sudah ada fondasinya.
+
+==================================================
+LANGKAH 22 — IMPLEMENTATION PLAN
+==================================================
+
+Jangan langsung implementasi semuanya dalam satu batch.
+
+Buat rencana fase:
+
+V4.0A — Runtime Audit & Data Mapping
+V4.0B — Project/Job Linkage
+V4.0C — Runtime Event Model
+V4.0D — Runtime Snapshot API
+V4.0E — Realtime SSE/WebSocket
+V4.0F — Workspace Integration
+V4.0G — Failure/Retry/Artifact/Review
+V4.0H — Security & Load Verification
+
+Untuk setiap subfase:
+
+- scope
+- files
+- tables
+- routes
+- migration
+- risks
+- acceptance criteria
+- rollback plan
+
+==================================================
+VERIFIKASI WAJIB
+==================================================
+
+Setelah implementasi setiap subfase:
+
+1. Typecheck.
+2. Build.
+3. Migration verification.
+4. Unit tests.
+5. Integration tests.
+6. Idempotency test.
+7. Duplicate job test.
+8. Worker failure test.
+9. Retry test.
+10. Unauthorized project access test.
+11. Cross-tenant access test.
+12. Runtime event ordering test.
+13. Reconnect test.
+14. SSE disconnect/reconnect test.
+15. Artifact visibility test.
+16. Human review transition test.
+17. Cost log test.
+18. Existing customer flow regression test.
+
+==================================================
+ACCEPTANCE CRITERIA AKHIR
+==================================================
+
+V4.0 dianggap selesai hanya jika:
+
+- production project membuat AI job nyata
+- job terhubung ke customer project
+- dispatcher menugaskan worker nyata
+- worker menghasilkan runtime event nyata
+- progress tidak random
+- Workspace membaca runtime snapshot
+- Workspace menerima update realtime atau polling fallback
+- artifacts terhubung ke job
+- review state terhubung ke runtime
+- failure dan retry terlihat aman
+- customer tidak dapat melihat project lain
+- tidak ada Demo Preview pada data yang sudah live
+- typecheck, build, test, dan security test lulus
+
+==================================================
+OUTPUT PERTAMA YANG SAYA MINTA
+==================================================
+
+Jangan langsung coding besar.
+
+Pertama, lakukan V4.0A — Runtime Audit & Data Mapping.
+
+Berikan laporan:
+
+# V4.0A AI Runtime Audit
+
+## Executive Summary
+
+## Existing Runtime Architecture
+
+## Existing Tables
+
+## Existing Routes
+
+## Existing Services
+
+## Existing Worker Processes
+
+## Existing Dispatcher
+
+## Existing Queue
+
+## Existing Event System
+
+## Existing Artifact Flow
+
+## Existing Cost Tracking
+
+## Current Customer Project Linkage
+
+## Security Findings
+
+## Critical Gaps
+
+## Duplicate/Overlap Risks
+
+## Recommended Canonical Architecture
+
+## Data Relationship Map
+
+## Status/Event Model Recommendation
+
+## Subphase Implementation Plan
+
+## Files Expected to Change
+
+## Tables Expected to Change
+
+## Migration Risk
+
+## Backward Compatibility Plan
+
+## Recommended First Implementation Step
+
+Jangan mengubah frontend atau backend sebelum laporan audit ini selesai.
+
+Jangan menebak.
+
+Cantumkan file path, table, function, route, dan bukti codebase untuk setiap temuan penting.
