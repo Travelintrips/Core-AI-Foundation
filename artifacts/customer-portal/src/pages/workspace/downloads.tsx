@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { WorkspaceLayout } from "@/components/workspace-layout";
 import { useWorkspaceDownloads, useSignDownload } from "@/hooks/use-workspace";
 import { useToast } from "@/hooks/use-toast";
 import { fmtDate } from "@/lib/workspace-format";
-import { Loader2, Download, Lock, Search, FileImage } from "lucide-react";
+import { Loader2, Download, Lock, Search, FileImage, ArrowLeft } from "lucide-react";
 
 export default function WorkspaceDownloadsPage({ params }: { params: { token: string } }) {
   const { token } = params;
@@ -27,6 +28,10 @@ export default function WorkspaceDownloadsPage({ params }: { params: { token: st
 
   return (
     <WorkspaceLayout token={token}>
+      <Link href={`/workspace/${token}`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6 group">
+        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+        Kembali ke Dashboard
+      </Link>
       <div className="mb-6">
         <h1 className="text-3xl font-serif font-medium mb-1">Download Center</h1>
         <p className="text-muted-foreground">All your files, secured with time-limited links.</p>

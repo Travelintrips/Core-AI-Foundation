@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Link } from "wouter";
 import { WorkspaceLayout } from "@/components/workspace-layout";
 import {
   useWorkspaceNotifications,
@@ -8,7 +9,7 @@ import {
 } from "@/hooks/use-workspace";
 import { fmtDate, fmtDateTime } from "@/lib/workspace-format";
 import {
-  Loader2, Bell, CheckCheck, Package, CreditCard, Wrench, Megaphone, LayoutGrid,
+  Loader2, Bell, CheckCheck, Package, CreditCard, Wrench, Megaphone, LayoutGrid, ArrowLeft,
 } from "lucide-react";
 
 const CATEGORY_TABS = [
@@ -124,6 +125,10 @@ export default function WorkspaceNotificationsPage({ params }: { params: { token
 
   return (
     <WorkspaceLayout token={token}>
+      <Link href={`/workspace/${token}`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6 group">
+        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+        Kembali ke Dashboard
+      </Link>
       {/* Header */}
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <div>

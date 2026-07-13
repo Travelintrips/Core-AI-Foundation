@@ -2,12 +2,12 @@
  * Post-approval status page — shows commercial gate status.
  * Route: /request-service/:requestId/approval?token=<reviewToken>
  */
-import { useParams } from "wouter";
+import { useParams, Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { FlowStepper } from "@/components/flow-stepper";
 import { useServiceQuotation } from "@/hooks/use-catalog";
 import { requestStatusToStep } from "@/pages/request-quotation";
-import { Loader2, CheckCircle2, Clock, ShieldCheck, Zap } from "lucide-react";
+import { Loader2, CheckCircle2, Clock, ShieldCheck, Zap, ArrowLeft } from "lucide-react";
 
 export default function RequestApprovalPage() {
   const { requestId } = useParams<{ requestId: string }>();
@@ -25,6 +25,12 @@ export default function RequestApprovalPage() {
 
   return (
     <Layout>
+      <div className="container mx-auto px-4 md:px-8 pt-6 max-w-3xl">
+        <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group">
+          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+          Kembali
+        </Link>
+      </div>
       <div className="border-b border-border/40 bg-muted/20">
         <div className="container mx-auto px-4 md:px-8 max-w-3xl">
           <FlowStepper currentStep={stepperStep} />

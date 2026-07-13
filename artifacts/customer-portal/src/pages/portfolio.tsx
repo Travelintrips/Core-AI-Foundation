@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
-import { Star, Clock, SlidersHorizontal, X, TrendingUp, Sparkles, ChevronDown, ArrowRight, Images, Loader2 } from "lucide-react";
+import { useLocation, Link } from "wouter";
+import { Star, Clock, SlidersHorizontal, X, TrendingUp, Sparkles, ChevronDown, ArrowRight, Images, Loader2, ArrowLeft } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -327,6 +327,12 @@ export default function PortfolioPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <div className="container mx-auto px-4 pt-6 max-w-5xl">
+        <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group">
+          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+          Kembali ke Beranda
+        </Link>
+      </div>
       {/* Hero */}
       <section className="bg-gradient-to-br from-primary/5 via-background to-secondary/5 border-b border-border px-4 pt-16 pb-12">
         <div className="max-w-5xl mx-auto text-center">

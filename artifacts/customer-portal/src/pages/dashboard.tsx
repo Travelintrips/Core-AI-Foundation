@@ -74,6 +74,12 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
   return (
     <Layout>
       <div className="container mx-auto px-4 md:px-8 py-12 max-w-6xl">
+        <div className="mb-6">
+          <Link href="/access" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group">
+            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+            Kembali
+          </Link>
+        </div>
         <div className="mb-12 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-serif font-medium mb-2">Welcome back, {data.clientName}</h1>

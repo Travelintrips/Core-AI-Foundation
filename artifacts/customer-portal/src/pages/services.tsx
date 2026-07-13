@@ -7,7 +7,7 @@ import {
   Scale, Truck, Package, TrendingUp, Briefcase, Headphones, BarChart2,
   RotateCcw, Filter, ChevronDown, Zap, Shield, X, Eye, Building2,
   Globe, LayoutGrid, ChevronRight, Award, Flame, BadgeCheck, Lock,
-  ChevronUp, SlidersHorizontal, History, Hash, Cpu,
+  ChevronUp, SlidersHorizontal, History, Hash, Cpu, ArrowLeft,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -870,6 +870,12 @@ export default function ServicesPage() {
   return (
     <Layout>
       <div className="bg-[#060B18] text-[#F0F4FF] min-h-screen">
+        <div className="container mx-auto px-4 pt-6 max-w-5xl">
+          <Link href="/" className="inline-flex items-center gap-1.5 text-sm transition-colors group" style={{ color: '#8B9BC4' }}>
+            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+            Kembali
+          </Link>
+        </div>
 
         {/* ── Hero ──────────────────────────────────────────────────────── */}
         <section className="relative overflow-hidden bg-[#060B18] border-b border-[#243352]">

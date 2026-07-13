@@ -4,7 +4,7 @@ import { Layout } from "@/components/layout";
 import { FlowStepper } from "@/components/flow-stepper";
 import { StatusBadge } from "@/components/status-badge";
 import { useGetPublicCreativeReview, useAddClientComment, useApproveCreativeReview, useRejectCreativeReview, useRequestRevisionCreativeReview } from "@/hooks/use-customer";
-import { Loader2, MessageSquare, Image as ImageIcon, Send, CheckCircle2, XCircle, RefreshCcw, FileText, Receipt } from "lucide-react";
+import { Loader2, MessageSquare, Image as ImageIcon, Send, CheckCircle2, XCircle, RefreshCcw, FileText, Receipt, ArrowLeft } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
@@ -103,6 +103,12 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
 
   return (
     <Layout>
+      <div className="container mx-auto px-4 md:px-8 pt-6 max-w-5xl">
+        <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group">
+          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+          Kembali
+        </Link>
+      </div>
       {/* Flow Stepper */}
       <div className="border-b border-border/40 bg-muted/20">
         <div className="container mx-auto px-4 md:px-8 max-w-5xl">

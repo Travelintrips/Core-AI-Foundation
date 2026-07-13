@@ -10,7 +10,7 @@ import {
 import { fmtMoney, fmtDate, stageColor } from "@/lib/workspace-format";
 import {
   FolderKanban, Clock, CheckCircle2, Wallet, Download, Palette,
-  Loader2, ArrowRight, Zap, AlertCircle, Sparkles, TrendingUp,
+  Loader2, ArrowRight, Zap, AlertCircle, Sparkles, TrendingUp, ArrowLeft,
 } from "lucide-react";
 import { WorkspaceActivityFeed } from "@/components/workspace-activity-feed";
 
@@ -145,6 +145,10 @@ export default function WorkspaceDashboardPage({ params }: { params: { token: st
 
   return (
     <WorkspaceLayout token={token}>
+      <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6 group">
+        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+        Kembali ke Beranda
+      </Link>
       {/* ── Header ── */}
       <div className="mb-8">
         <motion.h1
