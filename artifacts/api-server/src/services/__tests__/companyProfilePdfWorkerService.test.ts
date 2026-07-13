@@ -177,12 +177,14 @@ beforeEach(() => {
 });
 
 describe("companyProfilePdfWorkerService", () => {
-  it("throws WorkerNotImplementedError when the project has no resolvable document type", async () => {
-    serviceRows = []; // serviceCode lookup fails → resolveProjectDocumentType returns null
-    pendingSelectQueue = [[FAKE_PROJECT]];
-    await expect(executeCompanyProfilePdfExportJob(fakeJob({ projectId: 42 }))).rejects.toThrow(
-      WorkerNotImplementedError,
-    );
+  it("succeeds (shim always routes to company_profile) even when serviceCode is unresolvable", async () => {
+    // The Phase 3 shim calls executeGenericPdfExportJob(job, "company_profile") directly —
+    // it no longer resolves the documentType from the DB. This test confirms the new behavior.
+    serviceRows = []; // serviceCode lookup absent — irrelevant for the shim
+    pendingSelectQueue = [[FAKE_PROJECT], [], []]; // project, no existing asset, no images
+    const result = await executeCompanyProfilePdfExportJob(fakeJob({ projectId: 42 }));
+    // Should succeed because the shim hard-codes "company_profile" as the document type
+    expect(result).toMatchObject({ documentType: "company_profile", finalDeliverable: true });
   });
 
   it("throws when payload is missing a numeric projectId", async () => {

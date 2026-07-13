@@ -1,26 +1,43 @@
 /**
- * creativeProjectDocumentType.ts — Phase 2 Creative Document Engine
+ * creativeProjectDocumentType.ts — Phase 2/3 Creative Document Engine
  *
  * Resolves whether a `creative_projects` row is a document-producing project
- * (e.g. Company Profile PDF) vs. a plain image/asset project, and which
- * document type it maps to.
+ * (e.g. Company Profile PDF, Brand Strategy PDF) vs. a plain image/asset
+ * project, and which document type it maps to.
  *
  * A project is document-producing only when it came through the service
  * catalog (sourceType === "service_catalog") and its linked `ai_services`
  * row has a known documentType-bearing serviceCode. Legacy/direct projects
  * never produce documents — only the original image/creative-brief pipeline.
+ *
+ * Phase 3: Added brand_strategy, copywriting, creative_consultation,
+ *          brand_identity_guideline.
  */
 
 import { eq } from "drizzle-orm";
 import { db, aiServiceRequestsTable, aiServicesTable, type CreativeProject } from "@workspace/db";
 
+// ── Document type union ───────────────────────────────────────────────────────
+
+export type CreativeDocumentType =
+  | "company_profile"
+  | "brand_strategy"
+  | "copywriting"
+  | "creative_consultation"
+  | "brand_identity_guideline";
+
 /**
  * Maps a catalog `serviceCode` to the document type its PDF export worker
  * should handle. Add new entries here as more document types get built —
- * each new entry must have a matching branch in the pdf_export dispatcher.
+ * each new entry must have a matching definition in DOCUMENT_DEFINITIONS
+ * inside creativeDocumentWorkerService.ts.
  */
-const SERVICE_CODE_TO_DOCUMENT_TYPE: Readonly<Record<string, string>> = {
-  "company-profile": "company_profile",
+export const SERVICE_CODE_TO_DOCUMENT_TYPE: Readonly<Record<string, CreativeDocumentType>> = {
+  "company-profile":        "company_profile",
+  "brand-strategy":         "brand_strategy",
+  "copywriting":            "copywriting",
+  "creative-consultation":  "creative_consultation",
+  "brand-identity":         "brand_identity_guideline",
 };
 
 /**
@@ -29,7 +46,7 @@ const SERVICE_CODE_TO_DOCUMENT_TYPE: Readonly<Record<string, string>> = {
  */
 export async function resolveProjectDocumentType(
   project: Pick<CreativeProject, "sourceType" | "serviceRequestId">,
-): Promise<string | null> {
+): Promise<CreativeDocumentType | null> {
   if (project.sourceType !== "service_catalog" || !project.serviceRequestId) {
     return null;
   }

@@ -55,9 +55,47 @@ const PUBLIC_PATH_PREFIXES = [
   "/internal/auth/login", // internal staff login — must be reachable before a session exists
 ];
 
+/**
+ * Method-aware exemptions for customer-facing endpoints that live under an
+ * otherwise-admin-protected mount point (e.g. GET /ai/catalog/services/:id is
+ * public, but PATCH/DELETE on the same path are admin-only).
+ *
+ * Deliberately explicit and anchored — NEVER widen these to prefix/substring
+ * matches like `req.path.startsWith("/ai/catalog/services")`, which would
+ * also expose the admin create/update/delete routes on the same mount.
+ *
+ * Phase 2.2 audit (see .agents/memory/phase22-public-route-auth-hotfix.md):
+ * these three route groups were the ones customers actually call from the
+ * portal (service detail, quote calculator, create request, portfolio
+ * showcase, live AI preview) and were incorrectly requiring ADMIN_API_KEY.
+ */
+const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
+  // Service detail / quote / request-service (catalog.ts) — public because
+  // assertServiceIsPubliclyRequestable() still gates the underlying
+  // category visibility server-side.
+  { method: "GET", pattern: /^\/ai\/catalog\/services\/\d+$/ },
+  { method: "POST", pattern: /^\/ai\/catalog\/services\/\d+\/quote$/ },
+  { method: "POST", pattern: /^\/ai\/catalog\/services\/\d+\/request$/ },
+  // Portfolio showcase + live AI preview (portfolio.ts) — customer-facing;
+  // preview creation is separately rate-limited per session
+  // (MAX_PREVIEWS_PER_SESSION in livePreviewService.ts), not by admin key.
+  { method: "GET", pattern: /^\/ai\/portfolio\/services\/\d+\/showcase$/ },
+  { method: "POST", pattern: /^\/ai\/portfolio\/portfolios\/\d+\/view$/ },
+  { method: "POST", pattern: /^\/ai\/portfolio\/preview$/ },
+  { method: "GET", pattern: /^\/ai\/portfolio\/preview\/\d+$/ },
+  { method: "GET", pattern: /^\/ai\/portfolio\/preview\/session\/[^/]+\/count$/ },
+  { method: "POST", pattern: /^\/ai\/portfolio\/preview\/\d+\/continue$/ },
+];
+
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {
   for (const prefix of PUBLIC_PATH_PREFIXES) {
     if (req.path === prefix || req.path.startsWith(prefix + "/")) {
+      next();
+      return;
+    }
+  }
+  for (const rule of PUBLIC_ROUTE_RULES) {
+    if (req.method === rule.method && rule.pattern.test(req.path)) {
       next();
       return;
     }

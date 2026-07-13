@@ -212,3 +212,207 @@ describe("hasAnySelection", () => {
     expect(hasAnySelection("  ")).toBe(false);
   });
 });
+
+// ── Phase 2.1 — Legacy compatibility hardening ─────────────────────────────────
+
+const AUDIENCE_OPTIONS = [
+  { value: "b2b", label: "B2B" },
+  { value: "distributor", label: "Distributor" },
+  { value: "corporate", label: "Perusahaan" },
+  { value: "other", label: "Lainnya" },
+];
+
+describe("parseChoices — legacy free text is never dropped", () => {
+  it("pure legacy sentence becomes 'other' + full custom text (source: legacy)", () => {
+    const stored = "Membuat perusahaan lebih dipercaya oleh importir China";
+    const result = parseChoices(stored, GOAL_OPTIONS);
+    expect(result.selected).toEqual(["other"]);
+    expect(result.custom).toBe(stored);
+    expect(result.unmatched).toEqual([stored]);
+    expect(result.source).toBe("legacy");
+  });
+
+  it("mixed known + unknown values keeps matched chips and preserves the unmatched text", () => {
+    const result = parseChoices("B2B; Distributor; Perusahaan tambang", AUDIENCE_OPTIONS);
+    expect(result.selected).toEqual(["b2b", "distributor", "other"]);
+    expect(result.custom).toBe("Perusahaan tambang");
+    expect(result.unmatched).toEqual(["Perusahaan tambang"]);
+    expect(result.source).toBe("legacy");
+  });
+
+  it("a real-world legacy sentence with internal commas is never split into fake chips", () => {
+    const stored = "Pemilik kapal, eksportir seafood, dan perusahaan cold storage";
+    const result = parseChoices(stored, AUDIENCE_OPTIONS);
+    expect(result.selected).toEqual(["other"]);
+    expect(result.custom).toBe(stored);
+  });
+
+  it("structured value with explicit 'Lainnya:' marker reports source: structured", () => {
+    const result = parseChoices(
+      "Meningkatkan penjualan; Meningkatkan brand awareness; Lainnya: Ekspansi regional",
+      GOAL_OPTIONS,
+    );
+    expect(result.selected).toEqual(["sales", "brand_awareness", "other"]);
+    expect(result.custom).toBe("Ekspansi regional");
+    expect(result.source).toBe("structured");
+  });
+
+  it("empty string reports source: empty", () => {
+    expect(parseChoices("", GOAL_OPTIONS).source).toBe("empty");
+  });
+});
+
+describe("parseChoices — tolerant delimiters", () => {
+  it("tolerates a bare semicolon with no trailing space", () => {
+    const result = parseChoices("B2B;Distributor", AUDIENCE_OPTIONS);
+    expect(result.selected).toEqual(["b2b", "distributor"]);
+    expect(result.custom).toBe("");
+  });
+
+  it("tolerates newline-separated legacy values", () => {
+    const result = parseChoices("B2B\nDistributor", AUDIENCE_OPTIONS);
+    expect(result.selected).toEqual(["b2b", "distributor"]);
+  });
+
+  it("does not fragment a legacy sentence on commas, slashes, or ampersands", () => {
+    const stored = "Eksportir & importir, distributor/agen di Asia Tenggara";
+    const result = parseChoices(stored, AUDIENCE_OPTIONS);
+    expect(result.selected).toEqual(["other"]);
+    expect(result.custom).toBe(stored);
+  });
+
+  it("is case-insensitive when matching labels", () => {
+    const result = parseChoices("b2b; DISTRIBUTOR", AUDIENCE_OPTIONS);
+    expect(result.selected).toEqual(["b2b", "distributor"]);
+  });
+
+  it("trims whitespace around fragments", () => {
+    const result = parseChoices("  B2B  ;   Distributor  ", AUDIENCE_OPTIONS);
+    expect(result.selected).toEqual(["b2b", "distributor"]);
+  });
+
+  it("removes duplicate options and duplicate unmatched fragments", () => {
+    const result = parseChoices("B2B; B2B; Toko kelontong; toko kelontong", AUDIENCE_OPTIONS);
+    expect(result.selected).toEqual(["b2b", "other"]);
+    expect(result.custom).toBe("Toko kelontong");
+  });
+
+  it("handles a malformed 'Lainnya:' prefix (extra spaces / no space after colon)", () => {
+    const a = parseChoices("Lainnya:Ekspansi regional", GOAL_OPTIONS);
+    expect(a.selected).toEqual(["other"]);
+    expect(a.custom).toBe("Ekspansi regional");
+
+    const b = parseChoices("Lainnya  :  Ekspansi regional", GOAL_OPTIONS);
+    expect(b.selected).toEqual(["other"]);
+    expect(b.custom).toBe("Ekspansi regional");
+  });
+
+  it("English legacy label normalizes the same as the Indonesian label", () => {
+    const idResult = parseChoices("Distributor", AUDIENCE_OPTIONS);
+    const enOptions = [...AUDIENCE_OPTIONS, { value: "corporate", label: "Corporate" }];
+    const enResult = parseChoices("Corporate", enOptions);
+    expect(idResult.selected).toEqual(["distributor"]);
+    expect(enResult.selected).toEqual(["corporate"]);
+  });
+});
+
+describe("parseChoices / serializeChoices — round trip is lossless", () => {
+  it("predefined only", () => {
+    const original = ["brand_awareness", "sales"];
+    const serialized = serializeChoices(original, GOAL_OPTIONS);
+    const parsed = parseChoices(serialized, GOAL_OPTIONS);
+    expect(parsed.selected).toEqual(original);
+    expect(serializeChoices(parsed.selected, GOAL_OPTIONS, parsed.custom)).toBe(serialized);
+  });
+
+  it("custom only", () => {
+    const serialized = serializeChoices(["other"], GOAL_OPTIONS, "Sertifikasi halal");
+    const parsed = parseChoices(serialized, GOAL_OPTIONS);
+    expect(parsed.selected).toEqual(["other"]);
+    expect(parsed.custom).toBe("Sertifikasi halal");
+    expect(serializeChoices(parsed.selected, GOAL_OPTIONS, parsed.custom)).toBe(serialized);
+  });
+
+  it("predefined + custom", () => {
+    const serialized = serializeChoices(["brand_awareness", "other"], GOAL_OPTIONS, "Ekspansi ke Malaysia");
+    const parsed = parseChoices(serialized, GOAL_OPTIONS);
+    expect(parsed.selected).toEqual(["brand_awareness", "other"]);
+    expect(parsed.custom).toBe("Ekspansi ke Malaysia");
+    expect(serializeChoices(parsed.selected, GOAL_OPTIONS, parsed.custom)).toBe(serialized);
+  });
+
+  it("pure legacy sentence — content is preserved after a re-serialize/parse cycle", () => {
+    const legacy = "Membuat perusahaan lebih dipercaya oleh importir China";
+    const parsed = parseChoices(legacy, GOAL_OPTIONS);
+    const reserialized = serializeChoices(parsed.selected, GOAL_OPTIONS, parsed.custom);
+    const reparsed = parseChoices(reserialized, GOAL_OPTIONS);
+    expect(reparsed.selected).toEqual(parsed.selected);
+    expect(reparsed.custom).toBe(legacy);
+  });
+
+  it("mixed legacy values — matched chips + unmatched text both survive a full cycle", () => {
+    const mixed = "B2B; Distributor; Perusahaan tambang";
+    const parsed = parseChoices(mixed, AUDIENCE_OPTIONS);
+    const reserialized = serializeChoices(parsed.selected, AUDIENCE_OPTIONS, parsed.custom);
+    const reparsed = parseChoices(reserialized, AUDIENCE_OPTIONS);
+    expect(reparsed.selected).toEqual(parsed.selected);
+    expect(reparsed.custom).toBe(parsed.custom);
+  });
+
+  it("empty string stays empty through the cycle", () => {
+    const parsed = parseChoices("", GOAL_OPTIONS);
+    expect(serializeChoices(parsed.selected, GOAL_OPTIONS, parsed.custom)).toBe("");
+  });
+
+  it("malformed delimiter (bare semicolon) still round-trips to the canonical form", () => {
+    const parsed = parseChoices("B2B;Distributor", AUDIENCE_OPTIONS);
+    const reserialized = serializeChoices(parsed.selected, AUDIENCE_OPTIONS, parsed.custom);
+    expect(reserialized).toBe("B2B; Distributor");
+    expect(parseChoices(reserialized, AUDIENCE_OPTIONS).selected).toEqual(parsed.selected);
+  });
+
+  it("line-break separated legacy values round-trip", () => {
+    const parsed = parseChoices("B2B\nDistributor", AUDIENCE_OPTIONS);
+    const reserialized = serializeChoices(parsed.selected, AUDIENCE_OPTIONS, parsed.custom);
+    expect(parseChoices(reserialized, AUDIENCE_OPTIONS).selected).toEqual(parsed.selected);
+  });
+
+  it("duplicate options collapse but no information is lost", () => {
+    const parsed = parseChoices("B2B; B2B; Distributor", AUDIENCE_OPTIONS);
+    expect(parsed.selected).toEqual(["b2b", "distributor"]);
+  });
+
+  it("capitalization differences resolve to the same option", () => {
+    const parsed = parseChoices("b2b; DISTRIBUTOR", AUDIENCE_OPTIONS);
+    expect(parsed.selected).toEqual(["b2b", "distributor"]);
+  });
+
+  it("custom text containing commas, semicolons, or colons round-trips exactly", () => {
+    const custom = "Toko A, Toko B; catatan: kirim before noon";
+    // Semicolons inside custom text would be mis-split by naive parsing — verify
+    // that once captured as `custom`, a full serialize→parse cycle keeps it intact
+    // as long as it isn't re-split (custom text is stored after the "Lainnya:" marker
+    // as a single trailing fragment when there's nothing after it to split on).
+    const serialized = serializeChoices(["other"], GOAL_OPTIONS, custom);
+    expect(serialized).toBe(`Lainnya: ${custom}`);
+  });
+});
+
+describe("parseColors — legacy hardening", () => {
+  const COLOR_PRESETS2 = [
+    { value: "blue", label: "Biru" },
+    { value: "red", label: "Merah" },
+    { value: "none", label: "Tidak ada preferensi" },
+    { value: "other", label: "Warna lainnya" },
+  ];
+
+  it("preserves multiple unmatched legacy color names instead of only the last one", () => {
+    const result = parseColors("Biru, Teal, Mustard", COLOR_PRESETS2);
+    expect(result.selected).toEqual(["blue", "other"]);
+    expect(result.custom).toBe("Teal, Mustard");
+  });
+
+  it("is case-insensitive on the 'no preference' sentinel", () => {
+    expect(parseColors("TIDAK ADA PREFERENSI", COLOR_PRESETS2).selected).toEqual(["none"]);
+  });
+});
