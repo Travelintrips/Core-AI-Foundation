@@ -29,6 +29,7 @@ import {
   CHANNEL_OPTIONS, STYLE_OPTIONS, PRIORITY_OPTIONS, LANGUAGE_OPTIONS,
 } from "@/config/brief-options";
 import { BriefRecommendationPanel } from "@/features/brief-intelligence";
+import { STYLE_MAX, COLOR_MAX, AUDIENCE_MAX } from "@/features/brief-intelligence/apply-adapter";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -850,7 +851,7 @@ export default function BriefPage() {
                     options={AUDIENCE_OPTIONS}
                     selected={audienceParsed.selected}
                     onChange={handleAudienceChange}
-                    max={4}
+                    max={AUDIENCE_MAX}
                     error={!!errors.audienceDemographics}
                   />
                   <AnimatePresence>
@@ -931,7 +932,7 @@ export default function BriefPage() {
                     options={STYLE_OPTIONS}
                     selected={styleParsed.selected}
                     onChange={handleStyleChange}
-                    max={3}
+                    max={STYLE_MAX}
                     error={!!errors.stylePreference}
                     hint="Maks. 3 pilihan. Hover chip untuk melihat deskripsi."
                   />
@@ -958,7 +959,7 @@ export default function BriefPage() {
                     <ColorPicker
                       value={colorParsed.selected}
                       onChange={handleColorChange}
-                      max={3}
+                      max={COLOR_MAX}
                     />
                     {/* "Warna lainnya" custom input */}
                     <AnimatePresence>

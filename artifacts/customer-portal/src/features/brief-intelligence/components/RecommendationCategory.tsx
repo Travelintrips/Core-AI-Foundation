@@ -41,7 +41,7 @@ export const RecommendationCategory = memo(function RecommendationCategory({
             onClick={onUseCategory}
             className="text-[11px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded"
           >
-            Gunakan semua
+            Gunakan kategori ini
           </button>
         )}
       </div>

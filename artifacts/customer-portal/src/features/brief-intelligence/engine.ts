@@ -13,7 +13,7 @@ import { GOAL_RULES } from "./goal-rules";
 import { AUDIENCE_RULES } from "./audience-rules";
 import { COMPANY_SIZE_RULES } from "./company-size-rules";
 import { PRIORITY_RULES } from "./priority-rules";
-import { detectConflicts } from "./conflict-rules";
+import { detectConflicts, type ConflictContext } from "./conflict-rules";
 import { mergeCandidates, type Candidate } from "./recommendation-merger";
 import { normalizeAndLimit } from "./recommendation-validator";
 import { computeCompleteness } from "./completeness";
@@ -59,23 +59,30 @@ function industryCandidates(profile: IndustryProfile, source: RecommendationSour
 
 export function computeBriefRecommendations(ctx: BriefIntelligenceContext): BriefIntelligenceResult {
   const appliedRuleSources: RecommendationSource[] = [];
+  /** True ONLY for the truly-unknown generic fallback — alias matches are NOT
+   *  considered "unknown" and must NOT trigger the "Industri belum spesifik" badge. */
   let usedFallbackIndustry = false;
   let matchedIndustryProfileKey: string | null = null;
+  let industryMatchType: "exact" | "alias" | "generic-fallback" | null = null;
 
   // ── Resolve industry profile ────────────────────────────────────────────
   let industryProfile: IndustryProfile | null = getIndustryProfile(ctx.industryKey);
   if (industryProfile) {
     matchedIndustryProfileKey = industryProfile.key;
+    industryMatchType = "exact";
   } else if (ctx.industryCustomText.trim()) {
     const fallback = resolveFallbackIndustry(ctx.industryCustomText);
     if (fallback.profile) {
+      // Alias match — the industry IS known; do NOT set usedFallbackIndustry.
       industryProfile = fallback.profile;
       matchedIndustryProfileKey = fallback.matchedKey;
-      usedFallbackIndustry = true;
+      industryMatchType = "alias";
     } else {
+      // Truly unknown — use the safe generic profile and flag accordingly.
       industryProfile = GENERIC_FALLBACK_PROFILE;
       matchedIndustryProfileKey = null;
       usedFallbackIndustry = true;
+      industryMatchType = "generic-fallback";
     }
   }
 
@@ -167,7 +174,15 @@ export function computeBriefRecommendations(ctx: BriefIntelligenceContext): Brie
   const recommendedAudienceKeys = merged.filter((m) => m.category === "audience").map((m) => m.key);
   const allStyleKeys = Array.from(new Set([...ctx.selected.styleKeys, ...recommendedStyleKeys]));
   const allAudienceKeys = Array.from(new Set([...ctx.audienceKeys, ...recommendedAudienceKeys]));
-  const warnings = detectConflicts(allStyleKeys, allAudienceKeys);
+
+  // Build extended context for Phase 3.1 context-aware conflict rules.
+  const conflictCtx: ConflictContext = {
+    existingAssetKeys: ctx.existingAssetKeys,
+    priorityKey: ctx.priorityKey,
+    deliverableCount: merged.filter((m) => m.category === "deliverable").length,
+    hasPhotographyRecommendation: merged.some((m) => m.category === "photographyDirection"),
+  };
+  const warnings = detectConflicts(allStyleKeys, allAudienceKeys, conflictCtx);
 
   if (warnings.length > 0) {
     const conflictedKeys = new Set(warnings.flatMap((w) => w.affectedKeys));
@@ -209,6 +224,7 @@ export function computeBriefRecommendations(ctx: BriefIntelligenceContext): Brie
     usedFallbackIndustry,
     debug: {
       matchedIndustryProfileKey,
+      industryMatchType,
       matchedServiceProfileKey: serviceProfile.serviceType,
       appliedRuleSources: Array.from(new Set(appliedRuleSources)),
     },

@@ -13,6 +13,7 @@ import type { ApplySkip, BriefRecommendation, RecommendationCategory } from "../
 import { RecommendationCategory as RecommendationCategoryBlock } from "./RecommendationCategory";
 import { RecommendationSummary } from "./RecommendationSummary";
 import { RecommendationWarning } from "./RecommendationWarning";
+import { BriefIntelligenceDebugPanel, isBriefDebugEnabled } from "./BriefIntelligenceDebugPanel";
 
 const CATEGORY_LABELS: Record<RecommendationCategory, string> = {
   style: "Gaya Visual",
@@ -129,6 +130,9 @@ export const BriefRecommendationPanel = memo(function BriefRecommendationPanel({
               <div className="px-6 pb-6 space-y-5">
                 <RecommendationSummary completeness={result.completeness} usedFallbackIndustry={result.usedFallbackIndustry} />
                 <RecommendationWarning warnings={result.warnings} />
+                {import.meta.env.DEV && isBriefDebugEnabled() && (
+                  <BriefIntelligenceDebugPanel result={result} />
+                )}
 
                 {result.categories.map((cat) => (
                   <RecommendationCategoryBlock
@@ -154,8 +158,11 @@ export const BriefRecommendationPanel = memo(function BriefRecommendationPanel({
                       "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                     )}
                   >
-                    <Sparkles className="w-3.5 h-3.5" /> Gunakan semua untuk field yang masih kosong
+                    <Sparkles className="w-3.5 h-3.5" /> Terapkan ke field kosong
                   </button>
+                  <p className="mt-1.5 text-[11px] text-muted-foreground/70">
+                    Pilihan yang sudah Anda isi tidak akan diganti.
+                  </p>
                 </div>
               </div>
             </motion.div>

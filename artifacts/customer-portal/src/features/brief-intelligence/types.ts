@@ -117,6 +117,13 @@ export interface BriefIntelligenceResult {
   /** Debug-only breakdown; never rendered in production UI. */
   debug: {
     matchedIndustryProfileKey: string | null;
+    /** How the industry profile was resolved:
+     *  - "exact"   — industryKey matched a named profile directly
+     *  - "alias"   — free-text was matched via the alias table to a named profile
+     *  - "generic-fallback" — alias matching failed; using the generic profile
+     *  - null      — no industry context provided
+     */
+    industryMatchType: "exact" | "alias" | "generic-fallback" | null;
     matchedServiceProfileKey: string;
     appliedRuleSources: RecommendationSource[];
   };

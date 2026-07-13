@@ -134,4 +134,70 @@ describe("adminAuthWithExceptions", () => {
     adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
     expect(res.body).toBeUndefined();
   });
+
+  /**
+   * Phase 3.1 regression tests — PUBLIC_ROUTE_RULES runtime path verification.
+   *
+   * Express strips the "/api" mount prefix from req.path before middleware runs.
+   * The unit-test harness mimics this by constructing req.path WITHOUT the /api
+   * prefix (which is what adminAuthWithExceptions actually receives at runtime).
+   * This test guards against the Phase 3.1 regression where the compiled dist
+   * had a stale build that omitted PUBLIC_ROUTE_RULES entirely.
+   */
+  describe("Phase 3.1 — create-request auth runtime path regression guard", () => {
+    it("allows POST /ai/catalog/services/:id/request — the exact runtime req.path (no /api prefix)", () => {
+      // Express strips /api so req.path = /ai/catalog/services/1/request
+      const req = makeReq("POST", "/ai/catalog/services/1/request");
+      const res = makeRes();
+      const next = vi.fn();
+      adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.statusCode).toBeUndefined();
+    });
+
+    it("allows POST /ai/catalog/services/999/request (multi-digit service ID)", () => {
+      const req = makeReq("POST", "/ai/catalog/services/999/request");
+      const res = makeRes();
+      const next = vi.fn();
+      adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+      expect(next).toHaveBeenCalledTimes(1);
+    });
+
+    it("blocks POST /ai/catalog/services without ID (list mutation — admin only)", () => {
+      const req = makeReq("POST", "/ai/catalog/services");
+      const res = makeRes();
+      const next = vi.fn();
+      adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("blocks PATCH /ai/catalog/services/:id (update — admin only)", () => {
+      const req = makeReq("PATCH", "/ai/catalog/services/1");
+      const res = makeRes();
+      const next = vi.fn();
+      adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("blocks DELETE /ai/catalog/services/:id (delete — admin only)", () => {
+      const req = makeReq("DELETE", "/ai/catalog/services/1");
+      const res = makeRes();
+      const next = vi.fn();
+      adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("regex is anchored — does not match prefix /ai/catalog/services/1/request/extra", () => {
+      const req = makeReq("POST", "/ai/catalog/services/1/request/extra");
+      const res = makeRes();
+      const next = vi.fn();
+      adminAuthWithExceptions(req, res as unknown as Response, next as unknown as NextFunction);
+      // Should NOT pass (anchored regex)
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(401);
+    });
+  });
 });

@@ -11,10 +11,24 @@ import { INDUSTRY_PROFILES, getIndustryProfile } from "./industry-profiles";
 import type { IndustryProfile } from "./types";
 
 /** keyword (lowercase, substring-matched) → target industry key */
+/**
+ * Alias table for free-text industry matching.
+ *
+ * Ordering principle — specificity first:
+ *   - Multi-concept phrases (e.g. "export import") must appear BEFORE
+ *     single-concept aliases that share keywords (e.g. "logistics"), so the
+ *     more specific match wins when both keywords are present.
+ *   - Within a group, longer / more distinctive keywords come first.
+ *
+ * Example: "ekspor impor / logistik" — "ekspor" matches export_import (checked
+ * first) rather than logistics, which is the correct more-specific resolution.
+ */
 const ALIASES: [string[], string][] = [
   [["coffee", "kopi", "cafe", "kafe"], "coffee_shop"],
+  // export_import MUST come before logistics — "ekspor"/"impor" are more
+  // specific identifiers for this business type than logistik/cargo.
+  [["export", "import", "ekspor", "impor", "export import", "ekspor impor"], "export_import"],
   [["logistic", "logistik", "cargo", "kargo", "forwarding", "ekspedisi"], "logistics"],
-  [["export", "import", "ekspor", "impor"], "export_import"],
   [["charcoal", "arang", "briket"], "charcoal"],
   [["restoran", "resto", "restaurant", "rumah makan"], "restaurant"],
   [["bakery", "roti", "kue"], "bakery"],

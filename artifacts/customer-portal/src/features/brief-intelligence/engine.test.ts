@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { computeBriefRecommendations } from "./engine";
 import { buildBriefIntelligenceContext } from "./context-adapter";
-import { applyRecommendations } from "./apply-adapter";
+import { applyRecommendations, STYLE_MAX, COLOR_MAX, AUDIENCE_MAX } from "./apply-adapter";
 import { GENERIC_FALLBACK_PROFILE, resolveFallbackIndustry } from "./industry-fallback";
 import { INDUSTRY_PROFILES } from "./industry-profiles";
 import type { BriefIntelligenceContext } from "./types";
@@ -238,5 +238,235 @@ describe("applyRecommendations — apply-all-empty-only", () => {
     const applyResult = applyRecommendations(brief, [rec], "apply-all-empty-only", {});
     expect(applyResult.applied).toEqual([]);
     expect(applyResult.warnings.length).toBe(1);
+  });
+});
+
+// ── Phase 3.1: alias match semantics ──────────────────────────────────────────
+
+describe("computeBriefRecommendations — alias match NOT treated as generic fallback", () => {
+  it("alias match sets usedFallbackIndustry=false (not a generic fallback)", () => {
+    const result = computeBriefRecommendations(ctx({ industryCustomText: "developer properti perumahan" }));
+    // "properti" / "perumahan" should match property or real_estate via alias —
+    // it is a KNOWN industry, so the badge "Industri belum spesifik" must NOT appear.
+    expect(result.usedFallbackIndustry).toBe(false);
+    expect(result.debug.industryMatchType).toBe("alias");
+    expect(result.debug.matchedIndustryProfileKey).not.toBeNull();
+  });
+
+  it("alias match for coffee via free text resolves to alias matchType", () => {
+    const result = computeBriefRecommendations(ctx({ industryCustomText: "kedai kopi artisan" }));
+    expect(result.usedFallbackIndustry).toBe(false);
+    expect(result.debug.industryMatchType).toBe("alias");
+    expect(result.debug.matchedIndustryProfileKey).toBe("coffee_shop");
+  });
+
+  it("truly unknown industry sets usedFallbackIndustry=true and matchType=generic-fallback", () => {
+    const result = computeBriefRecommendations(ctx({ industryCustomText: "xyzzy nonsense 99999" }));
+    expect(result.usedFallbackIndustry).toBe(true);
+    expect(result.debug.industryMatchType).toBe("generic-fallback");
+    expect(result.debug.matchedIndustryProfileKey).toBeNull();
+  });
+
+  it("named industryKey sets matchType=exact and usedFallbackIndustry=false", () => {
+    const result = computeBriefRecommendations(ctx({ industryKey: "coffee_shop" }));
+    expect(result.usedFallbackIndustry).toBe(false);
+    expect(result.debug.industryMatchType).toBe("exact");
+    expect(result.debug.matchedIndustryProfileKey).toBe("coffee_shop");
+  });
+
+  it("no industry context at all sets matchType=null", () => {
+    const result = computeBriefRecommendations(ctx());
+    expect(result.debug.industryMatchType).toBeNull();
+  });
+});
+
+// ── Phase 3.1: export-import alias priority ────────────────────────────────────
+
+describe("resolveFallbackIndustry — export-import exact phrase priority", () => {
+  it("resolves 'ekspor impor' to export_import, not logistics", () => {
+    const result = resolveFallbackIndustry("ekspor impor");
+    expect(result.matchedKey).toBe("export_import");
+  });
+
+  it("resolves 'export import' to export_import", () => {
+    const result = resolveFallbackIndustry("export import");
+    expect(result.matchedKey).toBe("export_import");
+  });
+
+  it("resolves 'ekspor impor / logistik' to export_import (specificity wins)", () => {
+    // Both keywords present; export_import should be checked first (more specific).
+    const result = resolveFallbackIndustry("ekspor impor / logistik");
+    expect(result.matchedKey).toBe("export_import");
+  });
+
+  it("resolves 'logistik' alone (no import keywords) to logistics", () => {
+    const result = resolveFallbackIndustry("perusahaan logistik pengiriman");
+    expect(result.matchedKey).toBe("logistics");
+  });
+});
+
+// ── Phase 3.1: apply limits match UI limits ────────────────────────────────────
+
+describe("STYLE_MAX / COLOR_MAX / AUDIENCE_MAX match UI limits", () => {
+  it("STYLE_MAX exported constant equals the UI chip group max (3)", () => {
+    expect(STYLE_MAX).toBe(3);
+  });
+
+  it("COLOR_MAX exported constant equals the UI color picker max (3)", () => {
+    expect(COLOR_MAX).toBe(3);
+  });
+
+  it("AUDIENCE_MAX exported constant equals the UI chip group max (4)", () => {
+    expect(AUDIENCE_MAX).toBe(4);
+  });
+});
+
+describe("applyRecommendations — apply does not exceed selection limits", () => {
+  // Use real option labels so parseChoices can match them to their keys.
+  // STYLE_OPTIONS labels (lowercase keys for apply): minimalis, modern, corporate, premium…
+  // COLOR labels: Biru=blue, Hitam=black, Merah=red, Hijau=green, Ungu=purple
+  // AUDIENCE labels (partial): Konsumen umum=general, B2C=b2c, B2B=b2b, Perusahaan=corporate…
+
+  function makeRec(category: "style" | "color" | "audience", key: string, label: string) {
+    return { category, key, label, score: 90, confidence: "high" as const, reasons: [], sources: [] };
+  }
+
+  it("style apply does not exceed STYLE_MAX — once max is reached, extras are skipped", () => {
+    // Pre-fill with (STYLE_MAX - 1) = 2 real style labels so parseChoices recognises them.
+    // parseChoices uses "; " as the canonical separator for multi-choice fields.
+    const brief: BriefData = { ...EMPTY_BRIEF, stylePreference: "Minimalis; Modern" };
+    const recs = [
+      makeRec("style", "bold",     "Bold"),
+      makeRec("style", "playful",  "Playful"),
+      makeRec("style", "creative", "Creative"),
+    ];
+    const result = applyRecommendations(brief, recs, "apply-category", { category: "style" });
+    // One slot left → max 1 applied; the other 2 must be skipped (max reason)
+    expect(result.applied.length).toBeLessThanOrEqual(1);
+    const maxSkipped = result.skipped.filter((s) => s.reason.includes(`${STYLE_MAX}`));
+    expect(maxSkipped.length).toBeGreaterThanOrEqual(recs.length - 1);
+  });
+
+  it("color apply does not exceed COLOR_MAX — once max is reached, extras are skipped", () => {
+    // Pre-fill with (COLOR_MAX - 1) = 2 real color labels.
+    const brief: BriefData = { ...EMPTY_BRIEF, colorPalette: "Biru, Hitam" };
+    const recs = [
+      makeRec("color", "green",  "Hijau"),
+      makeRec("color", "red",    "Merah"),
+      makeRec("color", "purple", "Ungu"),
+    ];
+    const result = applyRecommendations(brief, recs, "apply-category", { category: "color" });
+    expect(result.applied.length).toBeLessThanOrEqual(1);
+    const maxSkipped = result.skipped.filter((s) => s.reason.includes(`${COLOR_MAX}`));
+    expect(maxSkipped.length).toBeGreaterThanOrEqual(recs.length - 1);
+  });
+
+  it("audience apply does not exceed AUDIENCE_MAX — once max is reached, extras are skipped", () => {
+    // Pre-fill with (AUDIENCE_MAX - 1) = 3 real audience labels.
+    // parseChoices uses "; " as the canonical separator for multi-choice fields.
+    const brief: BriefData = {
+      ...EMPTY_BRIEF,
+      audienceDemographics: "Konsumen umum; B2C; B2B",
+    };
+    const recs = [
+      makeRec("audience", "corporate",    "Perusahaan"),
+      makeRec("audience", "startup",      "Startup"),
+      makeRec("audience", "professional", "Profesional"),
+    ];
+    const result = applyRecommendations(brief, recs, "apply-category", { category: "audience" });
+    expect(result.applied.length).toBeLessThanOrEqual(1);
+    const maxSkipped = result.skipped.filter((s) => s.reason.includes(`${AUDIENCE_MAX}`));
+    expect(maxSkipped.length).toBeGreaterThanOrEqual(recs.length - 1);
+  });
+});
+
+// ── Phase 3.1: new conflict rules ─────────────────────────────────────────────
+
+describe("computeBriefRecommendations — new conflict rules", () => {
+  it("premium audience + colorful style triggers premium-colorful-playful warning", () => {
+    const result = computeBriefRecommendations(
+      ctx({
+        industryKey: "jewelry",
+        audienceKeys: ["premium"],
+        selected: { styleKeys: ["colorful"], colorKeys: [] },
+      }),
+    );
+    expect(result.warnings.some((w) => w.code === "premium-colorful-playful")).toBe(true);
+    // Recommendations still present — warning is non-blocking
+    expect(result.categories.length).toBeGreaterThan(0);
+  });
+
+  it("premium audience + playful style also triggers premium-colorful-playful warning", () => {
+    const result = computeBriefRecommendations(
+      ctx({
+        industryKey: "jewelry",
+        audienceKeys: ["premium"],
+        selected: { styleKeys: ["playful"], colorKeys: [] },
+      }),
+    );
+    expect(result.warnings.some((w) => w.code === "premium-colorful-playful")).toBe(true);
+  });
+
+  it("non-premium audience with colorful style does NOT trigger premium-colorful-playful", () => {
+    const result = computeBriefRecommendations(
+      ctx({
+        industryKey: "fnb_cafe",
+        audienceKeys: ["youth"],
+        selected: { styleKeys: ["colorful"], colorKeys: [] },
+      }),
+    );
+    expect(result.warnings.some((w) => w.code === "premium-colorful-playful")).toBe(false);
+  });
+
+  it("no-assets + photography recommendation triggers no-assets-photography warning", () => {
+    // Use an industry with photographyDirection recommendations (most do)
+    const result = computeBriefRecommendations(
+      ctx({
+        industryKey: "coffee_shop",
+        existingAssetKeys: ["none"],
+      }),
+    );
+    // coffee_shop has photographyDirection recs
+    if (result.categories.some((c) => c.category === "photographyDirection")) {
+      expect(result.warnings.some((w) => w.code === "no-assets-photography")).toBe(true);
+    }
+    // Non-blocking
+    expect(result.categories.length).toBeGreaterThan(0);
+  });
+
+  it("speed priority + many deliverables triggers speed-excessive-deliverables warning", () => {
+    // manufacturing has a rich deliverable list
+    const result = computeBriefRecommendations(
+      ctx({
+        industryKey: "manufacturing",
+        priorityKey: "speed",
+      }),
+    );
+    // Check only if engine actually produced enough deliverables
+    const delivCount = result.categories.find((c) => c.category === "deliverable")?.items.length ?? 0;
+    if (delivCount > 3) {
+      expect(result.warnings.some((w) => w.code === "speed-excessive-deliverables")).toBe(true);
+    }
+  });
+
+  it("speed priority + few deliverables does NOT trigger speed-excessive-deliverables", () => {
+    // Use a minimal context to produce at most 1 deliverable
+    const result = computeBriefRecommendations(
+      ctx({ priorityKey: "speed", serviceType: "default" }),
+    );
+    expect(result.warnings.some((w) => w.code === "speed-excessive-deliverables")).toBe(false);
+  });
+
+  it("all new conflict warnings are non-blocking — recommendations still present", () => {
+    const result = computeBriefRecommendations(
+      ctx({
+        industryKey: "jewelry",
+        audienceKeys: ["premium"],
+        existingAssetKeys: ["none"],
+        selected: { styleKeys: ["colorful"], colorKeys: [] },
+      }),
+    );
+    expect(result.warnings.some((w) => w.code === "premium-colorful-playful")).toBe(true);
+    expect(result.categories.length).toBeGreaterThan(0);
   });
 });

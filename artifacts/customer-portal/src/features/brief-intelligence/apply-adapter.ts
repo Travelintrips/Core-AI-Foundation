@@ -23,9 +23,14 @@ import {
 import type { BriefData } from "@/pages/brief";
 import type { ApplyMode, ApplyRecommendationResult, ApplySkip, BriefRecommendation, RecommendationCategory } from "./types";
 
-const STYLE_MAX = 5;
-const COLOR_MAX = 5;
-const AUDIENCE_MAX = 6;
+/**
+ * Selection limits — must match the UI chip group `max` props in brief.tsx.
+ * Single source of truth: import these in brief.tsx rather than hardcoding
+ * separate values, so the adapter and the UI can never drift apart.
+ */
+export const STYLE_MAX = 3;
+export const COLOR_MAX = 3;
+export const AUDIENCE_MAX = 4;
 
 const FREE_TEXT_CATEGORIES: RecommendationCategory[] = [
   "deliverable", "personality", "toneOfVoice", "photographyDirection", "visualDirection", "contentDirection",
