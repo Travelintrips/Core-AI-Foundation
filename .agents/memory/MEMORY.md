@@ -45,3 +45,4 @@
 - [phase21-brief-legacy-hardening](phase21-brief-legacy-hardening.md) — legacy free-text parsers must surface unmatched text as other+custom, never drop it; brief page never hydrated from server briefJson (fixed); ADMIN_API_KEY exceptions gap breaks public catalog routes (flagged, not fixed)
 - [phase2-company-profile-pdf](phase2-company-profile-pdf.md) — pdf_export gating, runtime document-type resolution, idempotent regeneration, status-map fallout
 - [phase3-document-engine](phase3-document-engine.md) — Generic PDF worker + registry; 4 new doc types; mapper mock rule; requiresLogo guard; fetch mock in tests
+- [phase4-presentation-engine](phase4-presentation-engine.md) — pptxgenjs default-export interop gotcha; PDFKit auto-pagination silently desyncs page count near page margins; honest spec-rendered PDF fallback pattern

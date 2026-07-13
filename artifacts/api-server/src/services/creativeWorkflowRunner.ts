@@ -43,6 +43,7 @@ import { readGuardrails } from "./guardrailService.js";
 import { getActiveModel } from "./aiModelService.js";
 import { createExecutionPlanForCreativeProject } from "./aiCeoService.js";
 import { resolveProjectDocumentType } from "./creativeProjectDocumentType.js";
+import { resolveProjectPresentationType } from "./creativeProjectPresentationType.js";
 import { enqueue } from "./queueManagerService.js";
 
 type StepOutput = Record<string, unknown>;
@@ -467,7 +468,15 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
   // project with no deliverable yet.
   const documentType = anyFailed ? null : await resolveProjectDocumentType(project);
   const isDocumentProject = documentType !== null;
-  const finalStatus = anyFailed ? "failed" : isDocumentProject ? "generating_document" : "completed";
+  const presentationType = anyFailed || isDocumentProject ? null : await resolveProjectPresentationType(project);
+  const isPresentationProject = presentationType !== null;
+  const finalStatus = anyFailed
+    ? "failed"
+    : isDocumentProject
+      ? "generating_document"
+      : isPresentationProject
+        ? "generating_presentation"
+        : "completed";
 
   await db
     .update(creativeProjectsTable)
@@ -525,6 +534,31 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
           await logAudit(
             "creative-document-engine",
             "pdf_export_enqueue_failed",
+            project.projectId,
+            "creative_project",
+            "failure",
+            { error: String(err) },
+          );
+        });
+      });
+    }
+
+    // Presentation-producing projects (e.g. Pitch Deck) need their cover/
+    // supporting images before the PPTX can render meaningfully, so the
+    // pptx_export job is only enqueued once the (fire-and-forget) image
+    // pipeline has settled — success or failure. A failed image pipeline
+    // still lets the deck render; the mapper simply omits the logo mark.
+    if (isPresentationProject) {
+      imagesDone.finally(() => {
+        enqueue({
+          jobType: "pptx_export",
+          payloadJson: { projectId: projectDbId, presentationType },
+          priority: 60,
+        }).catch(async (err) => {
+          console.error(`[pptx-export] Failed to enqueue pptx_export job for project ${project.projectId}:`, err);
+          await logAudit(
+            "creative-presentation-engine",
+            "pptx_export_enqueue_failed",
             project.projectId,
             "creative_project",
             "failure",

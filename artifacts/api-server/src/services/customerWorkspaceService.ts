@@ -600,6 +600,8 @@ export interface WorkspaceDownloadItem {
   documentType?: string | null;
   /** MIME type of the asset. */
   mimeType?: string | null;
+  /** Present for presentation assets (PPTX) — number of slides. */
+  slideCount?: number | null;
 }
 
 function formatDocumentTitle(documentType: string): string {
@@ -611,6 +613,15 @@ function formatDocumentTitle(documentType: string): string {
     brand_identity_guideline: "Brand Identity Guideline PDF",
   };
   return labels[documentType] ?? documentType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+const PPTX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
+function formatPresentationTitle(presentationType: string): string {
+  const labels: Record<string, string> = {
+    pitch_deck: "Pitch Deck (PPTX)",
+  };
+  return labels[presentationType] ?? presentationType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function guessCategory(assetType: string, category: string | null): string {
@@ -636,10 +647,14 @@ async function listDownloadsForProjects(
     const proj = byId.get(a.projectId);
     const meta = (a.metadata ?? {}) as Record<string, unknown>;
     const isDoc = a.assetType === "document";
+    const isPresentation = a.assetType === "presentation";
     const docType = isDoc ? (a.category ?? null) : null;
+    const presentationType = isPresentation ? (a.category ?? null) : null;
     const title = isDoc
       ? `${proj?.brandName ?? "Asset"} — ${formatDocumentTitle(docType ?? "document")} v${a.version}`
-      : `${proj?.brandName ?? "Asset"} — ${a.assetType} #${a.id}`;
+      : isPresentation
+        ? `${proj?.brandName ?? "Asset"} — ${formatPresentationTitle(presentationType ?? "presentation")} v${a.version}`
+        : `${proj?.brandName ?? "Asset"} — ${a.assetType} #${a.id}`;
     return {
       id: a.id,
       title,
@@ -653,9 +668,12 @@ async function listDownloadsForProjects(
       locked: !(proj?.filesUnlocked ?? false),
       createdAt: a.createdAt.toISOString(),
       pageCount:    isDoc ? (typeof meta["pageCount"]    === "number" ? meta["pageCount"]    : null) : null,
-      fileSizeBytes: isDoc ? (typeof meta["fileSizeBytes"] === "number" ? meta["fileSizeBytes"] : null) : null,
-      documentType: docType,
-      mimeType:     isDoc ? (typeof meta["mimeType"] === "string" ? meta["mimeType"] : "application/pdf") : null,
+      fileSizeBytes: (isDoc || isPresentation) ? (typeof meta["fileSizeBytes"] === "number" ? meta["fileSizeBytes"] : null) : null,
+      documentType: docType ?? presentationType,
+      mimeType:     isDoc ? (typeof meta["mimeType"] === "string" ? meta["mimeType"] : "application/pdf")
+                  : isPresentation ? (typeof meta["mimeType"] === "string" ? meta["mimeType"] : PPTX_MIME_TYPE)
+                  : null,
+      slideCount:   isPresentation ? (typeof meta["slideCount"] === "number" ? meta["slideCount"] : null) : null,
     };
   });
 }

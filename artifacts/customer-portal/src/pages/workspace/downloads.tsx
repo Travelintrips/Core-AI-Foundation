@@ -12,9 +12,13 @@ const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   copywriting:             "Copywriting",
   creative_consultation:   "Creative Consultation",
   brand_identity_guideline: "Brand Identity Guideline",
+  pitch_deck:              "Pitch Deck",
 };
 
-function DocumentIcon({ isPdf }: { isPdf: boolean }) {
+const PPTX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
+function DocumentIcon({ isPdf, isPptx }: { isPdf: boolean; isPptx: boolean }) {
+  if (isPptx) return <FileImage className="w-4 h-4 text-orange-500" />;
   if (isPdf) return <FileText className="w-4 h-4 text-primary" />;
   return <FileImage className="w-4 h-4 text-muted-foreground" />;
 }
@@ -72,17 +76,23 @@ export default function WorkspaceDownloadsPage({ params }: { params: { token: st
       ) : (
         <div className="bg-card border border-card-border rounded-2xl divide-y divide-border/60">
           {data.items.map((d) => {
-            const isPdf = d.mimeType === "application/pdf" || !!d.documentType;
+            const isPptx = d.mimeType === PPTX_MIME_TYPE;
+            const isPdf = !isPptx && (d.mimeType === "application/pdf" || !!d.documentType);
             const docLabel = d.documentType ? (DOCUMENT_TYPE_LABELS[d.documentType] ?? d.documentType) : null;
             return (
               <div key={d.id} className="flex items-center justify-between gap-4 p-4">
                 <div className="min-w-0 flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isPdf ? "bg-primary/10" : "bg-muted"}`}>
-                    <DocumentIcon isPdf={isPdf} />
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isPptx ? "bg-orange-500/10" : isPdf ? "bg-primary/10" : "bg-muted"}`}>
+                    <DocumentIcon isPdf={isPdf} isPptx={isPptx} />
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium truncate">{d.title}</p>
+                      {isPptx && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-500/10 text-orange-600 shrink-0">
+                          PPTX
+                        </span>
+                      )}
                       {isPdf && (
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary shrink-0">
                           PDF
@@ -97,6 +107,12 @@ export default function WorkspaceDownloadsPage({ params }: { params: { token: st
                         <>
                           <span className="text-xs text-muted-foreground/50">·</span>
                           <span className="text-xs text-muted-foreground">{d.pageCount} pages</span>
+                        </>
+                      )}
+                      {d.slideCount != null && (
+                        <>
+                          <span className="text-xs text-muted-foreground/50">·</span>
+                          <span className="text-xs text-muted-foreground">{d.slideCount} slides</span>
                         </>
                       )}
                       {d.fileSizeBytes != null && (

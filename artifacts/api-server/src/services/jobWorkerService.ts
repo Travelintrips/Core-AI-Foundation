@@ -34,9 +34,13 @@ import {
   getSupportedDocumentTypes,
 } from "./creativeDocumentWorkerService.js";
 import { initDocumentRegistry } from "./creativeDocumentRegistry.js";
+import { initPresentationRegistry } from "./presentation/creativePresentationRegistry.js";
+import { getSupportedPresentationTypes, executeGenericPresentationExportJob } from "./presentation/creativePresentationWorkerService.js";
+import { resolveProjectPresentationType } from "./creativeProjectPresentationType.js";
 
 // Register all document type definitions at module load time.
 initDocumentRegistry();
+initPresentationRegistry();
 
 // ── Real AI execution helpers ───────────────────────────────────────────────
 
@@ -503,6 +507,18 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
       throw new WorkerNotImplementedError(`pdf_export for document type '${documentType ?? "unknown"}'`);
     }
 
+    case "pptx_export": {
+      const pptxProjectId = (job.payloadJson as { projectId?: number } | null)?.projectId;
+      const [pptxProject] = typeof pptxProjectId === "number"
+        ? await db.select().from(creativeProjectsTable).where(eq(creativeProjectsTable.id, pptxProjectId))
+        : [];
+      const presentationType = pptxProject ? await resolveProjectPresentationType(pptxProject) : null;
+      if (presentationType && getSupportedPresentationTypes().includes(presentationType)) {
+        return executeGenericPresentationExportJob(job, presentationType);
+      }
+      throw new WorkerNotImplementedError(`pptx_export for presentation type '${presentationType ?? "unknown"}'`);
+    }
+
     case "csv_export":
       throw new WorkerNotImplementedError("csv_export");
 
@@ -631,6 +647,16 @@ export async function retryJob(
         const { markProjectDocumentFailed } = await import("./companyProfilePdfWorkerService.js");
         await markProjectDocumentFailed(pdfProjectId, errorMessage).catch((err) => {
           logger.warn({ err, pdfProjectId }, "[jobWorker] Failed to flag project as failed after exhausted pdf_export retries");
+        });
+      }
+    }
+
+    if (job.jobType === "pptx_export") {
+      const pptxProjectId = (job.payloadJson as { projectId?: number } | null)?.projectId;
+      if (typeof pptxProjectId === "number") {
+        const { markProjectPresentationFailed } = await import("./presentation/creativePresentationWorkerService.js");
+        await markProjectPresentationFailed(pptxProjectId, errorMessage).catch((err) => {
+          logger.warn({ err, pptxProjectId }, "[jobWorker] Failed to flag project as failed after exhausted pptx_export retries");
         });
       }
     }

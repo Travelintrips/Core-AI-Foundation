@@ -150,6 +150,8 @@ export type WorkspaceDownload = {
   documentType?: string | null;
   /** MIME type of the asset. */
   mimeType?: string | null;
+  /** Slide count — present for PPTX presentation assets. */
+  slideCount?: number | null;
 };
 
 export type WorkspaceInvoice = {
