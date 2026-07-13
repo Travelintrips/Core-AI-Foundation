@@ -18,7 +18,27 @@ import {
   failGate,
   waiveGate,
 } from "../services/commercialGateService.js";
-import { checkAndMaybeConvert } from "../services/serviceRequestConversionService.js";
+import {
+  checkAndMaybeConvert,
+  checkAndMaybeConvertByServiceQuotation,
+} from "../services/serviceRequestConversionService.js";
+
+// Fires the right conversion path depending on which flow the gate belongs
+// to (legacy creative_project_quotations vs. new service-catalog ai_quotations).
+// Without this, service-catalog requests never get a createdProjectId after
+// their gate clears, so they can never reach "completed" and customers never
+// see their results (see .agents/memory/... commercial-gate conversion gap).
+function triggerConversion(gate: { quotationId: number | null; serviceQuotationId: number | null }) {
+  if (gate.quotationId != null) {
+    checkAndMaybeConvert(gate.quotationId).catch((err) => {
+      console.warn("[commercial-gates] checkAndMaybeConvert non-fatal error:", err);
+    });
+  } else if (gate.serviceQuotationId != null) {
+    checkAndMaybeConvertByServiceQuotation(gate.serviceQuotationId).catch((err) => {
+      console.warn("[commercial-gates] checkAndMaybeConvertByServiceQuotation non-fatal error:", err);
+    });
+  }
+}
 
 const router = Router();
 
@@ -83,11 +103,7 @@ router.post("/commercial-gates/:id/verify", async (req, res): Promise<void> => {
     const gate = await verifyGate(id, verifiedBy, verifiedAmount, referenceNumber);
 
     // Attempt conversion now that gate is cleared (fire-and-forget)
-    if (gate.quotationId != null) {
-      checkAndMaybeConvert(gate.quotationId).catch((err) => {
-        console.warn("[commercial-gates] checkAndMaybeConvert non-fatal error:", err);
-      });
-    }
+    triggerConversion(gate);
 
     res.json(gate);
   } catch (err) {
@@ -129,11 +145,7 @@ router.post("/commercial-gates/:id/waive", async (req, res): Promise<void> => {
     const gate = await waiveGate(id, waivedBy, reason);
 
     // Attempt conversion now that gate is cleared (fire-and-forget)
-    if (gate.quotationId != null) {
-      checkAndMaybeConvert(gate.quotationId).catch((err) => {
-        console.warn("[commercial-gates] checkAndMaybeConvert non-fatal error:", err);
-      });
-    }
+    triggerConversion(gate);
 
     res.json(gate);
   } catch (err) {
