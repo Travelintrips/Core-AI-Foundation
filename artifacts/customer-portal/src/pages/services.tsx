@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "@/lib/i18n";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -79,12 +80,12 @@ function getCategoryIcon(cat: ServiceCategory): React.ElementType {
 // ── Sort options ──────────────────────────────────────────────────────────────
 
 type SortKey = "popular" | "newest" | "fastest" | "price_asc" | "rating";
-const SORT_OPTIONS: { key: SortKey; label: string; icon: React.ElementType }[] = [
-  { key: "popular",   label: "Most Popular",      icon: Flame },
-  { key: "newest",    label: "Newest",             icon: Sparkles },
-  { key: "fastest",   label: "Fastest Delivery",   icon: Zap },
-  { key: "price_asc", label: "Lowest Price",       icon: DollarSign },
-  { key: "rating",    label: "Highest Rating",     icon: Star },
+const SORT_KEYS: { key: SortKey; tKey: string; icon: React.ElementType }[] = [
+  { key: "popular",   tKey: "services.sort.popular",   icon: Flame },
+  { key: "newest",    tKey: "services.sort.newest",    icon: Sparkles },
+  { key: "fastest",   tKey: "services.sort.fastest",   icon: Zap },
+  { key: "price_asc", tKey: "services.sort.price_asc", icon: DollarSign },
+  { key: "rating",    tKey: "services.sort.rating",    icon: Star },
 ];
 
 // ── Search constants ──────────────────────────────────────────────────────────
@@ -149,11 +150,12 @@ function SkeletonCard() {
 // ── Quick Preview Panel ───────────────────────────────────────────────────────
 
 function QuickPreview({ s, onView }: { s: CatalogService; onView: (id: number) => void }) {
+  const { t } = useTranslation();
   const deliverables = [
-    s.humanReview ? "Human-reviewed output" : "AI-generated output",
-    `Delivered in ${s.estimatedDelivery}`,
-    s.serviceFlow === "fixed_price" ? "Fixed price, no surprises" : "Custom scoped project",
-    "Commercial license included",
+    s.humanReview ? t('services.preview.humanOutput') : t('services.preview.aiOutput'),
+    t('services.preview.deliveredIn', { time: s.estimatedDelivery }),
+    s.serviceFlow === "fixed_price" ? t('services.preview.fixedPrice') : t('services.preview.customScope'),
+    t('services.preview.commercialLicense'),
   ];
 
   return (
@@ -165,11 +167,9 @@ function QuickPreview({ s, onView }: { s: CatalogService; onView: (id: number) =
       className="absolute inset-0 z-10 flex flex-col justify-between rounded-2xl overflow-hidden"
       style={{ background: "linear-gradient(160deg, #111C38 0%, #0D1526 100%)", border: "1px solid rgba(124,110,250,0.5)" }}
     >
-      {/* Glow border */}
       <div className="absolute inset-0 rounded-2xl pointer-events-none" style={{ boxShadow: "inset 0 0 0 1px rgba(124,110,250,0.3), 0 8px 32px rgba(124,110,250,0.2)" }} />
-
       <div className="p-5 flex flex-col gap-3 flex-1">
-        <p className="text-[10px] font-bold text-[#7C6EFA] uppercase tracking-widest mb-1">Quick Preview</p>
+        <p className="text-[10px] font-bold text-[#7C6EFA] uppercase tracking-widest mb-1">{t('services.preview.title')}</p>
         <div className="space-y-2">
           {deliverables.map((d, i) => (
             <div key={i} className="flex items-start gap-2">
@@ -181,17 +181,16 @@ function QuickPreview({ s, onView }: { s: CatalogService; onView: (id: number) =
         <div className="flex items-center gap-2 mt-auto flex-wrap">
           {s.humanReview && (
             <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#7C6EFA]/15 text-[#7C6EFA] border border-[#7C6EFA]/25">
-              <Shield className="w-3 h-3" /> Human Reviewed
+              <Shield className="w-3 h-3" /> {t('services.preview.humanReviewed')}
             </span>
           )}
           {s.serviceFlow === "fixed_price" && (
             <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/25">
-              <BadgeCheck className="w-3 h-3" /> Commercial
+              <BadgeCheck className="w-3 h-3" /> {t('services.preview.commercial')}
             </span>
           )}
         </div>
       </div>
-
       <div className="p-4 pt-0">
         <Link
           href={`/services/${s.id}`}
@@ -199,7 +198,7 @@ function QuickPreview({ s, onView }: { s: CatalogService; onView: (id: number) =
           className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-semibold transition-all duration-150"
           style={{ background: "linear-gradient(135deg, #7C6EFA 0%, #5F52D0 100%)", color: "#fff" }}
         >
-          View Detail
+          {t('services.preview.viewDetail')}
           <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>
@@ -210,6 +209,7 @@ function QuickPreview({ s, onView }: { s: CatalogService; onView: (id: number) =
 // ── Service Card ──────────────────────────────────────────────────────────────
 
 function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) => void }) {
+  const { t } = useTranslation();
   const badge = serviceBadge(s);
   const rating = mockRating(s.id);
   const completed = mockCompleted(s.id);
@@ -280,7 +280,7 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
           </span>
           <span className="flex items-center gap-1">
             <CheckCircle className="w-3.5 h-3.5 text-[#10B981]" />
-            {completed} projects
+            {completed} {t('services.card.projects')}
           </span>
           <span className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5 text-[#22D3EE]" />
@@ -289,7 +289,7 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
           {s.humanReview && (
             <span className="flex items-center gap-1 text-[#7C6EFA]">
               <Shield className="w-3.5 h-3.5" />
-              Human
+              {t('services.preview.humanReviewed')}
             </span>
           )}
         </div>
@@ -297,7 +297,7 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
         {/* Price + CTA */}
         <div className="flex items-center justify-between pt-3 border-t border-[#243352] mt-auto">
           <div>
-            <p className="text-[11px] text-[#8B9BC4] mb-0.5">Starting from</p>
+            <p className="text-[11px] text-[#8B9BC4] mb-0.5">{t('services.card.startingFrom')}</p>
             <p style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-bold text-base text-[#F0F4FF]">
               {formatPrice(s.startingPrice, s.currency)}
             </p>
@@ -308,7 +308,7 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
             className="btn-primary !py-2 !px-4 !text-xs gap-1.5 flex items-center"
             aria-label={`View detail for ${s.serviceName}`}
           >
-            View Detail
+            {t('services.card.viewDetail')}
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -406,6 +406,7 @@ function FilterSidebar({
   open: boolean;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const set = <K extends keyof Filters>(k: K, v: Filters[K]) => onChange({ ...filters, [k]: v });
   const activeCount = countActiveFilters(filters);
 
@@ -429,7 +430,7 @@ function FilterSidebar({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <SlidersHorizontal className="w-4 h-4 text-[#7C6EFA]" />
-              <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-semibold text-sm text-[#F0F4FF]">Filters</h3>
+              <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-semibold text-sm text-[#F0F4FF]">{t('services.filter.title')}</h3>
               {activeCount > 0 && (
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#7C6EFA] text-white min-w-[18px] text-center">
                   {activeCount}
@@ -442,10 +443,10 @@ function FilterSidebar({
           </div>
 
           <div className="space-y-4">
-            <AccordionSection title="Price">
+            <AccordionSection title={t('services.filter.price')}>
               <div className="space-y-1 mb-2">
                 {[
-                  { label: "Any price", val: 999_999_999 },
+                  { label: t('services.filter.anyPrice'), val: 999_999_999 },
                   { label: "Under $500", val: 500 },
                   { label: "Under $1,000", val: 1000 },
                   { label: "Under $5,000", val: 5000 },
@@ -457,13 +458,13 @@ function FilterSidebar({
 
             <div className="h-px bg-[#243352]" />
 
-            <AccordionSection title="Delivery Time">
+            <AccordionSection title={t('services.filter.delivery')}>
               <div className="space-y-1 mb-2">
                 {[
-                  { label: "Any", val: 30 },
-                  { label: "Same day – 2 days", val: 2 },
-                  { label: "Up to 5 days", val: 5 },
-                  { label: "Up to 14 days", val: 14 },
+                  { label: t('services.filter.anyDelivery'), val: 30 },
+                  { label: t('services.filter.sameDay'), val: 2 },
+                  { label: t('services.filter.upTo5'), val: 5 },
+                  { label: t('services.filter.upTo14'), val: 14 },
                 ].map((o) => (
                   <RadioOption key={o.val} label={o.label} checked={filters.maxDelivery === o.val} onClick={() => set("maxDelivery", o.val)} />
                 ))}
@@ -472,12 +473,12 @@ function FilterSidebar({
 
             <div className="h-px bg-[#243352]" />
 
-            <AccordionSection title="Human Review">
+            <AccordionSection title={t('services.filter.humanReview')}>
               <div className="space-y-1 mb-2">
                 {[
-                  { label: "Any", val: null },
-                  { label: "Included", val: true },
-                  { label: "AI Only", val: false },
+                  { label: t('services.filter.any'), val: null },
+                  { label: t('services.filter.included'), val: true },
+                  { label: t('services.filter.aiOnly'), val: false },
                 ].map((o) => (
                   <RadioOption key={String(o.val)} label={o.label} checked={filters.humanReview === o.val} onClick={() => set("humanReview", o.val)} />
                 ))}
@@ -486,12 +487,12 @@ function FilterSidebar({
 
             <div className="h-px bg-[#243352]" />
 
-            <AccordionSection title="Rating">
+            <AccordionSection title={t('services.filter.rating')}>
               <div className="space-y-1 mb-2">
                 {[
-                  { label: "Any rating", val: 0 },
-                  { label: "4.0 & above", val: 4.0 },
-                  { label: "4.5 & above", val: 4.5 },
+                  { label: t('services.filter.anyRating'), val: 0 },
+                  { label: t('services.filter.above40'), val: 4.0 },
+                  { label: t('services.filter.above45'), val: 4.5 },
                 ].map((o) => (
                   <RadioOption key={o.val} label={o.label} checked={filters.minRating === o.val} onClick={() => set("minRating", o.val)} />
                 ))}
@@ -500,12 +501,12 @@ function FilterSidebar({
 
             <div className="h-px bg-[#243352]" />
 
-            <AccordionSection title="Commercial Ready" defaultOpen={false}>
+            <AccordionSection title={t('services.filter.commercial')} defaultOpen={false}>
               <div className="space-y-1 mb-2">
                 {[
-                  { label: "All", val: "" },
-                  { label: "Fixed Price", val: "fixed_price" },
-                  { label: "Custom Project", val: "custom_project" },
+                  { label: t('services.filter.all'), val: "" },
+                  { label: t('services.filter.fixedPrice'), val: "fixed_price" },
+                  { label: t('services.filter.customProject'), val: "custom_project" },
                   { label: "Enterprise", val: "enterprise" },
                 ].map((o) => (
                   <RadioOption key={o.val} label={o.label} checked={filters.flow === o.val} onClick={() => set("flow", o.val)} />
@@ -521,7 +522,7 @@ function FilterSidebar({
               aria-label="Reset all filters"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              Clear {activeCount} filter{activeCount > 1 ? "s" : ""}
+              {t('services.filter.clearFilters', { count: activeCount })}
             </button>
           )}
         </div>
@@ -541,6 +542,7 @@ function SearchDropdown({
   onSelect: (q: string) => void;
   onClearRecent: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <motion.div
       initial={{ opacity: 0, y: -6 }}
@@ -554,10 +556,10 @@ function SearchDropdown({
         <div className="p-4 border-b border-[#243352]">
           <div className="flex items-center justify-between mb-3">
             <p className="text-[11px] font-semibold text-[#8B9BC4] uppercase tracking-wider flex items-center gap-1.5">
-              <History className="w-3 h-3" /> Recent Searches
+              <History className="w-3 h-3" /> {t('services.search.recent')}
             </p>
             <button onClick={onClearRecent} className="text-[11px] text-[#8B9BC4] hover:text-[#7C6EFA] transition-colors">
-              Clear
+              {t('services.search.clear')}
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -576,7 +578,7 @@ function SearchDropdown({
       )}
       <div className="p-4">
         <p className="text-[11px] font-semibold text-[#8B9BC4] uppercase tracking-wider mb-3 flex items-center gap-1.5">
-          <Flame className="w-3 h-3 text-[#F97316]" /> Popular Searches
+          <Flame className="w-3 h-3 text-[#F97316]" /> {t('services.search.popular')}
         </p>
         <div className="flex flex-wrap gap-2">
           {POPULAR_SEARCHES.map((q) => (
@@ -593,10 +595,10 @@ function SearchDropdown({
       </div>
       <div className="px-4 pb-3 flex items-center gap-1.5 text-[11px] text-[#8B9BC4]/60">
         <kbd className="px-1.5 py-0.5 rounded bg-[#131E35] border border-[#2E4270] font-mono text-[10px]">Esc</kbd>
-        <span>to close</span>
+        <span>{t('services.search.close')}</span>
         <span className="mx-1">·</span>
         <kbd className="px-1.5 py-0.5 rounded bg-[#131E35] border border-[#2E4270] font-mono text-[10px]">/</kbd>
-        <span>to focus search</span>
+        <span>{t('services.search.focus')}</span>
       </div>
     </motion.div>
   );
@@ -605,6 +607,7 @@ function SearchDropdown({
 // ── Empty state ───────────────────────────────────────────────────────────────
 
 function EmptyState({ onReset }: { onReset: () => void }) {
+  const { t } = useTranslation();
   return (
     <motion.div
       variants={fadeUp}
@@ -612,7 +615,6 @@ function EmptyState({ onReset }: { onReset: () => void }) {
       animate="show"
       className="col-span-full flex flex-col items-center justify-center py-24 text-center"
     >
-      {/* SVG Illustration */}
       <div className="mb-8 relative">
         <div className="w-24 h-24 rounded-3xl border border-[#2E4270] flex items-center justify-center"
              style={{ background: "linear-gradient(135deg, #0D1526 0%, #131E35 100%)" }}>
@@ -634,10 +636,10 @@ function EmptyState({ onReset }: { onReset: () => void }) {
         </div>
       </div>
       <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-semibold text-xl mb-2 text-[#F0F4FF]">
-        No services found
+        {t('services.empty.title')}
       </h3>
       <p className="text-[#8B9BC4] text-sm max-w-xs mb-8 leading-relaxed">
-        Try adjusting your search terms or filters. We have 150+ AI services that might fit your needs.
+        {t('services.empty.desc')}
       </p>
       <div className="flex items-center gap-3 flex-wrap justify-center">
         <button
@@ -645,12 +647,12 @@ function EmptyState({ onReset }: { onReset: () => void }) {
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-[#2E4270] text-sm text-[#F0F4FF] hover:bg-[#131E35] hover:border-[#7C6EFA]/40 transition-all duration-150"
         >
           <RotateCcw className="w-4 h-4" />
-          Reset all filters
+          {t('services.empty.reset')}
         </button>
         <Link href="/services" className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150"
               style={{ background: "linear-gradient(135deg, #7C6EFA 0%, #5F52D0 100%)", color: "#fff" }}>
           <Sparkles className="w-4 h-4" />
-          Browse all services
+          {t('services.empty.browseAll')}
         </Link>
       </div>
     </motion.div>
@@ -694,6 +696,10 @@ function SectionHeader({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ServicesPage() {
+  const { t } = useTranslation();
+
+  const SORT_OPTIONS = SORT_KEYS.map((o) => ({ ...o, label: t(o.tKey) }));
+
   const [search, setSearch] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
@@ -897,11 +903,11 @@ export default function ServicesPage() {
             <motion.div variants={fadeUp} initial="hidden" animate="show" className="flex items-center justify-center gap-3 mb-6">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#2E4270] bg-[#0D1526]/70 text-xs font-semibold text-[#7C6EFA]">
                 <Sparkles className="w-3.5 h-3.5" />
-                AI Service Catalog — {allServices.length > 0 ? `${allServices.length}+ services` : "150+ services"}
+                AI Service Catalog — {allServices.length > 0 ? `${allServices.length}+ ${t('services.servicesLabel')}` : `150+ ${t('services.servicesLabel')}`}
               </div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#F59E0B]/30 bg-[#F59E0B]/8 text-xs font-semibold text-[#F59E0B]">
                 <Award className="w-3.5 h-3.5" />
-                Enterprise Grade
+                {t('services.enterpriseGrade')}
               </div>
             </motion.div>
 
@@ -912,8 +918,8 @@ export default function ServicesPage() {
               style={{ animationDelay: "60ms", fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               className="font-bold text-4xl md:text-6xl lg:text-7xl mb-5 leading-[1.08] text-[#F0F4FF]"
             >
-              Choose Your{" "}
-              <span className="text-gradient-primary">AI Specialist</span>
+              {t('services.hero.title')}{" "}
+              <span className="text-gradient-primary">{t('services.hero.titleSuffix')}</span>
             </motion.h1>
 
             <motion.p
@@ -923,8 +929,7 @@ export default function ServicesPage() {
               style={{ animationDelay: "120ms" }}
               className="text-base md:text-lg text-[#8B9BC4] max-w-2xl mx-auto mb-10"
             >
-              Explore AI services across Creative, Finance, Legal, Logistics, Procurement,
-              Trading, HR, Marketing, Executive and more.
+              {t('services.hero.desc')}
             </motion.p>
 
             {/* Search bar */}
@@ -944,8 +949,8 @@ export default function ServicesPage() {
                   onFocus={() => setSearchFocused(true)}
                   onBlur={handleSearchBlur}
                   onKeyDown={handleSearchKeyDown}
-                  placeholder="Search AI services…"
-                  aria-label="Search AI services"
+                  placeholder={t('services.search.placeholder')}
+                  aria-label={t('services.search.placeholder')}
                   className="w-full pl-14 pr-16 py-4 rounded-2xl bg-[#131E35] border border-[#2E4270]
                              text-base text-[#F0F4FF] placeholder:text-[#8B9BC4]/60 outline-none transition-all duration-200
                              focus:border-[#7C6EFA] focus:shadow-[0_0_0_3px_rgba(124,110,250,0.15)]"
@@ -990,7 +995,7 @@ export default function ServicesPage() {
               style={{ animationDelay: "240ms" }}
               className="flex items-center justify-center gap-2 mt-5 flex-wrap"
             >
-              <span className="text-xs text-[#8B9BC4]">Quick:</span>
+              <span className="text-xs text-[#8B9BC4]">{t('services.quickLabel')}</span>
               {["Creative AI", "Finance AI", "Legal AI", "Marketing AI"].map((tag) => (
                 <button
                   key={tag}
@@ -1024,7 +1029,7 @@ export default function ServicesPage() {
                 aria-pressed={categoryId === undefined}
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
-                All Services
+                {t('services.noCategory')}
               </button>
 
               {loadingCategories
@@ -1059,7 +1064,7 @@ export default function ServicesPage() {
           {/* ── Featured Services ────────────────────────────────────────── */}
           {!search && categoryId === undefined && featured.length > 0 && (
             <section className="mb-14">
-              <SectionHeader icon={Zap} iconColor="#F59E0B" title="Featured Services" />
+              <SectionHeader icon={Zap} iconColor="#F59E0B" title={t('services.featuredTitle')} />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* First card: hero size spanning 2 cols */}
                 {featured[0] && (() => {
@@ -1162,10 +1167,10 @@ export default function ServicesPage() {
               <SectionHeader
                 icon={TrendingUp}
                 iconColor="#22D3EE"
-                title="Recommended For You"
+                title={t('services.recommendedTitle')}
                 badge={
                   <span className="text-[11px] text-[#8B9BC4] bg-[#131E35] border border-[#2E4270] px-2 py-0.5 rounded-full">
-                    Based on popularity
+                    {t('services.basedOnPopularity')}
                   </span>
                 }
               />
@@ -1203,7 +1208,7 @@ export default function ServicesPage() {
           {/* ── Recently Viewed ───────────────────────────────────────────── */}
           {recentServices.length > 0 && !search && (
             <section className="mb-14">
-              <SectionHeader icon={Eye} iconColor="#8B9BC4" title="Recently Viewed">
+              <SectionHeader icon={Eye} iconColor="#8B9BC4" title={t('services.recentlyViewedTitle')}>
                 <button
                   onClick={() => {
                     setRecentlyViewed([]);
@@ -1212,7 +1217,7 @@ export default function ServicesPage() {
                   className="text-xs text-[#8B9BC4] hover:text-[#F0F4FF] transition-colors ml-2"
                   aria-label="Clear recently viewed"
                 >
-                  Clear
+                  {t('services.clear')}
                 </button>
               </SectionHeader>
               <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
@@ -1253,7 +1258,7 @@ export default function ServicesPage() {
                   aria-label="Open filters"
                 >
                   <Filter className="w-4 h-4" />
-                  Filters
+                  {t('services.filter.title')}
                   {activeFilterCount > 0 && (
                     <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[#7C6EFA] text-[10px] font-bold text-white flex items-center justify-center">
                       {activeFilterCount}
@@ -1266,19 +1271,19 @@ export default function ServicesPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     {filters.maxPrice < 999_999_999 && (
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#7C6EFA]/10 border border-[#7C6EFA]/30 text-[11px] text-[#7C6EFA]">
-                        Price
+                        {t('services.filter.price')}
                         <button onClick={() => setFilters(f => ({ ...f, maxPrice: DEFAULT_FILTERS.maxPrice }))} className="hover:text-white ml-0.5" aria-label="Remove price filter"><X className="w-2.5 h-2.5" /></button>
                       </span>
                     )}
                     {filters.maxDelivery < 30 && (
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#22D3EE]/10 border border-[#22D3EE]/30 text-[11px] text-[#22D3EE]">
-                        Delivery
+                        {t('services.filter.delivery')}
                         <button onClick={() => setFilters(f => ({ ...f, maxDelivery: DEFAULT_FILTERS.maxDelivery }))} className="hover:text-white ml-0.5" aria-label="Remove delivery filter"><X className="w-2.5 h-2.5" /></button>
                       </span>
                     )}
                     {filters.humanReview !== null && (
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#10B981]/10 border border-[#10B981]/30 text-[11px] text-[#10B981]">
-                        Human Review
+                        {t('services.filter.humanReview')}
                         <button onClick={() => setFilters(f => ({ ...f, humanReview: null }))} className="hover:text-white ml-0.5" aria-label="Remove human review filter"><X className="w-2.5 h-2.5" /></button>
                       </span>
                     )}
@@ -1292,8 +1297,8 @@ export default function ServicesPage() {
                 )}
 
                 <p className="text-sm text-[#8B9BC4]">
-                  <span className="font-semibold text-[#F0F4FF]">{filtered.length}</span> services
-                  {(search || categoryId !== undefined) && " found"}
+                  <span className="font-semibold text-[#F0F4FF]">{filtered.length}</span> {t('services.servicesLabel')}
+                  {(search || categoryId !== undefined) && ` ${t('services.foundLabel')}`}
                 </p>
 
                 {/* Sort dropdown */}
@@ -1305,7 +1310,7 @@ export default function ServicesPage() {
                     aria-label="Sort services"
                   >
                     <activeSort.icon className="w-3.5 h-3.5 text-[#8B9BC4]" />
-                    <span className="text-[#8B9BC4] hidden sm:inline">Sort:</span>
+                    <span className="text-[#8B9BC4] hidden sm:inline">{t('services.sortLabel')}</span>
                     {activeSort.label}
                     <ChevronDown className={`w-4 h-4 text-[#8B9BC4] transition-transform duration-200 ${sortOpen ? "rotate-180" : ""}`} />
                   </button>
@@ -1377,13 +1382,13 @@ export default function ServicesPage() {
                         className="flex items-center gap-2 py-3 px-8 rounded-xl border border-[#2E4270] text-sm font-medium text-[#F0F4FF] hover:bg-[#131E35] hover:border-[#7C6EFA]/40 transition-all duration-150 disabled:opacity-70 disabled:cursor-not-allowed"
                       >
                         {loadingMore ? (
-                          <><Loader2 className="w-4 h-4 animate-spin" /> Loading…</>
+                          <><Loader2 className="w-4 h-4 animate-spin" /> {t('services.loading')}</>
                         ) : (
-                          <><ChevronDown className="w-4 h-4" /> Load More</>
+                          <><ChevronDown className="w-4 h-4" /> {t('services.loadMore')}</>
                         )}
                       </button>
                       <p className="text-xs text-[#8B9BC4]">
-                        Showing {paginated.length} of {filtered.length} services
+                        {t('services.showing', { shown: String(paginated.length), total: String(filtered.length) })}
                       </p>
                     </div>
                   )}
@@ -1395,7 +1400,7 @@ export default function ServicesPage() {
                       className="text-center text-xs text-[#8B9BC4] mt-10 flex items-center justify-center gap-2"
                     >
                       <CheckCircle className="w-3.5 h-3.5 text-[#10B981]" />
-                      All {filtered.length} services loaded
+                      {t('services.allLoaded', { total: String(filtered.length) })}
                     </motion.p>
                   )}
                 </>

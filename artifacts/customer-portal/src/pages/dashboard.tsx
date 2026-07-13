@@ -3,8 +3,9 @@ import { Link, useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import { StatusBadge } from "@/components/status-badge";
 import { useGetCustomerDashboard } from "@/hooks/use-customer";
-import { Folder, Clock, CheckCircle, ArrowRight, ArrowLeft, Loader2, Calendar, FileText, ShoppingBag, AlertCircle } from "lucide-react";
+import { Folder, Clock, CheckCircle, ArrowRight, ArrowLeft, Loader2, Calendar, FileText, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
+import { useTranslation } from "@/lib/i18n";
 
 type ServiceRequestItem = {
   requestId: string;
@@ -38,6 +39,7 @@ function serviceRequestStatusColor(status: string) {
 }
 
 export default function DashboardPage({ params }: { params: { dashboardToken: string } }) {
+  const { t } = useTranslation();
   const { data, isLoading, error } = useGetCustomerDashboard(params.dashboardToken);
 
   if (isLoading) {
@@ -46,7 +48,7 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
         <div className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-muted-foreground">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p>Loading your dashboard...</p>
+            <p>{t('dashboard.loading')}</p>
           </div>
         </div>
       </Layout>
@@ -58,12 +60,10 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
       <Layout>
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="max-w-md text-center">
-            <h2 className="text-2xl font-serif mb-4">Dashboard not found</h2>
-            <p className="text-muted-foreground mb-8">
-              We couldn't load your dashboard. The link may be expired or invalid.
-            </p>
+            <h2 className="text-2xl font-serif mb-4">{t('dashboard.notFound')}</h2>
+            <p className="text-muted-foreground mb-8">{t('dashboard.notFoundDesc')}</p>
             <Link href="/access" className="inline-flex px-6 py-3 bg-foreground text-background rounded-full font-medium">
-              Request New Link
+              {t('dashboard.requestNewLink')}
             </Link>
           </div>
         </div>
@@ -76,14 +76,16 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
       <div className="container mx-auto px-4 md:px-8 py-12 max-w-6xl">
         <div className="mb-12 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl md:text-4xl font-serif font-medium mb-2">Welcome back, {data.clientName}</h1>
-            <p className="text-muted-foreground text-lg">Here are your creative projects and their current status.</p>
+            <h1 className="text-3xl md:text-4xl font-serif font-medium mb-2">
+              {t('dashboard.welcome', { name: data.clientName })}
+            </h1>
+            <p className="text-muted-foreground text-lg">{t('dashboard.subtitle')}</p>
           </div>
           <Link
             href={`/workspace/${params.dashboardToken}`}
             className="inline-flex items-center gap-2 text-sm font-medium bg-foreground text-background px-5 py-2.5 rounded-full hover:bg-foreground/90 transition-colors shrink-0"
           >
-            Open Full Workspace <ArrowRight className="w-4 h-4" />
+            {t('dashboard.openWorkspace')} <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
 
@@ -93,39 +95,40 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
               <Folder className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Total Projects</p>
+              <p className="text-sm font-medium text-muted-foreground">{t('dashboard.totalProjects')}</p>
               <p className="text-2xl font-serif font-semibold">{data.totalProjects}</p>
             </div>
           </div>
-          
+
           <div className="bg-card border border-card-border rounded-2xl p-6 shadow-sm flex items-center gap-4">
             <div className="w-12 h-12 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 rounded-full flex items-center justify-center">
               <Clock className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Action Required</p>
+              <p className="text-sm font-medium text-muted-foreground">{t('dashboard.actionRequired')}</p>
               <p className="text-2xl font-serif font-semibold">{data.pendingReview}</p>
             </div>
           </div>
-          
+
           <div className="bg-card border border-card-border rounded-2xl p-6 shadow-sm flex items-center gap-4">
             <div className="w-12 h-12 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full flex items-center justify-center">
               <CheckCircle className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Approved</p>
+              <p className="text-sm font-medium text-muted-foreground">{t('dashboard.approved')}</p>
               <p className="text-2xl font-serif font-semibold">{data.approved}</p>
             </div>
           </div>
         </div>
 
-        {/* ── Service Requests (new catalog flow) ────────────────────── */}
-        {(data as { serviceRequests?: ServiceRequestItem[] }).serviceRequests && (data as { serviceRequests?: ServiceRequestItem[] }).serviceRequests!.length > 0 && (
+        {/* ── Service Requests ── */}
+        {(data as { serviceRequests?: ServiceRequestItem[] }).serviceRequests &&
+          (data as { serviceRequests?: ServiceRequestItem[] }).serviceRequests!.length > 0 && (
           <div className="mb-10">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-serif font-medium">Pesanan Layanan</h2>
+              <h2 className="text-2xl font-serif font-medium">{t('dashboard.serviceOrders')}</h2>
               <Link href="/services" className="text-sm font-medium text-primary hover:underline">
-                + Pesan Layanan
+                {t('dashboard.orderService')}
               </Link>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -147,7 +150,7 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
                       {needsAction && (
                         <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 mb-4 text-xs text-amber-800 dark:text-amber-300">
                           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                          <span>Tindakan diperlukan — cek email Anda untuk link penawaran</span>
+                          <span>{t('dashboard.actionNeeded')}</span>
                         </div>
                       )}
 
@@ -160,7 +163,7 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
                           <span className="font-semibold text-foreground">{fmtMoney(sr.total, sr.currency)}</span>
                         </div>
                         <div className="text-primary flex items-center gap-1 text-sm font-medium group-hover:translate-x-1 transition-transform">
-                          Lihat <ArrowRight className="w-4 h-4" />
+                          {t('dashboard.view')} <ArrowRight className="w-4 h-4" />
                         </div>
                       </div>
                     </div>
@@ -171,17 +174,19 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
           </div>
         )}
 
-        {/* ── Creative Projects (old direct-submit flow) ──────────────── */}
+        {/* ── Creative Projects ── */}
         <div>
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-serif font-medium">Your Projects</h2>
+            <h2 className="text-2xl font-serif font-medium">{t('dashboard.projects')}</h2>
           </div>
-          
+
           {data.projects.length === 0 && !(data as { serviceRequests?: ServiceRequestItem[] }).serviceRequests?.length ? (
             <div className="bg-card border border-card-border rounded-2xl p-12 text-center">
               <Folder className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-              <h3 className="text-xl font-medium mb-2">No projects yet</h3>
-              <p className="text-muted-foreground mb-6">Gunakan menu <strong>Pesan Layanan</strong> di atas untuk memulai proyek baru.</p>
+              <h3 className="text-xl font-medium mb-2">{t('dashboard.noProjects')}</h3>
+              <p className="text-muted-foreground mb-6">
+                {t('dashboard.noProjectsDesc')}
+              </p>
             </div>
           ) : data.projects.length === 0 ? null : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -199,10 +204,8 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
                         <StatusBadge status={project.reviewStatus} type="review" />
                       </div>
                     </div>
-                    
-                    <p className="text-sm text-foreground/80 line-clamp-2 mb-6 flex-1">
-                      {project.goal}
-                    </p>
+
+                    <p className="text-sm text-foreground/80 line-clamp-2 mb-6 flex-1">{project.goal}</p>
 
                     {project.quotationStatus && (
                       <div className={`flex items-center justify-between mb-4 px-3 py-2 rounded-lg text-xs ${
@@ -214,16 +217,20 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
                       }`}>
                         <span className="flex items-center gap-1.5 font-medium">
                           <FileText className="w-3.5 h-3.5" />
-                          {project.quotationStatus === 'sent' ? 'Quotation awaiting your approval' :
-                            project.quotationStatus === 'approved' ? 'Quotation approved' :
-                            project.quotationStatus === 'rejected' ? 'Quotation declined' : 'Quotation expired'}
+                          {project.quotationStatus === 'sent'
+                            ? t('dashboard.quotationWaiting')
+                            : project.quotationStatus === 'approved'
+                            ? t('dashboard.quotationApproved')
+                            : project.quotationStatus === 'rejected'
+                            ? t('dashboard.quotationDeclined')
+                            : t('dashboard.quotationExpired')}
                         </span>
                         {typeof project.quotationTotal === 'number' && (
                           <span className="font-semibold">{project.quotationCurrency} {project.quotationTotal.toLocaleString()}</span>
                         )}
                       </div>
                     )}
-                    
+
                     <div className="flex items-center justify-between mt-auto pt-4 border-t border-border/50">
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
@@ -233,16 +240,16 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
                         {project.assetCount > 0 && (
                           <span className="flex items-center gap-1">
                             <Folder className="w-3.5 h-3.5" />
-                            {project.assetCount} asset{project.assetCount !== 1 ? 's' : ''}
+                            {t('dashboard.assetCount', { count: project.assetCount })}
                           </span>
                         )}
                       </div>
                       {hasReviewLink ? (
                         <div className="text-primary flex items-center gap-1 text-sm font-medium group-hover:translate-x-1 transition-transform">
-                          View <ArrowRight className="w-4 h-4" />
+                          {t('dashboard.view')} <ArrowRight className="w-4 h-4" />
                         </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground italic">Use your saved review link</span>
+                        <span className="text-xs text-muted-foreground italic">{t('dashboard.useSavedLink')}</span>
                       )}
                     </div>
                   </div>
@@ -257,7 +264,8 @@ export default function DashboardPage({ params }: { params: { dashboardToken: st
                     {cardContent}
                   </Link>
                 ) : (
-                  <div key={project.projectId} className="block cursor-default" title="This project was set up by your account manager. Use the review link you received to access it.">
+                  <div key={project.projectId} className="block cursor-default"
+                    title={t('dashboard.useSavedLink')}>
                     {cardContent}
                   </div>
                 );

@@ -1,8 +1,6 @@
 /**
  * Service-catalog quotation page — accessible via token.
  * Route: /request-service/:requestId/quotation?token=<reviewToken>
- *
- * Uses the new /api/public/quotations/:token endpoint (ai_quotations flow).
  */
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
@@ -14,8 +12,8 @@ import {
   useApproveServiceQuotation,
   useRequestChangeServiceQuotation,
   useRejectServiceQuotation,
-  useRequestDetail,
 } from "@/hooks/use-catalog";
+import { useTranslation } from "@/lib/i18n";
 
 /** Map service-request status → flow-stepper key */
 export function requestStatusToStep(status: string): string {
@@ -25,20 +23,12 @@ export function requestStatusToStep(status: string): string {
   if (["approved", "waiting_commercial_gate"].includes(status)) return "verifikasi";
   return "persetujuan";
 }
-import { Loader2, CheckCircle2, XCircle, MessageSquare, FileText, Clock, ShieldCheck } from "lucide-react";
+
+import { Loader2, CheckCircle2, XCircle, MessageSquare, Clock, ShieldCheck } from "lucide-react";
 import { CommercialStatusBadge } from "@/components/commercial/commercial-status-badge";
 import { ActionRequiredPanel } from "@/components/commercial/action-required-panel";
 import { PriceBreakdown } from "@/components/commercial/price-breakdown";
 import { CommercialErrorState } from "@/components/commercial/commercial-error-state";
-
-/** Message shown under the "Penawaran telah disetujui!" banner, based on real backend progress. */
-function postApproveMessage(requestStatus: string | null): string {
-  if (!requestStatus) return "Langkah berikutnya: verifikasi komersial oleh tim kami sebelum produksi dimulai.";
-  if (["completed", "converted_to_project"].includes(requestStatus)) return "Project Anda telah selesai!";
-  if (["waiting_review", "revision_requested"].includes(requestStatus)) return "Project Anda sedang ditinjau oleh tim kami sebelum diserahkan.";
-  if (["pending", "orchestrating", "in_progress", "ready_to_build"].includes(requestStatus)) return "Verifikasi komersial selesai — tim AI kami sedang mengerjakan project Anda.";
-  return "Langkah berikutnya: verifikasi komersial oleh tim kami sebelum produksi dimulai.";
-}
 
 function formatMoney(amount: number, currency = "IDR") {
   try {
@@ -48,20 +38,12 @@ function formatMoney(amount: number, currency = "IDR") {
   }
 }
 
-const TERMINAL: Record<string, { icon: typeof CheckCircle2; label: string; color: string }> = {
-  approved:           { icon: CheckCircle2, label: "Penawaran Disetujui",        color: "text-green-600" },
-  rejected:           { icon: XCircle,      label: "Penawaran Ditolak",           color: "text-destructive" },
-  revision_requested: { icon: MessageSquare,label: "Revisi Diminta",              color: "text-amber-600" },
-  expired:            { icon: Clock,        label: "Penawaran Kedaluwarsa",       color: "text-muted-foreground" },
-  cancelled:          { icon: XCircle,      label: "Penawaran Dibatalkan",        color: "text-muted-foreground" },
-};
-
 export default function RequestQuotationPage() {
+  const { t } = useTranslation();
   const { requestId } = useParams<{ requestId: string }>();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
-  // Read token from query string
   const token = new URLSearchParams(window.location.search).get("token") ?? "";
 
   const { data, isLoading, error } = useServiceQuotation(token);
@@ -75,14 +57,22 @@ export default function RequestQuotationPage() {
   const [showReject, setShowReject] = useState(false);
   const [confirmChecked, setConfirmChecked] = useState(false);
 
+  const TERMINAL: Record<string, { icon: typeof CheckCircle2; labelKey: string; color: string }> = {
+    approved:           { icon: CheckCircle2,  labelKey: "quotation.terminal.approved",          color: "text-green-600" },
+    rejected:           { icon: XCircle,       labelKey: "quotation.terminal.rejected",           color: "text-destructive" },
+    revision_requested: { icon: MessageSquare, labelKey: "quotation.terminal.revisionRequested",  color: "text-amber-600" },
+    expired:            { icon: Clock,         labelKey: "quotation.terminal.expired",            color: "text-muted-foreground" },
+    cancelled:          { icon: XCircle,       labelKey: "quotation.terminal.cancelled",          color: "text-muted-foreground" },
+  };
+
   if (!token) {
     return (
       <Layout>
         <CommercialErrorState
-          title="Link Penawaran Tidak Valid"
-          description="Tautan yang Anda buka tidak menyertakan kode akses yang sah. Silakan gunakan tautan dari email terakhir kami."
+          title={t('quotation.invalidLink')}
+          description={t('quotation.invalidLinkDesc')}
           backHref="/"
-          backLabel="Kembali ke beranda"
+          backLabel={t('common.backToHome')}
         />
       </Layout>
     );
@@ -102,10 +92,10 @@ export default function RequestQuotationPage() {
     return (
       <Layout>
         <CommercialErrorState
-          title="Penawaran Tidak Ditemukan"
-          description="Link mungkin sudah kedaluwarsa atau tidak valid. Silakan hubungi kami untuk penawaran baru."
+          title={t('quotation.notFound')}
+          description={t('quotation.notFoundDesc')}
           backHref="/"
-          backLabel="Kembali ke beranda"
+          backLabel={t('common.backToHome')}
         />
       </Layout>
     );
@@ -119,31 +109,39 @@ export default function RequestQuotationPage() {
       ? requestStatusToStep(requestStatus ?? "approved")
       : "persetujuan";
 
+  function postApproveMessage(rs: string | null): string {
+    if (!rs) return t('quotation.postApprove.default');
+    if (["completed", "converted_to_project"].includes(rs)) return t('quotation.postApprove.completed');
+    if (["waiting_review", "revision_requested"].includes(rs)) return t('quotation.postApprove.reviewing');
+    if (["pending", "orchestrating", "in_progress", "ready_to_build"].includes(rs)) return t('quotation.postApprove.inProgress');
+    return t('quotation.postApprove.default');
+  }
+
   const handleApprove = () => {
     approve.mutate({ token }, {
       onSuccess: () => {
-        toast({ title: "Penawaran disetujui!", description: "Kami akan memproses verifikasi komersial." });
+        toast({ title: t('quotation.actions.approved'), description: t('quotation.actions.approvedDesc') });
         setLocation(`/request-service/${requestId}/approval?token=${token}`);
       },
-      onError: (err) => toast({ title: "Gagal", description: String((err as Error)?.message ?? err), variant: "destructive" }),
+      onError: (err) => toast({ title: t('quotation.actions.failed'), description: String((err as Error)?.message ?? err), variant: "destructive" }),
     });
   };
 
   const handleRequestChange = () => {
     if (!changeNotes.trim()) {
-      toast({ title: "Catatan wajib diisi", description: "Jelaskan perubahan yang diinginkan.", variant: "destructive" });
+      toast({ title: t('quotation.actions.changeRequired'), description: t('quotation.actions.changeRequiredDesc'), variant: "destructive" });
       return;
     }
     requestChange.mutate({ token, notes: changeNotes }, {
-      onSuccess: () => toast({ title: "Permintaan perubahan terkirim", description: "Tim kami akan meninjau dan menghubungi Anda." }),
-      onError: (err) => toast({ title: "Gagal", description: String((err as Error)?.message ?? err), variant: "destructive" }),
+      onSuccess: () => toast({ title: t('quotation.actions.changeSent'), description: t('quotation.actions.changeSentDesc') }),
+      onError: (err) => toast({ title: t('quotation.actions.failed'), description: String((err as Error)?.message ?? err), variant: "destructive" }),
     });
   };
 
   const handleReject = () => {
     reject.mutate({ token, notes: rejectNotes }, {
-      onSuccess: () => toast({ title: "Penawaran ditolak" }),
-      onError: (err) => toast({ title: "Gagal", description: String((err as Error)?.message ?? err), variant: "destructive" }),
+      onSuccess: () => toast({ title: t('quotation.actions.rejected') }),
+      onError: (err) => toast({ title: t('quotation.actions.failed'), description: String((err as Error)?.message ?? err), variant: "destructive" }),
     });
   };
 
@@ -158,7 +156,7 @@ export default function RequestQuotationPage() {
       <div className="container mx-auto px-4 md:px-8 py-12 max-w-3xl">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
           <div>
-            <p className="text-xs text-muted-foreground mb-1">Penawaran Resmi</p>
+            <p className="text-xs text-muted-foreground mb-1">{t('quotation.badge')}</p>
             <h1 className="text-3xl font-serif font-medium">{quotation.quotationCode}</h1>
             <p className="text-muted-foreground text-sm mt-1">untuk {quotation.customerName}</p>
           </div>
@@ -172,9 +170,7 @@ export default function RequestQuotationPage() {
             {...(quotation.validUntil
               ? {
                   deadline: new Date(quotation.validUntil).toLocaleDateString("id-ID", {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
+                    day: "numeric", month: "long", year: "numeric",
                   }),
                 }
               : {})}
@@ -219,7 +215,18 @@ export default function RequestQuotationPage() {
           </div>
         )}
 
-        {/* Actions (only if quotation is active) */}
+        {/* Terminal state */}
+        {terminal && (
+          <div className={`flex items-center gap-3 p-4 rounded-xl border mb-6 ${
+            quotation.status === 'approved' ? 'border-green-200 bg-green-50 dark:bg-green-950/20' :
+            'border-border bg-muted/30'
+          }`}>
+            <terminal.icon className={`w-5 h-5 shrink-0 ${terminal.color}`} />
+            <span className={`font-medium text-sm ${terminal.color}`}>{t(terminal.labelKey)}</span>
+          </div>
+        )}
+
+        {/* Actions (only if active) */}
         {isActive && (
           <div className="space-y-4">
             {/* Approve */}
@@ -232,7 +239,7 @@ export default function RequestQuotationPage() {
                     onChange={(e) => setConfirmChecked(e.target.checked)}
                     className="mt-0.5 w-4 h-4 rounded border-border"
                   />
-                  Saya sudah meninjau rincian harga di atas dan setuju untuk melanjutkan.
+                  {t('quotation.confirm.label')}
                 </label>
                 <button
                   onClick={handleApprove}
@@ -241,7 +248,7 @@ export default function RequestQuotationPage() {
                   className="w-full flex items-center justify-center gap-2 py-3 bg-primary text-primary-foreground font-medium rounded-xl hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                 >
                   {approve.isPending ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <ShieldCheck className="w-4 h-4" aria-hidden="true" />}
-                  Setujui Penawaran
+                  {t('quotation.actions.approve')}
                 </button>
               </>
             )}
@@ -254,16 +261,16 @@ export default function RequestQuotationPage() {
                     onClick={() => setShowChange(true)}
                     className="w-full py-3 border border-border text-sm font-medium rounded-xl hover:bg-muted/50 transition-colors"
                   >
-                    Minta Perubahan
+                    {t('quotation.actions.requestChange')}
                   </button>
                 ) : (
                   <div className="border border-amber-200 rounded-xl p-4 bg-amber-50/50 dark:bg-amber-950/20 space-y-3">
-                    <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Deskripsikan perubahan yang diinginkan:</p>
+                    <p className="text-sm font-medium text-amber-700 dark:text-amber-400">{t('quotation.actions.changeNotes')}</p>
                     <textarea
                       className="w-full border border-border rounded-lg p-3 text-sm min-h-[100px] bg-background"
                       value={changeNotes}
                       onChange={(e) => setChangeNotes(e.target.value)}
-                      placeholder="Jelaskan secara detail perubahan yang Anda butuhkan..."
+                      placeholder={t('quotation.actions.changeNotesPlaceholder')}
                     />
                     <div className="flex gap-2">
                       <button
@@ -271,10 +278,10 @@ export default function RequestQuotationPage() {
                         disabled={requestChange.isPending}
                         className="flex-1 py-2 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-700 disabled:opacity-60 transition-colors"
                       >
-                        {requestChange.isPending ? "Mengirim..." : "Kirim Permintaan Perubahan"}
+                        {requestChange.isPending ? t('common.loading') : t('quotation.actions.changeSubmit')}
                       </button>
                       <button onClick={() => setShowChange(false)} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground">
-                        Batal
+                        {t('common.cancel')}
                       </button>
                     </div>
                   </div>
@@ -290,16 +297,16 @@ export default function RequestQuotationPage() {
                     onClick={() => setShowReject(true)}
                     className="w-full py-3 text-sm text-destructive hover:text-destructive/80 transition-colors"
                   >
-                    Tolak Penawaran
+                    {t('quotation.actions.reject')}
                   </button>
                 ) : (
                   <div className="border border-destructive/30 rounded-xl p-4 bg-destructive/5 space-y-3">
-                    <p className="text-sm font-medium text-destructive">Tolak penawaran ini?</p>
+                    <p className="text-sm font-medium text-destructive">{t('quotation.actions.reject')}?</p>
                     <textarea
                       className="w-full border border-border rounded-lg p-3 text-sm min-h-[80px] bg-background"
                       value={rejectNotes}
                       onChange={(e) => setRejectNotes(e.target.value)}
-                      placeholder="Alasan penolakan (opsional)..."
+                      placeholder={t('quotation.actions.rejectNotes')}
                     />
                     <div className="flex gap-2">
                       <button
@@ -307,10 +314,10 @@ export default function RequestQuotationPage() {
                         disabled={reject.isPending}
                         className="flex-1 py-2 bg-destructive text-destructive-foreground text-sm font-medium rounded-lg hover:bg-destructive/90 disabled:opacity-60 transition-colors"
                       >
-                        {reject.isPending ? "Memproses..." : "Ya, Tolak"}
+                        {reject.isPending ? t('common.loading') : t('quotation.actions.rejectSubmit')}
                       </button>
                       <button onClick={() => setShowReject(false)} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground">
-                        Batal
+                        {t('common.cancel')}
                       </button>
                     </div>
                   </div>
@@ -324,7 +331,7 @@ export default function RequestQuotationPage() {
         {quotation.status === "approved" && (
           <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-5 text-center">
             <CheckCircle2 className="w-8 h-8 text-green-600 mx-auto mb-2" />
-            <p className="font-medium text-green-700 dark:text-green-400">Penawaran telah disetujui!</p>
+            <p className="font-medium text-green-700 dark:text-green-400">{t('quotation.actions.approved')}</p>
             <p className="text-sm text-green-600/80 dark:text-green-500/80 mt-1">
               {postApproveMessage(requestStatus)}
             </p>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useLocation, Link } from "wouter";
+import { useParams } from "wouter";
 import { Layout } from "@/components/layout";
 import { FlowStepper, type FlowStep } from "@/components/flow-stepper";
 import { useRequestDetail, useCheckout, useSubmitPaymentProof } from "@/hooks/use-catalog";
@@ -9,6 +9,7 @@ import { ActionRequiredPanel, NoActionRequiredPanel } from "@/components/commerc
 import { PriceBreakdown } from "@/components/commercial/price-breakdown";
 import { PaymentInstructionCard } from "@/components/commercial/payment-instruction-card";
 import { CommercialErrorState } from "@/components/commercial/commercial-error-state";
+import { useTranslation } from "@/lib/i18n";
 
 function formatMoney(amount: number | string, currency = "IDR") {
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
@@ -19,36 +20,6 @@ function formatMoney(amount: number | string, currency = "IDR") {
   }
 }
 
-// Kept in sync with the label map used on the customer dashboard
-// (artifacts/api-server/src/routes/customer-portal.ts) — every status the
-// backend can set on a service request must have an entry here, otherwise
-// this page falls back to showing the raw backend value.
-const STATUS_LABEL: Record<string, string> = {
-  draft: "Permintaan Diterima",
-  brief_in_progress: "Mengisi Brief",
-  brief_completed: "Brief Selesai",
-  quoted: "Harga Dikalkulasi",
-  quotation_ready: "Penawaran Siap Dikirim",
-  waiting_customer_approval: "Menunggu Persetujuan Anda",
-  approved: "Disetujui",
-  waiting_commercial_gate: "Verifikasi Komersial",
-  ready_to_build: "Siap Produksi",
-  in_progress: "Sedang Diproduksi",
-  orchestrating: "Sedang Diproduksi",
-  waiting_review: "Menunggu Review Internal",
-  completed: "Selesai",
-  converted_to_project: "Project Dibuat",
-  revision_requested: "Revisi Dibutuhkan",
-  rejected: "Ditolak",
-  expired: "Kedaluwarsa",
-  cancelled: "Dibatalkan",
-};
-
-// Drives which dot on the FlowStepper is highlighted as "current". Kept as
-// its own map (rather than derived from `stageFor` below) because the
-// stepper has finer-grained steps than the 5 message stages do — e.g.
-// "waiting_customer_approval" and "approved" share a stage but are two
-// different steps ("Persetujuan" vs "Verifikasi Komersial").
 const STATUS_STEP: Record<string, FlowStep["key"]> = {
   draft: "brief",
   brief_in_progress: "brief",
@@ -70,41 +41,22 @@ const STATUS_STEP: Record<string, FlowStep["key"]> = {
   cancelled: "paket",
 };
 
-// Stage buckets drive which message/CTA is shown — this replaces the old
-// binary "hasQuotation" check, which only recognised 5 statuses and silently
-// mislabeled everything past that (e.g. "completed") as "still preparing".
-// "quotation_pending" (not yet approved) and "quotation_approved" (approved,
-// awaiting internal commercial verification) are split so the copy never
-// tells a customer who already approved to go approve it.
 type Stage = "awaiting_quotation" | "quotation_pending" | "quotation_approved" | "in_production" | "done" | "stopped";
 
 function stageFor(status: string): Stage {
-  if (["quotation_ready", "waiting_customer_approval", "revision_requested"].includes(status)) {
-    return "quotation_pending";
-  }
-  if (["approved", "waiting_commercial_gate"].includes(status)) {
-    return "quotation_approved";
-  }
-  // Dual Commercial Flow (Standard/fixed_price) lifecycle states — rendered via
-  // the dedicated checkout/payment-schedule block above, but still need a
-  // sensible fallback stage/copy here in case that block isn't shown.
-  if (["waiting_payment", "waiting_payment_verification"].includes(status)) {
-    return "quotation_pending";
-  }
-  if (["deposit_paid", "payment_verified", "waiting_remaining_payment", "remaining_paid", "ready_to_build", "building", "internal_review", "waiting_client_review", "revision"].includes(status)) {
-    return "in_production";
-  }
-  if (["ready_to_build", "in_progress", "orchestrating", "waiting_review", "converted_to_project"].includes(status)) {
-    return "in_production";
-  }
+  if (["quotation_ready", "waiting_customer_approval", "revision_requested"].includes(status)) return "quotation_pending";
+  if (["approved", "waiting_commercial_gate"].includes(status)) return "quotation_approved";
+  if (["waiting_payment", "waiting_payment_verification"].includes(status)) return "quotation_pending";
+  if (["deposit_paid", "payment_verified", "waiting_remaining_payment", "remaining_paid", "ready_to_build", "building", "internal_review", "waiting_client_review", "revision"].includes(status)) return "in_production";
+  if (["ready_to_build", "in_progress", "orchestrating", "waiting_review", "converted_to_project"].includes(status)) return "in_production";
   if (status === "completed") return "done";
   if (["rejected", "expired", "cancelled"].includes(status)) return "stopped";
-  return "awaiting_quotation"; // draft, brief_in_progress, brief_completed, quoted
+  return "awaiting_quotation";
 }
 
 export default function RequestPricingPage() {
+  const { t } = useTranslation();
   const { requestId } = useParams<{ requestId: string }>();
-  const [, setLocation] = useLocation();
   const { data: request, isLoading, error } = useRequestDetail(requestId);
   const checkout = useCheckout();
   const submitProof = useSubmitPaymentProof();
@@ -125,10 +77,10 @@ export default function RequestPricingPage() {
     return (
       <Layout>
         <CommercialErrorState
-          title="Permintaan Tidak Ditemukan"
-          description="Link ini mungkin tidak valid atau sudah tidak berlaku. Silakan hubungi tim kami untuk bantuan."
+          title={t('requestPricing.notFound')}
+          description={t('requestPricing.notFoundDesc')}
           backHref="/"
-          backLabel="Kembali ke beranda"
+          backLabel={t('common.backToHome')}
         />
       </Layout>
     );
@@ -136,15 +88,8 @@ export default function RequestPricingPage() {
 
   const stage = stageFor(request.status);
   const isPositiveStage = stage === "quotation_pending" || stage === "quotation_approved" || stage === "in_production" || stage === "done";
-
-  const STAGE_COPY: Record<Stage, string> = {
-    awaiting_quotation: "Tim kami sedang menyiapkan penawaran harga berdasarkan brief yang Anda kirimkan. Anda akan dihubungi via email saat penawaran siap.",
-    quotation_pending: "Penawaran harga sudah siap untuk Anda tinjau dan setujui.",
-    quotation_approved: "Terima kasih, penawaran sudah Anda setujui. Tim kami sedang melakukan verifikasi komersial internal sebelum memulai pengerjaan.",
-    in_production: "Penawaran sudah disetujui dan pekerjaan sedang dikerjakan oleh tim kami.",
-    done: "Pekerjaan untuk permintaan ini sudah selesai dikerjakan. Cek email Anda atau dashboard untuk melihat hasilnya.",
-    stopped: "Permintaan ini tidak lagi berjalan.",
-  };
+  const statusLabel = t(`status.${request.status}`) !== `status.${request.status}` ? t(`status.${request.status}`) : request.status;
+  const stageCopy = t(`requestPricing.stages.${stage}`) !== `requestPricing.stages.${stage}` ? t(`requestPricing.stages.${stage}`) : "";
 
   return (
     <Layout>
@@ -170,21 +115,21 @@ export default function RequestPricingPage() {
               {isPositiveStage ? <CheckCircle2 className="w-5 h-5" aria-hidden="true" /> : <Clock className="w-5 h-5 text-muted-foreground" aria-hidden="true" />}
             </div>
             <div>
-              <p className="font-medium">{STATUS_LABEL[request.status] ?? request.status}</p>
-              <p className="text-sm text-muted-foreground mt-1">{STAGE_COPY[stage]}</p>
+              <p className="font-medium">{statusLabel}</p>
+              <p className="text-sm text-muted-foreground mt-1">{stageCopy}</p>
             </div>
           </div>
         </div>
 
-        {/* Action required: fixed-price checkout waiting */}
+        {/* Fixed-price checkout CTA */}
         {request.serviceFlow === "fixed_price" &&
           !request.createdProjectId &&
           (request.status === "brief_completed" || request.status === "pricing_calculated") && (
             <ActionRequiredPanel
-              title="Lanjutkan ke pembayaran"
+              title={t('requestPricing.continuePayment')}
               description="Layanan ini tidak memerlukan penawaran khusus — checkout langsung untuk memulai pengerjaan."
               primary={{
-                label: checkout.isPending ? "Memproses..." : "Lanjut ke Pembayaran",
+                label: checkout.isPending ? t('common.loading') : t('requestPricing.continuePayment'),
                 onClick: () => checkout.mutate({ requestId: request.requestId }),
                 loading: checkout.isPending,
                 disabled: checkout.isPending,
@@ -193,7 +138,7 @@ export default function RequestPricingPage() {
             />
           )}
 
-        {/* Pricing breakdown (from service request) */}
+        {/* Pricing breakdown */}
         {parseFloat(String(request.total ?? "0")) > 0 && (
           <div className="mb-6">
             <h2 className="font-serif text-lg font-medium mb-4">Estimasi Harga</h2>
@@ -202,13 +147,7 @@ export default function RequestPricingPage() {
               lineItems={
                 request.pricingBreakdown?.lineItems && request.pricingBreakdown.lineItems.length > 0
                   ? request.pricingBreakdown.lineItems.map((item) => ({ key: item.code, label: item.label, amount: item.amount }))
-                  : [
-                      {
-                        key: "base",
-                        label: "Harga Dasar",
-                        amount: Number(request.pricingBreakdown?.basePrice ?? request.subtotal),
-                      },
-                    ]
+                  : [{ key: "base", label: "Harga Dasar", amount: Number(request.pricingBreakdown?.basePrice ?? request.subtotal) }]
               }
               subtotal={parseFloat(String(request.subtotal ?? "0"))}
               discount={parseFloat(String(request.discount ?? "0"))}
@@ -224,7 +163,7 @@ export default function RequestPricingPage() {
           </div>
         )}
 
-        {/* Standard (fixed_price) checkout — no quotation step */}
+        {/* Standard checkout — payment schedule */}
         {request.serviceFlow === "fixed_price" && (request.createdProjectId || checkout.data) && (
           <div className="bg-card border border-border rounded-2xl p-6 mb-6">
             <h2 className="font-serif text-lg font-medium mb-4 flex items-center gap-2">
@@ -252,11 +191,11 @@ export default function RequestPricingPage() {
                     <div className="space-y-3">
                       <PaymentInstructionCard />
                       <div className="flex flex-col sm:flex-row gap-2">
-                        <label className="sr-only" htmlFor={`ref-${s.id}`}>Kode/referensi transfer</label>
+                        <label className="sr-only" htmlFor={`ref-${s.id}`}>{t('requestPricing.referenceLabel')}</label>
                         <input
                           id={`ref-${s.id}`}
                           type="text"
-                          placeholder="Kode/referensi transfer"
+                          placeholder={t('requestPricing.referencePlaceholder')}
                           className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-background"
                           value={submittedScheduleId === s.id ? reference : ""}
                           onChange={(e) => { setSubmittedScheduleId(s.id); setReference(e.target.value); }}
@@ -267,12 +206,12 @@ export default function RequestPricingPage() {
                           onClick={() => submitProof.mutate({ scheduleId: s.id, reference: reference.trim() })}
                         >
                           {submitProof.isPending && submittedScheduleId === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Send className="w-3.5 h-3.5" aria-hidden="true" />}
-                          Kirim
+                          {t('requestPricing.submitProof')}
                         </button>
                       </div>
                       {submitProof.isSuccess && submittedScheduleId === s.id && (
                         <p className="text-xs text-green-600 flex items-center gap-1" role="status">
-                          <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> Referensi terkirim — menunggu verifikasi tim kami.
+                          <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> {t('requestPricing.proofSubmitted')}
                         </p>
                       )}
                       {submitProof.isError && submittedScheduleId === s.id && (
@@ -297,11 +236,11 @@ export default function RequestPricingPage() {
 
         {stage === "in_production" || stage === "done" ? <NoActionRequiredPanel /> : null}
 
-        {/* CTA (custom_project / enterprise — quotation-based flow) */}
+        {/* Status panels for custom/enterprise flow */}
         {request.serviceFlow !== "fixed_price" && stage === "quotation_pending" && (
           <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center">
             <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-3" />
-            <p className="font-medium mb-1">Penawaran Siap Ditinjau</p>
+            <p className="font-medium mb-1">{t('requestPricing.viewQuotation')}</p>
             <p className="text-sm text-muted-foreground">
               Tim kami telah mengirimkan link penawaran ke <strong>{request.customerEmail}</strong>. Jika belum menerima link, hubungi tim kami.
             </p>
@@ -310,36 +249,32 @@ export default function RequestPricingPage() {
         {request.serviceFlow !== "fixed_price" && stage === "quotation_approved" && (
           <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center">
             <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-3" />
-            <p className="font-medium mb-1">Penawaran Disetujui</p>
-            <p className="text-sm text-muted-foreground">
-              Terima kasih! Penawaran sudah Anda setujui. Tim kami sedang menyelesaikan verifikasi komersial internal sebelum pengerjaan dimulai — Anda akan dihubungi via email begitu proses ini selesai.
-            </p>
+            <p className="font-medium mb-1">{t('requestPricing.stages.quotation_approved').split('.')[0]}</p>
+            <p className="text-sm text-muted-foreground">{t('requestPricing.stages.quotation_approved')}</p>
           </div>
         )}
         {request.serviceFlow !== "fixed_price" && stage === "in_production" && (
           <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center">
             <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-3" />
             <p className="font-medium mb-1">Sedang Dikerjakan</p>
-            <p className="text-sm text-muted-foreground">
-              Tim kami sedang memproduksi hasil untuk permintaan ini. Anda akan dihubungi via email begitu hasilnya siap ditinjau.
-            </p>
+            <p className="text-sm text-muted-foreground">{t('requestPricing.stages.in_production')}</p>
           </div>
         )}
         {request.serviceFlow !== "fixed_price" && stage === "done" && (
           <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 text-center">
             <CheckCircle2 className="w-8 h-8 text-primary mx-auto mb-3" />
-            <p className="font-medium mb-1">Pekerjaan Selesai</p>
+            <p className="font-medium mb-1">{t('status.completed')}</p>
             <p className="text-sm text-muted-foreground">
-              Hasil untuk permintaan ini telah selesai dikerjakan. Cek email di <strong>{request.customerEmail}</strong> atau dashboard Anda untuk melihat hasilnya. Belum menerima apa pun? Hubungi tim kami.
+              {t('requestPricing.stages.done')} {request.customerEmail && <>Cek email di <strong>{request.customerEmail}</strong>.</>}
             </p>
           </div>
         )}
         {request.serviceFlow !== "fixed_price" && stage === "stopped" && (
           <div className="bg-muted/30 border border-border rounded-2xl p-6 text-center">
             <Clock className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-            <p className="font-medium mb-1">Permintaan Tidak Berlanjut</p>
+            <p className="font-medium mb-1">{t('requestPricing.stages.stopped').split('.')[0]}</p>
             <p className="text-sm text-muted-foreground">
-              Permintaan ini berstatus "{STATUS_LABEL[request.status] ?? request.status}". Hubungi tim kami jika ini tidak sesuai harapan Anda.
+              {statusLabel}. Hubungi tim kami jika ini tidak sesuai harapan Anda.
             </p>
           </div>
         )}
@@ -347,9 +282,7 @@ export default function RequestPricingPage() {
           <div className="bg-muted/30 border border-border rounded-2xl p-6 text-center">
             <Clock className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
             <p className="font-medium mb-1">Menunggu Penawaran Resmi</p>
-            <p className="text-sm text-muted-foreground">
-              Tim kami sedang menyiapkan penawaran. Anda akan dihubungi segera setelah siap.
-            </p>
+            <p className="text-sm text-muted-foreground">{t('requestPricing.stages.awaiting_quotation')}</p>
           </div>
         )}
       </div>

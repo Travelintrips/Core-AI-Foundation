@@ -7,8 +7,10 @@ import { useGetPublicCreativeReview, useAddClientComment, useApproveCreativeRevi
 import { Loader2, MessageSquare, Image as ImageIcon, Send, CheckCircle2, XCircle, RefreshCcw, FileText, Receipt } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from "@/lib/i18n";
 
 export default function ReviewPage({ params }: { params: { token: string } }) {
+  const { t } = useTranslation();
   const { data: review, isLoading, error } = useGetPublicCreativeReview(params.token);
   const addComment = useAddClientComment();
   const approveReview = useApproveCreativeReview();
@@ -25,7 +27,7 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
       <Layout>
         <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh]">
           <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
-          <p className="text-lg font-serif animate-pulse">Loading review portal...</p>
+          <p className="text-lg font-serif animate-pulse">{t('review.loading')}</p>
         </div>
       </Layout>
     );
@@ -36,8 +38,8 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
       <Layout>
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="max-w-md text-center">
-            <h2 className="text-2xl font-serif mb-4">Review Not Found</h2>
-            <p className="text-muted-foreground">This review link may be expired, invalid, or the project is not ready for review yet.</p>
+            <h2 className="text-2xl font-serif mb-4">{t('review.notFound')}</h2>
+            <p className="text-muted-foreground">{t('review.notFoundDesc')}</p>
           </div>
         </div>
       </Layout>
@@ -46,26 +48,22 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
 
   const isTerminal = review.reviewStatus === 'approved' || review.reviewStatus === 'rejected';
   const assetsInProgress = (review.assets ?? []).some((a) => a.status === 'generating' || a.status === 'pending');
-  // Still "in production" while the text workflow is running OR the image
-  // pipeline (which is chained after it) hasn't finished producing assets yet.
-  // A quotation that hasn't been approved yet means production hasn't actually started,
-  // even though the project row is still sitting in "pending" — don't show a false "generating" spinner.
   const awaitingQuotation = review.status === 'pending' && !!review.quotationStatus && review.quotationStatus !== 'approved';
   const isGenerating = (review.status === 'pending' || review.status === 'running' || assetsInProgress) && !awaitingQuotation;
 
   const handleApprove = () => {
     approveReview.mutate({ token: params.token, data: {} }, {
       onSuccess: () => {
-        toast({ title: "Project Approved!", description: "We'll finalize the assets for you." });
+        toast({ title: t('review.actions.approveConfirm'), description: t('review.actions.approveConfirmDesc') });
       }
     });
   };
 
   const handleReject = () => {
-    if (confirm("Are you sure you want to reject this project? This action cannot be undone.")) {
+    if (confirm(t('review.actions.rejectConfirm'))) {
       rejectReview.mutate({ token: params.token, data: {} }, {
         onSuccess: () => {
-          toast({ title: "Project Rejected", description: "The project has been closed." });
+          toast({ title: t('review.actions.rejectConfirmTitle'), description: t('review.actions.rejectConfirmDesc') });
         }
       });
     }
@@ -73,12 +71,11 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
 
   const handleRequestRevision = () => {
     if (!revisionNotes.trim()) {
-      toast({ title: "Missing notes", description: "Please provide notes for the revision.", variant: "destructive" });
+      toast({ title: t('review.actions.revision'), description: t('review.actions.revisionLabel'), variant: "destructive" });
       return;
     }
     requestRevision.mutate({ token: params.token, data: { notes: revisionNotes } }, {
       onSuccess: () => {
-        toast({ title: "Revision Requested", description: "Our agents will update the assets based on your feedback." });
         setShowRevisionInput(false);
         setRevisionNotes("");
       }
@@ -114,9 +111,9 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
       <div className="bg-card border-b border-card-border sticky top-16 z-40 shadow-sm">
         <div className="container mx-auto px-4 md:px-8 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl font-serif font-semibold">{review.brandName} - Creative Review</h1>
+            <h1 className="text-xl font-serif font-semibold">{review.brandName} — {t('review.header.review')}</h1>
             <p className="text-sm text-muted-foreground flex items-center gap-2">
-              For {review.clientName}
+              {t('review.header.for')} {review.clientName}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -131,32 +128,32 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
         {/* Main Content Area */}
         <div className="flex-1 w-full space-y-10">
           
-          {/* Assets section: spinner while generating, grid when done */}
+          {/* Assets section */}
           <section>
             <div className="flex items-center gap-2 mb-6">
               <ImageIcon className="w-5 h-5 text-primary" />
-              <h2 className="text-2xl font-serif font-medium">Visual Assets</h2>
+              <h2 className="text-2xl font-serif font-medium">{t('review.assets.title')}</h2>
             </div>
 
             {awaitingQuotation ? (
               <div className="bg-primary/5 border border-primary/20 rounded-2xl p-12 text-center flex flex-col items-center justify-center min-h-[300px]">
                 <Receipt className="w-12 h-12 text-primary mb-6" />
                 <h2 className="text-xl font-serif mb-2">
-                  {review.quotationStatus === 'sent' ? "Your price quotation is ready" : "Awaiting your quotation"}
+                  {review.quotationStatus === 'sent' ? t('review.assets.waitingTitle') : t('review.quotation.waiting')}
                 </h2>
                 <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-6">
                   {review.quotationStatus === 'sent'
-                    ? "Please review and approve the offer before we begin production."
+                    ? t('review.assets.waitingDesc')
                     : review.quotationStatus === 'rejected'
-                    ? "This quotation was declined and the project has been closed."
-                    : "We're preparing a price quotation for this project. You'll receive a link to review it soon."}
+                    ? t('review.assets.quotationDeclined')
+                    : t('review.assets.quotationPreparing')}
                 </p>
                 {review.quotationStatus === 'sent' && (
                   <Link
                     href={`/quotation/${params.token}`}
                     className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-full font-medium hover:bg-primary/90 transition-all"
                   >
-                    Review Quotation
+                    {t('review.assets.waitingCta')}
                   </Link>
                 )}
               </div>
@@ -166,9 +163,9 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
                   <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl animate-pulse"></div>
                   <Loader2 className="w-12 h-12 text-primary animate-spin relative z-10" />
                 </div>
-                <h2 className="text-xl font-serif mb-2">Generating your assets…</h2>
+                <h2 className="text-xl font-serif mb-2">{t('review.assets.generating')}</h2>
                 <p className="text-muted-foreground text-sm max-w-sm mx-auto">
-                  Our AI agents are working on your brief. This page refreshes automatically every few seconds.
+                  {t('review.assets.generatingDesc')}
                 </p>
               </div>
             ) : review.assets && review.assets.length > 0 ? (
@@ -182,7 +179,7 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
                       <a href={asset.imageUrl} target="_blank" rel="noreferrer" className="px-4 py-2 bg-white/20 backdrop-blur-md text-white rounded-lg text-sm font-medium hover:bg-white/30 transition-colors">
-                        View Full Size
+                        {t('common.view')}
                       </a>
                     </div>
                   </div>
@@ -190,7 +187,8 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
               </div>
             ) : (
               <div className="bg-card border border-border border-dashed rounded-2xl p-12 text-center text-muted-foreground">
-                No visual assets generated for this project yet.
+                <p className="font-medium mb-1">{t('review.assets.noAssets')}</p>
+                <p className="text-sm">{t('review.assets.noAssetsDesc')}</p>
               </div>
             )}
           </section>
@@ -278,7 +276,7 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
             </section>
           )}
 
-          {/* Brief Summary — always visible */}
+          {/* Brief Summary */}
           <section className="bg-muted/30 rounded-2xl p-6 md:p-8">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-6">Original Brief</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -302,10 +300,9 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
               </div>
             </div>
           </section>
-
         </div>
 
-        {/* Sidebar: Actions & Comments — always visible */}
+        {/* Sidebar */}
         <div className="w-full lg:w-96 shrink-0 space-y-6">
           
           {/* Action Card */}
@@ -315,8 +312,8 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
                 <div className="w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-3">
                   <Loader2 className="w-6 h-6 animate-spin" />
                 </div>
-                <h3 className="font-serif font-medium mb-1">In Production</h3>
-                <p className="text-xs text-muted-foreground">Action buttons will appear once your assets are ready. You can leave comments below while you wait.</p>
+                <h3 className="font-serif font-medium mb-1">{t('review.production.title')}</h3>
+                <p className="text-xs text-muted-foreground">{t('review.production.desc')}</p>
               </div>
             ) : isTerminal ? (
               <div className="text-center py-6">
@@ -325,16 +322,16 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
                     <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
                       <CheckCircle2 className="w-8 h-8" />
                     </div>
-                    <h3 className="font-serif text-xl font-medium mb-2">Approved</h3>
-                    <p className="text-sm text-muted-foreground">Thank you for approving this project. We'll be in touch with final deliverables.</p>
+                    <h3 className="font-serif text-xl font-medium mb-2">{t('review.terminal.approved')}</h3>
+                    <p className="text-sm text-muted-foreground">{t('review.actions.approveConfirmDesc')}</p>
                   </>
                 ) : (
                   <>
                     <div className="w-16 h-16 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mx-auto mb-4">
                       <XCircle className="w-8 h-8" />
                     </div>
-                    <h3 className="font-serif text-xl font-medium mb-2">Rejected</h3>
-                    <p className="text-sm text-muted-foreground">This project has been closed.</p>
+                    <h3 className="font-serif text-xl font-medium mb-2">{t('review.terminal.rejected')}</h3>
+                    <p className="text-sm text-muted-foreground">{t('review.actions.rejectConfirmDesc')}</p>
                   </>
                 )}
               </div>
@@ -343,25 +340,24 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
                 <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-4">
                   <RefreshCcw className="w-8 h-8" />
                 </div>
-                <h3 className="font-serif text-xl font-medium mb-2">Revision in progress</h3>
-                <p className="text-sm text-muted-foreground">Our AI is generating new assets based on your feedback. Please check back later.</p>
+                <h3 className="font-serif text-xl font-medium mb-2">{t('review.actions.revision')}</h3>
+                <p className="text-sm text-muted-foreground">{t('review.assets.generatingDesc')}</p>
               </div>
             ) : (
               <>
-                <h3 className="font-serif font-medium text-lg mb-4 text-center">Your Decision</h3>
-                
                 {showRevisionInput ? (
                   <div className="space-y-4 animate-in fade-in slide-in-from-top-4">
+                    <p className="text-sm font-medium">{t('review.actions.revisionLabel')}</p>
                     <textarea 
                       value={revisionNotes}
                       onChange={(e) => setRevisionNotes(e.target.value)}
                       className="w-full text-sm px-3 py-2 rounded-xl border border-input bg-background focus:ring-2 focus:ring-primary focus:outline-none resize-none"
                       rows={4}
-                      placeholder="What should we change? Be specific..."
+                      placeholder={t('review.actions.revisionPlaceholder')}
                     />
                     <div className="flex gap-2">
                       <button onClick={() => setShowRevisionInput(false)} className="flex-1 py-2 rounded-xl text-sm font-medium border border-border hover:bg-muted">
-                        Cancel
+                        {t('review.actions.cancelRevision')}
                       </button>
                       <button 
                         onClick={handleRequestRevision}
@@ -369,7 +365,7 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
                         className="flex-1 py-2 rounded-xl text-sm font-medium bg-orange-500 text-white hover:bg-orange-600 flex items-center justify-center gap-2"
                       >
                         {requestRevision.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                        Submit
+                        {requestRevision.isPending ? t('review.actions.submittingRevision') : t('review.actions.submitRevision')}
                       </button>
                     </div>
                   </div>
@@ -381,14 +377,14 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
                       className="w-full py-3 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
                     >
                       {approveReview.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-                      <CheckCircle2 className="w-5 h-5" /> Approve All
+                      <CheckCircle2 className="w-5 h-5" /> {t('review.actions.approve')}
                     </button>
                     
                     <button 
                       onClick={() => setShowRevisionInput(true)}
                       className="w-full py-3 bg-secondary/10 text-secondary-foreground rounded-xl font-medium hover:bg-secondary/20 transition-colors flex items-center justify-center gap-2"
                     >
-                      <RefreshCcw className="w-5 h-5" /> Request Revision
+                      <RefreshCcw className="w-5 h-5" /> {t('review.actions.revision')}
                     </button>
 
                     <button 
@@ -396,7 +392,8 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
                       disabled={rejectReview.isPending}
                       className="w-full py-2 text-muted-foreground text-sm font-medium hover:text-destructive transition-colors mt-2"
                     >
-                      Reject completely
+                      {rejectReview.isPending ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : null}
+                      {t('review.actions.reject')}
                     </button>
                   </div>
                 )}
@@ -404,11 +401,11 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
             )}
           </div>
 
-          {/* Comments Section — always visible */}
+          {/* Comments Section */}
           <div className="bg-card border border-card-border rounded-2xl p-6 shadow-sm flex flex-col h-[500px]">
             <div className="flex items-center gap-2 mb-4 border-b border-border pb-4 shrink-0">
               <MessageSquare className="w-5 h-5 text-muted-foreground" />
-              <h3 className="font-serif font-medium text-lg">Discussion</h3>
+              <h3 className="font-serif font-medium text-lg">{t('review.comment.title')}</h3>
             </div>
             
             <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
@@ -430,7 +427,7 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
                 ))
               ) : (
                 <div className="h-full flex items-center justify-center text-center text-muted-foreground text-sm">
-                  No comments yet. Have a question or note? Add it here.
+                  {t('review.comment.placeholder')}
                 </div>
               )}
             </div>
@@ -440,7 +437,7 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
                 type="text"
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Leave a comment..."
+                placeholder={t('review.comment.placeholder')}
                 disabled={addComment.isPending}
                 className="w-full pl-4 pr-12 py-3 bg-muted/50 border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-sm"
               />
@@ -453,7 +450,6 @@ export default function ReviewPage({ params }: { params: { token: string } }) {
               </button>
             </form>
           </div>
-
         </div>
       </div>
     </Layout>
