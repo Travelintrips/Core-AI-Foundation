@@ -178,13 +178,24 @@ async function executeArchiveAssetJob(job: AiJob): Promise<Record<string, unknow
     throw new Error("archive_asset job payload missing portfolioAssetId/sourceUrl");
   }
 
+  // Sprint P3: look up portfolioId so we can use deterministic ID-based storage paths
+  const [assetRow] = await db.select({ portfolioId: aiPortfolioAssetsTable.portfolioId })
+    .from(aiPortfolioAssetsTable).where(eq(aiPortfolioAssetsTable.id, portfolioAssetId)).limit(1);
+
   await db.update(aiPortfolioAssetsTable)
     .set({ status: "archiving", archiveStatus: "running", archiveStartedAt: new Date() })
     .where(eq(aiPortfolioAssetsTable.id, portfolioAssetId));
   publishSafe({ eventType: "asset.archiving", sourceModule: "asset-lifecycle", sourceId: String(portfolioAssetId), payload: { portfolioAssetId } });
 
   try {
-    const result = await archiveReplicateAsset({ sourceUrl, brandSlug, role });
+    const result = await archiveReplicateAsset({
+      sourceUrl,
+      // Sprint P3: prefer ID-based path; fall back to legacy brandSlug/role for in-flight jobs
+      portfolioId: assetRow?.portfolioId,
+      assetId: portfolioAssetId,
+      brandSlug,
+      role,
+    });
 
     await db.update(aiPortfolioAssetsTable)
       .set({
@@ -240,10 +251,20 @@ async function executeOptimizeAssetJob(job: AiJob): Promise<Record<string, unkno
     throw new Error("optimize_asset job payload missing portfolioAssetId/storagePath");
   }
 
+  // Sprint P3: look up portfolioId for deterministic ID-based storage paths
+  const [assetRow] = await db.select({ portfolioId: aiPortfolioAssetsTable.portfolioId })
+    .from(aiPortfolioAssetsTable).where(eq(aiPortfolioAssetsTable.id, portfolioAssetId)).limit(1);
+
   await db.update(aiPortfolioAssetsTable).set({ optimizationStatus: "running" }).where(eq(aiPortfolioAssetsTable.id, portfolioAssetId));
 
   try {
-    const result = await optimizeArchivedAsset({ sourceStoragePath: storagePath, brandSlug, role });
+    const result = await optimizeArchivedAsset({
+      sourceStoragePath: storagePath,
+      portfolioId: assetRow?.portfolioId,
+      assetId: portfolioAssetId,
+      brandSlug,
+      role,
+    });
 
     await db.update(aiPortfolioAssetsTable)
       .set({
@@ -282,10 +303,20 @@ async function executeGenerateThumbnailJob(job: AiJob): Promise<Record<string, u
     throw new Error("generate_thumbnail job payload missing portfolioAssetId/storagePath");
   }
 
+  // Sprint P3: look up portfolioId for deterministic ID-based storage paths
+  const [assetRow] = await db.select({ portfolioId: aiPortfolioAssetsTable.portfolioId })
+    .from(aiPortfolioAssetsTable).where(eq(aiPortfolioAssetsTable.id, portfolioAssetId)).limit(1);
+
   await db.update(aiPortfolioAssetsTable).set({ thumbnailStatus: "running" }).where(eq(aiPortfolioAssetsTable.id, portfolioAssetId));
 
   try {
-    const result = await generateAssetThumbnail({ sourceStoragePath: storagePath, brandSlug, role });
+    const result = await generateAssetThumbnail({
+      sourceStoragePath: storagePath,
+      portfolioId: assetRow?.portfolioId,
+      assetId: portfolioAssetId,
+      brandSlug,
+      role,
+    });
 
     await db.update(aiPortfolioAssetsTable)
       .set({ thumbnailStatus: "completed", thumbnailUrl: result.permanentUrl })

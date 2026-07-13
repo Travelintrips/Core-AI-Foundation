@@ -62,6 +62,15 @@ export const aiPortfolioAssetsTable = appSchema.table("ai_portfolio_assets", {
   thumbnailStatus: text("thumbnail_status").notNull().default("pending"), // pending|running|completed|failed
   optimizationStatus: text("optimization_status").notNull().default("pending"), // pending|running|completed|failed
 
+  // ── Sprint P3 — Asset purpose & expiry policy ────────────────────────────
+  // asset_purpose: live_preview | demo_portfolio | customer_preview | customer_final
+  // - live_preview: expires 1 h, watermarked, low-res, auto cleanup
+  // - demo_portfolio: permanent, Object Storage, public optimised preview
+  // - customer_preview: private, watermarked, signed access
+  // - customer_final: private permanent, payment-gated
+  assetPurpose: text("asset_purpose").notNull().default("demo_portfolio"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }), // only set for live_preview
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

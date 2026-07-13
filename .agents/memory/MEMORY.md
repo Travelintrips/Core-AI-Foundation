@@ -35,3 +35,4 @@
 - [phase26-automation-layer](phase26-automation-layer.md) — P2.6 rules: aiServiceRequestsTable has customerEmail not customerProfileId; service_requests count must use raw SQL join via customer_profiles; customerId in sales_funnel_events is integer not string
 - [text-overlay-diffusion-fix](text-overlay-diffusion-fix.md) — diffusion models can't spell; bake real text via SVG+sharp overlay post-generation; QC must judge final composited image with an overlay-aware prompt, not the noText generation prompt
 - [commercial-status-badge](commercial-status-badge.md) — status label maps must cover every raw DB status string, not just one hook's TS union; review tokens are only recoverable plaintext at issue time
+- [demo-portfolio-p3](demo-portfolio-p3.md) — publication guard (QC≥80/trademark/cover/6 assets), asset_purpose separation, audit+repair endpoints, generation_status pipeline tracking

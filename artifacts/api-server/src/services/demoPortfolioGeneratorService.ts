@@ -275,6 +275,65 @@ async function rebuildGalleryFromAssets(portfolioId: number): Promise<{ coverIma
   };
 }
 
+// ── Sprint P3 — Publication Guard ─────────────────────────────────────────────
+
+/** Minimum assets required before a portfolio may be published. */
+export const PUBLICATION_MIN_ASSETS = 6;
+/** Hard QC floor — stricter than the per-batch qcThreshold (which gates auto-publish routing). */
+export const PUBLICATION_MIN_QC = 80;
+
+/**
+ * Server-side state machine guard.
+ * Every path to publish_status = 'published' MUST pass through this check.
+ * Returns reasons array; ok=true means the portfolio is safe to publish.
+ */
+export async function checkPublicationGuard(
+  portfolioId: number,
+): Promise<{ ok: boolean; reasons: string[] }> {
+  const [portfolio] = await db
+    .select()
+    .from(aiServicePortfoliosTable)
+    .where(eq(aiServicePortfoliosTable.id, portfolioId))
+    .limit(1);
+  if (!portfolio) return { ok: false, reasons: ["Portfolio not found"] };
+
+  const p = portfolio as Record<string, unknown>;
+  const qcScore = p["qcScore"] ? parseFloat(String(p["qcScore"])) : null;
+  const reasons: string[] = [];
+
+  // QC gate
+  if (qcScore === null) reasons.push("QC score is missing");
+  else if (qcScore < PUBLICATION_MIN_QC) reasons.push(`QC score (${qcScore}) is below minimum ${PUBLICATION_MIN_QC}`);
+
+  // Trademark safety gate
+  if (p["trademarkRisk"] !== "low") reasons.push(`Trademark risk is "${p["trademarkRisk"] ?? "unknown"}" — must be "low"`);
+
+  // Cover gate
+  if (!portfolio.coverImage) reasons.push("Cover image is missing");
+  else if (portfolio.coverImage.includes("replicate.delivery")) {
+    reasons.push("Cover image is still a temporary Replicate URL — archiving not complete");
+  }
+
+  // Asset count + terminal state gates
+  const assets = await db
+    .select()
+    .from(aiPortfolioAssetsTable)
+    .where(eq(aiPortfolioAssetsTable.portfolioId, portfolioId));
+
+  if (assets.length < PUBLICATION_MIN_ASSETS) {
+    reasons.push(`Insufficient assets: ${assets.length}/${PUBLICATION_MIN_ASSETS} minimum required`);
+  }
+  const stillArchiving = assets.some((a) => !ASSET_TERMINAL_STATES.includes(a.status));
+  if (stillArchiving) reasons.push("One or more assets are still being archived");
+
+  const replicateAssets = assets.filter((a) => a.previewUrl?.includes("replicate.delivery"));
+  if (replicateAssets.length > 0) {
+    reasons.push(`${replicateAssets.length} asset(s) are still serving temporary Replicate URLs`);
+  }
+
+  return { ok: reasons.length === 0, reasons };
+}
+
 /**
  * Called after every archive_asset / optimize_asset job completion (success or
  * terminal failure). If ALL assets for the portfolio have reached a terminal
@@ -282,6 +341,9 @@ async function rebuildGalleryFromAssets(portfolioId: number): Promise<{ coverIma
  * portfolios that were auto-publish-eligible — flips publishStatus to
  * "published". This guarantees the public Gallery NEVER serves a Replicate
  * temporary URL, even though generation and archiving are decoupled.
+ *
+ * Sprint P3: also gates auto-publish on cover URL being permanent (not Replicate),
+ * and updates generation_status throughout.
  */
 export async function maybeFinalizePortfolioPublish(portfolioAssetId: number): Promise<void> {
   const [asset] = await db.select({ portfolioId: aiPortfolioAssetsTable.portfolioId })
@@ -299,13 +361,24 @@ export async function maybeFinalizePortfolioPublish(portfolioAssetId: number): P
 
   const { coverImage, galleryJson } = await rebuildGalleryFromAssets(portfolioId);
   const meta = (portfolio.metadataJson as Record<string, unknown> | null) ?? {};
-  const shouldAutoPublish = meta["pendingAutoPublish"] === true && portfolio.publishStatus === "pending_archive";
+
+  // Sprint P3: also require cover to be a permanent URL before auto-publishing
+  const shouldAutoPublish =
+    meta["pendingAutoPublish"] === true &&
+    portfolio.publishStatus === "pending_archive" &&
+    coverImage !== null &&
+    !coverImage.includes("replicate.delivery");
+
+  const newGenerationStatus = shouldAutoPublish ? "published"
+    : coverImage ? "archived"
+    : "incomplete";
 
   await db.update(aiServicePortfoliosTable)
     .set({
       coverImage, galleryJson,
       publishStatus: shouldAutoPublish ? "published" : portfolio.publishStatus,
       status: shouldAutoPublish ? "published" : portfolio.status,
+      generationStatus: newGenerationStatus,
       updatedAt: new Date(),
     } as Record<string, unknown>)
     .where(eq(aiServicePortfoliosTable.id, portfolioId));
@@ -317,19 +390,30 @@ export async function maybeFinalizePortfolioPublish(portfolioAssetId: number): P
   }
 }
 
+/**
+ * Admin-triggered approval: enforces the Sprint P3 publication guard.
+ * Hard QC threshold = 80 (regardless of the batch qcThreshold which only
+ * governs auto-publish routing during generation).
+ */
 export async function approvePortfolio(portfolioId: number, approvedBy?: string) {
-  const assets = await db.select({ status: aiPortfolioAssetsTable.status })
-    .from(aiPortfolioAssetsTable).where(eq(aiPortfolioAssetsTable.portfolioId, portfolioId));
-  const stillArchiving = assets.some((a) => !ASSET_TERMINAL_STATES.includes(a.status));
-  if (stillArchiving) {
-    throw new Error("Cannot approve — one or more assets are still archiving. Wait for archiving to finish or retry failed assets first.");
+  // Sprint P3: hard publication guard
+  const guard = await checkPublicationGuard(portfolioId);
+  if (!guard.ok) {
+    throw new Error(`Publication guard failed:\n• ${guard.reasons.join("\n• ")}`);
   }
 
   const { coverImage, galleryJson } = await rebuildGalleryFromAssets(portfolioId);
 
   const [row] = await db
     .update(aiServicePortfoliosTable)
-    .set({ publishStatus: "published", status: "published", coverImage, galleryJson, updatedAt: new Date() } as Record<string, unknown>)
+    .set({
+      publishStatus: "published",
+      status: "published",
+      coverImage,
+      galleryJson,
+      generationStatus: "published",
+      updatedAt: new Date(),
+    } as Record<string, unknown>)
     .where(eq(aiServicePortfoliosTable.id, portfolioId))
     .returning();
 
@@ -474,6 +558,7 @@ export async function regeneratePortfolioImages(
           portfolioId,
           assetType: "image",
           assetRole: a.role,
+          assetPurpose: "demo_portfolio" as const, // Sprint P3: explicit asset_purpose
           title: a.label,
           altText:
             a.status === "completed"
@@ -783,6 +868,11 @@ Return ONLY JSON (no markdown):
     ? "review" // any failed asset always forces manual review, regardless of autoPublish
     : canAutoPublish ? "pending_archive" : "review";
 
+  // Sprint P3: generation_status tracks the pipeline stage for Portfolio Center UI
+  const generationStatus = !allRequiredAssetsPresent ? "incomplete"
+    : publishStatus === "pending_archive" ? "archiving"
+    : "qc_review";
+
   const insertValues: Record<string, unknown> = {
     serviceId,
     title: `${brandName} — ${config.style} ${config.industry}`,
@@ -797,6 +887,7 @@ Return ONLY JSON (no markdown):
     portfolioCode, slug,
     isDemo: true, trademarkRisk,
     qcScore: String(avgQcScore),
+    generationStatus, // Sprint P3
     // Transient placeholder — overwritten with permanent storage URLs by
     // maybeFinalizePortfolioPublish() once archiving completes.
     coverImage: mainMockup?.imageUrl ?? null,
@@ -838,10 +929,12 @@ Return ONLY JSON (no markdown):
         portfolioId,
         assetType: "image",
         assetRole: a.role,
+        assetPurpose: "demo_portfolio" as const, // Sprint P3: explicit asset_purpose
         title: a.label,
         altText: a.status === "completed" ? `${a.label} — ${brandName} (AI Demo Project)` : null,
         thumbnailUrl: a.imageUrl,
         previewUrl: a.imageUrl,
+        sourceUrl: a.imageUrl,
         storagePath: null,
         mimeType: a.status === "completed" ? "image/webp" : null,
         displayOrder: i,
