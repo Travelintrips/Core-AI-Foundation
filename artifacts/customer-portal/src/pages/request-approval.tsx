@@ -38,11 +38,11 @@ export default function RequestApprovalPage() {
         </p>
 
         {isLoading ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          <div className="flex justify-center py-16" role="status" aria-live="polite">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" aria-hidden="true" />
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4" aria-live="polite">
             {/* Step 1: Quotation approved */}
             <StatusStep
               icon={CheckCircle2}

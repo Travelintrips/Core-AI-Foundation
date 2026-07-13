@@ -31,10 +31,10 @@ const WorkspaceDownloadsPage     = lazy(() => import('@/pages/workspace/download
 const WorkspaceInvoicesPage      = lazy(() => import('@/pages/workspace/invoices'));
 const WorkspaceBrandKitPage      = lazy(() => import('@/pages/workspace/brand-kit'));
 const WorkspaceNotificationsPage = lazy(() => import('@/pages/workspace/notifications'));
-const WorkspaceProfilePage   = lazy(() => import('@/pages/workspace/profile'));
-const WorkspaceSupportPage   = lazy(() => import('@/pages/workspace/support'));
-const WorkspaceSettingsPage  = lazy(() => import('@/pages/workspace/settings'));
-const PortfolioPage          = lazy(() => import('@/pages/portfolio'));
+const WorkspaceProfilePage       = lazy(() => import('@/pages/workspace/profile'));
+const WorkspaceSupportPage       = lazy(() => import('@/pages/workspace/support'));
+const WorkspaceSettingsPage      = lazy(() => import('@/pages/workspace/settings'));
+const PortfolioPage              = lazy(() => import('@/pages/portfolio'));
 
 /* ─── Loading fallback ─── */
 function PageLoader() {

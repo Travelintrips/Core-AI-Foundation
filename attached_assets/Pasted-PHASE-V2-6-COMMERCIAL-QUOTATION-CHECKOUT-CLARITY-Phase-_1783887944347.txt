@@ -1,0 +1,697 @@
+PHASE V2.6 — COMMERCIAL, QUOTATION & CHECKOUT CLARITY
+
+Phase V2.5 Project Brief Wizard telah selesai dan disetujui.
+
+Sekarang fokus hanya pada seluruh pengalaman Commercial, Quotation, Checkout, Payment Schedule, dan Payment Proof.
+
+Audit halaman dan route terkait seperti:
+
+- /request-service/:id/pricing
+- /quotation/:token
+- /gate/:token
+- halaman checkout atau payment schedule yang terkait
+- payment proof upload
+- quotation approval/revision
+- commercial status tracker
+
+Jangan mengubah Landing, Marketplace, Service Detail, Brief Wizard, Workspace, Review, atau halaman lain kecuali ada shared component yang benar-benar diperlukan.
+
+==================================================
+PERAN
+==================================================
+
+Bertindak sebagai:
+
+- Principal Product Designer
+- Enterprise Checkout UX Architect
+- Commercial Flow Analyst
+- Finance UX Designer
+- Senior Frontend Engineer
+- Accessibility Auditor
+
+Gunakan standar UX seperti:
+
+- Stripe Checkout
+- Shopify enterprise checkout
+- Linear billing
+- Xero quotation
+- QuickBooks invoices
+- DocuSign approval flow
+
+Pengalaman commercial harus terasa:
+
+- jelas
+- aman
+- transparan
+- profesional
+- tidak membingungkan
+- enterprise-ready
+
+Bukan seperti form pembayaran sederhana.
+
+==================================================
+ATURAN UTAMA
+==================================================
+
+Jangan mengubah:
+
+- backend
+- database
+- API contract
+- calculation formula
+- tax logic
+- discount logic
+- payment schedule logic
+- quotation lifecycle
+- status transitions
+- route
+- token behavior
+- authentication
+- checkout mutation
+- payment proof mutation
+- invoice generation
+- business flow
+
+Jangan membuat harga, status, tanggal, SLA, atau approval palsu.
+
+Gunakan hanya data aktual dari API.
+
+Jika data tidak tersedia, tampilkan state yang jujur.
+
+==================================================
+LANGKAH 1 — AUDIT AKTUAL
+==================================================
+
+Audit seluruh pengalaman commercial:
+
+- current status
+- status tracker
+- quotation breakdown
+- price breakdown
+- tax
+- discount
+- payment schedule
+- quotation validity
+- approve action
+- request revision
+- payment method
+- payment proof upload
+- waiting confirmation
+- error state
+- expired token
+- invalid request
+- mobile UX
+- accessibility
+- loading
+- retry
+- back navigation
+- download document jika tersedia
+
+Kelompokkan temuan menjadi:
+
+- Critical
+- High
+- Medium
+- Low
+
+Setelah audit, langsung implementasikan refinement.
+
+==================================================
+1. COMMERCIAL PAGE HEADER
+==================================================
+
+Header harus menjelaskan dengan jelas:
+
+- project/service name
+- request/order number
+- current commercial status
+- selected package
+- customer/company
+- created date
+- quotation validity bila ada
+- next required customer action
+
+Tambahkan status badge yang konsisten.
+
+Contoh status:
+
+- Preparing Quotation
+- Awaiting Approval
+- Revision Requested
+- Approved
+- Awaiting Payment
+- Payment Verification
+- In Production
+- Completed
+- Expired
+- Rejected
+
+Gunakan mapping existing. Jangan membuat status baru di backend.
+
+==================================================
+2. NEXT ACTION PANEL
+==================================================
+
+Tambahkan panel paling atas:
+
+“Action Required”
+
+Panel hanya muncul jika customer memang perlu melakukan tindakan.
+
+Contoh:
+
+- Review quotation
+- Approve quotation
+- Submit payment proof
+- Complete payment
+- Respond to revision
+- Wait for verification
+
+Isi panel:
+
+- action title
+- short explanation
+- deadline bila tersedia
+- primary CTA
+- secondary CTA
+- consequence atau next step
+
+Jika tidak ada tindakan:
+
+Tampilkan:
+
+“No action required from you right now.”
+
+Jangan membuat countdown jika API tidak menyediakan validity date.
+
+==================================================
+3. COMMERCIAL STEPPER
+==================================================
+
+Refine FlowStepper existing.
+
+Tahap dapat mengikuti flow existing, misalnya:
+
+1. Brief Submitted
+2. Analysis
+3. Quotation
+4. Approval
+5. Payment
+6. Verification
+7. Production
+8. Delivery
+
+Persyaratan:
+
+- current stage jelas
+- completed stage checked
+- failed/rejected state jelas
+- mobile compact
+- aria-current="step"
+- status label konsisten
+- flow fixed-price dan quotation-based tetap dibedakan dengan benar
+
+Jangan mengubah stageFor() atau mapping bisnis tanpa verifikasi.
+
+==================================================
+4. QUOTATION SUMMARY
+==================================================
+
+Quotation harus mudah dibaca.
+
+Tampilkan:
+
+- quotation number
+- issue date
+- valid until
+- service/package
+- quantity
+- delivery option
+- revisions
+- add-ons
+- subtotal
+- discount
+- tax
+- total
+- payment terms
+- notes
+- terms and conditions
+
+Gunakan table atau structured cards.
+
+Pastikan angka:
+
+- rata kanan
+- format mata uang konsisten
+- negatif/diskon jelas
+- total paling menonjol
+- zero-value row tidak perlu tampil kecuali penting
+
+Jangan mengubah kalkulasi.
+
+==================================================
+5. QUOTATION COMPARISON / REVISION
+==================================================
+
+Jika quotation memiliki revisi atau versi:
+
+Tampilkan:
+
+- current version
+- previous version
+- changed line items
+- changed total
+- revision reason
+- revision date
+
+Jika API tidak menyediakan version history, jangan membuat versi palsu.
+
+Untuk Request Revision:
+
+- sediakan reason
+- field note
+- optional line-item reference bila existing data mendukung
+- confirmation before submit
+- loading state
+- success feedback
+- preserve input on failure
+
+Jangan mengubah endpoint.
+
+==================================================
+6. APPROVAL EXPERIENCE
+==================================================
+
+Approval harus terasa serius dan jelas.
+
+Sebelum approve, tampilkan:
+
+- total quotation
+- payment terms
+- delivery estimate
+- included scope
+- important conditions
+
+Tambahkan confirmation checkbox hanya jika tidak mengubah legal flow secara substantif.
+
+Contoh:
+
+“I have reviewed the quotation and understand the next payment step.”
+
+Jangan menambahkan persetujuan hukum baru tanpa dasar.
+
+CTA:
+
+- Approve Quotation
+- Request Revision
+- Decline, hanya jika flow existing mendukung
+
+Prevent double-submit.
+
+==================================================
+7. FIXED-PRICE CHECKOUT
+==================================================
+
+Untuk fixed-price flow:
+
+Pastikan customer memahami:
+
+- total payment
+- payment method
+- due date
+- whether payment is full or installment
+- what happens after payment
+- whether verification is manual or automatic
+
+Tampilkan order summary sticky pada desktop.
+
+Mobile gunakan sticky bottom summary.
+
+Jangan melewati brief atau commercial verification existing.
+
+==================================================
+8. PAYMENT SCHEDULE
+==================================================
+
+Jika terdapat beberapa tahap pembayaran:
+
+Tampilkan timeline:
+
+- installment number
+- amount
+- due date
+- status
+- paid date
+- proof status
+- remaining balance
+
+Status:
+
+- Upcoming
+- Due
+- Overdue
+- Proof Submitted
+- Verified
+- Rejected
+- Paid
+
+Gunakan mapping aktual.
+
+Tambahkan summary:
+
+- total contract
+- amount paid
+- outstanding balance
+- next due payment
+
+Progress bar berdasarkan nilai aktual.
+
+==================================================
+9. PAYMENT PROOF UPLOAD
+==================================================
+
+Audit payment proof upload.
+
+Perbaiki:
+
+- supported file types
+- maximum size
+- preview
+- file name
+- file size
+- remove
+- retry
+- upload state
+- validation
+- duplicate submit prevention
+- rejection reason
+- re-upload flow
+
+Tambahkan field yang memang sudah didukung payload, misalnya:
+
+- bank name
+- account holder
+- transfer date
+- transfer amount
+- reference number
+- note
+
+Jangan menambahkan payload field baru.
+
+Jika upload baru dilakukan saat submit, gunakan copy jujur:
+
+“Ready to submit”
+
+Bukan progress palsu.
+
+==================================================
+10. PAYMENT INSTRUCTIONS
+==================================================
+
+Tampilkan instruksi dengan jelas:
+
+- beneficiary
+- bank
+- account number
+- payment amount
+- transfer reference
+- due date
+- payment note
+
+Tambahkan copy button pada account number dan reference.
+
+Pastikan:
+
+- aria-label
+- copied feedback
+- data berasal dari API/config existing
+- jangan hardcode rekening
+
+Jika data tidak tersedia, jangan tampilkan placeholder rekening palsu.
+
+==================================================
+11. PAYMENT VERIFICATION STATE
+==================================================
+
+Setelah proof dikirim:
+
+Tampilkan:
+
+- proof submitted time
+- verification status
+- expected next step
+- status history bila tersedia
+- rejection reason jika ditolak
+- re-upload CTA jika diizinkan
+
+Gunakan copy yang jujur.
+
+Jangan menjanjikan waktu verifikasi tertentu jika SLA tidak tersedia.
+
+==================================================
+12. DOCUMENT ACTIONS
+==================================================
+
+Jika API menyediakan document URL:
+
+Tambahkan:
+
+- Download Quotation
+- Download Invoice
+- Download Receipt
+- Print
+
+Jika belum ada URL/document, jangan tampilkan tombol mati.
+
+Pastikan opening/downloading state jelas.
+
+==================================================
+13. ERROR & EXPIRED STATE
+==================================================
+
+Tambahkan state eksplisit untuk:
+
+- invalid token
+- expired quotation
+- request not found
+- quotation unavailable
+- payment schedule missing
+- upload failed
+- network error
+- forbidden action
+
+Jangan menampilkan spinner tanpa akhir.
+
+Setiap error harus memiliki:
+
+- clear title
+- explanation
+- retry bila relevan
+- back action
+- support action bila tersedia
+
+==================================================
+14. STATUS TIMELINE
+==================================================
+
+Tambahkan timeline aktivitas commercial jika data tersedia:
+
+- quotation created
+- quotation viewed
+- revision requested
+- quotation updated
+- approved
+- payment proof submitted
+- payment verified
+- production started
+
+Jangan membuat activity palsu.
+
+Jika endpoint tidak menyediakan history, gunakan hanya current status summary.
+
+==================================================
+15. MOBILE EXPERIENCE
+==================================================
+
+Verifikasi pada 390px dan 430px.
+
+Periksa:
+
+- quotation table
+- currency rows
+- approval CTA
+- sticky summary
+- payment schedule
+- upload proof
+- bank instructions
+- copy buttons
+- modal/bottom sheet
+- status tracker
+- no horizontal overflow
+- minimum touch target 44px
+
+Gunakan card rows pada mobile jika table terlalu sempit.
+
+==================================================
+16. ACCESSIBILITY
+==================================================
+
+Audit dan perbaiki:
+
+- heading hierarchy
+- table semantics
+- scope attributes
+- aria-live for calculation/upload/status
+- aria-current step
+- form labels
+- aria-invalid
+- aria-describedby
+- keyboard modal
+- focus trap jika dialog
+- focus restore
+- focus-visible
+- color contrast
+- reduced motion
+- screen-reader-friendly currency
+- disabled reason
+
+==================================================
+17. PERFORMANCE
+==================================================
+
+Audit:
+
+- duplicate fetch
+- unnecessary polling
+- polling cleanup
+- large quotation component
+- image preview object URL cleanup
+- payment proof file memory
+- motion overhead
+- lazy loading documents/images
+- unnecessary rerender
+- bundle size
+
+Jangan menambahkan dependency baru kecuali benar-benar diperlukan.
+
+==================================================
+18. TRUST & CLARITY
+==================================================
+
+Tambahkan trust microcopy yang benar:
+
+- Transparent breakdown
+- No hidden fees
+- Payment status tracked
+- Commercial verification before production
+
+Hanya tampilkan klaim yang benar terhadap flow existing.
+
+Jangan menampilkan ISO, encryption, escrow, atau guarantee tanpa bukti.
+
+==================================================
+19. CONSISTENCY
+==================================================
+
+Pastikan pengalaman konsisten antara:
+
+- pricing page
+- quotation page
+- commercial gate
+- checkout
+- payment schedule
+- payment proof
+
+Gunakan komponen reusable bila masuk akal:
+
+- CommercialStatusBadge
+- CommercialStepper
+- PriceBreakdown
+- ActionRequiredPanel
+- PaymentScheduleTimeline
+- PaymentInstructionCard
+- ProofUploadCard
+- CommercialErrorState
+
+Jangan refactor berlebihan.
+
+==================================================
+VERIFIKASI
+==================================================
+
+Setelah implementasi:
+
+1. Jalankan typecheck.
+2. Jalankan build.
+3. Jalankan test bila tersedia.
+4. Verifikasi fixed-price flow.
+5. Verifikasi custom quotation flow.
+6. Verifikasi approved quotation.
+7. Verifikasi revision requested.
+8. Verifikasi payment proof submitted.
+9. Verifikasi proof rejected bila state tersedia.
+10. Verifikasi invalid token.
+11. Verifikasi expired quotation bila state tersedia.
+12. Verifikasi desktop 1440px.
+13. Verifikasi tablet 768px.
+14. Verifikasi mobile 390px.
+15. Verifikasi keyboard-only navigation.
+16. Verifikasi API mutation dan payload tetap sama.
+17. Verifikasi no infinite spinner.
+18. Verifikasi no duplicate submit.
+
+==================================================
+OUTPUT WAJIB
+==================================================
+
+Berikan laporan:
+
+# Phase V2.6 Commercial & Checkout Polish
+
+## UX Audit
+- Critical
+- High
+- Medium
+- Low
+
+## Files Changed
+
+## Components Added or Refactored
+
+## Quotation Improvements
+
+## Approval Improvements
+
+## Payment Schedule Improvements
+
+## Payment Proof Improvements
+
+## Error State Improvements
+
+## Accessibility Improvements
+
+## Mobile Improvements
+
+## Performance Improvements
+
+## API and Business Flow Verification
+
+## Desktop Screenshot
+
+## Tablet Screenshot
+
+## Mobile Screenshot
+
+## Bundle Comparison
+
+Tampilkan ukuran bundle sebelum dan sesudah.
+
+## Typecheck Result
+
+## Build Result
+
+## Remaining Non-Blocking Gaps
+
+Jangan lanjut ke Production Workspace, Review, atau Completed Delivery.
+
+Selesaikan dan laporkan hanya Phase V2.6.

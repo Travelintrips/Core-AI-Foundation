@@ -10,6 +10,10 @@ import {
 import { Loader2, CheckCircle2, XCircle, FileText, Clock, ShieldCheck, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { CommercialStatusBadge } from "@/components/commercial/commercial-status-badge";
+import { ActionRequiredPanel } from "@/components/commercial/action-required-panel";
+import { PriceBreakdown } from "@/components/commercial/price-breakdown";
+import { CommercialErrorState } from "@/components/commercial/commercial-error-state";
 
 function formatMoney(amount: number, currency: string) {
   try {
@@ -27,12 +31,13 @@ export default function QuotationPage({ params }: { params: { token: string } })
 
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [rejectNotes, setRejectNotes] = useState("");
+  const [confirmChecked, setConfirmChecked] = useState(false);
 
   if (isLoading) {
     return (
       <Layout>
-        <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh]">
-          <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+        <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh]" role="status" aria-live="polite">
+          <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" aria-hidden="true" />
           <p className="text-lg font-serif animate-pulse">Loading your quotation...</p>
         </div>
       </Layout>
@@ -42,14 +47,12 @@ export default function QuotationPage({ params }: { params: { token: string } })
   if (error || !quotation) {
     return (
       <Layout>
-        <div className="flex-1 flex items-center justify-center p-4">
-          <div className="max-w-md text-center">
-            <h2 className="text-2xl font-serif mb-4">Quotation Not Found</h2>
-            <p className="text-muted-foreground">
-              This link may be invalid, expired, or a quotation hasn't been sent for this project yet.
-            </p>
-          </div>
-        </div>
+        <CommercialErrorState
+          title="Quotation Not Found"
+          description="This link may be invalid, expired, or a quotation hasn't been sent for this project yet."
+          backHref="/"
+          backLabel="Back to home"
+        />
       </Layout>
     );
   }
@@ -97,11 +100,26 @@ export default function QuotationPage({ params }: { params: { token: string } })
             <FileText className="w-4 h-4" />
             Quotation for {quotation.brandName}
           </div>
-          <h1 className="text-3xl md:text-4xl font-serif font-medium mb-2">Price Offer</h1>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+            <h1 className="text-3xl md:text-4xl font-serif font-medium">Price Offer</h1>
+            <CommercialStatusBadge status={gateAwaitingClearance ? "waiting_commercial_gate" : quotation.status} />
+          </div>
           <p className="text-muted-foreground">
             Hi {quotation.clientName}, please review the offer below before we begin production.
           </p>
         </div>
+
+        {/* Action required: quotation awaiting the customer's decision */}
+        {quotation.status === "sent" && (
+          <ActionRequiredPanel
+            title="Review and respond to this price offer"
+            description="Approve to start production, or decline if this offer doesn't work for you."
+            {...(quotation.validUntil
+              ? { deadline: format(new Date(quotation.validUntil), "MMM d, yyyy") }
+              : {})}
+            consequence="No production work begins until you approve."
+          />
+        )}
 
         {/* Commercial gate pending banner */}
         {gateAwaitingClearance && (
@@ -143,81 +161,61 @@ export default function QuotationPage({ params }: { params: { token: string } })
           </div>
         )}
 
-        <div className="bg-card border border-card-border rounded-2xl p-6 md:p-8 shadow-sm mb-8">
-          <table className="w-full text-sm mb-6">
-            <thead>
-              <tr className="text-left text-muted-foreground border-b border-border/50">
-                <th className="pb-2 font-medium">Item</th>
-                <th className="pb-2 font-medium text-right">Qty</th>
-                <th className="pb-2 font-medium text-right">Unit Price</th>
-                <th className="pb-2 font-medium text-right">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {quotation.lineItems.map((item, i) => (
-                <tr key={i} className="border-b border-border/30">
-                  <td className="py-3 pr-2">{item.description}</td>
-                  <td className="py-3 text-right">{item.quantity}</td>
-                  <td className="py-3 text-right">{formatMoney(item.unitPrice, quotation.currency)}</td>
-                  <td className="py-3 text-right font-medium">{formatMoney(item.quantity * item.unitPrice, quotation.currency)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <PriceBreakdown
+          currency={quotation.currency}
+          lineItems={quotation.lineItems.map((item, i) => ({
+            key: i,
+            label: item.description,
+            meta: `${item.quantity} × ${formatMoney(item.unitPrice, quotation.currency)}`,
+            amount: item.quantity * item.unitPrice,
+          }))}
+          subtotal={quotation.subtotal}
+          discount={quotation.discount}
+          taxLabel={`Tax (${quotation.taxPercent}%)`}
+          taxAmount={quotation.taxAmount}
+          total={quotation.total}
+          formatMoney={formatMoney}
+        />
 
-          <div className="space-y-1.5 text-sm ml-auto max-w-xs">
-            <div className="flex justify-between text-muted-foreground">
-              <span>Subtotal</span>
-              <span>{formatMoney(quotation.subtotal, quotation.currency)}</span>
-            </div>
-            {quotation.discount > 0 && (
-              <div className="flex justify-between text-muted-foreground">
-                <span>Discount</span>
-                <span>-{formatMoney(quotation.discount, quotation.currency)}</span>
-              </div>
-            )}
-            {quotation.taxPercent > 0 && (
-              <div className="flex justify-between text-muted-foreground">
-                <span>Tax ({quotation.taxPercent}%)</span>
-                <span>{formatMoney(quotation.taxAmount, quotation.currency)}</span>
-              </div>
-            )}
-            <div className="flex justify-between font-serif text-lg font-semibold pt-2 border-t border-border/50">
-              <span>Total</span>
-              <span>{formatMoney(quotation.total, quotation.currency)}</span>
-            </div>
-          </div>
+        {quotation.notes && (
+          <div className="mt-6 text-sm text-muted-foreground whitespace-pre-wrap">{quotation.notes}</div>
+        )}
 
-          {quotation.notes && (
-            <div className="mt-6 pt-6 border-t border-border/50 text-sm text-muted-foreground whitespace-pre-wrap">
-              {quotation.notes}
-            </div>
-          )}
-
-          {quotation.validUntil && (
-            <p className="mt-4 text-xs text-muted-foreground flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5" />
-              Valid until {format(new Date(quotation.validUntil), "MMM d, yyyy")}
-            </p>
-          )}
-        </div>
+        {quotation.validUntil && (
+          <p className="mt-2 mb-8 text-xs text-muted-foreground flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+            Valid until {format(new Date(quotation.validUntil), "MMM d, yyyy")}
+          </p>
+        )}
 
         {!isTerminal && quotation.status === "sent" && (
-          <div className="space-y-4">
+          <div className="space-y-4 mt-8">
+            <label className="flex items-start gap-2.5 text-sm text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={confirmChecked}
+                onChange={(e) => setConfirmChecked(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-border/50"
+              />
+              I've reviewed the pricing above and agree to proceed on these terms.
+            </label>
+
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={handleApprove}
-                disabled={approve.isPending}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3 bg-foreground text-background rounded-full font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+                disabled={approve.isPending || !confirmChecked}
+                aria-disabled={!confirmChecked}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3 bg-foreground text-background rounded-full font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {approve.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                {approve.isPending ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="w-4 h-4" aria-hidden="true" />}
                 Approve & Start Project
               </button>
               <button
                 onClick={() => setShowRejectInput((v) => !v)}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3 border border-card-border rounded-full font-medium hover:bg-muted/40 transition-colors"
+                disabled={reject.isPending}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3 border border-card-border rounded-full font-medium hover:bg-muted/40 transition-colors disabled:opacity-50"
               >
-                <XCircle className="w-4 h-4" />
+                <XCircle className="w-4 h-4" aria-hidden="true" />
                 Decline Offer
               </button>
             </div>
@@ -229,19 +227,27 @@ export default function QuotationPage({ params }: { params: { token: string } })
                   onChange={(e) => setRejectNotes(e.target.value)}
                   placeholder="Optional — tell us why (helps us send a better offer)"
                   className="w-full rounded-lg border border-border/50 bg-background p-3 text-sm min-h-[80px]"
+                  aria-label="Reason for declining (optional)"
                 />
                 <button
                   onClick={handleReject}
                   disabled={reject.isPending}
                   className="inline-flex items-center gap-2 px-5 py-2 bg-destructive text-destructive-foreground rounded-full text-sm font-medium hover:opacity-90 disabled:opacity-50"
                 >
-                  {reject.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {reject.isPending ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
                   Confirm Decline
                 </button>
               </div>
             )}
           </div>
         )}
+
+        <div aria-live="polite" className="sr-only">
+          {approve.isSuccess && "Quotation approved."}
+          {reject.isSuccess && "Quotation declined."}
+          {approve.isError && "Failed to approve quotation."}
+          {reject.isError && "Failed to decline quotation."}
+        </div>
       </div>
     </Layout>
   );

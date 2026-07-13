@@ -5,9 +5,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { fmtMoney, fmtDate } from "@/lib/workspace-format";
 import {
   Loader2, Receipt, FileText, Download, Printer, RefreshCw,
-  AlertCircle, CheckCircle2, Clock, X, Send, Copy, Check, Info, Banknote,
+  AlertCircle, CheckCircle2, Clock, X, Send, Info, Banknote,
   Upload, Image, Eye, Trash2,
 } from "lucide-react";
+import { PaymentInstructionCard } from "@/components/commercial/payment-instruction-card";
 
 interface GenerateResult {
   documentNumber: string;
@@ -44,12 +45,6 @@ function scheduleStatusBadge(s: string | null): { label: string; cls: string } |
   return map[s] ?? null;
 }
 
-const BANK_ACCOUNTS = [
-  { bank: "BCA", accountNumber: "123-456-7890", accountName: "PT Creative AI Studio" },
-  { bank: "Mandiri", accountNumber: "098-765-4321", accountName: "PT Creative AI Studio" },
-  { bank: "BNI", accountNumber: "555-111-2222", accountName: "PT Creative AI Studio" },
-];
-
 const MAX_FILE_SIZE_MB = 5;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
@@ -70,7 +65,6 @@ function PaymentModal({
   existingReference, existingProofImageUrl, scheduleStatus, token, onClose,
 }: PaymentModalProps) {
   const [reference, setReference] = useState(existingReference ?? "");
-  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [success, setSuccess] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [previewFile, setPreviewFile] = useState<{ base64: string; mimeType: string; name: string } | null>(null);
@@ -81,12 +75,6 @@ function PaymentModal({
 
   const alreadySubmitted = scheduleStatus === "waiting_payment_verification";
   const isRejected = scheduleStatus === "rejected";
-
-  function copyAccountNumber(idx: number, value: string) {
-    navigator.clipboard.writeText(value).catch(() => {});
-    setCopiedIdx(idx);
-    setTimeout(() => setCopiedIdx(null), 2000);
-  }
 
   const handleFile = useCallback((file: File) => {
     setFileError(null);
@@ -244,29 +232,7 @@ function PaymentModal({
                 )}
 
                 {/* Bank accounts */}
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Rekening Tujuan</p>
-                  {BANK_ACCOUNTS.map((acc, idx) => (
-                    <div key={idx} className="bg-muted/40 rounded-xl px-4 py-3 flex items-center justify-between gap-4">
-                      <div>
-                        <p className="font-semibold text-sm">{acc.bank}</p>
-                        <p className="font-mono text-xs text-muted-foreground">{acc.accountNumber}</p>
-                        <p className="text-xs text-muted-foreground">{acc.accountName}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => copyAccountNumber(idx, acc.accountNumber)}
-                        className="p-2 rounded-lg hover:bg-muted transition-colors flex-shrink-0"
-                        title="Salin nomor rekening"
-                      >
-                        {copiedIdx === idx
-                          ? <Check className="w-4 h-4 text-green-500" />
-                          : <Copy className="w-4 h-4 text-muted-foreground" />
-                        }
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                <PaymentInstructionCard />
 
                 {/* Form */}
                 <form onSubmit={handleSubmit} className="space-y-4">
