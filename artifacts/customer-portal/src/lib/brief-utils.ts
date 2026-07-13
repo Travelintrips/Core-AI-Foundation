@@ -13,8 +13,22 @@ export interface ChipLike {
   label: string;
 }
 
+/** Detailed parse result — exposes unmatched legacy fragments and provenance. */
+export interface ParsedChoice {
+  selected: string[];
+  custom: string;
+  /** Raw fragments that did not match any known option (always folded into `custom`). */
+  unmatched: string[];
+  /** "structured" = every fragment matched a known option or an explicit "Lainnya:" marker.
+   *  "legacy" = at least one fragment was free text that had to be treated as "other".
+   *  "empty" = nothing stored. */
+  source: "structured" | "legacy" | "empty";
+}
+
 /** Separator used between multi-choice items */
 const SEP = "; ";
+/** Tolerant splitter for legacy data: semicolon (with/without trailing space) or a line break. */
+const LEGACY_SPLIT_RE = /\s*;\s*|\r?\n+/;
 
 // ── Multi-choice ─────────────────────────────────────────────────────────────
 
@@ -49,35 +63,80 @@ export function serializeChoices(
 
 /**
  * Recovers chip selected values + custom text from a stored string.
- * Handles both serialized format and legacy free-text values.
+ * Handles both serialized (Phase 2) format and legacy free-text values.
+ *
+ * Any fragment that cannot be matched to a known option is NEVER dropped:
+ * it activates "other" and is folded into `custom` so it stays visible and
+ * editable in the UI (never silently lost, never review-only).
  */
 export function parseChoices(
   stored: string,
   options: ChipLike[],
-): { selected: string[]; custom: string } {
-  if (!stored?.trim()) return { selected: [], custom: "" };
+): ParsedChoice {
+  if (!stored?.trim()) return { selected: [], custom: "", unmatched: [], source: "empty" };
 
-  const parts = stored.split(SEP).map((p) => p.trim()).filter(Boolean);
+  // Tolerate legacy data that used a bare ";" or a line break instead of the
+  // canonical "; " separator (e.g. copy-pasted or hand-edited old drafts).
+  const parts = stored
+    .split(LEGACY_SPLIT_RE)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
   const selected: string[] = [];
-  let custom = "";
+  const seen = new Set<string>();
+  const unmatched: string[] = [];
+  const customFromMarker: string[] = [];
+  let sawStructuredMarker = false;
+
+  const addSelected = (value: string) => {
+    if (!seen.has(value)) {
+      seen.add(value);
+      selected.push(value);
+    }
+  };
 
   for (const part of parts) {
-    if (part.startsWith("Lainnya: ")) {
-      selected.push("other");
-      custom = part.slice("Lainnya: ".length);
-    } else if (part === "Lainnya") {
-      selected.push("other");
+    if (/^Lainnya\s*:\s*/i.test(part)) {
+      addSelected("other");
+      const text = part.replace(/^Lainnya\s*:\s*/i, "").trim();
+      if (text) customFromMarker.push(text);
+      sawStructuredMarker = true;
+      continue;
+    }
+    if (/^Lainnya$/i.test(part)) {
+      addSelected("other");
+      sawStructuredMarker = true;
+      continue;
+    }
+
+    const opt = options.find(
+      (o) => o.value === part || o.label.toLowerCase() === part.toLowerCase(),
+    );
+    if (opt) {
+      addSelected(opt.value);
     } else {
-      const opt = options.find(
-        (o) =>
-          o.label === part || o.label.toLowerCase() === part.toLowerCase(),
-      );
-      if (opt) selected.push(opt.value);
-      // Legacy unrecognized text: skip chip match (value preserved as-is in stored string)
+      // Legacy free text: never discard — surface as "other" + custom.
+      addSelected("other");
+      unmatched.push(part);
     }
   }
 
-  return { selected, custom };
+  // Deduplicate unmatched fragments (case-insensitive) while preserving order.
+  const dedupedUnmatched: string[] = [];
+  const seenUnmatched = new Set<string>();
+  for (const u of [...customFromMarker, ...unmatched]) {
+    const key = u.toLowerCase();
+    if (!seenUnmatched.has(key)) {
+      seenUnmatched.add(key);
+      dedupedUnmatched.push(u);
+    }
+  }
+
+  const custom = dedupedUnmatched.join(SEP);
+  const source: ParsedChoice["source"] =
+    unmatched.length > 0 ? "legacy" : sawStructuredMarker || selected.length > 0 ? "structured" : "empty";
+
+  return { selected, custom, unmatched, source };
 }
 
 // ── Single-choice ─────────────────────────────────────────────────────────────
@@ -154,31 +213,39 @@ export function serializeColors(
 
 /**
  * Parse color string back to selected preset values + custom text.
+ * Legacy fragments that don't match a preset are never dropped — they are
+ * folded into `custom` (joined, if more than one) and "other" is activated.
  */
 export function parseColors(
   stored: string,
   presets: ChipLike[],
 ): { selected: string[]; custom: string } {
   if (!stored?.trim()) return { selected: [], custom: "" };
-  if (stored === "Tidak ada preferensi") return { selected: ["none"], custom: "" };
+  if (stored.toLowerCase() === "tidak ada preferensi") return { selected: ["none"], custom: "" };
 
   const parts = stored.split(",").map((p) => p.trim()).filter(Boolean);
   const selected: string[] = [];
-  let custom = "";
+  const seen = new Set<string>();
+  const unmatched: string[] = [];
+
+  const addSelected = (value: string) => {
+    if (!seen.has(value)) { seen.add(value); selected.push(value); }
+  };
 
   for (const part of parts) {
     const preset = presets.find(
-      (p) => p.label === part || p.label.toLowerCase() === part.toLowerCase(),
+      (p) => p.value === part || p.label.toLowerCase() === part.toLowerCase(),
     );
     if (preset) {
-      selected.push(preset.value);
+      addSelected(preset.value);
     } else {
-      // Unrecognized color label → treat as custom
-      selected.push("other");
-      custom = part;
+      // Unrecognized color label (legacy free text) → treat as custom, never discard.
+      addSelected("other");
+      unmatched.push(part);
     }
   }
 
+  const custom = unmatched.join(", ");
   return { selected, custom };
 }
 

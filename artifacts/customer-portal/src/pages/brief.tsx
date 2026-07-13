@@ -409,6 +409,11 @@ export default function BriefPage() {
   const [pendingDraft, setPendingDraft] = useState<BriefData | null>(null);
   const [draftChecked, setDraftChecked] = useState(false);
 
+  // Whether we've already merged the server-saved brief (briefJson) into
+  // local state once. Prevents a previously-submitted brief from being
+  // silently discarded on reload, while never clobbering in-progress edits.
+  const serverBriefHydrated = useRef(false);
+
   // Progressive disclosure toggles (auto-expand if content exists)
   const [showPainPoints,  setShowPainPoints]  = useState(false);
   const [showMilestones,  setShowMilestones]  = useState(false);
@@ -429,6 +434,20 @@ export default function BriefPage() {
     setDraftChecked(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Server brief hydration ──────────────────────────────────────────────────
+  // If there's no local (unsynced) draft to restore, load the brief the
+  // customer already saved on the server (e.g. returning on a new device,
+  // after clearing browser storage, or once a local draft has expired).
+  // Runs once; never overwrites a draft the user is actively restoring/editing.
+  useEffect(() => {
+    if (!draftChecked || pendingDraft || serverBriefHydrated.current) return;
+    if (!requestDetail?.briefJson) return;
+    const fromServer = { ...EMPTY_BRIEF, ...requestDetail.briefJson } as BriefData;
+    fromServer.priority = normalizeLegacyPriority(fromServer.priority);
+    serverBriefHydrated.current = true;
+    if (hasContent(fromServer)) setBrief(fromServer);
+  }, [draftChecked, pendingDraft, requestDetail]);
 
   // Auto-expand collapsible sections when draft content exists
   useEffect(() => {
@@ -696,9 +715,16 @@ export default function BriefPage() {
 
   const startOver = useCallback(() => {
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
-    setBrief(EMPTY_BRIEF);
+    // "Start over" discards the unsynced local draft, not data already saved
+    // on the server — fall back to the last server-saved brief, if any.
+    const fromServer = requestDetail?.briefJson
+      ? ({ ...EMPTY_BRIEF, ...requestDetail.briefJson } as BriefData)
+      : EMPTY_BRIEF;
+    fromServer.priority = normalizeLegacyPriority(fromServer.priority);
+    serverBriefHydrated.current = true;
+    setBrief(fromServer);
     setPendingDraft(null);
-  }, [STORAGE_KEY]);
+  }, [STORAGE_KEY, requestDetail]);
 
   const servicePackage = useMemo(
     () => serviceDetail?.packages.find((p) => p.id === requestDetail?.packageId) ?? null,

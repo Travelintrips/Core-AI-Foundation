@@ -1,0 +1,552 @@
+PHASE 2.1 — CREATIVE AI BRIEF VERIFICATION & LEGACY COMPATIBILITY HARDENING
+OBJECTIVE
+
+Phase 2 Smart Choice Brief Form telah selesai.
+
+Sebelum melanjutkan ke AI Recommendation dan AI Guided Assistant, lakukan hardening dan verifikasi end-to-end menggunakan data request nyata atau fixture yang merepresentasikan data production.
+
+Fase ini bukan untuk menambahkan fitur baru.
+
+Fokus:
+
+Memastikan seluruh halaman brief benar-benar dapat digunakan.
+Memastikan data legacy selalu terlihat dan dapat diedit.
+Memastikan tidak ada data hilang.
+Memastikan parsing, autosave, restore, navigasi, dan submit bekerja bersama.
+Memastikan konfigurasi layanan berbeda tidak menghasilkan field kosong atau mapping salah.
+BATASAN WAJIB
+
+Jangan mengubah:
+
+Database schema
+Backend API contract
+Pricing
+Approval flow
+Production pipeline
+Workflow AI
+Order flow
+Route halaman brief
+Kontrak saveBrief.mutate()
+
+Route tetap:
+
+/request-service/:requestId/brief
+
+Payload brief tetap menggunakan struktur existing.
+
+Jangan membuat AI Assistant, recommendation engine, website scraping, atau AI autofill pada fase ini.
+
+1. AUDIT HASIL PHASE 2
+
+Sebelum menulis kode:
+
+Baca seluruh src/pages/brief.tsx.
+Baca:
+src/lib/brief-utils.ts
+src/config/brief-service-config.ts
+seluruh komponen yang dimodifikasi pada Phase 2.
+Periksa bagaimana nilai parsed digunakan untuk:
+selected chips
+custom text
+validation
+autosave
+review
+final submit
+Cari state ganda antara:
+serialized string
+selected array
+custom input
+Cari kemungkinan data lama tidak terlihat di UI.
+Cari kemungkinan nilai custom tertimpa ketika chip diubah.
+Cari kemungkinan parser gagal pada delimiter seperti:
+koma
+titik koma
+baris baru
+slash
+tanda &
+Dokumentasikan temuan audit sebelum implementasi.
+2. PERBAIKI LEGACY FREE-TEXT VISIBILITY
+
+Saat ini laporan menyebut:
+
+Legacy free-text audienceDemographics tidak auto-map ke chip.
+Data tidak hilang, tetapi tidak terlihat pada chip.
+
+Ini belum dapat diterima.
+
+Semua nilai legacy harus terlihat oleh user.
+
+Perilaku yang diwajibkan
+
+Jika stored value tidak cocok dengan daftar predefined options:
+
+Otomatis aktifkan opsi Lainnya.
+Masukkan seluruh nilai lama ke custom input.
+Custom input langsung terlihat.
+Nilai harus dapat diedit.
+Nilai tersebut harus dianggap valid selama tidak kosong.
+
+Berlaku untuk:
+
+companyIndustry
+primaryGoal
+successMetrics
+existingAssets
+audienceDemographics
+audienceChannels
+stylePreference
+colorPalette
+field smart choice lain yang sebelumnya berupa teks bebas
+
+Contoh:
+
+Stored value:
+
+Pemilik kapal, eksportir seafood, dan perusahaan cold storage
+
+UI restore:
+
+☑ Lainnya
+
+Pemilik kapal, eksportir seafood, dan perusahaan cold storage
+
+Jangan membiarkan nilai hanya muncul pada review tetapi tidak muncul pada form edit.
+
+3. PERBAIKI PARSER LEGACY
+
+Perbarui parser agar memiliki hasil eksplisit:
+
+type ParsedChoice = {
+  selected: string[];
+  custom: string;
+  unmatched: string[];
+  source: "structured" | "legacy" | "empty";
+};
+
+Atau bentuk ekuivalen yang sesuai codebase.
+
+Aturan parsing
+Structured value
+
+Contoh:
+
+Meningkatkan penjualan; Meningkatkan brand awareness; Lainnya: Ekspansi regional
+
+Hasil:
+
+selected: [
+  "increase-sales",
+  "brand-awareness",
+  "other"
+]
+
+custom: "Ekspansi regional"
+source: "structured"
+Pure legacy value
+
+Contoh:
+
+Membuat perusahaan lebih dipercaya oleh importir China
+
+Hasil:
+
+selected: ["other"]
+custom: "Membuat perusahaan lebih dipercaya oleh importir China"
+source: "legacy"
+Mixed legacy value
+
+Contoh:
+
+B2B; Distributor; Perusahaan tambang
+
+Jika dua nilai cocok dan satu tidak cocok:
+
+selected: ["b2b", "distributor", "other"]
+custom: "Perusahaan tambang"
+unmatched: ["Perusahaan tambang"]
+
+Jangan membuang unmatched value.
+
+4. SERIALIZATION HARUS LOSSLESS
+
+Pastikan siklus berikut tidak mengubah makna data:
+
+stored value
+→ parse
+→ render
+→ user tidak mengubah apa pun
+→ serialize
+→ save
+
+Hasil akhir harus mempertahankan seluruh informasi awal.
+
+Tambahkan round-trip tests untuk:
+
+predefined only
+custom only
+predefined + custom
+legacy sentence
+mixed legacy
+empty string
+malformed delimiter
+line breaks
+duplicate options
+capitalization differences
+label Bahasa Inggris lama
+label Bahasa Indonesia baru
+5. JANGAN AUTOSAVE HANYA KARENA PARSING
+
+Saat halaman memuat draft legacy:
+
+Parsing untuk tampilan tidak boleh langsung menulis ulang data.
+Jangan memicu autosave hanya karena normalisasi internal.
+Autosave hanya berjalan setelah user benar-benar mengubah jawaban.
+Hindari request save pada initial hydration.
+Hindari loop:
+parse → state update → serialize → autosave → refetch → parse.
+
+Gunakan hydration guard yang sesuai dengan arsitektur existing.
+
+Contoh konsep:
+
+isHydratingRef
+hasUserEditedRef
+
+Gunakan implementasi yang paling sesuai; jangan menyalin contoh secara buta.
+
+6. BUAT FIXTURE REQUEST UNTUK VISUAL VERIFICATION
+
+Karena DB belum memiliki request nyata, buat fixture test atau seed development yang aman.
+
+Fixture harus:
+
+Hanya tersedia di development/test.
+Tidak berjalan otomatis di production.
+Tidak menggunakan data pelanggan nyata.
+Tidak mengubah schema.
+Bisa dibersihkan setelah pengujian.
+Menggunakan service/package existing.
+
+Minimal buat fixture untuk:
+
+Brand Identity
+Logo Design
+Company Profile
+Pitch Deck
+Social Media Design
+Copywriting
+Image Generation
+Unknown / Default Service
+
+Setiap fixture harus memiliki:
+
+requestId valid
+service name
+draft kosong
+draft modern terisi
+draft legacy free-text
+draft mixed predefined + custom
+field opsional kosong
+
+Jika backend seed tidak diperlukan, gunakan test harness atau mocked development route yang sesuai codebase.
+
+Jangan membuat production fallback palsu.
+
+7. VERIFIKASI SEMUA SERVICE CONFIG
+
+Untuk setiap service type, cek:
+
+Step yang tampil.
+Step yang disembunyikan.
+Label yang digunakan.
+Field required.
+Nilai yang disimpan.
+Review summary.
+Submit payload.
+
+Pastikan tidak ada masalah seperti:
+
+Field required disembunyikan.
+Field tersembunyi masih menghalangi validasi.
+Label berubah tetapi mapping value salah.
+Step kosong.
+Progress total salah.
+Back/Next melompati step.
+Review menampilkan field yang tidak relevan.
+Service tidak dikenal crash.
+Unknown service
+
+Jika detectServiceType() tidak mengenali service:
+
+Gunakan config default.
+Jangan crash.
+Jangan menghasilkan halaman kosong.
+Log warning hanya di development jika dibutuhkan.
+8. VALIDASI CONDITIONAL FIELD
+
+Periksa seluruh kombinasi berikut.
+
+Industry
+Standard option valid.
+Lainnya tanpa custom text invalid.
+Lainnya dengan custom text valid.
+Legacy custom valid.
+Project Goal
+Tidak ada pilihan invalid.
+1–5 pilihan valid.
+Pilihan keenam ditolak dengan pesan jelas.
+Lainnya tanpa text invalid jika selected.
+Deselect Lainnya tidak boleh menyimpan custom tersembunyi tanpa keputusan yang jelas.
+Metrics
+Belum menentukan eksklusif.
+Custom metric valid.
+Detail angka opsional.
+Deselect metric tidak meninggalkan suffix detail yang tidak relevan.
+Assets
+Belum punya aset eksklusif.
+Lainnya membutuhkan custom text.
+Notes tetap tersimpan.
+Notes tidak rusak ketika chip berubah.
+Style
+Maksimal 3.
+Tidak yakin eksklusif.
+Legacy style custom terlihat.
+Custom style tidak hilang.
+Colors
+Maksimal 3.
+Tidak ada preferensi eksklusif.
+Custom color terlihat dan dapat diedit.
+Legacy English colors dipetakan bila cocok.
+9. PERBAIKI ERROR DAN FOCUS MANAGEMENT
+
+Saat validation gagal:
+
+Scroll ke field pertama yang invalid.
+Fokus ke interactive control yang relevan.
+Gunakan aria-describedby.
+Gunakan aria-invalid.
+Error tidak boleh hilang hanya karena user membuka input custom.
+Error hilang setelah nilai benar-benar valid.
+Screen reader harus membaca pesan error.
+
+Pada mobile:
+
+Field error tidak tertutup sticky footer.
+Keyboard tidak menutupi custom textarea.
+Scroll offset memperhitungkan header sticky.
+10. REVIEW SCREEN HARUS LOSSLESS
+
+Review screen harus menampilkan:
+
+Semua pilihan predefined.
+Semua custom value.
+Semua notes/detail tambahan.
+Nilai legacy.
+Nilai field opsional yang terisi.
+Label sesuai service type.
+
+Tombol Edit harus kembali ke step yang tepat.
+
+Setelah user mengedit lalu kembali ke review:
+
+Data terbaru tampil.
+Tidak ada pilihan yang hilang.
+Progress tetap benar.
+
+Jangan menampilkan serialized raw string jika dapat disajikan sebagai daftar yang lebih mudah dibaca.
+
+Namun jangan mengubah nilai backend.
+
+11. TEST UTILITIES
+
+Perluas src/lib/brief-utils.test.ts.
+
+Minimal tambahkan test:
+
+Legacy unmatched value becomes Other + custom
+Mixed known and unknown values
+Round-trip known options
+Round-trip custom only
+Round-trip mixed values
+English legacy label normalization
+Indonesian label normalization
+Case-insensitive parsing
+Whitespace trimming
+Duplicate removal
+Newline-separated values
+Semicolon-separated values
+Comma-separated legacy values
+Custom text containing commas
+Custom text containing semicolons
+Custom text containing colon
+Empty values
+Malformed "Lainnya:" prefix
+Existing extra suffix preservation
+No information loss after serialize(parse(value))
+
+Jangan hanya menguji happy path.
+
+12. COMPONENT TESTS
+
+Jika test framework mendukung React component testing, tambahkan test untuk:
+
+TagSelector single select.
+MultiChoiceChip max selection.
+Exclusive option behavior.
+Custom field appearing after Lainnya.
+Legacy value hydration.
+No autosave during initial hydration.
+Autosave after actual user edit.
+Error focus.
+
+Jika component testing belum tersedia, jangan memasang library besar tanpa kebutuhan. Gunakan test yang sudah didukung project.
+
+13. E2E / MANUAL FLOW TEST
+
+Lakukan flow penuh:
+
+Buka request
+→ Start brief
+→ Isi step 1
+→ Next
+→ Isi seluruh step
+→ Back dua step
+→ Ubah jawaban
+→ Reload browser
+→ Restore draft
+→ Lanjut ke review
+→ Edit dari review
+→ Submit
+
+Ulangi untuk minimal:
+
+Brand Identity dengan data modern.
+Logo Design dengan custom values.
+Company Profile dengan legacy draft.
+Unknown service dengan default config.
+Mobile viewport 375px.
+
+Periksa network:
+
+Tidak ada duplicate save request.
+Tidak ada autosave pada hydration.
+Payload submit tidak kehilangan informasi.
+Tidak ada request API dari search chip.
+Tidak ada request gagal tersembunyi.
+14. PAYLOAD SNAPSHOT VERIFICATION
+
+Tambahkan test atau log development sementara untuk membandingkan payload.
+
+Verifikasi bahwa payload tetap:
+
+saveBrief.mutate({
+  requestId,
+  brief
+});
+
+Buat snapshot untuk:
+
+Standard selection.
+Standard + Other.
+Legacy text.
+Mixed selection.
+Optional fields empty.
+Semua fields terisi.
+
+Hapus console log sementara sebelum selesai.
+
+Jangan expose payload sensitif di production console.
+
+15. CLEANUP
+
+Periksa:
+
+guided-chips.tsx
+
+Jika benar-benar tidak dipakai:
+
+Cari seluruh import dan reference.
+Hapus hanya jika zero references.
+Pastikan build tetap lolos.
+
+Hapus juga:
+
+Dead imports.
+Temporary fixture yang tidak diperlukan.
+Console logs.
+Comment eksperimen.
+Duplicate option constants.
+State yang tidak digunakan.
+
+Namun jangan menghapus komponen legacy jika masih digunakan halaman lain.
+
+16. TYPECHECK, TEST, BUILD
+
+Jalankan command sesuai package manager project:
+
+npx tsc --noEmit
+npx vitest run
+npm run build
+
+Selain itu lakukan:
+
+Visual verification halaman brief nyata/fixture.
+Browser console check.
+Network request check.
+Mobile viewport check.
+Draft reload check.
+Submit check.
+
+Jangan menyatakan sukses hanya berdasarkan build.
+
+17. ACCEPTANCE CRITERIA
+
+Phase 2.1 selesai hanya jika:
+
+Semua legacy free-text terlihat di form.
+Legacy values otomatis tampil sebagai Lainnya + custom.
+Mixed known/unknown values tidak kehilangan unmatched text.
+Parse–serialize round-trip tidak kehilangan informasi.
+Initial hydration tidak memicu autosave.
+User edit memicu autosave.
+Semua service config telah diverifikasi.
+Unknown service memakai default config.
+Review menampilkan seluruh data.
+Edit dari review kembali ke step tepat.
+Back/Next tidak menghapus data.
+Refresh memulihkan draft.
+Submit payload valid.
+Tidak ada duplicate save.
+Mobile 375px tidak overflow.
+Typecheck, tests, dan build lulus.
+Ada bukti visual verification pada halaman brief.
+18. LAPORAN AKHIR
+
+Gunakan format:
+
+Laporan — Phase 2.1: Brief Verification & Legacy Compatibility Hardening
+
+1. Hasil audit Phase 2
+2. Bug yang ditemukan
+3. Perbaikan legacy free-text
+4. Perubahan parser dan serializer
+5. Hasil round-trip verification
+6. Autosave hydration protection
+7. Fixture/request yang digunakan
+8. Hasil pengujian per service
+9. Hasil unknown/default service
+10. Hasil review/edit flow
+11. Hasil payload verification
+12. File dibuat
+13. File dimodifikasi
+14. File dihapus
+15. Unit/component tests
+16. Hasil typecheck
+17. Hasil build
+18. Hasil browser console
+19. Hasil network verification
+20. Hasil mobile verification
+21. Konfirmasi tidak ada perubahan API/database/pricing/workflow
+22. Batasan tersisa
+
+Sertakan bukti konkret. Jangan hanya mengatakan “semua berjalan normal”.
