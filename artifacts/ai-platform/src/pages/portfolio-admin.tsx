@@ -539,19 +539,69 @@ function BatchesTab() {
 // ── Portfolio List Tab ────────────────────────────────────────────────────────
 
 function PortfoliosTab({ onView }: { onView: (p: Portfolio) => void }) {
-  const { data: portfolios = [], isLoading } = useQuery<Portfolio[]>({
+  const qc = useQueryClient();
+  const [seedDone, setSeedDone] = useState<{ batchIds: number[]; cleanedUp: number } | null>(null);
+
+  const { data: portfolios = [], isLoading, refetch } = useQuery<Portfolio[]>({
     queryKey: ["admin-portfolios"],
     queryFn: (): Promise<Portfolio[]> => apiFetch<Portfolio[]>("/ai/portfolio/services/1/portfolios").catch(() => [] as Portfolio[]),
+    // Poll while seed is in-flight so new portfolios appear automatically
+    refetchInterval: seedDone ? 15000 : false,
+  });
+
+  const seedMutation = useMutation({
+    mutationFn: () => apiFetch<{ batchIds: number[]; cleanedUp: number; message: string }>("/ai/portfolio/seed-demos", { method: "POST" }),
+    onSuccess: (data) => {
+      setSeedDone(data);
+      refetch();
+      qc.invalidateQueries({ queryKey: ["portfolio-batches"] });
+    },
   });
 
   return (
-    <div>
+    <div className="space-y-4">
+      {/* Seed banner */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium mb-0.5">Demo Sample Generator</p>
+            <p className="text-xs text-muted-foreground">
+              Generate 8 diverse brand portfolios (coffee, fashion, tech, food, healthcare, logistics, beauty, education).
+              Images upload directly to Supabase Storage — no expiring URLs. Old demo samples are replaced.
+            </p>
+            {seedDone && (
+              <p className="mt-2 text-xs text-green-600 flex items-center gap-1">
+                <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                {seedDone.batchIds.length} batches started · {seedDone.cleanedUp} old sample(s) removed.
+                Auto-refreshing every 15s…
+              </p>
+            )}
+            {seedMutation.isError && (
+              <p className="mt-2 text-xs text-red-600 flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                {(seedMutation.error as Error)?.message ?? "Failed"}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={() => { if (!seedMutation.isPending) seedMutation.mutate(); }}
+            disabled={seedMutation.isPending}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-60 shrink-0"
+          >
+            {seedMutation.isPending
+              ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Seeding…</>
+              : <><ImagePlus className="w-3.5 h-3.5" /> Seed Demo Samples</>}
+          </button>
+        </div>
+      </div>
+
+      {/* Portfolio list */}
       {isLoading ? (
         <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : portfolios.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border p-10 text-center">
           <Images className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">No portfolios. Seed them via the API or create a generation batch.</p>
+          <p className="text-sm text-muted-foreground">No portfolios yet. Click <strong>Seed Demo Samples</strong> above to generate 8 fresh ones.</p>
         </div>
       ) : (
         <div className="divide-y divide-border rounded-xl border border-border overflow-hidden">

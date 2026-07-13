@@ -20,7 +20,7 @@
  * Copywriter prompt builders), and imageDesignerService's Replicate + QC primitives
  * via generateNamedAssetSet.
  */
-import { eq, and, sql, ilike } from "drizzle-orm";
+import { eq, and, sql, ilike, inArray } from "drizzle-orm";
 import {
   db,
   aiPortfolioGenerationBatchesTable,
@@ -337,6 +337,71 @@ export async function approvePortfolio(portfolioId: number, approvedBy?: string)
   await logAudit("portfolio-generator", "portfolio_approved", String(portfolioId), "ai_service_portfolio", "success", { approvedBy });
   await publishSafe({ eventType: "portfolio_approved", sourceModule: "portfolio-generator", sourceId: String(portfolioId), payload: { approvedBy } });
   return row;
+}
+
+// ── Demo seed configs ─────────────────────────────────────────────────────────
+
+const DEMO_SEED_CONFIGS: { industry: string; style: string }[] = [
+  { industry: "coffee",     style: "minimalist" },
+  { industry: "fashion",    style: "elegant"    },
+  { industry: "technology", style: "modern"     },
+  { industry: "food",       style: "vibrant"    },
+  { industry: "healthcare", style: "clean"      },
+  { industry: "logistics",  style: "corporate"  },
+  { industry: "beauty",     style: "luxury"     },
+  { industry: "education",  style: "friendly"   },
+];
+
+/**
+ * Wipe all existing demo portfolios (isDemo = true) and their assets, then
+ * create + immediately start one generation batch per DEMO_SEED_CONFIGS entry.
+ * All batches: autoPublish=true, qcThreshold=60.
+ * Images upload via persistImageBuffer → Supabase — no expiring URLs.
+ */
+export async function seedDemoPortfolios(): Promise<{ batchIds: number[]; cleanedUp: number }> {
+  // Step 1: delete stale demo portfolios and their assets
+  const existingDemos = await db
+    .select({ id: aiServicePortfoliosTable.id })
+    .from(aiServicePortfoliosTable)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .where(eq((aiServicePortfoliosTable as any).isDemo, true));
+
+  let cleanedUp = 0;
+  if (existingDemos.length > 0) {
+    const ids = existingDemos.map((r) => r.id);
+    await db.delete(aiPortfolioAssetsTable).where(inArray(aiPortfolioAssetsTable.portfolioId, ids));
+    await db.delete(aiServicePortfoliosTable).where(inArray(aiServicePortfoliosTable.id, ids));
+    cleanedUp = ids.length;
+  }
+
+  // Step 2: create one batch per config
+  const batchIds: number[] = [];
+  for (const cfg of DEMO_SEED_CONFIGS) {
+    const batch = await createGenerationBatch({
+      industry: cfg.industry,
+      style: cfg.style,
+      packageLevel: "standard",
+      requestedCount: 1,
+      autoPublish: true,
+      qcThreshold: 60,
+      createdBy: "seed-script",
+    });
+    batchIds.push(batch.id);
+  }
+
+  // Step 3: start all batches fire-and-forget
+  for (const batchId of batchIds) {
+    startBatch(batchId).catch((err: unknown) => {
+      console.error(`[seed-demos] batch ${batchId} start failed:`, err);
+    });
+  }
+
+  await logAudit(
+    "portfolio-admin", "seed_demos_triggered", "seed", "system", "success",
+    { batchCount: batchIds.length, cleanedUp },
+  );
+
+  return { batchIds, cleanedUp };
 }
 
 /**

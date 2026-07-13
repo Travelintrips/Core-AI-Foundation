@@ -42,6 +42,7 @@ import {
   cancelBatch,
   approvePortfolio,
   rejectPortfolio,
+  seedDemoPortfolios,
   type BatchConfig,
 } from "../services/demoPortfolioGeneratorService.js";
 
@@ -268,6 +269,25 @@ router.post("/ai/portfolio/assets/:id/retry-archive", async (req, res): Promise<
 
   await logAudit("portfolio-admin", "asset_archive_retry", String(id), "ai_portfolio_asset", "success", {});
   res.json({ ok: true, message: `Retry re-queued for asset ${id}` });
+});
+
+/**
+ * Seed demo portfolios: wipe existing demos, then start 8 diverse generation
+ * batches (coffee/minimalist … education/friendly). All autoPublish=true.
+ * Images upload directly to Supabase — no expiring URLs.
+ */
+router.post("/ai/portfolio/seed-demos", async (req, res): Promise<void> => {
+  try {
+    const result = await seedDemoPortfolios();
+    res.json({
+      ok: true,
+      message: `Cleaned up ${result.cleanedUp} old demo portfolio(s). Started ${result.batchIds.length} generation batches — portfolios will appear in ~5–10 min each.`,
+      ...result,
+    });
+  } catch (err) {
+    req.log?.error?.({ err }, "[portfolio-admin] seed-demos failed");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to seed demos" });
+  }
 });
 
 /** Re-generate all images for a portfolio (reuses existing brand concept, uploads to Supabase). */
