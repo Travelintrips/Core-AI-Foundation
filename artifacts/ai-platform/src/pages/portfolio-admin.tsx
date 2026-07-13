@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Play, Ban, CheckCircle, XCircle, Loader2, RefreshCcw, Images, Star, TrendingUp, BarChart3, Settings, ListChecks, Layers, Archive, RotateCcw, AlertTriangle, Eye, ExternalLink, X, FileImage } from "lucide-react";
+import { Plus, Play, Ban, CheckCircle, XCircle, Loader2, RefreshCcw, Images, Star, TrendingUp, BarChart3, Settings, ListChecks, Layers, Archive, RotateCcw, AlertTriangle, Eye, ExternalLink, X, FileImage, RefreshCw, ImagePlus } from "lucide-react";
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
@@ -134,9 +134,19 @@ function StatusBadge({ status }: { status: string }) {
 // ── Portfolio Detail Drawer ───────────────────────────────────────────────────
 
 function PortfolioDetailDrawer({ portfolio, onClose }: { portfolio: Portfolio; onClose: () => void }) {
-  const { data: assets = [], isLoading: assetsLoading } = useQuery<PortfolioAsset[]>({
+  const qc = useQueryClient();
+  const { data: assets = [], isLoading: assetsLoading, refetch: refetchAssets } = useQuery<PortfolioAsset[]>({
     queryKey: ["portfolio-assets", portfolio.id],
     queryFn: () => apiFetch(`/ai/portfolio/portfolios/${portfolio.id}/assets`),
+  });
+
+  const regenerateMutation = useMutation({
+    mutationFn: () => apiFetch(`/ai/portfolio/portfolios/${portfolio.id}/regenerate-images`, { method: "POST" }),
+    onSuccess: () => {
+      refetchAssets();
+      qc.invalidateQueries({ queryKey: ["portfolio-review-queue"] });
+      qc.invalidateQueries({ queryKey: ["portfolios"] });
+    },
   });
 
   // Close on Escape key
@@ -306,6 +316,36 @@ function PortfolioDetailDrawer({ portfolio, onClose }: { portfolio: Portfolio; o
               <div className="flex justify-between"><span>Display order</span><span>{portfolio.displayOrder}</span></div>
             )}
             <div className="flex justify-between"><span>Created</span><span>{new Date(portfolio.createdAt).toLocaleString()}</span></div>
+          </div>
+
+          {/* Re-generate Images */}
+          <div className="pt-2 border-t border-border">
+            <p className="text-xs text-muted-foreground mb-2">
+              Re-generate images using existing brand concept and upload to Supabase Storage.
+              Old assets will be replaced.
+            </p>
+            {regenerateMutation.isError && (
+              <p className="text-xs text-red-600 mb-2 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3 shrink-0" />
+                {(regenerateMutation.error as Error)?.message ?? "Failed"}
+              </p>
+            )}
+            {regenerateMutation.isSuccess && (
+              <p className="text-xs text-green-600 mb-2 flex items-center gap-1">
+                <CheckCircle className="w-3 h-3 shrink-0" />
+                {(regenerateMutation.data as { count: number })?.count ?? 0} images saved to Supabase Storage
+              </p>
+            )}
+            <button
+              onClick={() => { if (!regenerateMutation.isPending) regenerateMutation.mutate(); }}
+              disabled={regenerateMutation.isPending}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted text-sm font-medium transition-colors disabled:opacity-60"
+            >
+              {regenerateMutation.isPending
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating & uploading to Supabase…</>
+                : <><ImagePlus className="w-4 h-4" /> Re-generate Images → Supabase Storage</>
+              }
+            </button>
           </div>
         </div>
       </div>

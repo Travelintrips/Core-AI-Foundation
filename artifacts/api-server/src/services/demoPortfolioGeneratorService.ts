@@ -339,6 +339,152 @@ export async function approvePortfolio(portfolioId: number, approvedBy?: string)
   return row;
 }
 
+/**
+ * Re-generate all images for an existing portfolio and upload them directly
+ * to Supabase Storage. Reuses the brand concept already stored in
+ * metadataJson — skips all LLM steps (Brand Strategist / Creative Director /
+ * Copywriter). Only runs image generation + QC + Supabase upload.
+ *
+ * Deletes old ai_portfolio_assets rows and replaces them with fresh ones
+ * whose previewUrl already points to Supabase CDN.
+ */
+export async function regeneratePortfolioImages(
+  portfolioId: number
+): Promise<{ count: number; cost: number }> {
+  const [portfolio] = await db
+    .select()
+    .from(aiServicePortfoliosTable)
+    .where(eq(aiServicePortfoliosTable.id, portfolioId))
+    .limit(1);
+  if (!portfolio) throw new Error(`Portfolio ${portfolioId} not found`);
+
+  const meta = (portfolio.metadataJson ?? {}) as Record<string, unknown>;
+  const brandName = String(meta["brandName"] ?? portfolio.title ?? "Demo Brand");
+  const brandSlug = String(
+    meta["brandSlug"] ??
+      brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-").substring(0, 40)
+  );
+
+  const imageBrief: Record<string, unknown> = {
+    brandName,
+    businessType: String(meta["businessType"] ?? portfolio.industry ?? ""),
+    targetMarket: String(meta["targetMarket"] ?? portfolio.industry ?? ""),
+    stylePreference: portfolio.style,
+    goal: "Showcase a high-quality fictional brand identity for the public demo portfolio gallery",
+    visualStyle: (meta["creativeDirection"] as Record<string, unknown> | null)?.[
+      "visual_style"
+    ],
+    colorDirection: (meta["creativeDirection"] as Record<string, unknown> | null)?.[
+      "color_direction"
+    ],
+    tagline: String(
+      (meta["copy"] as Record<string, unknown> | null)?.["tagline"] ??
+        meta["tagline"] ??
+        ""
+    ),
+    industry: portfolio.industry,
+  };
+
+  const assetRoles = buildAssetRoles(portfolio.industry ?? "");
+  const generatedAssets = await generateNamedAssetSet(imageBrief, assetRoles, {
+    maxRetryPerAsset: 2,
+  });
+  const totalCost = generatedAssets.reduce((sum, a) => sum + a.cost, 0);
+
+  // Remove stale assets, replace with fresh ones
+  await db
+    .delete(aiPortfolioAssetsTable)
+    .where(eq(aiPortfolioAssetsTable.portfolioId, portfolioId));
+
+  const completedAssets = generatedAssets.filter((a) => a.status === "completed");
+
+  if (generatedAssets.length) {
+    await db.insert(aiPortfolioAssetsTable).values(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      generatedAssets.map((a: any, i: number) => {
+        const inSupabase = Boolean(
+          a.imageUrl && String(a.imageUrl).includes("supabase.co")
+        );
+        return {
+          portfolioId,
+          assetType: "image",
+          assetRole: a.role,
+          title: a.label,
+          altText:
+            a.status === "completed"
+              ? `${a.label} — ${brandName} (AI Demo Project)`
+              : null,
+          thumbnailUrl: a.imageUrl,
+          previewUrl: a.imageUrl,
+          sourceUrl: a.sourceProviderUrl ?? a.imageUrl,
+          storagePath: null,
+          mimeType: a.status === "completed" ? "image/webp" : null,
+          // Mark as optimized (already in Supabase) or generated (needs archive job)
+          status: inSupabase ? "optimized" : "generated",
+          archiveStatus: inSupabase ? "completed" : "pending",
+          displayOrder: i,
+          downloadable: false,
+          watermarkRequired: false,
+          metadataJson: {
+            status: a.status,
+            qcScore: a.qcScore,
+            qcNotes: a.qcNotes,
+            cost: a.cost,
+            retries: a.retries,
+            prompt: a.prompt,
+            regenerated: true,
+          },
+        };
+      })
+    );
+  }
+
+  // Update portfolio cover image to the new Supabase URL
+  const mainMockup =
+    completedAssets.find((a) => a.role === "main_brand_mockup") ?? completedAssets[0];
+  if (mainMockup?.imageUrl) {
+    await db
+      .update(aiServicePortfoliosTable)
+      .set({ coverImage: mainMockup.imageUrl })
+      .where(eq(aiServicePortfoliosTable.id, portfolioId));
+  }
+
+  // For any assets that fell back to Replicate URL (persistImageBuffer failed),
+  // fire archive events so the background storage_worker picks them up.
+  const newAssets = await db
+    .select()
+    .from(aiPortfolioAssetsTable)
+    .where(eq(aiPortfolioAssetsTable.portfolioId, portfolioId));
+
+  for (const asset of newAssets) {
+    if (asset.status === "generated" && asset.sourceUrl) {
+      publishSafe({
+        eventType: "asset.generated",
+        sourceModule: "portfolio-admin",
+        sourceId: String(asset.id),
+        payload: {
+          portfolioAssetId: asset.id,
+          sourceUrl: asset.sourceUrl,
+          brandSlug,
+          role: asset.assetRole,
+          portfolioId,
+        },
+      });
+    }
+  }
+
+  await logAudit(
+    "portfolio-admin",
+    "portfolio_images_regenerated",
+    String(portfolioId),
+    "ai_service_portfolio",
+    "success",
+    { count: completedAssets.length, cost: totalCost }
+  );
+
+  return { count: completedAssets.length, cost: totalCost };
+}
+
 export async function rejectPortfolio(portfolioId: number, reason?: string) {
   const [row] = await db
     .update(aiServicePortfoliosTable)

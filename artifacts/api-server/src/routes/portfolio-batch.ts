@@ -270,6 +270,20 @@ router.post("/ai/portfolio/assets/:id/retry-archive", async (req, res): Promise<
   res.json({ ok: true, message: `Retry re-queued for asset ${id}` });
 });
 
+/** Re-generate all images for a portfolio (reuses existing brand concept, uploads to Supabase). */
+router.post("/ai/portfolio/portfolios/:id/regenerate-images", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
+  try {
+    const { regeneratePortfolioImages } = await import("../services/demoPortfolioGeneratorService.js");
+    const result = await regeneratePortfolioImages(id);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    req.log.error({ err }, "[portfolio-admin] regenerate-images failed");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to regenerate images" });
+  }
+});
+
 // ── Portfolio Permissions ─────────────────────────────────────────────────────
 
 router.get("/ai/portfolio/permissions", async (req, res): Promise<void> => {
