@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import * as jobDispatcher from "./services/jobDispatcherService.js";
 import * as scheduler from "./services/aiSchedulerService.js";
+import * as sseManager from "./services/sseManager.js";
 import { ensureObservabilityTables } from "./services/observabilityService.js";
 import { ensureStorageBucket } from "./lib/supabaseStorage.js";
 
@@ -78,16 +79,13 @@ app.listen(port, (err) => {
 });
 
 // ── Graceful shutdown ──────────────────────────────────────────────────────
-process.on("SIGTERM", () => {
-  logger.info("SIGTERM received — shutting down dispatcher and scheduler");
+function shutdown(signal: string): void {
+  logger.info(`${signal} received — shutting down dispatcher, scheduler, and SSE`);
+  sseManager.shutdown(); // close SSE connections first (fast, synchronous)
   Promise.all([scheduler.shutdown(), jobDispatcher.shutdown()])
     .then(() => process.exit(0))
     .catch(() => process.exit(1));
-});
+}
 
-process.on("SIGINT", () => {
-  logger.info("SIGINT received — shutting down dispatcher and scheduler");
-  Promise.all([scheduler.shutdown(), jobDispatcher.shutdown()])
-    .then(() => process.exit(0))
-    .catch(() => process.exit(1));
-});
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT",  () => shutdown("SIGINT"));

@@ -38,3 +38,4 @@
 - [phase-v40c-canonical-events](phase-v40c-canonical-events.md) — canonical event adapter; no new table; deterministic eventIds; metadata security rules; activity feed now reads events not audit_logs
 - [demo-portfolio-p3](demo-portfolio-p3.md) — publication guard (QC≥80/trademark/cover/6 assets), asset_purpose separation, audit+repair endpoints, generation_status pipeline tracking
 - [v40b-runtime-roster](v40b-runtime-roster.md) — creative_project_steps stays source of truth; lib/db needs `tsc -b` before api-server typecheck is trustworthy; no vitest existed, added minimal one
+- [phase-v40d-sse-runtime-stream](phase-v40d-sse-runtime-stream.md) — SSE transport: shared poller, base64url cursor, connection limits, hook+merge, graceful shutdown

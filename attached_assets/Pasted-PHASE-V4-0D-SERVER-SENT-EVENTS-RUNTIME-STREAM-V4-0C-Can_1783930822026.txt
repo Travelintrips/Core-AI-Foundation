@@ -1,0 +1,670 @@
+PHASE V4.0D — SERVER-SENT EVENTS RUNTIME STREAM
+
+V4.0C Canonical Runtime Event Model telah selesai dan disetujui.
+
+Canonical event source:
+
+canonicalEventService.ts
+
+Source of truth:
+
+creative_project_steps
+creative_ai_assets
+creative_ai_client_reviews
+creative project row
+
+CanonicalEvent model sudah final dan tidak boleh diubah secara breaking.
+
+==================================================
+TUJUAN
+==================================================
+
+Tambahkan realtime transport layer menggunakan Server-Sent Events agar Customer Workspace menerima canonical runtime events secara otomatis tanpa refresh.
+
+SSE hanya menjadi transport.
+
+Jangan memindahkan business logic ke SSE.
+
+Jangan membuat event model kedua.
+
+Jangan membuat WebSocket pada fase ini.
+
+Jangan mengaktifkan ai_jobs/dispatcher.
+
+==================================================
+PERAN
+==================================================
+
+Bertindak sebagai:
+
+- Realtime Backend Architect
+- Distributed Systems Engineer
+- Senior Node.js Engineer
+- Frontend State Synchronization Engineer
+- Security Engineer
+- Reliability Engineer
+
+==================================================
+ARSITEKTUR WAJIB
+==================================================
+
+Gunakan alur:
+
+Existing runtime tables
+→ canonicalEventService
+→ SSE endpoint
+→ frontend event client
+→ workspace state update
+
+Snapshot REST endpoint tetap menjadi source untuk initial load dan reconnect recovery.
+
+SSE tidak menggantikan snapshot API.
+
+==================================================
+LANGKAH 1 — AUDIT EXISTING SERVER
+==================================================
+
+Audit:
+
+- Express server configuration
+- proxy/gateway behavior
+- compression middleware
+- timeout middleware
+- authentication middleware
+- workspace token validation
+- graceful shutdown
+- CORS
+- rate limiting
+- reverse proxy buffering
+- current polling hooks
+- customer workspace data fetching
+
+Pastikan SSE dapat berjalan di environment deployment existing.
+
+Periksa apakah compression middleware harus dilewati untuk SSE route.
+
+Periksa apakah proxy membutuhkan:
+
+X-Accel-Buffering: no
+
+==================================================
+LANGKAH 2 — SSE ENDPOINT
+==================================================
+
+Tambahkan endpoint customer-safe, misalnya:
+
+GET /api/public/customer/workspace/:token/projects/:projectNumber/events/stream
+
+Gunakan route convention existing.
+
+Endpoint wajib:
+
+- validate workspace token;
+- resolve project ownership server-side;
+- reject cross-project access;
+- set Content-Type: text/event-stream;
+- set Cache-Control: no-cache, no-transform;
+- set Connection: keep-alive;
+- set X-Accel-Buffering: no;
+- flush headers jika tersedia;
+- send heartbeat;
+- clean up resources saat connection close.
+
+Jangan menerima arbitrary internalProjectId dari client.
+
+==================================================
+LANGKAH 3 — INITIAL SNAPSHOT
+==================================================
+
+Saat connection dibuka:
+
+1. validasi access;
+2. kirim event `snapshot`;
+3. snapshot berisi canonical events terbaru dan metadata koneksi;
+4. frontend dapat menyinkronkan ulang state.
+
+Contoh:
+
+event: snapshot
+id: snapshot:{timestamp}
+data: {
+  events: CanonicalEvent[],
+  lastEventId: string | null,
+  generatedAt: string
+}
+
+Batasi jumlah initial events agar payload tidak terlalu besar.
+
+Gunakan configurable limit.
+
+==================================================
+LANGKAH 4 — EVENT CURSOR
+==================================================
+
+Jangan membandingkan `createdAt > Last-Event-ID`.
+
+`Last-Event-ID` adalah event identifier.
+
+Implementasikan cursor yang aman.
+
+Pilihan yang disarankan:
+
+A. Gunakan canonical event ordering tuple:
+
+createdAt + eventId
+
+B. Tambahkan helper internal:
+
+CanonicalEventCursor {
+  createdAt: string;
+  eventId: string;
+}
+
+Encode cursor menjadi string customer-safe, misalnya base64url JSON.
+
+Atau gunakan query parameter:
+
+?after=<encoded-cursor>
+
+Jika browser reconnect native hanya mengirim Last-Event-ID, isi SSE `id:` dengan encoded cursor, bukan raw canonical eventId.
+
+Canonical eventId tetap berada di payload.
+
+Contoh:
+
+id: eyJjcmVhdGVkQXQiOiIyMDI2...}
+event: runtime.event
+data: {
+  event: CanonicalEvent
+}
+
+Cursor comparison:
+
+- createdAt lebih besar; atau
+- createdAt sama dan eventId lexicographically lebih besar.
+
+Ini mencegah event hilang saat beberapa event mempunyai timestamp sama.
+
+==================================================
+LANGKAH 5 — POLLING ADAPTER SERVER-SIDE
+==================================================
+
+Karena source tables belum memiliki push notification, SSE server boleh melakukan internal polling terhadap canonicalEventService.
+
+Persyaratan:
+
+- interval configurable, misalnya 2–5 detik;
+- jangan query per connection bila dapat dihindari;
+- cegah N connections menghasilkan N×4 DB queries;
+- gunakan shared project stream/poller per project;
+- fan-out ke subscribers project yang sama;
+- stop poller saat subscriber terakhir disconnect;
+- deduplicate events dengan canonical eventId/cursor;
+- sort events sebelum publish;
+- handle query failure tanpa menutup stream langsung.
+
+Jangan membuat cache kompleks.
+
+Gunakan lightweight in-memory project channel registry bila sesuai.
+
+==================================================
+LANGKAH 6 — HEARTBEAT
+==================================================
+
+Kirim heartbeat setiap 15–30 detik.
+
+Contoh:
+
+event: heartbeat
+data: {
+  timestamp: string
+}
+
+Heartbeat:
+
+- tidak masuk activity feed;
+- tidak disimpan;
+- menjaga proxy connection tetap hidup;
+- membantu frontend mengetahui stale connection.
+
+==================================================
+LANGKAH 7 — EVENT TYPES
+==================================================
+
+Gunakan tipe SSE:
+
+- snapshot
+- runtime.event
+- heartbeat
+- stream.warning
+- stream.error
+
+`runtime.event` harus membawa CanonicalEvent tanpa mengubah modelnya.
+
+Jangan expose internal exception pada `stream.error`.
+
+Contoh customer-safe:
+
+“Live updates are temporarily unavailable. Reconnecting…”
+
+==================================================
+LANGKAH 8 — FRONTEND CLIENT
+==================================================
+
+Tambahkan reusable hook/client, misalnya:
+
+useRuntimeEventStream({
+  token,
+  projectNumber,
+  enabled
+})
+
+State minimal:
+
+- connectionStatus
+- events
+- lastEventAt
+- reconnectCount
+- isStale
+- error
+
+Connection status:
+
+- connecting
+- live
+- reconnecting
+- offline
+- unavailable
+
+Gunakan native EventSource jika auth menggunakan token di URL existing.
+
+Jangan memasukkan secret selain workspace token yang memang sudah digunakan route public workspace.
+
+==================================================
+LANGKAH 9 — SNAPSHOT + STREAM MERGE
+==================================================
+
+Frontend harus:
+
+1. load snapshot REST existing;
+2. connect SSE;
+3. receive snapshot SSE;
+4. merge events by canonical eventId;
+5. sort by createdAt + eventId;
+6. ignore duplicates;
+7. update activity feed/timeline/current task;
+8. refetch full project snapshot bila stream kehilangan sinkronisasi.
+
+Jangan append blindly.
+
+Gunakan deterministic merge helper.
+
+==================================================
+LANGKAH 10 — RECONNECT
+==================================================
+
+Native EventSource reconnect dapat digunakan, tetapi tambahkan UX state.
+
+Handle:
+
+- temporary disconnect;
+- server restart;
+- browser sleep;
+- laptop wake;
+- network offline/online;
+- token expired;
+- project completed;
+- tab visibility change.
+
+Saat reconnect:
+
+- browser sends Last-Event-ID cursor;
+- server sends missed events;
+- client may refetch snapshot after long disconnect;
+- deduplicate all events.
+
+Jika reconnect gagal berulang:
+
+- fallback ke periodic snapshot polling;
+- tampilkan status “Updates delayed”;
+- jangan membuat modal alarm.
+
+==================================================
+LANGKAH 11 — CONNECTION INDICATOR
+==================================================
+
+Workspace AI Intelligence panel harus menampilkan indikator kecil:
+
+- Live
+- Connecting
+- Reconnecting
+- Last updated X ago
+- Updates delayed
+
+Jangan tampilkan “Live” sebelum heartbeat/event diterima.
+
+Gunakan warna dan icon yang aksesibel.
+
+Tambahkan aria-live polite untuk perubahan koneksi penting.
+
+==================================================
+LANGKAH 12 — WORKSPACE INTEGRATION
+==================================================
+
+Hubungkan canonical stream ke:
+
+- Live Activity
+- Project Timeline
+- Current AI Task
+- AI Workforce status
+- Project Health
+
+Tetapi:
+
+- jangan membuat progress persentase random;
+- gunakan canonical event/state;
+- jika event hanya step.started, tampilkan indeterminate running state;
+- completed step boleh memperbarui stage progress berdasarkan model canonical existing;
+- artifact/review events memperbarui badge dan activity.
+
+==================================================
+LANGKAH 13 — NO-RUNTIME PROJECTS
+==================================================
+
+Jangan membuka SSE connection untuk project yang belum memiliki runtime linkage jika tidak perlu.
+
+Jika dibuka, endpoint boleh mengirim snapshot kosong + heartbeat.
+
+Frontend harus tetap menampilkan honest fallback:
+
+“Live AI activity will appear when production starts.”
+
+==================================================
+LANGKAH 14 — COMPLETED PROJECTS
+==================================================
+
+Untuk project completed:
+
+- kirim snapshot final;
+- stream boleh tetap hidup singkat atau ditutup dengan event final;
+- frontend tidak perlu reconnect terus-menerus;
+- stop streaming setelah terminal state bila aman.
+
+Jika stream ditutup secara sengaja, kirim:
+
+event: stream.complete
+
+dan frontend menandai project final, tanpa reconnect loop.
+
+==================================================
+LANGKAH 15 — SECURITY
+==================================================
+
+Wajib audit:
+
+- workspace token validation;
+- project ownership;
+- cross-tenant stream access;
+- token in logs;
+- token in error reports;
+- stream rate limits;
+- maximum connections per token/IP/project;
+- event filtering;
+- no raw prompt/output/error;
+- no internal model secret;
+- no cost data customer-internal;
+- no connection leakage after logout/token expiry.
+
+Sanitize access logs agar token URL tidak tercatat penuh bila logging middleware merekam URL.
+
+==================================================
+LANGKAH 16 — RESOURCE LIMITS
+==================================================
+
+Tambahkan guard:
+
+- max connections per IP;
+- max connections per workspace token;
+- max subscribers per project;
+- idle timeout;
+- maximum initial event count;
+- polling interval minimum;
+- clean shutdown.
+
+Pada graceful shutdown:
+
+- kirim stream.warning atau close;
+- clear intervals;
+- close active responses;
+- jangan meninggalkan timers.
+
+==================================================
+LANGKAH 17 — PERFORMANCE
+==================================================
+
+Target:
+
+- shared poller per project;
+- no N+1 DB query per subscriber;
+- no full event list broadcast repeatedly;
+- only new events sent;
+- bounded in-memory dedup state;
+- cleanup after disconnect;
+- event payload small;
+- initial snapshot limit configurable.
+
+Tambahkan observability ringan:
+
+- active SSE connections;
+- active project pollers;
+- events delivered;
+- reconnect count jika tersedia;
+- query failures;
+- stream duration.
+
+Jangan log event payload sensitif.
+
+==================================================
+LANGKAH 18 — FALLBACK POLLING
+==================================================
+
+Jika EventSource tidak tersedia atau stream gagal terus:
+
+Gunakan existing REST events endpoint:
+
+GET /projects/:projectNumber/events
+
+Polling interval lebih lambat, misalnya 10–15 detik.
+
+Fallback harus menggunakan cursor/merge yang sama.
+
+Jangan membuat logic event kedua.
+
+==================================================
+LANGKAH 19 — TESTS BACKEND
+==================================================
+
+Tambahkan tests:
+
+1. valid token/project opens stream;
+2. invalid token rejected;
+3. valid token different project rejected;
+4. correct SSE headers;
+5. snapshot sent first;
+6. new event delivered once;
+7. duplicate event not sent;
+8. same timestamp ordering by eventId;
+9. Last-Event-ID cursor resumes correctly;
+10. heartbeat sent;
+11. disconnect cleans subscriber;
+12. last subscriber removes project poller;
+13. two subscribers share one poller;
+14. query failure sends safe warning;
+15. terminal project completes stream;
+16. no sensitive fields;
+17. connection limit enforced;
+18. graceful shutdown cleanup.
+
+==================================================
+LANGKAH 20 — TESTS FRONTEND
+==================================================
+
+Tambahkan tests untuk:
+
+1. event merge and dedup;
+2. ordering;
+3. snapshot replacement;
+4. reconnect state;
+5. stale state;
+6. fallback polling;
+7. project completed stops reconnect;
+8. no-runtime empty stream;
+9. connection indicator;
+10. duplicate activity events avoided.
+
+==================================================
+LANGKAH 21 — MANUAL VERIFICATION
+==================================================
+
+Verifikasi:
+
+A. Running project
+- open workspace;
+- connection becomes Live;
+- new step event appears without refresh;
+- current task updates;
+- no duplicate activity.
+
+B. No-runtime project
+- honest fallback;
+- no fake live worker;
+- no excessive reconnect.
+
+C. Completed project
+- final events shown;
+- stream ends cleanly;
+- no reconnect loop.
+
+D. Network interruption
+- shows Reconnecting;
+- resumes missed events;
+- no event duplication.
+
+E. Two browser tabs
+- both receive events;
+- backend uses one project poller if designed that way.
+
+==================================================
+LANGKAH 22 — DO NOT DO
+==================================================
+
+Jangan:
+
+- membuat WebSocket;
+- mengubah CanonicalEvent model breaking;
+- membuat runtime_events table;
+- mengaktifkan ai_jobs/dispatcher;
+- mengubah creativeWorkflowRunner;
+- membuat fake incremental progress;
+- expose chain-of-thought;
+- expose provider raw response;
+- expose internal cost;
+- mengubah artifact/review business flow.
+
+==================================================
+VERIFIKASI WAJIB
+==================================================
+
+Setelah implementasi:
+
+1. backend typecheck;
+2. frontend typecheck;
+3. API server build;
+4. customer portal build;
+5. canonical event tests tetap lulus;
+6. SSE backend tests lulus;
+7. frontend stream tests lulus;
+8. unauthorized/cross-project tests lulus;
+9. reconnect test lulus;
+10. resource cleanup test lulus;
+11. existing snapshot endpoints tetap berfungsi;
+12. existing project workflow tidak berubah.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+V4.0D selesai hanya jika:
+
+- canonical events dikirim realtime melalui SSE;
+- snapshot API tetap digunakan;
+- Last-Event-ID memakai cursor yang benar;
+- reconnect tidak kehilangan atau menggandakan event;
+- shared poller mencegah query per subscriber;
+- customer hanya melihat project miliknya;
+- no sensitive data leak;
+- workspace menunjukkan status koneksi;
+- activity/timeline berubah tanpa refresh;
+- fallback polling tersedia;
+- completed project tidak reconnect tanpa akhir;
+- typecheck, build, dan tests lulus.
+
+==================================================
+OUTPUT WAJIB
+==================================================
+
+Berikan laporan:
+
+# V4.0D SSE Runtime Stream
+
+## Audit Verification
+
+## SSE Architecture
+
+## Cursor Design
+
+## Endpoint Added
+
+## Headers and Proxy Compatibility
+
+## Shared Poller Design
+
+## Snapshot and Stream Merge
+
+## Frontend Hook/Client
+
+## Workspace Integration
+
+## Connection Indicator
+
+## Reconnect Behavior
+
+## Fallback Polling
+
+## Completed/No-Runtime Behavior
+
+## Security Verification
+
+## Connection Limits
+
+## Performance Verification
+
+## Observability
+
+## Tests Added
+
+## Manual Verification
+
+## Files Changed
+
+## API Changes
+
+## Typecheck Results
+
+## Build Results
+
+## Remaining Gaps
+
+## Recommendation for V4.0E
+
+Jangan lanjut ke V4.0E sebelum laporan ini direview.

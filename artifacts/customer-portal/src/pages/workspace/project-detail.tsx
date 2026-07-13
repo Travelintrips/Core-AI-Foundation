@@ -1,13 +1,20 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { WorkspaceLayout } from "@/components/workspace-layout";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useWorkspaceProjectDetail,
   useSignDownload,
   useRepeatOrder,
   useWorkspaceActivity,
+  type WorkspaceActivity,
 } from "@/hooks/use-workspace";
+import {
+  useRuntimeEventStream,
+  type CanonicalEvent,
+} from "@/hooks/use-runtime-event-stream";
+import { SseConnectionIndicator } from "@/components/sse-connection-indicator";
 import { fmtMoney, fmtDate, fmtDateTime, stageColor } from "@/lib/workspace-format";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -127,11 +134,58 @@ export default function WorkspaceProjectDetailPage({
   const [tab, setTab] = useState<Tab>("Overview");
   const [mobileAiOpen, setMobileAiOpen] = useState(false);
 
+  const qc = useQueryClient();
   const { data, isLoading, error } = useWorkspaceProjectDetail(token, projectNumber);
   const { data: activityData } = useWorkspaceActivity(token);
   const signDownload = useSignDownload(token);
   const repeatOrder = useRepeatOrder(token);
   const { toast } = useToast();
+
+  // ── SSE realtime stream ──────────────────────────────────────────────────
+  const sseStream = useRuntimeEventStream({ token, projectNumber, enabled: !!token && !!projectNumber });
+
+  // Invalidate project detail when new SSE events arrive (refreshes runtime snapshot)
+  const prevSseCountRef = useRef(0);
+  useEffect(() => {
+    if (sseStream.events.length > prevSseCountRef.current) {
+      prevSseCountRef.current = sseStream.events.length;
+      void qc.invalidateQueries({ queryKey: ["workspace-project-detail", token, projectNumber] });
+    }
+  }, [sseStream.events.length, qc, token, projectNumber]);
+
+  // Convert SSE canonical events to WorkspaceActivity format for the feed
+  const ACTIVITY_EVENT_TYPES = new Set([
+    "project.workflow_started", "project.completed", "project.failed",
+    "step.started", "step.completed", "step.failed", "step.blocked",
+    "artifact.created", "artifact.approved", "artifact.revision_requested", "artifact.failed",
+    "review.requested", "review.approved", "review.revision_requested",
+  ]);
+  const TERMINAL_EVENT_TYPES = new Set([
+    "step.completed", "project.completed", "artifact.approved", "review.approved",
+    "artifact.created", "review.revision_requested",
+  ]);
+
+  function canonicalToActivity(e: CanonicalEvent): WorkspaceActivity {
+    const status = e.severity === "error"
+      ? "failed"
+      : TERMINAL_EVENT_TYPES.has(e.eventType)
+        ? "completed"
+        : e.severity === "warning" ? "pending" : "processing";
+    return { action: e.eventType, label: e.publicMessage, resourceId: e.eventId, status, createdAt: e.createdAt };
+  }
+
+  const mergedActivityItems = useMemo((): WorkspaceActivity[] => {
+    const restItems = activityData?.items ?? [];
+    const sseItems = sseStream.events.filter((e) => ACTIVITY_EVENT_TYPES.has(e.eventType)).map(canonicalToActivity);
+    const seen = new Set<string>();
+    return [...restItems, ...sseItems].filter((item) => {
+      const key = item.resourceId ?? `${item.action}:${item.createdAt}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activityData, sseStream.events]);
 
   /* ── Loading ── */
   if (isLoading) {
@@ -213,6 +267,24 @@ export default function WorkspaceProjectDetailPage({
   /* ─────────────────────── AI INTELLIGENCE PANEL ─────────────── */
   const AiPanel = (
     <div className="space-y-0">
+      {/* SSE connection indicator row */}
+      <div className="flex items-center justify-between mb-3 pb-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <span className="text-[11px] font-semibold text-white/40 uppercase tracking-wide">AI Intelligence</span>
+        <SseConnectionIndicator
+          status={sseStream.connectionStatus}
+          lastEventAt={sseStream.lastEventAt}
+          isStale={sseStream.isStale}
+          error={sseStream.error}
+        />
+      </div>
+
+      {/* No-runtime fallback message */}
+      {!data.overview.internalProjectId && (
+        <p className="text-[12px] text-center py-3 mb-3" style={{ color: "#475569" }}>
+          Live AI activity will appear when production starts.
+        </p>
+      )}
+
       {/* Current AI Task */}
       {(overview.currentStage !== "completed" && overview.currentStage !== "delivered") && (
         <>
@@ -236,9 +308,9 @@ export default function WorkspaceProjectDetailPage({
         isDemoPlaceholder={isDemo}
       />
 
-      {/* Activity */}
+      {/* Activity — merged REST + SSE canonical events */}
       <PanelDivider />
-      <WorkspaceActivityFeed items={activityItems} maxItems={8} />
+      <WorkspaceActivityFeed items={mergedActivityItems} maxItems={8} />
 
       {/* Timeline */}
       <PanelDivider />
@@ -351,6 +423,12 @@ export default function WorkspaceProjectDetailPage({
           {isDemo && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-semibold">DEMO</span>
           )}
+          <SseConnectionIndicator
+            status={sseStream.connectionStatus}
+            lastEventAt={sseStream.lastEventAt}
+            isStale={sseStream.isStale}
+            error={sseStream.error}
+          />
         </span>
         {mobileAiOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
       </button>
