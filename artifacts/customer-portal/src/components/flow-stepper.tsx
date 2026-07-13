@@ -24,16 +24,26 @@ interface FlowStepperProps {
 
 export function FlowStepper({ currentStep, className }: FlowStepperProps) {
   const currentIndex = FLOW_STEPS.findIndex((s) => s.key === currentStep);
+  const currentLabel = FLOW_STEPS[currentIndex]?.label ?? currentStep;
 
   return (
-    <div className={cn("w-full overflow-x-auto", className)}>
+    <div className={cn("w-full", className)}>
+      {/* Compact summary for narrow viewports — the dot rail below still scrolls
+          horizontally, but this line always tells the customer where they are
+          without requiring a scroll. */}
+      {currentIndex >= 0 && (
+        <p className="sm:hidden text-center text-xs font-medium text-muted-foreground px-4 pt-3">
+          Langkah {currentIndex + 1} dari {FLOW_STEPS.length}: <span className="text-foreground">{currentLabel}</span>
+        </p>
+      )}
+      <div className="w-full overflow-x-auto">
       <ol className="flex items-center min-w-max mx-auto px-4 py-4 gap-0">
         {FLOW_STEPS.map((step, idx) => {
           const done = idx < currentIndex;
           const active = idx === currentIndex;
 
           return (
-            <li key={step.key} className="flex items-center">
+            <li key={step.key} className="flex items-center" aria-current={active ? "step" : undefined}>
               {/* Step dot + label */}
               <div className="flex flex-col items-center gap-1.5">
                 <div
@@ -75,6 +85,7 @@ export function FlowStepper({ currentStep, className }: FlowStepperProps) {
           );
         })}
       </ol>
+      </div>
     </div>
   );
 }
