@@ -1,0 +1,415 @@
+CONTINUE PHASE V4.0B — RUNTIME ROSTER & PROJECT LINKAGE
+
+Pekerjaan sebelumnya berhenti karena monthly quota limit.
+
+JANGAN mengulang implementasi dari awal.
+
+JANGAN membuat ulang file yang sudah dibuat.
+
+JANGAN mengganti arsitektur yang sudah dipilih.
+
+Lanjutkan dari kondisi codebase aktual dan selesaikan verifikasi serta perbaikan terakhir.
+
+==================================================
+KONTEKS PEKERJAAN YANG SUDAH DILAKUKAN
+==================================================
+
+Agent sebelumnya telah melakukan sebagian implementasi V4.0B.
+
+Log terakhir menyatakan:
+
+- ai-departments dan ai-employees sudah diekspor dari @workspace/db;
+- creativeProjectStepsTable sudah di-import;
+- runtime roster adapter service sudah mulai/dibuat;
+- API dan frontend sudah mulai dihubungkan;
+- mobile toggle badge sudah diperiksa dan dianggap benar;
+- agent kemudian mulai menjalankan typecheck/build;
+- proses terhenti karena quota limit.
+
+Artinya implementasi belum boleh dianggap selesai.
+
+==================================================
+TUJUAN
+==================================================
+
+Selesaikan V4.0B tanpa mengubah ruang lingkup.
+
+Creative workflow runtime existing tetap menjadi source of truth:
+
+creativeWorkflowRunner
+→ creative_project_steps
+
+ai_agents / ai_employees / ai_departments hanya boleh digunakan untuk metadata enrichment.
+
+ai_jobs / ai_workers / dispatcher tidak boleh diaktifkan atau dijadikan source of truth pada fase ini.
+
+==================================================
+LANGKAH 1 — INSPECT CURRENT DIFF
+==================================================
+
+Sebelum mengubah apa pun:
+
+1. Jalankan git diff.
+2. Identifikasi semua file yang telah diubah atau dibuat oleh agent sebelumnya.
+3. Baca file tersebut secara menyeluruh.
+4. Jangan menghapus implementasi yang sudah benar.
+5. Cari TODO, stub, incomplete branch, type assertion berbahaya, dan fallback yang belum jujur.
+
+Laporkan singkat:
+
+- file baru;
+- file berubah;
+- implementasi yang sudah selesai;
+- implementasi yang belum selesai.
+
+Setelah itu langsung lanjutkan pekerjaan.
+
+==================================================
+LANGKAH 2 — VERIFY RUNTIME ADAPTER
+==================================================
+
+Audit service/adapter runtime roster yang sudah dibuat.
+
+Pastikan adapter:
+
+- membaca creative_project_steps yang terkait dengan project customer;
+- tidak membaca step project lain;
+- menormalisasi status nyata;
+- tidak membuat progress random;
+- tidak membuat confidence palsu;
+- menggunakan ai_agents / ai_employees / ai_departments hanya sebagai metadata enrichment;
+- mempunyai safe fallback jika metadata tidak ditemukan;
+- tidak mengekspos prompt, secret, raw provider response, stack trace, atau internal metadata sensitif.
+
+Normalized worker response minimal:
+
+- id
+- roleKey
+- displayName
+- department
+- specialty
+- stepId
+- stepName
+- status
+- currentTask
+- provider
+- model
+- startedAt
+- completedAt
+- outputCount
+- attempt
+- isHuman
+- source
+- isLive
+
+Field boleh optional jika source data tidak tersedia.
+
+==================================================
+LANGKAH 3 — VERIFY PROJECT LINKAGE
+==================================================
+
+Pastikan hubungan berikut benar:
+
+workspace token
+→ customer workspace/project
+→ creative project/workflow
+→ creative_project_steps
+
+Periksa secara langsung:
+
+- key/foreign key yang digunakan;
+- query condition;
+- tenant/company scoping;
+- project ownership;
+- behavior untuk project lama;
+- behavior jika workflow belum dimulai;
+- behavior jika step kosong.
+
+Jangan hanya mengandalkan projectId dari client.
+
+Semua ownership harus divalidasi server-side.
+
+==================================================
+LANGKAH 4 — VERIFY CURRENT TASK LOGIC
+==================================================
+
+Current task harus dipilih dengan urutan yang konsisten:
+
+1. running / in_progress step;
+2. waiting_review / reviewing step;
+3. blocked / failed step bila perlu perhatian;
+4. latest completed step;
+5. next pending step;
+6. null jika tidak ada runtime.
+
+Pastikan current task berasal dari backend runtime snapshot, bukan stage-to-worker mapping frontend.
+
+Response harus customer-safe.
+
+==================================================
+LANGKAH 5 — VERIFY WORKSPACE API
+==================================================
+
+Periksa endpoint workspace project detail yang telah diubah.
+
+Pastikan response baru bersifat backward compatible.
+
+Struktur yang diharapkan kurang lebih:
+
+runtime: {
+  source: "creative_workflow",
+  isLive: boolean,
+  workers: RuntimeWorkerSnapshot[],
+  currentTask: RuntimeCurrentTask | null,
+  currentWorkerId: string | null,
+  currentStepId: string | null,
+  lastUpdatedAt: string | null
+}
+
+Syarat:
+
+- runtime optional;
+- frontend lama tidak crash;
+- no runtime project tetap mendapat response normal;
+- error runtime enrichment tidak membuat seluruh workspace gagal, kecuali error security;
+- tidak ada N+1 query berlebihan;
+- query menggunakan index yang tersedia.
+
+==================================================
+LANGKAH 6 — VERIFY FRONTEND
+==================================================
+
+Audit integrasi pada:
+
+- workspace-ai-workforce.tsx
+- workspace-project-health.tsx
+- workspace-timeline.tsx
+- workspace-activity-feed.tsx
+- project-detail.tsx
+- use-workspace.ts
+- types terkait
+
+Pastikan:
+
+- runtime.workers digunakan jika tersedia;
+- current task berasal dari runtime;
+- confidence disembunyikan jika tidak tersedia;
+- ETA disembunyikan atau “Estimating…” jika tidak nyata;
+- “Demo Preview” hanya muncul pada fallback demo;
+- worker live diberi label “Live Runtime” atau indikator sejenis yang jujur;
+- tidak ada lima worker default yang terlihat live;
+- mobile toggle badge mencerminkan live/demo dengan benar;
+- completed/failed/no-runtime state tampil jujur;
+- no horizontal overflow pada mobile.
+
+==================================================
+LANGKAH 7 — FIX TYPES AND BUILD
+==================================================
+
+Jalankan command yang benar berdasarkan package.json.
+
+Minimal:
+
+- frontend typecheck;
+- backend typecheck;
+- customer portal build;
+- api-server build.
+
+Perbaiki hanya error akibat V4.0B atau corruption/import issue yang benar-benar menghalangi build.
+
+Jangan melakukan refactor unrelated.
+
+==================================================
+LANGKAH 8 — TESTS
+==================================================
+
+Tambahkan atau jalankan test untuk:
+
+1. project dengan running step;
+2. project dengan completed steps;
+3. project tanpa steps;
+4. failed step;
+5. waiting human review;
+6. project lama tanpa runtime linkage;
+7. unauthorized workspace token;
+8. valid token tetapi project milik workspace lain;
+9. employee/agent metadata ditemukan;
+10. metadata tidak ditemukan;
+11. provider/model null;
+12. confidence tidak dikembalikan;
+13. repeated steps tidak menghasilkan worker duplikat yang menyesatkan;
+14. current task selection;
+15. response backward compatibility;
+16. no sensitive fields in response.
+
+Jika test infrastructure belum tersedia, buat targeted service tests atau route tests dengan pola existing.
+
+Jangan hanya melakukan visual test.
+
+==================================================
+LANGKAH 9 — MANUAL VERIFICATION
+==================================================
+
+Verifikasi minimal tiga project:
+
+A. Live runtime project
+- memiliki creative_project_steps;
+- worker runtime tampil;
+- current task nyata;
+- tidak ada confidence demo;
+- label live benar.
+
+B. No-runtime project
+- workspace tetap terbuka;
+- pesan fallback jujur;
+- tidak menampilkan worker palsu sebagai live.
+
+C. Completed atau failed project
+- status worker benar;
+- current task tidak salah;
+- project health tidak membuat progress random.
+
+Verifikasi desktop dan mobile.
+
+==================================================
+LANGKAH 10 — SECURITY VERIFICATION
+==================================================
+
+Wajib periksa:
+
+- unauthorized token → ditolak;
+- token valid tetapi project berbeda → ditolak;
+- no cross-tenant step lookup;
+- no worker leakage dari project lain;
+- no provider raw response;
+- no prompt/system instruction;
+- no API key;
+- no internal stack trace;
+- no sensitive cost metadata pada customer response.
+
+Jika menemukan IDOR atau leakage, perbaiki sebelum fase dinyatakan selesai.
+
+==================================================
+LANGKAH 11 — PERFORMANCE
+==================================================
+
+Periksa:
+
+- query count;
+- N+1 metadata lookup;
+- repeated agent/employee lookups;
+- unnecessary frontend rerender;
+- runtime adapter called more than once per request;
+- large response;
+- missing index.
+
+Gunakan batched lookup untuk metadata enrichment.
+
+Jangan menambahkan cache kompleks pada fase ini kecuali benar-benar diperlukan.
+
+==================================================
+LANGKAH 12 — DO NOT DO
+==================================================
+
+Jangan:
+
+- membuat SSE;
+- membuat WebSocket;
+- membuat event table;
+- menghubungkan ai_jobs ke production;
+- mengaktifkan dispatcher;
+- memindahkan creativeWorkflowRunner;
+- membuat weighted progress baru;
+- membuat confidence sintetis;
+- membuat cost actual;
+- mengubah artifact flow;
+- mengubah human review flow;
+- mengubah status production.
+
+Itu bukan scope V4.0B.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+V4.0B selesai hanya jika:
+
+- project customer dapat ditelusuri ke creative_project_steps;
+- runtime roster API aktif;
+- worker status berasal dari runtime nyata;
+- current task berasal dari runtime nyata;
+- metadata enrichment aman;
+- confidence palsu tidak tampil pada live runtime;
+- Demo Preview hanya pada fallback;
+- no-runtime project tetap stabil;
+- ownership dan tenant isolation aman;
+- frontend dan backend typecheck lulus;
+- customer portal dan api-server build lulus;
+- tests relevan lulus;
+- existing workflow execution tidak berubah.
+
+==================================================
+OUTPUT WAJIB
+==================================================
+
+Berikan laporan final:
+
+# V4.0B Runtime Roster & Project Linkage
+
+## Resume Audit
+- implementasi yang ditemukan dari agent sebelumnya
+- bagian yang belum selesai
+
+## Source of Truth
+
+## Files Changed
+
+## New Services / Adapters
+
+## Workspace API Changes
+
+## Project-to-Step Linkage
+
+## Runtime Worker Mapping
+
+## Current Task Selection Logic
+
+## Frontend Integration
+
+## Demo Data Removed
+
+## Fallback Behavior
+
+## Security Verification
+
+## Performance Verification
+
+## Tests Added and Results
+
+## Manual Verification
+- live runtime project
+- no-runtime project
+- completed/failed project
+- desktop
+- mobile
+
+## Typecheck Results
+- frontend
+- backend
+
+## Build Results
+- customer portal
+- api-server
+
+## Migration
+- yes/no
+- reason
+- rollback if applicable
+
+## Remaining Non-Blocking Gaps
+
+## Recommendation for V4.0C
+
+Jangan lanjut ke V4.0C.
+
+Jangan mengklaim selesai jika typecheck, build, tests, atau security verification belum dilakukan.

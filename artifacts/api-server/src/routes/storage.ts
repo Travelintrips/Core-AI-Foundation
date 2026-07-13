@@ -2,7 +2,6 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { Readable } from "stream";
 import { objectStorageService, ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage.js";
 import { ObjectPermission } from "../lib/objectAcl.js";
-import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage.js";
 
 function parseUploadUrlBody(body: unknown): { name: string; size: number; contentType: string } | null {
   if (!body || typeof body !== "object") return null;
