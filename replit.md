@@ -49,6 +49,10 @@ All secrets are configured in the Replit environment (`.replit` `[userenv]` sect
 
 Database uses a dedicated `ai_platform` schema in Supabase (not `public`). The environment is picked via `NODE_ENV`: development → dev credentials, production → prod credentials.
 
+## Re-import Setup (2026-07-13)
+
+After a GitHub re-import, artifacts and workflows were re-registered automatically once requested. `ADMIN_API_KEY`/`VITE_ADMIN_API_KEY` were missing (not part of the imported secrets) — generated a fresh random value and stored both as shared env vars (matching values, since `VITE_ADMIN_API_KEY` is bundled into the frontend anyway and isn't a true secret). All 4 services verified running: api-server (8080), ai-platform admin (20785, shows login gate as expected), customer-portal (23434, renders landing page), mockup-sandbox (8081).
+
 ## Key Technical Notes
 
 - **GitHub re-import**: restores all artifacts/workflows automatically via `scripts/post-merge.sh`
