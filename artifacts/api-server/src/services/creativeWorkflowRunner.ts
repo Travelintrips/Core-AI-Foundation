@@ -42,6 +42,8 @@ import { recordCost, getProjectCosts } from "./costService.js";
 import { readGuardrails } from "./guardrailService.js";
 import { getActiveModel } from "./aiModelService.js";
 import { createExecutionPlanForCreativeProject } from "./aiCeoService.js";
+import { resolveProjectDocumentType } from "./creativeProjectDocumentType.js";
+import { enqueue } from "./queueManagerService.js";
 
 type StepOutput = Record<string, unknown>;
 
@@ -459,8 +461,13 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
     qcReview:          stepOutputs["quality-control"] ?? null,
   };
 
-  // Reflect true outcome
-  const finalStatus = anyFailed ? "failed" : "completed";
+  // Reflect true outcome. Document-producing projects (e.g. Company Profile)
+  // are not truly "completed" until their PDF has rendered — hold them at
+  // "generating_document" so the customer workspace never shows a finished
+  // project with no deliverable yet.
+  const documentType = anyFailed ? null : await resolveProjectDocumentType(project);
+  const isDocumentProject = documentType !== null;
+  const finalStatus = anyFailed ? "failed" : isDocumentProject ? "generating_document" : "completed";
 
   await db
     .update(creativeProjectsTable)
@@ -490,7 +497,7 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
   // text-generation status update above.
   if (!anyFailed) {
     const { runImageDesignerPipeline } = await import("./imageDesignerService.js");
-    runImageDesignerPipeline(projectDbId, project.projectId, 2).catch(async (err) => {
+    const imagesDone = runImageDesignerPipeline(projectDbId, project.projectId, 2).catch(async (err) => {
       console.error(`[image-designer] Pipeline failed for project ${project.projectId}:`, err);
       await logAudit(
         "creative-ai",
@@ -501,5 +508,30 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
         { error: String(err) },
       );
     });
+
+    // Document-producing projects need their cover/inline images before the
+    // PDF can render meaningfully, so the pdf_export job is only enqueued
+    // once the (fire-and-forget) image pipeline has settled — success or
+    // failure. A failed image pipeline still lets the document render;
+    // the mapper simply omits the cover image section.
+    if (isDocumentProject) {
+      imagesDone.finally(() => {
+        enqueue({
+          jobType: "pdf_export",
+          payloadJson: { projectId: projectDbId, documentType },
+          priority: 60,
+        }).catch(async (err) => {
+          console.error(`[pdf-export] Failed to enqueue pdf_export job for project ${project.projectId}:`, err);
+          await logAudit(
+            "creative-document-engine",
+            "pdf_export_enqueue_failed",
+            project.projectId,
+            "creative_project",
+            "failure",
+            { error: String(err) },
+          );
+        });
+      });
+    }
   }
 }

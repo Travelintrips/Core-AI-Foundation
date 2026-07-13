@@ -42,3 +42,4 @@
 - [dashboard-token-recovery](dashboard-token-recovery.md) — dashboardToken is hashed/non-recoverable; use POST request-access to re-issue + get dashboardUrl live instead of storing a link
 - [reimport-workflow-port-conflicts](reimport-workflow-port-conflicts.md) — after a GitHub re-import + post-merge-setup, restarted workflows can EADDRINUSE against stale node/vite processes still holding old ports; kill by PID (lsof -i) before restart, not just WorkflowsRestart
 - [phase1b-production-safety](phase1b-production-safety.md) — completion guard, stub-throws, storageObjectExists, audit script, portal failed-state; validateJobCompletion called in dispatch() before completeJob()
+- [phase2-company-profile-pdf](phase2-company-profile-pdf.md) — pdf_export gating, runtime document-type resolution, idempotent regeneration, status-map fallout

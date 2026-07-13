@@ -15,7 +15,7 @@
  *   - Contact section only includes data that was provided
  */
 
-import { routeToModel } from "./intelligentRouter.js";
+import { routeToModel } from "./aiModelRouter.js";
 import { executeAI } from "./aiExecutionService.js";
 import { recordCost } from "./costService.js";
 import { parseJsonResponse } from "./creativeAiService.js";

@@ -19,6 +19,10 @@ export function StatusBadge({ status, type = 'project' }: StatusBadgeProps) {
         label = "Generating...";
         variant = "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
         break;
+      case 'generating_document':
+        label = "Preparing Document...";
+        variant = "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+        break;
       case 'completed':
         label = "Completed";
         variant = "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
