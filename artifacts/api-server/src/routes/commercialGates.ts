@@ -8,7 +8,7 @@
  * POST /api/commercial-gates/:id/fail    — fail a gate (requires reason)
  * POST /api/commercial-gates/:id/waive   — waive a gate (requires waivedBy + reason)
  * GET  /api/commercial-gates/:id         — fetch a single gate
- * GET  /api/commercial-gates             — list gates (optionally ?quotationId=)
+ * GET  /api/commercial-gates             — list gates (optionally ?quotationId= or ?serviceRequestId=)
  */
 import { Router } from "express";
 import { eq } from "drizzle-orm";
@@ -31,12 +31,22 @@ function parseId(raw: string | undefined): number | null {
 
 router.get("/commercial-gates", async (req, res): Promise<void> => {
   const quotationId = req.query.quotationId ? parseInt(String(req.query.quotationId), 10) : null;
-  const rows = quotationId && !Number.isNaN(quotationId)
-    ? await db
-        .select()
-        .from(aiCommercialGatesTable)
-        .where(eq(aiCommercialGatesTable.quotationId, quotationId))
-    : await db.select().from(aiCommercialGatesTable);
+  const serviceRequestId = req.query.serviceRequestId ? parseInt(String(req.query.serviceRequestId), 10) : null;
+
+  let rows;
+  if (serviceRequestId && !Number.isNaN(serviceRequestId)) {
+    rows = await db
+      .select()
+      .from(aiCommercialGatesTable)
+      .where(eq(aiCommercialGatesTable.serviceRequestId, serviceRequestId));
+  } else if (quotationId && !Number.isNaN(quotationId)) {
+    rows = await db
+      .select()
+      .from(aiCommercialGatesTable)
+      .where(eq(aiCommercialGatesTable.quotationId, quotationId));
+  } else {
+    rows = await db.select().from(aiCommercialGatesTable);
+  }
   res.json(rows);
 });
 

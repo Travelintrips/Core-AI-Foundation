@@ -128,12 +128,65 @@ function fmt(amount: string | number | null | undefined, currency = "IDR") {
 
 // ── Detail Panel ──────────────────────────────────────────────────────────────
 
+type CommercialGate = {
+  id: number;
+  serviceRequestId: number | null;
+  gateType: string;
+  status: string;
+  requiredAmount: string | null;
+  verifiedAmount: string | null;
+  referenceNumber: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  notes: string | null;
+};
+
 function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => void }) {
   const qc = useQueryClient();
   const snapshot = req.pricingSnapshotJson;
 
   const [quotationLink, setQuotationLink] = useState<{ url: string; validUntil: string } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const { data: gate } = useQuery({
+    queryKey: ["commercial-gate", req.id],
+    queryFn: async () => {
+      const rows = await apiFetch<CommercialGate[]>(`/api/commercial-gates?serviceRequestId=${req.id}`);
+      return rows[0] ?? null;
+    },
+    enabled: req.status === "waiting_commercial_gate",
+  });
+
+  const [gateName, setGateName] = useState("");
+  const [gateReason, setGateReason] = useState("");
+
+  const verifyGate = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/commercial-gates/${gate!.id}/verify`, {
+        method: "POST",
+        body: JSON.stringify({ verifiedBy: gateName.trim() }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["commercial-gate", req.id] });
+      qc.invalidateQueries({ queryKey: ["service-requests"] });
+      toast({ title: "Gate komersial diverifikasi." });
+    },
+    onError: (err: Error) => toast({ title: "Gagal verifikasi gate", description: err.message, variant: "destructive" }),
+  });
+
+  const waiveGate = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/commercial-gates/${gate!.id}/waive`, {
+        method: "POST",
+        body: JSON.stringify({ waivedBy: gateName.trim(), reason: gateReason.trim() }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["commercial-gate", req.id] });
+      qc.invalidateQueries({ queryKey: ["service-requests"] });
+      toast({ title: "Gate komersial dilewati (waived)." });
+    },
+    onError: (err: Error) => toast({ title: "Gagal waive gate", description: err.message, variant: "destructive" }),
+  });
 
   const approveMargin = useMutation({
     mutationFn: () =>
@@ -197,6 +250,7 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
   const actions = NEXT_ACTIONS[req.status] ?? [];
   const marginNeeded = req.marginApprovalRequired && !req.marginApprovedBy;
   const marginApproved = !!req.marginApprovedBy;
+  const gateBlocking = req.status === "waiting_commercial_gate" && !!gate && gate.status === "pending";
 
   const stage = STAGES.find((s) => s.statuses.includes(req.status));
 
@@ -266,6 +320,59 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
               <CheckCircle2 className="w-4 h-4 shrink-0" />
               Margin disetujui oleh <strong className="ml-1">{req.marginApprovedBy}</strong>
               {req.marginApprovedAt && <span className="ml-1 text-muted-foreground">· {new Date(req.marginApprovedAt).toLocaleDateString("id-ID")}</span>}
+            </div>
+          )}
+
+          {/* Commercial Gate */}
+          {req.status === "waiting_commercial_gate" && gate && gate.status === "pending" && (
+            <section className="bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 rounded-xl p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="w-5 h-5 text-teal-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-medium text-teal-800 dark:text-teal-300 text-sm">Gate Komersial #{gate.id} — {gate.gateType}</p>
+                  <p className="text-xs text-teal-700 dark:text-teal-400 mt-1">
+                    Perlu diverifikasi atau di-waive oleh admin sebelum proyek bisa lanjut ke "Siap Produksi".
+                  </p>
+                </div>
+              </div>
+              <input
+                value={gateName}
+                onChange={(e) => setGateName(e.target.value)}
+                placeholder="Nama admin (verified by / waived by)"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <textarea
+                value={gateReason}
+                onChange={(e) => setGateReason(e.target.value)}
+                rows={2}
+                placeholder="Alasan waive (wajib diisi hanya jika memilih Waive)"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => verifyGate.mutate()}
+                  disabled={!gateName.trim() || verifyGate.isPending || waiveGate.isPending}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {verifyGate.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                  Verify
+                </button>
+                <button
+                  onClick={() => waiveGate.mutate()}
+                  disabled={!gateName.trim() || !gateReason.trim() || verifyGate.isPending || waiveGate.isPending}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-muted hover:bg-muted/80 border border-border rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {waiveGate.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+                  Waive
+                </button>
+              </div>
+            </section>
+          )}
+
+          {req.status === "waiting_commercial_gate" && gate && gate.status !== "pending" && (
+            <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-xl px-4 py-2.5">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              Gate #{gate.id} {gate.status === "verified" ? "diverifikasi" : "diwaive"} oleh <strong className="ml-1">{gate.verifiedBy}</strong>
             </div>
           )}
 
@@ -482,7 +589,11 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
               <button
                 key={action.status}
                 onClick={() => changeStatus.mutate(action.status)}
-                disabled={changeStatus.isPending || (marginNeeded && action.status === "quotation_ready")}
+                disabled={
+                  changeStatus.isPending ||
+                  (marginNeeded && action.status === "quotation_ready") ||
+                  (gateBlocking && action.status === "ready_to_build")
+                }
                 className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 ${
                   action.variant === "primary"
                     ? "bg-primary text-primary-foreground hover:bg-primary/90"
@@ -499,6 +610,9 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
                 {action.label}
                 {marginNeeded && action.status === "quotation_ready" && (
                   <span className="ml-1 text-[10px] opacity-70">(approve margin dulu)</span>
+                )}
+                {gateBlocking && action.status === "ready_to_build" && (
+                  <span className="ml-1 text-[10px] opacity-70">(verify/waive gate dulu)</span>
                 )}
               </button>
             ))}
