@@ -34,6 +34,7 @@ const WorkspaceAssetLibraryPage     = lazy(() => import('@/pages/workspace/asset
 const WorkspaceBrandIntelligencePage = lazy(() => import('@/pages/workspace/brand-intelligence'));
 const TemplateGalleryPage            = lazy(() => import('@/pages/template-gallery'));
 const PortfolioGalleryPage           = lazy(() => import('@/pages/portfolio-gallery'));
+const AssetMarketplacePage           = lazy(() => import('@/pages/asset-marketplace'));
 const GalleryPage                    = lazy(() => import('@/pages/gallery'));
 const WorkspaceFavoritesPage         = lazy(() => import('@/pages/workspace/favorites'));
 const WorkspaceNotificationsPage = lazy(() => import('@/pages/workspace/notifications'));
@@ -122,6 +123,7 @@ function Router() {
         <Route path="/template-gallery" component={TemplateGalleryPage} />
         <Route path="/portfolio-gallery" component={PortfolioGalleryPage} />
         <Route path="/gallery" component={GalleryPage} />
+        <Route path="/marketplace" component={AssetMarketplacePage} />
         <Route path="/workspace/:token/favorites" component={WorkspaceFavoritesPage} />
         <Route path="/workspace/:token/notifications" component={WorkspaceNotificationsPage} />
         <Route path="/workspace/:token/profile" component={WorkspaceProfilePage} />

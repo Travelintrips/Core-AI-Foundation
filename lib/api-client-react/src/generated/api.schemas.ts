@@ -5620,6 +5620,283 @@ export interface PipelineMonitoringStatsResult {
   stageDefinitions: PipelineStageDefinition[];
 }
 
+export interface OkResult {
+  ok: boolean;
+}
+
+export interface CreativeCreativeMarketplaceCreatorSummary {
+  name: string;
+  code: string;
+  verified: boolean;
+  /** @nullable */
+  avatarUrl?: string | null;
+}
+
+export type CreativeMarketplaceAssetMetadata = { [key: string]: unknown };
+
+export interface CreativeMarketplaceAsset {
+  id: number;
+  assetCode: string;
+  assetType: string;
+  title: string;
+  /** @nullable */
+  description?: string | null;
+  category: string;
+  tags?: string[];
+  /** @nullable */
+  creatorId?: number | null;
+  creator?: CreativeCreativeMarketplaceCreatorSummary | null;
+  priceType: string;
+  priceAmount: string;
+  currency: string;
+  /** @nullable */
+  fileUrl?: string | null;
+  previewUrls?: string[];
+  /** @nullable */
+  thumbnailUrl?: string | null;
+  /** @nullable */
+  fileSizeBytes?: number | null;
+  /** @nullable */
+  fileFormat?: string | null;
+  license: string;
+  isFeatured: boolean;
+  isActive: boolean;
+  downloadsCount: number;
+  viewsCount: number;
+  favoritesCount: number;
+  avgRating: string;
+  ratingsCount: number;
+  metadata?: CreativeMarketplaceAssetMetadata;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreativeCreativeMarketplaceAssetList {
+  items: CreativeMarketplaceAsset[];
+  total: number;
+}
+
+export type CreateCreativeCreativeMarketplaceAssetInputAssetType = typeof CreateCreativeCreativeMarketplaceAssetInputAssetType[keyof typeof CreateCreativeCreativeMarketplaceAssetInputAssetType];
+
+
+export const CreateCreativeCreativeMarketplaceAssetInputAssetType = {
+  illustration: 'illustration',
+  icon: 'icon',
+  cover: 'cover',
+  layout: 'layout',
+  background: 'background',
+  photo: 'photo',
+  brand_pack: 'brand_pack',
+} as const;
+
+export type CreateCreativeCreativeMarketplaceAssetInputPriceType = typeof CreateCreativeCreativeMarketplaceAssetInputPriceType[keyof typeof CreateCreativeCreativeMarketplaceAssetInputPriceType];
+
+
+export const CreateCreativeCreativeMarketplaceAssetInputPriceType = {
+  free: 'free',
+  premium: 'premium',
+} as const;
+
+export type CreateCreativeCreativeMarketplaceAssetInputLicense = typeof CreateCreativeCreativeMarketplaceAssetInputLicense[keyof typeof CreateCreativeCreativeMarketplaceAssetInputLicense];
+
+
+export const CreateCreativeCreativeMarketplaceAssetInputLicense = {
+  standard: 'standard',
+  extended: 'extended',
+  exclusive: 'exclusive',
+} as const;
+
+export type CreateCreativeCreativeMarketplaceAssetInputMetadata = { [key: string]: unknown };
+
+export interface CreateCreativeCreativeMarketplaceAssetInput {
+  assetCode: string;
+  assetType: CreateCreativeCreativeMarketplaceAssetInputAssetType;
+  title: string;
+  description?: string;
+  category: string;
+  tags?: string[];
+  creatorId?: number;
+  priceType?: CreateCreativeCreativeMarketplaceAssetInputPriceType;
+  priceAmount?: string;
+  currency?: string;
+  fileUrl?: string;
+  previewUrls?: string[];
+  thumbnailUrl?: string;
+  fileFormat?: string;
+  license?: CreateCreativeCreativeMarketplaceAssetInputLicense;
+  isFeatured?: boolean;
+  metadata?: CreateCreativeCreativeMarketplaceAssetInputMetadata;
+}
+
+export type UpdateCreativeCreativeMarketplaceAssetInputMetadata = { [key: string]: unknown };
+
+export interface UpdateCreativeCreativeMarketplaceAssetInput {
+  title?: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  priceType?: string;
+  priceAmount?: string;
+  fileUrl?: string;
+  previewUrls?: string[];
+  thumbnailUrl?: string;
+  fileFormat?: string;
+  license?: string;
+  metadata?: UpdateCreativeCreativeMarketplaceAssetInputMetadata;
+}
+
+export type CreativeMarketplaceCreatorMetadata = { [key: string]: unknown };
+
+export interface CreativeMarketplaceCreator {
+  id: number;
+  creatorCode: string;
+  displayName: string;
+  /** @nullable */
+  bio?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
+  /** @nullable */
+  websiteUrl?: string | null;
+  /** @nullable */
+  email?: string | null;
+  isVerified: boolean;
+  isActive: boolean;
+  totalAssets: number;
+  totalDownloads: number;
+  avgRating: string;
+  metadata?: CreativeMarketplaceCreatorMetadata;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreativeCreativeMarketplaceCreatorDetail = CreativeMarketplaceCreator & {
+  assets: CreativeMarketplaceAsset[];
+};
+
+export interface CreativeCreativeMarketplaceCreatorList {
+  items: CreativeMarketplaceCreator[];
+  total: number;
+}
+
+export type CreateCreativeCreativeMarketplaceCreatorInputMetadata = { [key: string]: unknown };
+
+export interface CreateCreativeCreativeMarketplaceCreatorInput {
+  creatorCode: string;
+  displayName: string;
+  bio?: string;
+  avatarUrl?: string;
+  websiteUrl?: string;
+  email?: string;
+  isVerified?: boolean;
+  metadata?: CreateCreativeCreativeMarketplaceCreatorInputMetadata;
+}
+
+export type UpdateCreativeCreativeMarketplaceCreatorInputMetadata = { [key: string]: unknown };
+
+export interface UpdateCreativeCreativeMarketplaceCreatorInput {
+  displayName?: string;
+  bio?: string;
+  avatarUrl?: string;
+  websiteUrl?: string;
+  isVerified?: boolean;
+  isActive?: boolean;
+  metadata?: UpdateCreativeCreativeMarketplaceCreatorInputMetadata;
+}
+
+export interface CreativeMarketplaceRating {
+  id: number;
+  customerEmail: string;
+  itemType: string;
+  itemId: number;
+  /**
+     * @minimum 1
+     * @maximum 5
+     */
+  rating: number;
+  /** @nullable */
+  review?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreativeMarketplaceRateInput {
+  customerEmail: string;
+  /**
+     * @minimum 1
+     * @maximum 5
+     */
+  rating: number;
+  review?: string;
+}
+
+export type CreativeMarketplaceDownloadMetadata = { [key: string]: unknown };
+
+export interface CreativeMarketplaceDownload {
+  id: number;
+  /** @nullable */
+  customerEmail?: string | null;
+  itemType: string;
+  itemId: number;
+  /** @nullable */
+  ipAddress?: string | null;
+  metadata?: CreativeMarketplaceDownloadMetadata;
+  createdAt: string;
+}
+
+export interface CreativeCreativeMarketplaceDownloadResult {
+  /** @nullable */
+  downloadUrl?: string | null;
+  asset: CreativeMarketplaceAsset;
+}
+
+export interface CreativeMarketplaceFavoriteItem {
+  id: number;
+  customerEmail: string;
+  itemType: string;
+  itemId: number;
+  createdAt: string;
+}
+
+export type CreativeMarketplaceFavoritesResultTemplatesItem = { [key: string]: unknown };
+
+export interface CreativeMarketplaceFavoritesResult {
+  favorites: CreativeMarketplaceFavoriteItem[];
+  assets: CreativeMarketplaceAsset[];
+  templates: CreativeMarketplaceFavoritesResultTemplatesItem[];
+}
+
+export interface CreativeMarketplaceCategoriesResult {
+  assetTypes: string[];
+  categories: string[];
+}
+
+export type CreativeMarketplaceSearchResultTemplatesItem = { [key: string]: unknown };
+
+export interface CreativeMarketplaceSearchResult {
+  assets: CreativeMarketplaceAsset[];
+  templates: CreativeMarketplaceSearchResultTemplatesItem[];
+  total: number;
+}
+
+export interface CreativeMarketplaceByTypeItem {
+  assetType: string;
+  count: number;
+  downloads: number;
+}
+
+export interface CreativeMarketplaceAnalytics {
+  totalAssets: number;
+  freeAssets: number;
+  premiumAssets: number;
+  totalCreators: number;
+  verifiedCreators: number;
+  totalDownloads: number;
+  totalFavorites: number;
+  totalRatings: number;
+  avgRating: number;
+  byType: CreativeMarketplaceByTypeItem[];
+}
+
 export type NotFoundResponse = {
   error: string;
 };
@@ -6270,5 +6547,130 @@ pageSize?: number;
 
 export type ArchiveDesignProject200 = {
   ok: boolean;
+};
+
+export type ListCreativeMarketplaceAssetsAdminParams = {
+assetType?: string;
+category?: string;
+priceType?: string;
+search?: string;
+featured?: boolean;
+creatorId?: number;
+sortBy?: ListCreativeMarketplaceAssetsAdminSortBy;
+limit?: number;
+offset?: number;
+};
+
+export type ListCreativeMarketplaceAssetsAdminSortBy = typeof ListCreativeMarketplaceAssetsAdminSortBy[keyof typeof ListCreativeMarketplaceAssetsAdminSortBy];
+
+
+export const ListCreativeMarketplaceAssetsAdminSortBy = {
+  newest: 'newest',
+  popular: 'popular',
+  rating: 'rating',
+  downloads: 'downloads',
+} as const;
+
+export type FeatureCreativeMarketplaceAssetBody = {
+  featured?: boolean;
+};
+
+export type ActivateCreativeMarketplaceAssetBody = {
+  active?: boolean;
+};
+
+export type ListCreativeMarketplaceCreatorsAdminParams = {
+search?: string;
+isVerified?: boolean;
+limit?: number;
+offset?: number;
+};
+
+export type ListCreativeMarketplaceDownloadsAdminParams = {
+limit?: number;
+offset?: number;
+};
+
+export type ListCreativeMarketplaceDownloadsAdmin200 = {
+  items: CreativeMarketplaceDownload[];
+};
+
+export type ListFeaturedCreativeMarketplaceAssetsParams = {
+limit?: number;
+};
+
+export type ListFeaturedCreativeMarketplaceAssets200 = {
+  items: CreativeMarketplaceAsset[];
+};
+
+export type SearchMarketplaceParams = {
+q: string;
+assetType?: string;
+limit?: number;
+};
+
+export type ListCreativeMarketplaceAssetsPublicParams = {
+assetType?: string;
+category?: string;
+priceType?: string;
+search?: string;
+sortBy?: ListCreativeMarketplaceAssetsPublicSortBy;
+limit?: number;
+offset?: number;
+};
+
+export type ListCreativeMarketplaceAssetsPublicSortBy = typeof ListCreativeMarketplaceAssetsPublicSortBy[keyof typeof ListCreativeMarketplaceAssetsPublicSortBy];
+
+
+export const ListCreativeMarketplaceAssetsPublicSortBy = {
+  newest: 'newest',
+  popular: 'popular',
+  rating: 'rating',
+  downloads: 'downloads',
+} as const;
+
+export type DownloadCreativeMarketplaceAssetBody = {
+  customerEmail?: string;
+};
+
+export type GetCreativeMarketplaceAssetRatings200 = {
+  items: CreativeMarketplaceRating[];
+};
+
+export type ListCreativeMarketplaceCreatorsPublicParams = {
+search?: string;
+limit?: number;
+offset?: number;
+};
+
+export type AddWorkspaceMarketplaceFavoriteBodyItemType = typeof AddWorkspaceMarketplaceFavoriteBodyItemType[keyof typeof AddWorkspaceMarketplaceFavoriteBodyItemType];
+
+
+export const AddWorkspaceMarketplaceFavoriteBodyItemType = {
+  asset: 'asset',
+  template: 'template',
+} as const;
+
+export type AddWorkspaceMarketplaceFavoriteBody = {
+  itemType: AddWorkspaceMarketplaceFavoriteBodyItemType;
+  itemId: number;
+};
+
+export type GetWorkspaceCreativeMarketplaceDownloadsParams = {
+limit?: number;
+};
+
+export type GetWorkspaceCreativeMarketplaceDownloads200 = {
+  items: CreativeMarketplaceDownload[];
+};
+
+export type GetWorkspaceCreativeMarketplaceAssetsParams = {
+assetType?: string;
+category?: string;
+priceType?: string;
+search?: string;
+sortBy?: string;
+limit?: number;
+offset?: number;
 };
 

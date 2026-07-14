@@ -66,6 +66,7 @@ tags:
   - name: templates
     description: V4.3 Template Marketplace — gallery, live customization preview, Brand DNA recommendations, admin CRUD/versioning
   - name: design-studio
+  - name: creative-marketplace
     description: V4.5 AI Design Studio — visual canvas editor with layers, drag-drop, AI generation, and version control
 paths:
   /healthz:
@@ -7586,6 +7587,494 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AiRegenerateResult" }
   # ── End V4.5 Design Studio ───────────────────────────────────────────────────
+
+  # ── V4.7: Creative Marketplace (admin) ──────────────────────────────────────
+
+  /ai/creative-marketplace/assets:
+    get:
+      operationId: listCreativeMarketplaceAssetsAdmin
+      tags: [creative-marketplace]
+      summary: Admin — list / filter marketplace assets
+      parameters:
+        - { name: assetType, in: query, schema: { type: string } }
+        - { name: category,  in: query, schema: { type: string } }
+        - { name: priceType, in: query, schema: { type: string } }
+        - { name: search,    in: query, schema: { type: string } }
+        - { name: featured,  in: query, schema: { type: boolean } }
+        - { name: creatorId, in: query, schema: { type: integer } }
+        - { name: sortBy,    in: query, schema: { type: string, enum: [newest, popular, rating, downloads] } }
+        - { name: limit,     in: query, schema: { type: integer, default: 24 } }
+        - { name: offset,    in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Asset list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeCreativeMarketplaceAssetList" }
+    post:
+      operationId: createCreativeMarketplaceAsset
+      tags: [creative-marketplace]
+      summary: Admin — create marketplace asset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCreativeCreativeMarketplaceAssetInput" }
+      responses:
+        "201":
+          description: Created asset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeMarketplaceAsset" }
+
+  /ai/creative-marketplace/assets/{id}:
+    get:
+      operationId: getCreativeMarketplaceAssetAdmin
+      tags: [creative-marketplace]
+      summary: Admin — get asset by id
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Asset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeMarketplaceAsset" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateCreativeMarketplaceAsset
+      tags: [creative-marketplace]
+      summary: Admin — update asset
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCreativeCreativeMarketplaceAssetInput" }
+      responses:
+        "200":
+          description: Updated asset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeMarketplaceAsset" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ai/creative-marketplace/assets/{id}/feature:
+    post:
+      operationId: featureCreativeMarketplaceAsset
+      tags: [creative-marketplace]
+      summary: Admin — toggle featured status
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                featured: { type: boolean }
+      responses:
+        "200":
+          description: Updated asset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeMarketplaceAsset" }
+
+  /ai/creative-marketplace/assets/{id}/activate:
+    post:
+      operationId: activateCreativeMarketplaceAsset
+      tags: [creative-marketplace]
+      summary: Admin — toggle active/inactive
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                active: { type: boolean }
+      responses:
+        "200":
+          description: Updated asset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeMarketplaceAsset" }
+
+  /ai/creative-marketplace/creators:
+    get:
+      operationId: listCreativeMarketplaceCreatorsAdmin
+      tags: [creative-marketplace]
+      summary: Admin — list creators
+      parameters:
+        - { name: search,     in: query, schema: { type: string } }
+        - { name: isVerified, in: query, schema: { type: boolean } }
+        - { name: limit,      in: query, schema: { type: integer, default: 24 } }
+        - { name: offset,     in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Creator list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeCreativeMarketplaceCreatorList" }
+    post:
+      operationId: createCreativeMarketplaceCreator
+      tags: [creative-marketplace]
+      summary: Admin — create creator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCreativeCreativeMarketplaceCreatorInput" }
+      responses:
+        "201":
+          description: Created creator
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeMarketplaceCreator" }
+
+  /ai/creative-marketplace/creators/{id}:
+    get:
+      operationId: getCreativeMarketplaceCreatorAdmin
+      tags: [creative-marketplace]
+      summary: Admin — get creator with assets
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Creator with assets
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeCreativeMarketplaceCreatorDetail" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateCreativeMarketplaceCreator
+      tags: [creative-marketplace]
+      summary: Admin — update creator
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCreativeCreativeMarketplaceCreatorInput" }
+      responses:
+        "200":
+          description: Updated creator
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeMarketplaceCreator" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ai/creative-marketplace/analytics:
+    get:
+      operationId: getCreativeMarketplaceAnalytics
+      tags: [creative-marketplace]
+      summary: Admin — marketplace analytics dashboard
+      responses:
+        "200":
+          description: Analytics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeMarketplaceAnalytics" }
+
+  /ai/creative-marketplace/downloads:
+    get:
+      operationId: listCreativeMarketplaceDownloadsAdmin
+      tags: [creative-marketplace]
+      summary: Admin — download event log
+      parameters:
+        - { name: limit,  in: query, schema: { type: integer, default: 100 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Download list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/CreativeMarketplaceDownload" }
+
+  # ── V4.7: Creative Marketplace (public) ─────────────────────────────────────
+
+  /public/creative-marketplace/assets/featured:
+    get:
+      operationId: listFeaturedCreativeMarketplaceAssets
+      tags: [creative-marketplace]
+      summary: Public — featured assets
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 12 } }
+      responses:
+        "200":
+          description: Featured assets
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/CreativeMarketplaceAsset" }
+
+  /public/creative-marketplace/assets/categories:
+    get:
+      operationId: listMarketplaceCategories
+      tags: [creative-marketplace]
+      summary: Public — list asset types and categories
+      responses:
+        "200":
+          description: Categories
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeMarketplaceCategoriesResult" }
+
+  /public/creative-marketplace/assets/search:
+    get:
+      operationId: searchMarketplace
+      tags: [creative-marketplace]
+      summary: Public — search templates and assets
+      parameters:
+        - { name: q,         in: query, required: true, schema: { type: string } }
+        - { name: assetType, in: query, schema: { type: string } }
+        - { name: limit,     in: query, schema: { type: integer, default: 20 } }
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeMarketplaceSearchResult" }
+
+  /public/creative-marketplace/assets:
+    get:
+      operationId: listCreativeMarketplaceAssetsPublic
+      tags: [creative-marketplace]
+      summary: Public — browse assets
+      parameters:
+        - { name: assetType, in: query, schema: { type: string } }
+        - { name: category,  in: query, schema: { type: string } }
+        - { name: priceType, in: query, schema: { type: string } }
+        - { name: search,    in: query, schema: { type: string } }
+        - { name: sortBy,    in: query, schema: { type: string, enum: [newest, popular, rating, downloads] } }
+        - { name: limit,     in: query, schema: { type: integer, default: 24 } }
+        - { name: offset,    in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Asset list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeCreativeMarketplaceAssetList" }
+
+  /public/creative-marketplace/assets/{id}:
+    get:
+      operationId: getCreativeMarketplaceAssetPublic
+      tags: [creative-marketplace]
+      summary: Public — get asset detail (records view)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Asset detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeMarketplaceAsset" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/creative-marketplace/assets/{id}/download:
+    post:
+      operationId: downloadCreativeMarketplaceAsset
+      tags: [creative-marketplace]
+      summary: Public — download asset (tracks event)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                customerEmail: { type: string, format: email }
+      responses:
+        "200":
+          description: Download URL
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeCreativeMarketplaceDownloadResult" }
+
+  /public/creative-marketplace/assets/{id}/rate:
+    post:
+      operationId: rateCreativeMarketplaceAsset
+      tags: [creative-marketplace]
+      summary: Public — rate an asset
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreativeMarketplaceRateInput" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResult" }
+
+  /public/creative-marketplace/assets/{id}/ratings:
+    get:
+      operationId: getCreativeMarketplaceAssetRatings
+      tags: [creative-marketplace]
+      summary: Public — get ratings for an asset
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Ratings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/CreativeMarketplaceRating" }
+
+  /public/creative-marketplace/creators:
+    get:
+      operationId: listCreativeMarketplaceCreatorsPublic
+      tags: [creative-marketplace]
+      summary: Public — list creators
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: limit,  in: query, schema: { type: integer, default: 24 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Creator list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeCreativeMarketplaceCreatorList" }
+
+  /public/creative-marketplace/creators/{id}:
+    get:
+      operationId: getCreativeMarketplaceCreatorPublic
+      tags: [creative-marketplace]
+      summary: Public — creator profile with assets
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Creator profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeCreativeMarketplaceCreatorDetail" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ── V4.7: Creative Marketplace (workspace) ───────────────────────────────────
+
+  /public/customer/workspace/{token}/creative-marketplace/favorites:
+    get:
+      operationId: getWorkspaceMarketplaceFavorites
+      tags: [creative-marketplace]
+      summary: Workspace — get favorites
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Favorites
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeMarketplaceFavoritesResult" }
+    post:
+      operationId: addWorkspaceMarketplaceFavorite
+      tags: [creative-marketplace]
+      summary: Workspace — add favorite
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [itemType, itemId]
+              properties:
+                itemType: { type: string, enum: [asset, template] }
+                itemId: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResult" }
+
+  /public/customer/workspace/{token}/creative-marketplace/favorites/{itemType}/{itemId}:
+    delete:
+      operationId: removeWorkspaceMarketplaceFavorite
+      tags: [creative-marketplace]
+      summary: Workspace — remove favorite
+      parameters:
+        - { name: token,    in: path, required: true, schema: { type: string } }
+        - { name: itemType, in: path, required: true, schema: { type: string } }
+        - { name: itemId,   in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResult" }
+
+  /public/customer/workspace/{token}/creative-marketplace/downloads:
+    get:
+      operationId: getWorkspaceCreativeMarketplaceDownloads
+      tags: [creative-marketplace]
+      summary: Workspace — download history
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+      responses:
+        "200":
+          description: Downloads
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/CreativeMarketplaceDownload" }
+
+  /public/customer/workspace/{token}/creative-marketplace/assets:
+    get:
+      operationId: getWorkspaceCreativeMarketplaceAssets
+      tags: [creative-marketplace]
+      summary: Workspace — browse assets with personalization
+      parameters:
+        - { name: token,     in: path,  required: true, schema: { type: string } }
+        - { name: assetType, in: query, schema: { type: string } }
+        - { name: category,  in: query, schema: { type: string } }
+        - { name: priceType, in: query, schema: { type: string } }
+        - { name: search,    in: query, schema: { type: string } }
+        - { name: sortBy,    in: query, schema: { type: string } }
+        - { name: limit,     in: query, schema: { type: integer, default: 24 } }
+        - { name: offset,    in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Asset list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreativeCreativeMarketplaceAssetList" }
+
+  # ── End V4.7 Creative Marketplace ────────────────────────────────────────────
 
 components:
   responses:
@@ -15123,3 +15612,278 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PipelineStageDefinition"
+
+    OkResult:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+
+    # ── V4.7 Creative Marketplace schemas ──────────────────────────────────────
+
+    CreativeCreativeMarketplaceCreatorSummary:
+      type: object
+      required: [name, code, verified]
+      properties:
+        name:    { type: string }
+        code:    { type: string }
+        verified: { type: boolean }
+        avatarUrl: { type: [string, "null"] }
+
+    CreativeMarketplaceAsset:
+      type: object
+      required: [id, assetCode, assetType, title, category, priceType, priceAmount, currency, license, isFeatured, isActive, downloadsCount, viewsCount, favoritesCount, avgRating, ratingsCount, createdAt, updatedAt]
+      properties:
+        id:             { type: integer }
+        assetCode:      { type: string }
+        assetType:      { type: string }
+        title:          { type: string }
+        description:    { type: [string, "null"] }
+        category:       { type: string }
+        tags:           { type: array, items: { type: string } }
+        creatorId:      { type: [integer, "null"] }
+        creator:
+          oneOf:
+            - { $ref: "#/components/schemas/CreativeCreativeMarketplaceCreatorSummary" }
+            - { type: "null" }
+        priceType:      { type: string }
+        priceAmount:    { type: string }
+        currency:       { type: string }
+        fileUrl:        { type: [string, "null"] }
+        previewUrls:    { type: array, items: { type: string } }
+        thumbnailUrl:   { type: [string, "null"] }
+        fileSizeBytes:  { type: [integer, "null"] }
+        fileFormat:     { type: [string, "null"] }
+        license:        { type: string }
+        isFeatured:     { type: boolean }
+        isActive:       { type: boolean }
+        downloadsCount: { type: integer }
+        viewsCount:     { type: integer }
+        favoritesCount: { type: integer }
+        avgRating:      { type: string }
+        ratingsCount:   { type: integer }
+        metadata:       { type: object }
+        createdAt:      { type: string, format: date-time }
+        updatedAt:      { type: string, format: date-time }
+
+    CreativeCreativeMarketplaceAssetList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CreativeMarketplaceAsset" }
+        total: { type: integer }
+
+    CreateCreativeCreativeMarketplaceAssetInput:
+      type: object
+      required: [assetCode, assetType, title, category]
+      properties:
+        assetCode:    { type: string }
+        assetType:    { type: string, enum: [illustration, icon, cover, layout, background, photo, brand_pack] }
+        title:        { type: string }
+        description:  { type: string }
+        category:     { type: string }
+        tags:         { type: array, items: { type: string } }
+        creatorId:    { type: integer }
+        priceType:    { type: string, enum: [free, premium], default: free }
+        priceAmount:  { type: string, default: "0" }
+        currency:     { type: string, default: IDR }
+        fileUrl:      { type: string }
+        previewUrls:  { type: array, items: { type: string } }
+        thumbnailUrl: { type: string }
+        fileFormat:   { type: string }
+        license:      { type: string, enum: [standard, extended, exclusive], default: standard }
+        isFeatured:   { type: boolean, default: false }
+        metadata:     { type: object }
+
+    UpdateCreativeCreativeMarketplaceAssetInput:
+      type: object
+      properties:
+        title:        { type: string }
+        description:  { type: string }
+        category:     { type: string }
+        tags:         { type: array, items: { type: string } }
+        priceType:    { type: string }
+        priceAmount:  { type: string }
+        fileUrl:      { type: string }
+        previewUrls:  { type: array, items: { type: string } }
+        thumbnailUrl: { type: string }
+        fileFormat:   { type: string }
+        license:      { type: string }
+        metadata:     { type: object }
+
+    CreativeMarketplaceCreator:
+      type: object
+      required: [id, creatorCode, displayName, isVerified, isActive, totalAssets, totalDownloads, avgRating, createdAt, updatedAt]
+      properties:
+        id:             { type: integer }
+        creatorCode:    { type: string }
+        displayName:    { type: string }
+        bio:            { type: [string, "null"] }
+        avatarUrl:      { type: [string, "null"] }
+        websiteUrl:     { type: [string, "null"] }
+        email:          { type: [string, "null"] }
+        isVerified:     { type: boolean }
+        isActive:       { type: boolean }
+        totalAssets:    { type: integer }
+        totalDownloads: { type: integer }
+        avgRating:      { type: string }
+        metadata:       { type: object }
+        createdAt:      { type: string, format: date-time }
+        updatedAt:      { type: string, format: date-time }
+
+    CreativeCreativeMarketplaceCreatorDetail:
+      allOf:
+        - { $ref: "#/components/schemas/CreativeMarketplaceCreator" }
+        - type: object
+          required: [assets]
+          properties:
+            assets:
+              type: array
+              items: { $ref: "#/components/schemas/CreativeMarketplaceAsset" }
+
+    CreativeCreativeMarketplaceCreatorList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CreativeMarketplaceCreator" }
+        total: { type: integer }
+
+    CreateCreativeCreativeMarketplaceCreatorInput:
+      type: object
+      required: [creatorCode, displayName]
+      properties:
+        creatorCode:  { type: string }
+        displayName:  { type: string }
+        bio:          { type: string }
+        avatarUrl:    { type: string }
+        websiteUrl:   { type: string }
+        email:        { type: string }
+        isVerified:   { type: boolean, default: false }
+        metadata:     { type: object }
+
+    UpdateCreativeCreativeMarketplaceCreatorInput:
+      type: object
+      properties:
+        displayName: { type: string }
+        bio:         { type: string }
+        avatarUrl:   { type: string }
+        websiteUrl:  { type: string }
+        isVerified:  { type: boolean }
+        isActive:    { type: boolean }
+        metadata:    { type: object }
+
+    CreativeMarketplaceRating:
+      type: object
+      required: [id, customerEmail, itemType, itemId, rating, createdAt]
+      properties:
+        id:            { type: integer }
+        customerEmail: { type: string }
+        itemType:      { type: string }
+        itemId:        { type: integer }
+        rating:        { type: integer, minimum: 1, maximum: 5 }
+        review:        { type: [string, "null"] }
+        createdAt:     { type: string, format: date-time }
+        updatedAt:     { type: string, format: date-time }
+
+    CreativeMarketplaceRateInput:
+      type: object
+      required: [customerEmail, rating]
+      properties:
+        customerEmail: { type: string, format: email }
+        rating:        { type: integer, minimum: 1, maximum: 5 }
+        review:        { type: string }
+
+    CreativeMarketplaceDownload:
+      type: object
+      required: [id, itemType, itemId, createdAt]
+      properties:
+        id:            { type: integer }
+        customerEmail: { type: [string, "null"] }
+        itemType:      { type: string }
+        itemId:        { type: integer }
+        ipAddress:     { type: [string, "null"] }
+        metadata:      { type: object }
+        createdAt:     { type: string, format: date-time }
+
+    CreativeCreativeMarketplaceDownloadResult:
+      type: object
+      required: [asset]
+      properties:
+        downloadUrl: { type: [string, "null"] }
+        asset:       { $ref: "#/components/schemas/CreativeMarketplaceAsset" }
+
+    CreativeMarketplaceFavoriteItem:
+      type: object
+      required: [id, customerEmail, itemType, itemId, createdAt]
+      properties:
+        id:            { type: integer }
+        customerEmail: { type: string }
+        itemType:      { type: string }
+        itemId:        { type: integer }
+        createdAt:     { type: string, format: date-time }
+
+    CreativeMarketplaceFavoritesResult:
+      type: object
+      required: [favorites, assets, templates]
+      properties:
+        favorites:
+          type: array
+          items: { $ref: "#/components/schemas/CreativeMarketplaceFavoriteItem" }
+        assets:
+          type: array
+          items: { $ref: "#/components/schemas/CreativeMarketplaceAsset" }
+        templates:
+          type: array
+          items: { type: object }
+
+    CreativeMarketplaceCategoriesResult:
+      type: object
+      required: [assetTypes, categories]
+      properties:
+        assetTypes:
+          type: array
+          items: { type: string }
+        categories:
+          type: array
+          items: { type: string }
+
+    CreativeMarketplaceSearchResult:
+      type: object
+      required: [assets, templates, total]
+      properties:
+        assets:
+          type: array
+          items: { $ref: "#/components/schemas/CreativeMarketplaceAsset" }
+        templates:
+          type: array
+          items: { type: object }
+        total: { type: integer }
+
+    CreativeMarketplaceByTypeItem:
+      type: object
+      required: [assetType, count, downloads]
+      properties:
+        assetType: { type: string }
+        count:     { type: integer }
+        downloads: { type: integer }
+
+    CreativeMarketplaceAnalytics:
+      type: object
+      required: [totalAssets, freeAssets, premiumAssets, totalCreators, verifiedCreators, totalDownloads, totalFavorites, totalRatings, avgRating, byType]
+      properties:
+        totalAssets:      { type: integer }
+        freeAssets:       { type: integer }
+        premiumAssets:    { type: integer }
+        totalCreators:    { type: integer }
+        verifiedCreators: { type: integer }
+        totalDownloads:   { type: integer }
+        totalFavorites:   { type: integer }
+        totalRatings:     { type: integer }
+        avgRating:        { type: number }
+        byType:
+          type: array
+          items: { $ref: "#/components/schemas/CreativeMarketplaceByTypeItem" }

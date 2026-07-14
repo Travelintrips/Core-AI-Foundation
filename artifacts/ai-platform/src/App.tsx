@@ -52,6 +52,7 @@ import ObservabilityPage from "@/pages/observability";
 import ProductionPipelinePage from "@/pages/production-pipeline";
 import DesignStudio from "@/pages/design-studio";
 import DesignStudioEditor from "@/pages/design-studio-editor";
+import CreativeMarketplace from "@/pages/creative-marketplace";
 
 const queryClient = new QueryClient();
 
@@ -100,6 +101,7 @@ function AdminRouter() {
         <Route path="/template-engine" component={TemplateEngine} />
         <Route path="/design-studio" component={DesignStudio} />
         <Route path="/design-studio/:id" component={DesignStudioEditor} />
+        <Route path="/creative-marketplace" component={CreativeMarketplace} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
