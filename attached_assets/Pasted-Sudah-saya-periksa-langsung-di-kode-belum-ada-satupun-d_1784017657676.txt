@@ -1,0 +1,34 @@
+Sudah saya periksa langsung di kode — belum ada satupun dari 4 item itu yang diimplementasikan:
+
+Gallery UI di customer-portal — tidak ada. Tidak ditemukan halaman/komponen yang memanggil endpoint image-batch atau menampilkan hasil batch gambar ke pelanggan.
+Batch monitor di admin ai-platform — tidak ada. Tidak ada halaman admin yang memantau status batch generation.
+Real timed full-batch run — belum ada bukti pernah dijalankan sampai selesai.
+Automated test untuk logic batch — tidak ada file test sama sekali di direktori services/image-batch/ (registry, worker, asset service, entitlement, export — semuanya tanpa test).
+Backend-nya sendiri sudah ada dan cukup lengkap (routes, worker service, asset grouping, entitlement, export), tapi keempat item itu memang masih murni "belum dikerjakan" seperti yang tertulis di laporan itu.
+
+Mau saya lanjutkan yang mana dulu? Kalau semua, saya sarankan urutan: (a) tulis automated test untuk logic yang sudah ada dulu (paling murah, langsung dapat jaminan regresi), (b) baru bangun gallery UI pelanggan + batch monitor admin, (c) trigger real batch run terakhir untuk verifikasi end-to-end setelah UI-nya ada supaya bisa dicek visual, bukan cuma lewat API.
+
+
+Worked for 44 seconds
+semua ,sesuaikan dengan urutan
+
+41 minutes ago
+
+46 actions
+All 42 tests pass. Now let's run the full existing suite to confirm nothing regressed, then move to step (b): frontend UI.
+
+
+69 actions
+Now wiring ImageBatchSection into the project detail view alongside the Quotation and Client Review sections.
+
+
+7 actions
+165 pre-existing errors confirmed baseline noise, unrelated to my changes — the ai-platform app doesn't typecheck cleanly project-wide even without my edits (stale dist references, implicit-any throughout other pages). My new code added 0 new errors of that kind.
+
+
+Checked for code errors
+All errors in my new ImageBatchSection (line 1866-1867, no new errors there) are none — confirmed all remaining creative-ai.tsx errors are pre-existing lines outside my addition. Now wiring the admin nav link and checking the running app visually.
+
+
+75 actions
+Now works. Let's screenshot the customer gallery.
