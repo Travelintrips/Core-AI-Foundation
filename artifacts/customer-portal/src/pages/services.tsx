@@ -33,16 +33,16 @@ function deliveryDays(est: string): number {
   return m ? parseInt(m[1]) : 7;
 }
 
-type BadgeKind = "Enterprise" | "Fast Delivery" | "New" | "Most Popular" | "Trending" | "Human Reviewed" | "Commercial Ready";
+type BadgeKind = "Enterprise" | "Pengiriman Cepat" | "Baru" | "Terpopuler" | "Trending" | "Direview Manusia" | "Siap Komersial";
 
 function serviceBadge(s: CatalogService): { label: BadgeKind; color: string } | null {
   if (s.serviceFlow === "enterprise") return { label: "Enterprise", color: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" };
-  if (s.humanReview && s.id % 5 === 1) return { label: "Human Reviewed", color: "bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30" };
-  if (deliveryDays(s.estimatedDelivery) <= 2) return { label: "Fast Delivery", color: "bg-[#22D3EE]/10 text-[#22D3EE] border-[#22D3EE]/30" };
+  if (s.humanReview && s.id % 5 === 1) return { label: "Direview Manusia", color: "bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30" };
+  if (deliveryDays(s.estimatedDelivery) <= 2) return { label: "Pengiriman Cepat", color: "bg-[#22D3EE]/10 text-[#22D3EE] border-[#22D3EE]/30" };
   if (s.id % 7 === 0) return { label: "Trending", color: "bg-[#F97316]/10 text-[#F97316] border-[#F97316]/30" };
-  if (s.id % 4 === 0) return { label: "New", color: "bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30" };
-  if (s.id % 3 === 0) return { label: "Most Popular", color: "bg-[#7C6EFA]/10 text-[#7C6EFA] border-[#7C6EFA]/30" };
-  if (s.serviceFlow === "fixed_price" && s.id % 2 === 0) return { label: "Commercial Ready", color: "bg-[#8B5CF6]/10 text-[#8B5CF6] border-[#8B5CF6]/30" };
+  if (s.id % 4 === 0) return { label: "Baru", color: "bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30" };
+  if (s.id % 3 === 0) return { label: "Terpopuler", color: "bg-[#7C6EFA]/10 text-[#7C6EFA] border-[#7C6EFA]/30" };
+  if (s.serviceFlow === "fixed_price" && s.id % 2 === 0) return { label: "Siap Komersial", color: "bg-[#8B5CF6]/10 text-[#8B5CF6] border-[#8B5CF6]/30" };
   return null;
 }
 
@@ -80,11 +80,11 @@ function getCategoryIcon(cat: ServiceCategory): React.ElementType {
 
 type SortKey = "popular" | "newest" | "fastest" | "price_asc" | "rating";
 const SORT_OPTIONS: { key: SortKey; label: string; icon: React.ElementType }[] = [
-  { key: "popular",   label: "Most Popular",      icon: Flame },
-  { key: "newest",    label: "Newest",             icon: Sparkles },
-  { key: "fastest",   label: "Fastest Delivery",   icon: Zap },
-  { key: "price_asc", label: "Lowest Price",       icon: DollarSign },
-  { key: "rating",    label: "Highest Rating",     icon: Star },
+  { key: "popular",   label: "Terpopuler",           icon: Flame },
+  { key: "newest",    label: "Terbaru",               icon: Sparkles },
+  { key: "fastest",   label: "Pengiriman Tercepat",   icon: Zap },
+  { key: "price_asc", label: "Harga Terendah",        icon: DollarSign },
+  { key: "rating",    label: "Rating Tertinggi",      icon: Star },
 ];
 
 // ── Search constants ──────────────────────────────────────────────────────────
@@ -92,8 +92,8 @@ const SORT_OPTIONS: { key: SortKey; label: string; icon: React.ElementType }[] =
 const RECENT_SEARCH_KEY = "apex_recent_searches";
 const RECENTLY_VIEWED_KEY = "apex_recently_viewed";
 const POPULAR_SEARCHES = [
-  "Brand Strategy", "Legal Document", "Finance Report",
-  "Marketing Campaign", "HR Analytics", "Logistics AI",
+  "Strategi Brand", "Dokumen Legal", "Laporan Keuangan",
+  "Kampanye Marketing", "Analitik HR", "Logistics AI",
 ];
 
 // ── Animation variants ────────────────────────────────────────────────────────
@@ -150,10 +150,10 @@ function SkeletonCard() {
 
 function QuickPreview({ s, onView }: { s: CatalogService; onView: (id: number) => void }) {
   const deliverables = [
-    s.humanReview ? "Human-reviewed output" : "AI-generated output",
-    `Delivered in ${s.estimatedDelivery}`,
-    s.serviceFlow === "fixed_price" ? "Fixed price, no surprises" : "Custom scoped project",
-    "Commercial license included",
+    s.humanReview ? "Hasil direview manusia" : "Hasil dibuat oleh AI",
+    `Dikirim dalam ${s.estimatedDelivery}`,
+    s.serviceFlow === "fixed_price" ? "Harga pasti, tanpa kejutan" : "Project dengan lingkup kustom",
+    "Sudah termasuk lisensi komersial",
   ];
 
   return (
@@ -169,7 +169,7 @@ function QuickPreview({ s, onView }: { s: CatalogService; onView: (id: number) =
       <div className="absolute inset-0 rounded-2xl pointer-events-none" style={{ boxShadow: "inset 0 0 0 1px rgba(124,110,250,0.3), 0 8px 32px rgba(124,110,250,0.2)" }} />
 
       <div className="p-5 flex flex-col gap-3 flex-1">
-        <p className="text-[10px] font-bold text-[#7C6EFA] uppercase tracking-widest mb-1">Quick Preview</p>
+        <p className="text-[10px] font-bold text-[#7C6EFA] uppercase tracking-widest mb-1">Pratinjau Cepat</p>
         <div className="space-y-2">
           {deliverables.map((d, i) => (
             <div key={i} className="flex items-start gap-2">
@@ -181,12 +181,12 @@ function QuickPreview({ s, onView }: { s: CatalogService; onView: (id: number) =
         <div className="flex items-center gap-2 mt-auto flex-wrap">
           {s.humanReview && (
             <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#7C6EFA]/15 text-[#7C6EFA] border border-[#7C6EFA]/25">
-              <Shield className="w-3 h-3" /> Human Reviewed
+              <Shield className="w-3 h-3" /> Direview Manusia
             </span>
           )}
           {s.serviceFlow === "fixed_price" && (
             <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/25">
-              <BadgeCheck className="w-3 h-3" /> Commercial
+              <BadgeCheck className="w-3 h-3" /> Komersial
             </span>
           )}
         </div>
@@ -199,7 +199,7 @@ function QuickPreview({ s, onView }: { s: CatalogService; onView: (id: number) =
           className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-semibold transition-all duration-150"
           style={{ background: "linear-gradient(135deg, #7C6EFA 0%, #5F52D0 100%)", color: "#fff" }}
         >
-          View Detail
+          Lihat Detail
           <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>
@@ -280,7 +280,7 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
           </span>
           <span className="flex items-center gap-1">
             <CheckCircle className="w-3.5 h-3.5 text-[#10B981]" />
-            {completed} projects
+            {completed} project
           </span>
           <span className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5 text-[#22D3EE]" />
@@ -289,7 +289,7 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
           {s.humanReview && (
             <span className="flex items-center gap-1 text-[#7C6EFA]">
               <Shield className="w-3.5 h-3.5" />
-              Human
+              Manusia
             </span>
           )}
         </div>
@@ -297,7 +297,7 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
         {/* Price + CTA */}
         <div className="flex items-center justify-between pt-3 border-t border-[#243352] mt-auto">
           <div>
-            <p className="text-[11px] text-[#8B9BC4] mb-0.5">Starting from</p>
+            <p className="text-[11px] text-[#8B9BC4] mb-0.5">Mulai dari</p>
             <p style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-bold text-base text-[#F0F4FF]">
               {formatPrice(s.startingPrice, s.currency)}
             </p>
@@ -306,9 +306,9 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
             href={`/services/${s.id}`}
             onClick={() => onView(s.id)}
             className="btn-primary !py-2 !px-4 !text-xs gap-1.5 flex items-center"
-            aria-label={`View detail for ${s.serviceName}`}
+            aria-label={`Lihat detail untuk ${s.serviceName}`}
           >
-            View Detail
+            Lihat Detail
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -335,6 +335,12 @@ interface Filters {
   minRating: number;
   flow: string;
 }
+
+const FLOW_LABELS: Record<string, string> = {
+  fixed_price: "Harga Pasti",
+  custom_project: "Project Kustom",
+  enterprise: "Enterprise",
+};
 
 const DEFAULT_FILTERS: Filters = {
   maxPrice: 999_999_999,
@@ -442,13 +448,13 @@ function FilterSidebar({
           </div>
 
           <div className="space-y-4">
-            <AccordionSection title="Price">
+            <AccordionSection title="Harga">
               <div className="space-y-1 mb-2">
                 {[
-                  { label: "Any price", val: 999_999_999 },
-                  { label: "Under $500", val: 500 },
-                  { label: "Under $1,000", val: 1000 },
-                  { label: "Under $5,000", val: 5000 },
+                  { label: "Semua harga", val: 999_999_999 },
+                  { label: "Di bawah Rp 500.000", val: 500_000 },
+                  { label: "Di bawah Rp 1.500.000", val: 1_500_000 },
+                  { label: "Di bawah Rp 3.000.000", val: 3_000_000 },
                 ].map((o) => (
                   <RadioOption key={o.val} label={o.label} checked={filters.maxPrice === o.val} onClick={() => set("maxPrice", o.val)} />
                 ))}
@@ -457,13 +463,13 @@ function FilterSidebar({
 
             <div className="h-px bg-[#243352]" />
 
-            <AccordionSection title="Delivery Time">
+            <AccordionSection title="Waktu Pengerjaan">
               <div className="space-y-1 mb-2">
                 {[
-                  { label: "Any", val: 30 },
-                  { label: "Same day – 2 days", val: 2 },
-                  { label: "Up to 5 days", val: 5 },
-                  { label: "Up to 14 days", val: 14 },
+                  { label: "Semua", val: 30 },
+                  { label: "Hari ini – 2 hari", val: 2 },
+                  { label: "Hingga 5 hari", val: 5 },
+                  { label: "Hingga 14 hari", val: 14 },
                 ].map((o) => (
                   <RadioOption key={o.val} label={o.label} checked={filters.maxDelivery === o.val} onClick={() => set("maxDelivery", o.val)} />
                 ))}
@@ -472,12 +478,12 @@ function FilterSidebar({
 
             <div className="h-px bg-[#243352]" />
 
-            <AccordionSection title="Human Review">
+            <AccordionSection title="Review Manusia">
               <div className="space-y-1 mb-2">
                 {[
-                  { label: "Any", val: null },
-                  { label: "Included", val: true },
-                  { label: "AI Only", val: false },
+                  { label: "Semua", val: null },
+                  { label: "Termasuk", val: true },
+                  { label: "Hanya AI", val: false },
                 ].map((o) => (
                   <RadioOption key={String(o.val)} label={o.label} checked={filters.humanReview === o.val} onClick={() => set("humanReview", o.val)} />
                 ))}
@@ -489,9 +495,9 @@ function FilterSidebar({
             <AccordionSection title="Rating">
               <div className="space-y-1 mb-2">
                 {[
-                  { label: "Any rating", val: 0 },
-                  { label: "4.0 & above", val: 4.0 },
-                  { label: "4.5 & above", val: 4.5 },
+                  { label: "Semua rating", val: 0 },
+                  { label: "4.0 & di atasnya", val: 4.0 },
+                  { label: "4.5 & di atasnya", val: 4.5 },
                 ].map((o) => (
                   <RadioOption key={o.val} label={o.label} checked={filters.minRating === o.val} onClick={() => set("minRating", o.val)} />
                 ))}
@@ -500,12 +506,12 @@ function FilterSidebar({
 
             <div className="h-px bg-[#243352]" />
 
-            <AccordionSection title="Commercial Ready" defaultOpen={false}>
+            <AccordionSection title="Siap Komersial" defaultOpen={false}>
               <div className="space-y-1 mb-2">
                 {[
-                  { label: "All", val: "" },
-                  { label: "Fixed Price", val: "fixed_price" },
-                  { label: "Custom Project", val: "custom_project" },
+                  { label: "Semua", val: "" },
+                  { label: "Harga Pasti", val: "fixed_price" },
+                  { label: "Project Kustom", val: "custom_project" },
                   { label: "Enterprise", val: "enterprise" },
                 ].map((o) => (
                   <RadioOption key={o.val} label={o.label} checked={filters.flow === o.val} onClick={() => set("flow", o.val)} />
@@ -518,10 +524,10 @@ function FilterSidebar({
             <button
               onClick={onReset}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-[#2E4270] text-sm text-[#8B9BC4] hover:text-[#F0F4FF] hover:border-[#7C6EFA] transition-all duration-150"
-              aria-label="Reset all filters"
+              aria-label="Reset semua filter"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              Clear {activeCount} filter{activeCount > 1 ? "s" : ""}
+              Hapus {activeCount} filter
             </button>
           )}
         </div>
@@ -554,10 +560,10 @@ function SearchDropdown({
         <div className="p-4 border-b border-[#243352]">
           <div className="flex items-center justify-between mb-3">
             <p className="text-[11px] font-semibold text-[#8B9BC4] uppercase tracking-wider flex items-center gap-1.5">
-              <History className="w-3 h-3" /> Recent Searches
+              <History className="w-3 h-3" /> Pencarian Terakhir
             </p>
             <button onClick={onClearRecent} className="text-[11px] text-[#8B9BC4] hover:text-[#7C6EFA] transition-colors">
-              Clear
+              Hapus
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -576,7 +582,7 @@ function SearchDropdown({
       )}
       <div className="p-4">
         <p className="text-[11px] font-semibold text-[#8B9BC4] uppercase tracking-wider mb-3 flex items-center gap-1.5">
-          <Flame className="w-3 h-3 text-[#F97316]" /> Popular Searches
+          <Flame className="w-3 h-3 text-[#F97316]" /> Pencarian Populer
         </p>
         <div className="flex flex-wrap gap-2">
           {POPULAR_SEARCHES.map((q) => (
@@ -593,10 +599,10 @@ function SearchDropdown({
       </div>
       <div className="px-4 pb-3 flex items-center gap-1.5 text-[11px] text-[#8B9BC4]/60">
         <kbd className="px-1.5 py-0.5 rounded bg-[#131E35] border border-[#2E4270] font-mono text-[10px]">Esc</kbd>
-        <span>to close</span>
+        <span>untuk menutup</span>
         <span className="mx-1">·</span>
         <kbd className="px-1.5 py-0.5 rounded bg-[#131E35] border border-[#2E4270] font-mono text-[10px]">/</kbd>
-        <span>to focus search</span>
+        <span>untuk fokus ke pencarian</span>
       </div>
     </motion.div>
   );
@@ -634,10 +640,10 @@ function EmptyState({ onReset }: { onReset: () => void }) {
         </div>
       </div>
       <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-semibold text-xl mb-2 text-[#F0F4FF]">
-        No services found
+        Layanan tidak ditemukan
       </h3>
       <p className="text-[#8B9BC4] text-sm max-w-xs mb-8 leading-relaxed">
-        Try adjusting your search terms or filters. We have 150+ AI services that might fit your needs.
+        Coba ubah kata kunci pencarian atau filter Anda. Kami punya 150+ layanan AI yang mungkin sesuai kebutuhan Anda.
       </p>
       <div className="flex items-center gap-3 flex-wrap justify-center">
         <button
@@ -645,12 +651,12 @@ function EmptyState({ onReset }: { onReset: () => void }) {
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-[#2E4270] text-sm text-[#F0F4FF] hover:bg-[#131E35] hover:border-[#7C6EFA]/40 transition-all duration-150"
         >
           <RotateCcw className="w-4 h-4" />
-          Reset all filters
+          Reset semua filter
         </button>
         <Link href="/services" className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150"
               style={{ background: "linear-gradient(135deg, #7C6EFA 0%, #5F52D0 100%)", color: "#fff" }}>
           <Sparkles className="w-4 h-4" />
-          Browse all services
+          Jelajahi semua layanan
         </Link>
       </div>
     </motion.div>
@@ -795,7 +801,7 @@ export default function ServicesPage() {
     }
 
     if (filters.maxPrice < 999_999_999) {
-      list = list.filter((s) => Number(s.startingPrice) <= filters.maxPrice || s.currency === "IDR");
+      list = list.filter((s) => Number(s.startingPrice) <= filters.maxPrice);
     }
 
     if (filters.maxDelivery < 30) {
@@ -903,11 +909,11 @@ export default function ServicesPage() {
             <motion.div variants={fadeUp} initial="hidden" animate="show" className="flex items-center justify-center gap-3 mb-6">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#2E4270] bg-[#0D1526]/70 text-xs font-semibold text-[#7C6EFA]">
                 <Sparkles className="w-3.5 h-3.5" />
-                AI Service Catalog — {allServices.length > 0 ? `${allServices.length}+ services` : "150+ services"}
+                Katalog Layanan AI — {allServices.length > 0 ? `${allServices.length}+ layanan` : "150+ layanan"}
               </div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#F59E0B]/30 bg-[#F59E0B]/8 text-xs font-semibold text-[#F59E0B]">
                 <Award className="w-3.5 h-3.5" />
-                Enterprise Grade
+                Kelas Enterprise
               </div>
             </motion.div>
 
@@ -918,8 +924,8 @@ export default function ServicesPage() {
               style={{ animationDelay: "60ms", fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               className="font-bold text-4xl md:text-6xl lg:text-7xl mb-5 leading-[1.08] text-[#F0F4FF]"
             >
-              Choose Your{" "}
-              <span className="text-gradient-primary">AI Specialist</span>
+              Pilih Spesialis{" "}
+              <span className="text-gradient-primary">AI Anda</span>
             </motion.h1>
 
             <motion.p
@@ -929,8 +935,8 @@ export default function ServicesPage() {
               style={{ animationDelay: "120ms" }}
               className="text-base md:text-lg text-[#8B9BC4] max-w-2xl mx-auto mb-10"
             >
-              Explore AI services across Creative, Finance, Legal, Logistics, Procurement,
-              Trading, HR, Marketing, Executive and more.
+              Jelajahi layanan AI di bidang Kreatif, Keuangan, Legal, Logistik, Procurement,
+              Trading, HR, Marketing, Eksekutif, dan lainnya.
             </motion.p>
 
             {/* Search bar */}
@@ -950,8 +956,8 @@ export default function ServicesPage() {
                   onFocus={() => setSearchFocused(true)}
                   onBlur={handleSearchBlur}
                   onKeyDown={handleSearchKeyDown}
-                  placeholder="Search AI services…"
-                  aria-label="Search AI services"
+                  placeholder="Cari layanan AI…"
+                  aria-label="Cari layanan AI"
                   className="w-full pl-14 pr-16 py-4 rounded-2xl bg-[#131E35] border border-[#2E4270]
                              text-base text-[#F0F4FF] placeholder:text-[#8B9BC4]/60 outline-none transition-all duration-200
                              focus:border-[#7C6EFA] focus:shadow-[0_0_0_3px_rgba(124,110,250,0.15)]"
@@ -996,7 +1002,7 @@ export default function ServicesPage() {
               style={{ animationDelay: "240ms" }}
               className="flex items-center justify-center gap-2 mt-5 flex-wrap"
             >
-              <span className="text-xs text-[#8B9BC4]">Quick:</span>
+              <span className="text-xs text-[#8B9BC4]">Cepat:</span>
               {["Creative AI", "Finance AI", "Legal AI", "Marketing AI"].map((tag) => (
                 <button
                   key={tag}
@@ -1018,7 +1024,7 @@ export default function ServicesPage() {
               className="flex items-center gap-2 py-3 overflow-x-auto"
               style={{ scrollbarWidth: "none" }}
               role="navigation"
-              aria-label="Service categories"
+              aria-label="Kategori layanan"
             >
               <button
                 onClick={() => setCategoryId(undefined)}
@@ -1030,7 +1036,7 @@ export default function ServicesPage() {
                 aria-pressed={categoryId === undefined}
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
-                All Services
+                Semua Layanan
               </button>
 
               {loadingCategories
@@ -1065,12 +1071,12 @@ export default function ServicesPage() {
           {/* ── Featured Services ────────────────────────────────────────── */}
           {!search && categoryId === undefined && featured.length > 0 && (
             <section className="mb-14">
-              <SectionHeader icon={Zap} iconColor="#F59E0B" title="Featured Services" />
+              <SectionHeader icon={Zap} iconColor="#F59E0B" title="Layanan Unggulan" />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* First card: hero size spanning 2 cols */}
                 {featured[0] && (() => {
                   const s = featured[0];
-                  const badge = serviceBadge(s) ?? { label: "Featured", color: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" };
+                  const badge = serviceBadge(s) ?? { label: "Unggulan" as BadgeKind, color: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" };
                   return (
                     <motion.div
                       key={s.id}
@@ -1105,15 +1111,15 @@ export default function ServicesPage() {
                           <div className="flex items-center gap-4 text-xs text-[#8B9BC4] mb-4">
                             <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 fill-[#F59E0B] text-[#F59E0B]" />{mockRating(s.id)}</span>
                             <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-[#22D3EE]" />{s.estimatedDelivery}</span>
-                            {s.humanReview && <span className="flex items-center gap-1 text-[#7C6EFA]"><Shield className="w-3.5 h-3.5" />Human Review</span>}
+                            {s.humanReview && <span className="flex items-center gap-1 text-[#7C6EFA]"><Shield className="w-3.5 h-3.5" />Review Manusia</span>}
                           </div>
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="text-[11px] text-[#8B9BC4] mb-0.5">Starting from</p>
+                              <p className="text-[11px] text-[#8B9BC4] mb-0.5">Mulai dari</p>
                               <p style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-bold text-lg text-[#F0F4FF]">{formatPrice(s.startingPrice, s.currency)}</p>
                             </div>
                             <div className="flex items-center gap-2 text-sm font-semibold text-[#7C6EFA] group-hover:gap-3 transition-all">
-                              View Detail <ArrowRight className="w-4 h-4" />
+                              Lihat Detail <ArrowRight className="w-4 h-4" />
                             </div>
                           </div>
                         </div>
@@ -1124,7 +1130,7 @@ export default function ServicesPage() {
 
                 {/* Remaining 3 cards */}
                 {featured.slice(1).map((s, idx) => {
-                  const badge = serviceBadge(s) ?? { label: "Featured", color: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" };
+                  const badge = serviceBadge(s) ?? { label: "Unggulan" as BadgeKind, color: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" };
                   return (
                     <motion.div
                       key={s.id}
@@ -1168,10 +1174,10 @@ export default function ServicesPage() {
               <SectionHeader
                 icon={TrendingUp}
                 iconColor="#22D3EE"
-                title="Recommended For You"
+                title="Rekomendasi Untuk Anda"
                 badge={
                   <span className="text-[11px] text-[#8B9BC4] bg-[#131E35] border border-[#2E4270] px-2 py-0.5 rounded-full">
-                    Based on popularity
+                    Berdasarkan popularitas
                   </span>
                 }
               />
@@ -1209,16 +1215,16 @@ export default function ServicesPage() {
           {/* ── Recently Viewed ───────────────────────────────────────────── */}
           {recentServices.length > 0 && !search && (
             <section className="mb-14">
-              <SectionHeader icon={Eye} iconColor="#8B9BC4" title="Recently Viewed">
+              <SectionHeader icon={Eye} iconColor="#8B9BC4" title="Baru Dilihat">
                 <button
                   onClick={() => {
                     setRecentlyViewed([]);
                     localStorage.removeItem(RECENTLY_VIEWED_KEY);
                   }}
                   className="text-xs text-[#8B9BC4] hover:text-[#F0F4FF] transition-colors ml-2"
-                  aria-label="Clear recently viewed"
+                  aria-label="Hapus riwayat dilihat"
                 >
-                  Clear
+                  Hapus
                 </button>
               </SectionHeader>
               <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
@@ -1256,10 +1262,10 @@ export default function ServicesPage() {
                 <button
                   onClick={() => setSidebarOpen(true)}
                   className="lg:hidden flex items-center gap-2 px-4 py-2 rounded-xl border border-[#2E4270] text-sm font-medium text-[#F0F4FF] hover:border-[#7C6EFA]/40 transition-colors bg-[#0D1526] relative"
-                  aria-label="Open filters"
+                  aria-label="Buka filter"
                 >
                   <Filter className="w-4 h-4" />
-                  Filters
+                  Filter
                   {activeFilterCount > 0 && (
                     <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[#7C6EFA] text-[10px] font-bold text-white flex items-center justify-center">
                       {activeFilterCount}
@@ -1272,34 +1278,34 @@ export default function ServicesPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     {filters.maxPrice < 999_999_999 && (
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#7C6EFA]/10 border border-[#7C6EFA]/30 text-[11px] text-[#7C6EFA]">
-                        Price
-                        <button onClick={() => setFilters(f => ({ ...f, maxPrice: DEFAULT_FILTERS.maxPrice }))} className="hover:text-white ml-0.5" aria-label="Remove price filter"><X className="w-2.5 h-2.5" /></button>
+                        Harga
+                        <button onClick={() => setFilters(f => ({ ...f, maxPrice: DEFAULT_FILTERS.maxPrice }))} className="hover:text-white ml-0.5" aria-label="Hapus filter harga"><X className="w-2.5 h-2.5" /></button>
                       </span>
                     )}
                     {filters.maxDelivery < 30 && (
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#22D3EE]/10 border border-[#22D3EE]/30 text-[11px] text-[#22D3EE]">
-                        Delivery
-                        <button onClick={() => setFilters(f => ({ ...f, maxDelivery: DEFAULT_FILTERS.maxDelivery }))} className="hover:text-white ml-0.5" aria-label="Remove delivery filter"><X className="w-2.5 h-2.5" /></button>
+                        Pengiriman
+                        <button onClick={() => setFilters(f => ({ ...f, maxDelivery: DEFAULT_FILTERS.maxDelivery }))} className="hover:text-white ml-0.5" aria-label="Hapus filter pengiriman"><X className="w-2.5 h-2.5" /></button>
                       </span>
                     )}
                     {filters.humanReview !== null && (
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#10B981]/10 border border-[#10B981]/30 text-[11px] text-[#10B981]">
-                        Human Review
-                        <button onClick={() => setFilters(f => ({ ...f, humanReview: null }))} className="hover:text-white ml-0.5" aria-label="Remove human review filter"><X className="w-2.5 h-2.5" /></button>
+                        Review Manusia
+                        <button onClick={() => setFilters(f => ({ ...f, humanReview: null }))} className="hover:text-white ml-0.5" aria-label="Hapus filter review manusia"><X className="w-2.5 h-2.5" /></button>
                       </span>
                     )}
                     {filters.flow && (
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#8B5CF6]/10 border border-[#8B5CF6]/30 text-[11px] text-[#8B5CF6]">
-                        {filters.flow.replace(/_/g, " ")}
-                        <button onClick={() => setFilters(f => ({ ...f, flow: "" }))} className="hover:text-white ml-0.5" aria-label="Remove flow filter"><X className="w-2.5 h-2.5" /></button>
+                        {FLOW_LABELS[filters.flow] ?? filters.flow.replace(/_/g, " ")}
+                        <button onClick={() => setFilters(f => ({ ...f, flow: "" }))} className="hover:text-white ml-0.5" aria-label="Hapus filter tipe layanan"><X className="w-2.5 h-2.5" /></button>
                       </span>
                     )}
                   </div>
                 )}
 
                 <p className="text-sm text-[#8B9BC4]">
-                  <span className="font-semibold text-[#F0F4FF]">{filtered.length}</span> services
-                  {(search || categoryId !== undefined) && " found"}
+                  <span className="font-semibold text-[#F0F4FF]">{filtered.length}</span> layanan
+                  {(search || categoryId !== undefined) && " ditemukan"}
                 </p>
 
                 {/* Sort dropdown */}
@@ -1308,10 +1314,10 @@ export default function ServicesPage() {
                     onClick={() => setSortOpen((v) => !v)}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl border border-[#2E4270] text-sm font-medium text-[#F0F4FF] hover:border-[#7C6EFA]/40 transition-colors bg-[#0D1526]"
                     aria-expanded={sortOpen}
-                    aria-label="Sort services"
+                    aria-label="Urutkan layanan"
                   >
                     <activeSort.icon className="w-3.5 h-3.5 text-[#8B9BC4]" />
-                    <span className="text-[#8B9BC4] hidden sm:inline">Sort:</span>
+                    <span className="text-[#8B9BC4] hidden sm:inline">Urutkan:</span>
                     {activeSort.label}
                     <ChevronDown className={`w-4 h-4 text-[#8B9BC4] transition-transform duration-200 ${sortOpen ? "rotate-180" : ""}`} />
                   </button>
@@ -1383,13 +1389,13 @@ export default function ServicesPage() {
                         className="flex items-center gap-2 py-3 px-8 rounded-xl border border-[#2E4270] text-sm font-medium text-[#F0F4FF] hover:bg-[#131E35] hover:border-[#7C6EFA]/40 transition-all duration-150 disabled:opacity-70 disabled:cursor-not-allowed"
                       >
                         {loadingMore ? (
-                          <><Loader2 className="w-4 h-4 animate-spin" /> Loading…</>
+                          <><Loader2 className="w-4 h-4 animate-spin" /> Memuat…</>
                         ) : (
-                          <><ChevronDown className="w-4 h-4" /> Load More</>
+                          <><ChevronDown className="w-4 h-4" /> Muat Lebih Banyak</>
                         )}
                       </button>
                       <p className="text-xs text-[#8B9BC4]">
-                        Showing {paginated.length} of {filtered.length} services
+                        Menampilkan {paginated.length} dari {filtered.length} layanan
                       </p>
                     </div>
                   )}
@@ -1401,7 +1407,7 @@ export default function ServicesPage() {
                       className="text-center text-xs text-[#8B9BC4] mt-10 flex items-center justify-center gap-2"
                     >
                       <CheckCircle className="w-3.5 h-3.5 text-[#10B981]" />
-                      All {filtered.length} services loaded
+                      Semua {filtered.length} layanan telah dimuat
                     </motion.p>
                   )}
                 </>
