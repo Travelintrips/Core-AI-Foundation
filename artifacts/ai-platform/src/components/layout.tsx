@@ -31,6 +31,7 @@ import {
   Users2,
   Heart,
   Lightbulb,
+  LayoutTemplate,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";

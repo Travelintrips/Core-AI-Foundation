@@ -61,6 +61,8 @@ Re-verified once more later on 2026-07-14 after yet another re-import: identical
 
 Re-verified a further time 2026-07-14 (same day, later re-import): identical symptom (`node_modules` + registration wiped), identical fix applied, all 4 services confirmed running again with no code changes.
 
+Re-verified once more 2026-07-14 (later re-import): same wipe pattern, same fix, but this time two genuine code bugs surfaced (not present in earlier re-imports) and were fixed: (1) `templates.ts` imported a non-existent `requireAdminApiKey` export from `adminAuth.ts` — added it as an alias for `adminAuth`. (2) `ai-platform`'s `layout.tsx` referenced the `LayoutTemplate` lucide-react icon without importing it — added to the import list. All 4 services re-verified running via screenshot after the fixes.
+
 ## Key Technical Notes
 ## Database
 

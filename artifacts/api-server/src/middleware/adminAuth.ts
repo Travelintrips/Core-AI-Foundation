@@ -15,6 +15,8 @@ import { verifySessionToken, getInternalUserById, SESSION_COOKIE_NAME } from "..
  * If ADMIN_API_KEY is not set in development, the middleware allows all traffic
  * (dev fail-open convenience).
  */
+export const requireAdminApiKey = adminAuth;
+
 export async function adminAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   // ── Path 1: session cookie from internal user login ───────────────────────
   const sessionToken = (req.cookies as Record<string, string> | undefined)?.[SESSION_COOKIE_NAME];
