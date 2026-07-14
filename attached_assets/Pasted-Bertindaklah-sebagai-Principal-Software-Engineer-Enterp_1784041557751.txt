@@ -1,0 +1,563 @@
+Bertindaklah sebagai Principal Software Engineer, Enterprise SaaS Security Engineer, PostgreSQL/Supabase Engineer, dan Technical Delivery Lead.
+
+KERJAKAN IMPLEMENTASI, BUKAN AUDIT ULANG.
+
+JANGAN bertanya kepada saya.
+
+JANGAN meminta konfirmasi.
+
+Ambil keputusan teknis paling aman berdasarkan source code aktual dan dokumen spesifikasi yang sudah tersedia.
+
+===========================================================
+SUMBER KEBENARAN
+================
+
+Baca seluruh dokumen berikut sebelum mengubah kode:
+
+* `docs/specifications/p0-enterprise-foundation-implementation-spec.md`
+* `docs/specifications/p0-work-package-plan.md`
+* `docs/specifications/p0-database-change-plan.md`
+* `docs/specifications/p0-test-and-rollout-plan.md`
+* `docs/specifications/p0-file-impact-matrix.md`
+
+Gunakan juga:
+
+* `docs/blueprints/p0-tenant-isolation-blueprint.md`
+* `docs/blueprints/p0-soft-delete-blueprint.md`
+* `docs/blueprints/p0-audit-log-blueprint.md`
+* `docs/blueprints/p0-canonical-quotation-blueprint.md`
+* `docs/audit/enterprise-readiness-audit-validation-2026-07-14.md`
+
+Jika dokumen bertentangan dengan kode aktual, source code aktual dan hasil validation audit menjadi sumber kebenaran.
+
+===========================================================
+SCOPE IMPLEMENTASI SAAT INI
+===========================
+
+Implementasikan hanya:
+
+* WP-00 — Baseline Security Fixes and Safety Tests
+* WP-01 — Canonical Request and Tenant Context Types
+
+JANGAN mengimplementasikan WP-02 sampai WP-14 pada tahap ini.
+
+Namun desain WP-00 dan WP-01 tidak boleh menghambat work package berikutnya.
+
+===========================================================
+KEPUTUSAN BISNIS YANG DITETAPKAN
+================================
+
+Untuk proyek non-catalog yang sebelumnya bergantung pada legacy quotation:
+
+* jangan terus membuat quotation baru di `creative_project_quotations`;
+* arahkan semua quotation baru ke `ai_quotations`;
+* `ai_quotations` harus mendukung quotation dari catalog maupun non-catalog;
+* bedakan asal quotation melalui metadata atau field source/type yang canonical;
+* jangan membuat tabel quotation ketiga;
+* jangan menghapus legacy branch pada tahap ini;
+* legacy tetap read-compatible sampai fase canonical quotation selesai.
+
+Keputusan ini hanya menjadi constraint arsitektur pada WP-00/WP-01.
+
+Jangan mengimplementasikan migrasi quotation sekarang.
+
+===========================================================
+WP-00 — BASELINE SECURITY FIXES
+===============================
+
+Tujuan utama WP-00 adalah menutup kerentanan tenant spoofing yang sudah terkonfirmasi dan membangun baseline regression/security tests.
+
+---
+
+1. PERBAIKI TENANT SPOOFING DI marketplace.ts
+
+---
+
+Audit implementasi aktual `parseTenantId` dan seluruh call site-nya.
+
+Kerentanan yang harus ditutup:
+
+* tenant tidak boleh dipercaya dari body customer;
+* tenant tidak boleh dipercaya dari query parameter publik;
+* tenant tidak boleh dipercaya dari header arbitrer;
+* fallback tenant tidak boleh membuat user dapat memilih tenant lain;
+* nilai tenant dari client tidak boleh mengalahkan session/resource-derived tenant.
+
+Terapkan aturan:
+
+A. Authenticated request
+
+Tenant harus berasal dari:
+
+* session/authenticated identity;
+* membership/workspace/organization yang tervalidasi;
+* atau server-side tenant context.
+
+B. Public token request
+
+Tenant harus berasal dari resource yang ditemukan menggunakan token valid:
+
+token
+→ resolve resource
+→ derive tenant
+→ verify scope
+→ create context
+
+C. Internal/system request
+
+Tenant harus berasal dari payload internal yang tervalidasi, bukan input publik.
+
+D. Mismatch
+
+Jika client mengirim `tenantId` yang berbeda dari tenant hasil resolusi server:
+
+* jangan gunakan nilai client;
+* tolak request apabila input tersebut berpotensi menunjukkan akses lintas tenant;
+* hasilkan security log yang aman;
+* jangan bocorkan apakah tenant/resource target benar-benar ada.
+
+---
+
+2. AUDIT SELURUH CALL SITE parseTenantId
+
+---
+
+Cari semua import, pemanggilan, wrapper, alias, atau fungsi setara.
+
+Untuk setiap call site:
+
+* tentukan jenis akses;
+* tentukan sumber tenant canonical;
+* perbaiki agar tidak memakai tenant input client sebagai sumber kebenaran;
+* jangan meninggalkan jalur fallback yang masih dapat di-spoof;
+* pertahankan backward compatibility hanya bila aman.
+
+Jangan hanya memperbaiki fungsi utama tetapi meninggalkan call site rawan.
+
+---
+
+3. TUTUP DIRECT TENANT INPUT
+
+---
+
+Cari pola:
+
+* `req.body.tenantId`
+* `req.query.tenantId`
+* `req.headers["x-tenant-id"]`
+* `tenant_id` dari payload publik
+* fallback tenant statis
+* tenant dari form customer/vendor
+* tenant yang diteruskan tanpa validasi ke service/query
+
+Klasifikasikan:
+
+* trusted internal;
+* authenticated but must validate;
+* public and untrusted;
+* obsolete.
+
+Perbaiki seluruh temuan yang termasuk scope WP-00 dan memiliki risiko spoofing langsung.
+
+Jangan melakukan refactor besar repository pada tahap ini.
+
+Gunakan perubahan surgical dan kompatibel dengan WP-01.
+
+---
+
+4. SECURITY ERROR BEHAVIOR
+
+---
+
+Gunakan response yang aman:
+
+* `401` untuk autentikasi tidak ada/tidak valid;
+* `403` untuk context valid tetapi tidak berwenang;
+* `404` bila perlu menyamarkan keberadaan resource lintas tenant;
+* jangan mengembalikan tenant ID internal;
+* jangan mengembalikan detail membership atau nama tenant lain.
+
+Ikuti pola error proyek yang sudah ada.
+
+Jangan membuat error framework baru jika tidak diperlukan.
+
+---
+
+5. SECURITY OBSERVABILITY
+
+---
+
+Tambahkan logging terstruktur untuk kondisi penting:
+
+* tenant context tidak dapat ditentukan;
+* tenant input client berbeda dari hasil server;
+* public token gagal resolve scope;
+* cross-tenant access diblok;
+* internal request kehilangan tenant.
+
+Pastikan log:
+
+* tidak memuat token mentah;
+* tidak memuat secret;
+* tidak memuat body sensitif;
+* memiliki request/correlation ID jika tersedia;
+* tidak menyebabkan request gagal hanya karena logging gagal.
+
+Gunakan fasilitas observability yang sudah ada.
+
+Jangan membuat audit-log architecture baru pada WP-00.
+
+---
+
+6. WP-00 TESTS
+
+---
+
+Tambahkan regression dan security tests minimal untuk:
+
+1. Authenticated Tenant A tidak dapat meminta data Tenant B dengan mengganti body tenantId.
+2. Query parameter tenantId tidak dapat mengubah tenant aktif.
+3. Header tenant arbitrer tidak dipercaya pada route publik.
+4. Public token hanya memperoleh tenant dari resource token.
+5. Token Tenant A tidak dapat digunakan bersama resource Tenant B.
+6. Tenant mismatch ditolak tanpa membocorkan resource existence.
+7. Request sah pada tenant yang benar tetap bekerja.
+8. Existing marketplace happy path tetap lulus.
+9. Missing tenant context gagal secara aman.
+10. Logging tidak merekam token mentah.
+
+Gunakan test framework dan pola fixture proyek yang sudah ada.
+
+Jangan membuat test yang hanya memeriksa implementasi internal; uji behavior yang dapat diamati.
+
+===========================================================
+WP-01 — CANONICAL REQUEST AND TENANT CONTEXT
+============================================
+
+Setelah WP-00 bersih, implementasikan canonical context types sebagai fondasi work package berikutnya.
+
+---
+
+1. CANONICAL CONTEXT TYPE
+
+---
+
+Buat satu tipe canonical yang minimal memiliki:
+
+* `tenantId`
+* `actorId`
+* `actorType`
+* `authMode`
+* `requestId`
+* `correlationId`
+* `source`
+* `permissions`
+* `resourceScope`
+* `isPlatformAdmin`
+* `originatingActorId` bila relevan
+* metadata aman yang memang diperlukan
+
+Gunakan enum/union yang jelas untuk:
+
+Actor type, minimal evaluasi:
+
+* customer
+* tenant_admin
+* platform_admin
+* vendor
+* public_token
+* system
+* worker
+* scheduler
+* webhook
+
+Auth mode, minimal evaluasi:
+
+* session
+* bearer
+* public_token
+* internal
+* webhook
+* system
+
+Source, minimal evaluasi:
+
+* api
+* customer_portal
+* admin_portal
+* public_page
+* worker
+* scheduler
+* webhook
+* internal_service
+
+Jangan menggunakan string bebas jika proyek telah memiliki enum atau type yang dapat dipakai ulang.
+
+---
+
+2. CONTEXT INVARIANTS
+
+---
+
+Terapkan invariant:
+
+* tenant-owned operation wajib memiliki tenantId;
+* platform-wide operation harus eksplisit;
+* `isPlatformAdmin` tidak otomatis berarti boleh bypass seluruh query;
+* actor system/worker tetap harus memiliki tenant untuk operasi tenant-owned;
+* public token tidak boleh membawa permission lebih luas dari resource scope;
+* tenantId tidak boleh diturunkan dari input user tanpa verifikasi.
+
+Buat helper validation kecil dan terfokus.
+
+Hindari “god context utility”.
+
+---
+
+3. REQUEST CONTEXT CREATION
+
+---
+
+Implementasikan fondasi untuk membuat context dari jalur aktual:
+
+A. Authenticated session
+
+* identity dari session/auth middleware;
+* tenant dari membership/workspace server-side;
+* permissions dari role yang tervalidasi.
+
+B. Public resource token
+
+* helper contract untuk resource-derived tenant;
+* jangan membuat route baru yang tidak diperlukan;
+* migrasikan hanya call site relevan WP-00 sebagai contoh penggunaan awal.
+
+C. Internal/system
+
+* factory eksplisit;
+* wajib menerima tenant untuk tenant-owned operation;
+* tidak boleh memakai default tenant tersembunyi.
+
+D. Webhook
+
+* sumber tenant harus berasal dari mapping server-side terhadap account/integration/resource;
+* jangan percaya tenantId dari payload provider.
+
+Implementasikan hanya fondasi yang diperlukan sekarang.
+
+Jangan memigrasikan semua route di WP-01; migrasi penuh dilakukan pada WP-02 dan seterusnya.
+
+---
+
+4. COMPATIBILITY
+
+---
+
+Bila service lama masih menggunakan parameter terpisah seperti:
+
+* `tenantId`
+* `userId`
+* `requestId`
+
+jangan memecahkan seluruh proyek sekaligus.
+
+Gunakan strategi transisi yang aman:
+
+* canonical context untuk kode baru;
+* adapter sementara untuk call site lama;
+* tandai penggunaan adapter melalui komentar dokumentatif atau telemetry yang masuk akal;
+* jangan menambah TODO kosong;
+* jangan membuat dua context model permanen.
+
+Target akhirnya harus tetap satu canonical context.
+
+---
+
+5. TYPE SAFETY
+
+---
+
+Pastikan:
+
+* tidak ada `any` baru;
+* context tidak mudah dibuat dengan object arbitrary yang tidak tervalidasi;
+* helper return type jelas;
+* nullable field benar-benar dibedakan dari required field;
+* resource scope memiliki struktur yang dapat diverifikasi;
+* permission checks tidak berbasis substring/string rapuh.
+
+---
+
+6. REQUEST/CORRELATION ID
+
+---
+
+Integrasikan dengan mekanisme request ID yang sudah ada.
+
+Jika request ID sudah dibuat oleh middleware:
+
+* reuse;
+* jangan membuat ID kedua yang berbeda.
+
+Correlation ID harus dapat diteruskan ke:
+
+* service;
+* worker/job;
+* audit log nanti;
+* SSE/event metadata nanti.
+
+Jangan mengubah seluruh worker pada WP-01.
+
+Cukup pastikan contract context siap digunakan.
+
+---
+
+7. WP-01 TESTS
+
+---
+
+Tambahkan unit tests minimal untuk:
+
+* context session valid;
+* context public token valid;
+* tenant-owned context tanpa tenant ditolak;
+* platform context eksplisit;
+* worker/system context tanpa tenant ditolak untuk tenant-owned operation;
+* permission normalization;
+* resource scope enforcement;
+* mismatch tenant input vs resolved tenant;
+* request/correlation ID preservation;
+* legacy adapter tidak dapat mengganti tenant canonical;
+* context object tidak mengandung token/secret mentah.
+
+===========================================================
+BATASAN IMPLEMENTASI
+====================
+
+Pada tahap ini jangan:
+
+* membuat RLS policy;
+* mengaktifkan RLS;
+* membuat repository foundation lengkap;
+* menambah kolom soft delete;
+* mengubah hard delete;
+* mengubah audit-log schema;
+* memigrasikan quotation;
+* memblok seluruh legacy quotation;
+* mengubah semua route sekaligus;
+* membuat redesign frontend;
+* membuat deliverable baru;
+* mengubah AI workflow yang tidak terkait;
+* menambah dependency tanpa kebutuhan nyata;
+* melakukan schema push ke production.
+
+Jika perubahan database kecil benar-benar diperlukan untuk WP-00/WP-01, buktikan dulu bahwa tidak ada alternatif aman tanpa migration. Default-nya: tidak ada perubahan database pada tahap ini.
+
+===========================================================
+URUTAN EKSEKUSI
+===============
+
+1. Baca kelima dokumen specification.
+2. Inspeksi file aktual pada WP-00 dan WP-01.
+3. Catat baseline tests/typecheck/build.
+4. Implementasikan WP-00.
+5. Jalankan security tests khusus WP-00.
+6. Jalankan regression tests marketplace.
+7. Implementasikan WP-01.
+8. Jalankan unit tests context.
+9. Jalankan seluruh test suite yang relevan.
+10. Jalankan typecheck.
+11. Jalankan build semua artifact terdampak.
+12. Inspeksi diff.
+13. Pastikan tidak ada perubahan di luar scope.
+14. Buat laporan implementasi.
+
+Jangan menunda testing sampai akhir.
+
+===========================================================
+QUALITY GATES
+=============
+
+WP-00 hanya boleh dinyatakan selesai bila:
+
+* tenant dari body/query/header tidak lagi menjadi sumber kebenaran;
+* seluruh call site `parseTenantId` telah ditinjau;
+* exploit Tenant A → Tenant B memiliki negative test;
+* happy path tetap lulus;
+* log tidak membocorkan token/secret;
+* tidak ada fallback tenant berbahaya.
+
+WP-01 hanya boleh dinyatakan selesai bila:
+
+* canonical context type tersedia;
+* invariant tenant-owned operation diterapkan;
+* factory session/public/system memiliki test;
+* request ID tetap konsisten;
+* adapter lama tidak dapat override tenant;
+* typecheck bersih;
+* build bersih;
+* regression tests relevan lulus.
+
+===========================================================
+DOKUMENTASI
+===========
+
+Perbarui dokumentasi secara terbatas:
+
+* tandai WP-00 dan WP-01 sebagai implemented hanya setelah seluruh gate lulus;
+* catat file aktual yang berubah;
+* catat compatibility adapter yang masih tersisa;
+* catat route yang sengaja belum dimigrasikan karena masuk WP berikutnya;
+* jangan mengubah status WP-02 sampai WP-14.
+
+Buat laporan:
+
+`docs/implementation/p0-wp00-wp01-implementation-report.md`
+
+Isi minimal:
+
+1. Scope
+2. Baseline
+3. Vulnerability Root Cause
+4. Files Changed
+5. Canonical Context Design Implemented
+6. Tests Added
+7. Test Results
+8. Typecheck and Build Results
+9. Remaining Compatibility Paths
+10. Risks
+11. Rollback Notes
+12. Readiness for WP-02
+
+===========================================================
+GIT DAN PERUBAHAN
+=================
+
+* Jangan membuat commit kecuali environment secara eksplisit mewajibkan.
+* Jangan push.
+* Jangan membuat PR.
+* Jangan mengubah file unrelated.
+* Jangan melakukan formatting massal.
+* Jangan menghapus legacy code yang masih diperlukan.
+* Jangan menyembunyikan pre-existing failure.
+* Bedakan dengan jelas pre-existing failure dan regression baru.
+
+===========================================================
+OUTPUT AKHIR
+============
+
+Setelah selesai, laporkan secara ringkas:
+
+* vulnerability yang ditutup;
+* sumber tenant baru untuk setiap jalur yang disentuh;
+* canonical context files yang dibuat/diubah;
+* jumlah call site yang diperbaiki;
+* tests yang ditambahkan;
+* hasil tests/typecheck/build;
+* file yang berubah;
+* compatibility path yang masih tersisa;
+* apakah WP-02 siap dimulai.
+
+Jangan melanjutkan otomatis ke WP-02.
+
+Berhenti setelah WP-00 dan WP-01 selesai serta seluruh bukti verifikasi tersedia.
