@@ -613,6 +613,257 @@ router.delete("/public/cp-review/:token/comments/:id", async (req, res): Promise
   res.json({ success: true, deleted: commentId });
 });
 
+// ── POST /public/cp-review/:token/reject — reject with required reason ────────
+
+router.post("/public/cp-review/:token/reject", async (req, res): Promise<void> => {
+  const { token } = req.params as { token: string };
+  const { reason } = (req.body ?? {}) as { reason?: unknown };
+
+  if (!reason || typeof reason !== "string" || !reason.trim()) {
+    res.status(400).json({ error: "reason is required to reject the document." });
+    return;
+  }
+
+  const validated = await resolveToken(token);
+  if (!validated.ok) { res.status(validated.status).json({ error: validated.error }); return; }
+  const { review } = validated;
+
+  if (TERMINAL.has(review.status)) {
+    res.status(409).json({ error: `Review is already in a final state (${review.status}).` });
+    return;
+  }
+
+  // CAS update — atomic reject
+  const updated = await db
+    .update(creativeAiClientReviewsTable)
+    .set({ status: "rejected", rejectedAt: new Date() })
+    .where(and(
+      eq(creativeAiClientReviewsTable.id, review.id),
+      sql`${creativeAiClientReviewsTable.status} NOT IN ('approved','rejected','revoked')`,
+    ))
+    .returning({ id: creativeAiClientReviewsTable.id });
+
+  if (updated.length === 0) {
+    res.status(409).json({ error: "Review state changed concurrently. Please refresh and try again." });
+    return;
+  }
+
+  // Save rejection reason as a high-priority comment for the team
+  await db.insert(cpPageCommentsTable).values({
+    reviewId:  review.id,
+    projectId: review.projectId,
+    comment:   `[Rejection] ${reason.trim()}`,
+    authorName: review.clientName,
+    authorType: "client",
+    priority:   "urgent",
+    status:     "open",
+  });
+
+  logAudit("cp-review", "cp_review.rejected", String(review.id), "creative_ai_client_review", "success", {
+    projectId: review.projectId,
+    reason: reason.trim(),
+  });
+
+  publishSafe({
+    eventType: "customer.cp_review.rejected",
+    sourceModule: "cp-review",
+    sourceId: String(review.id),
+    payload: { reviewId: review.id, projectId: review.projectId, reason: reason.trim() },
+  });
+
+  res.json({ success: true, status: "rejected" });
+});
+
+// ── GET /public/cp-review/:token/timeline — full event timeline ───────────────
+
+router.get("/public/cp-review/:token/timeline", async (req, res): Promise<void> => {
+  const { token } = req.params as { token: string };
+
+  const validated = await resolveToken(token);
+  if (!validated.ok) { res.status(validated.status).json({ error: validated.error }); return; }
+  const { review } = validated;
+
+  const [versions, comments] = await Promise.all([
+    listVersionsForProject(review.projectId),
+    db
+      .select()
+      .from(cpPageCommentsTable)
+      .where(eq(cpPageCommentsTable.reviewId, review.id))
+      .orderBy(cpPageCommentsTable.createdAt),
+  ]);
+
+  // Build a chronological event list
+  type TimelineEvent = {
+    type: string;
+    label: string;
+    actor: string | null;
+    meta?: Record<string, unknown>;
+    timestamp: string;
+  };
+
+  const events: TimelineEvent[] = [];
+
+  // Review lifecycle milestones
+  if (review.createdAt) {
+    events.push({ type: "review_created", label: "Review link created", actor: null, timestamp: review.createdAt.toISOString() });
+  }
+  if (review.sharedAt) {
+    events.push({ type: "review_shared", label: "Document sent for review", actor: null, timestamp: review.sharedAt.toISOString() });
+  }
+  if (review.viewedAt) {
+    events.push({ type: "review_viewed", label: "Customer opened review", actor: review.clientName, timestamp: review.viewedAt.toISOString() });
+  }
+  if (review.revisionRequestedAt) {
+    events.push({ type: "revision_requested", label: "Revision requested", actor: review.clientName, timestamp: review.revisionRequestedAt.toISOString() });
+  }
+  if (review.approvedAt) {
+    events.push({ type: "approved", label: "Document approved by customer", actor: review.clientName, timestamp: review.approvedAt.toISOString() });
+  }
+  if (review.rejectedAt) {
+    events.push({ type: "rejected", label: "Document rejected", actor: review.clientName, timestamp: review.rejectedAt.toISOString() });
+  }
+
+  // Version snapshots
+  for (const v of versions) {
+    events.push({
+      type: "version_created",
+      label: `Version ${v.versionLabel ?? `v${v.version}`} created`,
+      actor: v.createdBy ?? null,
+      meta: { version: v.version, versionLabel: v.versionLabel, qcScore: v.qcScore },
+      timestamp: v.createdAt.toISOString(),
+    });
+    if (v.approvedAt) {
+      events.push({
+        type: "version_approved",
+        label: `Version ${v.versionLabel ?? `v${v.version}`} approved`,
+        actor: v.approvedBy ?? review.clientName,
+        meta: { version: v.version },
+        timestamp: v.approvedAt.toISOString(),
+      });
+    }
+  }
+
+  // Comments
+  for (const c of comments) {
+    if (c.parentCommentId === null || c.parentCommentId === undefined) {
+      events.push({
+        type: "comment_added",
+        label: c.comment.length > 60 ? `${c.comment.slice(0, 60)}…` : c.comment,
+        actor: c.authorName,
+        meta: { commentId: c.id, priority: c.priority, pageNumber: c.pageNumber ?? null, sectionId: c.sectionId ?? null },
+        timestamp: c.createdAt.toISOString(),
+      });
+    }
+    if (c.resolvedAt) {
+      events.push({
+        type: "comment_resolved",
+        label: "Comment resolved",
+        actor: c.resolvedBy ?? null,
+        meta: { commentId: c.id },
+        timestamp: c.resolvedAt.toISOString(),
+      });
+    }
+  }
+
+  // Sort by timestamp
+  events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+  res.json({
+    reviewId: review.id,
+    projectId: review.projectId,
+    reviewStatus: review.status,
+    totalEvents: events.length,
+    events,
+  });
+});
+
+// ── GET /public/cp-review/:token/stats — review KPIs alias (stats) ───────────
+// (forwards to dashboard data shape but named /stats per spec)
+
+router.get("/public/cp-review/:token/stats", async (req, res): Promise<void> => {
+  const { token } = req.params as { token: string };
+
+  const validated = await resolveToken(token);
+  if (!validated.ok) { res.status(validated.status).json({ error: validated.error }); return; }
+  const { review } = validated;
+
+  const [comments, versions, asset, filesUnlocked] = await Promise.all([
+    db.select().from(cpPageCommentsTable).where(eq(cpPageCommentsTable.reviewId, review.id)),
+    listVersionsForProject(review.projectId),
+    getLatestCpAsset(review.projectId),
+    getFilesUnlocked(review.projectId),
+  ]);
+
+  const meta      = (asset?.metadata ?? {}) as Record<string, unknown>;
+  const qcResult  = asset ? scoreFromAssetMetadata(meta) : null;
+  const latestVer = versions[0];
+
+  const totalComments    = comments.length;
+  const openComments     = comments.filter((c) => c.status === "open").length;
+  const resolvedComments = comments.filter((c) => c.status === "resolved").length;
+  const highPriority     = comments.filter((c) => c.status === "open" && (c.priority === "high" || c.priority === "urgent")).length;
+  const byPage: Record<number, number> = {};
+  const bySection: Record<string, number> = {};
+  for (const c of comments) {
+    if (c.pageNumber !== null && c.pageNumber !== undefined) {
+      byPage[c.pageNumber] = (byPage[c.pageNumber] ?? 0) + 1;
+    }
+    if (c.sectionId) {
+      bySection[c.sectionId] = (bySection[c.sectionId] ?? 0) + 1;
+    }
+  }
+
+  res.json({
+    reviewId: review.id,
+    reviewStatus: review.status,
+    currentVersion: latestVer?.versionLabel ?? null,
+    totalVersions: versions.length,
+    totalComments,
+    openComments,
+    resolvedComments,
+    highPriorityPending: highPriority,
+    commentsByPage: byPage,
+    commentsBySection: bySection,
+    qcScore:    qcResult?.qcScore ?? null,
+    qcPassed:   qcResult?.passed  ?? null,
+    filesUnlocked,
+    approvedAt: review.approvedAt?.toISOString() ?? null,
+  });
+});
+
+// ── GET /public/cp-review/:token/versions/:versionId — single version detail ──
+
+router.get("/public/cp-review/:token/versions/:versionId", async (req, res): Promise<void> => {
+  const { token } = req.params as { token: string };
+  const versionNum = parseInt(req.params["versionId"] as string, 10);
+  if (isNaN(versionNum)) { res.status(400).json({ error: "Invalid version number" }); return; }
+
+  const validated = await resolveToken(token);
+  if (!validated.ok) { res.status(validated.status).json({ error: validated.error }); return; }
+  const { review } = validated;
+
+  const v = await getVersionByNumber(review.projectId, versionNum);
+  if (!v) { res.status(404).json({ error: `Version ${versionNum} not found.` }); return; }
+
+  res.json({
+    id:              v.id,
+    version:         v.version,
+    versionLabel:    v.versionLabel,
+    reason:          v.reason ?? null,
+    revisionNotes:   v.revisionNotes ?? null,
+    sectionsIncluded: Array.isArray(v.sectionsJson) ? v.sectionsJson : [],
+    qcScore:         v.qcScore ?? null,
+    qcPassed:        v.qcPassed ?? null,
+    qcDimensions:    v.qcDimensionsJson ?? null,
+    approved:        v.approved,
+    approvedAt:      v.approvedAt?.toISOString() ?? null,
+    approvedBy:      v.approvedBy ?? null,
+    sentForReviewAt: v.sentForReviewAt?.toISOString() ?? null,
+    createdBy:       v.createdBy ?? null,
+    createdAt:       v.createdAt.toISOString(),
+  });
+});
+
 // ── POST /public/cp-review/:token/approve — approve with checkbox ─────────────
 
 router.post("/public/cp-review/:token/approve", async (req, res): Promise<void> => {

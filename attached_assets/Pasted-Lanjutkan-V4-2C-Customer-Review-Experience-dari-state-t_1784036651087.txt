@@ -1,0 +1,294 @@
+Lanjutkan V4.2C — Customer Review Experience dari state terakhir.
+
+JANGAN ulang eksplorasi.
+JANGAN ulang DDL yang sudah berhasil.
+JANGAN sentuh ulang bug commercial-gate yang sudah diperbaiki.
+JANGAN membuat review system kedua.
+
+STATUS TERAKHIR:
+
+- API server sudah running clean
+- Commercial-gate bugs sudah diperbaiki
+- TypeScript utama sudah clean
+- seedCatalog concatenation issue sudah diperbaiki
+- Route /cp-review/:token sudah terdaftar
+- Frontend review page sudah lengkap secara UI
+- Hooks masih memakai manual fetch
+- DB tables untuk V4.2C sudah dibuat
+- 345 tests passing
+- Customer portal live
+- Screenshot loading state sudah berhasil
+- 404 pada invalid token adalah expected
+- Quota habis saat:
+  1. memperbaiki 2 TypeScript errors di test file
+  2. menambahkan OpenAPI spec cp-review
+  3. menyiapkan screenshot dengan token valid
+
+==================================================
+1. SELESAIKAN 2 TYPESCRIPT ERROR DI TEST
+==================================================
+
+Periksa test file V4.2C yang terakhir disentuh.
+
+Perbaiki hanya error tipe yang nyata.
+
+Jangan:
+- melemahkan type safety dengan any global
+- menghapus test
+- men-skip test
+- mengubah production code tanpa alasan
+
+Setelah fix:
+- jalankan unit test terkait
+- jalankan typecheck package terkait
+
+==================================================
+2. FINALISASI OPENAPI CP-REVIEW
+==================================================
+
+Dokumentasikan route aktual yang sudah aktif.
+
+Minimal endpoint:
+
+GET /public/cp-review/:token
+GET /public/cp-review/:token/document
+GET /public/cp-review/:token/preview
+GET /public/cp-review/:token/versions
+GET /public/cp-review/:token/versions/:versionId
+GET /public/cp-review/:token/compare
+GET /public/cp-review/:token/comments
+POST /public/cp-review/:token/comments
+PATCH /public/cp-review/:token/comments/:commentId
+POST /public/cp-review/:token/comments/:commentId/replies
+POST /public/cp-review/:token/comments/:commentId/resolve
+POST /public/cp-review/:token/comments/:commentId/reopen
+POST /public/cp-review/:token/approve
+POST /public/cp-review/:token/request-revision
+POST /public/cp-review/:token/reject
+GET /public/cp-review/:token/timeline
+GET /public/cp-review/:token/stats
+
+Gunakan path aktual jika berbeda.
+
+Pastikan:
+- operationId unik
+- request/response schema lengkap
+- documented errors
+- security/token scheme jelas
+- pageNumber nullable
+- sectionKey nullable
+- thread parent nullable
+- version diff schema jelas
+- approval/revision/reject body schema jelas
+
+Jangan membuat duplicate path.
+
+==================================================
+3. CODEGEN
+==================================================
+
+Setelah OpenAPI selesai:
+
+- jalankan codegen resmi
+- jangan edit generated file manual
+- rebuild api-zod
+- rebuild api-client-react
+- check duplicate exports
+- check stale dist
+- check generated headers
+
+Hooks frontend boleh tetap manual untuk sprint ini karena UI sudah stabil,
+tetapi:
+- gunakan generated types jika aman
+- dokumentasikan manual fetch yang masih tersisa
+- jangan punya dua caller aktif untuk endpoint yang sama
+
+==================================================
+4. VALID TOKEN FIXTURE
+==================================================
+
+Buat fixture development yang aman untuk screenshot dan smoke test.
+
+Fixture harus memiliki:
+
+- valid review token
+- company profile project
+- current version
+- PDF preview
+- watermark preview jika payment locked
+- minimal 3 comments
+- satu reply thread
+- satu resolved comment
+- version 1 dan version 2
+- section-level diff
+- timeline events
+- review stats
+- payment lock status
+
+Jangan memakai token production nyata.
+Fixture harus idempotent dan dapat dihapus.
+
+==================================================
+5. SMOKE TEST END-TO-END
+==================================================
+
+Dengan token fixture valid, verifikasi:
+
+1. Review page terbuka.
+2. PDF viewer tampil.
+3. Page navigation bekerja.
+4. Zoom bekerja.
+5. Thumbnail sidebar tampil.
+6. Comment drawer tampil.
+7. Page comment tampil pada page yang benar.
+8. Section comment tampil pada section yang benar.
+9. Reply thread tampil.
+10. Resolve/reopen bekerja.
+11. Version selector tampil.
+12. Compare version menampilkan added/removed/changed sections.
+13. Watermark preview tampil jika locked.
+14. Final file tidak tersedia jika locked.
+15. Approve modal membutuhkan checkbox.
+16. Revision form bekerja.
+17. Reject membutuhkan reason.
+18. Timeline tampil.
+19. Stats tampil.
+20. Customer-safe DTO tidak bocor internal metadata.
+
+==================================================
+6. SCREENSHOT WAJIB
+==================================================
+
+Ambil screenshot dengan token valid untuk:
+
+- desktop review page
+- mobile review page
+- PDF viewer
+- comments drawer
+- page comment
+- reply thread
+- version selector
+- version compare
+- watermark preview
+- approve modal
+- revision form
+- reject form
+- timeline/stats
+
+Pastikan:
+- tidak ada 404
+- tidak ada blank state
+- tidak ada overflow
+- tidak ada broken PDF
+- tidak ada raw error
+- bahasa UI konsisten di halaman yang sama
+
+==================================================
+7. STATE MACHINE VERIFICATION
+==================================================
+
+Verifikasi backend guards:
+
+- approve hanya current version
+- stale version approve ditolak
+- approve membutuhkan confirmation
+- approved version immutable
+- revision request membuat revision cycle/version baru
+- reject membutuhkan reason
+- terminal state tidak dapat dioverwrite
+- comment edit hanya oleh author dan unresolved
+- cross-project/token access ditolak
+
+==================================================
+8. WATERMARK VERIFICATION
+==================================================
+
+Pastikan watermark:
+
+- benar-benar tertanam di PDF derived preview
+- bukan CSS overlay
+- final PDF tidak dimodifikasi
+- locked customer hanya dapat preview
+- unlocked customer dapat signed final access
+- preview URL/token expired sesuai policy
+- original path tidak bocor
+
+==================================================
+9. TEST WAJIB
+==================================================
+
+Backend:
+
+- valid token accepted
+- invalid token rejected
+- expired/revoked token rejected jika supported
+- cross-project access denied
+- create page comment
+- create section comment
+- reply
+- edit own unresolved
+- edit resolved blocked
+- resolve/reopen
+- approve current version
+- stale approve blocked
+- revision creates version
+- reject requires reason
+- compare versions
+- watermark generated
+- final unwatermarked
+- locked final blocked
+- internal fields absent
+
+Frontend:
+
+- PDF viewer render
+- navigation
+- comments drawer
+- comment badges
+- version selector
+- compare mode
+- approval checkbox
+- revision form
+- reject form
+- mobile layout
+- lock status
+
+Build:
+
+- OpenAPI valid
+- codegen deterministic
+- lib/db build clean
+- api-server build clean
+- customer-portal build clean
+- pnpm run verify clean
+
+==================================================
+10. FINAL REPORT
+==================================================
+
+Berikan laporan:
+
+- 2 TypeScript errors yang diperbaiki
+- OpenAPI operations added
+- generated files status
+- manual hooks yang masih dipertahankan
+- DB tables aktif
+- valid fixture details
+- backend endpoint status
+- watermark result
+- version compare result
+- comments/thread result
+- approval/revision/reject state machine
+- screenshot list
+- test totals
+- pnpm run verify result
+- known limitations
+
+JANGAN lanjut ke V4.2D.
+
+Target akhir:
+
+V4.2C benar-benar selesai dengan OpenAPI clean,
+test clean, screenshot valid, watermark nyata,
+versioning/comments/approval bekerja end-to-end,
+dan tidak ada lagi pekerjaan setengah selesai.

@@ -5619,8 +5619,526 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/OkResponse" }
 
+  # ── V4.2C Company Profile Review (public token-auth) ─────────────────────────
+
+  /public/cp-review/{token}:
+    get:
+      tags: [client-review]
+      operationId: getPublicCpReview
+      summary: Get CP review context
+      description: Resolve the review token, mark as viewed, and return full context including document state, versions, comments, and QC scores.
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Review context
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CpReviewContext" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/Gone" }
+
+  /public/cp-review/{token}/pdf:
+    get:
+      tags: [client-review]
+      operationId: getCpReviewPdf
+      summary: Serve PDF (watermarked or clean redirect)
+      description: |
+        If filesUnlocked is false, returns a server-rendered watermarked PDF binary.
+        If filesUnlocked is true, redirects (302) to the clean Supabase signed URL.
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Watermarked PDF bytes
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "302":
+          description: Redirect to clean signed URL
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/Gone" }
+
+  /public/cp-review/{token}/versions:
+    get:
+      tags: [client-review]
+      operationId: getCpReviewVersions
+      summary: List all document versions
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: List of document versions (newest first)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CpDocumentVersion" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/cp-review/{token}/versions/{versionId}:
+    get:
+      tags: [client-review]
+      operationId: getCpReviewVersionById
+      summary: Get a single document version by version number
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+        - { name: versionId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Document version detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CpDocumentVersion" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/cp-review/{token}/versions/compare:
+    get:
+      tags: [client-review]
+      operationId: compareCpReviewVersions
+      summary: Section-level diff between two versions
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+        - { name: v1, in: query, required: true, schema: { type: integer }, description: Base version number }
+        - { name: v2, in: query, required: true, schema: { type: integer }, description: Compare version number }
+      responses:
+        "200":
+          description: Version diff result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CpVersionDiff" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/cp-review/{token}/comments:
+    get:
+      tags: [client-review]
+      operationId: getCpReviewComments
+      summary: List comments with threaded replies
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+        - { name: page, in: query, required: false, schema: { type: integer, nullable: true }, description: Filter by page number }
+        - { name: section, in: query, required: false, schema: { type: string, nullable: true }, description: Filter by section key }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [open, resolved, archived], nullable: true } }
+      responses:
+        "200":
+          description: Threaded comment list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [total, open, resolved, comments]
+                properties:
+                  total: { type: integer }
+                  open: { type: integer }
+                  resolved: { type: integer }
+                  comments:
+                    type: array
+                    items: { $ref: "#/components/schemas/CpPageCommentThread" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [client-review]
+      operationId: addCpReviewComment
+      summary: Add a page or section comment
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CpAddCommentInput" }
+      responses:
+        "201":
+          description: Created comment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CpPageComment" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/cp-review/{token}/comments/{commentId}:
+    patch:
+      tags: [client-review]
+      operationId: patchCpReviewComment
+      summary: Edit or resolve/reopen a comment (client only)
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+        - { name: commentId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment: { type: string, minLength: 1 }
+                status: { type: string, enum: [open, resolved, archived] }
+      responses:
+        "200":
+          description: Updated comment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CpPageComment" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [client-review]
+      operationId: deleteCpReviewComment
+      summary: Delete own open comment
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+        - { name: commentId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /public/cp-review/{token}/approve:
+    post:
+      tags: [client-review]
+      operationId: approveCpReview
+      summary: Approve document — requires confirmed:true checkbox
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmed]
+              properties:
+                confirmed:
+                  type: boolean
+                  enum: [true]
+                  description: Must be true — customer must check the approval checkbox
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CpActionResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /public/cp-review/{token}/request-revision:
+    post:
+      tags: [client-review]
+      operationId: requestCpReviewRevision
+      summary: Request a revision with structured notes
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CpRevisionInput" }
+      responses:
+        "200":
+          description: Revision requested
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, status]
+                properties:
+                  success: { type: boolean }
+                  status: { type: string }
+                  pages: { type: array, items: { type: integer } }
+                  sections: { type: array, items: { type: string } }
+                  priority: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /public/cp-review/{token}/reject:
+    post:
+      tags: [client-review]
+      operationId: rejectCpReview
+      summary: Reject document — requires reason
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  minLength: 10
+                  description: Detailed reason for rejection (required)
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CpActionResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /public/cp-review/{token}/timeline:
+    get:
+      tags: [client-review]
+      operationId: getCpReviewTimeline
+      summary: Full chronological event timeline
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Timeline events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reviewId, projectId, reviewStatus, totalEvents, events]
+                properties:
+                  reviewId: { type: integer }
+                  projectId: { type: string }
+                  reviewStatus: { type: string }
+                  totalEvents: { type: integer }
+                  events:
+                    type: array
+                    items: { $ref: "#/components/schemas/CpTimelineEvent" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/cp-review/{token}/stats:
+    get:
+      tags: [client-review]
+      operationId: getCpReviewStats
+      summary: Review KPI stats (comment counts, QC, payment lock)
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Review stats
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CpReviewStats" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/cp-review/{token}/dashboard:
+    get:
+      tags: [client-review]
+      operationId: getCpReviewDashboard
+      summary: Review KPI dashboard (extended stats)
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Dashboard KPIs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CpReviewDashboard" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   schemas:
+    CpReviewContext:
+      type: object
+      required: [reviewId, projectId, clientName, reviewStatus, brandName, businessType, documentReady, watermarked, filesUnlocked, totalVersions, totalComments, resolvedComments, pendingComments, comments, sectionsIncluded, sectionsSkipped, qcWarnings, createdAt]
+      properties:
+        reviewId: { type: integer }
+        projectId: { type: string }
+        clientName: { type: string }
+        reviewStatus: { type: string, enum: [shared, viewed, revision_requested, approved, rejected, revoked] }
+        brandName: { type: string }
+        businessType: { type: string }
+        documentReady: { type: boolean }
+        documentVersion: { type: integer, nullable: true }
+        documentUrl: { type: string, nullable: true, description: "null when watermarked" }
+        watermarked: { type: boolean }
+        filesUnlocked: { type: boolean }
+        pageCount: { type: integer, nullable: true }
+        sectionsIncluded: { type: array, items: { type: string } }
+        sectionsSkipped: { type: array, items: { type: string } }
+        packageLevel: { type: string, nullable: true }
+        pageTarget: { type: integer, nullable: true }
+        qcScore: { type: integer, nullable: true }
+        qcPassed: { type: boolean, nullable: true }
+        qcDimensions: { type: object, nullable: true, additionalProperties: true }
+        qcWarnings: { type: array, items: { type: string } }
+        currentVersion: { $ref: "#/components/schemas/CpDocumentVersion", nullable: true }
+        totalVersions: { type: integer }
+        totalComments: { type: integer }
+        resolvedComments: { type: integer }
+        pendingComments: { type: integer }
+        comments:
+          type: array
+          items: { $ref: "#/components/schemas/CpPageComment" }
+        createdAt: { type: string, format: date-time }
+        sharedAt: { type: string, format: date-time, nullable: true }
+        approvedAt: { type: string, format: date-time, nullable: true }
+        rejectedAt: { type: string, format: date-time, nullable: true }
+        revisionRequestedAt: { type: string, format: date-time, nullable: true }
+
+    CpDocumentVersion:
+      type: object
+      required: [id, version, versionLabel, sectionsIncluded, approved, createdAt]
+      properties:
+        id: { type: integer }
+        version: { type: integer }
+        versionLabel: { type: string, nullable: true }
+        reason: { type: string, nullable: true }
+        revisionNotes: { type: string, nullable: true }
+        sectionsIncluded: { type: array, items: { type: string } }
+        qcScore: { type: integer, nullable: true }
+        qcPassed: { type: boolean, nullable: true }
+        qcDimensions: { type: object, nullable: true, additionalProperties: true }
+        approved: { type: boolean }
+        approvedAt: { type: string, format: date-time, nullable: true }
+        approvedBy: { type: string, nullable: true }
+        sentForReviewAt: { type: string, format: date-time, nullable: true }
+        createdBy: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    CpPageComment:
+      type: object
+      required: [id, reviewId, projectId, comment, authorName, authorType, priority, status, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        reviewId: { type: integer }
+        projectId: { type: string }
+        documentVersionId: { type: integer, nullable: true }
+        parentCommentId: { type: integer, nullable: true, description: "null for top-level comments" }
+        pageNumber: { type: integer, nullable: true }
+        positionX: { type: number, nullable: true }
+        positionY: { type: number, nullable: true }
+        sectionId: { type: string, nullable: true, description: "null for page-level comments" }
+        comment: { type: string }
+        authorName: { type: string }
+        authorType: { type: string, enum: [client, admin] }
+        priority: { type: string, enum: [low, normal, high, urgent] }
+        status: { type: string, enum: [open, resolved, archived] }
+        resolvedBy: { type: string, nullable: true }
+        resolvedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CpPageCommentThread:
+      allOf:
+        - { $ref: "#/components/schemas/CpPageComment" }
+        - type: object
+          properties:
+            replies:
+              type: array
+              items: { $ref: "#/components/schemas/CpPageComment" }
+
+    CpVersionDiff:
+      type: object
+      required: [v1, v2, diff]
+      properties:
+        v1:
+          type: object
+          required: [version, versionLabel]
+          properties:
+            version: { type: integer }
+            versionLabel: { type: string, nullable: true }
+            qcScore: { type: integer, nullable: true }
+        v2:
+          type: object
+          required: [version, versionLabel]
+          properties:
+            version: { type: integer }
+            versionLabel: { type: string, nullable: true }
+            qcScore: { type: integer, nullable: true }
+        diff:
+          type: object
+          required: [added, removed, unchanged, totalChanged]
+          properties:
+            added: { type: array, items: { type: string }, description: "Sections new in v2" }
+            removed: { type: array, items: { type: string }, description: "Sections dropped from v1" }
+            unchanged: { type: array, items: { type: string }, description: "Sections in both" }
+            totalChanged: { type: integer }
+
+    CpAddCommentInput:
+      type: object
+      required: [comment, authorName]
+      properties:
+        comment: { type: string, minLength: 1 }
+        authorName: { type: string, minLength: 1 }
+        pageNumber: { type: integer, nullable: true }
+        positionX: { type: number, nullable: true }
+        positionY: { type: number, nullable: true }
+        sectionId: { type: string, nullable: true }
+        parentCommentId: { type: integer, nullable: true, description: "null for top-level comments" }
+        priority: { type: string, enum: [low, normal, high, urgent], default: normal }
+        documentVersionId: { type: integer, nullable: true }
+
+    CpRevisionInput:
+      type: object
+      required: [notes]
+      properties:
+        notes: { type: string, minLength: 1 }
+        selectedPages: { type: array, items: { type: integer }, nullable: true }
+        selectedSections: { type: array, items: { type: string }, nullable: true }
+        priority: { type: string, enum: [low, normal, high, urgent], default: normal }
+
+    CpActionResult:
+      type: object
+      required: [success, status]
+      properties:
+        success: { type: boolean }
+        status: { type: string }
+
+    CpTimelineEvent:
+      type: object
+      required: [type, label, timestamp]
+      properties:
+        type: { type: string }
+        label: { type: string }
+        actor: { type: string, nullable: true }
+        meta: { type: object, nullable: true, additionalProperties: true }
+        timestamp: { type: string, format: date-time }
+
+    CpReviewStats:
+      type: object
+      required: [reviewId, reviewStatus, totalVersions, totalComments, openComments, resolvedComments, highPriorityPending, filesUnlocked]
+      properties:
+        reviewId: { type: integer }
+        reviewStatus: { type: string }
+        currentVersion: { type: string, nullable: true }
+        totalVersions: { type: integer }
+        totalComments: { type: integer }
+        openComments: { type: integer }
+        resolvedComments: { type: integer }
+        highPriorityPending: { type: integer }
+        commentsByPage: { type: object, additionalProperties: { type: integer } }
+        commentsBySection: { type: object, additionalProperties: { type: integer } }
+        qcScore: { type: integer, nullable: true }
+        qcPassed: { type: boolean, nullable: true }
+        filesUnlocked: { type: boolean }
+        approvedAt: { type: string, format: date-time, nullable: true }
+
+    CpReviewDashboard:
+      type: object
+      required: [reviewId, reviewStatus, totalVersions, totalComments, openComments, resolvedComments, pendingRevisions, highPriorityPending, filesUnlocked, approvalStatus]
+      properties:
+        reviewId: { type: integer }
+        reviewStatus: { type: string }
+        currentVersion: { type: string, nullable: true }
+        totalVersions: { type: integer }
+        totalComments: { type: integer }
+        openComments: { type: integer }
+        resolvedComments: { type: integer }
+        pendingRevisions: { type: integer }
+        highPriorityPending: { type: integer }
+        qcScore: { type: integer, nullable: true }
+        qcPassed: { type: boolean, nullable: true }
+        filesUnlocked: { type: boolean }
+        approvalStatus: { type: string }
+        approvedAt: { type: string, format: date-time, nullable: true }
+        sharedAt: { type: string, format: date-time, nullable: true }
+        revisionRequestedAt: { type: string, format: date-time, nullable: true }
+
     CompanyProfileConditionalQuestion:
       type: object
       required: [key, label, type]
