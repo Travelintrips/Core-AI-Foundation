@@ -46,6 +46,9 @@ export const aiQuotationsTable = appSchema.table("ai_quotations", {
   revisionNotes: text("revision_notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  // WP-09: soft-delete columns — NULL = not deleted (stays nullable forever by design)
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedBy: text("deleted_by"), // actorId: internal user id or customer profile id
 });
 
 export const insertAiQuotationSchema = createInsertSchema(aiQuotationsTable).omit({

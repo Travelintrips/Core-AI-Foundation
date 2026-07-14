@@ -25,6 +25,9 @@ export const creativeProjectQuotationsTable = pgTable("creative_project_quotatio
   responseNotes: text("response_notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  // WP-09: soft-delete — NULL = not deleted; frozen table keeps readable forever
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedBy: text("deleted_by"),
 });
 
 export const insertCreativeProjectQuotationSchema = createInsertSchema(creativeProjectQuotationsTable).omit({
