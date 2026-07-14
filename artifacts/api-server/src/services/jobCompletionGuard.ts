@@ -89,6 +89,7 @@ export const JOB_COMPLETION_REQUIREMENTS: Readonly<Record<string, JobRequirement
   generate_thumbnail:  { requiresAsset: true, requiredResultFields: ["permanentUrl"] },
   zip_export:          { requiresAsset: true, requiredResultFields: ["storagePath", "permanentUrl"] },
   video_generation:    { requiresAsset: true, requiredResultFields: ["storagePath", "permanentUrl"] },
+  image_batch_export:  { requiresAsset: true, requiredResultFields: ["storagePath", "permanentUrl"] },
 };
 
 /** True if this job type is expected to produce a file deliverable. */

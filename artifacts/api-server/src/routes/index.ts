@@ -12,6 +12,7 @@ import analyticsRouter from "./analytics";
 import settingsRouter from "./settings";
 
 import creativeAiRouter from "./creative-ai";
+import imageBatchRouter from "./image-batch";
 import capabilitiesRouter from "./capabilities";
 import feedbackRouter from "./feedback";
 import clientMemoryRouter from "./client-memory";
@@ -75,6 +76,7 @@ router.use(auditRouter);
 router.use(analyticsRouter);
 router.use(settingsRouter);
 router.use(creativeAiRouter);
+router.use(imageBatchRouter);
 router.use(capabilitiesRouter);
 router.use(feedbackRouter);
 router.use(clientMemoryRouter);

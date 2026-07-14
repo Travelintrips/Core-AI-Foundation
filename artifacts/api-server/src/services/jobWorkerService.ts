@@ -37,10 +37,15 @@ import { initDocumentRegistry } from "./creativeDocumentRegistry.js";
 import { initPresentationRegistry } from "./presentation/creativePresentationRegistry.js";
 import { getSupportedPresentationTypes, executeGenericPresentationExportJob } from "./presentation/creativePresentationWorkerService.js";
 import { resolveProjectPresentationType } from "./creativeProjectPresentationType.js";
+import { initImageBatchRegistry } from "./image-batch/imageBatchRegistryInit.js";
+import { getSupportedImageBatchTypes } from "./image-batch/creativeImageBatchRegistry.js";
+import { executeGenericImageBatchExportJob } from "./image-batch/creativeImageBatchWorkerService.js";
+import { resolveProjectImageBatchType } from "./creativeProjectImageBatchType.js";
 
 // Register all document type definitions at module load time.
 initDocumentRegistry();
 initPresentationRegistry();
+initImageBatchRegistry();
 
 // ── Real AI execution helpers ───────────────────────────────────────────────
 
@@ -519,6 +524,18 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
       throw new WorkerNotImplementedError(`pptx_export for presentation type '${presentationType ?? "unknown"}'`);
     }
 
+    case "image_batch_export": {
+      const batchProjectId = (job.payloadJson as { projectId?: number } | null)?.projectId;
+      const [batchProject] = typeof batchProjectId === "number"
+        ? await db.select().from(creativeProjectsTable).where(eq(creativeProjectsTable.id, batchProjectId))
+        : [];
+      const batchType = batchProject ? await resolveProjectImageBatchType(batchProject) : null;
+      if (batchType && getSupportedImageBatchTypes().includes(batchType)) {
+        return executeGenericImageBatchExportJob(job, batchType);
+      }
+      throw new WorkerNotImplementedError(`image_batch_export for batch type '${batchType ?? "unknown"}'`);
+    }
+
     case "csv_export":
       throw new WorkerNotImplementedError("csv_export");
 
@@ -647,6 +664,16 @@ export async function retryJob(
         const { markProjectDocumentFailed } = await import("./companyProfilePdfWorkerService.js");
         await markProjectDocumentFailed(pdfProjectId, errorMessage).catch((err) => {
           logger.warn({ err, pdfProjectId }, "[jobWorker] Failed to flag project as failed after exhausted pdf_export retries");
+        });
+      }
+    }
+
+    if (job.jobType === "image_batch_export") {
+      const batchProjectId = (job.payloadJson as { projectId?: number } | null)?.projectId;
+      if (typeof batchProjectId === "number") {
+        const { markProjectImageBatchFailed } = await import("./image-batch/creativeImageBatchWorkerService.js");
+        await markProjectImageBatchFailed(batchProjectId, errorMessage).catch((err) => {
+          logger.warn({ err, batchProjectId }, "[jobWorker] Failed to flag project as failed after exhausted image_batch_export retries");
         });
       }
     }

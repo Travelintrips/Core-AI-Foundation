@@ -408,12 +408,13 @@ async function persistImageBuffer(
   contentType: string,
   brandSlug: string,
   role: string,
+  pathPrefix?: string,
 ): Promise<string | null> {
   try {
     const { isSupabaseStorageAvailable, uploadToSupabase } = await import("../lib/supabaseStorage.js");
     if (!isSupabaseStorageAvailable()) return null;
     const ext = contentType.includes("png") ? "png" : contentType.includes("jpeg") ? "jpg" : "webp";
-    const storagePath = `demo-portfolios/${brandSlug}/${role}-${Date.now()}.${ext}`;
+    const storagePath = `${pathPrefix ?? `demo-portfolios/${brandSlug}`}/${role}-${Date.now()}.${ext}`;
     return await uploadToSupabase(storagePath, buffer, contentType);
   } catch {
     return null;
@@ -462,7 +463,7 @@ interface AssetAttemptResult {
 export async function generateNamedAssetSet(
   brief: Record<string, unknown>,
   roles: NamedAssetRole[],
-  opts?: { maxRetryPerAsset?: number; maxQualityRetryPerAsset?: number },
+  opts?: { maxRetryPerAsset?: number; maxQualityRetryPerAsset?: number; storagePathPrefix?: string },
 ): Promise<GeneratedNamedAsset[]> {
   const guardrails = await readGuardrails();
   const maxRetry = Math.max(0, opts?.maxRetryPerAsset ?? Math.min(guardrails.maxRetryPerProvider, 2));
@@ -580,7 +581,7 @@ export async function generateNamedAssetSet(
       const qcImageRef = finalBuffer ? `data:${contentType};base64,${finalBuffer.toString("base64")}` : imageUrl;
       const qc = await reviewImage(brief, qcPrompt, qcImageRef);
       const persistedUrl = finalBuffer
-        ? await persistImageBuffer(finalBuffer, contentType, brandSlug, role.role)
+        ? await persistImageBuffer(finalBuffer, contentType, brandSlug, role.role, opts?.storagePathPrefix)
         : null;
 
       return {

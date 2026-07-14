@@ -305,6 +305,7 @@ async function upsertPackage(serviceId: number, packageType: string, data: {
   monthlyPrice?: string;
   yearlyPrice?: string;
   features: string[];
+  limitsJson?: Record<string, unknown>;
 }) {
   const [existing] = await db
     .select()
@@ -319,6 +320,7 @@ async function upsertPackage(serviceId: number, packageType: string, data: {
     monthlyPrice: data.monthlyPrice ?? null,
     yearlyPrice: data.yearlyPrice ?? null,
     featuresJson: data.features,
+    limitsJson: data.limitsJson ?? null,
     status: "active" as const,
   };
 
@@ -334,6 +336,42 @@ async function upsertPackage(serviceId: number, packageType: string, data: {
   const [created] = await db.insert(aiServicePackagesTable).values(values).returning();
   return created;
 }
+
+// Phase 5 — Image Batch Engine structured entitlement, keyed by serviceCode
+// (never by package name/tier). This is the real, machine-readable source of
+// truth for how many images/views a service promises; imageBatchEntitlementService
+// reads this via ai_service_packages.limits_json, falling back to the batch
+// definition's hardcoded constant only for legacy orders with no package.
+const IMAGE_BATCH_ENTITLEMENTS: Record<string, Record<string, unknown>> = {
+  "logo-design": {
+    logo_design: {
+      zipRequired: true,
+      groups: [
+        { key: "concept-1", label: "Concept 1 — Wordmark", count: 1, aspectRatio: "1:1" },
+        { key: "concept-2", label: "Concept 2 — Icon Mark", count: 1, aspectRatio: "1:1" },
+        { key: "concept-3", label: "Concept 3 — Emblem", count: 1, aspectRatio: "1:1" },
+      ],
+    },
+  },
+  "social-media-design": {
+    social_media: {
+      zipRequired: true,
+      groups: [
+        { key: "instagram-feed", label: "Instagram Feed (1:1)", count: 1, aspectRatio: "1:1", platform: "instagram" },
+        { key: "instagram-story", label: "Instagram Story (9:16)", count: 1, aspectRatio: "9:16", platform: "instagram" },
+        { key: "facebook-post", label: "Facebook Post (16:9)", count: 1, aspectRatio: "16:9", platform: "facebook" },
+        { key: "linkedin-post", label: "LinkedIn Post (1:1)", count: 1, aspectRatio: "1:1", platform: "linkedin" },
+      ],
+    },
+  },
+  "packaging-design": {
+    // Catalog only promises a single visual concept — do not overclaim multi-view here.
+    packaging_design: {
+      zipRequired: true,
+      groups: [{ key: "front", label: "Front View Concept", count: 1, aspectRatio: "4:5" }],
+    },
+  },
+};
 
 export async function seedServiceCatalog() {
   console.log("\n🗂️  Seeding AI Service Catalog...");
@@ -357,11 +395,13 @@ export async function seedServiceCatalog() {
       serviceCount += 1;
 
       const oneTime = Number(s.startingPrice);
+      const imageBatchLimits = IMAGE_BATCH_ENTITLEMENTS[s.serviceCode];
       await upsertPackage(service.id, "standard", {
         packageName: "Standard",
         oneTimePrice: s.pricingModel === "one_time" ? String(oneTime) : undefined,
         monthlyPrice: s.pricingModel !== "one_time" ? String(oneTime) : undefined,
         features: [s.shortDescription, "Standard turnaround", "1 revision round"],
+        limitsJson: imageBatchLimits,
       });
       await upsertPackage(service.id, "pro", {
         packageName: "Pro",
@@ -369,10 +409,12 @@ export async function seedServiceCatalog() {
         monthlyPrice: s.pricingModel !== "one_time" ? String(Math.round(oneTime * 1.8)) : undefined,
         yearlyPrice: s.subscriptionSupported ? String(Math.round(oneTime * 1.8 * 10)) : undefined,
         features: [s.shortDescription, "Priority turnaround", "2 revision rounds", "Human review included"],
+        limitsJson: imageBatchLimits,
       });
       await upsertPackage(service.id, "enterprise", {
         packageName: "Enterprise",
         features: ["Custom scope", "Dedicated department capacity", "SLA-backed delivery", "Priority support"],
+        limitsJson: imageBatchLimits,
       });
       packageCount += 3;
     }

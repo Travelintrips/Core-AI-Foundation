@@ -44,6 +44,10 @@ import {
   getEventsForProject,
   filterForActivityFeed,
 } from "../services/canonicalEventService.js";
+import { db, creativeProjectsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
+import { resolveProjectImageBatchType } from "../services/creativeProjectImageBatchType.js";
+import { listBatchAssets, groupAssetsForGallery } from "../services/image-batch/imageBatchAssetService.js";
 
 const router = Router();
 
@@ -125,6 +129,52 @@ router.get(
     const summaries = events.map((e) => detail.eventSummaries[eventIndexById.get(e.eventId)!]);
 
     res.json({ events, summaries, total: events.length });
+  },
+);
+
+// ── GET /public/customer/workspace/:token/projects/:projectNumber/image-batch ─
+// Phase 5: grouped image batch gallery (logo concepts / social pack / packaging
+// views). Customer-safe fields only — no qc notes, cost, or entitlement source.
+router.get(
+  "/public/customer/workspace/:token/projects/:projectNumber/image-batch",
+  async (req, res): Promise<void> => {
+    const session = await withSession(req, res);
+    if (!session) return;
+    const { projectNumber } = req.params as { projectNumber: string };
+
+    // Ownership check via the existing detail lookup before touching batch data.
+    const detail = await getProjectDetail(req, session.clientEmail, projectNumber);
+    if (!detail) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+
+    const [project] = await db
+      .select()
+      .from(creativeProjectsTable)
+      .where(eq(creativeProjectsTable.projectId, projectNumber));
+    const batchType = project ? await resolveProjectImageBatchType(project) : null;
+    if (!project || !batchType) {
+      res.json({ batchType: null, groups: [] });
+      return;
+    }
+
+    const assets = await listBatchAssets(project.projectId, batchType);
+    const groups = groupAssetsForGallery(assets);
+
+    res.json({
+      batchType,
+      filesUnlocked: detail.overview.filesUnlocked ?? false,
+      groups: groups.map((g) => ({
+        group: g.group,
+        groupLabel: g.groupLabel,
+        items: g.items.map((a) => ({
+          id: a.id,
+          status: a.status,
+          imageUrl: a.status === "completed" ? a.imageUrl : null,
+        })),
+      })),
+    });
   },
 );
 
