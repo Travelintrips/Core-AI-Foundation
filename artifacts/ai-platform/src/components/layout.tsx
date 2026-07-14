@@ -58,6 +58,7 @@ const NAV_SECTIONS = [
       { href: "/agents", label: "Agents", icon: Users },
       { href: "/orchestrator", label: "Orchestrator", icon: Play },
       { href: "/creative-ai", label: "Creative AI", icon: Sparkles },
+      { href: "/production-pipeline", label: "Production Pipeline", icon: GitMerge },
     ],
   },
   {
@@ -107,6 +108,12 @@ const NAV_SECTIONS = [
       { href: "/ai-insights", label: "AI Insights", icon: Lightbulb },
       { href: "/creative-intelligence", label: "Creative Intelligence", icon: Brain },
       { href: "/template-marketplace", label: "Templates", icon: LayoutTemplate },
+    ],
+  },
+  {
+    label: "Creative",
+    items: [
+      { href: "/design-studio", label: "Design Studio", icon: LayoutTemplate },
     ],
   },
   {

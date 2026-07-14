@@ -122,3 +122,6 @@ export function adminAuthWithExceptions(req: Request, res: Response, next: NextF
   }
   adminAuth(req, res, next);
 }
+
+// Alias used by routes that import under the more explicit name
+export const requireAdminApiKey = adminAuth;

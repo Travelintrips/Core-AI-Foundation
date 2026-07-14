@@ -54,6 +54,7 @@ import { resolveWorkspaceSession } from "../services/customerWorkspaceService.js
 const router = Router();
 
 // ── Admin Routes ──────────────────────────────────────────────────────────────
+// Auth is handled globally by app.ts (adminAuthWithExceptions) — no per-route middleware needed.
 
 router.get("/ai/templates/stats", async (req, res) => {
   try {
@@ -107,6 +108,7 @@ router.get("/ai/templates", async (req, res) => {
 });
 
 router.get("/ai/templates/:id", async (req, res) => {
+router.get("/ai/templates/:id", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
@@ -119,6 +121,7 @@ router.get("/ai/templates/:id", async (req, res) => {
 });
 
 router.post("/ai/templates", async (req, res) => {
+router.post("/ai/templates", async (req, res): Promise<void> => {
   try {
     const body = req.body as Record<string, unknown>;
     if (!body.templateCode || !body.name || !body.category || !body.style) {
@@ -133,6 +136,7 @@ router.post("/ai/templates", async (req, res) => {
 });
 
 router.patch("/ai/templates/:id", async (req, res) => {
+router.patch("/ai/templates/:id", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
@@ -145,6 +149,7 @@ router.patch("/ai/templates/:id", async (req, res) => {
 });
 
 router.post("/ai/templates/:id/publish", async (req, res) => {
+router.post("/ai/templates/:id/publish", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
@@ -156,6 +161,7 @@ router.post("/ai/templates/:id/publish", async (req, res) => {
 });
 
 router.post("/ai/templates/:id/archive", async (req, res) => {
+router.post("/ai/templates/:id/archive", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
@@ -167,6 +173,7 @@ router.post("/ai/templates/:id/archive", async (req, res) => {
 });
 
 router.post("/ai/templates/:id/event", async (req, res) => {
+router.post("/ai/templates/:id/event", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }

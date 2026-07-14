@@ -58,4 +58,7 @@
 - [wp02-repository-foundation](wp02-repository-foundation.md) — RepositoryContext wraps RequestContext (no 2nd context type); only Marketplace domain fully migrated, others deferred
 - [admin-auth-canonical-pattern](admin-auth-canonical-pattern.md) — admin-key gating is one global app.ts mount (adminAuthWithExceptions), never per-route middleware; templates.ts's requireAdminApiKey never existed, was dead import
 - [phase-v42e-creative-intelligence](phase-v42e-creative-intelligence.md) — V4.2E: Brand DNA + Asset Intelligence tables/services/routes/UI; admin uses apiFetch not useAdminApi hook
+- [phase-v43-portfolio-gallery](phase-v43-portfolio-gallery.md) — route files must omit the app-level `/api` prefix (silent 404 otherwise); migrations reuse shared `pool`; `/portfolio-gallery` route name already owned by another team
+- [phase-v44-production-pipeline](phase-v44-production-pipeline.md) — V4.4 7-stage pipeline: migrate pool import rule, stage ordering, orval naming, pre-existing verify failures
 - [phase-v43-templates-portfolio](phase-v43-templates-portfolio.md) — V4.3: Express 5 params string|string[] middleware quirk, migration pool convention, use-template→draft-request seed pattern
+- [phase-v45-design-studio](phase-v45-design-studio.md) — V4.5 canvas editor; route prefix must be /ai/... not /api/ai/... ; canvas state as JSONB; pre-existing typecheck failures in presentation/zip services

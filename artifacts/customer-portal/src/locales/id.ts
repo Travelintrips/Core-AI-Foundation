@@ -577,6 +577,7 @@ export const id = {
       notifications: "Notifikasi",
       affiliate: "Afiliasi",
       referral: "Referral",
+      favorites: "Favorit",
       profile: "Profil",
       support: "Support",
       settings: "Pengaturan",
