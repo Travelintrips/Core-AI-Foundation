@@ -41,6 +41,7 @@ import { initImageBatchRegistry } from "./image-batch/imageBatchRegistryInit.js"
 import { getSupportedImageBatchTypes } from "./image-batch/creativeImageBatchRegistry.js";
 import { executeGenericImageBatchExportJob } from "./image-batch/creativeImageBatchWorkerService.js";
 import { resolveProjectImageBatchType } from "./creativeProjectImageBatchType.js";
+import { executeZipDeliveryJob } from "./zipDeliveryService.js";
 
 // Register all document type definitions at module load time.
 initDocumentRegistry();
@@ -535,6 +536,21 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
         return executeGenericImageBatchExportJob(job, batchType);
       }
       throw new WorkerNotImplementedError(`image_batch_export for batch type '${batchType ?? "unknown"}'`);
+    }
+
+    case "generate_project_zip": {
+      const zipPayload = job.payloadJson as { projectId?: string; deliveryId?: number } | null;
+      const zipProjectId = zipPayload?.projectId ?? "";
+      const zipDeliveryId = zipPayload?.deliveryId ?? 0;
+      if (!zipProjectId || !zipDeliveryId) {
+        throw new WorkerNotImplementedError("generate_project_zip: missing projectId or deliveryId in payload");
+      }
+      const zipResult = await executeZipDeliveryJob(zipDeliveryId, zipProjectId);
+      if (!zipResult.ok) {
+        // Non-fatal: log but don't throw — project stays completed
+        logger.warn({ jobId: job.id, zipProjectId, error: zipResult.error }, "[executeJob] ZIP generation failed (non-fatal)");
+      }
+      return { message: "ZIP delivery job executed", projectId: zipProjectId, deliveryId: zipDeliveryId, ok: zipResult.ok };
     }
 
     case "csv_export":

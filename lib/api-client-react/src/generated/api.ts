@@ -23,8 +23,11 @@ import type {
   AbTest,
   AbTestList,
   AcceptHumanTaskBody,
+  AdminAssetLibraryStats200,
+  AdminBrandKitStats200,
   AdminGetCustomerAssets200,
   AdminGetCustomerWorkspace200,
+  AdminZipDeliveryStats200,
   Affiliate,
   AffiliateList,
   AffiliateStats,
@@ -84,12 +87,21 @@ import type {
   AiWorkflowInput,
   AiWorkflowUpdate,
   AnalyticsOverview,
+  ApproveCpReviewBody,
   ApproveRequestMargin200,
   ApproveRequestMarginBody,
   AssetFeedbackInput,
+  AssetLibraryItem,
+  AssetLibraryList,
+  AssetSignedDownload,
   AssetStatusUpdate,
   AssignHumanTaskBody,
   AuditLogPage,
+  BadRequestResponse,
+  BrandKitEnterpriseDetail,
+  BrandKitEnterpriseList,
+  BrandKitSlotAsset,
+  BrandKitSlotHistory,
   CancelJobBody,
   CatalogAnalytics,
   CheckoutResponse,
@@ -109,15 +121,27 @@ import type {
   CommercialGateVerifyInput,
   CommercialGateWaiveInput,
   CompanyProfileBriefScore,
+  CompareCpReviewVersionsParams,
   CompleteHumanTaskBody,
+  ConflictResponse,
   ContinueLivePreviewBody,
   ConvertReferralInput,
   CostAnalyticsResponse,
   Coupon,
   CouponList,
   CouponValidationResult,
+  CpActionResult,
+  CpAddCommentInput,
+  CpDocumentVersion,
+  CpPageComment,
+  CpReviewContext,
+  CpReviewDashboard,
+  CpReviewStats,
+  CpRevisionInput,
+  CpVersionDiff,
   CreateAbTestInput,
   CreateAffiliateInput,
+  CreateAssetLibraryInput,
   CreateCouponInput,
   CreateHumanTaskBody,
   CreateJobBody,
@@ -148,6 +172,7 @@ import type {
   EventTimelineResponse,
   FeedbackEntry,
   FeedbackInput,
+  ForbiddenResponse,
   FunnelAnalytics,
   GenerateImageBody,
   GenerateImageResponse,
@@ -162,9 +187,13 @@ import type {
   GetCommercialAnalyticsParams,
   GetCompanyProfileBriefReadiness200,
   GetCostAnalyticsParams,
+  GetCpReviewComments200,
+  GetCpReviewCommentsParams,
+  GetCpReviewTimeline200,
   GetCreativeImageAnalyticsParams,
   GetFunnelAnalyticsParams,
   GetLivePreviewSessionCount200,
+  GoneResponse,
   HealthStatus,
   HumanTask,
   HumanTaskDetail,
@@ -180,6 +209,7 @@ import type {
   KnowledgeBaseUpdate,
   KnowledgeDocument,
   KnowledgeDocumentInput,
+  ListAssetLibraryParams,
   ListAuditLogsParams,
   ListCommercialGatesParams,
   ListEventsParams,
@@ -207,12 +237,14 @@ import type {
   MarkNotificationReadInput,
   MemoryEntry,
   MemoryEntryInput,
+  NotFoundResponse,
   OkResponse,
   OrchestratorExecuteInput,
   OrchestratorResult,
   OrchestratorSession,
   OverrideCompanyProfileBriefGuard200,
   OverrideCompanyProfileBriefGuardBody,
+  PatchCpReviewCommentBody,
   PauseQueue200,
   PaymentKpi,
   PaymentProofInput,
@@ -222,6 +254,7 @@ import type {
   PortfolioAnalytics,
   PortfolioReview,
   PortfolioReviewInput,
+  PromoteCreativeAssetToLibraryBody,
   Promotion,
   PromotionList,
   ProviderBreakdown,
@@ -239,11 +272,14 @@ import type {
   ReferralStats,
   RegisterClusterWorkerBody,
   RegisterWorkerBody,
+  RejectCpReviewBody,
   RejectHumanTaskBody,
+  RenameAssetLibraryItemBody,
   RenewLeaseBody,
   RepeatOrderDraft,
   RepeatOrderInput,
   ReprioritizeJobBody,
+  RequestCpReviewRevision200,
   ResumeQueue200,
   RevokeFileDownloadTokenBody,
   RotateTokenInput,
@@ -257,12 +293,14 @@ import type {
   StartLivePreview202,
   SubmitPaymentProof200,
   SubscriptionListResponse,
+  TagAssetLibraryItemBody,
   TickDispatcher200,
   TrackClickInput,
   TrackConversionInput,
   TrackFunnelEventInput,
   UpdateScheduleBody,
   UpdateSubscriptionBody,
+  UpsertBrandKitSlotInput,
   UsageDataPoint,
   ValidateCouponInput,
   WorkerCapacityItem,
@@ -282,7 +320,8 @@ import type {
   WorkspaceSignedDownload,
   WorkspaceSummary,
   WorkspaceSupportTicket,
-  WorkspaceSupportTicketList
+  WorkspaceSupportTicketList,
+  ZipDeliveryView
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -17680,6 +17719,1914 @@ export function useAdminGetCustomerWorkspace<TData = Awaited<ReturnType<typeof a
 
 
 
+export const getListBrandKitEnterpriseUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/brand-kit-enterprise`
+}
+
+/**
+ * @summary List enterprise brand kit items for the workspace customer
+ */
+export const listBrandKitEnterprise = async (token: string, options?: RequestInit): Promise<BrandKitEnterpriseList> => {
+
+  return customFetch<BrandKitEnterpriseList>(getListBrandKitEnterpriseUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBrandKitEnterpriseQueryKey = (token: string,) => {
+    return [
+    `/api/public/customer/workspace/${token}/brand-kit-enterprise`
+    ] as const;
+    }
+
+
+export const getListBrandKitEnterpriseQueryOptions = <TData = Awaited<ReturnType<typeof listBrandKitEnterprise>>, TError = ErrorType<unknown>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBrandKitEnterprise>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBrandKitEnterpriseQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBrandKitEnterprise>>> = ({ signal }) => listBrandKitEnterprise(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBrandKitEnterprise>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBrandKitEnterpriseQueryResult = NonNullable<Awaited<ReturnType<typeof listBrandKitEnterprise>>>
+export type ListBrandKitEnterpriseQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List enterprise brand kit items for the workspace customer
+ */
+
+export function useListBrandKitEnterprise<TData = Awaited<ReturnType<typeof listBrandKitEnterprise>>, TError = ErrorType<unknown>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBrandKitEnterprise>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBrandKitEnterpriseQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetBrandKitEnterpriseUrl = (token: string,
+    projectId: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/brand-kit-enterprise/${projectId}`
+}
+
+/**
+ * @summary Get enterprise brand kit with completeness score for a project
+ */
+export const getBrandKitEnterprise = async (token: string,
+    projectId: string, options?: RequestInit): Promise<BrandKitEnterpriseDetail> => {
+
+  return customFetch<BrandKitEnterpriseDetail>(getGetBrandKitEnterpriseUrl(token,projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBrandKitEnterpriseQueryKey = (token: string,
+    projectId: string,) => {
+    return [
+    `/api/public/customer/workspace/${token}/brand-kit-enterprise/${projectId}`
+    ] as const;
+    }
+
+
+export const getGetBrandKitEnterpriseQueryOptions = <TData = Awaited<ReturnType<typeof getBrandKitEnterprise>>, TError = ErrorType<ErrorResponse>>(token: string,
+    projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBrandKitEnterprise>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBrandKitEnterpriseQueryKey(token,projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBrandKitEnterprise>>> = ({ signal }) => getBrandKitEnterprise(token,projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined && projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBrandKitEnterprise>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBrandKitEnterpriseQueryResult = NonNullable<Awaited<ReturnType<typeof getBrandKitEnterprise>>>
+export type GetBrandKitEnterpriseQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get enterprise brand kit with completeness score for a project
+ */
+
+export function useGetBrandKitEnterprise<TData = Awaited<ReturnType<typeof getBrandKitEnterprise>>, TError = ErrorType<ErrorResponse>>(
+ token: string,
+    projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBrandKitEnterprise>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBrandKitEnterpriseQueryOptions(token,projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpsertBrandKitSlotUrl = (token: string,
+    projectId: string,
+    slot: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/brand-kit-enterprise/${projectId}/slots/${slot}`
+}
+
+/**
+ * @summary Upload or update a brand kit slot (creates new version)
+ */
+export const upsertBrandKitSlot = async (token: string,
+    projectId: string,
+    slot: string,
+    upsertBrandKitSlotInput: UpsertBrandKitSlotInput, options?: RequestInit): Promise<BrandKitSlotAsset> => {
+
+  return customFetch<BrandKitSlotAsset>(getUpsertBrandKitSlotUrl(token,projectId,slot),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(upsertBrandKitSlotInput)
+  }
+);}
+
+
+
+
+export const getUpsertBrandKitSlotMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertBrandKitSlot>>, TError,{token: string;projectId: string;slot: string;data: BodyType<UpsertBrandKitSlotInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof upsertBrandKitSlot>>, TError,{token: string;projectId: string;slot: string;data: BodyType<UpsertBrandKitSlotInput>}, TContext> => {
+
+const mutationKey = ['upsertBrandKitSlot'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof upsertBrandKitSlot>>, {token: string;projectId: string;slot: string;data: BodyType<UpsertBrandKitSlotInput>}> = (props) => {
+          const {token,projectId,slot,data} = props ?? {};
+
+          return  upsertBrandKitSlot(token,projectId,slot,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpsertBrandKitSlotMutationResult = NonNullable<Awaited<ReturnType<typeof upsertBrandKitSlot>>>
+    export type UpsertBrandKitSlotMutationBody = BodyType<UpsertBrandKitSlotInput>
+    export type UpsertBrandKitSlotMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Upload or update a brand kit slot (creates new version)
+ */
+export const useUpsertBrandKitSlot = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertBrandKitSlot>>, TError,{token: string;projectId: string;slot: string;data: BodyType<UpsertBrandKitSlotInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof upsertBrandKitSlot>>,
+        TError,
+        {token: string;projectId: string;slot: string;data: BodyType<UpsertBrandKitSlotInput>},
+        TContext
+      > => {
+      return useMutation(getUpsertBrandKitSlotMutationOptions(options));
+    }
+
+export const getArchiveBrandKitSlotUrl = (token: string,
+    projectId: string,
+    slot: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/brand-kit-enterprise/${projectId}/slots/${slot}`
+}
+
+/**
+ * @summary Archive a brand kit slot
+ */
+export const archiveBrandKitSlot = async (token: string,
+    projectId: string,
+    slot: string, options?: RequestInit): Promise<OkResponse> => {
+
+  return customFetch<OkResponse>(getArchiveBrandKitSlotUrl(token,projectId,slot),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getArchiveBrandKitSlotMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveBrandKitSlot>>, TError,{token: string;projectId: string;slot: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof archiveBrandKitSlot>>, TError,{token: string;projectId: string;slot: string}, TContext> => {
+
+const mutationKey = ['archiveBrandKitSlot'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof archiveBrandKitSlot>>, {token: string;projectId: string;slot: string}> = (props) => {
+          const {token,projectId,slot} = props ?? {};
+
+          return  archiveBrandKitSlot(token,projectId,slot,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ArchiveBrandKitSlotMutationResult = NonNullable<Awaited<ReturnType<typeof archiveBrandKitSlot>>>
+
+    export type ArchiveBrandKitSlotMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Archive a brand kit slot
+ */
+export const useArchiveBrandKitSlot = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveBrandKitSlot>>, TError,{token: string;projectId: string;slot: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof archiveBrandKitSlot>>,
+        TError,
+        {token: string;projectId: string;slot: string},
+        TContext
+      > => {
+      return useMutation(getArchiveBrandKitSlotMutationOptions(options));
+    }
+
+export const getGetBrandKitSlotHistoryUrl = (token: string,
+    projectId: string,
+    slot: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/brand-kit-enterprise/${projectId}/slots/${slot}/history`
+}
+
+/**
+ * @summary Get version history for a brand kit slot
+ */
+export const getBrandKitSlotHistory = async (token: string,
+    projectId: string,
+    slot: string, options?: RequestInit): Promise<BrandKitSlotHistory> => {
+
+  return customFetch<BrandKitSlotHistory>(getGetBrandKitSlotHistoryUrl(token,projectId,slot),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBrandKitSlotHistoryQueryKey = (token: string,
+    projectId: string,
+    slot: string,) => {
+    return [
+    `/api/public/customer/workspace/${token}/brand-kit-enterprise/${projectId}/slots/${slot}/history`
+    ] as const;
+    }
+
+
+export const getGetBrandKitSlotHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getBrandKitSlotHistory>>, TError = ErrorType<unknown>>(token: string,
+    projectId: string,
+    slot: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBrandKitSlotHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBrandKitSlotHistoryQueryKey(token,projectId,slot);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBrandKitSlotHistory>>> = ({ signal }) => getBrandKitSlotHistory(token,projectId,slot, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined && projectId !== null && projectId !== undefined && slot !== null && slot !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBrandKitSlotHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBrandKitSlotHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getBrandKitSlotHistory>>>
+export type GetBrandKitSlotHistoryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get version history for a brand kit slot
+ */
+
+export function useGetBrandKitSlotHistory<TData = Awaited<ReturnType<typeof getBrandKitSlotHistory>>, TError = ErrorType<unknown>>(
+ token: string,
+    projectId: string,
+    slot: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBrandKitSlotHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBrandKitSlotHistoryQueryOptions(token,projectId,slot,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListAssetLibraryUrl = (token: string,
+    params?: ListAssetLibraryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/customer/workspace/${token}/assets?${stringifiedParams}` : `/api/public/customer/workspace/${token}/assets`
+}
+
+/**
+ * @summary List / search asset library for the workspace customer
+ */
+export const listAssetLibrary = async (token: string,
+    params?: ListAssetLibraryParams, options?: RequestInit): Promise<AssetLibraryList> => {
+
+  return customFetch<AssetLibraryList>(getListAssetLibraryUrl(token,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAssetLibraryQueryKey = (token: string,
+    params?: ListAssetLibraryParams,) => {
+    return [
+    `/api/public/customer/workspace/${token}/assets`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAssetLibraryQueryOptions = <TData = Awaited<ReturnType<typeof listAssetLibrary>>, TError = ErrorType<unknown>>(token: string,
+    params?: ListAssetLibraryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAssetLibrary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAssetLibraryQueryKey(token,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAssetLibrary>>> = ({ signal }) => listAssetLibrary(token,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAssetLibrary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAssetLibraryQueryResult = NonNullable<Awaited<ReturnType<typeof listAssetLibrary>>>
+export type ListAssetLibraryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List / search asset library for the workspace customer
+ */
+
+export function useListAssetLibrary<TData = Awaited<ReturnType<typeof listAssetLibrary>>, TError = ErrorType<unknown>>(
+ token: string,
+    params?: ListAssetLibraryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAssetLibrary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAssetLibraryQueryOptions(token,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateAssetLibraryItemUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/assets`
+}
+
+/**
+ * @summary Create a new asset library item
+ */
+export const createAssetLibraryItem = async (token: string,
+    createAssetLibraryInput: CreateAssetLibraryInput, options?: RequestInit): Promise<AssetLibraryItem> => {
+
+  return customFetch<AssetLibraryItem>(getCreateAssetLibraryItemUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createAssetLibraryInput)
+  }
+);}
+
+
+
+
+export const getCreateAssetLibraryItemMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAssetLibraryItem>>, TError,{token: string;data: BodyType<CreateAssetLibraryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAssetLibraryItem>>, TError,{token: string;data: BodyType<CreateAssetLibraryInput>}, TContext> => {
+
+const mutationKey = ['createAssetLibraryItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAssetLibraryItem>>, {token: string;data: BodyType<CreateAssetLibraryInput>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  createAssetLibraryItem(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAssetLibraryItemMutationResult = NonNullable<Awaited<ReturnType<typeof createAssetLibraryItem>>>
+    export type CreateAssetLibraryItemMutationBody = BodyType<CreateAssetLibraryInput>
+    export type CreateAssetLibraryItemMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Create a new asset library item
+ */
+export const useCreateAssetLibraryItem = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAssetLibraryItem>>, TError,{token: string;data: BodyType<CreateAssetLibraryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAssetLibraryItem>>,
+        TError,
+        {token: string;data: BodyType<CreateAssetLibraryInput>},
+        TContext
+      > => {
+      return useMutation(getCreateAssetLibraryItemMutationOptions(options));
+    }
+
+export const getGetAssetLibraryItemUrl = (token: string,
+    id: number,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/assets/${id}`
+}
+
+/**
+ * @summary Get a single asset library item
+ */
+export const getAssetLibraryItem = async (token: string,
+    id: number, options?: RequestInit): Promise<AssetLibraryItem> => {
+
+  return customFetch<AssetLibraryItem>(getGetAssetLibraryItemUrl(token,id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAssetLibraryItemQueryKey = (token: string,
+    id: number,) => {
+    return [
+    `/api/public/customer/workspace/${token}/assets/${id}`
+    ] as const;
+    }
+
+
+export const getGetAssetLibraryItemQueryOptions = <TData = Awaited<ReturnType<typeof getAssetLibraryItem>>, TError = ErrorType<ErrorResponse>>(token: string,
+    id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssetLibraryItem>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAssetLibraryItemQueryKey(token,id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAssetLibraryItem>>> = ({ signal }) => getAssetLibraryItem(token,id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined && id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAssetLibraryItem>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAssetLibraryItemQueryResult = NonNullable<Awaited<ReturnType<typeof getAssetLibraryItem>>>
+export type GetAssetLibraryItemQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get a single asset library item
+ */
+
+export function useGetAssetLibraryItem<TData = Awaited<ReturnType<typeof getAssetLibraryItem>>, TError = ErrorType<ErrorResponse>>(
+ token: string,
+    id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssetLibraryItem>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAssetLibraryItemQueryOptions(token,id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAssetVersionHistoryUrl = (token: string,
+    id: number,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/assets/${id}/history`
+}
+
+/**
+ * @summary Get version history for an asset
+ */
+export const getAssetVersionHistory = async (token: string,
+    id: number, options?: RequestInit): Promise<AssetLibraryList> => {
+
+  return customFetch<AssetLibraryList>(getGetAssetVersionHistoryUrl(token,id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAssetVersionHistoryQueryKey = (token: string,
+    id: number,) => {
+    return [
+    `/api/public/customer/workspace/${token}/assets/${id}/history`
+    ] as const;
+    }
+
+
+export const getGetAssetVersionHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getAssetVersionHistory>>, TError = ErrorType<unknown>>(token: string,
+    id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssetVersionHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAssetVersionHistoryQueryKey(token,id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAssetVersionHistory>>> = ({ signal }) => getAssetVersionHistory(token,id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined && id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAssetVersionHistory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAssetVersionHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getAssetVersionHistory>>>
+export type GetAssetVersionHistoryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get version history for an asset
+ */
+
+export function useGetAssetVersionHistory<TData = Awaited<ReturnType<typeof getAssetVersionHistory>>, TError = ErrorType<unknown>>(
+ token: string,
+    id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssetVersionHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAssetVersionHistoryQueryOptions(token,id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getReplaceAssetLibraryItemUrl = (token: string,
+    id: number,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/assets/${id}/replace`
+}
+
+/**
+ * @summary Replace an asset (create a new version, archive old)
+ */
+export const replaceAssetLibraryItem = async (token: string,
+    id: number,
+    createAssetLibraryInput: CreateAssetLibraryInput, options?: RequestInit): Promise<AssetLibraryItem> => {
+
+  return customFetch<AssetLibraryItem>(getReplaceAssetLibraryItemUrl(token,id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createAssetLibraryInput)
+  }
+);}
+
+
+
+
+export const getReplaceAssetLibraryItemMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof replaceAssetLibraryItem>>, TError,{token: string;id: number;data: BodyType<CreateAssetLibraryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof replaceAssetLibraryItem>>, TError,{token: string;id: number;data: BodyType<CreateAssetLibraryInput>}, TContext> => {
+
+const mutationKey = ['replaceAssetLibraryItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof replaceAssetLibraryItem>>, {token: string;id: number;data: BodyType<CreateAssetLibraryInput>}> = (props) => {
+          const {token,id,data} = props ?? {};
+
+          return  replaceAssetLibraryItem(token,id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReplaceAssetLibraryItemMutationResult = NonNullable<Awaited<ReturnType<typeof replaceAssetLibraryItem>>>
+    export type ReplaceAssetLibraryItemMutationBody = BodyType<CreateAssetLibraryInput>
+    export type ReplaceAssetLibraryItemMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Replace an asset (create a new version, archive old)
+ */
+export const useReplaceAssetLibraryItem = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof replaceAssetLibraryItem>>, TError,{token: string;id: number;data: BodyType<CreateAssetLibraryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof replaceAssetLibraryItem>>,
+        TError,
+        {token: string;id: number;data: BodyType<CreateAssetLibraryInput>},
+        TContext
+      > => {
+      return useMutation(getReplaceAssetLibraryItemMutationOptions(options));
+    }
+
+export const getRenameAssetLibraryItemUrl = (token: string,
+    id: number,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/assets/${id}/rename`
+}
+
+/**
+ * @summary Rename an asset
+ */
+export const renameAssetLibraryItem = async (token: string,
+    id: number,
+    renameAssetLibraryItemBody: RenameAssetLibraryItemBody, options?: RequestInit): Promise<AssetLibraryItem> => {
+
+  return customFetch<AssetLibraryItem>(getRenameAssetLibraryItemUrl(token,id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(renameAssetLibraryItemBody)
+  }
+);}
+
+
+
+
+export const getRenameAssetLibraryItemMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof renameAssetLibraryItem>>, TError,{token: string;id: number;data: BodyType<RenameAssetLibraryItemBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof renameAssetLibraryItem>>, TError,{token: string;id: number;data: BodyType<RenameAssetLibraryItemBody>}, TContext> => {
+
+const mutationKey = ['renameAssetLibraryItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof renameAssetLibraryItem>>, {token: string;id: number;data: BodyType<RenameAssetLibraryItemBody>}> = (props) => {
+          const {token,id,data} = props ?? {};
+
+          return  renameAssetLibraryItem(token,id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RenameAssetLibraryItemMutationResult = NonNullable<Awaited<ReturnType<typeof renameAssetLibraryItem>>>
+    export type RenameAssetLibraryItemMutationBody = BodyType<RenameAssetLibraryItemBody>
+    export type RenameAssetLibraryItemMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Rename an asset
+ */
+export const useRenameAssetLibraryItem = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof renameAssetLibraryItem>>, TError,{token: string;id: number;data: BodyType<RenameAssetLibraryItemBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof renameAssetLibraryItem>>,
+        TError,
+        {token: string;id: number;data: BodyType<RenameAssetLibraryItemBody>},
+        TContext
+      > => {
+      return useMutation(getRenameAssetLibraryItemMutationOptions(options));
+    }
+
+export const getToggleAssetFavoriteUrl = (token: string,
+    id: number,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/assets/${id}/favorite`
+}
+
+/**
+ * @summary Toggle favorite status of an asset
+ */
+export const toggleAssetFavorite = async (token: string,
+    id: number, options?: RequestInit): Promise<AssetLibraryItem> => {
+
+  return customFetch<AssetLibraryItem>(getToggleAssetFavoriteUrl(token,id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getToggleAssetFavoriteMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof toggleAssetFavorite>>, TError,{token: string;id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof toggleAssetFavorite>>, TError,{token: string;id: number}, TContext> => {
+
+const mutationKey = ['toggleAssetFavorite'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof toggleAssetFavorite>>, {token: string;id: number}> = (props) => {
+          const {token,id} = props ?? {};
+
+          return  toggleAssetFavorite(token,id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ToggleAssetFavoriteMutationResult = NonNullable<Awaited<ReturnType<typeof toggleAssetFavorite>>>
+
+    export type ToggleAssetFavoriteMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Toggle favorite status of an asset
+ */
+export const useToggleAssetFavorite = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof toggleAssetFavorite>>, TError,{token: string;id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof toggleAssetFavorite>>,
+        TError,
+        {token: string;id: number},
+        TContext
+      > => {
+      return useMutation(getToggleAssetFavoriteMutationOptions(options));
+    }
+
+export const getArchiveAssetLibraryItemUrl = (token: string,
+    id: number,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/assets/${id}/archive`
+}
+
+/**
+ * @summary Archive an asset
+ */
+export const archiveAssetLibraryItem = async (token: string,
+    id: number, options?: RequestInit): Promise<AssetLibraryItem> => {
+
+  return customFetch<AssetLibraryItem>(getArchiveAssetLibraryItemUrl(token,id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getArchiveAssetLibraryItemMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveAssetLibraryItem>>, TError,{token: string;id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof archiveAssetLibraryItem>>, TError,{token: string;id: number}, TContext> => {
+
+const mutationKey = ['archiveAssetLibraryItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof archiveAssetLibraryItem>>, {token: string;id: number}> = (props) => {
+          const {token,id} = props ?? {};
+
+          return  archiveAssetLibraryItem(token,id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ArchiveAssetLibraryItemMutationResult = NonNullable<Awaited<ReturnType<typeof archiveAssetLibraryItem>>>
+
+    export type ArchiveAssetLibraryItemMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Archive an asset
+ */
+export const useArchiveAssetLibraryItem = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveAssetLibraryItem>>, TError,{token: string;id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof archiveAssetLibraryItem>>,
+        TError,
+        {token: string;id: number},
+        TContext
+      > => {
+      return useMutation(getArchiveAssetLibraryItemMutationOptions(options));
+    }
+
+export const getTagAssetLibraryItemUrl = (token: string,
+    id: number,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/assets/${id}/tags`
+}
+
+/**
+ * @summary Update tags on an asset
+ */
+export const tagAssetLibraryItem = async (token: string,
+    id: number,
+    tagAssetLibraryItemBody: TagAssetLibraryItemBody, options?: RequestInit): Promise<AssetLibraryItem> => {
+
+  return customFetch<AssetLibraryItem>(getTagAssetLibraryItemUrl(token,id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(tagAssetLibraryItemBody)
+  }
+);}
+
+
+
+
+export const getTagAssetLibraryItemMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof tagAssetLibraryItem>>, TError,{token: string;id: number;data: BodyType<TagAssetLibraryItemBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof tagAssetLibraryItem>>, TError,{token: string;id: number;data: BodyType<TagAssetLibraryItemBody>}, TContext> => {
+
+const mutationKey = ['tagAssetLibraryItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof tagAssetLibraryItem>>, {token: string;id: number;data: BodyType<TagAssetLibraryItemBody>}> = (props) => {
+          const {token,id,data} = props ?? {};
+
+          return  tagAssetLibraryItem(token,id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TagAssetLibraryItemMutationResult = NonNullable<Awaited<ReturnType<typeof tagAssetLibraryItem>>>
+    export type TagAssetLibraryItemMutationBody = BodyType<TagAssetLibraryItemBody>
+    export type TagAssetLibraryItemMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update tags on an asset
+ */
+export const useTagAssetLibraryItem = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof tagAssetLibraryItem>>, TError,{token: string;id: number;data: BodyType<TagAssetLibraryItemBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof tagAssetLibraryItem>>,
+        TError,
+        {token: string;id: number;data: BodyType<TagAssetLibraryItemBody>},
+        TContext
+      > => {
+      return useMutation(getTagAssetLibraryItemMutationOptions(options));
+    }
+
+export const getSignAssetLibraryDownloadUrl = (token: string,
+    id: number,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/assets/${id}/sign`
+}
+
+/**
+ * @summary Generate a signed download URL for an asset
+ */
+export const signAssetLibraryDownload = async (token: string,
+    id: number, options?: RequestInit): Promise<AssetSignedDownload> => {
+
+  return customFetch<AssetSignedDownload>(getSignAssetLibraryDownloadUrl(token,id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSignAssetLibraryDownloadMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof signAssetLibraryDownload>>, TError,{token: string;id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof signAssetLibraryDownload>>, TError,{token: string;id: number}, TContext> => {
+
+const mutationKey = ['signAssetLibraryDownload'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof signAssetLibraryDownload>>, {token: string;id: number}> = (props) => {
+          const {token,id} = props ?? {};
+
+          return  signAssetLibraryDownload(token,id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SignAssetLibraryDownloadMutationResult = NonNullable<Awaited<ReturnType<typeof signAssetLibraryDownload>>>
+
+    export type SignAssetLibraryDownloadMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Generate a signed download URL for an asset
+ */
+export const useSignAssetLibraryDownload = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof signAssetLibraryDownload>>, TError,{token: string;id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof signAssetLibraryDownload>>,
+        TError,
+        {token: string;id: number},
+        TContext
+      > => {
+      return useMutation(getSignAssetLibraryDownloadMutationOptions(options));
+    }
+
+export const getPromoteCreativeAssetToLibraryUrl = (token: string,
+    sourceAssetId: number,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/assets/promote/${sourceAssetId}`
+}
+
+/**
+ * @summary Promote an AI-generated creative asset into the asset library
+ */
+export const promoteCreativeAssetToLibrary = async (token: string,
+    sourceAssetId: number,
+    promoteCreativeAssetToLibraryBody?: PromoteCreativeAssetToLibraryBody, options?: RequestInit): Promise<AssetLibraryItem> => {
+
+  return customFetch<AssetLibraryItem>(getPromoteCreativeAssetToLibraryUrl(token,sourceAssetId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(promoteCreativeAssetToLibraryBody)
+  }
+);}
+
+
+
+
+export const getPromoteCreativeAssetToLibraryMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof promoteCreativeAssetToLibrary>>, TError,{token: string;sourceAssetId: number;data?: BodyType<PromoteCreativeAssetToLibraryBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof promoteCreativeAssetToLibrary>>, TError,{token: string;sourceAssetId: number;data?: BodyType<PromoteCreativeAssetToLibraryBody>}, TContext> => {
+
+const mutationKey = ['promoteCreativeAssetToLibrary'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof promoteCreativeAssetToLibrary>>, {token: string;sourceAssetId: number;data?: BodyType<PromoteCreativeAssetToLibraryBody>}> = (props) => {
+          const {token,sourceAssetId,data} = props ?? {};
+
+          return  promoteCreativeAssetToLibrary(token,sourceAssetId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PromoteCreativeAssetToLibraryMutationResult = NonNullable<Awaited<ReturnType<typeof promoteCreativeAssetToLibrary>>>
+    export type PromoteCreativeAssetToLibraryMutationBody = BodyType<PromoteCreativeAssetToLibraryBody> | undefined
+    export type PromoteCreativeAssetToLibraryMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Promote an AI-generated creative asset into the asset library
+ */
+export const usePromoteCreativeAssetToLibrary = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof promoteCreativeAssetToLibrary>>, TError,{token: string;sourceAssetId: number;data?: BodyType<PromoteCreativeAssetToLibraryBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof promoteCreativeAssetToLibrary>>,
+        TError,
+        {token: string;sourceAssetId: number;data?: BodyType<PromoteCreativeAssetToLibraryBody>},
+        TContext
+      > => {
+      return useMutation(getPromoteCreativeAssetToLibraryMutationOptions(options));
+    }
+
+export const getGetZipDeliveryStatusUrl = (token: string,
+    projectId: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/zip/${projectId}`
+}
+
+/**
+ * @summary Get ZIP delivery status for a project
+ */
+export const getZipDeliveryStatus = async (token: string,
+    projectId: string, options?: RequestInit): Promise<ZipDeliveryView> => {
+
+  return customFetch<ZipDeliveryView>(getGetZipDeliveryStatusUrl(token,projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetZipDeliveryStatusQueryKey = (token: string,
+    projectId: string,) => {
+    return [
+    `/api/public/customer/workspace/${token}/zip/${projectId}`
+    ] as const;
+    }
+
+
+export const getGetZipDeliveryStatusQueryOptions = <TData = Awaited<ReturnType<typeof getZipDeliveryStatus>>, TError = ErrorType<unknown>>(token: string,
+    projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getZipDeliveryStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetZipDeliveryStatusQueryKey(token,projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getZipDeliveryStatus>>> = ({ signal }) => getZipDeliveryStatus(token,projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined && projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getZipDeliveryStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetZipDeliveryStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getZipDeliveryStatus>>>
+export type GetZipDeliveryStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get ZIP delivery status for a project
+ */
+
+export function useGetZipDeliveryStatus<TData = Awaited<ReturnType<typeof getZipDeliveryStatus>>, TError = ErrorType<unknown>>(
+ token: string,
+    projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getZipDeliveryStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetZipDeliveryStatusQueryOptions(token,projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRequestZipDeliveryUrl = (token: string,
+    projectId: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/zip/${projectId}/request`
+}
+
+/**
+ * @summary Request ZIP generation for an unlocked project
+ */
+export const requestZipDelivery = async (token: string,
+    projectId: string, options?: RequestInit): Promise<ZipDeliveryView> => {
+
+  return customFetch<ZipDeliveryView>(getRequestZipDeliveryUrl(token,projectId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRequestZipDeliveryMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestZipDelivery>>, TError,{token: string;projectId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestZipDelivery>>, TError,{token: string;projectId: string}, TContext> => {
+
+const mutationKey = ['requestZipDelivery'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestZipDelivery>>, {token: string;projectId: string}> = (props) => {
+          const {token,projectId} = props ?? {};
+
+          return  requestZipDelivery(token,projectId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestZipDeliveryMutationResult = NonNullable<Awaited<ReturnType<typeof requestZipDelivery>>>
+
+    export type RequestZipDeliveryMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Request ZIP generation for an unlocked project
+ */
+export const useRequestZipDelivery = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestZipDelivery>>, TError,{token: string;projectId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestZipDelivery>>,
+        TError,
+        {token: string;projectId: string},
+        TContext
+      > => {
+      return useMutation(getRequestZipDeliveryMutationOptions(options));
+    }
+
+export const getRetryZipDeliveryUrl = (token: string,
+    projectId: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/zip/${projectId}/retry`
+}
+
+/**
+ * @summary Retry a failed ZIP delivery
+ */
+export const retryZipDelivery = async (token: string,
+    projectId: string, options?: RequestInit): Promise<ZipDeliveryView> => {
+
+  return customFetch<ZipDeliveryView>(getRetryZipDeliveryUrl(token,projectId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRetryZipDeliveryMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryZipDelivery>>, TError,{token: string;projectId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryZipDelivery>>, TError,{token: string;projectId: string}, TContext> => {
+
+const mutationKey = ['retryZipDelivery'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryZipDelivery>>, {token: string;projectId: string}> = (props) => {
+          const {token,projectId} = props ?? {};
+
+          return  retryZipDelivery(token,projectId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryZipDeliveryMutationResult = NonNullable<Awaited<ReturnType<typeof retryZipDelivery>>>
+
+    export type RetryZipDeliveryMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Retry a failed ZIP delivery
+ */
+export const useRetryZipDelivery = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryZipDelivery>>, TError,{token: string;projectId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof retryZipDelivery>>,
+        TError,
+        {token: string;projectId: string},
+        TContext
+      > => {
+      return useMutation(getRetryZipDeliveryMutationOptions(options));
+    }
+
+export const getAdminBrandKitStatsUrl = () => {
+
+
+
+
+  return `/api/ai/brand-kit/stats`
+}
+
+/**
+ * @summary Admin — brand kit completeness summary across all projects
+ */
+export const adminBrandKitStats = async ( options?: RequestInit): Promise<AdminBrandKitStats200> => {
+
+  return customFetch<AdminBrandKitStats200>(getAdminBrandKitStatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminBrandKitStatsQueryKey = () => {
+    return [
+    `/api/ai/brand-kit/stats`
+    ] as const;
+    }
+
+
+export const getAdminBrandKitStatsQueryOptions = <TData = Awaited<ReturnType<typeof adminBrandKitStats>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminBrandKitStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminBrandKitStatsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminBrandKitStats>>> = ({ signal }) => adminBrandKitStats({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminBrandKitStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AdminBrandKitStatsQueryResult = NonNullable<Awaited<ReturnType<typeof adminBrandKitStats>>>
+export type AdminBrandKitStatsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — brand kit completeness summary across all projects
+ */
+
+export function useAdminBrandKitStats<TData = Awaited<ReturnType<typeof adminBrandKitStats>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminBrandKitStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAdminBrandKitStatsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAdminGetProjectBrandKitUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/ai/brand-kit/projects/${projectId}`
+}
+
+/**
+ * @summary Admin — get brand kit for any project
+ */
+export const adminGetProjectBrandKit = async (projectId: string, options?: RequestInit): Promise<BrandKitEnterpriseDetail> => {
+
+  return customFetch<BrandKitEnterpriseDetail>(getAdminGetProjectBrandKitUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminGetProjectBrandKitQueryKey = (projectId: string,) => {
+    return [
+    `/api/ai/brand-kit/projects/${projectId}`
+    ] as const;
+    }
+
+
+export const getAdminGetProjectBrandKitQueryOptions = <TData = Awaited<ReturnType<typeof adminGetProjectBrandKit>>, TError = ErrorType<ErrorResponse>>(projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminGetProjectBrandKit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminGetProjectBrandKitQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminGetProjectBrandKit>>> = ({ signal }) => adminGetProjectBrandKit(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminGetProjectBrandKit>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AdminGetProjectBrandKitQueryResult = NonNullable<Awaited<ReturnType<typeof adminGetProjectBrandKit>>>
+export type AdminGetProjectBrandKitQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Admin — get brand kit for any project
+ */
+
+export function useAdminGetProjectBrandKit<TData = Awaited<ReturnType<typeof adminGetProjectBrandKit>>, TError = ErrorType<ErrorResponse>>(
+ projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminGetProjectBrandKit>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAdminGetProjectBrandKitQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAdminAssetLibraryStatsUrl = () => {
+
+
+
+
+  return `/api/ai/asset-library/stats`
+}
+
+/**
+ * @summary Admin — asset library stats
+ */
+export const adminAssetLibraryStats = async ( options?: RequestInit): Promise<AdminAssetLibraryStats200> => {
+
+  return customFetch<AdminAssetLibraryStats200>(getAdminAssetLibraryStatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminAssetLibraryStatsQueryKey = () => {
+    return [
+    `/api/ai/asset-library/stats`
+    ] as const;
+    }
+
+
+export const getAdminAssetLibraryStatsQueryOptions = <TData = Awaited<ReturnType<typeof adminAssetLibraryStats>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminAssetLibraryStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminAssetLibraryStatsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminAssetLibraryStats>>> = ({ signal }) => adminAssetLibraryStats({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminAssetLibraryStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AdminAssetLibraryStatsQueryResult = NonNullable<Awaited<ReturnType<typeof adminAssetLibraryStats>>>
+export type AdminAssetLibraryStatsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — asset library stats
+ */
+
+export function useAdminAssetLibraryStats<TData = Awaited<ReturnType<typeof adminAssetLibraryStats>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminAssetLibraryStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAdminAssetLibraryStatsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAdminZipDeliveryStatsUrl = () => {
+
+
+
+
+  return `/api/ai/zip-deliveries`
+}
+
+/**
+ * @summary Admin — ZIP delivery overview stats
+ */
+export const adminZipDeliveryStats = async ( options?: RequestInit): Promise<AdminZipDeliveryStats200> => {
+
+  return customFetch<AdminZipDeliveryStats200>(getAdminZipDeliveryStatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminZipDeliveryStatsQueryKey = () => {
+    return [
+    `/api/ai/zip-deliveries`
+    ] as const;
+    }
+
+
+export const getAdminZipDeliveryStatsQueryOptions = <TData = Awaited<ReturnType<typeof adminZipDeliveryStats>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminZipDeliveryStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminZipDeliveryStatsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminZipDeliveryStats>>> = ({ signal }) => adminZipDeliveryStats({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminZipDeliveryStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AdminZipDeliveryStatsQueryResult = NonNullable<Awaited<ReturnType<typeof adminZipDeliveryStats>>>
+export type AdminZipDeliveryStatsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — ZIP delivery overview stats
+ */
+
+export function useAdminZipDeliveryStats<TData = Awaited<ReturnType<typeof adminZipDeliveryStats>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminZipDeliveryStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAdminZipDeliveryStatsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAdminGetProjectZipUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/ai/zip-deliveries/${projectId}`
+}
+
+/**
+ * @summary Admin — get ZIP delivery status for a project
+ */
+export const adminGetProjectZip = async (projectId: string, options?: RequestInit): Promise<ZipDeliveryView> => {
+
+  return customFetch<ZipDeliveryView>(getAdminGetProjectZipUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminGetProjectZipQueryKey = (projectId: string,) => {
+    return [
+    `/api/ai/zip-deliveries/${projectId}`
+    ] as const;
+    }
+
+
+export const getAdminGetProjectZipQueryOptions = <TData = Awaited<ReturnType<typeof adminGetProjectZip>>, TError = ErrorType<unknown>>(projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminGetProjectZip>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminGetProjectZipQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminGetProjectZip>>> = ({ signal }) => adminGetProjectZip(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminGetProjectZip>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AdminGetProjectZipQueryResult = NonNullable<Awaited<ReturnType<typeof adminGetProjectZip>>>
+export type AdminGetProjectZipQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — get ZIP delivery status for a project
+ */
+
+export function useAdminGetProjectZip<TData = Awaited<ReturnType<typeof adminGetProjectZip>>, TError = ErrorType<unknown>>(
+ projectId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminGetProjectZip>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAdminGetProjectZipQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAdminRetryZipDeliveryUrl = (projectId: string,) => {
+
+
+
+
+  return `/api/ai/zip-deliveries/${projectId}/retry`
+}
+
+/**
+ * @summary Admin — force retry ZIP delivery for a project
+ */
+export const adminRetryZipDelivery = async (projectId: string, options?: RequestInit): Promise<ZipDeliveryView> => {
+
+  return customFetch<ZipDeliveryView>(getAdminRetryZipDeliveryUrl(projectId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getAdminRetryZipDeliveryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminRetryZipDelivery>>, TError,{projectId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminRetryZipDelivery>>, TError,{projectId: string}, TContext> => {
+
+const mutationKey = ['adminRetryZipDelivery'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminRetryZipDelivery>>, {projectId: string}> = (props) => {
+          const {projectId} = props ?? {};
+
+          return  adminRetryZipDelivery(projectId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminRetryZipDeliveryMutationResult = NonNullable<Awaited<ReturnType<typeof adminRetryZipDelivery>>>
+
+    export type AdminRetryZipDeliveryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Admin — force retry ZIP delivery for a project
+ */
+export const useAdminRetryZipDelivery = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminRetryZipDelivery>>, TError,{projectId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminRetryZipDelivery>>,
+        TError,
+        {projectId: string},
+        TContext
+      > => {
+      return useMutation(getAdminRetryZipDeliveryMutationOptions(options));
+    }
+
 export const getAdminGetCustomerDownloadsUrl = (email: string,) => {
 
 
@@ -20507,4 +22454,1158 @@ export const useRecordAbVariantMetric = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getRecordAbVariantMetricMutationOptions(options));
     }
+
+export const getGetPublicCpReviewUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}`
+}
+
+/**
+ * Resolve the review token, mark as viewed, and return full context including document state, versions, comments, and QC scores.
+ * @summary Get CP review context
+ */
+export const getPublicCpReview = async (token: string, options?: RequestInit): Promise<CpReviewContext> => {
+
+  return customFetch<CpReviewContext>(getGetPublicCpReviewUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicCpReviewQueryKey = (token: string,) => {
+    return [
+    `/api/public/cp-review/${token}`
+    ] as const;
+    }
+
+
+export const getGetPublicCpReviewQueryOptions = <TData = Awaited<ReturnType<typeof getPublicCpReview>>, TError = ErrorType<NotFoundResponse | GoneResponse>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicCpReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicCpReviewQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicCpReview>>> = ({ signal }) => getPublicCpReview(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicCpReview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicCpReviewQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicCpReview>>>
+export type GetPublicCpReviewQueryError = ErrorType<NotFoundResponse | GoneResponse>
+
+
+/**
+ * @summary Get CP review context
+ */
+
+export function useGetPublicCpReview<TData = Awaited<ReturnType<typeof getPublicCpReview>>, TError = ErrorType<NotFoundResponse | GoneResponse>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicCpReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicCpReviewQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCpReviewPdfUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/pdf`
+}
+
+/**
+ * If filesUnlocked is false, returns a server-rendered watermarked PDF binary.
+ * If filesUnlocked is true, redirects (302) to the clean Supabase signed URL.
+ * @summary Serve PDF (watermarked or clean redirect)
+ */
+export const getCpReviewPdf = async (token: string, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetCpReviewPdfUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCpReviewPdfQueryKey = (token: string,) => {
+    return [
+    `/api/public/cp-review/${token}/pdf`
+    ] as const;
+    }
+
+
+export const getGetCpReviewPdfQueryOptions = <TData = Awaited<ReturnType<typeof getCpReviewPdf>>, TError = ErrorType<void | NotFoundResponse | GoneResponse>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewPdf>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCpReviewPdfQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCpReviewPdf>>> = ({ signal }) => getCpReviewPdf(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCpReviewPdf>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCpReviewPdfQueryResult = NonNullable<Awaited<ReturnType<typeof getCpReviewPdf>>>
+export type GetCpReviewPdfQueryError = ErrorType<void | NotFoundResponse | GoneResponse>
+
+
+/**
+ * @summary Serve PDF (watermarked or clean redirect)
+ */
+
+export function useGetCpReviewPdf<TData = Awaited<ReturnType<typeof getCpReviewPdf>>, TError = ErrorType<void | NotFoundResponse | GoneResponse>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewPdf>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCpReviewPdfQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCpReviewVersionsUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/versions`
+}
+
+/**
+ * @summary List all document versions
+ */
+export const getCpReviewVersions = async (token: string, options?: RequestInit): Promise<CpDocumentVersion[]> => {
+
+  return customFetch<CpDocumentVersion[]>(getGetCpReviewVersionsUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCpReviewVersionsQueryKey = (token: string,) => {
+    return [
+    `/api/public/cp-review/${token}/versions`
+    ] as const;
+    }
+
+
+export const getGetCpReviewVersionsQueryOptions = <TData = Awaited<ReturnType<typeof getCpReviewVersions>>, TError = ErrorType<NotFoundResponse>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCpReviewVersionsQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCpReviewVersions>>> = ({ signal }) => getCpReviewVersions(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCpReviewVersions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCpReviewVersionsQueryResult = NonNullable<Awaited<ReturnType<typeof getCpReviewVersions>>>
+export type GetCpReviewVersionsQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary List all document versions
+ */
+
+export function useGetCpReviewVersions<TData = Awaited<ReturnType<typeof getCpReviewVersions>>, TError = ErrorType<NotFoundResponse>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCpReviewVersionsQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCpReviewVersionByIdUrl = (token: string,
+    versionId: number,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/versions/${versionId}`
+}
+
+/**
+ * @summary Get a single document version by version number
+ */
+export const getCpReviewVersionById = async (token: string,
+    versionId: number, options?: RequestInit): Promise<CpDocumentVersion> => {
+
+  return customFetch<CpDocumentVersion>(getGetCpReviewVersionByIdUrl(token,versionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCpReviewVersionByIdQueryKey = (token: string,
+    versionId: number,) => {
+    return [
+    `/api/public/cp-review/${token}/versions/${versionId}`
+    ] as const;
+    }
+
+
+export const getGetCpReviewVersionByIdQueryOptions = <TData = Awaited<ReturnType<typeof getCpReviewVersionById>>, TError = ErrorType<NotFoundResponse>>(token: string,
+    versionId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewVersionById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCpReviewVersionByIdQueryKey(token,versionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCpReviewVersionById>>> = ({ signal }) => getCpReviewVersionById(token,versionId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined && versionId !== null && versionId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCpReviewVersionById>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCpReviewVersionByIdQueryResult = NonNullable<Awaited<ReturnType<typeof getCpReviewVersionById>>>
+export type GetCpReviewVersionByIdQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Get a single document version by version number
+ */
+
+export function useGetCpReviewVersionById<TData = Awaited<ReturnType<typeof getCpReviewVersionById>>, TError = ErrorType<NotFoundResponse>>(
+ token: string,
+    versionId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewVersionById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCpReviewVersionByIdQueryOptions(token,versionId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCompareCpReviewVersionsUrl = (token: string,
+    params: CompareCpReviewVersionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/cp-review/${token}/versions/compare?${stringifiedParams}` : `/api/public/cp-review/${token}/versions/compare`
+}
+
+/**
+ * @summary Section-level diff between two versions
+ */
+export const compareCpReviewVersions = async (token: string,
+    params: CompareCpReviewVersionsParams, options?: RequestInit): Promise<CpVersionDiff> => {
+
+  return customFetch<CpVersionDiff>(getCompareCpReviewVersionsUrl(token,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCompareCpReviewVersionsQueryKey = (token: string,
+    params?: CompareCpReviewVersionsParams,) => {
+    return [
+    `/api/public/cp-review/${token}/versions/compare`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getCompareCpReviewVersionsQueryOptions = <TData = Awaited<ReturnType<typeof compareCpReviewVersions>>, TError = ErrorType<BadRequestResponse | NotFoundResponse>>(token: string,
+    params: CompareCpReviewVersionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof compareCpReviewVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCompareCpReviewVersionsQueryKey(token,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof compareCpReviewVersions>>> = ({ signal }) => compareCpReviewVersions(token,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof compareCpReviewVersions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type CompareCpReviewVersionsQueryResult = NonNullable<Awaited<ReturnType<typeof compareCpReviewVersions>>>
+export type CompareCpReviewVersionsQueryError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+
+/**
+ * @summary Section-level diff between two versions
+ */
+
+export function useCompareCpReviewVersions<TData = Awaited<ReturnType<typeof compareCpReviewVersions>>, TError = ErrorType<BadRequestResponse | NotFoundResponse>>(
+ token: string,
+    params: CompareCpReviewVersionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof compareCpReviewVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getCompareCpReviewVersionsQueryOptions(token,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCpReviewCommentsUrl = (token: string,
+    params?: GetCpReviewCommentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/cp-review/${token}/comments?${stringifiedParams}` : `/api/public/cp-review/${token}/comments`
+}
+
+/**
+ * @summary List comments with threaded replies
+ */
+export const getCpReviewComments = async (token: string,
+    params?: GetCpReviewCommentsParams, options?: RequestInit): Promise<GetCpReviewComments200> => {
+
+  return customFetch<GetCpReviewComments200>(getGetCpReviewCommentsUrl(token,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCpReviewCommentsQueryKey = (token: string,
+    params?: GetCpReviewCommentsParams,) => {
+    return [
+    `/api/public/cp-review/${token}/comments`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCpReviewCommentsQueryOptions = <TData = Awaited<ReturnType<typeof getCpReviewComments>>, TError = ErrorType<NotFoundResponse>>(token: string,
+    params?: GetCpReviewCommentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewComments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCpReviewCommentsQueryKey(token,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCpReviewComments>>> = ({ signal }) => getCpReviewComments(token,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCpReviewComments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCpReviewCommentsQueryResult = NonNullable<Awaited<ReturnType<typeof getCpReviewComments>>>
+export type GetCpReviewCommentsQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary List comments with threaded replies
+ */
+
+export function useGetCpReviewComments<TData = Awaited<ReturnType<typeof getCpReviewComments>>, TError = ErrorType<NotFoundResponse>>(
+ token: string,
+    params?: GetCpReviewCommentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewComments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCpReviewCommentsQueryOptions(token,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAddCpReviewCommentUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/comments`
+}
+
+/**
+ * @summary Add a page or section comment
+ */
+export const addCpReviewComment = async (token: string,
+    cpAddCommentInput: CpAddCommentInput, options?: RequestInit): Promise<CpPageComment> => {
+
+  return customFetch<CpPageComment>(getAddCpReviewCommentUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(cpAddCommentInput)
+  }
+);}
+
+
+
+
+export const getAddCpReviewCommentMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addCpReviewComment>>, TError,{token: string;data: BodyType<CpAddCommentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addCpReviewComment>>, TError,{token: string;data: BodyType<CpAddCommentInput>}, TContext> => {
+
+const mutationKey = ['addCpReviewComment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addCpReviewComment>>, {token: string;data: BodyType<CpAddCommentInput>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  addCpReviewComment(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddCpReviewCommentMutationResult = NonNullable<Awaited<ReturnType<typeof addCpReviewComment>>>
+    export type AddCpReviewCommentMutationBody = BodyType<CpAddCommentInput>
+    export type AddCpReviewCommentMutationError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+    /**
+ * @summary Add a page or section comment
+ */
+export const useAddCpReviewComment = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addCpReviewComment>>, TError,{token: string;data: BodyType<CpAddCommentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addCpReviewComment>>,
+        TError,
+        {token: string;data: BodyType<CpAddCommentInput>},
+        TContext
+      > => {
+      return useMutation(getAddCpReviewCommentMutationOptions(options));
+    }
+
+export const getPatchCpReviewCommentUrl = (token: string,
+    commentId: number,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/comments/${commentId}`
+}
+
+/**
+ * @summary Edit or resolve/reopen a comment (client only)
+ */
+export const patchCpReviewComment = async (token: string,
+    commentId: number,
+    patchCpReviewCommentBody: PatchCpReviewCommentBody, options?: RequestInit): Promise<CpPageComment> => {
+
+  return customFetch<CpPageComment>(getPatchCpReviewCommentUrl(token,commentId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(patchCpReviewCommentBody)
+  }
+);}
+
+
+
+
+export const getPatchCpReviewCommentMutationOptions = <TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchCpReviewComment>>, TError,{token: string;commentId: number;data: BodyType<PatchCpReviewCommentBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchCpReviewComment>>, TError,{token: string;commentId: number;data: BodyType<PatchCpReviewCommentBody>}, TContext> => {
+
+const mutationKey = ['patchCpReviewComment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchCpReviewComment>>, {token: string;commentId: number;data: BodyType<PatchCpReviewCommentBody>}> = (props) => {
+          const {token,commentId,data} = props ?? {};
+
+          return  patchCpReviewComment(token,commentId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchCpReviewCommentMutationResult = NonNullable<Awaited<ReturnType<typeof patchCpReviewComment>>>
+    export type PatchCpReviewCommentMutationBody = BodyType<PatchCpReviewCommentBody>
+    export type PatchCpReviewCommentMutationError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Edit or resolve/reopen a comment (client only)
+ */
+export const usePatchCpReviewComment = <TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchCpReviewComment>>, TError,{token: string;commentId: number;data: BodyType<PatchCpReviewCommentBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof patchCpReviewComment>>,
+        TError,
+        {token: string;commentId: number;data: BodyType<PatchCpReviewCommentBody>},
+        TContext
+      > => {
+      return useMutation(getPatchCpReviewCommentMutationOptions(options));
+    }
+
+export const getDeleteCpReviewCommentUrl = (token: string,
+    commentId: number,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/comments/${commentId}`
+}
+
+/**
+ * @summary Delete own open comment
+ */
+export const deleteCpReviewComment = async (token: string,
+    commentId: number, options?: RequestInit): Promise<OkResponse> => {
+
+  return customFetch<OkResponse>(getDeleteCpReviewCommentUrl(token,commentId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteCpReviewCommentMutationOptions = <TError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCpReviewComment>>, TError,{token: string;commentId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteCpReviewComment>>, TError,{token: string;commentId: number}, TContext> => {
+
+const mutationKey = ['deleteCpReviewComment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteCpReviewComment>>, {token: string;commentId: number}> = (props) => {
+          const {token,commentId} = props ?? {};
+
+          return  deleteCpReviewComment(token,commentId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteCpReviewCommentMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCpReviewComment>>>
+
+    export type DeleteCpReviewCommentMutationError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Delete own open comment
+ */
+export const useDeleteCpReviewComment = <TError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCpReviewComment>>, TError,{token: string;commentId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteCpReviewComment>>,
+        TError,
+        {token: string;commentId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteCpReviewCommentMutationOptions(options));
+    }
+
+export const getApproveCpReviewUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/approve`
+}
+
+/**
+ * @summary Approve document — requires confirmed:true checkbox
+ */
+export const approveCpReview = async (token: string,
+    approveCpReviewBody: ApproveCpReviewBody, options?: RequestInit): Promise<CpActionResult> => {
+
+  return customFetch<CpActionResult>(getApproveCpReviewUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(approveCpReviewBody)
+  }
+);}
+
+
+
+
+export const getApproveCpReviewMutationOptions = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveCpReview>>, TError,{token: string;data: BodyType<ApproveCpReviewBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveCpReview>>, TError,{token: string;data: BodyType<ApproveCpReviewBody>}, TContext> => {
+
+const mutationKey = ['approveCpReview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveCpReview>>, {token: string;data: BodyType<ApproveCpReviewBody>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  approveCpReview(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveCpReviewMutationResult = NonNullable<Awaited<ReturnType<typeof approveCpReview>>>
+    export type ApproveCpReviewMutationBody = BodyType<ApproveCpReviewBody>
+    export type ApproveCpReviewMutationError = ErrorType<BadRequestResponse | ConflictResponse>
+
+    /**
+ * @summary Approve document — requires confirmed:true checkbox
+ */
+export const useApproveCpReview = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveCpReview>>, TError,{token: string;data: BodyType<ApproveCpReviewBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveCpReview>>,
+        TError,
+        {token: string;data: BodyType<ApproveCpReviewBody>},
+        TContext
+      > => {
+      return useMutation(getApproveCpReviewMutationOptions(options));
+    }
+
+export const getRequestCpReviewRevisionUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/request-revision`
+}
+
+/**
+ * @summary Request a revision with structured notes
+ */
+export const requestCpReviewRevision = async (token: string,
+    cpRevisionInput: CpRevisionInput, options?: RequestInit): Promise<RequestCpReviewRevision200> => {
+
+  return customFetch<RequestCpReviewRevision200>(getRequestCpReviewRevisionUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(cpRevisionInput)
+  }
+);}
+
+
+
+
+export const getRequestCpReviewRevisionMutationOptions = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestCpReviewRevision>>, TError,{token: string;data: BodyType<CpRevisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestCpReviewRevision>>, TError,{token: string;data: BodyType<CpRevisionInput>}, TContext> => {
+
+const mutationKey = ['requestCpReviewRevision'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestCpReviewRevision>>, {token: string;data: BodyType<CpRevisionInput>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  requestCpReviewRevision(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestCpReviewRevisionMutationResult = NonNullable<Awaited<ReturnType<typeof requestCpReviewRevision>>>
+    export type RequestCpReviewRevisionMutationBody = BodyType<CpRevisionInput>
+    export type RequestCpReviewRevisionMutationError = ErrorType<BadRequestResponse | ConflictResponse>
+
+    /**
+ * @summary Request a revision with structured notes
+ */
+export const useRequestCpReviewRevision = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestCpReviewRevision>>, TError,{token: string;data: BodyType<CpRevisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestCpReviewRevision>>,
+        TError,
+        {token: string;data: BodyType<CpRevisionInput>},
+        TContext
+      > => {
+      return useMutation(getRequestCpReviewRevisionMutationOptions(options));
+    }
+
+export const getRejectCpReviewUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/reject`
+}
+
+/**
+ * @summary Reject document — requires reason
+ */
+export const rejectCpReview = async (token: string,
+    rejectCpReviewBody: RejectCpReviewBody, options?: RequestInit): Promise<CpActionResult> => {
+
+  return customFetch<CpActionResult>(getRejectCpReviewUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(rejectCpReviewBody)
+  }
+);}
+
+
+
+
+export const getRejectCpReviewMutationOptions = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectCpReview>>, TError,{token: string;data: BodyType<RejectCpReviewBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rejectCpReview>>, TError,{token: string;data: BodyType<RejectCpReviewBody>}, TContext> => {
+
+const mutationKey = ['rejectCpReview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rejectCpReview>>, {token: string;data: BodyType<RejectCpReviewBody>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  rejectCpReview(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RejectCpReviewMutationResult = NonNullable<Awaited<ReturnType<typeof rejectCpReview>>>
+    export type RejectCpReviewMutationBody = BodyType<RejectCpReviewBody>
+    export type RejectCpReviewMutationError = ErrorType<BadRequestResponse | ConflictResponse>
+
+    /**
+ * @summary Reject document — requires reason
+ */
+export const useRejectCpReview = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectCpReview>>, TError,{token: string;data: BodyType<RejectCpReviewBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rejectCpReview>>,
+        TError,
+        {token: string;data: BodyType<RejectCpReviewBody>},
+        TContext
+      > => {
+      return useMutation(getRejectCpReviewMutationOptions(options));
+    }
+
+export const getGetCpReviewTimelineUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/timeline`
+}
+
+/**
+ * @summary Full chronological event timeline
+ */
+export const getCpReviewTimeline = async (token: string, options?: RequestInit): Promise<GetCpReviewTimeline200> => {
+
+  return customFetch<GetCpReviewTimeline200>(getGetCpReviewTimelineUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCpReviewTimelineQueryKey = (token: string,) => {
+    return [
+    `/api/public/cp-review/${token}/timeline`
+    ] as const;
+    }
+
+
+export const getGetCpReviewTimelineQueryOptions = <TData = Awaited<ReturnType<typeof getCpReviewTimeline>>, TError = ErrorType<NotFoundResponse>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewTimeline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCpReviewTimelineQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCpReviewTimeline>>> = ({ signal }) => getCpReviewTimeline(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCpReviewTimeline>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCpReviewTimelineQueryResult = NonNullable<Awaited<ReturnType<typeof getCpReviewTimeline>>>
+export type GetCpReviewTimelineQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Full chronological event timeline
+ */
+
+export function useGetCpReviewTimeline<TData = Awaited<ReturnType<typeof getCpReviewTimeline>>, TError = ErrorType<NotFoundResponse>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewTimeline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCpReviewTimelineQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCpReviewStatsUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/stats`
+}
+
+/**
+ * @summary Review KPI stats (comment counts, QC, payment lock)
+ */
+export const getCpReviewStats = async (token: string, options?: RequestInit): Promise<CpReviewStats> => {
+
+  return customFetch<CpReviewStats>(getGetCpReviewStatsUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCpReviewStatsQueryKey = (token: string,) => {
+    return [
+    `/api/public/cp-review/${token}/stats`
+    ] as const;
+    }
+
+
+export const getGetCpReviewStatsQueryOptions = <TData = Awaited<ReturnType<typeof getCpReviewStats>>, TError = ErrorType<NotFoundResponse>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCpReviewStatsQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCpReviewStats>>> = ({ signal }) => getCpReviewStats(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCpReviewStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCpReviewStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getCpReviewStats>>>
+export type GetCpReviewStatsQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Review KPI stats (comment counts, QC, payment lock)
+ */
+
+export function useGetCpReviewStats<TData = Awaited<ReturnType<typeof getCpReviewStats>>, TError = ErrorType<NotFoundResponse>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCpReviewStatsQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCpReviewDashboardUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/dashboard`
+}
+
+/**
+ * @summary Review KPI dashboard (extended stats)
+ */
+export const getCpReviewDashboard = async (token: string, options?: RequestInit): Promise<CpReviewDashboard> => {
+
+  return customFetch<CpReviewDashboard>(getGetCpReviewDashboardUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCpReviewDashboardQueryKey = (token: string,) => {
+    return [
+    `/api/public/cp-review/${token}/dashboard`
+    ] as const;
+    }
+
+
+export const getGetCpReviewDashboardQueryOptions = <TData = Awaited<ReturnType<typeof getCpReviewDashboard>>, TError = ErrorType<NotFoundResponse>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCpReviewDashboardQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCpReviewDashboard>>> = ({ signal }) => getCpReviewDashboard(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCpReviewDashboard>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCpReviewDashboardQueryResult = NonNullable<Awaited<ReturnType<typeof getCpReviewDashboard>>>
+export type GetCpReviewDashboardQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Review KPI dashboard (extended stats)
+ */
+
+export function useGetCpReviewDashboard<TData = Awaited<ReturnType<typeof getCpReviewDashboard>>, TError = ErrorType<NotFoundResponse>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCpReviewDashboardQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

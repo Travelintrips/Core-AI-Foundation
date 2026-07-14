@@ -30,6 +30,7 @@ async function buildAll() {
     external: [
       "*.node",
       "pdfkit",
+      "pdf-lib",
       "sharp",
       "better-sqlite3",
       "sqlite3",

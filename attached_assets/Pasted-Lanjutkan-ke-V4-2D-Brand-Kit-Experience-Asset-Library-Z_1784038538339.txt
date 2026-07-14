@@ -1,0 +1,480 @@
+Lanjutkan ke V4.2D — Brand Kit Experience, Asset Library, ZIP Delivery & Download Center.
+
+STATUS SAAT INI
+
+V4.2A
+✅ Brief Intelligence selesai
+
+V4.2B
+✅ Document Engine + Package Enforcement + QC selesai
+
+V4.2C
+✅ Customer Review Experience selesai
+
+TIDAK BOLEH MENGUBAH:
+
+- Queue
+- Dispatcher
+- Worker Cluster
+- Event Bus
+- Commercial Flow
+- Payment Gate
+- Review System
+- Company Profile Document Engine
+- Watermark logic
+- Approval state machine
+
+Reuse seluruh sistem yang sudah ada.
+
+==========================================================
+TARGET V4.2D
+==========================================================
+
+Menyelesaikan experience setelah customer APPROVE.
+
+Fokus:
+
+1.
+Brand Kit Enterprise
+
+2.
+Asset Library
+
+3.
+ZIP Delivery
+
+4.
+Download Center Enterprise
+
+5.
+Final Unlock Flow
+
+6.
+Customer Analytics
+
+==========================================================
+A. BRAND KIT ENTERPRISE
+==========================================================
+
+Audit Brand Kit existing.
+
+Lengkapi menjadi:
+
+Logo
+
+Secondary Logo
+
+Icon
+
+Monogram
+
+Brand Color
+
+Secondary Color
+
+Accent Color
+
+Typography
+
+Heading Font
+
+Body Font
+
+Brand Voice
+
+Writing Style
+
+Photography Style
+
+Illustration Style
+
+Icon Style
+
+Do / Don't
+
+Social Style
+
+Email Signature
+
+Stationery
+
+Corporate Pattern
+
+Brand Guidelines PDF
+
+Semua asset memiliki:
+
+- version
+- uploadedBy
+- uploadedAt
+- active
+- archived
+- tags
+- preview
+- checksum
+
+Tambahkan completeness score:
+
+0-100
+
+Dimensi:
+
+Logo
+
+Colors
+
+Fonts
+
+Voice
+
+Assets
+
+Guidelines
+
+Jika belum lengkap:
+
+Workspace menampilkan warning.
+
+==========================================================
+B. ASSET LIBRARY
+==========================================================
+
+Buat Asset Library Enterprise.
+
+Kategori:
+
+Logo
+
+Photo
+
+Illustration
+
+Icon
+
+Document
+
+Brand Guideline
+
+Reference
+
+Generated Image
+
+Uploaded Image
+
+Customer dapat:
+
+Search
+
+Filter
+
+Preview
+
+Rename
+
+Favorite
+
+Archive
+
+Replace
+
+Download
+
+Tag
+
+Sort
+
+Semua asset:
+
+Versioned.
+
+==========================================================
+C. ZIP DELIVERY
+==========================================================
+
+Setelah:
+
+Payment Verified
+
+FilesUnlocked
+
+↓
+
+Generate ZIP background.
+
+Isi ZIP:
+
+PDF
+
+PPTX
+
+DOCX (jika package)
+
+Images
+
+Logo
+
+Brand Assets
+
+Manifest
+
+QC Report
+
+Version History
+
+README
+
+ZIP generation memakai Queue existing.
+
+Jika gagal:
+
+Project tetap completed.
+
+Retry terpisah.
+
+==========================================================
+D. DOWNLOAD CENTER
+==========================================================
+
+Upgrade Download Center.
+
+Tampilkan:
+
+PDF
+
+PPTX
+
+DOCX
+
+ZIP
+
+Brand Assets
+
+Manifest
+
+QC Report
+
+Version
+
+Language
+
+Page Count
+
+Slide Count
+
+Generated Date
+
+Status
+
+Checksum
+
+Semua download:
+
+Signed URL
+
+Expiry
+
+Audit Log
+
+==========================================================
+E. FINAL UNLOCK FLOW
+==========================================================
+
+Flow:
+
+Approve
+
+↓
+
+Payment Verified
+
+↓
+
+Unlock
+
+↓
+
+Generate ZIP
+
+↓
+
+Generate Signed URLs
+
+↓
+
+Notify Customer
+
+Pastikan:
+
+Approve ≠ Unlock
+
+Payment adalah source of truth.
+
+==========================================================
+F. CUSTOMER ANALYTICS
+==========================================================
+
+Track:
+
+Download
+
+Preview
+
+ZIP Download
+
+Asset View
+
+Brand Kit Completion
+
+Brand Asset Usage
+
+Language Preference
+
+Document Version Download
+
+Semua melalui Event Bus existing.
+
+==========================================================
+G. ADMIN
+==========================================================
+
+Tambahkan panel:
+
+Brand Kit Score
+
+Asset Library
+
+ZIP Status
+
+Download Logs
+
+Unlock History
+
+Asset Usage
+
+Storage Summary
+
+Retry ZIP
+
+==========================================================
+H. SECURITY
+==========================================================
+
+Pastikan:
+
+Signed URL
+
+Expiry
+
+Ownership
+
+Audit
+
+No storage path leak
+
+No provider leak
+
+No prompt leak
+
+No AI metadata leak
+
+==========================================================
+I. OPENAPI
+==========================================================
+
+Dokumentasikan seluruh endpoint baru.
+
+Generate:
+
+Zod
+
+Hooks
+
+Types
+
+==========================================================
+J. TEST
+==========================================================
+
+Minimal:
+
+✓ Brand completeness
+
+✓ Asset upload
+
+✓ Asset replace
+
+✓ Asset version
+
+✓ ZIP generation
+
+✓ ZIP retry
+
+✓ Signed download
+
+✓ Download expiry
+
+✓ Manifest
+
+✓ QC report
+
+✓ Unlock flow
+
+✓ Analytics events
+
+✓ OpenAPI
+
+✓ Codegen
+
+✓ pnpm verify
+
+==========================================================
+SCREENSHOT
+==========================================================
+
+Ambil screenshot:
+
+Brand Kit
+
+Asset Library
+
+Download Center
+
+ZIP Download
+
+Unlock Status
+
+Admin Brand Dashboard
+
+==========================================================
+FINAL REPORT
+==========================================================
+
+Laporkan:
+
+- files berubah
+- endpoint baru
+- Brand Kit score
+- Asset Library
+- ZIP flow
+- Download Center
+- Unlock flow
+- Analytics
+- tests
+- screenshots
+- OpenAPI count
+- verify
+- known limitations
+
+JANGAN lanjut ke:
+
+Finance AI
+
+Legal AI
+
+Marketing AI
+
+Marketplace
+
+Target akhir:
+
+Creative AI memiliki pengalaman end-to-end yang lengkap, mulai dari Brief → AI → Review → Approval → Payment → Unlock → Download → Brand Asset Management, sehingga siap digunakan sebagai layanan komersial enterprise.

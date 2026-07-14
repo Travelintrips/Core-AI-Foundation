@@ -52,3 +52,5 @@
 - [phase-v41-execution-summary](phase-v41-execution-summary.md) — additive-wrapper pattern for derived customer-safe views over CanonicalEvents; type-only import breaks circularity; eventId/sourceEventId regex collision gotcha
 - [cp-brief-wizard-p0](cp-brief-wizard-p0.md) — Company Profile P0: all 27 cp* fields wired into brief wizard steps 1-5, validateStep isCP param, ReviewStep readiness banner, 40 backend tests passing
 - [cp-p1-document-engine](cp-p1-document-engine.md) — P1: mapper uses cp* fields from brief_json, package gating, QC service, deliverable manifest endpoint
+- [cp-review-v42c-completion](cp-review-v42c-completion.md) — OpenAPI shared-responses gotcha, fixture/schema drift (tsx doesn't typecheck), watermark must fail-closed, created_project_id text-vs-int bug, pdf-lib install≠externalize
+- [phase-v42d-brand-kit-zip](phase-v42d-brand-kit-zip.md) — V4.2D rules: slot weights, no @/lib/api in portal, ZIP job payload, pdf-lib re-install, route mount order
