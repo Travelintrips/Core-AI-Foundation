@@ -773,12 +773,23 @@ router.get("/ai/catalog/analytics", async (_req, res): Promise<void> => {
       }
     : null;
 
-  // Average delivery time: parse leading integer out of estimatedDelivery strings like "3-5 days"
+  // Average delivery time: parse estimatedDelivery strings like "3-5 hari",
+  // "30-60 menit", "2-4 jam" into a day-equivalent number. Only matching a
+  // bare leading integer (old behavior) misreads "30-60 menit" as 30 days.
   const deliveryDays: number[] = [];
   for (const r of requests) {
     const service = serviceById.get(r.serviceId);
-    const match = service?.estimatedDelivery?.match(/(\d+)/);
-    if (match) deliveryDays.push(parseInt(match[1], 10));
+    const match = service?.estimatedDelivery?.toLowerCase().match(/(\d+)(?:\s*[-–]\s*\d+)?\s*(menit|jam|hari|minggu|bulan)/);
+    if (match) {
+      const value = parseInt(match[1], 10);
+      const days =
+        match[2] === "menit" ? value / (24 * 60) :
+        match[2] === "jam" ? value / 24 :
+        match[2] === "minggu" ? value * 7 :
+        match[2] === "bulan" ? value * 30 :
+        value; // hari
+      deliveryDays.push(days);
+    }
   }
   const averageDeliveryTimeDays = deliveryDays.length
     ? Math.round((deliveryDays.reduce((a, b) => a + b, 0) / deliveryDays.length) * 10) / 10

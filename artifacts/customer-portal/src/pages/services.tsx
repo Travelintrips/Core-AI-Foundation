@@ -28,9 +28,21 @@ function mockCompleted(id: number) {
   return ((id * 11 + 7) % 180) + 42;
 }
 
+// Parses strings like "30-60 menit", "2-4 jam", "5-7 hari", "2 minggu" into a
+// day-equivalent number so comparisons/sorts/filters (all expressed in days)
+// are correct regardless of unit. Falls back to 7 for non-numeric estimates
+// like "Ongoing, bulanan".
 function deliveryDays(est: string): number {
-  const m = est.match(/(\d+)/);
-  return m ? parseInt(m[1]) : 7;
+  const m = est.toLowerCase().match(/(\d+)(?:\s*[-–]\s*\d+)?\s*(menit|jam|hari|minggu|bulan)/);
+  if (!m) return 7;
+  const value = parseInt(m[1], 10);
+  switch (m[2]) {
+    case "menit": return value / (24 * 60);
+    case "jam": return value / 24;
+    case "minggu": return value * 7;
+    case "bulan": return value * 30;
+    default: return value; // hari
+  }
 }
 
 type BadgeKind = "Enterprise" | "Pengiriman Cepat" | "Baru" | "Terpopuler" | "Trending" | "Direview Manusia" | "Siap Komersial";
