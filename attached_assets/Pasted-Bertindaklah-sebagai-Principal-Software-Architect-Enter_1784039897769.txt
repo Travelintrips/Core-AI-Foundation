@@ -1,0 +1,362 @@
+Bertindaklah sebagai Principal Software Architect, Enterprise SaaS Architect, Security Architect, PostgreSQL Architect, dan Supabase Multi-Tenant Specialist.
+
+INI BUKAN IMPLEMENTASI.
+
+INI BUKAN REFACTOR.
+
+INI BUKAN PERUBAHAN SOURCE CODE.
+
+JANGAN MENGUBAH FILE APAPUN.
+
+JANGAN MEMBUAT COMMIT.
+
+JANGAN MEMBUAT MIGRATION.
+
+JANGAN MEMBUAT TODO IMPLEMENTASI.
+
+===========================================================
+TUJUAN
+===========================================================
+
+Saya ingin membuat IMPLEMENTATION BLUEPRINT untuk Phase P0-1:
+
+ENTERPRISE TENANT ISOLATION
+
+Blueprint ini akan menjadi acuan implementasi berikutnya.
+
+Blueprint harus berdasarkan:
+
+- source code aktual
+- audit enterprise
+- validation audit
+- roadmap enterprise
+
+Bukan berdasarkan asumsi.
+
+===========================================================
+LATAR BELAKANG
+===========================================================
+
+Validation Audit menemukan bahwa:
+
+- tenant_id tidak digunakan secara konsisten
+- query tidak melakukan tenant filtering
+- tenant isolation belum ditegakkan
+- belum ada enforcement yang sistematis
+
+Saya ingin mengetahui desain terbaik untuk memperbaikinya TANPA membangun ulang platform.
+
+===========================================================
+ANALISIS
+===========================================================
+
+Audit seluruh project.
+
+Cari:
+
+- semua entity yang seharusnya multi-tenant
+- semua service
+- semua repository
+- semua route
+- semua middleware
+- semua worker
+- semua background job
+- semua scheduler
+- semua SSE
+- semua export
+- semua AI workflow
+
+Petakan bagaimana tenant seharusnya mengalir.
+
+===========================================================
+BLUEPRINT YANG HARUS DIBUAT
+===========================================================
+
+1.
+Current Architecture
+
+Bagaimana tenant bekerja sekarang.
+
+===========================================================
+
+2.
+Target Architecture
+
+Bagaimana tenant seharusnya bekerja.
+
+===========================================================
+
+3.
+Tenant Context Flow
+
+Request
+
+↓
+
+Authentication
+
+↓
+
+Tenant Resolution
+
+↓
+
+Authorization
+
+↓
+
+Service
+
+↓
+
+Repository
+
+↓
+
+Database
+
+↓
+
+Response
+
+===========================================================
+
+4.
+Tenant Resolution Strategy
+
+Jelaskan alternatif:
+
+JWT
+
+Workspace
+
+Organization
+
+Subdomain
+
+Header
+
+Hybrid
+
+Lalu pilih yang PALING COCOK dengan project ini beserta alasannya.
+
+===========================================================
+
+5.
+Data Isolation Strategy
+
+Jelaskan:
+
+- application level
+- repository level
+- database level
+- RLS
+- hybrid
+
+Berikan rekomendasi terbaik.
+
+===========================================================
+
+6.
+Middleware Strategy
+
+Blueprint middleware.
+
+Tidak perlu implementasi.
+
+===========================================================
+
+7.
+Repository Strategy
+
+Bagaimana semua query nantinya harus mengikuti tenant context.
+
+===========================================================
+
+8.
+Worker Strategy
+
+Bagaimana background worker membawa tenant context.
+
+===========================================================
+
+9.
+AI Workflow Strategy
+
+Bagaimana AI job membawa tenant.
+
+===========================================================
+
+10.
+Export Strategy
+
+PDF
+
+Presentation
+
+ZIP
+
+Preview
+
+Thumbnail
+
+Bagaimana memastikan semua export tetap tenant-safe.
+
+===========================================================
+
+11.
+SSE Strategy
+
+Bagaimana event hanya dikirim kepada tenant yang benar.
+
+===========================================================
+
+12.
+Audit Log Strategy
+
+Bagaimana audit log menyimpan tenant.
+
+===========================================================
+
+13.
+Security Analysis
+
+Kemungkinan:
+
+tenant leak
+
+cross tenant read
+
+cross tenant write
+
+background leak
+
+cache leak
+
+SSE leak
+
+AI leak
+
+===========================================================
+
+14.
+Migration Strategy
+
+Tanpa implementasi.
+
+Bagaimana migrasi dilakukan bertahap.
+
+Phase 1
+
+Phase 2
+
+Phase 3
+
+Rollback Strategy
+
+===========================================================
+
+15.
+Compatibility Analysis
+
+Apakah perubahan ini mempengaruhi:
+
+Customer Portal
+
+Admin Portal
+
+Worker
+
+Scheduler
+
+AI
+
+Presentation
+
+Document
+
+Quotation
+
+Authentication
+
+===========================================================
+
+16.
+Risk Analysis
+
+Kemungkinan masalah.
+
+Mitigasi.
+
+===========================================================
+
+17.
+Implementation Order
+
+Urutan implementasi yang paling aman.
+
+===========================================================
+
+18.
+Acceptance Criteria
+
+Bagaimana memastikan tenant isolation benar-benar selesai.
+
+===========================================================
+
+19.
+Testing Strategy
+
+Unit Test
+
+Integration Test
+
+Security Test
+
+Tenant Isolation Test
+
+Regression Test
+
+===========================================================
+OUTPUT
+===========================================================
+
+Simpan laporan ke:
+
+docs/blueprints/p0-tenant-isolation-blueprint.md
+
+Laporan harus bersifat teknis tingkat enterprise.
+
+Tidak boleh membuat kode.
+
+Tidak boleh membuat migration.
+
+Tidak boleh membuat refactor.
+
+Tidak boleh membuat commit.
+
+Tidak boleh membuat contoh implementasi.
+
+Blueprint ini nantinya akan dijadikan acuan implementasi Tenant Isolation pada fase berikutnya.
+
+===========================================================
+SETELAH SELESAI
+===========================================================
+
+JANGAN berhenti.
+
+Lanjutkan otomatis membuat blueprint berikutnya secara berurutan tanpa menunggu instruksi saya:
+
+P0-2 Soft Delete Blueprint
+
+P0-3 Audit Log Blueprint
+
+P0-4 Canonical Quotation Blueprint
+
+Masing-masing disimpan pada folder:
+
+docs/blueprints/
+
+dengan format dan kedalaman analisis yang sama.
+
+Tetap dilarang mengubah source code, migration, maupun implementasi.

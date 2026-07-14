@@ -1,0 +1,415 @@
+Bertindaklah sebagai Principal Product Architect, Enterprise Solution Architect, SaaS Architect, dan CTO.
+
+JANGAN bertanya kepada saya.
+
+JANGAN meminta konfirmasi.
+
+Jika ada keputusan desain yang wajar, ambil keputusan terbaik berdasarkan enterprise best practice.
+
+===========================================================
+TUJUAN
+===========================================================
+
+Berdasarkan:
+
+1. Audit Enterprise Readiness
+2. Validation Audit
+
+Saya ingin Anda menyusun ROADMAP IMPLEMENTASI ENTERPRISE yang akan dijadikan acuan pengembangan selanjutnya.
+
+INI BUKAN IMPLEMENTASI.
+
+INI BUKAN REFACTOR.
+
+INI BUKAN PERUBAHAN KODE.
+
+Tidak boleh mengubah source code.
+
+Tidak boleh membuat migration.
+
+Tidak boleh membuat commit.
+
+===========================================================
+PRINSIP
+===========================================================
+
+Roadmap harus berdasarkan:
+
+• hasil audit aktual
+• hasil validation audit
+• source code aktual
+• kondisi project saat ini
+
+Bukan berdasarkan asumsi.
+
+===========================================================
+TUGAS
+===========================================================
+
+Analisa seluruh hasil audit dan validasi.
+
+Kemudian susun roadmap implementasi dengan urutan yang PALING MASUK AKAL.
+
+Prioritaskan:
+
+1.
+Security
+
+2.
+Architecture
+
+3.
+Scalability
+
+4.
+Business Value
+
+5.
+Customer Experience
+
+6.
+Admin Experience
+
+7.
+AI Quality
+
+8.
+Enterprise Readiness
+
+===========================================================
+UNTUK SETIAP ITEM ROADMAP
+===========================================================
+
+Berikan:
+
+Nama Phase
+
+Tujuan
+
+Alasan bisnis
+
+Alasan teknis
+
+Risiko bila tidak dikerjakan
+
+Impact
+
+Complexity
+
+Dependencies
+
+Estimasi effort
+
+Estimasi risk
+
+===========================================================
+KLASIFIKASI
+===========================================================
+
+Kelompokkan menjadi:
+
+P0
+Critical
+
+P1
+High Priority
+
+P2
+Medium
+
+P3
+Low
+
+P4
+Future
+
+===========================================================
+KHUSUS CREATIVE CONSULTANT
+===========================================================
+
+Buat roadmap khusus.
+
+Jangan implementasi.
+
+Analisa apakah Creative Consultant layak di-upgrade menjadi:
+
+Strategic Creative Consultant AI
+
+yang mampu:
+
+Executive Summary
+
+Business Analysis
+
+Brand Audit
+
+Marketing Audit
+
+Competitive Insight
+
+Creative Direction Summary
+
+Business Insight
+
+Risk Analysis
+
+Gap Analysis
+
+Priority Actions
+
+ROI Recommendation
+
+Implementation Checklist
+
+Roadmap
+
+Decision Support
+
+Expected Outcome
+
+Next Consultation
+
+Jika iya,
+
+buat roadmap upgrade bertahap.
+
+===========================================================
+KHUSUS MULTI TENANT
+===========================================================
+
+Susun roadmap:
+
+tenant isolation
+
+authorization
+
+middleware
+
+query isolation
+
+repository isolation
+
+RLS
+
+tenant context
+
+audit log
+
+tanpa implementasi.
+
+===========================================================
+KHUSUS SOFT DELETE
+===========================================================
+
+Susun roadmap:
+
+soft delete
+
+restore
+
+archive
+
+retention
+
+purge policy
+
+audit trail
+
+===========================================================
+KHUSUS QUOTATION
+===========================================================
+
+Analisa dua workflow quotation.
+
+Tentukan:
+
+mana yang menjadi canonical workflow.
+
+mana yang harus dipensiunkan.
+
+mana yang harus dimigrasikan.
+
+Tanpa implementasi.
+
+===========================================================
+DELIVERABLE ROADMAP
+===========================================================
+
+Audit kembali seluruh deliverable.
+
+Kelompokkan:
+
+Production Ready
+
+Needs Improvement
+
+Planned
+
+Missing
+
+Deprecated
+
+===========================================================
+AI ROADMAP
+===========================================================
+
+Analisa seluruh AI.
+
+Kelompokkan:
+
+Stable
+
+Needs Refactor
+
+Needs Optimization
+
+Future AI
+
+===========================================================
+BUSINESS ROADMAP
+===========================================================
+
+Susun roadmap agar platform berkembang menjadi:
+
+Enterprise Creative Agency AI
+
+yang melayani:
+
+Branding
+
+Marketing
+
+Sales
+
+Investor
+
+Corporate
+
+SME
+
+Startup
+
+Agency
+
+Manufacturing
+
+Trading
+
+Logistics
+
+Hospitality
+
+Healthcare
+
+Education
+
+Government
+
+===========================================================
+JANGAN MENAMBAHKAN FITUR SEMBARANGAN.
+===========================================================
+
+Setiap rekomendasi harus memenuhi minimal satu:
+
+• meningkatkan business value
+
+• meningkatkan enterprise readiness
+
+• meningkatkan AI quality
+
+• meningkatkan automation
+
+• meningkatkan scalability
+
+• meningkatkan customer experience
+
+• meningkatkan revenue potential
+
+===========================================================
+OUTPUT
+===========================================================
+
+Buat laporan profesional.
+
+Minimal berisi:
+
+1.
+Executive Summary
+
+2.
+Current Platform Position
+
+3.
+Critical Findings
+
+4.
+Priority Matrix
+
+5.
+Roadmap P0
+
+6.
+Roadmap P1
+
+7.
+Roadmap P2
+
+8.
+Roadmap P3
+
+9.
+Roadmap P4
+
+10.
+Creative Consultant Roadmap
+
+11.
+AI Evolution Roadmap
+
+12.
+Architecture Evolution
+
+13.
+Security Evolution
+
+14.
+Business Evolution
+
+15.
+Deliverable Evolution
+
+16.
+Enterprise Readiness Roadmap
+
+17.
+Estimated Development Sequence
+
+18.
+Risks
+
+19.
+Final Recommendation
+
+===========================================================
+ATURAN
+===========================================================
+
+Tidak boleh mengubah kode.
+
+Tidak boleh membuat commit.
+
+Tidak boleh membuat migration.
+
+Tidak boleh membuat TODO implementasi.
+
+Tidak boleh membuat placeholder.
+
+Tidak boleh membuat kode contoh.
+
+Fokus hanya membuat roadmap implementasi berdasarkan hasil audit dan validation audit yang sudah ada.
+
+Simpan laporan roadmap ke:
+
+docs/roadmap/enterprise-platform-roadmap-2026-07-14.md
+
+Laporan harus cukup detail sehingga setiap phase nantinya dapat langsung dijadikan acuan implementasi.
