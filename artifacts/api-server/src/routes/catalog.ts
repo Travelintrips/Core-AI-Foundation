@@ -38,6 +38,13 @@ import { generatePricingSnapshot, toCustomerFacingBreakdown, type PricingSelecti
 import { generateScheduleForProject, type PaymentPolicy } from "../services/paymentScheduleService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
 import { createHash, randomBytes } from "crypto";
+import {
+  assertCompanyProfileBriefReady,
+  computeCompanyProfileBriefScore,
+  isCompanyProfileServiceCode,
+  resolveIndustryQuestionGroup,
+  BriefIncompleteError,
+} from "../services/companyProfileBriefIntelligence.js";
 import { getGateForServiceQuotation, gateIsCleared } from "../services/commercialGateService.js";
 
 // Statuses that must only be reached once the commercial gate (if one exists
@@ -429,6 +436,51 @@ router.post("/ai/catalog/requests/:id/approve-margin", async (req, res): Promise
   if (!row) { res.status(404).json({ error: "Request not found" }); return; }
   await logAudit("catalog", "approve_margin", String(id), "ai_service_request", "success", { approvedBy });
   res.json({ ok: true });
+});
+
+// ── Company Profile sprint (P0): brief-completeness readiness + admin override ─
+
+router.get("/ai/catalog/requests/:id/brief-readiness", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
+  const [row] = await db.select().from(aiServiceRequestsTable).where(eq(aiServiceRequestsTable.id, id)).limit(1);
+  if (!row) { res.status(404).json({ error: "Request not found" }); return; }
+  const score = computeCompanyProfileBriefScore((row.briefJson ?? {}) as Record<string, unknown>);
+  const brief = (row.briefJson ?? {}) as Record<string, unknown>;
+  const industrySignal = typeof brief.cpBusinessTypeDetail === "string" ? brief.cpBusinessTypeDetail : (typeof brief.companyIndustry === "string" ? brief.companyIndustry : null);
+  const questionGroup = resolveIndustryQuestionGroup(industrySignal);
+  res.json({
+    ...score,
+    conditionalQuestionGroup: questionGroup,
+    overrideActive: Boolean(row.briefGuardOverrideAt),
+    overrideReason: row.briefGuardOverrideReason,
+    overrideBy: row.briefGuardOverrideBy,
+    overrideAt: row.briefGuardOverrideAt,
+  });
+});
+
+router.post("/ai/catalog/requests/:id/override-brief-guard", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id, res);
+  if (id === null) return;
+  const { reason, overriddenBy } = req.body as { reason?: string; overriddenBy?: string };
+  if (!reason || !reason.trim()) { res.status(400).json({ error: "reason is required" }); return; }
+  if (!overriddenBy || !overriddenBy.trim()) { res.status(400).json({ error: "overriddenBy is required" }); return; }
+  const [row] = await db
+    .update(aiServiceRequestsTable)
+    .set({
+      briefGuardOverrideReason: reason.trim(),
+      briefGuardOverrideBy: overriddenBy.trim(),
+      briefGuardOverrideAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(aiServiceRequestsTable.id, id))
+    .returning();
+  if (!row) { res.status(404).json({ error: "Request not found" }); return; }
+  await logAudit("catalog", "override_brief_guard", String(id), "ai_service_request", "success", {
+    reason: reason.trim(),
+    overriddenBy: overriddenBy.trim(),
+  });
+  res.json({ ok: true, briefGuardOverrideAt: row.briefGuardOverrideAt });
 });
 
 router.patch("/ai/catalog/requests/:id/status", async (req, res): Promise<void> => {
@@ -1074,6 +1126,44 @@ router.put("/public/catalog/requests/:requestId/brief", async (req, res): Promis
   res.json({ ok: true, status: updated.status });
 });
 
+// ── Public: Company Profile brief readiness (live UX in the brief wizard) ─────
+
+router.get("/public/catalog/requests/:requestId/brief-readiness", async (req, res): Promise<void> => {
+  const { requestId } = req.params as { requestId: string };
+  if (!requestId || requestId.length < 8) {
+    res.status(400).json({ error: "Invalid requestId" });
+    return;
+  }
+
+  const [row] = await db
+    .select({ briefJson: aiServiceRequestsTable.briefJson, serviceId: aiServiceRequestsTable.serviceId })
+    .from(aiServiceRequestsTable)
+    .where(eq(aiServiceRequestsTable.requestId, requestId))
+    .limit(1);
+
+  if (!row) {
+    res.status(404).json({ error: "Service request not found" });
+    return;
+  }
+
+  const [service] = await db
+    .select({ serviceCode: aiServicesTable.serviceCode })
+    .from(aiServicesTable)
+    .where(eq(aiServicesTable.id, row.serviceId))
+    .limit(1);
+
+  if (!isCompanyProfileServiceCode(service?.serviceCode)) {
+    res.status(409).json({ error: "Brief readiness scoring only applies to the Company Profile service" });
+    return;
+  }
+
+  const brief = (row.briefJson ?? {}) as Record<string, unknown>;
+  const score = computeCompanyProfileBriefScore(brief);
+  const industrySignal = typeof brief.cpBusinessTypeDetail === "string" ? brief.cpBusinessTypeDetail : (typeof brief.companyIndustry === "string" ? brief.companyIndustry : null);
+  const questionGroup = resolveIndustryQuestionGroup(industrySignal);
+  res.json({ ...score, conditionalQuestionGroup: questionGroup });
+});
+
 // ── Public: Standard (fixed_price) checkout ───────────────────────────────────
 // POST /public/catalog/requests/:requestId/checkout
 //
@@ -1118,6 +1208,26 @@ router.post("/public/catalog/requests/:requestId/checkout", async (req, res): Pr
   if (service.serviceFlow !== "fixed_price") {
     res.status(409).json({ error: "This service requires a quotation — use the Enterprise/Custom flow" });
     return;
+  }
+
+  // ── Company Profile sprint (P0): block generation start on an incomplete brief ──
+  if (isCompanyProfileServiceCode(service.serviceCode) && !request.briefGuardOverrideAt) {
+    try {
+      assertCompanyProfileBriefReady((request.briefJson ?? {}) as Record<string, unknown>);
+    } catch (err) {
+      if (err instanceof BriefIncompleteError) {
+        res.status(422).json({
+          error: err.message,
+          code: err.code,
+          missingFields: err.missingFields,
+          currentScore: err.currentScore,
+          requiredScore: err.requiredScore,
+          nextRecommendedQuestions: err.nextRecommendedQuestions,
+        });
+        return;
+      }
+      throw err;
+    }
   }
 
   let pkg: typeof aiServicePackagesTable.$inferSelect | null = null;

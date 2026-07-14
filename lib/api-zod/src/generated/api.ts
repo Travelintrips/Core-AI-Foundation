@@ -4805,6 +4805,91 @@ export const ApproveRequestMarginResponse = zod.object({
 
 
 /**
+ * @summary Compute the Company Profile brief-completeness score for a request (admin)
+ */
+export const GetCompanyProfileBriefReadinessParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCompanyProfileBriefReadinessResponse = zod.object({
+  "identityScore": zod.number(),
+  "storyScore": zod.number(),
+  "serviceScore": zod.number(),
+  "legalScore": zod.number(),
+  "visualScore": zod.number(),
+  "contactScore": zod.number(),
+  "scopeScore": zod.number(),
+  "overallScore": zod.number(),
+  "missingRequiredFields": zod.array(zod.string()),
+  "recommendedQuestions": zod.array(zod.string()),
+  "readinessStatus": zod.enum(['incomplete', 'needs_information', 'ready_for_generation']),
+  "conditionalQuestionGroup": zod.union([zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "questions": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "type": zod.enum(['text', 'textarea', 'multiselect', 'checklist'])
+}))
+}),zod.null()])
+}).and(zod.object({
+  "overrideActive": zod.boolean().optional(),
+  "overrideReason": zod.string().nullish(),
+  "overrideBy": zod.string().nullish(),
+  "overrideAt": zod.coerce.date().nullish()
+}))
+
+
+/**
+ * @summary Admin override of the Company Profile BRIEF_INCOMPLETE production guard
+ */
+export const OverrideCompanyProfileBriefGuardParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const OverrideCompanyProfileBriefGuardBody = zod.object({
+  "reason": zod.string(),
+  "overriddenBy": zod.string()
+})
+
+export const OverrideCompanyProfileBriefGuardResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "briefGuardOverrideAt": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Compute the Company Profile brief-completeness score (customer-facing, no auth required)
+ */
+export const GetPublicCompanyProfileBriefReadinessParams = zod.object({
+  "requestId": zod.coerce.string()
+})
+
+export const GetPublicCompanyProfileBriefReadinessResponse = zod.object({
+  "identityScore": zod.number(),
+  "storyScore": zod.number(),
+  "serviceScore": zod.number(),
+  "legalScore": zod.number(),
+  "visualScore": zod.number(),
+  "contactScore": zod.number(),
+  "scopeScore": zod.number(),
+  "overallScore": zod.number(),
+  "missingRequiredFields": zod.array(zod.string()),
+  "recommendedQuestions": zod.array(zod.string()),
+  "readinessStatus": zod.enum(['incomplete', 'needs_information', 'ready_for_generation']),
+  "conditionalQuestionGroup": zod.union([zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "questions": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "type": zod.enum(['text', 'textarea', 'multiselect', 'checklist'])
+}))
+}),zod.null()])
+})
+
+
+/**
  * @summary Update a service pricing package
  */
 export const UpdateServicePackageParams = zod.object({

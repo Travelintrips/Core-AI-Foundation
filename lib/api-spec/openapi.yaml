@@ -3630,6 +3630,103 @@ paths:
                 properties:
                   ok:
                     type: boolean
+  /ai/catalog/requests/{id}/brief-readiness:
+    get:
+      operationId: getCompanyProfileBriefReadiness
+      tags: [service-catalog]
+      summary: Compute the Company Profile brief-completeness score for a request (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Score computed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/CompanyProfileBriefScore"
+                  - type: object
+                    properties:
+                      overrideActive:
+                        type: boolean
+                      overrideReason:
+                        type: string
+                        nullable: true
+                      overrideBy:
+                        type: string
+                        nullable: true
+                      overrideAt:
+                        type: string
+                        format: date-time
+                        nullable: true
+        "404":
+          description: Not found
+  /ai/catalog/requests/{id}/override-brief-guard:
+    post:
+      operationId: overrideCompanyProfileBriefGuard
+      tags: [service-catalog]
+      summary: Admin override of the Company Profile BRIEF_INCOMPLETE production guard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason, overriddenBy]
+              properties:
+                reason:
+                  type: string
+                overriddenBy:
+                  type: string
+      responses:
+        "200":
+          description: Override recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  briefGuardOverrideAt:
+                    type: string
+                    format: date-time
+        "400":
+          description: Missing reason/overriddenBy
+        "404":
+          description: Not found
+  /public/catalog/requests/{requestId}/brief-readiness:
+    get:
+      operationId: getPublicCompanyProfileBriefReadiness
+      tags: [service-catalog]
+      summary: Compute the Company Profile brief-completeness score (customer-facing, no auth required)
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Score computed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyProfileBriefScore"
+        "404":
+          description: Not found
+        "409":
+          description: Not a Company Profile request
   /ai/catalog/packages/{id}:
     patch:
       operationId: updateServicePackage
@@ -5524,6 +5621,76 @@ paths:
 
 components:
   schemas:
+    CompanyProfileConditionalQuestion:
+      type: object
+      required: [key, label, type]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+          enum: [text, textarea, multiselect, checklist]
+    CompanyProfileQuestionGroup:
+      type: object
+      required: [key, label, questions]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanyProfileConditionalQuestion"
+    CompanyProfileBriefScore:
+      type: object
+      required:
+        - identityScore
+        - storyScore
+        - serviceScore
+        - legalScore
+        - visualScore
+        - contactScore
+        - scopeScore
+        - overallScore
+        - missingRequiredFields
+        - recommendedQuestions
+        - readinessStatus
+        - conditionalQuestionGroup
+      properties:
+        identityScore:
+          type: integer
+        storyScore:
+          type: integer
+        serviceScore:
+          type: integer
+        legalScore:
+          type: integer
+        visualScore:
+          type: integer
+        contactScore:
+          type: integer
+        scopeScore:
+          type: integer
+        overallScore:
+          type: integer
+        missingRequiredFields:
+          type: array
+          items:
+            type: string
+        recommendedQuestions:
+          type: array
+          items:
+            type: string
+        readinessStatus:
+          type: string
+          enum: [incomplete, needs_information, ready_for_generation]
+        conditionalQuestionGroup:
+          oneOf:
+            - $ref: "#/components/schemas/CompanyProfileQuestionGroup"
+            - type: "null"
     HealthStatus:
       type: object
       properties:

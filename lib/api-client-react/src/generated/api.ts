@@ -108,6 +108,7 @@ import type {
   CommercialGateFailInput,
   CommercialGateVerifyInput,
   CommercialGateWaiveInput,
+  CompanyProfileBriefScore,
   CompleteHumanTaskBody,
   ContinueLivePreviewBody,
   ConvertReferralInput,
@@ -159,6 +160,7 @@ import type {
   GetAnalyticsUsageParams,
   GetApplicablePromotionsParams,
   GetCommercialAnalyticsParams,
+  GetCompanyProfileBriefReadiness200,
   GetCostAnalyticsParams,
   GetCreativeImageAnalyticsParams,
   GetFunnelAnalyticsParams,
@@ -209,6 +211,8 @@ import type {
   OrchestratorExecuteInput,
   OrchestratorResult,
   OrchestratorSession,
+  OverrideCompanyProfileBriefGuard200,
+  OverrideCompanyProfileBriefGuardBody,
   PauseQueue200,
   PaymentKpi,
   PaymentProofInput,
@@ -12728,6 +12732,231 @@ export const useApproveRequestMargin = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getApproveRequestMarginMutationOptions(options));
     }
+
+export const getGetCompanyProfileBriefReadinessUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/requests/${id}/brief-readiness`
+}
+
+/**
+ * @summary Compute the Company Profile brief-completeness score for a request (admin)
+ */
+export const getCompanyProfileBriefReadiness = async (id: number, options?: RequestInit): Promise<GetCompanyProfileBriefReadiness200> => {
+
+  return customFetch<GetCompanyProfileBriefReadiness200>(getGetCompanyProfileBriefReadinessUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCompanyProfileBriefReadinessQueryKey = (id: number,) => {
+    return [
+    `/api/ai/catalog/requests/${id}/brief-readiness`
+    ] as const;
+    }
+
+
+export const getGetCompanyProfileBriefReadinessQueryOptions = <TData = Awaited<ReturnType<typeof getCompanyProfileBriefReadiness>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompanyProfileBriefReadiness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCompanyProfileBriefReadinessQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCompanyProfileBriefReadiness>>> = ({ signal }) => getCompanyProfileBriefReadiness(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCompanyProfileBriefReadiness>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCompanyProfileBriefReadinessQueryResult = NonNullable<Awaited<ReturnType<typeof getCompanyProfileBriefReadiness>>>
+export type GetCompanyProfileBriefReadinessQueryError = ErrorType<void>
+
+
+/**
+ * @summary Compute the Company Profile brief-completeness score for a request (admin)
+ */
+
+export function useGetCompanyProfileBriefReadiness<TData = Awaited<ReturnType<typeof getCompanyProfileBriefReadiness>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCompanyProfileBriefReadiness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCompanyProfileBriefReadinessQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getOverrideCompanyProfileBriefGuardUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/catalog/requests/${id}/override-brief-guard`
+}
+
+/**
+ * @summary Admin override of the Company Profile BRIEF_INCOMPLETE production guard
+ */
+export const overrideCompanyProfileBriefGuard = async (id: number,
+    overrideCompanyProfileBriefGuardBody: OverrideCompanyProfileBriefGuardBody, options?: RequestInit): Promise<OverrideCompanyProfileBriefGuard200> => {
+
+  return customFetch<OverrideCompanyProfileBriefGuard200>(getOverrideCompanyProfileBriefGuardUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(overrideCompanyProfileBriefGuardBody)
+  }
+);}
+
+
+
+
+export const getOverrideCompanyProfileBriefGuardMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof overrideCompanyProfileBriefGuard>>, TError,{id: number;data: BodyType<OverrideCompanyProfileBriefGuardBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof overrideCompanyProfileBriefGuard>>, TError,{id: number;data: BodyType<OverrideCompanyProfileBriefGuardBody>}, TContext> => {
+
+const mutationKey = ['overrideCompanyProfileBriefGuard'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof overrideCompanyProfileBriefGuard>>, {id: number;data: BodyType<OverrideCompanyProfileBriefGuardBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  overrideCompanyProfileBriefGuard(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type OverrideCompanyProfileBriefGuardMutationResult = NonNullable<Awaited<ReturnType<typeof overrideCompanyProfileBriefGuard>>>
+    export type OverrideCompanyProfileBriefGuardMutationBody = BodyType<OverrideCompanyProfileBriefGuardBody>
+    export type OverrideCompanyProfileBriefGuardMutationError = ErrorType<void>
+
+    /**
+ * @summary Admin override of the Company Profile BRIEF_INCOMPLETE production guard
+ */
+export const useOverrideCompanyProfileBriefGuard = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof overrideCompanyProfileBriefGuard>>, TError,{id: number;data: BodyType<OverrideCompanyProfileBriefGuardBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof overrideCompanyProfileBriefGuard>>,
+        TError,
+        {id: number;data: BodyType<OverrideCompanyProfileBriefGuardBody>},
+        TContext
+      > => {
+      return useMutation(getOverrideCompanyProfileBriefGuardMutationOptions(options));
+    }
+
+export const getGetPublicCompanyProfileBriefReadinessUrl = (requestId: string,) => {
+
+
+
+
+  return `/api/public/catalog/requests/${requestId}/brief-readiness`
+}
+
+/**
+ * @summary Compute the Company Profile brief-completeness score (customer-facing, no auth required)
+ */
+export const getPublicCompanyProfileBriefReadiness = async (requestId: string, options?: RequestInit): Promise<CompanyProfileBriefScore> => {
+
+  return customFetch<CompanyProfileBriefScore>(getGetPublicCompanyProfileBriefReadinessUrl(requestId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicCompanyProfileBriefReadinessQueryKey = (requestId: string,) => {
+    return [
+    `/api/public/catalog/requests/${requestId}/brief-readiness`
+    ] as const;
+    }
+
+
+export const getGetPublicCompanyProfileBriefReadinessQueryOptions = <TData = Awaited<ReturnType<typeof getPublicCompanyProfileBriefReadiness>>, TError = ErrorType<void>>(requestId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicCompanyProfileBriefReadiness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicCompanyProfileBriefReadinessQueryKey(requestId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicCompanyProfileBriefReadiness>>> = ({ signal }) => getPublicCompanyProfileBriefReadiness(requestId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: requestId !== null && requestId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicCompanyProfileBriefReadiness>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicCompanyProfileBriefReadinessQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicCompanyProfileBriefReadiness>>>
+export type GetPublicCompanyProfileBriefReadinessQueryError = ErrorType<void>
+
+
+/**
+ * @summary Compute the Company Profile brief-completeness score (customer-facing, no auth required)
+ */
+
+export function useGetPublicCompanyProfileBriefReadiness<TData = Awaited<ReturnType<typeof getPublicCompanyProfileBriefReadiness>>, TError = ErrorType<void>>(
+ requestId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicCompanyProfileBriefReadiness>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicCompanyProfileBriefReadinessQueryOptions(requestId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getUpdateServicePackageUrl = (id: number,) => {
 

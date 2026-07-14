@@ -22,6 +22,7 @@ import {
   creativeProjectQuotationsTable,
   aiQuotationsTable,
   aiServiceRequestsTable,
+  aiServicesTable,
   creativeProjectsTable,
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
@@ -33,6 +34,11 @@ import {
   getGateForServiceQuotation,
   gateIsCleared,
 } from "./commercialGateService.js";
+import {
+  assertCompanyProfileBriefReady,
+  isCompanyProfileServiceCode,
+  BriefIncompleteError,
+} from "./companyProfileBriefIntelligence.js";
 
 // ── convertServiceRequestToProject ───────────────────────────────────────────
 
@@ -75,6 +81,28 @@ export async function convertServiceRequestToProject(
 
   if (!gateIsCleared(gate)) {
     return { alreadyConverted: false, createdProjectId: null, skipped: "gate_not_cleared" };
+  }
+
+  // ── Company Profile sprint (P0): block generation start on an incomplete brief ──
+  const [service] = await db
+    .select({ serviceCode: aiServicesTable.serviceCode })
+    .from(aiServicesTable)
+    .where(eq(aiServicesTable.id, request.serviceId))
+    .limit(1);
+
+  if (isCompanyProfileServiceCode(service?.serviceCode) && !request.briefGuardOverrideAt) {
+    try {
+      assertCompanyProfileBriefReady((request.briefJson ?? {}) as Record<string, unknown>);
+    } catch (err) {
+      if (err instanceof BriefIncompleteError) {
+        return {
+          alreadyConverted: false,
+          createdProjectId: null,
+          skipped: `${err.code}:${err.missingFields.join(",")}`,
+        };
+      }
+      throw err;
+    }
   }
 
   // ── Quotation & project lookup — supports legacy (quotationId) and service-catalog (serviceQuotationId) paths ──

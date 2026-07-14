@@ -5,6 +5,52 @@
  * AI Platform Enterprise API
  * OpenAPI spec version: 0.1.0
  */
+export type CompanyProfileConditionalQuestionType = typeof CompanyProfileConditionalQuestionType[keyof typeof CompanyProfileConditionalQuestionType];
+
+
+export const CompanyProfileConditionalQuestionType = {
+  text: 'text',
+  textarea: 'textarea',
+  multiselect: 'multiselect',
+  checklist: 'checklist',
+} as const;
+
+export interface CompanyProfileConditionalQuestion {
+  key: string;
+  label: string;
+  type: CompanyProfileConditionalQuestionType;
+}
+
+export interface CompanyProfileQuestionGroup {
+  key: string;
+  label: string;
+  questions: CompanyProfileConditionalQuestion[];
+}
+
+export type CompanyProfileBriefScoreReadinessStatus = typeof CompanyProfileBriefScoreReadinessStatus[keyof typeof CompanyProfileBriefScoreReadinessStatus];
+
+
+export const CompanyProfileBriefScoreReadinessStatus = {
+  incomplete: 'incomplete',
+  needs_information: 'needs_information',
+  ready_for_generation: 'ready_for_generation',
+} as const;
+
+export interface CompanyProfileBriefScore {
+  identityScore: number;
+  storyScore: number;
+  serviceScore: number;
+  legalScore: number;
+  visualScore: number;
+  contactScore: number;
+  scopeScore: number;
+  overallScore: number;
+  missingRequiredFields: string[];
+  recommendedQuestions: string[];
+  readinessStatus: CompanyProfileBriefScoreReadinessStatus;
+  conditionalQuestionGroup: CompanyProfileQuestionGroup | null;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -4419,6 +4465,23 @@ export type ApproveRequestMarginBody = {
 
 export type ApproveRequestMargin200 = {
   ok?: boolean;
+};
+
+export type GetCompanyProfileBriefReadiness200 = CompanyProfileBriefScore & ({
+  overrideActive?: boolean;
+  overrideReason?: string | null;
+  overrideBy?: string | null;
+  overrideAt?: string | null;
+});
+
+export type OverrideCompanyProfileBriefGuardBody = {
+  reason: string;
+  overriddenBy: string;
+};
+
+export type OverrideCompanyProfileBriefGuard200 = {
+  ok?: boolean;
+  briefGuardOverrideAt?: string;
 };
 
 export type RecordPortfolioView200 = {

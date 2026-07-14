@@ -59,6 +59,37 @@ export type BriefData = {
   deadline: string;
   priority: string;
   milestones: string;
+  // Company Profile sprint (P0) — extra fields, only rendered/required when
+  // the service is Company Profile. Namespaced `cp*` so they never collide
+  // with the generic fields above or with any other service's brief data.
+  cpLegalName: string;
+  cpBusinessTypeDetail: string;
+  cpYearEstablished: string;
+  cpCompanyHistory: string;
+  cpVision: string;
+  cpMission: string;
+  cpCompanyValues: string;
+  cpValueProposition: string;
+  cpProductsServices: string;
+  cpGeographicCoverage: string;
+  cpFacilities: string;
+  cpProductionCapacity: string;
+  cpCertifications: string;
+  cpLegalDocuments: string;
+  cpOrganizationStructure: string;
+  cpKeyPeople: string;
+  cpClientsPartners: string;
+  cpProjectExperience: string;
+  cpQualityAssurance: string;
+  cpSustainability: string;
+  cpPageTarget: string;
+  cpUploadedLogo: string;
+  cpUploadedPhotos: string;
+  cpReferenceDocuments: string;
+  cpContactEmail: string;
+  cpContactPhone: string;
+  cpContactAddress: string;
+  cpContactWebsite: string;
 };
 
 const EMPTY_BRIEF: BriefData = {
@@ -68,7 +99,78 @@ const EMPTY_BRIEF: BriefData = {
   stylePreference: "", colorPalette: "", referenceLinks: "",
   outputFormats: "", outputLanguage: "id", specialRequirements: "",
   deadline: "", priority: "balanced", milestones: "",
+  cpLegalName: "", cpBusinessTypeDetail: "", cpYearEstablished: "",
+  cpCompanyHistory: "", cpVision: "", cpMission: "", cpCompanyValues: "",
+  cpValueProposition: "", cpProductsServices: "", cpGeographicCoverage: "",
+  cpFacilities: "", cpProductionCapacity: "", cpCertifications: "",
+  cpLegalDocuments: "", cpOrganizationStructure: "", cpKeyPeople: "",
+  cpClientsPartners: "", cpProjectExperience: "", cpQualityAssurance: "",
+  cpSustainability: "", cpPageTarget: "", cpUploadedLogo: "",
+  cpUploadedPhotos: "", cpReferenceDocuments: "", cpContactEmail: "",
+  cpContactPhone: "", cpContactAddress: "", cpContactWebsite: "",
 };
+
+/** Free-text industry/business-type matchers for the 5 conditional question
+ *  groups (mirrors artifacts/api-server/src/services/companyProfileBriefIntelligence.ts —
+ *  keep both in sync if the groups change). */
+const CP_INDUSTRY_GROUPS: { key: string; label: string; needles: string[]; fields: { key: keyof BriefData; label: string }[] }[] = [
+  {
+    key: "logistics", label: "Logistik",
+    needles: ["logistik", "logistics", "freight", "shipping", "ekspedisi", "warehousing"],
+    fields: [
+      { key: "cpFacilities", label: "Armada & gudang yang dimiliki" },
+    ],
+  },
+  {
+    key: "trading", label: "Trading / Ekspor-Impor",
+    needles: ["trading", "export", "import", "ekspor", "impor", "perdagangan"],
+    fields: [
+      { key: "cpGeographicCoverage", label: "Negara asal & tujuan komoditas" },
+    ],
+  },
+  {
+    key: "manufacturing", label: "Manufaktur",
+    needles: ["manufaktur", "manufacturing", "pabrik", "factory", "produksi", "industri"],
+    fields: [
+      { key: "cpProductionCapacity", label: "Kapasitas produksi & mesin utama" },
+    ],
+  },
+  {
+    key: "professional", label: "Jasa Profesional",
+    needles: ["konsultan", "consulting", "jasa profesional", "professional_svcs", "hukum", "akuntansi"],
+    fields: [
+      { key: "cpQualityAssurance", label: "Metodologi kerja & pengalaman kasus" },
+    ],
+  },
+  {
+    key: "medical", label: "Kesehatan / Medis",
+    needles: ["kesehatan", "healthcare", "klinik", "clinic", "rumah sakit", "hospital", "medical"],
+    fields: [
+      { key: "cpLegalDocuments", label: "Izin praktik & lisensi" },
+    ],
+  },
+];
+
+function resolveCpIndustryGroup(industryText: string): (typeof CP_INDUSTRY_GROUPS)[number] | null {
+  const normalized = industryText.toLowerCase();
+  if (!normalized) return null;
+  return CP_INDUSTRY_GROUPS.find((g) => g.needles.some((n) => normalized.includes(n))) ?? null;
+}
+
+/** Lightweight client-side mirror of the server's readiness check — used only
+ *  for live UX in the wizard. The server (companyProfileBriefIntelligence.ts)
+ *  is the authoritative gate at checkout/conversion. */
+function getCompanyProfileMissingFields(brief: BriefData): string[] {
+  const missing: string[] = [];
+  if (!brief.cpLegalName.trim()) missing.push("Nama resmi perusahaan");
+  if (!brief.companyIndustry.trim() && !brief.cpBusinessTypeDetail.trim()) missing.push("Jenis bisnis");
+  if (!brief.cpCompanyHistory.trim() && !brief.cpVision.trim() && !brief.cpMission.trim())
+    missing.push("Sejarah, visi, atau misi perusahaan (minimal salah satu)");
+  if (!brief.cpValueProposition.trim()) missing.push("Value proposition");
+  if (!brief.cpProductsServices.trim()) missing.push("Produk/jasa yang ditawarkan");
+  if (!brief.cpContactEmail.trim() && !brief.cpContactPhone.trim()) missing.push("Email atau nomor telepon kontak");
+  return missing;
+}
 
 function hasContent(brief: BriefData): boolean {
   return Object.entries(brief).some(([key, value]) => {
