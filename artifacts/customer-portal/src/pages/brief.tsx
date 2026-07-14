@@ -30,6 +30,7 @@ import {
 } from "@/config/brief-options";
 import { BriefRecommendationPanel } from "@/features/brief-intelligence";
 import { STYLE_MAX, COLOR_MAX, AUDIENCE_MAX } from "@/features/brief-intelligence/apply-adapter";
+import { BriefAssistantLauncher, BriefAssistantPanel } from "@/features/brief-assistant";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -147,10 +148,14 @@ export default function BriefPage() {
   const STORAGE_KEY = `brief_draft_${requestId}`;
 
   // ── Service config ──────────────────────────────────────────────────────────
-  const serviceConfig = useMemo(() => {
-    const svcType = detectServiceType(serviceDetail?.serviceName);
-    return getServiceConfig(svcType);
-  }, [serviceDetail?.serviceName]);
+  const serviceType = useMemo(
+    () => detectServiceType(serviceDetail?.serviceName),
+    [serviceDetail?.serviceName],
+  );
+  const serviceConfig = useMemo(
+    () => getServiceConfig(serviceType),
+    [serviceType],
+  );
 
   // ── Start brief ─────────────────────────────────────────────────────────────
   const startBriefFired = useRef(false);
@@ -166,6 +171,7 @@ export default function BriefPage() {
   const [currentStep, setCurrentStep]         = useState(1);
   const [errors, setErrors]                   = useState<FieldErrors>({});
   const [brief, setBrief]                     = useState<BriefData>(EMPTY_BRIEF);
+  const [assistantOpen, setAssistantOpen]     = useState(false);
   const [isSaving, setIsSaving]               = useState(false);
   const [submitError, setSubmitError]         = useState<string | null>(null);
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
@@ -1198,6 +1204,24 @@ export default function BriefPage() {
           onSubmit={handleSubmit}
         />
       </div>
+
+      {/* ── Brief Assistant ───────────────────────────────────────────────── */}
+      <BriefAssistantLauncher
+        onOpen={() => setAssistantOpen(true)}
+        disabled={!requestId}
+      />
+      <AnimatePresence>
+        {assistantOpen && requestId && (
+          <BriefAssistantPanel
+            requestId={requestId}
+            brief={brief}
+            serviceType={serviceType}
+            serviceConfig={serviceConfig}
+            onBriefChange={(newBrief) => setBrief(newBrief)}
+            onClose={() => setAssistantOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </Layout>
   );
 }

@@ -1,0 +1,1067 @@
+PHASE 4A — AI GUIDED BRIEF ASSISTANT FOUNDATION
+OBJECTIVE
+
+Phase 1 sampai Phase 3.1 telah selesai.
+
+Sekarang bangun pondasi AI Guided Brief Assistant untuk membantu user mengisi brief secara terstruktur.
+
+Pada fase ini, assistant belum boleh memanggil OpenAI, Anthropic, Gemini, atau provider AI eksternal apa pun.
+
+Assistant harus bekerja sepenuhnya menggunakan:
+
+BriefData existing
+Brief Intelligence Engine
+brief-service-config
+brief parser/serializer
+existing autosave
+existing validation
+existing brief wizard
+
+Tujuan Phase 4A:
+
+Membuat assistant terstruktur berbasis rule dan quick replies yang sudah dapat membantu user melengkapi brief, menampilkan preview perubahan, meminta konfirmasi, lalu menerapkan jawaban ke form tanpa menimpa data existing.
+
+Fase ini adalah foundation.
+
+Backend AI integration akan dikerjakan di Phase 4B.
+
+KONDISI EXISTING YANG WAJIB DIPERTAHANKAN
+
+Jangan mengubah:
+
+database schema;
+backend API contract;
+pricing;
+order flow;
+approval flow;
+production pipeline;
+brief submit contract;
+customer token flow;
+admin auth;
+public route auth;
+autosave contract;
+route brief existing;
+server hydration;
+legacy parser compatibility;
+Brief Intelligence Engine Phase 3;
+recommendation apply behavior existing.
+
+Route brief tetap:
+
+/request-service/:requestId/brief
+
+saveBrief.mutate({ requestId, brief }) tidak boleh berubah.
+
+JANGAN IMPLEMENTASIKAN PADA PHASE 4A
+
+Jangan membuat:
+
+endpoint AI baru;
+OpenAI/Anthropic/Gemini call;
+provider/model integration;
+token usage tracking;
+AI cost tracking;
+website scraping;
+logo analysis;
+image analysis;
+competitor research;
+generative chat;
+free-form chatbot;
+database conversation;
+AI recommendation baru;
+automatic brief submission;
+automatic order changes;
+hidden form mutation;
+fake AI response;
+hardcoded delay untuk membuat assistant terlihat seperti AI.
+1. AUDIT SEBELUM IMPLEMENTASI
+
+Sebelum menulis kode, baca:
+
+src/pages/brief.tsx
+src/features/brief-intelligence/**
+src/config/brief-service-config.ts
+src/lib/brief-utils.ts
+src/config/brief-options.ts
+src/components/creative-ui/**
+
+Identifikasi:
+
+Struktur BriefData.
+Field wajib per step.
+Field wajib per service.
+Stable keys setiap pilihan.
+Parser dan serializer yang digunakan.
+Selection limit:
+style maksimal 3;
+color maksimal 3;
+audience maksimal 4;
+goal maksimal sesuai form existing.
+Existing-answer protection.
+Autosave flow.
+Draft hydration.
+Review flow.
+Brief Intelligence completeness.
+Service type detection.
+
+Laporkan temuan singkat sebelum implementasi.
+
+Jangan membuat daftar opsi baru jika registry existing sudah tersedia.
+
+2. BUAT FEATURE FOLDER
+
+Buat folder:
+
+src/features/brief-assistant/
+
+Minimal:
+
+types.ts
+constants.ts
+question-planner.ts
+answer-mapper.ts
+conversation-reducer.ts
+conversation-storage.ts
+assistant-session.ts
+index.ts
+
+components/
+  BriefAssistantLauncher.tsx
+  BriefAssistantPanel.tsx
+  AssistantHeader.tsx
+  AssistantMessage.tsx
+  AssistantQuestion.tsx
+  AssistantQuickReplies.tsx
+  AssistantTextInput.tsx
+  AssistantChangePreview.tsx
+  AssistantReview.tsx
+  AssistantCompletionSummary.tsx
+
+Nama boleh disesuaikan dengan arsitektur project, tetapi tanggung jawab setiap file harus jelas.
+
+Jangan menaruh seluruh logic di brief.tsx.
+
+3. DOMAIN TYPES
+
+Buat type terstruktur.
+
+Contoh konsep:
+
+type AssistantMode =
+  | "start-from-beginning"
+  | "complete-missing"
+  | "show-recommendations";
+
+type AssistantStage =
+  | "idle"
+  | "intro"
+  | "question"
+  | "preview"
+  | "review"
+  | "complete";
+
+type AssistantQuestionType =
+  | "single"
+  | "multi"
+  | "text"
+  | "confirm";
+
+type AssistantOption = {
+  key: string;
+  label: string;
+  description?: string;
+};
+
+type PlannedBriefQuestion = {
+  id: string;
+  field: keyof BriefData;
+  type: AssistantQuestionType;
+  title: string;
+  question: string;
+  helperText?: string;
+  options?: AssistantOption[];
+  required: boolean;
+  maxSelections?: number;
+  reason: string;
+  serviceType?: string;
+};
+
+type AssistantDraftChange = {
+  field: keyof BriefData;
+  previousValue: string;
+  nextValue: string;
+  displayBefore?: string[];
+  displayAfter?: string[];
+  conflict?: boolean;
+  warnings: string[];
+};
+
+type AssistantConversationState = {
+  mode: AssistantMode | null;
+  stage: AssistantStage;
+  currentQuestionId: string | null;
+  answeredQuestionIds: string[];
+  skippedQuestionIds: string[];
+  pendingChange: AssistantDraftChange | null;
+  completed: boolean;
+};
+
+Sesuaikan dengan bentuk codebase nyata.
+
+4. ASSISTANT BUKAN GENERAL CHAT
+
+Assistant hanya boleh melakukan tindakan:
+
+memilih mode
+menanyakan pertanyaan brief
+menerima quick reply
+menerima custom text
+menampilkan preview perubahan
+menerapkan jawaban
+melewati pertanyaan
+menampilkan ringkasan
+menutup assistant
+
+Jangan sediakan text box chatbot bebas pada seluruh tahap.
+
+Text input hanya boleh muncul pada pertanyaan yang memang membutuhkan jawaban custom.
+
+5. START MENU
+
+Saat launcher dibuka pertama kali, tampilkan tiga pilihan:
+
+Bantu isi dari awal
+Lengkapi bagian yang masih kosong
+Tampilkan rekomendasi untuk brief saya
+Bantu isi dari awal
+Assistant mengikuti question plan utama.
+Field yang sudah terisi tetap tidak boleh ditimpa tanpa konfirmasi.
+Lengkapi bagian yang masih kosong
+Hanya pertanyaan untuk field kosong atau invalid.
+Field lengkap dilewati.
+Tampilkan rekomendasi
+Gunakan Brief Intelligence Engine existing.
+Jangan membuat rekomendasi baru.
+Tampilkan hasil rekomendasi existing.
+Gunakan apply adapter existing.
+Tidak ada network call.
+6. QUESTION PLANNER
+
+Buat pure function:
+
+planBriefQuestions(input): PlannedBriefQuestion[]
+
+Dan:
+
+getNextBriefQuestion(input): PlannedBriefQuestion | null
+
+Input minimal:
+
+{
+  brief: BriefData;
+  serviceType: string;
+  serviceConfig: BriefServiceConfig;
+  answeredQuestionIds: string[];
+  skippedQuestionIds: string[];
+  mode: AssistantMode;
+}
+
+Planner harus:
+
+deterministic;
+tidak membaca React state langsung;
+tidak melakukan network call;
+tidak mutate brief;
+memakai stable keys existing;
+memakai service config existing;
+tidak menanyakan field hidden;
+tidak menanyakan field yang tidak relevan;
+memprioritaskan required fields;
+tidak menanyakan ulang field valid;
+selesai jika tidak ada pertanyaan lagi.
+7. QUESTION PRIORITY
+
+Urutan umum:
+
+industry
+company/product context
+project goal
+target audience
+style
+color
+existing assets
+priority
+service-specific fields
+
+Namun planner harus menyesuaikan service.
+
+Brand Identity
+
+Prioritaskan:
+
+industry
+goal
+audience
+brand personality/style
+color
+existing assets
+Logo Design
+
+Prioritaskan:
+
+industry
+brand context
+goal
+style
+color
+symbol/reference preference jika field existing tersedia
+Company Profile
+
+Prioritaskan:
+
+industry
+audience
+goal
+company strengths/material
+language
+existing assets
+Pitch Deck
+
+Prioritaskan:
+
+goal
+pitch audience
+industry
+available data
+style
+language
+Social Media
+
+Prioritaskan:
+
+platform/channel
+goal
+audience
+style
+existing content assets
+Copywriting
+
+Prioritaskan:
+
+content type
+goal
+audience
+tone
+language
+CTA jika field existing tersedia
+Image Generation
+
+Prioritaskan:
+
+subject/context
+visual style
+color/mood
+output requirement
+reference/assets
+
+Jangan membuat field baru jika belum ada di BriefData.
+
+8. REUSE EXISTING OPTIONS
+
+Quick replies harus mengambil option dari registry existing.
+
+Contoh:
+
+INDUSTRY_OPTIONS
+GOAL_OPTIONS
+AUDIENCE_OPTIONS
+STYLE_OPTIONS
+COLOR_PRESETS
+ASSET_OPTIONS
+PRIORITY_OPTIONS
+
+Jangan hardcode ulang daftar lengkap di assistant.
+
+Jika label assistant perlu lebih pendek, buat display adapter, tetapi stable key tetap sama.
+
+9. QUICK REPLIES
+
+Gunakan quick replies untuk pertanyaan:
+
+industry;
+goal;
+audience;
+style;
+colors;
+assets;
+priority;
+language;
+channels;
+company size.
+
+Support:
+
+single select
+multi select
+max selection
+exclusive option
+Other/Lainnya
+skip
+
+Contoh:
+
+Siapa target utama bisnis Anda?
+
+[B2B]
+[Konsumen umum]
+[Distributor]
+[International Buyer]
+[Lainnya]
+
+Jangan memanggil AI saat quick reply dipilih.
+
+10. CUSTOM TEXT
+
+Jika user memilih:
+
+Lainnya
+
+tampilkan AssistantTextInput.
+
+Ketentuan:
+
+input tidak muncul sebelum Lainnya dipilih;
+value trimmed;
+panjang maksimal masuk akal;
+kosong tidak dianggap valid;
+karakter berbahaya tidak dirender sebagai HTML;
+user dapat kembali ke quick reply;
+custom value dipetakan menggunakan serializer existing.
+
+Contoh field custom:
+
+custom industry
+custom goal
+custom audience
+custom style
+custom asset
+special requirement
+11. ANSWER MAPPER
+
+Buat pure function:
+
+previewAssistantAnswer(input): AssistantDraftChange
+
+Dan:
+
+applyAssistantDraftChange(
+  brief: BriefData,
+  change: AssistantDraftChange,
+  mode: "merge" | "replace"
+): ApplyAssistantAnswerResult
+
+Result minimal:
+
+type ApplyAssistantAnswerResult = {
+  updatedBrief: BriefData;
+  applied: boolean;
+  skipped: boolean;
+  reason?: string;
+  warnings: string[];
+};
+
+Mapper harus:
+
+menggunakan parser/serializer existing;
+menjaga legacy custom values;
+menghormati selection limit;
+menghormati exclusive option;
+deduplicate selected keys;
+tidak overwrite nilai existing secara otomatis;
+tidak membuang Lainnya;
+tidak mengubah field lain.
+12. PREVIEW BEFORE APPLY
+
+Jawaban tidak boleh langsung mengubah brief.
+
+Setelah user memilih jawaban, tampilkan preview:
+
+Saya akan menambahkan:
+
+Target audiens
+- B2B
+- International Buyer
+
+Pilihan Anda sebelumnya tidak akan dihapus.
+
+Tombol:
+
+Terapkan
+Ubah jawaban
+Lewati
+
+Hanya tombol Terapkan yang boleh memanggil callback perubahan brief.
+
+13. CONFLICT HANDLING
+
+Jika field sudah terisi dan jawaban baru berbeda, tampilkan:
+
+Field ini sudah berisi:
+Classic
+
+Jawaban baru:
+Modern
+
+Pilihan:
+
+Pertahankan jawaban lama
+Tambahkan jawaban baru
+Ganti jawaban lama
+
+Ketentuan:
+
+default adalah mempertahankan;
+Tambahkan hanya tersedia untuk multi-select;
+Ganti memerlukan tindakan eksplisit;
+selection limit tetap dihormati;
+custom value tidak boleh hilang tanpa konfirmasi.
+14. EXISTING-ANSWER PROTECTION
+
+Assistant harus menganggap jawaban existing sebagai milik user.
+
+Tidak boleh:
+
+overwrite otomatis;
+membersihkan field saat assistant dibuka;
+menghapus legacy value;
+mengubah pilihan karena recommendation berbeda;
+mengosongkan field ketika pertanyaan dilewati.
+
+Mode complete-missing tidak boleh menawarkan replace kecuali user membuka detail konflik secara manual.
+
+15. BRIEF INTELLIGENCE INTEGRATION
+
+Gunakan:
+
+computeBriefRecommendations
+applyRecommendations
+BriefIntelligenceResult
+completeness
+
+yang sudah ada.
+
+Mode:
+
+Tampilkan rekomendasi untuk brief saya
+
+harus menampilkan:
+
+completeness;
+category recommendation;
+reasons;
+confidence label;
+warnings;
+apply single;
+apply category;
+apply all empty-only.
+
+Jangan duplikasi recommendation panel lama.
+
+Reuse komponen atau composable logic yang sudah ada.
+
+16. CONVERSATION REDUCER
+
+Gunakan reducer atau state machine sederhana.
+
+Minimal action:
+
+OPEN
+CLOSE
+SELECT_MODE
+SHOW_QUESTION
+ANSWER_DRAFTED
+EDIT_DRAFT
+APPLY_DRAFT
+SKIP_QUESTION
+GO_TO_REVIEW
+COMPLETE
+RESET
+RESTORE
+
+Reducer harus pure.
+
+Jangan menyebarkan banyak useState yang saling bergantung di panel.
+
+17. SESSION STORAGE
+
+Simpan conversation state secara ringan di:
+
+sessionStorage
+
+Gunakan key yang terikat pada request:
+
+creative-brief-assistant:{requestId}
+
+Simpan hanya:
+
+mode
+stage
+currentQuestionId
+answeredQuestionIds
+skippedQuestionIds
+pending change jika aman
+completed
+
+Jangan simpan:
+
+request token
+admin key
+authorization header
+customer email
+customer phone
+raw backend response
+
+Saat refresh:
+
+conversation dapat dilanjutkan;
+brief tetap diambil dari state/server existing;
+pending change tidak boleh diterapkan otomatis.
+18. LAUNCHER
+
+Tambahkan BriefAssistantLauncher.
+
+Copy:
+
+Butuh bantuan mengisi?
+Buka Asisten Brief
+
+Ketentuan:
+
+posisi kanan bawah;
+tidak menutupi tombol Back/Next;
+memperhitungkan sticky footer;
+desktop dan mobile safe;
+keyboard accessible;
+aria-label jelas;
+dapat ditutup;
+tidak auto-open;
+tidak menampilkan unread badge palsu.
+19. PANEL LAYOUT
+
+Desktop:
+
+drawer kanan
+
+Mobile:
+
+full-screen sheet atau bottom sheet tinggi
+
+Panel berisi:
+
+header
+mode/current stage
+conversation progress
+assistant message
+quick replies/text input
+preview change
+action buttons
+
+Pertahankan dark theme dan branding Creative AI.
+
+Jangan membuat visual seperti aplikasi admin.
+
+20. ASSISTANT COPY
+
+Gunakan bahasa Indonesia yang ramah.
+
+Contoh intro:
+
+Saya akan membantu melengkapi brief Anda melalui beberapa pertanyaan singkat.
+Pilihan yang sudah Anda isi tidak akan diganti tanpa persetujuan.
+
+Contoh pertanyaan:
+
+Apa tujuan utama project ini?
+
+Helper:
+
+Pilih maksimal 5 tujuan yang paling penting.
+
+Contoh preview:
+
+Saya akan menambahkan dua target audiens ke brief Anda.
+
+Hindari klaim seperti:
+
+Saya sudah memahami seluruh bisnis Anda.
+
+karena assistant belum menggunakan AI eksternal.
+
+21. PROGRESS ASSISTANT
+
+Tampilkan progress conversation terpisah dari wizard progress.
+
+Contoh:
+
+Pertanyaan 2 dari 5
+
+Jangan mengganti ProgressStepper brief existing.
+
+Jika pertanyaan dinamis, hitung berdasarkan current plan secara stabil.
+
+22. SKIP BEHAVIOR
+
+Setiap pertanyaan opsional boleh dilewati.
+
+Jika required field dilewati:
+
+tandai skipped;
+jangan dianggap complete;
+tampilkan pada review sebagai belum diisi;
+user tetap dapat lanjut menggunakan form manual.
+
+Assistant tidak boleh memaksa user menyelesaikan semua field.
+
+23. REVIEW ASSISTANT
+
+Sebelum assistant selesai, tampilkan ringkasan:
+
+Industri
+Tujuan
+Audiens
+Style
+Warna
+Aset
+Prioritas
+
+Status:
+
+Sudah diisi
+Belum diisi
+Dilewati
+Opsional
+
+Tombol:
+
+Kembali edit
+Selesai dan kembali ke brief
+Lanjut isi manual
+
+Jangan submit brief final.
+
+24. COMPLETION
+
+Assistant selesai jika:
+
+tidak ada pertanyaan relevan lagi; atau
+user memilih selesai; atau
+user kembali ke brief manual.
+
+Saat selesai:
+
+panel boleh ditutup;
+brief state tetap;
+autosave existing menangani perubahan yang sudah diterapkan;
+assistant tidak memanggil submit.
+25. AUTOSAVE INTEGRATION
+
+Penting:
+
+membuka assistant tidak memicu autosave;
+memilih quick reply belum memicu autosave;
+preview change belum memicu autosave;
+skip tidak memicu autosave;
+hanya Terapkan yang mengubah brief state;
+satu apply menghasilkan satu consolidated state update;
+gunakan autosave existing;
+jangan membuat autosave baru;
+jangan memanggil saveBrief.mutate() langsung dari assistant.
+26. ACCESSIBILITY
+
+Wajib:
+
+launcher keyboard accessible;
+panel focus trap jika menggunakan dialog/sheet;
+Escape menutup panel;
+focus kembali ke launcher setelah close;
+quick reply punya role/button yang benar;
+selected state diumumkan;
+preview dan apply result memakai live region;
+warning tidak hanya menggunakan warna;
+touch target minimal 44px;
+heading hierarchy benar.
+27. RESPONSIVE
+
+Uji:
+
+375 × 812
+768px
+1280px
+
+Pastikan:
+
+panel tidak overflow;
+launcher tidak menutupi sticky footer;
+keyboard tidak menutup text input;
+quick replies wrap;
+tombol tetap terlihat;
+sheet dapat discroll;
+header dan actions tetap dapat dijangkau.
+28. PERFORMANCE
+
+Pastikan:
+
+question plan tidak dihitung berlebihan;
+registry statis tidak dibuat ulang;
+tidak ada network call;
+tidak ada polling;
+tidak ada interval;
+sessionStorage write di-debounce atau hanya saat state penting berubah;
+tidak ada infinite render;
+tidak ada duplicate autosave;
+opening panel tidak memuat library berat yang tidak perlu jika dapat lazy-load.
+29. ANALYTICS HOOK PREPARATION
+
+Phase 4A belum mengirim analytics backend.
+
+Namun siapkan callback interface:
+
+type BriefAssistantEvent =
+  | "assistant_opened"
+  | "assistant_started"
+  | "question_answered"
+  | "answer_applied"
+  | "answer_skipped"
+  | "recommendations_viewed"
+  | "assistant_completed"
+  | "assistant_closed";
+
+Default handler boleh no-op.
+
+Jangan membuat endpoint analytics baru.
+
+Phase 4C akan menghubungkannya ke analytics existing.
+
+30. TEST — QUESTION PLANNER
+
+Tambahkan unit tests:
+
+planner deterministic
+required fields diprioritaskan
+filled field tidak ditanyakan ulang
+complete-missing hanya menanyakan field kosong
+start-from-beginning tetap melindungi existing value
+brand identity plan benar
+logo plan benar
+company profile plan benar
+pitch deck plan benar
+social media plan benar
+copywriting plan benar
+image generation plan benar
+unknown service memakai default
+skipped question tidak ditanyakan ulang
+planner selesai jika tidak ada pertanyaan
+31. TEST — ANSWER MAPPER
+
+Tambahkan tests:
+
+single choice preview
+multi choice preview
+custom Other
+selection limit
+exclusive option
+duplicate selection
+existing field protected
+merge multi-select
+replace explicit
+custom value retained
+legacy value retained
+invalid option rejected
+serializer output compatible
+field lain tidak berubah
+32. TEST — REDUCER
+
+Tambahkan tests:
+
+open/close
+select mode
+show question
+draft answer
+edit answer
+apply answer
+skip question
+go to review
+complete
+reset
+restore session
+pending change tidak auto-apply
+33. COMPONENT TESTS
+
+Jika framework mendukung:
+
+launcher opens panel
+start menu tampil
+mode selection bekerja
+quick reply dipilih
+Other menampilkan text input
+preview muncul
+apply memanggil onBriefChange sekali
+skip tidak memanggil onBriefChange
+existing answer conflict tampil
+replace membutuhkan explicit click
+review tampil
+close mengembalikan focus
+mobile sheet dapat ditutup
+
+Jangan menambah library testing besar jika stack existing belum mendukungnya.
+
+34. VISUAL VERIFICATION
+
+Uji melalui wizard asli:
+
+/request-service/:requestId/brief
+
+Gunakan request development aman.
+
+Minimal skenario:
+
+Coffee Shop + Brand Identity
+buka assistant;
+pilih Lengkapi bagian yang masih kosong;
+jawab industry/goal/audience;
+preview;
+apply;
+recommendation tampil;
+kembali ke form.
+Export Import + Company Profile
+existing industry sudah terisi;
+assistant tidak menanyakannya ulang;
+assistant menanyakan audience/material/language yang relevan.
+Technology + Pitch Deck
+planner memprioritaskan goal dan pitch audience;
+review menampilkan field relevant.
+Existing partially-filled brief
+assistant tidak overwrite jawaban;
+conflict flow bekerja.
+Unknown service
+default plan;
+tidak crash.
+Mobile 375×812
+launcher/panel/button/input dapat digunakan.
+35. NETWORK VERIFICATION
+
+Expected:
+
+Buka assistant              → 0 AI/API request
+Pilih mode                  → 0 AI/API request
+Pilih quick reply           → 0 AI/API request
+Isi custom text             → 0 AI/API request
+Preview                     → 0 AI/API request
+Apply                       → autosave existing setelah debounce
+Lihat recommendations       → 0 recommendation API request
+
+Tidak boleh ada endpoint AI baru pada fase ini.
+
+36. CLEANUP
+
+Sebelum selesai:
+
+hapus fixture sementara;
+hapus dev route sementara;
+hapus console log;
+hapus duplicate option list;
+pastikan satu source of truth;
+pastikan tidak ada fake AI copy;
+pastikan tidak ada setTimeout palsu;
+pastikan tidak ada TODO kritis tersembunyi;
+pastikan brief.tsx hanya melakukan wiring, bukan menyimpan logic assistant besar.
+37. COMMANDS
+
+Jalankan sesuai workspace:
+
+pnpm --filter @workspace/customer-portal exec tsc --noEmit
+pnpm --filter @workspace/customer-portal exec vitest run
+pnpm --filter @workspace/customer-portal run build
+
+Jika ada lint command, jalankan juga.
+
+Lakukan browser verification dan network inspection.
+
+38. ACCEPTANCE CRITERIA
+
+Phase 4A selesai hanya jika:
+
+Feature folder assistant tersedia.
+Question planner deterministic.
+Service-specific question plan tersedia.
+Quick reply memakai registry existing.
+Custom Lainnya bekerja.
+Assistant bukan free chat.
+Jawaban tidak langsung mutate brief.
+Preview tampil sebelum apply.
+Existing answer tidak ditimpa.
+Merge/replace explicit.
+Brief Intelligence Engine digunakan.
+Recommendations tidak diduplikasi.
+Session state dapat dipulihkan.
+Pending change tidak auto-apply.
+Launcher dan panel responsive.
+Autosave tetap satu jalur existing.
+Tidak ada endpoint/API AI.
+Tidak ada AI provider call.
+Tidak ada perubahan database.
+Tidak ada perubahan pricing/workflow.
+Unit tests lulus.
+Typecheck lulus.
+Build lulus.
+Visual verification wizard asli selesai.
+Mobile verification selesai.
+Network verification menunjukkan nol AI call.
+39. LAPORAN AKHIR
+
+Gunakan format:
+
+Laporan — Phase 4A: AI Guided Brief Assistant Foundation
+
+1. Hasil audit
+2. Arsitektur feature
+3. Domain types
+4. Question planner
+5. Service-specific plans
+6. Quick reply registry reuse
+7. Custom Other behavior
+8. Answer mapper
+9. Preview-before-apply
+10. Existing-answer protection
+11. Merge/replace flow
+12. Brief Intelligence integration
+13. Conversation reducer
+14. Session storage
+15. Launcher
+16. Desktop panel
+17. Mobile panel
+18. Assistant progress
+19. Review and completion
+20. Autosave integration
+21. Accessibility
+22. Files created
+23. Files modified
+24. Tests added
+25. Planner test results
+26. Mapper test results
+27. Reducer test results
+28. Component test results
+29. Typecheck
+30. Test result
+31. Build result
+32. Desktop visual verification
+33. Mobile visual verification
+34. Network verification
+35. Example Coffee Shop flow
+36. Example Export Import flow
+37. Example Technology/Pitch Deck flow
+38. Confirmation no AI API/provider call
+39. Confirmation no database/pricing/workflow changes
+40. Remaining limitations
+
+Jangan menyatakan Phase 4A selesai hanya karena launcher dan drawer berhasil tampil. Buktikan bahwa planner, mapping, preview, apply confirmation, existing-answer protection, autosave, session restore, dan wizard integration semuanya bekerja.
