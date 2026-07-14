@@ -59,6 +59,9 @@ import storageRouter from "./storage";
 import observabilityRouter from "./observability";
 import internalAuthRouter from "./internal-auth";
 import internalCatalogRouter from "./internal-catalog";
+import brandKitEnterpriseRouter from "./brand-kit-enterprise";
+import assetLibraryRouter from "./asset-library";
+import zipDeliveryRouter from "./zip-delivery";
 
 const router: IRouter = Router();
 
@@ -109,6 +112,9 @@ router.use(portfolioPublicRouter);
 router.use(portfolioBatchRouter);
 router.use(filesRouter);
 router.use(customerWorkspaceRouter);
+router.use(brandKitEnterpriseRouter);
+router.use(assetLibraryRouter);
+router.use(zipDeliveryRouter);
 router.use(customerWorkspaceSseRouter);
 router.use(customerWorkspaceDocumentsRouter);
 router.use(adminCustomerWorkspaceRouter);

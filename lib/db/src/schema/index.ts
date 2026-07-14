@@ -73,3 +73,6 @@ export * from "./ai-provider-pricing";
 export * from "./internal-users";
 export * from "./cp-document-versions";
 export * from "./cp-page-comments";
+export * from "./ai-brand-kit-assets";
+export * from "./ai-asset-library";
+export * from "./ai-zip-deliveries";

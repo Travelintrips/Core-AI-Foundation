@@ -6746,6 +6746,841 @@ export const AdminGetCustomerWorkspaceResponse = zod.object({
 
 
 /**
+ * @summary List enterprise brand kit items for the workspace customer
+ */
+export const ListBrandKitEnterpriseParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const listBrandKitEnterpriseResponseItemsItemCompletenessTotalMin = 0;
+export const listBrandKitEnterpriseResponseItemsItemCompletenessTotalMax = 100;
+
+
+
+export const ListBrandKitEnterpriseResponse = zod.object({
+  "items": zod.array(zod.object({
+  "projectId": zod.string(),
+  "slots": zod.record(zod.string(), zod.object({
+  "id": zod.number(),
+  "projectId": zod.string(),
+  "emailHash": zod.string(),
+  "slot": zod.string(),
+  "fileName": zod.string().nullish(),
+  "storagePath": zod.string().nullish(),
+  "previewUrl": zod.string().nullish(),
+  "mimeType": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "value": zod.string().nullish(),
+  "valueJson": zod.object({
+
+}).passthrough().nullish(),
+  "version": zod.number(),
+  "parentAssetId": zod.number().nullish(),
+  "active": zod.boolean(),
+  "archived": zod.boolean(),
+  "uploadedBy": zod.string().nullish(),
+  "tags": zod.array(zod.string()).optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "completeness": zod.object({
+  "total": zod.number().min(listBrandKitEnterpriseResponseItemsItemCompletenessTotalMin).max(listBrandKitEnterpriseResponseItemsItemCompletenessTotalMax),
+  "dimensions": zod.object({
+  "logo": zod.number().optional(),
+  "colors": zod.number().optional(),
+  "fonts": zod.number().optional(),
+  "voice": zod.number().optional(),
+  "assets": zod.number().optional(),
+  "guidelines": zod.number().optional()
+}),
+  "filledSlots": zod.array(zod.string()),
+  "missingSlots": zod.array(zod.string()),
+  "isComplete": zod.boolean()
+})
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Get enterprise brand kit with completeness score for a project
+ */
+export const GetBrandKitEnterpriseParams = zod.object({
+  "token": zod.coerce.string(),
+  "projectId": zod.coerce.string()
+})
+
+export const getBrandKitEnterpriseResponseCompletenessTotalMin = 0;
+export const getBrandKitEnterpriseResponseCompletenessTotalMax = 100;
+
+
+
+export const GetBrandKitEnterpriseResponse = zod.object({
+  "projectId": zod.string(),
+  "slots": zod.record(zod.string(), zod.object({
+  "id": zod.number(),
+  "projectId": zod.string(),
+  "emailHash": zod.string(),
+  "slot": zod.string(),
+  "fileName": zod.string().nullish(),
+  "storagePath": zod.string().nullish(),
+  "previewUrl": zod.string().nullish(),
+  "mimeType": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "value": zod.string().nullish(),
+  "valueJson": zod.object({
+
+}).passthrough().nullish(),
+  "version": zod.number(),
+  "parentAssetId": zod.number().nullish(),
+  "active": zod.boolean(),
+  "archived": zod.boolean(),
+  "uploadedBy": zod.string().nullish(),
+  "tags": zod.array(zod.string()).optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "completeness": zod.object({
+  "total": zod.number().min(getBrandKitEnterpriseResponseCompletenessTotalMin).max(getBrandKitEnterpriseResponseCompletenessTotalMax),
+  "dimensions": zod.object({
+  "logo": zod.number().optional(),
+  "colors": zod.number().optional(),
+  "fonts": zod.number().optional(),
+  "voice": zod.number().optional(),
+  "assets": zod.number().optional(),
+  "guidelines": zod.number().optional()
+}),
+  "filledSlots": zod.array(zod.string()),
+  "missingSlots": zod.array(zod.string()),
+  "isComplete": zod.boolean()
+})
+})
+
+
+/**
+ * @summary Upload or update a brand kit slot (creates new version)
+ */
+export const UpsertBrandKitSlotParams = zod.object({
+  "token": zod.coerce.string(),
+  "projectId": zod.coerce.string(),
+  "slot": zod.coerce.string()
+})
+
+export const UpsertBrandKitSlotBody = zod.object({
+  "fileName": zod.string().optional(),
+  "storagePath": zod.string().optional(),
+  "previewUrl": zod.string().optional(),
+  "mimeType": zod.string().optional(),
+  "fileSizeBytes": zod.number().optional(),
+  "value": zod.string().optional(),
+  "valueJson": zod.object({
+
+}).passthrough().optional(),
+  "tags": zod.array(zod.string()).optional()
+})
+
+export const UpsertBrandKitSlotResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.string(),
+  "emailHash": zod.string(),
+  "slot": zod.string(),
+  "fileName": zod.string().nullish(),
+  "storagePath": zod.string().nullish(),
+  "previewUrl": zod.string().nullish(),
+  "mimeType": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "value": zod.string().nullish(),
+  "valueJson": zod.object({
+
+}).passthrough().nullish(),
+  "version": zod.number(),
+  "parentAssetId": zod.number().nullish(),
+  "active": zod.boolean(),
+  "archived": zod.boolean(),
+  "uploadedBy": zod.string().nullish(),
+  "tags": zod.array(zod.string()).optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Archive a brand kit slot
+ */
+export const ArchiveBrandKitSlotParams = zod.object({
+  "token": zod.coerce.string(),
+  "projectId": zod.coerce.string(),
+  "slot": zod.coerce.string()
+})
+
+export const ArchiveBrandKitSlotResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Get version history for a brand kit slot
+ */
+export const GetBrandKitSlotHistoryParams = zod.object({
+  "token": zod.coerce.string(),
+  "projectId": zod.coerce.string(),
+  "slot": zod.coerce.string()
+})
+
+export const GetBrandKitSlotHistoryResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "projectId": zod.string(),
+  "emailHash": zod.string(),
+  "slot": zod.string(),
+  "fileName": zod.string().nullish(),
+  "storagePath": zod.string().nullish(),
+  "previewUrl": zod.string().nullish(),
+  "mimeType": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "value": zod.string().nullish(),
+  "valueJson": zod.object({
+
+}).passthrough().nullish(),
+  "version": zod.number(),
+  "parentAssetId": zod.number().nullish(),
+  "active": zod.boolean(),
+  "archived": zod.boolean(),
+  "uploadedBy": zod.string().nullish(),
+  "tags": zod.array(zod.string()).optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary List / search asset library for the workspace customer
+ */
+export const ListAssetLibraryParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const ListAssetLibraryQueryParams = zod.object({
+  "category": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "favorited": zod.coerce.boolean().optional(),
+  "archived": zod.coerce.boolean().optional(),
+  "tags": zod.coerce.string().optional().describe('Comma-separated list of tags'),
+  "sort": zod.enum(['newest', 'oldest', 'name', 'size']).optional(),
+  "projectId": zod.coerce.string().optional()
+})
+
+export const ListAssetLibraryResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "emailHash": zod.string(),
+  "projectId": zod.string().nullish(),
+  "category": zod.string(),
+  "categoryLabel": zod.string(),
+  "title": zod.string(),
+  "fileName": zod.string(),
+  "storagePath": zod.string().nullish(),
+  "previewUrl": zod.string().nullish(),
+  "mimeType": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "version": zod.number(),
+  "parentAssetId": zod.number().nullish(),
+  "active": zod.boolean(),
+  "archived": zod.boolean(),
+  "favorited": zod.boolean(),
+  "uploadedBy": zod.string().nullish(),
+  "sourceAssetId": zod.number().nullish(),
+  "tags": zod.array(zod.string()),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Create a new asset library item
+ */
+export const CreateAssetLibraryItemParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const CreateAssetLibraryItemBody = zod.object({
+  "category": zod.string(),
+  "title": zod.string(),
+  "fileName": zod.string(),
+  "projectId": zod.string().optional(),
+  "storagePath": zod.string().optional(),
+  "previewUrl": zod.string().optional(),
+  "mimeType": zod.string().optional(),
+  "fileSizeBytes": zod.number().optional(),
+  "uploadedBy": zod.string().optional(),
+  "tags": zod.array(zod.string()).optional()
+})
+
+export const CreateAssetLibraryItemResponse = zod.object({
+  "id": zod.number(),
+  "emailHash": zod.string(),
+  "projectId": zod.string().nullish(),
+  "category": zod.string(),
+  "categoryLabel": zod.string(),
+  "title": zod.string(),
+  "fileName": zod.string(),
+  "storagePath": zod.string().nullish(),
+  "previewUrl": zod.string().nullish(),
+  "mimeType": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "version": zod.number(),
+  "parentAssetId": zod.number().nullish(),
+  "active": zod.boolean(),
+  "archived": zod.boolean(),
+  "favorited": zod.boolean(),
+  "uploadedBy": zod.string().nullish(),
+  "sourceAssetId": zod.number().nullish(),
+  "tags": zod.array(zod.string()),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get a single asset library item
+ */
+export const GetAssetLibraryItemParams = zod.object({
+  "token": zod.coerce.string(),
+  "id": zod.coerce.number()
+})
+
+export const GetAssetLibraryItemResponse = zod.object({
+  "id": zod.number(),
+  "emailHash": zod.string(),
+  "projectId": zod.string().nullish(),
+  "category": zod.string(),
+  "categoryLabel": zod.string(),
+  "title": zod.string(),
+  "fileName": zod.string(),
+  "storagePath": zod.string().nullish(),
+  "previewUrl": zod.string().nullish(),
+  "mimeType": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "version": zod.number(),
+  "parentAssetId": zod.number().nullish(),
+  "active": zod.boolean(),
+  "archived": zod.boolean(),
+  "favorited": zod.boolean(),
+  "uploadedBy": zod.string().nullish(),
+  "sourceAssetId": zod.number().nullish(),
+  "tags": zod.array(zod.string()),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get version history for an asset
+ */
+export const GetAssetVersionHistoryParams = zod.object({
+  "token": zod.coerce.string(),
+  "id": zod.coerce.number()
+})
+
+export const GetAssetVersionHistoryResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "emailHash": zod.string(),
+  "projectId": zod.string().nullish(),
+  "category": zod.string(),
+  "categoryLabel": zod.string(),
+  "title": zod.string(),
+  "fileName": zod.string(),
+  "storagePath": zod.string().nullish(),
+  "previewUrl": zod.string().nullish(),
+  "mimeType": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "version": zod.number(),
+  "parentAssetId": zod.number().nullish(),
+  "active": zod.boolean(),
+  "archived": zod.boolean(),
+  "favorited": zod.boolean(),
+  "uploadedBy": zod.string().nullish(),
+  "sourceAssetId": zod.number().nullish(),
+  "tags": zod.array(zod.string()),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Replace an asset (create a new version, archive old)
+ */
+export const ReplaceAssetLibraryItemParams = zod.object({
+  "token": zod.coerce.string(),
+  "id": zod.coerce.number()
+})
+
+export const ReplaceAssetLibraryItemBody = zod.object({
+  "category": zod.string(),
+  "title": zod.string(),
+  "fileName": zod.string(),
+  "projectId": zod.string().optional(),
+  "storagePath": zod.string().optional(),
+  "previewUrl": zod.string().optional(),
+  "mimeType": zod.string().optional(),
+  "fileSizeBytes": zod.number().optional(),
+  "uploadedBy": zod.string().optional(),
+  "tags": zod.array(zod.string()).optional()
+})
+
+export const ReplaceAssetLibraryItemResponse = zod.object({
+  "id": zod.number(),
+  "emailHash": zod.string(),
+  "projectId": zod.string().nullish(),
+  "category": zod.string(),
+  "categoryLabel": zod.string(),
+  "title": zod.string(),
+  "fileName": zod.string(),
+  "storagePath": zod.string().nullish(),
+  "previewUrl": zod.string().nullish(),
+  "mimeType": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "version": zod.number(),
+  "parentAssetId": zod.number().nullish(),
+  "active": zod.boolean(),
+  "archived": zod.boolean(),
+  "favorited": zod.boolean(),
+  "uploadedBy": zod.string().nullish(),
+  "sourceAssetId": zod.number().nullish(),
+  "tags": zod.array(zod.string()),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Rename an asset
+ */
+export const RenameAssetLibraryItemParams = zod.object({
+  "token": zod.coerce.string(),
+  "id": zod.coerce.number()
+})
+
+export const RenameAssetLibraryItemBody = zod.object({
+  "title": zod.string()
+})
+
+export const RenameAssetLibraryItemResponse = zod.object({
+  "id": zod.number(),
+  "emailHash": zod.string(),
+  "projectId": zod.string().nullish(),
+  "category": zod.string(),
+  "categoryLabel": zod.string(),
+  "title": zod.string(),
+  "fileName": zod.string(),
+  "storagePath": zod.string().nullish(),
+  "previewUrl": zod.string().nullish(),
+  "mimeType": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "version": zod.number(),
+  "parentAssetId": zod.number().nullish(),
+  "active": zod.boolean(),
+  "archived": zod.boolean(),
+  "favorited": zod.boolean(),
+  "uploadedBy": zod.string().nullish(),
+  "sourceAssetId": zod.number().nullish(),
+  "tags": zod.array(zod.string()),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Toggle favorite status of an asset
+ */
+export const ToggleAssetFavoriteParams = zod.object({
+  "token": zod.coerce.string(),
+  "id": zod.coerce.number()
+})
+
+export const ToggleAssetFavoriteResponse = zod.object({
+  "id": zod.number(),
+  "emailHash": zod.string(),
+  "projectId": zod.string().nullish(),
+  "category": zod.string(),
+  "categoryLabel": zod.string(),
+  "title": zod.string(),
+  "fileName": zod.string(),
+  "storagePath": zod.string().nullish(),
+  "previewUrl": zod.string().nullish(),
+  "mimeType": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "version": zod.number(),
+  "parentAssetId": zod.number().nullish(),
+  "active": zod.boolean(),
+  "archived": zod.boolean(),
+  "favorited": zod.boolean(),
+  "uploadedBy": zod.string().nullish(),
+  "sourceAssetId": zod.number().nullish(),
+  "tags": zod.array(zod.string()),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Archive an asset
+ */
+export const ArchiveAssetLibraryItemParams = zod.object({
+  "token": zod.coerce.string(),
+  "id": zod.coerce.number()
+})
+
+export const ArchiveAssetLibraryItemResponse = zod.object({
+  "id": zod.number(),
+  "emailHash": zod.string(),
+  "projectId": zod.string().nullish(),
+  "category": zod.string(),
+  "categoryLabel": zod.string(),
+  "title": zod.string(),
+  "fileName": zod.string(),
+  "storagePath": zod.string().nullish(),
+  "previewUrl": zod.string().nullish(),
+  "mimeType": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "version": zod.number(),
+  "parentAssetId": zod.number().nullish(),
+  "active": zod.boolean(),
+  "archived": zod.boolean(),
+  "favorited": zod.boolean(),
+  "uploadedBy": zod.string().nullish(),
+  "sourceAssetId": zod.number().nullish(),
+  "tags": zod.array(zod.string()),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update tags on an asset
+ */
+export const TagAssetLibraryItemParams = zod.object({
+  "token": zod.coerce.string(),
+  "id": zod.coerce.number()
+})
+
+export const TagAssetLibraryItemBody = zod.object({
+  "tags": zod.array(zod.string())
+})
+
+export const TagAssetLibraryItemResponse = zod.object({
+  "id": zod.number(),
+  "emailHash": zod.string(),
+  "projectId": zod.string().nullish(),
+  "category": zod.string(),
+  "categoryLabel": zod.string(),
+  "title": zod.string(),
+  "fileName": zod.string(),
+  "storagePath": zod.string().nullish(),
+  "previewUrl": zod.string().nullish(),
+  "mimeType": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "version": zod.number(),
+  "parentAssetId": zod.number().nullish(),
+  "active": zod.boolean(),
+  "archived": zod.boolean(),
+  "favorited": zod.boolean(),
+  "uploadedBy": zod.string().nullish(),
+  "sourceAssetId": zod.number().nullish(),
+  "tags": zod.array(zod.string()),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Generate a signed download URL for an asset
+ */
+export const SignAssetLibraryDownloadParams = zod.object({
+  "token": zod.coerce.string(),
+  "id": zod.coerce.number()
+})
+
+export const SignAssetLibraryDownloadResponse = zod.object({
+  "ok": zod.boolean(),
+  "accessPath": zod.string(),
+  "downloadUrl": zod.string(),
+  "expiresAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Promote an AI-generated creative asset into the asset library
+ */
+export const PromoteCreativeAssetToLibraryParams = zod.object({
+  "token": zod.coerce.string(),
+  "sourceAssetId": zod.coerce.number()
+})
+
+export const PromoteCreativeAssetToLibraryBody = zod.object({
+  "category": zod.string().optional(),
+  "title": zod.string().optional()
+})
+
+export const PromoteCreativeAssetToLibraryResponse = zod.object({
+  "id": zod.number(),
+  "emailHash": zod.string(),
+  "projectId": zod.string().nullish(),
+  "category": zod.string(),
+  "categoryLabel": zod.string(),
+  "title": zod.string(),
+  "fileName": zod.string(),
+  "storagePath": zod.string().nullish(),
+  "previewUrl": zod.string().nullish(),
+  "mimeType": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "version": zod.number(),
+  "parentAssetId": zod.number().nullish(),
+  "active": zod.boolean(),
+  "archived": zod.boolean(),
+  "favorited": zod.boolean(),
+  "uploadedBy": zod.string().nullish(),
+  "sourceAssetId": zod.number().nullish(),
+  "tags": zod.array(zod.string()),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get ZIP delivery status for a project
+ */
+export const GetZipDeliveryStatusParams = zod.object({
+  "token": zod.coerce.string(),
+  "projectId": zod.coerce.string()
+})
+
+export const GetZipDeliveryStatusResponse = zod.object({
+  "id": zod.number().optional(),
+  "projectId": zod.string(),
+  "status": zod.enum(['queued', 'generating', 'completed', 'failed', 'none']),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "downloadToken": zod.string().nullish(),
+  "expiresAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "retryCount": zod.number().optional(),
+  "jobId": zod.number().nullish(),
+  "manifestJson": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.coerce.date().optional(),
+  "updatedAt": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Request ZIP generation for an unlocked project
+ */
+export const RequestZipDeliveryParams = zod.object({
+  "token": zod.coerce.string(),
+  "projectId": zod.coerce.string()
+})
+
+export const RequestZipDeliveryResponse = zod.object({
+  "id": zod.number().optional(),
+  "projectId": zod.string(),
+  "status": zod.enum(['queued', 'generating', 'completed', 'failed', 'none']),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "downloadToken": zod.string().nullish(),
+  "expiresAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "retryCount": zod.number().optional(),
+  "jobId": zod.number().nullish(),
+  "manifestJson": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.coerce.date().optional(),
+  "updatedAt": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Retry a failed ZIP delivery
+ */
+export const RetryZipDeliveryParams = zod.object({
+  "token": zod.coerce.string(),
+  "projectId": zod.coerce.string()
+})
+
+export const RetryZipDeliveryResponse = zod.object({
+  "id": zod.number().optional(),
+  "projectId": zod.string(),
+  "status": zod.enum(['queued', 'generating', 'completed', 'failed', 'none']),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "downloadToken": zod.string().nullish(),
+  "expiresAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "retryCount": zod.number().optional(),
+  "jobId": zod.number().nullish(),
+  "manifestJson": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.coerce.date().optional(),
+  "updatedAt": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Admin — brand kit completeness summary across all projects
+ */
+export const AdminBrandKitStatsResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Admin — get brand kit for any project
+ */
+export const AdminGetProjectBrandKitParams = zod.object({
+  "projectId": zod.coerce.string()
+})
+
+export const adminGetProjectBrandKitResponseCompletenessTotalMin = 0;
+export const adminGetProjectBrandKitResponseCompletenessTotalMax = 100;
+
+
+
+export const AdminGetProjectBrandKitResponse = zod.object({
+  "projectId": zod.string(),
+  "slots": zod.record(zod.string(), zod.object({
+  "id": zod.number(),
+  "projectId": zod.string(),
+  "emailHash": zod.string(),
+  "slot": zod.string(),
+  "fileName": zod.string().nullish(),
+  "storagePath": zod.string().nullish(),
+  "previewUrl": zod.string().nullish(),
+  "mimeType": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "value": zod.string().nullish(),
+  "valueJson": zod.object({
+
+}).passthrough().nullish(),
+  "version": zod.number(),
+  "parentAssetId": zod.number().nullish(),
+  "active": zod.boolean(),
+  "archived": zod.boolean(),
+  "uploadedBy": zod.string().nullish(),
+  "tags": zod.array(zod.string()).optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "completeness": zod.object({
+  "total": zod.number().min(adminGetProjectBrandKitResponseCompletenessTotalMin).max(adminGetProjectBrandKitResponseCompletenessTotalMax),
+  "dimensions": zod.object({
+  "logo": zod.number().optional(),
+  "colors": zod.number().optional(),
+  "fonts": zod.number().optional(),
+  "voice": zod.number().optional(),
+  "assets": zod.number().optional(),
+  "guidelines": zod.number().optional()
+}),
+  "filledSlots": zod.array(zod.string()),
+  "missingSlots": zod.array(zod.string()),
+  "isComplete": zod.boolean()
+})
+})
+
+
+/**
+ * @summary Admin — asset library stats
+ */
+export const AdminAssetLibraryStatsResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Admin — ZIP delivery overview stats
+ */
+export const AdminZipDeliveryStatsResponse = zod.object({
+
+}).passthrough()
+
+
+/**
+ * @summary Admin — get ZIP delivery status for a project
+ */
+export const AdminGetProjectZipParams = zod.object({
+  "projectId": zod.coerce.string()
+})
+
+export const AdminGetProjectZipResponse = zod.object({
+  "id": zod.number().optional(),
+  "projectId": zod.string(),
+  "status": zod.enum(['queued', 'generating', 'completed', 'failed', 'none']),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "downloadToken": zod.string().nullish(),
+  "expiresAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "retryCount": zod.number().optional(),
+  "jobId": zod.number().nullish(),
+  "manifestJson": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.coerce.date().optional(),
+  "updatedAt": zod.coerce.date().optional()
+})
+
+
+/**
+ * @summary Admin — force retry ZIP delivery for a project
+ */
+export const AdminRetryZipDeliveryParams = zod.object({
+  "projectId": zod.coerce.string()
+})
+
+export const AdminRetryZipDeliveryResponse = zod.object({
+  "id": zod.number().optional(),
+  "projectId": zod.string(),
+  "status": zod.enum(['queued', 'generating', 'completed', 'failed', 'none']),
+  "fileSizeBytes": zod.number().nullish(),
+  "checksum": zod.string().nullish(),
+  "downloadToken": zod.string().nullish(),
+  "expiresAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "retryCount": zod.number().optional(),
+  "jobId": zod.number().nullish(),
+  "manifestJson": zod.object({
+
+}).passthrough().nullish(),
+  "createdAt": zod.coerce.date().optional(),
+  "updatedAt": zod.coerce.date().optional()
+})
+
+
+/**
  * @summary Admin — view a customer's downloads
  */
 export const AdminGetCustomerDownloadsParams = zod.object({

@@ -5000,6 +5000,448 @@ paths:
         "200": { description: Customer workspace summary, content: { application/json: { schema: { type: object } } } }
         "404": { description: Customer not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
 
+  # ── V4.2D: Brand Kit Enterprise (customer workspace) ──────────────────────
+  /public/customer/workspace/{token}/brand-kit-enterprise:
+    get:
+      operationId: listBrandKitEnterprise
+      tags: [brand-kit-enterprise]
+      summary: List enterprise brand kit items for the workspace customer
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Brand kit enterprise list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandKitEnterpriseList"
+
+  /public/customer/workspace/{token}/brand-kit-enterprise/{projectId}:
+    get:
+      operationId: getBrandKitEnterprise
+      tags: [brand-kit-enterprise]
+      summary: Get enterprise brand kit with completeness score for a project
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: projectId, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Brand kit enterprise detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandKitEnterpriseDetail"
+        "404": { description: Not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/brand-kit-enterprise/{projectId}/slots/{slot}:
+    put:
+      operationId: upsertBrandKitSlot
+      tags: [brand-kit-enterprise]
+      summary: Upload or update a brand kit slot (creates new version)
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: projectId, required: true, schema: { type: string } }
+        - { in: path, name: slot, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertBrandKitSlotInput"
+      responses:
+        "201":
+          description: Slot updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandKitSlotAsset"
+        "400": { description: Invalid slot, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "404": { description: Project not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+    delete:
+      operationId: archiveBrandKitSlot
+      tags: [brand-kit-enterprise]
+      summary: Archive a brand kit slot
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: projectId, required: true, schema: { type: string } }
+        - { in: path, name: slot, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Archived, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "404": { description: Not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/brand-kit-enterprise/{projectId}/slots/{slot}/history:
+    get:
+      operationId: getBrandKitSlotHistory
+      tags: [brand-kit-enterprise]
+      summary: Get version history for a brand kit slot
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: projectId, required: true, schema: { type: string } }
+        - { in: path, name: slot, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Slot version history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandKitSlotHistory"
+
+  # ── V4.2D: Asset Library (customer workspace) ─────────────────────────────
+  /public/customer/workspace/{token}/assets:
+    get:
+      operationId: listAssetLibrary
+      tags: [asset-library]
+      summary: List / search asset library for the workspace customer
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: search, schema: { type: string } }
+        - { in: query, name: favorited, schema: { type: boolean } }
+        - { in: query, name: archived, schema: { type: boolean } }
+        - { in: query, name: tags, schema: { type: string }, description: Comma-separated list of tags }
+        - { in: query, name: sort, schema: { type: string, enum: [newest, oldest, name, size] } }
+        - { in: query, name: projectId, schema: { type: string } }
+      responses:
+        "200":
+          description: Asset library list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetLibraryList"
+    post:
+      operationId: createAssetLibraryItem
+      tags: [asset-library]
+      summary: Create a new asset library item
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAssetLibraryInput"
+      responses:
+        "201":
+          description: Asset created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetLibraryItem"
+        "400": { description: Validation error, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/assets/{id}:
+    get:
+      operationId: getAssetLibraryItem
+      tags: [asset-library]
+      summary: Get a single asset library item
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Asset item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetLibraryItem"
+        "404": { description: Not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/assets/{id}/history:
+    get:
+      operationId: getAssetVersionHistory
+      tags: [asset-library]
+      summary: Get version history for an asset
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Version history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetLibraryList"
+
+  /public/customer/workspace/{token}/assets/{id}/replace:
+    post:
+      operationId: replaceAssetLibraryItem
+      tags: [asset-library]
+      summary: Replace an asset (create a new version, archive old)
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAssetLibraryInput"
+      responses:
+        "201":
+          description: New version created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetLibraryItem"
+        "404": { description: Not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/assets/{id}/rename:
+    patch:
+      operationId: renameAssetLibraryItem
+      tags: [asset-library]
+      summary: Rename an asset
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+      responses:
+        "200":
+          description: Asset renamed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetLibraryItem"
+        "404": { description: Not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/assets/{id}/favorite:
+    post:
+      operationId: toggleAssetFavorite
+      tags: [asset-library]
+      summary: Toggle favorite status of an asset
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Updated asset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetLibraryItem"
+        "404": { description: Not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/assets/{id}/archive:
+    post:
+      operationId: archiveAssetLibraryItem
+      tags: [asset-library]
+      summary: Archive an asset
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Archived asset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetLibraryItem"
+        "404": { description: Not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/assets/{id}/tags:
+    patch:
+      operationId: tagAssetLibraryItem
+      tags: [asset-library]
+      summary: Update tags on an asset
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tags]
+              properties:
+                tags: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: Updated asset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetLibraryItem"
+
+  /public/customer/workspace/{token}/assets/{id}/sign:
+    post:
+      operationId: signAssetLibraryDownload
+      tags: [asset-library]
+      summary: Generate a signed download URL for an asset
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "201":
+          description: Signed download URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetSignedDownload"
+        "404": { description: Not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/assets/promote/{sourceAssetId}:
+    post:
+      operationId: promoteCreativeAssetToLibrary
+      tags: [asset-library]
+      summary: Promote an AI-generated creative asset into the asset library
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: sourceAssetId, required: true, schema: { type: integer } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                category: { type: string }
+                title: { type: string }
+      responses:
+        "201":
+          description: Promoted asset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetLibraryItem"
+        "404": { description: Source asset not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  # ── V4.2D: ZIP Delivery (customer workspace) ──────────────────────────────
+  /public/customer/workspace/{token}/zip/{projectId}:
+    get:
+      operationId: getZipDeliveryStatus
+      tags: [zip-delivery]
+      summary: Get ZIP delivery status for a project
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: projectId, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: ZIP delivery status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ZipDeliveryView"
+
+  /public/customer/workspace/{token}/zip/{projectId}/request:
+    post:
+      operationId: requestZipDelivery
+      tags: [zip-delivery]
+      summary: Request ZIP generation for an unlocked project
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: projectId, required: true, schema: { type: string } }
+      responses:
+        "202":
+          description: ZIP job queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ZipDeliveryView"
+        "402": { description: Files locked, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "404": { description: Project not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /public/customer/workspace/{token}/zip/{projectId}/retry:
+    post:
+      operationId: retryZipDelivery
+      tags: [zip-delivery]
+      summary: Retry a failed ZIP delivery
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: projectId, required: true, schema: { type: string } }
+      responses:
+        "202":
+          description: ZIP job re-queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ZipDeliveryView"
+        "402": { description: Files locked, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  # ── V4.2D: Admin brand kit + asset library + ZIP stats ───────────────────
+  /ai/brand-kit/stats:
+    get:
+      operationId: adminBrandKitStats
+      tags: [brand-kit-enterprise]
+      summary: Admin — brand kit completeness summary across all projects
+      security: [{ adminKey: [] }]
+      responses:
+        "200": { description: Brand kit stats, content: { application/json: { schema: { type: object } } } }
+
+  /ai/brand-kit/projects/{projectId}:
+    get:
+      operationId: adminGetProjectBrandKit
+      tags: [brand-kit-enterprise]
+      summary: Admin — get brand kit for any project
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: projectId, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Brand kit detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandKitEnterpriseDetail"
+        "404": { description: Not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /ai/asset-library/stats:
+    get:
+      operationId: adminAssetLibraryStats
+      tags: [asset-library]
+      summary: Admin — asset library stats
+      security: [{ adminKey: [] }]
+      responses:
+        "200": { description: Asset stats, content: { application/json: { schema: { type: object } } } }
+
+  /ai/zip-deliveries:
+    get:
+      operationId: adminZipDeliveryStats
+      tags: [zip-delivery]
+      summary: Admin — ZIP delivery overview stats
+      security: [{ adminKey: [] }]
+      responses:
+        "200": { description: ZIP stats, content: { application/json: { schema: { type: object } } } }
+
+  /ai/zip-deliveries/{projectId}:
+    get:
+      operationId: adminGetProjectZip
+      tags: [zip-delivery]
+      summary: Admin — get ZIP delivery status for a project
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: projectId, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: ZIP delivery view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ZipDeliveryView"
+
+  /ai/zip-deliveries/{projectId}/retry:
+    post:
+      operationId: adminRetryZipDelivery
+      tags: [zip-delivery]
+      summary: Admin — force retry ZIP delivery for a project
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: projectId, required: true, schema: { type: string } }
+      responses:
+        "202":
+          description: ZIP retry queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ZipDeliveryView"
+
   /ai/customer-workspace/{email}/downloads:
     get:
       operationId: adminGetCustomerDownloads
@@ -12269,6 +12711,163 @@ components:
         conversions: { type: integer }
         revenue: { type: integer }
         createdAt: { type: string, format: date-time }
+
+    # ── V4.2D schemas ────────────────────────────────────────────────────────
+
+    BrandKitSlotAsset:
+      type: object
+      required: [id, projectId, emailHash, slot, version, active, archived, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        projectId: { type: string }
+        emailHash: { type: string }
+        slot: { type: string }
+        fileName: { type: string, nullable: true }
+        storagePath: { type: string, nullable: true }
+        previewUrl: { type: string, nullable: true }
+        mimeType: { type: string, nullable: true }
+        fileSizeBytes: { type: integer, nullable: true }
+        checksum: { type: string, nullable: true }
+        value: { type: string, nullable: true }
+        valueJson: { type: object, nullable: true }
+        version: { type: integer }
+        parentAssetId: { type: integer, nullable: true }
+        active: { type: boolean }
+        archived: { type: boolean }
+        uploadedBy: { type: string, nullable: true }
+        tags: { type: array, items: { type: string } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    BrandCompletenessScore:
+      type: object
+      required: [total, dimensions, filledSlots, missingSlots, isComplete]
+      properties:
+        total: { type: integer, minimum: 0, maximum: 100 }
+        dimensions:
+          type: object
+          properties:
+            logo: { type: integer }
+            colors: { type: integer }
+            fonts: { type: integer }
+            voice: { type: integer }
+            assets: { type: integer }
+            guidelines: { type: integer }
+        filledSlots: { type: array, items: { type: string } }
+        missingSlots: { type: array, items: { type: string } }
+        isComplete: { type: boolean }
+
+    BrandKitEnterpriseDetail:
+      type: object
+      required: [projectId, slots, completeness]
+      properties:
+        projectId: { type: string }
+        slots: { type: object, additionalProperties: { $ref: "#/components/schemas/BrandKitSlotAsset" } }
+        completeness: { $ref: "#/components/schemas/BrandCompletenessScore" }
+
+    BrandKitEnterpriseList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/BrandKitEnterpriseDetail" } }
+        total: { type: integer }
+
+    BrandKitSlotHistory:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/BrandKitSlotAsset" } }
+        total: { type: integer }
+
+    UpsertBrandKitSlotInput:
+      type: object
+      properties:
+        fileName: { type: string }
+        storagePath: { type: string }
+        previewUrl: { type: string }
+        mimeType: { type: string }
+        fileSizeBytes: { type: integer }
+        value: { type: string }
+        valueJson: { type: object }
+        tags: { type: array, items: { type: string } }
+
+    AssetLibraryItem:
+      type: object
+      required: [id, emailHash, category, categoryLabel, title, fileName, version, active, archived, favorited, tags, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        emailHash: { type: string }
+        projectId: { type: string, nullable: true }
+        category: { type: string }
+        categoryLabel: { type: string }
+        title: { type: string }
+        fileName: { type: string }
+        storagePath: { type: string, nullable: true }
+        previewUrl: { type: string, nullable: true }
+        mimeType: { type: string, nullable: true }
+        fileSizeBytes: { type: integer, nullable: true }
+        checksum: { type: string, nullable: true }
+        version: { type: integer }
+        parentAssetId: { type: integer, nullable: true }
+        active: { type: boolean }
+        archived: { type: boolean }
+        favorited: { type: boolean }
+        uploadedBy: { type: string, nullable: true }
+        sourceAssetId: { type: integer, nullable: true }
+        tags: { type: array, items: { type: string } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AssetLibraryList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AssetLibraryItem" } }
+        total: { type: integer }
+
+    CreateAssetLibraryInput:
+      type: object
+      required: [category, title, fileName]
+      properties:
+        category: { type: string }
+        title: { type: string }
+        fileName: { type: string }
+        projectId: { type: string }
+        storagePath: { type: string }
+        previewUrl: { type: string }
+        mimeType: { type: string }
+        fileSizeBytes: { type: integer }
+        uploadedBy: { type: string }
+        tags: { type: array, items: { type: string } }
+
+    AssetSignedDownload:
+      type: object
+      required: [ok, accessPath, downloadUrl, expiresAt]
+      properties:
+        ok: { type: boolean }
+        accessPath: { type: string }
+        downloadUrl: { type: string }
+        expiresAt: { type: string, format: date-time }
+
+    ZipDeliveryView:
+      type: object
+      required: [status, projectId]
+      properties:
+        id: { type: integer }
+        projectId: { type: string }
+        status: { type: string, enum: [queued, generating, completed, failed, none] }
+        fileSizeBytes: { type: integer, nullable: true }
+        checksum: { type: string, nullable: true }
+        downloadToken: { type: string, nullable: true }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        errorMessage: { type: string, nullable: true }
+        retryCount: { type: integer }
+        jobId: { type: integer, nullable: true }
+        manifestJson: { type: object, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    # ── End V4.2D schemas ─────────────────────────────────────────────────────
 
     AbTest:
       type: object

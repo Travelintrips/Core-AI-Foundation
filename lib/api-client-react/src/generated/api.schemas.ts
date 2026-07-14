@@ -4452,6 +4452,162 @@ export interface AbVariant {
   createdAt: string;
 }
 
+export type BrandKitSlotAssetValueJson = { [key: string]: unknown } | null;
+
+export interface BrandKitSlotAsset {
+  id: number;
+  projectId: string;
+  emailHash: string;
+  slot: string;
+  fileName?: string | null;
+  storagePath?: string | null;
+  previewUrl?: string | null;
+  mimeType?: string | null;
+  fileSizeBytes?: number | null;
+  checksum?: string | null;
+  value?: string | null;
+  valueJson?: BrandKitSlotAssetValueJson;
+  version: number;
+  parentAssetId?: number | null;
+  active: boolean;
+  archived: boolean;
+  uploadedBy?: string | null;
+  tags?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type BrandCompletenessScoreDimensions = {
+  logo?: number;
+  colors?: number;
+  fonts?: number;
+  voice?: number;
+  assets?: number;
+  guidelines?: number;
+};
+
+export interface BrandCompletenessScore {
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  total: number;
+  dimensions: BrandCompletenessScoreDimensions;
+  filledSlots: string[];
+  missingSlots: string[];
+  isComplete: boolean;
+}
+
+export type BrandKitEnterpriseDetailSlots = {[key: string]: BrandKitSlotAsset};
+
+export interface BrandKitEnterpriseDetail {
+  projectId: string;
+  slots: BrandKitEnterpriseDetailSlots;
+  completeness: BrandCompletenessScore;
+}
+
+export interface BrandKitEnterpriseList {
+  items: BrandKitEnterpriseDetail[];
+  total: number;
+}
+
+export interface BrandKitSlotHistory {
+  items: BrandKitSlotAsset[];
+  total: number;
+}
+
+export type UpsertBrandKitSlotInputValueJson = { [key: string]: unknown };
+
+export interface UpsertBrandKitSlotInput {
+  fileName?: string;
+  storagePath?: string;
+  previewUrl?: string;
+  mimeType?: string;
+  fileSizeBytes?: number;
+  value?: string;
+  valueJson?: UpsertBrandKitSlotInputValueJson;
+  tags?: string[];
+}
+
+export interface AssetLibraryItem {
+  id: number;
+  emailHash: string;
+  projectId?: string | null;
+  category: string;
+  categoryLabel: string;
+  title: string;
+  fileName: string;
+  storagePath?: string | null;
+  previewUrl?: string | null;
+  mimeType?: string | null;
+  fileSizeBytes?: number | null;
+  checksum?: string | null;
+  version: number;
+  parentAssetId?: number | null;
+  active: boolean;
+  archived: boolean;
+  favorited: boolean;
+  uploadedBy?: string | null;
+  sourceAssetId?: number | null;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AssetLibraryList {
+  items: AssetLibraryItem[];
+  total: number;
+}
+
+export interface CreateAssetLibraryInput {
+  category: string;
+  title: string;
+  fileName: string;
+  projectId?: string;
+  storagePath?: string;
+  previewUrl?: string;
+  mimeType?: string;
+  fileSizeBytes?: number;
+  uploadedBy?: string;
+  tags?: string[];
+}
+
+export interface AssetSignedDownload {
+  ok: boolean;
+  accessPath: string;
+  downloadUrl: string;
+  expiresAt: string;
+}
+
+export type ZipDeliveryViewStatus = typeof ZipDeliveryViewStatus[keyof typeof ZipDeliveryViewStatus];
+
+
+export const ZipDeliveryViewStatus = {
+  queued: 'queued',
+  generating: 'generating',
+  completed: 'completed',
+  failed: 'failed',
+  none: 'none',
+} as const;
+
+export type ZipDeliveryViewManifestJson = { [key: string]: unknown } | null;
+
+export interface ZipDeliveryView {
+  id?: number;
+  projectId: string;
+  status: ZipDeliveryViewStatus;
+  fileSizeBytes?: number | null;
+  checksum?: string | null;
+  downloadToken?: string | null;
+  expiresAt?: string | null;
+  errorMessage?: string | null;
+  retryCount?: number;
+  jobId?: number | null;
+  manifestJson?: ZipDeliveryViewManifestJson;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export type AbTestTestType = typeof AbTestTestType[keyof typeof AbTestTestType];
 
 
@@ -4851,6 +5007,48 @@ export const ListWorkspaceNotificationsRead = {
 } as const;
 
 export type AdminGetCustomerWorkspace200 = { [key: string]: unknown };
+
+export type ListAssetLibraryParams = {
+category?: string;
+search?: string;
+favorited?: boolean;
+archived?: boolean;
+/**
+ * Comma-separated list of tags
+ */
+tags?: string;
+sort?: ListAssetLibrarySort;
+projectId?: string;
+};
+
+export type ListAssetLibrarySort = typeof ListAssetLibrarySort[keyof typeof ListAssetLibrarySort];
+
+
+export const ListAssetLibrarySort = {
+  newest: 'newest',
+  oldest: 'oldest',
+  name: 'name',
+  size: 'size',
+} as const;
+
+export type RenameAssetLibraryItemBody = {
+  title: string;
+};
+
+export type TagAssetLibraryItemBody = {
+  tags: string[];
+};
+
+export type PromoteCreativeAssetToLibraryBody = {
+  category?: string;
+  title?: string;
+};
+
+export type AdminBrandKitStats200 = { [key: string]: unknown };
+
+export type AdminAssetLibraryStats200 = { [key: string]: unknown };
+
+export type AdminZipDeliveryStats200 = { [key: string]: unknown };
 
 export type AdminGetCustomerAssets200 = { [key: string]: unknown };
 
