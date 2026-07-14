@@ -1,0 +1,613 @@
+Audit dan lengkapi layanan Company Profile pada Customer Portal agar customer menerima deliverable yang jelas dan end-to-end.
+
+STATUS SAAT INI:
+
+- Brief Assistant tersedia
+- Brief Intelligence scoring tersedia
+- AI menghasilkan visi, misi, value proposition, deskripsi layanan, dan closing
+- PDF document engine tersedia
+- PPTX presentation engine tersedia
+- Brand Kit dapat menyuntikkan logo dan warna
+- Review token tersedia
+- Download terkunci oleh payment gate
+- Live runtime tracking tersedia
+
+PENTING:
+
+Jangan membuat Document Engine, Presentation Engine, Brand Kit, Review System, Payment Gate, Queue, atau Workflow baru.
+
+Reuse sistem yang sudah ada.
+
+Semua perubahan harus:
+- additive
+- OpenAPI-first
+- type-safe
+- backward compatible
+- anti-fabrication
+- pnpm run verify clean
+
+==========================================================
+1. AUDIT IMPLEMENTASI AKTUAL
+==========================================================
+
+Sebelum coding, verifikasi:
+
+- pertanyaan brief Company Profile yang benar-benar aktif
+- mapper Company Profile
+- document renderer
+- presentation renderer
+- Brand Kit integration
+- review flow
+- revision flow
+- payment lock
+- download routes
+- live runtime events
+
+Tentukan:
+- COMPLETE
+- PARTIAL
+- PLACEHOLDER
+- NOT CONNECTED
+- MISSING
+
+Jangan menganggap fitur aktif hanya karena file ada.
+
+==========================================================
+2. COMPANY PROFILE BRIEF
+==========================================================
+
+Lengkapi brief dengan field:
+
+- company_name
+- legal_name
+- business_type
+- industry
+- year_established
+- company_history
+- vision
+- mission
+- company_values
+- value_proposition
+- products_services
+- target_market
+- geographic_coverage
+- facilities
+- production_capacity
+- certifications
+- legal_documents
+- organization_structure
+- key_people
+- clients_partners
+- project_experience
+- quality_assurance
+- sustainability
+- contact_information
+- website
+- social_media
+- document_language
+- page_target
+- preferred_style
+- preferred_colors
+- reference_documents
+- reference_links
+- uploaded_logo
+- uploaded_photos
+- notes
+
+Gunakan conditional questions berdasarkan industri.
+
+Contoh:
+
+Logistics:
+- air freight
+- sea freight
+- trucking
+- customs clearance
+- warehousing
+- route coverage
+- fleet
+- certifications
+
+Trading:
+- commodities
+- sourcing countries
+- destination countries
+- monthly capacity
+- incoterms
+- quality documentation
+
+Manufacturing:
+- factory location
+- machinery
+- production capacity
+- quality control
+- certifications
+
+Jangan menampilkan pertanyaan yang tidak relevan.
+
+==========================================================
+3. BRIEF COMPLETENESS
+==========================================================
+
+Brief Intelligence harus menilai:
+
+- identity completeness
+- company story
+- service completeness
+- legal information
+- visual assets
+- contact information
+- language selection
+- page scope
+
+Status:
+
+- incomplete
+- needs_information
+- ready_for_generation
+
+AI tidak boleh memulai full workflow jika required fields belum lengkap.
+
+==========================================================
+4. DOCUMENT STRUCTURE
+==========================================================
+
+Company Profile dapat menghasilkan section:
+
+1. Cover
+2. Company Overview
+3. Company History
+4. Vision and Mission
+5. Company Values
+6. Value Proposition
+7. Products and Services
+8. How We Work
+9. Facilities and Capabilities
+10. Market and Coverage
+11. Organization Structure
+12. Legalities and Certifications
+13. Projects or Experience
+14. Clients and Partners
+15. Quality Assurance
+16. Sustainability or CSR
+17. Contact and CTA
+18. Closing
+
+Setiap section harus bersifat conditional.
+
+Jika data tidak tersedia:
+- skip section
+- atau tandai sebagai missing information sebelum generation
+
+Jangan mengarang fakta.
+
+==========================================================
+5. ANTI-FABRICATION
+==========================================================
+
+AI dilarang mengarang:
+
+- tahun berdiri
+- omzet
+- jumlah karyawan
+- jumlah cabang
+- kapasitas
+- legalitas
+- sertifikasi
+- pelanggan
+- proyek
+- mitra
+- alamat
+- statistik
+- penghargaan
+- klaim market leader
+
+Semua angka dan fakta harus berasal dari brief, uploaded document, atau database yang valid.
+
+Jika data tidak ada:
+- jangan tampilkan
+- jangan isi placeholder palsu
+- jangan membuat chart
+
+==========================================================
+6. PACKAGE-BASED OUTPUT
+==========================================================
+
+Support package:
+
+STARTER
+- maksimal 8 halaman
+- 1 bahasa
+- PDF
+- 2 revisi
+- AI layout
+- standard delivery
+
+PROFESSIONAL
+- maksimal 16 halaman
+- copywriting lengkap
+- PDF
+- PPTX editable
+- 3 revisi
+- human review
+- custom layout
+
+BUSINESS
+- maksimal 24 halaman
+- bilingual ID/EN
+- infographics
+- PDF
+- PPTX
+- 3 revisi
+- human review
+- priority processing
+
+ENTERPRISE
+- page count custom
+- multi-language
+- workshop or consultation
+- custom structure
+- SLA
+- dedicated reviewer
+- source files according to contract
+
+Enforce package limits pada backend, bukan hanya UI.
+
+==========================================================
+7. BRAND KIT INTEGRATION
+==========================================================
+
+Gunakan Brand Kit untuk:
+
+- primary logo
+- logo variant
+- primary color
+- secondary color
+- typography
+- brand voice
+- visual style
+
+Jika Brand Kit belum lengkap:
+- tampilkan warning
+- izinkan upload saat brief
+- jangan menggunakan logo dummy tanpa label
+
+==========================================================
+8. IMAGE AND MEDIA HANDLING
+==========================================================
+
+Support upload:
+
+- company logo
+- office photos
+- factory photos
+- warehouse photos
+- fleet photos
+- product photos
+- team photos
+- certificates
+- legal documents
+
+Validasi:
+- MIME
+- size
+- ownership
+- storage security
+
+Jangan menggunakan gambar stok seolah-olah fasilitas customer.
+
+Jika memakai stock/generated image:
+- tandai sebagai illustrative
+- jangan klaim sebagai aset nyata perusahaan
+
+==========================================================
+9. PDF OUTPUT
+==========================================================
+
+PDF harus memiliki:
+
+- cover
+- consistent layout
+- page numbering
+- header/footer
+- logo
+- brand colors
+- typography
+- image optimization
+- conditional sections
+- no overflow
+- no clipped text
+- no blank accidental pages
+- final QC
+
+==========================================================
+10. PPTX OUTPUT
+==========================================================
+
+PPTX harus:
+
+- mengikuti struktur Company Profile
+- editable
+- memakai theme colors
+- memakai logo
+- memakai font yang tersedia
+- memiliki slide count sesuai package
+- tidak overflow
+- tidak menyisipkan metrics palsu
+
+Tampilkan secara jujur:
+- editable PPTX
+- bukan Adobe Illustrator/InDesign source kecuali memang tersedia
+
+==========================================================
+11. VERSIONING & REVISION
+==========================================================
+
+Tambahkan/reuse version history:
+
+- version number
+- generated_at
+- revision reason
+- customer comments
+- changed sections
+- status
+- approved_at
+
+Customer dapat:
+
+- view version
+- compare version
+- comment per page/slide
+- approve version
+- request revision
+
+Revision limit mengikuti package.
+
+Extra revision harus terhubung ke Pricing Engine.
+
+==========================================================
+12. CLIENT REVIEW
+==========================================================
+
+Customer review page menampilkan:
+
+- PDF preview
+- PPTX thumbnail preview jika tersedia
+- page/slide navigation
+- comments
+- revision request
+- approve
+- reject
+
+Jangan tampilkan:
+- provider
+- model
+- token
+- AI cost
+- prompt
+- internal QC notes
+
+==========================================================
+13. PAYMENT & FILE LOCK
+==========================================================
+
+Flow:
+
+Choose Package
+→ Complete Brief
+→ Payment or DP Verified
+→ Generate
+→ Internal QC
+→ Client Review
+→ Revision
+→ Final Approval
+→ Remaining Payment
+→ Unlock Final Files
+
+Sebelum pelunasan:
+- preview watermark
+- no PDF final download
+- no PPTX download
+- no ZIP/source download
+
+Setelah payment verified:
+- signed download URL
+- audit download
+- file remains private
+
+==========================================================
+14. LIVE TRACKING
+==========================================================
+
+Live runtime event customer harus jujur dan berasal dari event nyata.
+
+Contoh:
+
+- validating brief
+- preparing content outline
+- generating company overview
+- generating service descriptions
+- assembling PDF
+- rendering presentation
+- running quality control
+- preparing client review
+
+Jangan membuat delay atau status palsu hanya untuk terlihat sibuk.
+
+==========================================================
+15. DELIVERABLE MANIFEST
+==========================================================
+
+Setelah selesai, tampilkan manifest:
+
+- Company Profile PDF
+- Editable PPTX
+- DOCX draft jika package mendukung
+- Thumbnail
+- Preview
+- ZIP package
+- Language versions
+- Version number
+- Page count
+- Slide count
+- Generated date
+- Approval status
+
+==========================================================
+16. CUSTOMER UI
+==========================================================
+
+Pada service detail Company Profile tampilkan:
+
+- portfolio examples
+- package comparison
+- page limits
+- language options
+- output formats
+- revision count
+- human review
+- delivery estimate
+- what customer must prepare
+- exclusions
+- FAQ
+
+Tambahkan checklist:
+
+“Siapkan data berikut”
+- logo
+- company overview
+- services
+- legalities
+- contact
+- company photos
+- certifications
+- project list
+
+==========================================================
+17. ADMIN UI
+==========================================================
+
+Admin dapat:
+
+- inspect brief
+- mark missing data
+- edit document outline
+- regenerate one section only
+- replace image
+- request customer data
+- run PDF render
+- run PPTX render
+- run QC
+- send to review
+- approve final
+- unlock files after payment
+
+Jangan memaksa regenerate seluruh dokumen untuk memperbaiki satu section.
+
+==========================================================
+18. QC
+==========================================================
+
+QC wajib memeriksa:
+
+- factual consistency
+- spelling
+- language consistency
+- logo placement
+- image ownership/label
+- layout overflow
+- blank pages
+- page numbering
+- PDF validity
+- PPTX validity
+- package limits
+- missing sections
+- duplicate sections
+- fabricated claims
+
+Output QC:
+
+- score
+- errors
+- warnings
+- recommended fixes
+- pass/fail
+
+Minimum send-to-client score:
+80
+
+==========================================================
+19. ANALYTICS
+==========================================================
+
+Track:
+
+- Company Profile service viewed
+- package selected
+- brief started
+- brief completed
+- payment verified
+- generation started
+- PDF generated
+- PPTX generated
+- review opened
+- revision requested
+- approved
+- downloaded
+- repeat order
+
+==========================================================
+20. TEST WAJIB
+==========================================================
+
+Test:
+
+1. Starter enforces max 8 pages.
+2. Professional enforces max 16 pages.
+3. Business enforces max 24 pages.
+4. Missing required data blocks production.
+5. AI does not fabricate absent facts.
+6. Brand Kit logo appears in PDF/PPTX.
+7. Brand colors apply correctly.
+8. PDF is valid.
+9. PPTX is valid and editable.
+10. Bilingual output works.
+11. Revision creates a new version.
+12. Comment per page works.
+13. Payment lock blocks final download.
+14. Signed URL works after unlock.
+15. Live tracking uses real events.
+16. Customer DTO hides internal metadata.
+17. OpenAPI clean.
+18. Codegen clean.
+19. pnpm run verify clean.
+20. Production build clean.
+
+==========================================================
+FINAL REPORT
+==========================================================
+
+Berikan laporan:
+
+- actual features before changes
+- gaps found
+- brief fields added
+- conditional questions
+- document sections
+- package limits
+- anti-fabrication rules
+- PDF output
+- PPTX output
+- revision/versioning
+- review flow
+- payment lock
+- live tracking events
+- test results
+- known limitations
+- pnpm run verify status
+
+TARGET AKHIR:
+
+Customer yang membeli layanan Company Profile menerima proses lengkap:
+brief pintar, konten faktual, desain sesuai Brand Kit, PDF dan PPTX,
+review, revisi, payment-gated download, serta histori versi yang profesional.
