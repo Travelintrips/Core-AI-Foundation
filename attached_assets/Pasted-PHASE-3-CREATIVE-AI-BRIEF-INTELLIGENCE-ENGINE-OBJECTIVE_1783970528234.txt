@@ -1,0 +1,1433 @@
+PHASE 3 — CREATIVE AI BRIEF INTELLIGENCE ENGINE
+OBJECTIVE
+
+Phase 1, Phase 2, Phase 2.1, dan Phase 2.2 telah selesai.
+
+Sekarang bangun Brief Intelligence Engine sebagai otak rekomendasi untuk seluruh layanan Creative AI.
+
+Tujuan utama fase ini:
+
+Ketika user memilih industri, tujuan project, target audiens, layanan, dan konteks bisnis, sistem dapat menghasilkan rekomendasi brief yang relevan, konsisten, dapat dijelaskan, dan dapat diterapkan ke form hanya setelah mendapat persetujuan user.
+
+Fase ini bukan AI chatbot.
+
+Fase ini bukan website scraping.
+
+Fase ini bukan generative AI call.
+
+Bangun dahulu recommendation engine yang deterministic, testable, reusable, dan tidak bergantung pada model AI eksternal.
+
+Contoh pengalaman yang dituju:
+
+User memilih:
+Coffee Shop
+
+Engine merekomendasikan:
+- Brand personality: Hangat, Ramah, Premium
+- Style: Modern, Minimalis, Natural
+- Color: Cokelat, Cream, Dark Green
+- Audience: Anak muda, Profesional, Konsumen umum
+- Deliverables: Logo, Brand Guideline, Packaging, Social Media Kit
+- Photography: Natural lighting, Lifestyle, Product close-up
+
+User kemudian dapat memilih:
+
+Gunakan Semua Rekomendasi
+
+atau menerapkan rekomendasi satu per satu.
+
+PRINSIP ARSITEKTUR
+
+Brief Intelligence Engine harus:
+
+deterministic;
+berbasis rule dan configuration;
+dapat diuji tanpa API eksternal;
+tidak mengubah pilihan user secara otomatis;
+tidak overwrite jawaban user tanpa konfirmasi;
+reusable untuk semua layanan Creative AI;
+dapat dikembangkan bertahap;
+tidak hardcode logic besar di halaman React;
+tidak bergantung pada bahasa label UI;
+menggunakan stable keys;
+memiliki confidence dan reason;
+mendukung fallback;
+tidak mengubah backend contract existing.
+BATASAN WAJIB
+
+Jangan mengubah:
+
+database schema;
+pricing;
+order flow;
+approval flow;
+production pipeline;
+brief submit contract;
+route frontend existing;
+customer token flow;
+admin auth;
+public route auth;
+autosave contract;
+existing service request contract.
+
+Jangan implementasikan pada fase ini:
+
+AI chat;
+OpenAI/Anthropic/Gemini call;
+website scraping;
+logo/image analysis;
+automatic competitor research;
+AI autofill dari website;
+hidden automatic form mutation;
+fake recommendation dari timeout;
+database baru;
+vector database;
+embeddings;
+LLM prompt generation.
+1. AUDIT SEBELUM IMPLEMENTASI
+
+Sebelum menulis kode, baca dan audit:
+
+src/pages/brief.tsx
+src/lib/brief-utils.ts
+src/config/brief-service-config.ts
+src/components/creative-ui/*
+
+Baca juga backend dan catalog source yang menentukan:
+
+service code
+service name
+service category
+package
+brief payload
+request detail
+service metadata
+
+Identifikasi:
+
+Semua field brief existing.
+Stable internal value untuk setiap chip.
+Service type yang sudah didukung.
+Field yang required per service.
+Field yang dapat menerima recommendation.
+Field yang tidak boleh dimodifikasi engine.
+Legacy string mapping.
+Current autosave behavior.
+Current draft hydration behavior.
+Data apa saja yang tersedia tanpa menambah API.
+
+Laporkan temuan audit sebelum implementasi.
+
+2. BUAT DOMAIN MODEL INTELLIGENCE ENGINE
+
+Buat folder yang sesuai, contoh:
+
+src/features/brief-intelligence/
+
+Atau lokasi lain yang konsisten dengan arsitektur project.
+
+Minimal buat struktur:
+
+types.ts
+engine.ts
+industry-profiles.ts
+service-profiles.ts
+goal-rules.ts
+audience-rules.ts
+recommendation-merger.ts
+recommendation-validator.ts
+recommendation-explanations.ts
+index.ts
+
+Gunakan struktur yang sesuai bila nama berbeda lebih tepat.
+
+3. GUNAKAN STABLE KEYS, BUKAN LABEL
+
+Jangan menggunakan label UI sebagai identifier internal.
+
+Contoh benar:
+
+type StyleKey =
+  | "minimal"
+  | "modern"
+  | "corporate"
+  | "premium"
+  | "luxury"
+  | "natural";
+
+Label dapat tetap:
+
+Minimalis
+Modern
+Corporate
+Premium
+Luxury
+Natural
+
+Tetapi engine harus bekerja dengan stable keys.
+
+Buat typed key minimal untuk:
+
+industry;
+service type;
+project goal;
+audience;
+style;
+color;
+personality;
+deliverable;
+visual direction;
+tone of voice;
+content direction;
+photography direction.
+
+Jangan menduplikasi seluruh option definition bila sudah ada central registry. Reuse atau pindahkan ke registry yang reusable.
+
+4. INPUT CONTEXT
+
+Buat model input seperti:
+
+type BriefIntelligenceContext = {
+  serviceType: string;
+  serviceCode?: string;
+  serviceName?: string;
+  packageName?: string;
+
+  industry?: string;
+  companySize?: string;
+  primaryGoals?: string[];
+  audiences?: string[];
+  audienceChannels?: string[];
+  existingAssets?: string[];
+  selectedStyles?: string[];
+  selectedColors?: string[];
+  priority?: string;
+  language?: string;
+
+  customIndustry?: string;
+  customGoal?: string;
+  customAudience?: string;
+};
+
+Sesuaikan dengan struktur nyata.
+
+Input harus dibuat dari state brief existing melalui adapter/helper.
+
+Jangan membuat engine membaca langsung komponen React.
+
+5. OUTPUT RECOMMENDATION MODEL
+
+Buat output terstruktur.
+
+Contoh:
+
+type BriefRecommendation<T = string> = {
+  key: string;
+  value: T;
+  score: number;
+  confidence: "low" | "medium" | "high";
+  reasons: string[];
+  sources: RecommendationSource[];
+  conflictsWithUserSelection?: boolean;
+};
+
+type BriefIntelligenceResult = {
+  industryProfile?: string;
+  recommendations: {
+    styles: BriefRecommendation[];
+    colors: BriefRecommendation[];
+    audiences: BriefRecommendation[];
+    personalities: BriefRecommendation[];
+    deliverables: BriefRecommendation[];
+    toneOfVoice: BriefRecommendation[];
+    visualDirections: BriefRecommendation[];
+    photographyDirections: BriefRecommendation[];
+    contentDirections: BriefRecommendation[];
+  };
+  warnings: IntelligenceWarning[];
+  completeness: number;
+  generatedAt: string;
+  engineVersion: string;
+};
+
+Tidak wajib mengikuti bentuk persis ini, tetapi output harus:
+
+typed;
+dapat diuji;
+mempunyai score;
+mempunyai reasons;
+mempunyai source;
+mempunyai confidence;
+mempunyai warnings;
+mempunyai engine version.
+6. RECOMMENDATION SOURCE
+
+Setiap recommendation harus menyimpan asalnya.
+
+Contoh:
+
+type RecommendationSource =
+  | { type: "industry"; key: string }
+  | { type: "service"; key: string }
+  | { type: "goal"; key: string }
+  | { type: "audience"; key: string }
+  | { type: "company-size"; key: string }
+  | { type: "priority"; key: string }
+  | { type: "fallback"; key: string };
+
+Tujuan:
+
+hasil dapat dijelaskan;
+debugging lebih mudah;
+recommendation tidak terasa acak;
+UI dapat menampilkan “Direkomendasikan karena...”.
+7. INDUSTRY PROFILE REGISTRY
+
+Buat registry industry profile.
+
+Minimal mendukung industri yang sudah tersedia di brief.
+
+Jangan hanya membuat tiga contoh.
+
+Kelompokkan agar maintainable.
+
+Contoh kategori:
+
+Technology & Digital
+Finance
+Healthcare
+Education
+Food & Beverage
+Hospitality & Travel
+Logistics & Trade
+Manufacturing & Industrial
+Construction & Property
+Professional Services
+Fashion & Beauty
+Agriculture & Natural Resources
+Automotive
+Fitness & Sports
+Media & Creative
+Government & Nonprofit
+Retail & E-commerce
+
+Setiap profile dapat memiliki:
+
+{
+  key: "coffee-shop",
+  category: "food-beverage",
+  aliases: ["coffee shop", "cafe", "kedai kopi"],
+  traits: ["warm", "friendly", "social", "sensory"],
+  recommendedStyles: [...],
+  recommendedColors: [...],
+  recommendedAudiences: [...],
+  recommendedPersonalities: [...],
+  recommendedDeliverables: [...],
+  toneOfVoice: [...],
+  photographyDirections: [...],
+  visualDirections: [...],
+  avoid: [...],
+  notes: [...]
+}
+
+Gunakan reusable defaults per category agar tidak terjadi copy-paste besar.
+
+8. MINIMAL INDUSTRY PROFILES
+
+Minimal sediakan profile spesifik untuk:
+
+E-commerce
+Marketplace
+Retail
+Technology
+Software
+Artificial Intelligence
+Startup
+Fintech
+Banking
+Insurance
+Healthcare
+Clinic
+Education
+Restaurant
+Kuliner & F&B
+Cafe
+Coffee Shop
+Hotel
+Travel
+Logistics
+Freight Forwarding
+Shipping
+Warehousing
+Export Import
+Trading
+Manufacturing
+Construction
+Property
+Real Estate
+Consulting
+Law Firm
+Creative Agency
+Marketing Agency
+Fashion
+Beauty
+Furniture
+Agriculture
+Plantation
+Seafood
+Fishery
+Mining
+Coal
+Palm Oil
+Coconut Product
+Charcoal
+Automotive
+Fitness
+Gym
+Sport Center
+Event Organizer
+Government
+Nonprofit / NGO
+Professional Services
+
+Profile boleh mewarisi category defaults.
+
+Jangan membuat data kosong hanya agar key tersedia.
+
+9. CONTOH PROFILE WAJIB
+Coffee Shop
+
+Rekomendasi awal:
+
+Personality:
+Warm
+Friendly
+Authentic
+Premium
+
+Style:
+Modern
+Minimal
+Natural
+Editorial
+
+Colors:
+Brown
+Cream
+Dark Green
+Earth Tone
+
+Audience:
+Young Adults
+Professionals
+Local Customers
+Lifestyle Consumers
+
+Deliverables:
+Logo
+Brand Guideline
+Packaging
+Menu Design
+Social Media Kit
+Store Signage
+
+Photography:
+Natural Lighting
+Product Close-up
+Lifestyle
+Warm Ambience
+
+Tone:
+Friendly
+Inviting
+Sensory
+Authentic
+Export Import
+Personality:
+Professional
+Trustworthy
+International
+Reliable
+
+Style:
+Corporate
+Modern
+Minimal
+Premium
+
+Colors:
+Blue
+White
+Gray
+Dark Navy
+
+Audience:
+B2B
+Corporate
+Distributor
+International Buyer
+Government
+
+Deliverables:
+Company Profile
+Corporate Identity
+Presentation
+Website
+Email Signature
+Sales Brochure
+
+Visual:
+Global Network
+Trade Route
+Port
+Container
+Professional Team
+
+Tone:
+Clear
+Professional
+Credible
+International
+Charcoal Export
+Personality:
+Industrial
+Premium
+Reliable
+Strong
+Sustainable
+
+Style:
+Industrial
+Premium
+Minimal
+Luxury
+
+Colors:
+Black
+Gold
+Dark Gray
+Brown
+
+Audience:
+International Buyer
+Distributor
+B2B
+Hospitality Buyer
+Retail Brand
+
+Deliverables:
+Company Profile
+Product Catalog
+Packaging
+Specification Sheet
+Export Presentation
+Website
+
+Visual:
+Briquette Texture
+Factory
+Container
+Port
+Product Packaging
+Quality Certificate
+
+Tone:
+Professional
+Technical
+Premium
+Trustworthy
+Technology / AI
+Personality:
+Innovative
+Intelligent
+Efficient
+Reliable
+
+Style:
+Modern
+Minimal
+Technology
+Corporate
+
+Colors:
+Blue
+Purple
+White
+Dark Navy
+
+Audience:
+Startup
+Corporate
+Investor
+Professional
+B2B
+
+Deliverables:
+Brand Identity
+Pitch Deck
+Website
+Product UI
+Presentation
+Social Media Kit
+
+Tone:
+Clear
+Confident
+Intelligent
+Simple
+10. SERVICE PROFILE REGISTRY
+
+Industry menentukan karakter bisnis.
+
+Service menentukan recommendation yang relevan terhadap output.
+
+Buat service profiles untuk:
+
+brand_identity
+logo_design
+company_profile
+pitch_deck
+social_media
+copywriting
+image_generation
+brand_strategy
+creative_consultation
+default
+
+Contoh:
+
+Brand Identity
+
+Prioritaskan:
+
+Personality
+Style
+Color
+Typography direction
+Tone of voice
+Brand applications
+Brand guideline deliverables
+Company Profile
+
+Prioritaskan:
+
+Audience
+Tone
+Content structure
+Trust elements
+Corporate visual direction
+Photography
+Page/section suggestions
+Pitch Deck
+
+Prioritaskan:
+
+Investor / stakeholder audience
+Storytelling
+Problem-solution
+Data visualization
+Credibility
+Clear CTA
+Social Media
+
+Prioritaskan:
+
+Platform
+Content pillars
+Visual consistency
+Engagement goal
+Campaign style
+Content tone
+Copywriting
+
+Prioritaskan:
+
+Tone of voice
+Audience
+Message hierarchy
+CTA
+Content type
+Language
+Image Generation
+
+Prioritaskan:
+
+Visual style
+Composition
+Lighting
+Subject
+Mood
+Aspect ratio guidance
+Negative direction
+
+Service profile harus memengaruhi ranking recommendation, bukan hanya label UI.
+
+11. GOAL RULES
+
+Buat rule untuk goal.
+
+Contoh:
+
+Brand Awareness
+
+Boost:
+
+Distinctive style
+Consistent color
+Memorable personality
+Social media kit
+Brand guideline
+Increase Sales
+
+Boost:
+
+Clear CTA
+Product-focused visual
+Trust signal
+Conversion-oriented content
+Sales brochure
+Landing-page assets
+Rebranding
+
+Boost:
+
+Brand audit
+Clear differentiation
+Updated identity
+Migration consistency
+Brand guideline
+Investor
+
+Boost:
+
+Pitch deck
+Professional
+Data-driven
+Credible
+Clear business story
+International Market
+
+Boost:
+
+Bilingual
+Corporate
+Global
+Trustworthy
+Export documentation visual
+International buyer audience
+Launching Product
+
+Boost:
+
+Campaign assets
+Packaging
+Product photography
+Social media launch kit
+Presentation
+12. AUDIENCE RULES
+
+Audience juga harus memengaruhi recommendation.
+
+Contoh:
+
+B2B / Corporate
+
+Boost:
+
+Corporate
+Professional
+Trustworthy
+Clear
+Minimal
+Data-oriented
+Young Adults
+
+Boost:
+
+Modern
+Bold
+Social
+Lifestyle
+Engaging
+Premium Market
+
+Boost:
+
+Luxury
+Elegant
+Premium
+Minimal
+High-quality photography
+International Buyer
+
+Boost:
+
+Bilingual
+Professional
+Technical clarity
+Export-ready
+Compliance visibility
+Government
+
+Boost:
+
+Formal
+Clear
+Institutional
+Conservative
+Accessible
+13. COMPANY SIZE RULES
+
+Gunakan ukuran perusahaan sebagai secondary signal.
+
+Contoh:
+
+Personal / Startup
+
+Prioritaskan:
+
+Lean deliverables
+Simple brand system
+Fast deployment
+Digital-first assets
+Small / Medium
+
+Prioritaskan:
+
+Scalable identity
+Sales materials
+Website/social consistency
+Clear brand guideline
+Enterprise
+
+Prioritaskan:
+
+Governance
+Comprehensive guideline
+Multiple applications
+Formal tone
+Consistency
+Accessibility
+
+Jangan mengubah harga atau scope order.
+
+Rule ini hanya recommendation.
+
+14. PRIORITY RULES
+
+Jika user memilih:
+
+Kualitas terbaik
+
+Boost high-completeness deliverables dan premium visual direction.
+
+Kecepatan pengerjaan
+
+Boost deliverables essential dan kurangi recommendation nonessential.
+
+Efisiensi anggaran
+
+Prioritaskan reusable digital assets dan core identity.
+
+Keseimbangan
+
+Gunakan balanced defaults.
+
+Jangan menghapus deliverable yang sudah dibeli.
+
+Jangan mengubah package.
+
+15. SCORING ENGINE
+
+Buat scoring deterministic.
+
+Contoh konsep:
+
+Industry profile match       +40
+Service profile relevance    +30
+Goal relevance               +20
+Audience relevance           +15
+Company size relevance       +5
+Priority relevance           +5
+Existing user selection      special handling
+Conflict penalty             -30
+
+Nilai hanya contoh. Tentukan bobot yang masuk akal dan dokumentasikan.
+
+Engine harus:
+
+menggabungkan duplicate recommendation;
+mengakumulasi reasons;
+mengakumulasi sources;
+melakukan deduplication berdasarkan stable key;
+menormalisasi score;
+menentukan confidence;
+memotong hasil sesuai limit;
+menghasilkan urutan stabil;
+menghasilkan output sama untuk input sama.
+
+Tambahkan deterministic tie-breaker berdasarkan registry order atau key.
+
+16. USER SELECTION PROTECTION
+
+Rekomendasi tidak boleh overwrite pilihan user.
+
+Contoh:
+
+User memilih:
+
+Style: Classic
+Color: Red
+
+Engine merekomendasikan:
+
+Modern
+Blue
+
+UI harus menandai rekomendasi sebagai:
+
+Alternatif rekomendasi
+
+bukan mengganti pilihan user.
+
+Aturan:
+
+user answer selalu prioritas;
+engine boleh menambah saran;
+konflik harus diberi warning atau label;
+jangan menghapus custom input;
+jangan otomatis mengubah field saat engine dijalankan;
+recommendation hanya diterapkan melalui tindakan user.
+17. CONFLICT DETECTION
+
+Buat conflict detection ringan.
+
+Contoh kemungkinan konflik:
+
+Luxury + Playful
+Government + Highly Playful
+Corporate B2B + Childlike
+Premium Market + Extremely Colorful
+Urgent + terlalu banyak deliverables tambahan
+No Assets + recommendation yang membutuhkan banyak existing photography
+
+Jangan membuat rule terlalu kaku.
+
+Output conflict harus berupa warning, bukan blocking error.
+
+Contoh:
+
+{
+  code: "STYLE_AUDIENCE_MISMATCH",
+  severity: "info",
+  message: "Gaya Playful mungkin kurang sesuai untuk target Government.",
+  affectedKeys: ["playful", "government"]
+}
+18. EXISTING ASSET AWARENESS
+
+Gunakan existing assets untuk menyesuaikan recommendation.
+
+Contoh:
+
+Jika user belum punya logo:
+
+Logo / Brand Identity menjadi prioritas
+
+Jika sudah punya brand guideline:
+
+Jangan merekomendasikan membuat ulang guideline sebagai prioritas utama
+
+Jika tidak punya foto:
+
+Rekomendasikan image generation atau photography direction
+
+Jika sudah punya company profile:
+
+Rekomendasikan refresh/update bila relevan, bukan selalu create new
+
+Jangan mengubah scope order.
+
+19. COMPLETENESS SCORE
+
+Hitung nilai kelengkapan context intelligence, bukan progress form lama.
+
+Contoh faktor:
+
+Service known
+Industry known
+Goal known
+Audience known
+Style known
+Color known
+Existing assets known
+Priority known
+
+Output:
+
+0–100
+
+Contoh:
+
+Industry + Service saja = 35
+Tambah Goal = 50
+Tambah Audience = 65
+Tambah Style dan Asset = 85
+
+Nilai ini digunakan untuk memberi tahu kualitas recommendation.
+
+Jangan mengganti progress step existing.
+
+20. FALLBACK UNTUK INDUSTRI CUSTOM
+
+Jika user memilih Lainnya dan menulis industri yang tidak dikenal:
+
+Jangan crash.
+Gunakan category/default profile.
+Lakukan alias/keyword matching ringan.
+Jangan menggunakan LLM.
+Jangan menyatakan engine memahami sesuatu yang tidak dipahami.
+Turunkan confidence.
+Tampilkan warning:
+Rekomendasi menggunakan profil umum karena industri belum tersedia secara spesifik.
+
+Contoh keyword:
+
+coffee, cafe, kopi → coffee-shop
+logistic, cargo, forwarding → logistics
+charcoal, briquette, arang → charcoal
+property, developer → real-estate
+AI, artificial intelligence → artificial-intelligence
+
+Gunakan normalization case-insensitive.
+
+21. RECOMMENDATION LIMIT
+
+Jangan menampilkan terlalu banyak saran.
+
+Default maksimal:
+
+Styles: 4
+Colors: 4
+Audiences: 4
+Personalities: 5
+Deliverables: 6
+Tone of voice: 4
+Visual directions: 5
+Photography: 4
+Content directions: 5
+
+Buat configurable per service profile.
+
+22. APPLY RECOMMENDATION ADAPTER
+
+Buat helper untuk mengubah recommendation menjadi update field existing.
+
+Contoh:
+
+applyRecommendationToBrief(
+  brief,
+  recommendation,
+  mode
+)
+
+Mode minimal:
+
+apply-single
+apply-category
+apply-all-empty-only
+apply-single
+
+Terapkan satu recommendation.
+
+apply-category
+
+Terapkan semua rekomendasi kategori, misalnya seluruh style.
+
+apply-all-empty-only
+
+Isi hanya field yang masih kosong.
+
+Ini mode default untuk tombol:
+
+Gunakan Semua Rekomendasi
+
+Jangan overwrite field yang sudah diisi user.
+
+Bila field sudah mempunyai pilihan:
+
+tambahkan hanya jika masih di bawah batas;
+atau skip dan laporkan;
+jangan mengganti diam-diam.
+23. APPLY RESULT
+
+Setiap apply harus mengembalikan laporan.
+
+Contoh:
+
+type ApplyRecommendationResult = {
+  updatedBrief: BriefData;
+  applied: string[];
+  skipped: {
+    key: string;
+    reason: string;
+  }[];
+  warnings: string[];
+};
+
+UI nanti dapat menampilkan:
+
+8 rekomendasi diterapkan
+3 dilewati karena field sudah terisi
+24. INTEGRASI UI DI HALAMAN BRIEF
+
+Tambahkan panel recommendation secara bertahap.
+
+Jangan membuat chat.
+
+Minimal tambahkan komponen reusable:
+
+BriefRecommendationPanel.tsx
+RecommendationCategory.tsx
+RecommendationItem.tsx
+RecommendationReason.tsx
+RecommendationWarning.tsx
+RecommendationSummary.tsx
+
+Tempatkan di:
+
+src/components/creative-ui/
+
+atau feature folder yang lebih sesuai.
+
+25. POSISI PANEL
+
+Panel dapat muncul:
+
+setelah industri dipilih;
+setelah goal dipilih;
+setelah audience dipilih;
+pada review step;
+atau sebagai drawer di desktop.
+
+Jangan mengganggu form utama.
+
+Rekomendasi awal paling cepat boleh muncul setelah:
+
+service type + industry
+
+Tetapi tampilkan bahwa confidence akan meningkat setelah goal dan audience diisi.
+
+26. UI RECOMMENDATION CARD
+
+Setiap recommendation harus menampilkan:
+
+Modern
+Direkomendasikan untuk industri Technology dan target B2B
+Confidence: Tinggi
+[Gunakan]
+
+Jangan menampilkan score numerik mentah kepada user kecuali dalam debug mode.
+
+Gunakan label:
+
+Cocok
+Sangat cocok
+Alternatif
+
+Simpan score untuk internal.
+
+27. TOMBOL APPLY
+
+Sediakan tindakan:
+
+Gunakan
+Gunakan kategori ini
+Gunakan semua rekomendasi
+
+Tombol Gunakan semua rekomendasi harus:
+
+menggunakan apply-all-empty-only;
+meminta konfirmasi singkat;
+menjelaskan bahwa pilihan existing tidak akan ditimpa;
+memicu autosave existing setelah brief state berubah;
+tidak membuat API recommendation request;
+tidak membuat save request lebih dari autosave existing.
+28. RECOMMENDATION REFRESH
+
+Engine berjalan lokal dan cepat.
+
+Jalankan ulang ketika context penting berubah:
+
+service
+industry
+goal
+audience
+company size
+existing assets
+priority
+
+Gunakan memoization hanya bila diperlukan.
+
+Jangan simpan recommendation ke database pada fase ini.
+
+Jangan memicu autosave karena recommendation dihitung.
+
+Autosave hanya ketika user menerapkan recommendation.
+
+29. EXPLANATION
+
+Setiap saran harus dapat dijelaskan.
+
+Contoh:
+
+Dark Navy direkomendasikan karena:
+- Bisnis bergerak di sektor Export Import
+- Target utama adalah B2B dan International Buyer
+- Tujuan project adalah membangun kepercayaan
+
+Reasons harus dibuat dari rule sources, bukan teks acak.
+
+Hindari terlalu banyak detail.
+
+Tampilkan maksimal 2–3 alasan utama.
+
+30. DEBUG MODE DEVELOPMENT
+
+Tambahkan debug view hanya di development.
+
+Contoh informasi:
+
+Matched industry profile
+Applied rules
+Raw score
+Source contribution
+Conflict penalties
+Engine version
+
+Jangan tampilkan debug view di production.
+
+Jangan log data sensitif.
+
+31. VERSIONING
+
+Engine harus memiliki version:
+
+brief-intelligence-v1
+
+Atau format semver:
+
+1.0.0
+
+Gunakan version dalam result dan tests.
+
+Tujuannya untuk future migration dan analytics.
+
+Jangan membuat database migration pada fase ini.
+
+32. UNIT TESTS ENGINE
+
+Tambahkan unit tests yang komprehensif.
+
+Minimal test:
+
+Coffee Shop menghasilkan rekomendasi warm/modern/earth tone
+Export Import menghasilkan corporate/blue/international
+Charcoal menghasilkan industrial/black/gold/export deliverables
+Technology menghasilkan modern/blue-purple/investor-ready
+Brand Identity service memprioritaskan style/color/personality
+Company Profile service memprioritaskan trust/content/photography
+Pitch Deck service memprioritaskan investor/storytelling
+Social Media service memprioritaskan platform/content/engagement
+Goal sales menambah conversion-oriented recommendation
+Goal investor menambah pitch-deck direction
+Audience B2B meningkatkan corporate recommendation
+Premium audience meningkatkan luxury/elegant
+No assets memprioritaskan foundational deliverables
+Existing guideline mengurangi duplicate guideline recommendation
+Custom unknown industry memakai fallback
+Alias matching bekerja
+Mixed signals digabungkan
+Duplicate recommendation ter-deduplicate
+Reasons digabungkan
+Sources digabungkan
+Score deterministic
+Tie-break deterministic
+Confidence benar
+Recommendation limit bekerja
+Conflict warning muncul
+User selection tidak ditimpa
+Apply single bekerja
+Apply category bekerja
+Apply all empty-only bekerja
+Max selection tidak dilanggar
+Custom value tetap dipertahankan
+Round-trip brief serialization tetap valid
+33. COMPONENT TESTS
+
+Jika framework mendukung:
+
+panel muncul setelah industry dipilih;
+panel tidak muncul bila context belum cukup;
+apply single mengubah field terkait;
+apply all tidak overwrite jawaban existing;
+skipped recommendation dilaporkan;
+reason tampil;
+warning tampil;
+autosave hanya terjadi setelah apply;
+rerun recommendation tidak autosave;
+mobile panel dapat dibuka dan ditutup.
+
+Jangan menambah library besar bila belum tersedia.
+
+34. VISUAL VERIFICATION
+
+Verifikasi minimal menggunakan fixture atau request development:
+
+Coffee Shop + Brand Identity.
+Export Import + Company Profile.
+Charcoal + Company Profile.
+Technology + Pitch Deck.
+Unknown custom industry + default service.
+User sudah memilih style yang berbeda.
+User memilih Tidak yakin — beri rekomendasi.
+Mobile viewport 375px.
+
+Periksa:
+
+panel tidak overflow;
+recommendation dapat dibaca;
+apply button bekerja;
+existing user answer tidak hilang;
+review step menampilkan hasil applied;
+refresh browser memuat applied values dari draft/server;
+recommendation dihitung ulang dengan benar.
+35. PERFORMANCE
+
+Engine harus berjalan cepat di browser.
+
+Target:
+
+tidak ada network call;
+tidak ada heavy computation;
+tidak ada infinite render;
+tidak ada autosave loop;
+tidak ada recommendation regeneration karena hover;
+static registry didefinisikan di luar React component;
+result dapat di-memo berdasarkan normalized context.
+
+Jangan melakukan optimasi prematur yang membuat kode sulit dibaca.
+
+36. ACCESSIBILITY
+
+Panel recommendation harus:
+
+keyboard accessible;
+tombol memiliki label jelas;
+card bukan satu-satunya clickable area tanpa role;
+reason dapat dibaca screen reader;
+status apply diumumkan menggunakan live region;
+warning tidak hanya mengandalkan warna;
+focus kembali ke posisi relevan setelah modal konfirmasi.
+37. SECURITY DAN PRIVACY
+
+Karena engine lokal:
+
+jangan kirim brief ke provider AI;
+jangan log seluruh brief di production;
+jangan masukkan token/request ID ke debug panel;
+jangan simpan recommendation ke localStorage terpisah;
+recommendation dapat dihitung ulang dari brief;
+jangan expose internal admin data.
+38. JANGAN MENGUBAH LABEL MENJADI DATA ENGINE
+
+Pastikan translation/UI copy terpisah dari stable key.
+
+Contoh:
+
+key: "corporate"
+labelId: "Corporate"
+labelEn: "Corporate"
+
+Jangan menyimpan key ke backend jika backend sebelumnya menyimpan label string, kecuali sudah ada adapter yang memastikan payload existing tetap sama.
+
+Frontend engine boleh memakai key.
+
+Serializer akhir tetap mengikuti kontrak brief existing.
+
+39. ACCEPTANCE CRITERIA
+
+Phase 3 selesai hanya jika:
+
+Engine deterministic dan tidak memakai AI API.
+Industry profile registry tersedia.
+Service profile registry tersedia.
+Goal dan audience rules tersedia.
+Recommendation memiliki score, confidence, source, dan reason.
+Duplicate recommendation digabung.
+Conflict menghasilkan warning non-blocking.
+User selection tidak pernah ditimpa otomatis.
+Gunakan bekerja.
+Gunakan kategori ini bekerja.
+Gunakan semua rekomendasi hanya mengisi field kosong.
+Autosave hanya berjalan setelah apply.
+Recommendation calculation tidak autosave.
+Unknown industry memakai fallback aman.
+Engine tidak crash untuk unknown service.
+Brief payload backend tetap sama.
+Legacy parsing tetap berjalan.
+Review menampilkan hasil applied.
+Refresh memulihkan applied values.
+Unit tests lolos.
+Typecheck lolos.
+Build lolos.
+Visual verification dilakukan.
+Tidak ada perubahan database/API/pricing/workflow.
+40. LAPORAN AKHIR
+
+Gunakan format:
+
+Laporan — Phase 3: Creative AI Brief Intelligence Engine
+
+1. Hasil audit
+2. Arsitektur engine
+3. Domain model
+4. Stable key registry
+5. Industry profiles
+6. Service profiles
+7. Goal rules
+8. Audience rules
+9. Company size dan priority rules
+10. Scoring model
+11. Deduplication
+12. Confidence calculation
+13. Explanation/source model
+14. Conflict detection
+15. Completeness calculation
+16. Unknown industry fallback
+17. Apply recommendation adapter
+18. User selection protection
+19. UI panel
+20. Autosave integration
+21. File dibuat
+22. File dimodifikasi
+23. Unit tests
+24. Component tests
+25. Hasil typecheck
+26. Hasil test
+27. Hasil build
+28. Hasil visual verification
+29. Hasil mobile verification
+30. Performance verification
+31. Konfirmasi tidak ada AI API call
+32. Konfirmasi tidak ada perubahan database/API/pricing/workflow
+33. Risiko atau batasan tersisa
+
+Sertakan contoh input dan output nyata untuk:
+
+Coffee Shop
+Export Import
+Charcoal
+Technology
+Unknown Industry
+
+Jangan hanya menulis “recommendation engine berhasil dibuat”. Tunjukkan recommendation, reasons, confidence, dan hasil apply ke brief.

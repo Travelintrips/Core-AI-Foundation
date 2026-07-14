@@ -1,0 +1,1308 @@
+Lanjutkan Creative AI Production Engine ke:
+
+# PHASE 5 — CREATIVE ASSET BATCH ENGINE
+
+Phase 4 Pitch Deck Presentation Engine sudah selesai dan terverifikasi.
+
+Fondasi yang sudah tersedia dan tidak boleh dirusak:
+
+* Document Engine generik
+* Presentation Engine generik
+* shared job queue
+* completion guard
+* Supabase Storage
+* secure customer access
+* creative asset records
+* project ownership checks
+* generation cost tracking dasar
+* workflow orchestration
+* customer Downloads page
+* admin production monitor
+* status failure yang jujur
+* no false completion
+* seluruh regression tests lulus
+
+Scope Phase 5 hanya:
+
+1. Logo Design multi-concept
+2. Social Media Design batch
+3. Packaging Design multi-view bila katalog menjanjikannya
+4. Shared Image Batch Engine
+5. Quantity enforcement berdasarkan package entitlement
+6. Duplicate detection
+7. Per-asset retry
+8. ZIP export hanya untuk batch image deliverables
+9. Customer gallery dan bulk download
+10. Admin batch production monitor
+11. Real smoke tests
+
+Jangan mengerjakan:
+
+* Video
+* FFmpeg
+* Voice-over
+* Subtitle
+* Image-to-video
+* DOCX
+* Presentation type baru
+* Perubahan besar Document Engine
+* Perubahan besar Pitch Deck
+* SVG vectorization kompleks
+* Editing canvas
+* Manual design editor
+
+---
+
+# 1. Recovery dan audit singkat
+
+Sebelum menulis kode:
+
+1. Jalankan `git status`.
+2. Audit implementasi image generation saat ini.
+3. Baca:
+
+   * `jobWorkerService.ts`
+   * image generation worker
+   * Replicate provider integration
+   * `creative_ai_assets`
+   * workflow runner
+   * package entitlement atau `limits_json`
+   * service request snapshot
+   * logo-design service catalog
+   * social-media-design service catalog
+   * packaging-design service catalog
+   * customer workspace gallery
+   * admin production monitor
+4. Temukan jumlah output yang dijanjikan setiap package.
+5. Pastikan apakah saat ini:
+
+   * Logo Design selalu menghasilkan satu image.
+   * Social Media sudah menghasilkan multiple image tetapi belum terkelompok.
+   * Packaging hanya menghasilkan satu raw image.
+6. Audit apakah quantity berasal dari:
+
+   * service package
+   * limits JSON
+   * pricing snapshot
+   * order snapshot
+   * hard-coded worker parameter
+
+Jangan menebak jumlah package.
+
+Gunakan snapshot yang benar-benar dibeli customer sebagai source of truth.
+
+---
+
+# 2. Target arsitektur
+
+Bangun Image Batch Engine terpisah tetapi tetap menggunakan provider image generation yang ada.
+
+Struktur yang disarankan:
+
+```text
+services/image-batch/
+├── creativeImageBatchRegistry.ts
+├── creativeImageBatchWorkerService.ts
+├── imageBatchTypes.ts
+├── imageBatchEntitlementService.ts
+├── imageBatchPromptService.ts
+├── imageBatchAssetService.ts
+├── imageBatchQcService.ts
+├── imageDuplicateDetectionService.ts
+├── imageBatchStorageService.ts
+├── imageBatchExportService.ts
+└── definitions/
+    ├── logoDesignBatchDefinition.ts
+    ├── socialMediaBatchDefinition.ts
+    └── packagingDesignBatchDefinition.ts
+```
+
+Nama boleh disesuaikan dengan repository.
+
+Jangan membuat tiga worker besar yang menduplikasi:
+
+* provider call
+* upload
+* storage verification
+* asset creation
+* retry
+* duplicate detection
+* completion logic
+
+Gunakan registry.
+
+---
+
+# 3. Image batch types
+
+Gunakan structured specification.
+
+```ts
+type CreativeImageBatchType =
+  | "logo_design"
+  | "social_media_design"
+  | "packaging_design";
+```
+
+Definition:
+
+```ts
+type ImageBatchDefinition = {
+  batchType: CreativeImageBatchType;
+  serviceCodes: string[];
+  resolveEntitlement: ImageBatchEntitlementResolver;
+  buildItems: ImageBatchItemBuilder;
+  validateBatch: ImageBatchValidator;
+  completionPolicy: ImageBatchCompletionPolicy;
+};
+```
+
+Batch item:
+
+```ts
+type ImageBatchItemSpec = {
+  itemKey: string;
+  conceptGroup?: string;
+  platform?: string;
+  placement?: string;
+  aspectRatio: string;
+  width?: number;
+  height?: number;
+  prompt: string;
+  negativePrompt?: string;
+  required: boolean;
+  orderIndex: number;
+  metadata?: Record<string, unknown>;
+};
+```
+
+Generated item result:
+
+```ts
+type GeneratedImageBatchItem = {
+  itemKey: string;
+  assetId: string;
+  storagePath: string;
+  mimeType: string;
+  width: number;
+  height: number;
+  fileSizeBytes: number;
+  checksum: string;
+  provider: string;
+  model: string;
+  cost: number;
+  qcScore?: number;
+  duplicateScore?: number;
+  status: string;
+};
+```
+
+---
+
+# 4. Entitlement resolution
+
+Jumlah output harus berasal dari order/package snapshot.
+
+Urutan source of truth:
+
+1. Service request pricing/package snapshot.
+2. Package limits snapshot saat order dibuat.
+3. Catalog package definition hanya sebagai fallback untuk legacy order.
+4. Explicit custom quotation deliverables jika order custom.
+
+Jangan menggunakan package name seperti `Basic`, `Standard`, atau `Premium` sebagai satu-satunya logic.
+
+Contoh entitlement:
+
+```ts
+type ImageBatchEntitlement = {
+  totalAssets: number;
+  concepts?: number;
+  variantsPerConcept?: number;
+  platformBreakdown?: Array<{
+    platform: string;
+    placement: string;
+    quantity: number;
+    aspectRatio: string;
+  }>;
+  requiredViews?: string[];
+  allowRegeneration: boolean;
+  maxRegenerations?: number;
+};
+```
+
+Simpan resolved entitlement di generation report.
+
+---
+
+# 5. Logo Design batch
+
+Logo Design harus menghasilkan jumlah konsep sesuai entitlement.
+
+Minimum target untuk paket yang menjanjikan tiga konsep:
+
+* Concept A
+* Concept B
+* Concept C
+
+Setiap konsep wajib berbeda secara nyata dalam:
+
+* simbol atau icon direction
+* composition
+* typography direction
+* visual style
+* geometric structure
+* brand mood
+
+Jangan hanya mengganti warna.
+
+## Prompt diversification
+
+Bangun concept direction sebelum image generation.
+
+Contoh direction:
+
+```text
+Concept A — Symbol-led geometric mark
+Concept B — Wordmark-focused typographic identity
+Concept C — Monogram or abstract letterform
+```
+
+Direction harus disesuaikan dengan brief customer.
+
+Setiap concept memiliki:
+
+* concept key
+* concept name
+* creative rationale
+* visual direction
+* prompt
+* provider result
+* QC result
+
+## Output per concept
+
+Minimal:
+
+* primary preview
+* PNG atau WebP
+* background light
+* background dark jika entitlement menjanjikan
+* transparent output hanya jika provider benar-benar mendukung
+* prompt metadata
+* concept rationale
+
+Jangan mengklaim SVG tersedia jika hanya raster.
+
+## Completion
+
+Logo batch hanya completed jika seluruh required concept tersedia.
+
+Jika 3 konsep diwajibkan dan hanya 2 berhasil:
+
+* project tidak completed
+* batch status partial atau failed
+* admin dapat retry hanya concept yang gagal
+
+---
+
+# 6. Logo duplicate detection
+
+Implementasikan duplicate detection.
+
+Gunakan kombinasi yang tersedia:
+
+* perceptual hash
+* image similarity
+* embedding similarity jika sudah ada
+* prompt diversity validation
+* metadata comparison
+
+Jangan hanya membandingkan checksum karena gambar yang hampir sama akan memiliki checksum berbeda.
+
+Threshold harus configurable.
+
+Contoh:
+
+```text
+duplicate threshold >= 0.92 similarity
+near-duplicate warning >= 0.85
+```
+
+Jika dua konsep terlalu mirip:
+
+* tandai duplicate
+* regenerate salah satu
+* batasi retry
+* simpan alasan
+* jangan memasukkan duplicate ke final deliverable
+
+Test harus membuktikan dua asset identik ditolak.
+
+---
+
+# 7. Social Media Design batch
+
+Social Media output harus mengikuti entitlement.
+
+Contoh kemungkinan:
+
+* Instagram Feed
+* Instagram Story
+* Facebook Post
+* LinkedIn Post
+* Square Post
+* Portrait Feed
+* Vertical Story
+
+Jangan hard-code breakdown jika package snapshot sudah memilikinya.
+
+Setiap item harus menyimpan:
+
+* platform
+* placement
+* aspect ratio
+* width
+* height
+* campaign theme
+* content angle
+* copy variant reference
+* asset status
+
+## Visual consistency
+
+Seluruh batch dalam satu campaign harus konsisten pada:
+
+* color palette
+* typography direction
+* visual language
+* brand mood
+* logo placement
+* image style
+
+Tetapi tidak boleh menjadi copy identik.
+
+Gunakan shared campaign direction lalu variasi per item.
+
+## Copy handling
+
+Bila project sudah memiliki hasil Copywriting:
+
+* gunakan output approved yang sesuai
+* jangan generate copy baru tanpa kebutuhan
+* jangan memasukkan teks terlalu panjang
+* jangan biarkan text clipping
+
+Bila tidak ada copy:
+
+* gunakan brief
+* generate concise text jika workflow mengizinkan
+* catat LLM usage
+
+---
+
+# 8. Social media aspect ratios
+
+Minimal mendukung:
+
+```text
+1:1
+4:5
+9:16
+16:9
+```
+
+Gunakan ukuran dari entitlement/catalog bila tersedia.
+
+Contoh umum hanya sebagai fallback:
+
+```text
+Instagram Feed Square: 1080×1080
+Instagram Feed Portrait: 1080×1350
+Instagram Story/Reels: 1080×1920
+Facebook/LinkedIn Landscape: 1200×628
+```
+
+Jangan mengubah ratio hanya agar provider lebih mudah.
+
+Jika provider tidak mendukung exact resolution:
+
+* generate pada ratio terdekat
+* resize/crop memakai Sharp
+* preserve important content area
+* catat transform metadata
+
+---
+
+# 9. Packaging Design multi-view
+
+Audit janji katalog Packaging Design.
+
+Jika katalog hanya menjanjikan satu concept visual:
+
+* jangan paksa menjadi empat view
+
+Jika katalog menjanjikan multiple view, dukung:
+
+* front view
+* back view
+* side view
+* perspective mockup
+* shelf mockup
+
+Gunakan entitlement aktual.
+
+Packaging output harus dibedakan:
+
+* concept artwork
+* flat label
+* package mockup
+* perspective visualization
+
+Jangan mengklaim dieline produksi jika hanya visual mockup.
+
+Jika tidak ada real product dimensions:
+
+* jangan membuat production-ready dieline
+* label output sebagai conceptual design/mockup
+
+---
+
+# 10. Image generation provider abstraction
+
+Gunakan provider abstraction existing.
+
+Jangan hard-code FLUX langsung ke Image Batch Engine.
+
+Batch engine harus meminta capability:
+
+* supported aspect ratios
+* transparency
+* max resolution
+* synchronous/asynchronous
+* seed support
+* negative prompt support
+* cost estimate
+* retry behavior
+
+Jika provider tidak mendukung suatu kebutuhan:
+
+* apply safe fallback
+* record limitation
+* jangan mengklaim feature tersedia
+
+---
+
+# 11. Batch job orchestration
+
+Gunakan parent batch job dan child item tracking bila schema memungkinkan.
+
+Flow:
+
+```text
+resolve entitlement
+→ build item specs
+→ enqueue/generate required items
+→ upload each asset
+→ validate each asset
+→ duplicate detection
+→ QC
+→ retry failed/duplicate items
+→ validate batch completeness
+→ generate ZIP
+→ complete project
+```
+
+Simpan status:
+
+* planned
+* generating
+* uploaded
+* validating
+* duplicate_detected
+* qc_failed
+* retrying
+* completed
+* failed
+
+Jangan membuat project completed ketika hanya parent job selesai tetapi item masih gagal.
+
+---
+
+# 12. Per-item retry
+
+Admin harus dapat retry:
+
+* Concept B saja
+* Instagram Story item saja
+* Packaging back view saja
+
+Retry per item tidak boleh:
+
+* mengulang semua batch
+* menggandakan asset yang sudah valid
+* menghapus valid asset tanpa alasan
+* membuat version conflict
+
+Gunakan item key stabil.
+
+Contoh:
+
+```text
+logo/concept-a
+logo/concept-b
+social/instagram-feed-01
+social/instagram-story-01
+packaging/front-view
+```
+
+---
+
+# 13. Image validation
+
+Setiap generated image harus divalidasi:
+
+* file buffer tersedia
+* MIME valid
+* file size lebih dari nol
+* width/height valid
+* aspect ratio sesuai tolerance
+* checksum
+* storage object exists
+* project ownership
+* provider result valid
+* tidak mengandung placeholder/broken response
+
+Gunakan Sharp untuk metadata dan transform.
+
+File yang tidak valid tidak boleh menjadi final asset.
+
+---
+
+# 14. Image QC
+
+Phase 1B menemukan `image_qc` sebelumnya stub.
+
+Implementasikan real image QC untuk batch output.
+
+QC minimal:
+
+* image readable
+* correct aspect ratio
+* correct dimensions
+* visual relevance to prompt
+* no severe artifacts
+* no obvious text corruption jika desain mengandung teks
+* no blank output
+* no duplicate
+* project logo use sesuai policy
+* composition quality
+* brand consistency
+
+Gunakan:
+
+* deterministic technical checks
+* vision model scoring bila provider tersedia
+* configurable threshold
+
+Contoh score:
+
+```text
+technical: 30
+prompt relevance: 25
+composition: 20
+brand consistency: 15
+text/readability: 10
+```
+
+Default pass threshold dapat 70, tetapi ambil dari config jika sudah tersedia.
+
+Jangan menyebut QC berhasil jika hanya metadata check tanpa visual assessment.
+
+---
+
+# 15. Text rendering in social design
+
+Jika image provider sering merusak teks, audit strategi.
+
+Preferensi:
+
+1. Generate visual background tanpa teks.
+2. Overlay approved text menggunakan Sharp/SVG composition.
+3. Gunakan font yang tersedia secara legal di environment.
+4. Render logo dan CTA secara deterministik.
+5. Validate text bounding box.
+
+Jangan mengandalkan image model untuk menghasilkan teks panjang yang akurat.
+
+Jangan menyertakan font file dalam deliverable tanpa lisensi.
+
+---
+
+# 16. ZIP export untuk image batch
+
+Tambahkan ZIP packaging khusus batch image.
+
+Gunakan:
+
+```text
+archiver
+```
+
+atau library stabil yang sesuai.
+
+ZIP Logo Design:
+
+```text
+Logo-Design-v1.zip
+├── Concept-A/
+│   ├── concept-a-primary.png
+│   ├── concept-a-light.png
+│   └── concept-a-dark.png
+├── Concept-B/
+├── Concept-C/
+├── concept-rationale.pdf atau .txt
+└── generation-report.json
+```
+
+Hanya masukkan file yang benar-benar tersedia.
+
+ZIP Social Media:
+
+```text
+Social-Media-Batch-v1.zip
+├── Instagram/
+│   ├── Feed/
+│   └── Story/
+├── Facebook/
+├── LinkedIn/
+├── campaign-copy.txt
+└── generation-report.json
+```
+
+ZIP Packaging:
+
+```text
+Packaging-Concept-v1.zip
+├── Front/
+├── Back/
+├── Perspective/
+├── Mockups/
+└── generation-report.json
+```
+
+Jangan memasukkan:
+
+* signed token
+* storage path internal
+* API key
+* internal prompts yang bersifat rahasia
+* provider credentials
+* customer data yang tidak relevan
+
+ZIP harus:
+
+* valid
+* file size > 0
+* isi sesuai entitlement
+* disimpan di private storage
+* tercatat sebagai asset
+* secure download
+
+---
+
+# 17. ZIP completion policy
+
+ZIP tidak menggantikan individual assets.
+
+Project selesai jika:
+
+* seluruh required images valid
+* batch completeness lulus
+* required ZIP valid jika katalog menjanjikan bulk download
+* storage verified
+* asset records benar
+
+Jika ZIP optional:
+
+* individual output boleh menyelesaikan project
+* ZIP failure dicatat dan bisa retry terpisah
+
+Gunakan katalog/order snapshot.
+
+---
+
+# 18. Workflow integration
+
+## Logo Design
+
+```text
+brief
+→ concept directions
+→ batch item generation
+→ image QC
+→ duplicate detection
+→ retry failed concepts
+→ ZIP
+→ completed
+```
+
+## Social Media
+
+```text
+brief
+→ campaign direction
+→ platform item planning
+→ image generation
+→ text overlay if needed
+→ QC
+→ batch completeness
+→ ZIP
+→ completed
+```
+
+## Packaging
+
+```text
+brief
+→ packaging concept direction
+→ required views
+→ image generation
+→ QC
+→ ZIP if required
+→ completed
+```
+
+Tambahkan status bila diperlukan:
+
+* `planning_assets`
+* `generating_assets`
+* `validating_assets`
+* `packaging_assets`
+
+Update status label pada:
+
+* backend
+* customer portal
+* AI platform/admin
+
+Jangan meninggalkan blank status.
+
+---
+
+# 19. Completion guard
+
+Tambahkan completion requirements untuk batch jobs.
+
+Contoh:
+
+```ts
+image_batch_export: {
+  requiresAssets: true,
+  validate: validateBatchCompletion
+}
+```
+
+Completion harus memeriksa:
+
+* required count
+* required item keys
+* valid storage objects
+* correct dimensions/aspect ratios
+* QC threshold
+* no disallowed duplicates
+* correct ownership
+* ZIP bila required
+
+Jangan hanya memeriksa satu asset ID.
+
+---
+
+# 20. Asset metadata
+
+Setiap image asset harus menyimpan:
+
+* project ID
+* service request ID
+* job ID
+* batch ID
+* item key
+* concept group
+* platform
+* placement
+* asset type
+* MIME
+* width
+* height
+* aspect ratio
+* storage path
+* file size
+* checksum
+* provider
+* model
+* cost
+* qc score
+* duplicate score
+* version
+* final deliverable
+* generated timestamp
+
+ZIP asset:
+
+* batch ID
+* file count
+* total uncompressed size
+* ZIP checksum
+* version
+* source asset IDs
+
+Gunakan metadata JSON bila cukup.
+
+Migration hanya jika integrity benar-benar membutuhkan kolom.
+
+---
+
+# 21. Customer portal
+
+Customer workspace harus menampilkan gallery.
+
+## Logo
+
+* Concept A/B/C
+* preview
+* concept rationale
+* dimensions
+* QC status jika customer-facing policy mengizinkan
+* download individual
+* download ZIP
+* version
+
+## Social Media
+
+Group berdasarkan:
+
+* platform
+* placement
+* campaign
+* aspect ratio
+
+Tampilkan:
+
+* preview
+* platform badge
+* dimensions
+* download
+* download all ZIP
+
+## Packaging
+
+Group berdasarkan view.
+
+Jangan tampilkan:
+
+* provider cost
+* internal storage path
+* raw prompt internal
+* failed empty cards
+* duplicate rejected output
+
+Download hanya melalui secure access.
+
+---
+
+# 22. Admin production monitor
+
+Tampilkan:
+
+* batch type
+* entitlement count
+* planned count
+* completed count
+* failed count
+* retrying count
+* duplicate count
+* QC failed count
+* cost total
+* provider/model
+* item-level status
+* retry per item
+* regenerate duplicate
+* rebuild ZIP
+* error detail
+
+Admin harus dapat membuka asset comparison untuk duplicate warning.
+
+---
+
+# 23. Error codes
+
+Tambahkan structured errors jika diperlukan:
+
+* `IMAGE_BATCH_TYPE_UNSUPPORTED`
+* `IMAGE_BATCH_ENTITLEMENT_MISSING`
+* `IMAGE_BATCH_PLAN_INVALID`
+* `IMAGE_BATCH_INCOMPLETE`
+* `IMAGE_GENERATION_FAILED`
+* `IMAGE_VALIDATION_FAILED`
+* `IMAGE_ASPECT_RATIO_INVALID`
+* `IMAGE_DIMENSIONS_INVALID`
+* `IMAGE_QC_FAILED`
+* `IMAGE_DUPLICATE_DETECTED`
+* `REQUIRED_IMAGE_ASSET_MISSING`
+* `BATCH_ZIP_CREATION_FAILED`
+* `BATCH_ZIP_VALIDATION_FAILED`
+* `BATCH_UPLOAD_FAILED`
+* `BATCH_UPLOAD_VERIFICATION_FAILED`
+
+Customer melihat pesan aman, bukan stack trace.
+
+---
+
+# 24. Cost tracking
+
+Catat per item:
+
+* text/concept planning cost
+* image generation cost
+* retry cost
+* QC vision cost
+* text overlay/render cost
+* storage cost bila sistem menghitung
+* ZIP creation cost jika relevan
+
+Batch summary:
+
+* initial generation cost
+* retry cost
+* total batch cost
+* cost per accepted asset
+* rejected asset cost
+
+Tampilkan ke admin, bukan customer.
+
+---
+
+# 25. Security
+
+Pertahankan:
+
+* tenant isolation
+* project ownership
+* private final storage
+* signed file access
+* payment gate
+* sanitized filenames
+* no arbitrary storage path
+* no cross-project asset reuse
+* safe remote image handling
+* SSRF protection
+* file size limits
+* pixel dimension limits
+* ZIP path traversal protection
+* no secrets in ZIP
+* no internal prompt disclosure
+* no public final asset URL
+
+---
+
+# 26. Testing wajib
+
+## Registry dan entitlement
+
+1. Logo service resolves correctly.
+2. Social service resolves correctly.
+3. Packaging service resolves correctly.
+4. Unsupported service rejected.
+5. Entitlement read from order snapshot.
+6. Legacy fallback works.
+7. Package name alone does not control quantity.
+8. Custom quotation deliverables supported.
+
+## Logo batch
+
+9. Three-concept entitlement creates three unique item keys.
+10. Concept directions differ.
+11. Missing required concept blocks completion.
+12. Retry only failed concept.
+13. Valid concepts are reused.
+14. Identical image detected as duplicate.
+15. Near-duplicate threshold works.
+16. Duplicate item is regenerated.
+17. Final accepted count matches entitlement.
+
+## Social Media
+
+18. Platform breakdown matches entitlement.
+19. Correct aspect ratios generated.
+20. Platform metadata stored.
+21. Missing required platform blocks completion.
+22. Optional platform failure follows policy.
+23. Text overlay fits bounding box.
+24. Batch visual direction is consistent.
+25. Items are not exact duplicates.
+
+## Packaging
+
+26. Required views follow entitlement.
+27. Conceptual output is not labeled production dieline.
+28. Missing required view blocks completion.
+29. Optional mockup can be skipped.
+
+## Image validation
+
+30. Valid image passes.
+31. Broken file rejected.
+32. Wrong MIME rejected.
+33. Zero-byte rejected.
+34. Invalid dimension rejected.
+35. Aspect ratio outside tolerance rejected.
+36. Storage object missing rejected.
+37. Cross-project asset rejected.
+
+## QC
+
+38. Real QC worker no longer returns stub response.
+39. Technical QC score recorded.
+40. Vision QC score recorded when available.
+41. Score below threshold rejected.
+42. Retry limit enforced.
+43. Blank image rejected.
+44. Severe text corruption flagged where detectable.
+
+## ZIP
+
+45. ZIP is structurally valid.
+46. ZIP file count matches accepted assets.
+47. ZIP paths are safe.
+48. ZIP excludes rejected assets.
+49. ZIP excludes secrets/internal paths.
+50. ZIP storage verified.
+51. ZIP retry does not duplicate final asset.
+
+## Workflow
+
+52. Project enters asset generation statuses.
+53. Parent completion waits for child items.
+54. Project does not complete with missing required assets.
+55. Project completes after batch validation.
+56. Duplicate active batch jobs are prevented.
+57. Failed item propagates honestly.
+58. Retry only affects failed item.
+59. ZIP requirement follows catalog snapshot.
+
+## Frontend
+
+60. Logo concepts grouped correctly.
+61. Social assets grouped by platform.
+62. Packaging views grouped correctly.
+63. Dimensions displayed.
+64. Individual download works.
+65. ZIP download appears only if valid.
+66. Internal paths hidden.
+67. Failed/partial state visible.
+68. Rejected duplicate assets hidden from customer.
+
+## Regression
+
+69. Phase 1B tests pass.
+70. Document Engine tests pass.
+71. Presentation Engine tests pass.
+72. Existing image-generation service still works.
+
+---
+
+# 27. Real smoke tests
+
+Run three real end-to-end smoke tests.
+
+## Smoke A — Logo Standard
+
+Use a realistic Indonesian B2B logistics brand brief.
+
+Expected:
+
+* three concept directions
+* three generated concepts
+* no duplicates above threshold
+* all images valid
+* storage verified
+* ZIP valid
+* customer gallery grouped
+
+Record:
+
+* concept count
+* accepted count
+* duplicate count
+* retry count
+* dimensions
+* file sizes
+* QC scores
+* total cost
+* ZIP file size
+
+## Smoke B — Social Media Batch
+
+Use a campaign brief with actual platform breakdown from a fixture entitlement.
+
+Expected:
+
+* all required platform items
+* correct aspect ratios
+* consistent campaign direction
+* readable overlay text
+* individual assets
+* ZIP grouped by platform
+
+Record:
+
+* planned count
+* completed count
+* platform breakdown
+* dimensions
+* QC
+* total cost
+* ZIP result
+
+## Smoke C — Packaging
+
+Use a realistic commodity product packaging brief.
+
+Expected:
+
+* required views according to entitlement
+* output labeled conceptual
+* valid assets
+* optional views handled honestly
+* ZIP if required
+
+Do not use confidential customer data.
+
+---
+
+# 28. Manual visual review
+
+Inspect smoke-test images visually.
+
+Review:
+
+* concept uniqueness
+* logo readability
+* text artifacts
+* image distortion
+* incorrect cropping
+* social layout consistency
+* platform-safe margins
+* logo placement
+* packaging perspective
+* brand consistency
+* duplicate appearance
+* blank areas
+* color contrast
+
+Fix real defects before final report.
+
+Do not rely only on file metadata.
+
+---
+
+# 29. Verification order
+
+Run:
+
+1. Registry tests.
+2. Entitlement tests.
+3. Batch planning tests.
+4. Duplicate detection tests.
+5. QC tests.
+6. Worker tests.
+7. ZIP tests.
+8. Workflow tests.
+9. Frontend tests.
+10. Phase 1B regression.
+11. Document Engine regression.
+12. Presentation Engine regression.
+13. Full API suite.
+14. API typecheck.
+15. API build.
+16. Customer portal typecheck/build.
+17. AI platform typecheck/build.
+18. Real smoke tests.
+19. Manual image review.
+20. `git diff --check`.
+21. Final diff review.
+
+---
+
+# 30. Final review
+
+Pastikan tidak ada:
+
+* hard-coded package names as quantity logic
+* duplicate worker implementation
+* fake image QC
+* stub ZIP
+* cross-project asset reuse
+* public final URLs
+* debug logs
+* raw provider secrets
+* rejected assets customer-facing
+* false completion
+* project completed with incomplete batch
+* duplicate concepts accepted
+* unsupported SVG claims
+* packaging dieline false claim
+* unrelated changes
+
+---
+
+# 31. Final report
+
+Laporkan:
+
+* audited package entitlements
+* Image Batch Engine architecture
+* registry structure
+* entitlement resolution
+* item planning
+* concept diversification
+* duplicate detection
+* QC implementation
+* workflow changes
+* completion rules
+* ZIP structure
+* customer gallery
+* admin monitor
+* cost tracking
+* security
+* files created
+* files changed
+* dependencies
+* migration
+* endpoints
+* test count
+* typecheck/build results
+* smoke test results
+* manual review results
+
+Gunakan tabel:
+
+| Service      | Planned | Completed | Rejected/Duplicate | ZIP | Storage Verified | Secure Access |
+| ------------ | ------: | --------: | -----------------: | --- | ---------------- | ------------- |
+| Logo Design  |         |           |                    |     |                  |               |
+| Social Media |         |           |                    |     |                  |               |
+| Packaging    |         |           |                    |     |                  |               |
+
+Jangan menyatakan Phase 5 selesai jika:
+
+* quantity tidak mengikuti entitlement
+* Logo Standard masih hanya menghasilkan satu konsep
+* duplicate concept diterima
+* Social Media batch tidak dikelompokkan per platform
+* ZIP hanya placeholder
+* project completed dengan asset kurang
+* customer tidak dapat download
+* QC masih stub
+* smoke tests belum menghasilkan gambar nyata
+
+Phase 5 selesai hanya ketika batch asset benar-benar dihasilkan, divalidasi, disimpan, dapat diunduh, jumlahnya sesuai paket, dan tidak terjadi false completion.

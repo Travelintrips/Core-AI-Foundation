@@ -3,8 +3,25 @@ import { Link } from "wouter";
 import { WorkspaceLayout } from "@/components/workspace-layout";
 import { useWorkspaceDownloads, useSignDownload } from "@/hooks/use-workspace";
 import { useToast } from "@/hooks/use-toast";
-import { fmtDate } from "@/lib/workspace-format";
-import { Loader2, Download, Lock, Search, FileImage, ArrowLeft } from "lucide-react";
+import { fmtDate, fmtFileSize } from "@/lib/workspace-format";
+import { Loader2, Download, Lock, Search, FileImage, FileText, ArrowLeft } from "lucide-react";
+
+const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  company_profile:         "Company Profile",
+  brand_strategy:          "Brand Strategy",
+  copywriting:             "Copywriting",
+  creative_consultation:   "Creative Consultation",
+  brand_identity_guideline: "Brand Identity Guideline",
+  pitch_deck:              "Pitch Deck",
+};
+
+const PPTX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
+function DocumentIcon({ isPdf, isPptx }: { isPdf: boolean; isPptx: boolean }) {
+  if (isPptx) return <FileImage className="w-4 h-4 text-orange-500" />;
+  if (isPdf) return <FileText className="w-4 h-4 text-primary" />;
+  return <FileImage className="w-4 h-4 text-muted-foreground" />;
+}
 
 export default function WorkspaceDownloadsPage({ params }: { params: { token: string } }) {
   const { token } = params;
@@ -54,31 +71,79 @@ export default function WorkspaceDownloadsPage({ params }: { params: { token: st
         <div className="bg-card border border-card-border rounded-2xl p-12 text-center">
           <FileImage className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
           <h3 className="text-xl font-medium mb-2">No files yet</h3>
+          <p className="text-sm text-muted-foreground">Your deliverables will appear here once they are ready.</p>
         </div>
       ) : (
         <div className="bg-card border border-card-border rounded-2xl divide-y divide-border/60">
-          {data.items.map((d) => (
-            <div key={d.id} className="flex items-center justify-between gap-4 p-4">
-              <div className="min-w-0 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                  <FileImage className="w-4 h-4 text-muted-foreground" />
+          {data.items.map((d) => {
+            const isPptx = d.mimeType === PPTX_MIME_TYPE;
+            const isPdf = !isPptx && (d.mimeType === "application/pdf" || !!d.documentType);
+            const docLabel = d.documentType ? (DOCUMENT_TYPE_LABELS[d.documentType] ?? d.documentType) : null;
+            return (
+              <div key={d.id} className="flex items-center justify-between gap-4 p-4">
+                <div className="min-w-0 flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isPptx ? "bg-orange-500/10" : isPdf ? "bg-primary/10" : "bg-muted"}`}>
+                    <DocumentIcon isPdf={isPdf} isPptx={isPptx} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-medium truncate">{d.title}</p>
+                      {isPptx && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-500/10 text-orange-600 shrink-0">
+                          PPTX
+                        </span>
+                      )}
+                      {isPdf && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary shrink-0">
+                          PDF
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <span className="text-xs text-muted-foreground">{d.projectName}</span>
+                      <span className="text-xs text-muted-foreground/50">·</span>
+                      <span className="text-xs text-muted-foreground">v{d.version}</span>
+                      {d.pageCount != null && (
+                        <>
+                          <span className="text-xs text-muted-foreground/50">·</span>
+                          <span className="text-xs text-muted-foreground">{d.pageCount} pages</span>
+                        </>
+                      )}
+                      {d.slideCount != null && (
+                        <>
+                          <span className="text-xs text-muted-foreground/50">·</span>
+                          <span className="text-xs text-muted-foreground">{d.slideCount} slides</span>
+                        </>
+                      )}
+                      {d.fileSizeBytes != null && (
+                        <>
+                          <span className="text-xs text-muted-foreground/50">·</span>
+                          <span className="text-xs text-muted-foreground">{fmtFileSize(d.fileSizeBytes)}</span>
+                        </>
+                      )}
+                      {docLabel && (
+                        <>
+                          <span className="text-xs text-muted-foreground/50">·</span>
+                          <span className="text-xs text-muted-foreground">{docLabel}</span>
+                        </>
+                      )}
+                      <span className="text-xs text-muted-foreground/50">·</span>
+                      <span className="text-xs text-muted-foreground">{fmtDate(d.createdAt)}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="font-medium truncate">{d.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">{d.projectName} · v{d.version} · {fmtDate(d.createdAt)}</p>
-                </div>
+                <button
+                  onClick={() => handleDownload(d.id, d.locked)}
+                  className={`shrink-0 inline-flex items-center gap-1.5 text-sm font-medium px-3.5 py-2 rounded-full transition-colors ${
+                    d.locked ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-primary/10 text-primary hover:bg-primary/20"
+                  }`}
+                  data-testid={`button-download-${d.id}`}
+                >
+                  {d.locked ? <><Lock className="w-3.5 h-3.5" /> Locked</> : <><Download className="w-3.5 h-3.5" /> Download</>}
+                </button>
               </div>
-              <button
-                onClick={() => handleDownload(d.id, d.locked)}
-                className={`shrink-0 inline-flex items-center gap-1.5 text-sm font-medium px-3.5 py-2 rounded-full transition-colors ${
-                  d.locked ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-primary/10 text-primary hover:bg-primary/20"
-                }`}
-                data-testid={`button-download-${d.id}`}
-              >
-                {d.locked ? <><Lock className="w-3.5 h-3.5" /> Locked</> : <><Download className="w-3.5 h-3.5" /> Download</>}
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </WorkspaceLayout>

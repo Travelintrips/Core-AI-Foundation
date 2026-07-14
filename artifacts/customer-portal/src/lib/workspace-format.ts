@@ -1,3 +1,10 @@
+export function fmtFileSize(bytes: number | null | undefined): string {
+  if (bytes == null) return "—";
+  if (bytes < 1024)        return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function fmtMoney(amount: string | number | null | undefined, currency = "IDR") {
   if (amount === null || amount === undefined) return "—";
   const n = typeof amount === "string" ? parseFloat(amount) : amount;

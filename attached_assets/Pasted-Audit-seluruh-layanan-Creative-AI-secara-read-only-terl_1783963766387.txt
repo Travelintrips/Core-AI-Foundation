@@ -1,0 +1,84 @@
+Audit seluruh layanan Creative AI secara read-only terlebih dahulu.
+
+Jangan langsung mengimplementasikan PDF, PPTX, video, atau migration sebelum audit selesai.
+
+Tujuan audit:
+
+1. Identifikasi semua layanan Creative AI yang tampil di katalog customer.
+2. Bandingkan output yang dijanjikan dengan output aktual.
+3. Temukan seluruh stub, placeholder, fake completion, dan job yang hanya berstatus dispatched.
+4. Audit khusus:
+
+   * `jobWorkerService.ts`
+   * production worker
+   * asset generation service
+   * storage service
+   * katalog layanan
+   * order snapshot atau entitlement
+   * tabel production job
+   * tabel generated asset
+   * frontend detail order customer
+   * frontend admin production monitor
+5. Identifikasi provider dan model yang saat ini digunakan untuk:
+
+   * text generation
+   * image generation
+   * video generation
+   * document generation
+6. Pastikan apakah saat ini sudah ada library untuk:
+
+   * PDF
+   * DOCX
+   * PPTX
+   * ZIP
+   * FFmpeg atau video composition
+7. Audit object storage dan kebijakan signed URL.
+8. Bedakan temporary preview dan final paid deliverable.
+
+Buat laporan dalam tabel dengan kolom:
+
+* Service
+* Catalog Promise
+* Actual Output
+* Output Quantity
+* File Created
+* Storage Record
+* Preview Available
+* Download Available
+* Provider
+* Model
+* Current Worker
+* Gap Severity
+* Recommended Fix
+
+Kelompokkan hasil audit menjadi:
+
+* berfungsi end-to-end
+* berfungsi sebagian
+* placeholder
+* belum diimplementasikan
+* berbahaya karena false-completed
+
+Setelah audit, buat proposal arsitektur Creative Production Engine yang menggunakan komponen bersama:
+
+* Document Engine
+* Presentation Engine
+* Image Batch Engine
+* Video Engine
+* Export Package Engine
+* Storage Manager
+* Production Job Manager
+* QC Validator
+
+Jangan mengubah kode pada fase ini.
+
+Di akhir laporan, sertakan:
+
+* daftar file relevan
+* tabel database relevan
+* endpoint relevan
+* dependency yang sudah tersedia
+* dependency yang perlu ditambahkan
+* risiko migration
+* urutan implementasi yang paling aman
+* acceptance criteria setiap fase berikutnya

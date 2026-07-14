@@ -105,6 +105,8 @@ function statusColor(status: string) {
   switch (status) {
     case "completed":        return "bg-green-500/15 text-green-400 border-green-500/30";
     case "running":          return "bg-blue-500/15 text-blue-400 border-blue-500/30";
+    case "generating_document": return "bg-blue-500/15 text-blue-400 border-blue-500/30";
+    case "generating_presentation": return "bg-blue-500/15 text-blue-400 border-blue-500/30";
     case "failed":           return "bg-red-500/15 text-red-400 border-red-500/30";
     case "blocked_by_budget": return "bg-orange-500/15 text-orange-400 border-orange-500/30";
     default:                 return "bg-muted text-muted-foreground border-border";
@@ -116,6 +118,8 @@ function StatusIcon({ status, className }: { status: string; className?: string 
   switch (status) {
     case "completed":        return <CheckCircle2 className={cn(cls, "text-green-400")} />;
     case "running":          return <Loader2 className={cn(cls, "text-blue-400 animate-spin")} />;
+    case "generating_document": return <Loader2 className={cn(cls, "text-blue-400 animate-spin")} />;
+    case "generating_presentation": return <Loader2 className={cn(cls, "text-blue-400 animate-spin")} />;
     case "failed":           return <XCircle className={cn(cls, "text-red-400")} />;
     case "blocked_by_budget": return <BanIcon className={cn(cls, "text-orange-400")} />;
     default:                 return <CircleDot className={cn(cls, "text-muted-foreground")} />;
@@ -568,6 +572,8 @@ function ProjectListItem({ project, isActive, onClick }: { project: CreativeProj
         <div className={cn("size-1.5 rounded-full shrink-0",
           project.status === "completed" ? "bg-green-500" :
           project.status === "running"   ? "bg-blue-500 animate-pulse" :
+          project.status === "generating_document" ? "bg-blue-500 animate-pulse" :
+          project.status === "generating_presentation" ? "bg-blue-500 animate-pulse" :
           project.status === "failed"    ? "bg-red-500" : "bg-muted-foreground",
         )} />
       </div>

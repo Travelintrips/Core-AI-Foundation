@@ -71,6 +71,49 @@ router.get("/public/files/access/:token", async (req, res): Promise<void> => {
     return;
   }
 
+  // ── Phase 1B: verify the storage object actually exists before redirecting ──
+  // Prevents serving a broken redirect when production was never completed
+  // or the file was deleted. Returns structured errors instead of 302→404.
+  try {
+    const headRes = await fetch(url, { method: "HEAD" });
+    if (!headRes.ok) {
+      const code = headRes.status;
+      await logAudit("files", "access_denied_missing", String(pid), "signed_url", "failure", {
+        reason: "Storage object not found",
+        httpStatus: code,
+        ip,
+      });
+      if (code === 404 || code === 400) {
+        res.status(404).json({
+          error: "File not found. Production may not have completed successfully.",
+          code: "FILE_NOT_FOUND",
+        });
+      } else if (code === 410) {
+        res.status(410).json({
+          error: "File has expired and is no longer available.",
+          code: "FILE_EXPIRED",
+        });
+      } else {
+        res.status(409).json({
+          error: "Dokumen belum berhasil dibuat. Tim produksi telah menerima laporan kegagalan dan proses dapat dijalankan ulang.",
+          code: "PRODUCTION_INCOMPLETE",
+        });
+      }
+      return;
+    }
+  } catch {
+    // Network error reaching storage — log but still redirect; may be transient
+    await logAudit("files", "access_storage_check_failed", String(pid), "signed_url", "failure", {
+      reason: "HEAD check network error",
+      ip,
+    });
+    res.status(503).json({
+      error: "Storage service temporarily unavailable. Please try again shortly.",
+      code: "STORAGE_UNAVAILABLE",
+    });
+    return;
+  }
+
   await logAudit("files", "access_granted", String(pid), "signed_url", "success", {
     tokenId: verification.payload.id,
     ip,

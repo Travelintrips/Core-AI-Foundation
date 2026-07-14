@@ -41,3 +41,9 @@
 - [phase-v40d-sse-runtime-stream](phase-v40d-sse-runtime-stream.md) — SSE transport: shared poller, base64url cursor, connection limits, hook+merge, graceful shutdown
 - [dashboard-token-recovery](dashboard-token-recovery.md) — dashboardToken is hashed/non-recoverable; use POST request-access to re-issue + get dashboardUrl live instead of storing a link
 - [reimport-workflow-port-conflicts](reimport-workflow-port-conflicts.md) — after a GitHub re-import + post-merge-setup, restarted workflows can EADDRINUSE against stale node/vite processes still holding old ports; kill by PID (lsof -i) before restart, not just WorkflowsRestart
+- [phase1b-production-safety](phase1b-production-safety.md) — completion guard, stub-throws, storageObjectExists, audit script, portal failed-state; validateJobCompletion called in dispatch() before completeJob()
+- [phase21-brief-legacy-hardening](phase21-brief-legacy-hardening.md) — legacy free-text parsers must surface unmatched text as other+custom, never drop it; brief page never hydrated from server briefJson (fixed); ADMIN_API_KEY exceptions gap breaks public catalog routes (flagged, not fixed)
+- [phase2-company-profile-pdf](phase2-company-profile-pdf.md) — pdf_export gating, runtime document-type resolution, idempotent regeneration, status-map fallout
+- [phase3-document-engine](phase3-document-engine.md) — Generic PDF worker + registry; 4 new doc types; mapper mock rule; requiresLogo guard; fetch mock in tests
+- [phase4-presentation-engine](phase4-presentation-engine.md) — pptxgenjs default-export interop gotcha; PDFKit auto-pagination silently desyncs page count near page margins; honest spec-rendered PDF fallback pattern
+- [phase4a-brief-assistant](phase4a-brief-assistant.md) — Rule-based brief assistant: file structure, key invariants, BriefRecommendationPanel prop names, wiring pattern in brief.tsx
