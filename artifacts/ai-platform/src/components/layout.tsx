@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { 
   Activity, 
   BarChart2,
+  Brain,
   Box, 
   CalendarClock,
   ClipboardCheck,
@@ -103,6 +104,7 @@ const NAV_SECTIONS = [
       { href: "/affiliates", label: "Affiliates", icon: Users2 },
       { href: "/health-scores", label: "Health Scores", icon: Heart },
       { href: "/ai-insights", label: "AI Insights", icon: Lightbulb },
+      { href: "/creative-intelligence", label: "Creative Intelligence", icon: Brain },
     ],
   },
   {

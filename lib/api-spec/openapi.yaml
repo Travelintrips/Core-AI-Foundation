@@ -53,6 +53,10 @@ tags:
     description: Commercial gate management — payment verification, waiver, and approval before project conversion
   - name: customer-workspace
     description: Customer Workspace — dashboard, projects, downloads, invoices, brand kit, notifications, profile, support
+  - name: brand-intelligence
+    description: V4.2E Brand DNA Engine — analyze brand identity, recommendations, consistency, creative memory
+  - name: asset-intelligence
+    description: V4.2E Auto Asset Analyzer — auto-tagging, duplicate detection, version chains
   - name: customer-workspace-admin
     description: Admin visibility into customer workspaces — impersonation, token rotation, analytics
 paths:
@@ -5425,6 +5429,325 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ZipDeliveryView"
+
+  # ── V4.2E Brand Intelligence ────────────────────────────────────────────────
+
+  /ai/brand-intelligence/stats:
+    get:
+      operationId: getAdminBrandIntelligenceStats
+      tags: [brand-intelligence]
+      summary: Admin — overall brand intelligence stats across all clients
+      security: [{ adminKey: [] }]
+      responses:
+        "200":
+          description: Brand intelligence stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminBrandIntelligenceStats"
+
+  /ai/brand-intelligence/analyze:
+    post:
+      operationId: adminAnalyzeBrand
+      tags: [brand-intelligence]
+      summary: Admin — trigger Brand DNA analysis for a client
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeBrandInput"
+      responses:
+        "200":
+          description: Brand DNA result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandDnaView"
+        "400": { description: Bad request, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /ai/brand-intelligence/{clientId}:
+    get:
+      operationId: getAdminBrandDna
+      tags: [brand-intelligence]
+      summary: Admin — get stored Brand DNA for a client
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: clientId, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Brand DNA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandDnaView"
+        "404": { description: Not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /ai/brand-intelligence/{clientId}/refresh:
+    post:
+      operationId: adminRefreshBrandDna
+      tags: [brand-intelligence]
+      summary: Admin — force re-analyze Brand DNA for a client
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: clientId, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Refreshed Brand DNA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandDnaView"
+
+  /ai/brand-intelligence/{clientId}/recommendations:
+    get:
+      operationId: getAdminBrandRecommendations
+      tags: [brand-intelligence]
+      summary: Admin — get brand improvement recommendations for a client
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: clientId, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Brand recommendations list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandRecommendationList"
+
+  /ai/brand-intelligence/{clientId}/consistency-report:
+    get:
+      operationId: getAdminConsistencyReport
+      tags: [brand-intelligence]
+      summary: Admin — brand consistency report for a client
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: clientId, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Consistency report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandConsistencyReport"
+
+  /ai/brand-intelligence/{clientId}/creative-memory:
+    get:
+      operationId: getAdminCreativeMemory
+      tags: [brand-intelligence]
+      summary: Admin — creative memory for a client
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: clientId, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Creative memory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreativeMemoryView"
+
+  /ai/brand-intelligence/{clientId}/creative-director:
+    get:
+      operationId: getAdminCreativeDirectorRecommendation
+      tags: [brand-intelligence]
+      summary: Admin — AI Creative Director recommendation for a client
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: clientId, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Creative Director recommendation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreativeDirectorRecommendation"
+
+  # ── V4.2E Asset Intelligence ─────────────────────────────────────────────────
+
+  /ai/asset-intelligence/analyze:
+    post:
+      operationId: adminAnalyzeAsset
+      tags: [asset-intelligence]
+      summary: Admin — trigger asset intelligence analysis
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeAssetInput"
+      responses:
+        "200":
+          description: Asset intelligence result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetIntelligenceView"
+        "400": { description: Bad request, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /ai/asset-intelligence/analyze/{assetId}:
+    post:
+      operationId: adminAnalyzeAssetById
+      tags: [asset-intelligence]
+      summary: Admin — analyze a specific asset by ID
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: assetId, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assetSource, clientId]
+              properties:
+                assetSource: { type: string, enum: [brand_kit, library, creative_asset] }
+                clientId: { type: string }
+      responses:
+        "200":
+          description: Asset intelligence result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetIntelligenceView"
+
+  /ai/asset-intelligence/{assetId}:
+    get:
+      operationId: getAdminAssetIntelligence
+      tags: [asset-intelligence]
+      summary: Admin — get stored asset intelligence for an asset
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: assetId, required: true, schema: { type: integer } }
+        - { in: query, name: source, schema: { type: string, enum: [brand_kit, library, creative_asset] } }
+      responses:
+        "200":
+          description: Asset intelligence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetIntelligenceView"
+        "404": { description: Not found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+
+  /ai/asset-intelligence/duplicates/{clientId}:
+    get:
+      operationId: getAdminDuplicateReport
+      tags: [asset-intelligence]
+      summary: Admin — duplicate detection report for a client
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: clientId, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Duplicate report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DuplicateReport"
+
+  /ai/asset-intelligence/client/{clientId}:
+    get:
+      operationId: listAdminAssetIntelligence
+      tags: [asset-intelligence]
+      summary: Admin — list all asset intelligence for a client
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: clientId, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Asset intelligence list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetIntelligenceList"
+
+  # ── V4.2E Public (workspace token) ─────────────────────────────────────────
+
+  /public/customer/workspace/{token}/brand-intelligence:
+    get:
+      operationId: getWorkspaceBrandIntelligence
+      tags: [customer-workspace]
+      summary: Customer — get full brand intelligence dashboard (auto-analyzes if not yet done)
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Brand intelligence dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceBrandIntelligenceDashboard"
+
+  /public/customer/workspace/{token}/brand-intelligence/refresh:
+    post:
+      operationId: refreshWorkspaceBrandDna
+      tags: [customer-workspace]
+      summary: Customer — force refresh Brand DNA analysis
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Refreshed Brand DNA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandDnaView"
+
+  /public/customer/workspace/{token}/brand-intelligence/creative-director:
+    get:
+      operationId: getWorkspaceCreativeDirector
+      tags: [customer-workspace]
+      summary: Customer — AI Creative Director recommendation
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Creative Director recommendation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreativeDirectorRecommendation"
+
+  /public/customer/workspace/{token}/asset-intelligence:
+    get:
+      operationId: getWorkspaceAssetIntelligence
+      tags: [customer-workspace]
+      summary: Customer — list asset intelligence + duplicate report
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Asset intelligence with duplicates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceAssetIntelligenceDashboard"
+
+  /public/customer/workspace/{token}/asset-intelligence/analyze/{assetId}:
+    post:
+      operationId: analyzeWorkspaceAsset
+      tags: [customer-workspace]
+      summary: Customer — trigger asset intelligence analysis for a single asset
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: assetId, required: true, schema: { type: integer } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                assetSource: { type: string, enum: [brand_kit, library, creative_asset] }
+      responses:
+        "200":
+          description: Asset intelligence result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetIntelligenceView"
 
   /ai/zip-deliveries/{projectId}/retry:
     post:
@@ -12866,6 +13189,240 @@ components:
         manifestJson: { type: object, nullable: true }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+
+    # ── V4.2E schemas ─────────────────────────────────────────────────────────
+
+    AnalyzeBrandInput:
+      type: object
+      required: [clientId]
+      properties:
+        clientId: { type: string }
+
+    BrandDnaDetectedColors:
+      type: object
+      properties:
+        primary: { type: string, nullable: true }
+        secondary: { type: string, nullable: true }
+        accent: { type: string, nullable: true }
+        palette: { type: array, items: { type: string } }
+
+    BrandDnaTypography:
+      type: object
+      properties:
+        heading: { type: string, nullable: true }
+        body: { type: string, nullable: true }
+        style: { type: string }
+
+    BrandDnaAudience:
+      type: object
+      properties:
+        primary: { type: string }
+        secondary: { type: string }
+        demographics: { type: array, items: { type: string } }
+        psychographics: { type: array, items: { type: string } }
+
+    BrandDnaDataSources:
+      type: object
+      properties:
+        brandKitSlots: { type: integer }
+        assetCount: { type: integer }
+        projectCount: { type: integer }
+        memoryCount: { type: integer }
+
+    BrandDnaView:
+      type: object
+      required: [clientId, brandPersonality, brandVoice, writingStyle, completenessScore, consistencyScore, confidenceScore, analyzedAt]
+      properties:
+        clientId: { type: string }
+        brandPersonality: { type: array, items: { type: string } }
+        brandVoice: { type: string }
+        writingStyle: { type: string }
+        photographyStyle: { type: string }
+        illustrationStyle: { type: string }
+        iconStyle: { type: string }
+        layoutStyle: { type: string }
+        visualDensity: { type: string }
+        spacingStyle: { type: string }
+        detectedColors: { $ref: "#/components/schemas/BrandDnaDetectedColors" }
+        colorPsychology: { type: array, items: { type: string } }
+        detectedTypography: { $ref: "#/components/schemas/BrandDnaTypography" }
+        targetAudience: { $ref: "#/components/schemas/BrandDnaAudience" }
+        industry: { type: string }
+        riskProfile: { type: string }
+        completenessScore: { type: integer }
+        consistencyScore: { type: integer }
+        confidenceScore: { type: number }
+        dataSourcesSummary: { $ref: "#/components/schemas/BrandDnaDataSources" }
+        analyzedAt: { type: string, format: date-time }
+
+    BrandRecommendation:
+      type: object
+      required: [type, priority, title, description, expectedImpact, missingItems]
+      properties:
+        type: { type: string }
+        priority: { type: string, enum: [high, medium, low] }
+        title: { type: string }
+        description: { type: string }
+        expectedImpact: { type: string }
+        missingItems: { type: array, items: { type: string } }
+
+    BrandRecommendationList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/BrandRecommendation" } }
+        total: { type: integer }
+
+    BrandConsistencyChecklist:
+      type: object
+      properties:
+        logoCorrect: { type: boolean }
+        fontCorrect: { type: boolean }
+        colorCorrect: { type: boolean }
+        brandVoiceCorrect: { type: boolean }
+        writingStyleCorrect: { type: boolean }
+        layoutCorrect: { type: boolean }
+        photoStyleCorrect: { type: boolean }
+        illustrationStyleCorrect: { type: boolean }
+
+    BrandConsistencyReport:
+      type: object
+      required: [clientId, overallScore, checklist, warnings, suggestions, assetsChecked]
+      properties:
+        clientId: { type: string }
+        overallScore: { type: integer }
+        checklist: { $ref: "#/components/schemas/BrandConsistencyChecklist" }
+        warnings: { type: array, items: { type: string } }
+        suggestions: { type: array, items: { type: string } }
+        assetsChecked: { type: integer }
+
+    CreativeMemoryEntry:
+      type: object
+      properties:
+        key: { type: string }
+        value: { type: string }
+        category: { type: string }
+        source: { type: string }
+        confidence: { type: number }
+        updatedAt: { type: string, format: date-time }
+
+    CreativeMemoryProject:
+      type: object
+      properties:
+        projectId: { type: string }
+        brandName: { type: string }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    CreativeMemoryView:
+      type: object
+      required: [clientId, memories, projectHistory, totalProjects, totalMemories]
+      properties:
+        clientId: { type: string }
+        memories: { type: array, items: { $ref: "#/components/schemas/CreativeMemoryEntry" } }
+        projectHistory: { type: array, items: { $ref: "#/components/schemas/CreativeMemoryProject" } }
+        totalProjects: { type: integer }
+        totalMemories: { type: integer }
+
+    CreativeDirectorRecommendation:
+      type: object
+      required: [clientId, creativeStrategy, visualDirection, communicationDirection, designRecommendations, brandComplianceNotes, templateRecommendations, priorityActions, generatedAt]
+      properties:
+        clientId: { type: string }
+        creativeStrategy: { type: string }
+        visualDirection: { type: string }
+        communicationDirection: { type: string }
+        designRecommendations: { type: array, items: { type: string } }
+        brandComplianceNotes: { type: array, items: { type: string } }
+        templateRecommendations: { type: array, items: { type: string } }
+        priorityActions: { type: array, items: { type: string } }
+        generatedAt: { type: string, format: date-time }
+
+    AdminBrandIntelligenceStats:
+      type: object
+      required: [totalClientsAnalyzed, averageCompletenessScore, averageConsistencyScore, averageConfidenceScore, highConfidenceClients, clientsWithLogo]
+      properties:
+        totalClientsAnalyzed: { type: integer }
+        averageCompletenessScore: { type: integer }
+        averageConsistencyScore: { type: integer }
+        averageConfidenceScore: { type: number }
+        highConfidenceClients: { type: integer }
+        clientsWithLogo: { type: integer }
+
+    WorkspaceBrandIntelligenceDashboard:
+      type: object
+      required: [dna, recommendations, consistencyReport, memory]
+      properties:
+        dna: { $ref: "#/components/schemas/BrandDnaView", nullable: true }
+        recommendations: { type: array, items: { $ref: "#/components/schemas/BrandRecommendation" } }
+        consistencyReport: { $ref: "#/components/schemas/BrandConsistencyReport" }
+        memory: { $ref: "#/components/schemas/CreativeMemoryView" }
+
+    AnalyzeAssetInput:
+      type: object
+      required: [assetId, assetSource, clientId]
+      properties:
+        assetId: { type: integer }
+        assetSource: { type: string, enum: [brand_kit, library, creative_asset] }
+        clientId: { type: string }
+
+    AssetIntelligenceView:
+      type: object
+      required: [id, assetId, assetSource, clientId, isDuplicate, analysisFailed, analyzedAt]
+      properties:
+        id: { type: integer }
+        assetId: { type: integer }
+        assetSource: { type: string }
+        clientId: { type: string }
+        detectedSubjects: { type: array, items: { type: string } }
+        autoTags: { type: array, items: { type: string } }
+        autoCategory: { type: string }
+        searchKeywords: { type: array, items: { type: string } }
+        suggestedUsage: { type: array, items: { type: string } }
+        colorPalette: { type: array, items: { type: string } }
+        versionType: { type: string }
+        isDuplicate: { type: boolean }
+        duplicateOfId: { type: integer, nullable: true }
+        versionChainId: { type: integer, nullable: true }
+        qualityScore: { type: integer }
+        hasTransparency: { type: boolean }
+        confidenceScore: { type: number }
+        analysisFailed: { type: boolean }
+        failureReason: { type: string, nullable: true }
+        analyzedAt: { type: string, format: date-time }
+
+    AssetIntelligenceList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AssetIntelligenceView" } }
+        total: { type: integer }
+
+    DuplicateGroup:
+      type: object
+      properties:
+        perceptualHash: { type: string }
+        assetIds: { type: array, items: { type: integer } }
+        versionTypes: { type: array, items: { type: string } }
+        recommendation: { type: string }
+
+    DuplicateReport:
+      type: object
+      required: [clientId, totalDuplicatesFound, duplicateGroups]
+      properties:
+        clientId: { type: string }
+        totalDuplicatesFound: { type: integer }
+        duplicateGroups: { type: array, items: { $ref: "#/components/schemas/DuplicateGroup" } }
+
+    WorkspaceAssetIntelligenceDashboard:
+      type: object
+      required: [items, total, duplicates]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AssetIntelligenceView" } }
+        total: { type: integer }
+        duplicates: { $ref: "#/components/schemas/DuplicateReport" }
+
+    # ── End V4.2E schemas ──────────────────────────────────────────────────────
 
     # ── End V4.2D schemas ─────────────────────────────────────────────────────
 

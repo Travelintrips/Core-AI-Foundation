@@ -76,3 +76,5 @@ export * from "./cp-page-comments";
 export * from "./ai-brand-kit-assets";
 export * from "./ai-asset-library";
 export * from "./ai-zip-deliveries";
+export * from "./ai-brand-dna";
+export * from "./ai-asset-intelligence";

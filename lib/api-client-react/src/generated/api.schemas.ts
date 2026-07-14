@@ -4608,6 +4608,218 @@ export interface ZipDeliveryView {
   updatedAt?: string;
 }
 
+export interface AnalyzeBrandInput {
+  clientId: string;
+}
+
+export interface BrandDnaDetectedColors {
+  primary?: string | null;
+  secondary?: string | null;
+  accent?: string | null;
+  palette?: string[];
+}
+
+export interface BrandDnaTypography {
+  heading?: string | null;
+  body?: string | null;
+  style?: string;
+}
+
+export interface BrandDnaAudience {
+  primary?: string;
+  secondary?: string;
+  demographics?: string[];
+  psychographics?: string[];
+}
+
+export interface BrandDnaDataSources {
+  brandKitSlots?: number;
+  assetCount?: number;
+  projectCount?: number;
+  memoryCount?: number;
+}
+
+export interface BrandDnaView {
+  clientId: string;
+  brandPersonality: string[];
+  brandVoice: string;
+  writingStyle: string;
+  photographyStyle?: string;
+  illustrationStyle?: string;
+  iconStyle?: string;
+  layoutStyle?: string;
+  visualDensity?: string;
+  spacingStyle?: string;
+  detectedColors?: BrandDnaDetectedColors;
+  colorPsychology?: string[];
+  detectedTypography?: BrandDnaTypography;
+  targetAudience?: BrandDnaAudience;
+  industry?: string;
+  riskProfile?: string;
+  completenessScore: number;
+  consistencyScore: number;
+  confidenceScore: number;
+  dataSourcesSummary?: BrandDnaDataSources;
+  analyzedAt: string;
+}
+
+export type BrandRecommendationPriority = typeof BrandRecommendationPriority[keyof typeof BrandRecommendationPriority];
+
+
+export const BrandRecommendationPriority = {
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+} as const;
+
+export interface BrandRecommendation {
+  type: string;
+  priority: BrandRecommendationPriority;
+  title: string;
+  description: string;
+  expectedImpact: string;
+  missingItems: string[];
+}
+
+export interface BrandRecommendationList {
+  items: BrandRecommendation[];
+  total: number;
+}
+
+export interface BrandConsistencyChecklist {
+  logoCorrect?: boolean;
+  fontCorrect?: boolean;
+  colorCorrect?: boolean;
+  brandVoiceCorrect?: boolean;
+  writingStyleCorrect?: boolean;
+  layoutCorrect?: boolean;
+  photoStyleCorrect?: boolean;
+  illustrationStyleCorrect?: boolean;
+}
+
+export interface BrandConsistencyReport {
+  clientId: string;
+  overallScore: number;
+  checklist: BrandConsistencyChecklist;
+  warnings: string[];
+  suggestions: string[];
+  assetsChecked: number;
+}
+
+export interface CreativeMemoryEntry {
+  key?: string;
+  value?: string;
+  category?: string;
+  source?: string;
+  confidence?: number;
+  updatedAt?: string;
+}
+
+export interface CreativeMemoryProject {
+  projectId?: string;
+  brandName?: string;
+  status?: string;
+  createdAt?: string;
+}
+
+export interface CreativeMemoryView {
+  clientId: string;
+  memories: CreativeMemoryEntry[];
+  projectHistory: CreativeMemoryProject[];
+  totalProjects: number;
+  totalMemories: number;
+}
+
+export interface CreativeDirectorRecommendation {
+  clientId: string;
+  creativeStrategy: string;
+  visualDirection: string;
+  communicationDirection: string;
+  designRecommendations: string[];
+  brandComplianceNotes: string[];
+  templateRecommendations: string[];
+  priorityActions: string[];
+  generatedAt: string;
+}
+
+export interface AdminBrandIntelligenceStats {
+  totalClientsAnalyzed: number;
+  averageCompletenessScore: number;
+  averageConsistencyScore: number;
+  averageConfidenceScore: number;
+  highConfidenceClients: number;
+  clientsWithLogo: number;
+}
+
+export interface WorkspaceBrandIntelligenceDashboard {
+  dna: BrandDnaView | null;
+  recommendations: BrandRecommendation[];
+  consistencyReport: BrandConsistencyReport;
+  memory: CreativeMemoryView;
+}
+
+export type AnalyzeAssetInputAssetSource = typeof AnalyzeAssetInputAssetSource[keyof typeof AnalyzeAssetInputAssetSource];
+
+
+export const AnalyzeAssetInputAssetSource = {
+  brand_kit: 'brand_kit',
+  library: 'library',
+  creative_asset: 'creative_asset',
+} as const;
+
+export interface AnalyzeAssetInput {
+  assetId: number;
+  assetSource: AnalyzeAssetInputAssetSource;
+  clientId: string;
+}
+
+export interface AssetIntelligenceView {
+  id: number;
+  assetId: number;
+  assetSource: string;
+  clientId: string;
+  detectedSubjects?: string[];
+  autoTags?: string[];
+  autoCategory?: string;
+  searchKeywords?: string[];
+  suggestedUsage?: string[];
+  colorPalette?: string[];
+  versionType?: string;
+  isDuplicate: boolean;
+  duplicateOfId?: number | null;
+  versionChainId?: number | null;
+  qualityScore?: number;
+  hasTransparency?: boolean;
+  confidenceScore?: number;
+  analysisFailed: boolean;
+  failureReason?: string | null;
+  analyzedAt: string;
+}
+
+export interface AssetIntelligenceList {
+  items: AssetIntelligenceView[];
+  total: number;
+}
+
+export interface DuplicateGroup {
+  perceptualHash?: string;
+  assetIds?: number[];
+  versionTypes?: string[];
+  recommendation?: string;
+}
+
+export interface DuplicateReport {
+  clientId: string;
+  totalDuplicatesFound: number;
+  duplicateGroups: DuplicateGroup[];
+}
+
+export interface WorkspaceAssetIntelligenceDashboard {
+  items: AssetIntelligenceView[];
+  total: number;
+  duplicates: DuplicateReport;
+}
+
 export type AbTestTestType = typeof AbTestTestType[keyof typeof AbTestTestType];
 
 
@@ -5049,6 +5261,46 @@ export type AdminBrandKitStats200 = { [key: string]: unknown };
 export type AdminAssetLibraryStats200 = { [key: string]: unknown };
 
 export type AdminZipDeliveryStats200 = { [key: string]: unknown };
+
+export type AdminAnalyzeAssetByIdBodyAssetSource = typeof AdminAnalyzeAssetByIdBodyAssetSource[keyof typeof AdminAnalyzeAssetByIdBodyAssetSource];
+
+
+export const AdminAnalyzeAssetByIdBodyAssetSource = {
+  brand_kit: 'brand_kit',
+  library: 'library',
+  creative_asset: 'creative_asset',
+} as const;
+
+export type AdminAnalyzeAssetByIdBody = {
+  assetSource: AdminAnalyzeAssetByIdBodyAssetSource;
+  clientId: string;
+};
+
+export type GetAdminAssetIntelligenceParams = {
+source?: GetAdminAssetIntelligenceSource;
+};
+
+export type GetAdminAssetIntelligenceSource = typeof GetAdminAssetIntelligenceSource[keyof typeof GetAdminAssetIntelligenceSource];
+
+
+export const GetAdminAssetIntelligenceSource = {
+  brand_kit: 'brand_kit',
+  library: 'library',
+  creative_asset: 'creative_asset',
+} as const;
+
+export type AnalyzeWorkspaceAssetBodyAssetSource = typeof AnalyzeWorkspaceAssetBodyAssetSource[keyof typeof AnalyzeWorkspaceAssetBodyAssetSource];
+
+
+export const AnalyzeWorkspaceAssetBodyAssetSource = {
+  brand_kit: 'brand_kit',
+  library: 'library',
+  creative_asset: 'creative_asset',
+} as const;
+
+export type AnalyzeWorkspaceAssetBody = {
+  assetSource?: AnalyzeWorkspaceAssetBodyAssetSource;
+};
 
 export type AdminGetCustomerAssets200 = { [key: string]: unknown };
 
