@@ -55,4 +55,5 @@
 - [cp-review-v42c-completion](cp-review-v42c-completion.md) — OpenAPI shared-responses gotcha, fixture/schema drift (tsx doesn't typecheck), watermark must fail-closed, created_project_id text-vs-int bug, pdf-lib install≠externalize
 - [phase-v42d-brand-kit-zip](phase-v42d-brand-kit-zip.md) — V4.2D rules: slot weights, no @/lib/api in portal, ZIP job payload, pdf-lib re-install, route mount order
 - [wp00-wp01-tenant-security](wp00-wp01-tenant-security.md) — canonical RequestContext + tenant resolvers; never trust body/query/header tenantId, resolve server-side via security/tenantResolution.ts
+- [wp02-repository-foundation](wp02-repository-foundation.md) — RepositoryContext wraps RequestContext (no 2nd context type); only Marketplace domain fully migrated, others deferred; pre-existing templates.ts build break blocks server boot
 - [phase-v42e-creative-intelligence](phase-v42e-creative-intelligence.md) — V4.2E: Brand DNA + Asset Intelligence tables/services/routes/UI; admin uses apiFetch not useAdminApi hook
