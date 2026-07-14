@@ -35,6 +35,7 @@ const WorkspaceProfilePage       = lazy(() => import('@/pages/workspace/profile'
 const WorkspaceSupportPage       = lazy(() => import('@/pages/workspace/support'));
 const WorkspaceSettingsPage      = lazy(() => import('@/pages/workspace/settings'));
 const PortfolioPage              = lazy(() => import('@/pages/portfolio'));
+const CpReviewPage               = lazy(() => import('@/pages/cp-review'));
 
 /* ─── Loading fallback ─── */
 function PageLoader() {
@@ -91,6 +92,7 @@ function Router() {
         <Route path="/submit" component={SubmitPage} />
         <Route path="/success" component={SuccessPage} />
         <Route path="/review/:token" component={ReviewPage} />
+        <Route path="/cp-review/:token" component={CpReviewPage} />
         <Route path="/dashboard/:dashboardToken" component={DashboardPage} />
         <Route path="/access" component={AccessPage} />
         <Route path="/quotation/:token" component={QuotationPage} />

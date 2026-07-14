@@ -1,0 +1,549 @@
+Lanjutkan AI Enterprise Platform ke V4.2C — Customer Review Experience (Enterprise).
+
+STATUS SAAT INI
+
+P0 — Brief Intelligence
+✅ Complete
+
+P1 — Company Profile Document Engine
+⚠️ Sebagian selesai
+
+Sudah ada:
+
+- Brief Intelligence
+- Production Guard
+- Company Profile Document Mapper
+- Package Level Section Gating
+- QC Service dasar
+- Deliverable Manifest dasar
+
+BELUM ADA:
+
+- Enterprise PDF Viewer
+- Comment per halaman
+- Version History lengkap
+- Watermark Preview
+- Compare Version
+- Approval UX
+- Revision Workspace
+- Section Diff
+- Asset Compare
+
+JANGAN MEMBUAT REVIEW SYSTEM BARU.
+
+Reuse:
+
+- Client Review
+- Customer Workspace
+- Signed URL
+- Event Bus
+- Runtime Events
+- Queue
+- Existing Approval Flow
+- Existing Revision Flow
+
+==========================================================
+TARGET
+==========================================================
+
+Bangun Customer Review Experience setara software profesional seperti:
+
+- Canva Review
+- Figma Comments
+- Adobe Review
+- InVision
+- Notion Review
+
+Tetapi khusus untuk Company Profile.
+
+==========================================================
+1. PDF REVIEWER
+==========================================================
+
+Review Page harus memiliki:
+
+✓ PDF Viewer inline
+
+✓ Zoom
+
+✓ Fit Width
+
+✓ Page Navigation
+
+✓ Next Page
+
+✓ Previous Page
+
+✓ Current Page Indicator
+
+✓ Search
+
+✓ Thumbnail Sidebar
+
+✓ Rotate
+
+✓ Fullscreen
+
+✓ Mobile Friendly
+
+Jika browser tidak support:
+
+fallback download preview.
+
+==========================================================
+2. COMMENT PER HALAMAN
+==========================================================
+
+Customer dapat:
+
+Klik halaman
+
+↓
+
+Tambah komentar
+
+Komentar memiliki:
+
+- page number
+- position optional
+- section
+- comment
+- status
+- author
+- createdAt
+- resolvedBy
+- resolvedAt
+
+Support:
+
+- edit
+- delete own comment
+- resolve
+- reopen
+- mention admin
+- reply thread
+
+==========================================================
+3. COMMENT PER SECTION
+==========================================================
+
+Selain page comment,
+
+support:
+
+Cover
+
+Vision
+
+Mission
+
+Services
+
+Legal
+
+Contact
+
+Closing
+
+dll.
+
+Admin bisa regenerate SATU section.
+
+Jangan regenerate seluruh document.
+
+==========================================================
+4. VERSION HISTORY
+==========================================================
+
+Setiap revisi membuat:
+
+Version 1
+
+↓
+
+Version 2
+
+↓
+
+Version 3
+
+dst.
+
+Tampilkan:
+
+- version
+- created
+- created by
+- reason
+- revision notes
+- QC score
+- approved
+
+==========================================================
+5. VERSION COMPARE
+==========================================================
+
+Tambahkan compare mode.
+
+Customer dapat memilih:
+
+Version 1
+
+vs
+
+Version 2
+
+Tampilkan:
+
+- section berubah
+- section baru
+- section dihapus
+
+Highlight perubahan.
+
+Tidak perlu diff kata-per-kata.
+
+Section-level cukup.
+
+==========================================================
+6. WATERMARK PREVIEW
+==========================================================
+
+Sebelum pembayaran lunas:
+
+Preview PDF
+
+↓
+
+Watermark
+
+Contoh:
+
+CONFIDENTIAL
+
+PREVIEW
+
+UNPAID
+
+Watermark harus:
+
+server-rendered
+
+atau
+
+PDF rendered
+
+Bukan CSS overlay.
+
+==========================================================
+7. APPROVAL FLOW
+==========================================================
+
+Customer dapat:
+
+Approve
+
+↓
+
+Project Final
+
+Request Revision
+
+↓
+
+Revision Queue
+
+Reject
+
+↓
+
+Needs Review
+
+Approve harus meminta:
+
+checkbox
+
+"Saya menyetujui hasil ini."
+
+==========================================================
+8. REVISION WORKSPACE
+==========================================================
+
+Saat request revision:
+
+Customer memilih:
+
+✓ halaman
+
+✓ section
+
+✓ komentar
+
+✓ prioritas
+
+Admin melihat:
+
+Pending Revisions
+
+Resolve
+
+Regenerate
+
+Completed
+
+==========================================================
+9. ASSET REVIEW
+==========================================================
+
+Jika Company Profile memiliki gambar:
+
+Customer dapat:
+
+Preview
+
+Zoom
+
+Compare
+
+Approve
+
+Request replace
+
+Comment
+
+==========================================================
+10. BRAND KIT REVIEW
+==========================================================
+
+Review Page menampilkan:
+
+Logo
+
+Typography
+
+Color Palette
+
+Brand Voice
+
+Jika berbeda dari Brand Kit,
+
+beri warning.
+
+==========================================================
+11. REVIEW TIMELINE
+==========================================================
+
+Timeline:
+
+Draft
+
+↓
+
+QC
+
+↓
+
+Sent Review
+
+↓
+
+Revision
+
+↓
+
+Approved
+
+↓
+
+Payment Complete
+
+↓
+
+Unlocked
+
+Timeline memakai Event Bus.
+
+==========================================================
+12. REVIEW DASHBOARD
+==========================================================
+
+Tambahkan KPI:
+
+Comments
+
+Resolved
+
+Pending
+
+Revisions
+
+Current Version
+
+QC Score
+
+Approval Status
+
+==========================================================
+13. ADMIN PANEL
+==========================================================
+
+Admin dapat:
+
+Open Review
+
+Filter comments
+
+Resolve
+
+Reply
+
+Regenerate section
+
+Upload replacement asset
+
+Send new version
+
+Approve final
+
+==========================================================
+14. CUSTOMER UX
+==========================================================
+
+Workspace menampilkan:
+
+Review Status
+
+Current Version
+
+Pending Revision
+
+QC Passed
+
+Payment Status
+
+Unlock Status
+
+==========================================================
+15. NOTIFICATION
+==========================================================
+
+Realtime:
+
+New Comment
+
+Comment Resolved
+
+New Version
+
+Approval
+
+Revision Needed
+
+Payment Unlock
+
+==========================================================
+16. SECURITY
+==========================================================
+
+Pastikan:
+
+Customer hanya melihat project miliknya.
+
+Signed URL.
+
+No internal path.
+
+No AI prompt.
+
+No cost.
+
+No provider.
+
+==========================================================
+17. OPENAPI
+==========================================================
+
+Tambahkan seluruh endpoint review baru.
+
+Generate:
+
+Zod
+
+Hooks
+
+Types
+
+OperationId unik.
+
+==========================================================
+18. TEST
+==========================================================
+
+Minimal:
+
+✓ PDF Viewer
+
+✓ Comment per page
+
+✓ Comment thread
+
+✓ Version history
+
+✓ Version compare
+
+✓ Watermark
+
+✓ Approval
+
+✓ Revision
+
+✓ Timeline
+
+✓ Notification
+
+✓ Signed URL
+
+✓ Permission
+
+✓ OpenAPI
+
+✓ pnpm verify
+
+✓ Production build
+
+==========================================================
+FINAL REPORT
+==========================================================
+
+Laporkan:
+
+- files berubah
+- endpoint baru
+- UI baru
+- review flow
+- version flow
+- approval flow
+- watermark
+- tests
+- screenshots
+- OpenAPI
+- verify
+- known limitations
+
+JANGAN LANJUT KE:
+
+Finance AI
+
+Legal AI
+
+Marketing AI
+
+Marketplace
+
+Customer Portal baru
+
+Fokus hanya menyelesaikan V4.2C hingga benar-benar production-ready.
+
+Target akhir:
+
+Customer dapat mereview Company Profile secara profesional seperti Canva/Figma, memberi komentar per halaman dan per section, melihat versi dokumen, meminta revisi parsial, menyetujui hasil, dan baru setelah pembayaran lunas mendapatkan file final tanpa watermark.

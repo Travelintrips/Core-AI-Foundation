@@ -71,3 +71,5 @@ export * from "./ai-execution-logs";
 export * from "./ai-workflow-costs";
 export * from "./ai-provider-pricing";
 export * from "./internal-users";
+export * from "./cp-document-versions";
+export * from "./cp-page-comments";
