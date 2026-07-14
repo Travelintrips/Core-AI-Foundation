@@ -7555,6 +7555,671 @@ export const AdminGetProjectZipResponse = zod.object({
 
 
 /**
+ * @summary Admin — overall brand intelligence stats across all clients
+ */
+export const GetAdminBrandIntelligenceStatsResponse = zod.object({
+  "totalClientsAnalyzed": zod.number(),
+  "averageCompletenessScore": zod.number(),
+  "averageConsistencyScore": zod.number(),
+  "averageConfidenceScore": zod.number(),
+  "highConfidenceClients": zod.number(),
+  "clientsWithLogo": zod.number()
+})
+
+
+/**
+ * @summary Admin — trigger Brand DNA analysis for a client
+ */
+export const AdminAnalyzeBrandBody = zod.object({
+  "clientId": zod.string()
+})
+
+export const AdminAnalyzeBrandResponse = zod.object({
+  "clientId": zod.string(),
+  "brandPersonality": zod.array(zod.string()),
+  "brandVoice": zod.string(),
+  "writingStyle": zod.string(),
+  "photographyStyle": zod.string().optional(),
+  "illustrationStyle": zod.string().optional(),
+  "iconStyle": zod.string().optional(),
+  "layoutStyle": zod.string().optional(),
+  "visualDensity": zod.string().optional(),
+  "spacingStyle": zod.string().optional(),
+  "detectedColors": zod.object({
+  "primary": zod.string().nullish(),
+  "secondary": zod.string().nullish(),
+  "accent": zod.string().nullish(),
+  "palette": zod.array(zod.string()).optional()
+}).optional(),
+  "colorPsychology": zod.array(zod.string()).optional(),
+  "detectedTypography": zod.object({
+  "heading": zod.string().nullish(),
+  "body": zod.string().nullish(),
+  "style": zod.string().optional()
+}).optional(),
+  "targetAudience": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "demographics": zod.array(zod.string()).optional(),
+  "psychographics": zod.array(zod.string()).optional()
+}).optional(),
+  "industry": zod.string().optional(),
+  "riskProfile": zod.string().optional(),
+  "completenessScore": zod.number(),
+  "consistencyScore": zod.number(),
+  "confidenceScore": zod.number(),
+  "dataSourcesSummary": zod.object({
+  "brandKitSlots": zod.number().optional(),
+  "assetCount": zod.number().optional(),
+  "projectCount": zod.number().optional(),
+  "memoryCount": zod.number().optional()
+}).optional(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — get stored Brand DNA for a client
+ */
+export const GetAdminBrandDnaParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const GetAdminBrandDnaResponse = zod.object({
+  "clientId": zod.string(),
+  "brandPersonality": zod.array(zod.string()),
+  "brandVoice": zod.string(),
+  "writingStyle": zod.string(),
+  "photographyStyle": zod.string().optional(),
+  "illustrationStyle": zod.string().optional(),
+  "iconStyle": zod.string().optional(),
+  "layoutStyle": zod.string().optional(),
+  "visualDensity": zod.string().optional(),
+  "spacingStyle": zod.string().optional(),
+  "detectedColors": zod.object({
+  "primary": zod.string().nullish(),
+  "secondary": zod.string().nullish(),
+  "accent": zod.string().nullish(),
+  "palette": zod.array(zod.string()).optional()
+}).optional(),
+  "colorPsychology": zod.array(zod.string()).optional(),
+  "detectedTypography": zod.object({
+  "heading": zod.string().nullish(),
+  "body": zod.string().nullish(),
+  "style": zod.string().optional()
+}).optional(),
+  "targetAudience": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "demographics": zod.array(zod.string()).optional(),
+  "psychographics": zod.array(zod.string()).optional()
+}).optional(),
+  "industry": zod.string().optional(),
+  "riskProfile": zod.string().optional(),
+  "completenessScore": zod.number(),
+  "consistencyScore": zod.number(),
+  "confidenceScore": zod.number(),
+  "dataSourcesSummary": zod.object({
+  "brandKitSlots": zod.number().optional(),
+  "assetCount": zod.number().optional(),
+  "projectCount": zod.number().optional(),
+  "memoryCount": zod.number().optional()
+}).optional(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — force re-analyze Brand DNA for a client
+ */
+export const AdminRefreshBrandDnaParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const AdminRefreshBrandDnaResponse = zod.object({
+  "clientId": zod.string(),
+  "brandPersonality": zod.array(zod.string()),
+  "brandVoice": zod.string(),
+  "writingStyle": zod.string(),
+  "photographyStyle": zod.string().optional(),
+  "illustrationStyle": zod.string().optional(),
+  "iconStyle": zod.string().optional(),
+  "layoutStyle": zod.string().optional(),
+  "visualDensity": zod.string().optional(),
+  "spacingStyle": zod.string().optional(),
+  "detectedColors": zod.object({
+  "primary": zod.string().nullish(),
+  "secondary": zod.string().nullish(),
+  "accent": zod.string().nullish(),
+  "palette": zod.array(zod.string()).optional()
+}).optional(),
+  "colorPsychology": zod.array(zod.string()).optional(),
+  "detectedTypography": zod.object({
+  "heading": zod.string().nullish(),
+  "body": zod.string().nullish(),
+  "style": zod.string().optional()
+}).optional(),
+  "targetAudience": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "demographics": zod.array(zod.string()).optional(),
+  "psychographics": zod.array(zod.string()).optional()
+}).optional(),
+  "industry": zod.string().optional(),
+  "riskProfile": zod.string().optional(),
+  "completenessScore": zod.number(),
+  "consistencyScore": zod.number(),
+  "confidenceScore": zod.number(),
+  "dataSourcesSummary": zod.object({
+  "brandKitSlots": zod.number().optional(),
+  "assetCount": zod.number().optional(),
+  "projectCount": zod.number().optional(),
+  "memoryCount": zod.number().optional()
+}).optional(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — get brand improvement recommendations for a client
+ */
+export const GetAdminBrandRecommendationsParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const GetAdminBrandRecommendationsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "type": zod.string(),
+  "priority": zod.enum(['high', 'medium', 'low']),
+  "title": zod.string(),
+  "description": zod.string(),
+  "expectedImpact": zod.string(),
+  "missingItems": zod.array(zod.string())
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Admin — brand consistency report for a client
+ */
+export const GetAdminConsistencyReportParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const GetAdminConsistencyReportResponse = zod.object({
+  "clientId": zod.string(),
+  "overallScore": zod.number(),
+  "checklist": zod.object({
+  "logoCorrect": zod.boolean().optional(),
+  "fontCorrect": zod.boolean().optional(),
+  "colorCorrect": zod.boolean().optional(),
+  "brandVoiceCorrect": zod.boolean().optional(),
+  "writingStyleCorrect": zod.boolean().optional(),
+  "layoutCorrect": zod.boolean().optional(),
+  "photoStyleCorrect": zod.boolean().optional(),
+  "illustrationStyleCorrect": zod.boolean().optional()
+}),
+  "warnings": zod.array(zod.string()),
+  "suggestions": zod.array(zod.string()),
+  "assetsChecked": zod.number()
+})
+
+
+/**
+ * @summary Admin — creative memory for a client
+ */
+export const GetAdminCreativeMemoryParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const GetAdminCreativeMemoryResponse = zod.object({
+  "clientId": zod.string(),
+  "memories": zod.array(zod.object({
+  "key": zod.string().optional(),
+  "value": zod.string().optional(),
+  "category": zod.string().optional(),
+  "source": zod.string().optional(),
+  "confidence": zod.number().optional(),
+  "updatedAt": zod.coerce.date().optional()
+})),
+  "projectHistory": zod.array(zod.object({
+  "projectId": zod.string().optional(),
+  "brandName": zod.string().optional(),
+  "status": zod.string().optional(),
+  "createdAt": zod.coerce.date().optional()
+})),
+  "totalProjects": zod.number(),
+  "totalMemories": zod.number()
+})
+
+
+/**
+ * @summary Admin — AI Creative Director recommendation for a client
+ */
+export const GetAdminCreativeDirectorRecommendationParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const GetAdminCreativeDirectorRecommendationResponse = zod.object({
+  "clientId": zod.string(),
+  "creativeStrategy": zod.string(),
+  "visualDirection": zod.string(),
+  "communicationDirection": zod.string(),
+  "designRecommendations": zod.array(zod.string()),
+  "brandComplianceNotes": zod.array(zod.string()),
+  "templateRecommendations": zod.array(zod.string()),
+  "priorityActions": zod.array(zod.string()),
+  "generatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — trigger asset intelligence analysis
+ */
+export const AdminAnalyzeAssetBody = zod.object({
+  "assetId": zod.number(),
+  "assetSource": zod.enum(['brand_kit', 'library', 'creative_asset']),
+  "clientId": zod.string()
+})
+
+export const AdminAnalyzeAssetResponse = zod.object({
+  "id": zod.number(),
+  "assetId": zod.number(),
+  "assetSource": zod.string(),
+  "clientId": zod.string(),
+  "detectedSubjects": zod.array(zod.string()).optional(),
+  "autoTags": zod.array(zod.string()).optional(),
+  "autoCategory": zod.string().optional(),
+  "searchKeywords": zod.array(zod.string()).optional(),
+  "suggestedUsage": zod.array(zod.string()).optional(),
+  "colorPalette": zod.array(zod.string()).optional(),
+  "versionType": zod.string().optional(),
+  "isDuplicate": zod.boolean(),
+  "duplicateOfId": zod.number().nullish(),
+  "versionChainId": zod.number().nullish(),
+  "qualityScore": zod.number().optional(),
+  "hasTransparency": zod.boolean().optional(),
+  "confidenceScore": zod.number().optional(),
+  "analysisFailed": zod.boolean(),
+  "failureReason": zod.string().nullish(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — analyze a specific asset by ID
+ */
+export const AdminAnalyzeAssetByIdParams = zod.object({
+  "assetId": zod.coerce.number()
+})
+
+export const AdminAnalyzeAssetByIdBody = zod.object({
+  "assetSource": zod.enum(['brand_kit', 'library', 'creative_asset']),
+  "clientId": zod.string()
+})
+
+export const AdminAnalyzeAssetByIdResponse = zod.object({
+  "id": zod.number(),
+  "assetId": zod.number(),
+  "assetSource": zod.string(),
+  "clientId": zod.string(),
+  "detectedSubjects": zod.array(zod.string()).optional(),
+  "autoTags": zod.array(zod.string()).optional(),
+  "autoCategory": zod.string().optional(),
+  "searchKeywords": zod.array(zod.string()).optional(),
+  "suggestedUsage": zod.array(zod.string()).optional(),
+  "colorPalette": zod.array(zod.string()).optional(),
+  "versionType": zod.string().optional(),
+  "isDuplicate": zod.boolean(),
+  "duplicateOfId": zod.number().nullish(),
+  "versionChainId": zod.number().nullish(),
+  "qualityScore": zod.number().optional(),
+  "hasTransparency": zod.boolean().optional(),
+  "confidenceScore": zod.number().optional(),
+  "analysisFailed": zod.boolean(),
+  "failureReason": zod.string().nullish(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — get stored asset intelligence for an asset
+ */
+export const GetAdminAssetIntelligenceParams = zod.object({
+  "assetId": zod.coerce.number()
+})
+
+export const GetAdminAssetIntelligenceQueryParams = zod.object({
+  "source": zod.enum(['brand_kit', 'library', 'creative_asset']).optional()
+})
+
+export const GetAdminAssetIntelligenceResponse = zod.object({
+  "id": zod.number(),
+  "assetId": zod.number(),
+  "assetSource": zod.string(),
+  "clientId": zod.string(),
+  "detectedSubjects": zod.array(zod.string()).optional(),
+  "autoTags": zod.array(zod.string()).optional(),
+  "autoCategory": zod.string().optional(),
+  "searchKeywords": zod.array(zod.string()).optional(),
+  "suggestedUsage": zod.array(zod.string()).optional(),
+  "colorPalette": zod.array(zod.string()).optional(),
+  "versionType": zod.string().optional(),
+  "isDuplicate": zod.boolean(),
+  "duplicateOfId": zod.number().nullish(),
+  "versionChainId": zod.number().nullish(),
+  "qualityScore": zod.number().optional(),
+  "hasTransparency": zod.boolean().optional(),
+  "confidenceScore": zod.number().optional(),
+  "analysisFailed": zod.boolean(),
+  "failureReason": zod.string().nullish(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — duplicate detection report for a client
+ */
+export const GetAdminDuplicateReportParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const GetAdminDuplicateReportResponse = zod.object({
+  "clientId": zod.string(),
+  "totalDuplicatesFound": zod.number(),
+  "duplicateGroups": zod.array(zod.object({
+  "perceptualHash": zod.string().optional(),
+  "assetIds": zod.array(zod.number()).optional(),
+  "versionTypes": zod.array(zod.string()).optional(),
+  "recommendation": zod.string().optional()
+}))
+})
+
+
+/**
+ * @summary Admin — list all asset intelligence for a client
+ */
+export const ListAdminAssetIntelligenceParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const ListAdminAssetIntelligenceResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "assetId": zod.number(),
+  "assetSource": zod.string(),
+  "clientId": zod.string(),
+  "detectedSubjects": zod.array(zod.string()).optional(),
+  "autoTags": zod.array(zod.string()).optional(),
+  "autoCategory": zod.string().optional(),
+  "searchKeywords": zod.array(zod.string()).optional(),
+  "suggestedUsage": zod.array(zod.string()).optional(),
+  "colorPalette": zod.array(zod.string()).optional(),
+  "versionType": zod.string().optional(),
+  "isDuplicate": zod.boolean(),
+  "duplicateOfId": zod.number().nullish(),
+  "versionChainId": zod.number().nullish(),
+  "qualityScore": zod.number().optional(),
+  "hasTransparency": zod.boolean().optional(),
+  "confidenceScore": zod.number().optional(),
+  "analysisFailed": zod.boolean(),
+  "failureReason": zod.string().nullish(),
+  "analyzedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Customer — get full brand intelligence dashboard (auto-analyzes if not yet done)
+ */
+export const GetWorkspaceBrandIntelligenceParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetWorkspaceBrandIntelligenceResponse = zod.object({
+  "dna": zod.object({
+  "clientId": zod.string(),
+  "brandPersonality": zod.array(zod.string()),
+  "brandVoice": zod.string(),
+  "writingStyle": zod.string(),
+  "photographyStyle": zod.string().optional(),
+  "illustrationStyle": zod.string().optional(),
+  "iconStyle": zod.string().optional(),
+  "layoutStyle": zod.string().optional(),
+  "visualDensity": zod.string().optional(),
+  "spacingStyle": zod.string().optional(),
+  "detectedColors": zod.object({
+  "primary": zod.string().nullish(),
+  "secondary": zod.string().nullish(),
+  "accent": zod.string().nullish(),
+  "palette": zod.array(zod.string()).optional()
+}).optional(),
+  "colorPsychology": zod.array(zod.string()).optional(),
+  "detectedTypography": zod.object({
+  "heading": zod.string().nullish(),
+  "body": zod.string().nullish(),
+  "style": zod.string().optional()
+}).optional(),
+  "targetAudience": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "demographics": zod.array(zod.string()).optional(),
+  "psychographics": zod.array(zod.string()).optional()
+}).optional(),
+  "industry": zod.string().optional(),
+  "riskProfile": zod.string().optional(),
+  "completenessScore": zod.number(),
+  "consistencyScore": zod.number(),
+  "confidenceScore": zod.number(),
+  "dataSourcesSummary": zod.object({
+  "brandKitSlots": zod.number().optional(),
+  "assetCount": zod.number().optional(),
+  "projectCount": zod.number().optional(),
+  "memoryCount": zod.number().optional()
+}).optional(),
+  "analyzedAt": zod.coerce.date()
+}).nullable(),
+  "recommendations": zod.array(zod.object({
+  "type": zod.string(),
+  "priority": zod.enum(['high', 'medium', 'low']),
+  "title": zod.string(),
+  "description": zod.string(),
+  "expectedImpact": zod.string(),
+  "missingItems": zod.array(zod.string())
+})),
+  "consistencyReport": zod.object({
+  "clientId": zod.string(),
+  "overallScore": zod.number(),
+  "checklist": zod.object({
+  "logoCorrect": zod.boolean().optional(),
+  "fontCorrect": zod.boolean().optional(),
+  "colorCorrect": zod.boolean().optional(),
+  "brandVoiceCorrect": zod.boolean().optional(),
+  "writingStyleCorrect": zod.boolean().optional(),
+  "layoutCorrect": zod.boolean().optional(),
+  "photoStyleCorrect": zod.boolean().optional(),
+  "illustrationStyleCorrect": zod.boolean().optional()
+}),
+  "warnings": zod.array(zod.string()),
+  "suggestions": zod.array(zod.string()),
+  "assetsChecked": zod.number()
+}),
+  "memory": zod.object({
+  "clientId": zod.string(),
+  "memories": zod.array(zod.object({
+  "key": zod.string().optional(),
+  "value": zod.string().optional(),
+  "category": zod.string().optional(),
+  "source": zod.string().optional(),
+  "confidence": zod.number().optional(),
+  "updatedAt": zod.coerce.date().optional()
+})),
+  "projectHistory": zod.array(zod.object({
+  "projectId": zod.string().optional(),
+  "brandName": zod.string().optional(),
+  "status": zod.string().optional(),
+  "createdAt": zod.coerce.date().optional()
+})),
+  "totalProjects": zod.number(),
+  "totalMemories": zod.number()
+})
+})
+
+
+/**
+ * @summary Customer — force refresh Brand DNA analysis
+ */
+export const RefreshWorkspaceBrandDnaParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const RefreshWorkspaceBrandDnaResponse = zod.object({
+  "clientId": zod.string(),
+  "brandPersonality": zod.array(zod.string()),
+  "brandVoice": zod.string(),
+  "writingStyle": zod.string(),
+  "photographyStyle": zod.string().optional(),
+  "illustrationStyle": zod.string().optional(),
+  "iconStyle": zod.string().optional(),
+  "layoutStyle": zod.string().optional(),
+  "visualDensity": zod.string().optional(),
+  "spacingStyle": zod.string().optional(),
+  "detectedColors": zod.object({
+  "primary": zod.string().nullish(),
+  "secondary": zod.string().nullish(),
+  "accent": zod.string().nullish(),
+  "palette": zod.array(zod.string()).optional()
+}).optional(),
+  "colorPsychology": zod.array(zod.string()).optional(),
+  "detectedTypography": zod.object({
+  "heading": zod.string().nullish(),
+  "body": zod.string().nullish(),
+  "style": zod.string().optional()
+}).optional(),
+  "targetAudience": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "demographics": zod.array(zod.string()).optional(),
+  "psychographics": zod.array(zod.string()).optional()
+}).optional(),
+  "industry": zod.string().optional(),
+  "riskProfile": zod.string().optional(),
+  "completenessScore": zod.number(),
+  "consistencyScore": zod.number(),
+  "confidenceScore": zod.number(),
+  "dataSourcesSummary": zod.object({
+  "brandKitSlots": zod.number().optional(),
+  "assetCount": zod.number().optional(),
+  "projectCount": zod.number().optional(),
+  "memoryCount": zod.number().optional()
+}).optional(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Customer — AI Creative Director recommendation
+ */
+export const GetWorkspaceCreativeDirectorParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetWorkspaceCreativeDirectorResponse = zod.object({
+  "clientId": zod.string(),
+  "creativeStrategy": zod.string(),
+  "visualDirection": zod.string(),
+  "communicationDirection": zod.string(),
+  "designRecommendations": zod.array(zod.string()),
+  "brandComplianceNotes": zod.array(zod.string()),
+  "templateRecommendations": zod.array(zod.string()),
+  "priorityActions": zod.array(zod.string()),
+  "generatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Customer — list asset intelligence + duplicate report
+ */
+export const GetWorkspaceAssetIntelligenceParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetWorkspaceAssetIntelligenceResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "assetId": zod.number(),
+  "assetSource": zod.string(),
+  "clientId": zod.string(),
+  "detectedSubjects": zod.array(zod.string()).optional(),
+  "autoTags": zod.array(zod.string()).optional(),
+  "autoCategory": zod.string().optional(),
+  "searchKeywords": zod.array(zod.string()).optional(),
+  "suggestedUsage": zod.array(zod.string()).optional(),
+  "colorPalette": zod.array(zod.string()).optional(),
+  "versionType": zod.string().optional(),
+  "isDuplicate": zod.boolean(),
+  "duplicateOfId": zod.number().nullish(),
+  "versionChainId": zod.number().nullish(),
+  "qualityScore": zod.number().optional(),
+  "hasTransparency": zod.boolean().optional(),
+  "confidenceScore": zod.number().optional(),
+  "analysisFailed": zod.boolean(),
+  "failureReason": zod.string().nullish(),
+  "analyzedAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "duplicates": zod.object({
+  "clientId": zod.string(),
+  "totalDuplicatesFound": zod.number(),
+  "duplicateGroups": zod.array(zod.object({
+  "perceptualHash": zod.string().optional(),
+  "assetIds": zod.array(zod.number()).optional(),
+  "versionTypes": zod.array(zod.string()).optional(),
+  "recommendation": zod.string().optional()
+}))
+})
+})
+
+
+/**
+ * @summary Customer — trigger asset intelligence analysis for a single asset
+ */
+export const AnalyzeWorkspaceAssetParams = zod.object({
+  "token": zod.coerce.string(),
+  "assetId": zod.coerce.number()
+})
+
+export const AnalyzeWorkspaceAssetBody = zod.object({
+  "assetSource": zod.enum(['brand_kit', 'library', 'creative_asset']).optional()
+})
+
+export const AnalyzeWorkspaceAssetResponse = zod.object({
+  "id": zod.number(),
+  "assetId": zod.number(),
+  "assetSource": zod.string(),
+  "clientId": zod.string(),
+  "detectedSubjects": zod.array(zod.string()).optional(),
+  "autoTags": zod.array(zod.string()).optional(),
+  "autoCategory": zod.string().optional(),
+  "searchKeywords": zod.array(zod.string()).optional(),
+  "suggestedUsage": zod.array(zod.string()).optional(),
+  "colorPalette": zod.array(zod.string()).optional(),
+  "versionType": zod.string().optional(),
+  "isDuplicate": zod.boolean(),
+  "duplicateOfId": zod.number().nullish(),
+  "versionChainId": zod.number().nullish(),
+  "qualityScore": zod.number().optional(),
+  "hasTransparency": zod.boolean().optional(),
+  "confidenceScore": zod.number().optional(),
+  "analysisFailed": zod.boolean(),
+  "failureReason": zod.string().nullish(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Admin — force retry ZIP delivery for a project
  */
 export const AdminRetryZipDeliveryParams = zod.object({
@@ -8966,6 +9631,1046 @@ export const GetCpReviewDashboardResponse = zod.object({
   "approvedAt": zod.coerce.date().nullish(),
   "sharedAt": zod.coerce.date().nullish(),
   "revisionRequestedAt": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary Admin — list/filter templates
+ */
+export const ListTemplatesAdminQueryParams = zod.object({
+  "category": zod.coerce.string().optional(),
+  "industry": zod.coerce.string().optional(),
+  "style": zod.coerce.string().optional(),
+  "status": zod.enum(['draft', 'published', 'archived']).optional(),
+  "isPremium": zod.coerce.boolean().optional(),
+  "featured": zod.coerce.boolean().optional(),
+  "sortBy": zod.enum(['popular', 'newest', 'conversions', 'selections']).optional(),
+  "search": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().optional(),
+  "offset": zod.coerce.number().optional()
+})
+
+export const ListTemplatesAdminResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "templateCode": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "style": zod.string(),
+  "industry": zod.string().nullish(),
+  "colorTheme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional(),
+  "background": zod.string().optional(),
+  "text": zod.string().optional()
+}).nullish(),
+  "typography": zod.object({
+  "heading": zod.string().optional(),
+  "body": zod.string().optional(),
+  "style": zod.string().optional()
+}).nullish(),
+  "layout": zod.string().nullish(),
+  "supportedPackages": zod.array(zod.string()).nullish(),
+  "brandDnaTags": zod.object({
+  "personalities": zod.array(zod.string()).optional(),
+  "voices": zod.array(zod.string()).optional(),
+  "audiences": zod.array(zod.string()).optional(),
+  "industries": zod.array(zod.string()).optional()
+}).nullish(),
+  "previewImages": zod.object({
+  "thumbnail": zod.string().optional(),
+  "hero": zod.string().optional(),
+  "gallery": zod.array(zod.string()).optional()
+}).nullish(),
+  "pdfPreviewUrl": zod.string().nullish(),
+  "pptPreviewUrl": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "editable": zod.boolean(),
+  "isPremium": zod.boolean(),
+  "version": zod.string(),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "featured": zod.boolean(),
+  "sortOrder": zod.number().optional(),
+  "views": zod.number(),
+  "selections": zod.number(),
+  "previewsGenerated": zod.number(),
+  "conversions": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Admin — create a template
+ */
+export const CreateTemplateBody = zod.object({
+  "templateCode": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().optional(),
+  "category": zod.string(),
+  "style": zod.string(),
+  "industry": zod.string().optional(),
+  "colorTheme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional(),
+  "background": zod.string().optional(),
+  "text": zod.string().optional()
+}).optional(),
+  "typography": zod.object({
+  "heading": zod.string().optional(),
+  "body": zod.string().optional(),
+  "style": zod.string().optional()
+}).optional(),
+  "layout": zod.string().optional(),
+  "supportedPackages": zod.array(zod.string()).optional(),
+  "brandDnaTags": zod.object({
+  "personalities": zod.array(zod.string()).optional(),
+  "voices": zod.array(zod.string()).optional(),
+  "audiences": zod.array(zod.string()).optional(),
+  "industries": zod.array(zod.string()).optional()
+}).optional(),
+  "previewImages": zod.object({
+  "thumbnail": zod.string().optional(),
+  "hero": zod.string().optional(),
+  "gallery": zod.array(zod.string()).optional()
+}).optional(),
+  "editable": zod.boolean().optional(),
+  "isPremium": zod.boolean().optional(),
+  "version": zod.string().optional(),
+  "featured": zod.boolean().optional(),
+  "sortOrder": zod.number().optional()
+})
+
+export const CreateTemplateResponse = zod.object({
+  "id": zod.number(),
+  "templateCode": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "style": zod.string(),
+  "industry": zod.string().nullish(),
+  "colorTheme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional(),
+  "background": zod.string().optional(),
+  "text": zod.string().optional()
+}).nullish(),
+  "typography": zod.object({
+  "heading": zod.string().optional(),
+  "body": zod.string().optional(),
+  "style": zod.string().optional()
+}).nullish(),
+  "layout": zod.string().nullish(),
+  "supportedPackages": zod.array(zod.string()).nullish(),
+  "brandDnaTags": zod.object({
+  "personalities": zod.array(zod.string()).optional(),
+  "voices": zod.array(zod.string()).optional(),
+  "audiences": zod.array(zod.string()).optional(),
+  "industries": zod.array(zod.string()).optional()
+}).nullish(),
+  "previewImages": zod.object({
+  "thumbnail": zod.string().optional(),
+  "hero": zod.string().optional(),
+  "gallery": zod.array(zod.string()).optional()
+}).nullish(),
+  "pdfPreviewUrl": zod.string().nullish(),
+  "pptPreviewUrl": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "editable": zod.boolean(),
+  "isPremium": zod.boolean(),
+  "version": zod.string(),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "featured": zod.boolean(),
+  "sortOrder": zod.number().optional(),
+  "views": zod.number(),
+  "selections": zod.number(),
+  "previewsGenerated": zod.number(),
+  "conversions": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — template analytics stats
+ */
+export const GetTemplateAnalyticsStatsResponse = zod.object({
+  "summary": zod.object({
+  "totalViews": zod.number().nullish(),
+  "totalSelections": zod.number().nullish(),
+  "totalPreviews": zod.number().nullish(),
+  "totalConversions": zod.number().nullish(),
+  "templateCount": zod.number().nullish()
+}),
+  "topByViews": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "category": zod.string().optional(),
+  "views": zod.number().optional(),
+  "conversions": zod.number().optional()
+})),
+  "topByConversions": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "category": zod.string().optional(),
+  "views": zod.number().optional(),
+  "conversions": zod.number().optional()
+})),
+  "byCategory": zod.array(zod.object({
+  "category": zod.string().optional(),
+  "count": zod.number().optional(),
+  "totalViews": zod.number().optional()
+})),
+  "byStyle": zod.array(zod.object({
+  "style": zod.string().optional(),
+  "count": zod.number().optional(),
+  "totalSelections": zod.number().optional()
+}))
+})
+
+
+/**
+ * @summary Admin — evolution recommendations (underperforming/needs-revision/top-converters)
+ */
+export const GetTemplateEvolutionRecommendationsResponse = zod.object({
+  "underperforming": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "category": zod.string().optional(),
+  "style": zod.string().optional(),
+  "views": zod.number().optional(),
+  "conversions": zod.number().optional(),
+  "previewsGenerated": zod.number().optional(),
+  "recommendation": zod.string().optional()
+})),
+  "needsRevision": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "category": zod.string().optional(),
+  "style": zod.string().optional(),
+  "views": zod.number().optional(),
+  "conversions": zod.number().optional(),
+  "previewsGenerated": zod.number().optional(),
+  "recommendation": zod.string().optional()
+})),
+  "topConverters": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "name": zod.string().optional(),
+  "category": zod.string().optional(),
+  "style": zod.string().optional(),
+  "views": zod.number().optional(),
+  "conversions": zod.number().optional(),
+  "previewsGenerated": zod.number().optional(),
+  "recommendation": zod.string().optional()
+}))
+})
+
+
+/**
+ * @summary Admin — industry showcase (top template per industry)
+ */
+export const GetTemplateIndustryShowcaseAdminResponse = zod.object({
+  "items": zod.array(zod.object({
+  "industry": zod.string(),
+  "topTemplate": zod.object({
+  "id": zod.number(),
+  "templateCode": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "style": zod.string(),
+  "industry": zod.string().nullish(),
+  "colorTheme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional(),
+  "background": zod.string().optional(),
+  "text": zod.string().optional()
+}).nullish(),
+  "typography": zod.object({
+  "heading": zod.string().optional(),
+  "body": zod.string().optional(),
+  "style": zod.string().optional()
+}).nullish(),
+  "layout": zod.string().nullish(),
+  "supportedPackages": zod.array(zod.string()).nullish(),
+  "brandDnaTags": zod.object({
+  "personalities": zod.array(zod.string()).optional(),
+  "voices": zod.array(zod.string()).optional(),
+  "audiences": zod.array(zod.string()).optional(),
+  "industries": zod.array(zod.string()).optional()
+}).nullish(),
+  "previewImages": zod.object({
+  "thumbnail": zod.string().optional(),
+  "hero": zod.string().optional(),
+  "gallery": zod.array(zod.string()).optional()
+}).nullish(),
+  "pdfPreviewUrl": zod.string().nullish(),
+  "pptPreviewUrl": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "editable": zod.boolean(),
+  "isPremium": zod.boolean(),
+  "version": zod.string(),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "featured": zod.boolean(),
+  "sortOrder": zod.number().optional(),
+  "views": zod.number(),
+  "selections": zod.number(),
+  "previewsGenerated": zod.number(),
+  "conversions": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).nullish(),
+  "totalTemplates": zod.number()
+}))
+})
+
+
+/**
+ * @summary Admin — get one template
+ */
+export const GetTemplateAdminParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetTemplateAdminResponse = zod.object({
+  "id": zod.number(),
+  "templateCode": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "style": zod.string(),
+  "industry": zod.string().nullish(),
+  "colorTheme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional(),
+  "background": zod.string().optional(),
+  "text": zod.string().optional()
+}).nullish(),
+  "typography": zod.object({
+  "heading": zod.string().optional(),
+  "body": zod.string().optional(),
+  "style": zod.string().optional()
+}).nullish(),
+  "layout": zod.string().nullish(),
+  "supportedPackages": zod.array(zod.string()).nullish(),
+  "brandDnaTags": zod.object({
+  "personalities": zod.array(zod.string()).optional(),
+  "voices": zod.array(zod.string()).optional(),
+  "audiences": zod.array(zod.string()).optional(),
+  "industries": zod.array(zod.string()).optional()
+}).nullish(),
+  "previewImages": zod.object({
+  "thumbnail": zod.string().optional(),
+  "hero": zod.string().optional(),
+  "gallery": zod.array(zod.string()).optional()
+}).nullish(),
+  "pdfPreviewUrl": zod.string().nullish(),
+  "pptPreviewUrl": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "editable": zod.boolean(),
+  "isPremium": zod.boolean(),
+  "version": zod.string(),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "featured": zod.boolean(),
+  "sortOrder": zod.number().optional(),
+  "views": zod.number(),
+  "selections": zod.number(),
+  "previewsGenerated": zod.number(),
+  "conversions": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — update a template
+ */
+export const UpdateTemplateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateTemplateBody = zod.object({
+  "templateCode": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().optional(),
+  "category": zod.string(),
+  "style": zod.string(),
+  "industry": zod.string().optional(),
+  "colorTheme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional(),
+  "background": zod.string().optional(),
+  "text": zod.string().optional()
+}).optional(),
+  "typography": zod.object({
+  "heading": zod.string().optional(),
+  "body": zod.string().optional(),
+  "style": zod.string().optional()
+}).optional(),
+  "layout": zod.string().optional(),
+  "supportedPackages": zod.array(zod.string()).optional(),
+  "brandDnaTags": zod.object({
+  "personalities": zod.array(zod.string()).optional(),
+  "voices": zod.array(zod.string()).optional(),
+  "audiences": zod.array(zod.string()).optional(),
+  "industries": zod.array(zod.string()).optional()
+}).optional(),
+  "previewImages": zod.object({
+  "thumbnail": zod.string().optional(),
+  "hero": zod.string().optional(),
+  "gallery": zod.array(zod.string()).optional()
+}).optional(),
+  "editable": zod.boolean().optional(),
+  "isPremium": zod.boolean().optional(),
+  "version": zod.string().optional(),
+  "featured": zod.boolean().optional(),
+  "sortOrder": zod.number().optional()
+})
+
+export const UpdateTemplateResponse = zod.object({
+  "id": zod.number(),
+  "templateCode": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "style": zod.string(),
+  "industry": zod.string().nullish(),
+  "colorTheme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional(),
+  "background": zod.string().optional(),
+  "text": zod.string().optional()
+}).nullish(),
+  "typography": zod.object({
+  "heading": zod.string().optional(),
+  "body": zod.string().optional(),
+  "style": zod.string().optional()
+}).nullish(),
+  "layout": zod.string().nullish(),
+  "supportedPackages": zod.array(zod.string()).nullish(),
+  "brandDnaTags": zod.object({
+  "personalities": zod.array(zod.string()).optional(),
+  "voices": zod.array(zod.string()).optional(),
+  "audiences": zod.array(zod.string()).optional(),
+  "industries": zod.array(zod.string()).optional()
+}).nullish(),
+  "previewImages": zod.object({
+  "thumbnail": zod.string().optional(),
+  "hero": zod.string().optional(),
+  "gallery": zod.array(zod.string()).optional()
+}).nullish(),
+  "pdfPreviewUrl": zod.string().nullish(),
+  "pptPreviewUrl": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "editable": zod.boolean(),
+  "isPremium": zod.boolean(),
+  "version": zod.string(),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "featured": zod.boolean(),
+  "sortOrder": zod.number().optional(),
+  "views": zod.number(),
+  "selections": zod.number(),
+  "previewsGenerated": zod.number(),
+  "conversions": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — publish a template
+ */
+export const PublishTemplateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const PublishTemplateResponse = zod.object({
+  "ok": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Admin — archive a template
+ */
+export const ArchiveTemplateParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ArchiveTemplateResponse = zod.object({
+  "ok": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Admin — record a template event
+ */
+export const RecordTemplateEventAdminParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RecordTemplateEventAdminBody = zod.object({
+  "eventType": zod.enum(['view', 'selected', 'preview_generated', 'portfolio_viewed', 'conversion', 'favorited']),
+  "clientId": zod.string().optional(),
+  "sessionId": zod.string().optional(),
+  "metadata": zod.object({
+
+}).passthrough().optional()
+})
+
+export const RecordTemplateEventAdminResponse = zod.object({
+  "ok": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Public — template gallery (published only)
+ */
+export const ListTemplatesPublicQueryParams = zod.object({
+  "category": zod.coerce.string().optional(),
+  "industry": zod.coerce.string().optional(),
+  "style": zod.coerce.string().optional(),
+  "isPremium": zod.coerce.boolean().optional(),
+  "featured": zod.coerce.boolean().optional(),
+  "sortBy": zod.enum(['popular', 'newest', 'conversions', 'selections']).optional(),
+  "search": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().optional(),
+  "offset": zod.coerce.number().optional()
+})
+
+export const ListTemplatesPublicResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "templateCode": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "style": zod.string(),
+  "industry": zod.string().nullish(),
+  "colorTheme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional(),
+  "background": zod.string().optional(),
+  "text": zod.string().optional()
+}).nullish(),
+  "typography": zod.object({
+  "heading": zod.string().optional(),
+  "body": zod.string().optional(),
+  "style": zod.string().optional()
+}).nullish(),
+  "layout": zod.string().nullish(),
+  "supportedPackages": zod.array(zod.string()).nullish(),
+  "brandDnaTags": zod.object({
+  "personalities": zod.array(zod.string()).optional(),
+  "voices": zod.array(zod.string()).optional(),
+  "audiences": zod.array(zod.string()).optional(),
+  "industries": zod.array(zod.string()).optional()
+}).nullish(),
+  "previewImages": zod.object({
+  "thumbnail": zod.string().optional(),
+  "hero": zod.string().optional(),
+  "gallery": zod.array(zod.string()).optional()
+}).nullish(),
+  "pdfPreviewUrl": zod.string().nullish(),
+  "pptPreviewUrl": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "editable": zod.boolean(),
+  "isPremium": zod.boolean(),
+  "version": zod.string(),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "featured": zod.boolean(),
+  "sortOrder": zod.number().optional(),
+  "views": zod.number(),
+  "selections": zod.number(),
+  "previewsGenerated": zod.number(),
+  "conversions": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Public — industry showcase
+ */
+export const GetTemplateIndustryShowcasePublicResponse = zod.object({
+  "items": zod.array(zod.object({
+  "industry": zod.string(),
+  "topTemplate": zod.object({
+  "id": zod.number(),
+  "templateCode": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "style": zod.string(),
+  "industry": zod.string().nullish(),
+  "colorTheme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional(),
+  "background": zod.string().optional(),
+  "text": zod.string().optional()
+}).nullish(),
+  "typography": zod.object({
+  "heading": zod.string().optional(),
+  "body": zod.string().optional(),
+  "style": zod.string().optional()
+}).nullish(),
+  "layout": zod.string().nullish(),
+  "supportedPackages": zod.array(zod.string()).nullish(),
+  "brandDnaTags": zod.object({
+  "personalities": zod.array(zod.string()).optional(),
+  "voices": zod.array(zod.string()).optional(),
+  "audiences": zod.array(zod.string()).optional(),
+  "industries": zod.array(zod.string()).optional()
+}).nullish(),
+  "previewImages": zod.object({
+  "thumbnail": zod.string().optional(),
+  "hero": zod.string().optional(),
+  "gallery": zod.array(zod.string()).optional()
+}).nullish(),
+  "pdfPreviewUrl": zod.string().nullish(),
+  "pptPreviewUrl": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "editable": zod.boolean(),
+  "isPremium": zod.boolean(),
+  "version": zod.string(),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "featured": zod.boolean(),
+  "sortOrder": zod.number().optional(),
+  "views": zod.number(),
+  "selections": zod.number(),
+  "previewsGenerated": zod.number(),
+  "conversions": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).nullish(),
+  "totalTemplates": zod.number()
+}))
+})
+
+
+/**
+ * @summary Public — anonymous recommendations by industry/category
+ */
+export const GetPublicTemplateRecommendationsQueryParams = zod.object({
+  "industry": zod.coerce.string().optional(),
+  "category": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().optional()
+})
+
+export const GetPublicTemplateRecommendationsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "template": zod.object({
+  "id": zod.number(),
+  "templateCode": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "style": zod.string(),
+  "industry": zod.string().nullish(),
+  "colorTheme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional(),
+  "background": zod.string().optional(),
+  "text": zod.string().optional()
+}).nullish(),
+  "typography": zod.object({
+  "heading": zod.string().optional(),
+  "body": zod.string().optional(),
+  "style": zod.string().optional()
+}).nullish(),
+  "layout": zod.string().nullish(),
+  "supportedPackages": zod.array(zod.string()).nullish(),
+  "brandDnaTags": zod.object({
+  "personalities": zod.array(zod.string()).optional(),
+  "voices": zod.array(zod.string()).optional(),
+  "audiences": zod.array(zod.string()).optional(),
+  "industries": zod.array(zod.string()).optional()
+}).nullish(),
+  "previewImages": zod.object({
+  "thumbnail": zod.string().optional(),
+  "hero": zod.string().optional(),
+  "gallery": zod.array(zod.string()).optional()
+}).nullish(),
+  "pdfPreviewUrl": zod.string().nullish(),
+  "pptPreviewUrl": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "editable": zod.boolean(),
+  "isPremium": zod.boolean(),
+  "version": zod.string(),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "featured": zod.boolean(),
+  "sortOrder": zod.number().optional(),
+  "views": zod.number(),
+  "selections": zod.number(),
+  "previewsGenerated": zod.number(),
+  "conversions": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "score": zod.number(),
+  "reasons": zod.array(zod.string())
+}))
+})
+
+
+/**
+ * @summary Public — get one template (published only), records a view
+ */
+export const GetTemplatePublicParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetTemplatePublicResponse = zod.object({
+  "id": zod.number(),
+  "templateCode": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "style": zod.string(),
+  "industry": zod.string().nullish(),
+  "colorTheme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional(),
+  "background": zod.string().optional(),
+  "text": zod.string().optional()
+}).nullish(),
+  "typography": zod.object({
+  "heading": zod.string().optional(),
+  "body": zod.string().optional(),
+  "style": zod.string().optional()
+}).nullish(),
+  "layout": zod.string().nullish(),
+  "supportedPackages": zod.array(zod.string()).nullish(),
+  "brandDnaTags": zod.object({
+  "personalities": zod.array(zod.string()).optional(),
+  "voices": zod.array(zod.string()).optional(),
+  "audiences": zod.array(zod.string()).optional(),
+  "industries": zod.array(zod.string()).optional()
+}).nullish(),
+  "previewImages": zod.object({
+  "thumbnail": zod.string().optional(),
+  "hero": zod.string().optional(),
+  "gallery": zod.array(zod.string()).optional()
+}).nullish(),
+  "pdfPreviewUrl": zod.string().nullish(),
+  "pptPreviewUrl": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "editable": zod.boolean(),
+  "isPremium": zod.boolean(),
+  "version": zod.string(),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "featured": zod.boolean(),
+  "sortOrder": zod.number().optional(),
+  "views": zod.number(),
+  "selections": zod.number(),
+  "previewsGenerated": zod.number(),
+  "conversions": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Public — generate a live customization preview
+ */
+export const GenerateTemplateLivePreviewPublicParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GenerateTemplateLivePreviewPublicBody = zod.object({
+  "companyName": zod.string(),
+  "brandColor": zod.string(),
+  "logoUrl": zod.string().optional(),
+  "industry": zod.string().optional()
+})
+
+export const GenerateTemplateLivePreviewPublicResponse = zod.object({
+  "templateId": zod.number(),
+  "templateName": zod.string(),
+  "companyName": zod.string(),
+  "brandColor": zod.string(),
+  "logoUrl": zod.string().nullish(),
+  "previewConcept": zod.object({
+  "headerBg": zod.string().optional(),
+  "headerText": zod.string().optional(),
+  "accentColor": zod.string().optional(),
+  "fontPairing": zod.string().optional(),
+  "layoutType": zod.string().optional(),
+  "mockSections": zod.array(zod.object({
+  "type": zod.string().optional(),
+  "content": zod.string().optional(),
+  "color": zod.string().optional()
+})).optional()
+}),
+  "generatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Public — record a template event (view/selected/etc.)
+ */
+export const RecordTemplateEventPublicParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RecordTemplateEventPublicBody = zod.object({
+  "eventType": zod.enum(['view', 'selected', 'preview_generated', 'portfolio_viewed', 'conversion', 'favorited']),
+  "clientId": zod.string().optional(),
+  "sessionId": zod.string().optional(),
+  "metadata": zod.object({
+
+}).passthrough().optional()
+})
+
+export const RecordTemplateEventPublicResponse = zod.object({
+  "ok": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Customer — template gallery + Brand DNA recommendations
+ */
+export const GetWorkspaceTemplatesParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetWorkspaceTemplatesQueryParams = zod.object({
+  "category": zod.coerce.string().optional(),
+  "industry": zod.coerce.string().optional(),
+  "style": zod.coerce.string().optional(),
+  "sortBy": zod.enum(['popular', 'newest']).optional(),
+  "limit": zod.coerce.number().optional(),
+  "offset": zod.coerce.number().optional()
+})
+
+export const GetWorkspaceTemplatesResponse = zod.object({
+  "gallery": zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "templateCode": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "style": zod.string(),
+  "industry": zod.string().nullish(),
+  "colorTheme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional(),
+  "background": zod.string().optional(),
+  "text": zod.string().optional()
+}).nullish(),
+  "typography": zod.object({
+  "heading": zod.string().optional(),
+  "body": zod.string().optional(),
+  "style": zod.string().optional()
+}).nullish(),
+  "layout": zod.string().nullish(),
+  "supportedPackages": zod.array(zod.string()).nullish(),
+  "brandDnaTags": zod.object({
+  "personalities": zod.array(zod.string()).optional(),
+  "voices": zod.array(zod.string()).optional(),
+  "audiences": zod.array(zod.string()).optional(),
+  "industries": zod.array(zod.string()).optional()
+}).nullish(),
+  "previewImages": zod.object({
+  "thumbnail": zod.string().optional(),
+  "hero": zod.string().optional(),
+  "gallery": zod.array(zod.string()).optional()
+}).nullish(),
+  "pdfPreviewUrl": zod.string().nullish(),
+  "pptPreviewUrl": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "editable": zod.boolean(),
+  "isPremium": zod.boolean(),
+  "version": zod.string(),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "featured": zod.boolean(),
+  "sortOrder": zod.number().optional(),
+  "views": zod.number(),
+  "selections": zod.number(),
+  "previewsGenerated": zod.number(),
+  "conversions": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+}),
+  "recommended": zod.array(zod.object({
+  "template": zod.object({
+  "id": zod.number(),
+  "templateCode": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "style": zod.string(),
+  "industry": zod.string().nullish(),
+  "colorTheme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional(),
+  "background": zod.string().optional(),
+  "text": zod.string().optional()
+}).nullish(),
+  "typography": zod.object({
+  "heading": zod.string().optional(),
+  "body": zod.string().optional(),
+  "style": zod.string().optional()
+}).nullish(),
+  "layout": zod.string().nullish(),
+  "supportedPackages": zod.array(zod.string()).nullish(),
+  "brandDnaTags": zod.object({
+  "personalities": zod.array(zod.string()).optional(),
+  "voices": zod.array(zod.string()).optional(),
+  "audiences": zod.array(zod.string()).optional(),
+  "industries": zod.array(zod.string()).optional()
+}).nullish(),
+  "previewImages": zod.object({
+  "thumbnail": zod.string().optional(),
+  "hero": zod.string().optional(),
+  "gallery": zod.array(zod.string()).optional()
+}).nullish(),
+  "pdfPreviewUrl": zod.string().nullish(),
+  "pptPreviewUrl": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "editable": zod.boolean(),
+  "isPremium": zod.boolean(),
+  "version": zod.string(),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "featured": zod.boolean(),
+  "sortOrder": zod.number().optional(),
+  "views": zod.number(),
+  "selections": zod.number(),
+  "previewsGenerated": zod.number(),
+  "conversions": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "score": zod.number(),
+  "reasons": zod.array(zod.string())
+}))
+})
+
+
+/**
+ * @summary Customer — top templates by Brand DNA match
+ */
+export const GetWorkspaceTemplateRecommendationsParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetWorkspaceTemplateRecommendationsQueryParams = zod.object({
+  "category": zod.coerce.string().optional(),
+  "packageLevel": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().optional()
+})
+
+export const GetWorkspaceTemplateRecommendationsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "template": zod.object({
+  "id": zod.number(),
+  "templateCode": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "style": zod.string(),
+  "industry": zod.string().nullish(),
+  "colorTheme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional(),
+  "background": zod.string().optional(),
+  "text": zod.string().optional()
+}).nullish(),
+  "typography": zod.object({
+  "heading": zod.string().optional(),
+  "body": zod.string().optional(),
+  "style": zod.string().optional()
+}).nullish(),
+  "layout": zod.string().nullish(),
+  "supportedPackages": zod.array(zod.string()).nullish(),
+  "brandDnaTags": zod.object({
+  "personalities": zod.array(zod.string()).optional(),
+  "voices": zod.array(zod.string()).optional(),
+  "audiences": zod.array(zod.string()).optional(),
+  "industries": zod.array(zod.string()).optional()
+}).nullish(),
+  "previewImages": zod.object({
+  "thumbnail": zod.string().optional(),
+  "hero": zod.string().optional(),
+  "gallery": zod.array(zod.string()).optional()
+}).nullish(),
+  "pdfPreviewUrl": zod.string().nullish(),
+  "pptPreviewUrl": zod.string().nullish(),
+  "coverImage": zod.string().nullish(),
+  "editable": zod.boolean(),
+  "isPremium": zod.boolean(),
+  "version": zod.string(),
+  "status": zod.enum(['draft', 'published', 'archived']),
+  "featured": zod.boolean(),
+  "sortOrder": zod.number().optional(),
+  "views": zod.number(),
+  "selections": zod.number(),
+  "previewsGenerated": zod.number(),
+  "conversions": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "score": zod.number(),
+  "reasons": zod.array(zod.string())
+}))
+})
+
+
+/**
+ * @summary Customer — generate a live customization preview
+ */
+export const GenerateWorkspaceTemplateLivePreviewParams = zod.object({
+  "token": zod.coerce.string(),
+  "id": zod.coerce.number()
+})
+
+export const GenerateWorkspaceTemplateLivePreviewBody = zod.object({
+  "companyName": zod.string(),
+  "brandColor": zod.string(),
+  "logoUrl": zod.string().optional(),
+  "industry": zod.string().optional()
+})
+
+export const GenerateWorkspaceTemplateLivePreviewResponse = zod.object({
+  "templateId": zod.number(),
+  "templateName": zod.string(),
+  "companyName": zod.string(),
+  "brandColor": zod.string(),
+  "logoUrl": zod.string().nullish(),
+  "previewConcept": zod.object({
+  "headerBg": zod.string().optional(),
+  "headerText": zod.string().optional(),
+  "accentColor": zod.string().optional(),
+  "fontPairing": zod.string().optional(),
+  "layoutType": zod.string().optional(),
+  "mockSections": zod.array(zod.object({
+  "type": zod.string().optional(),
+  "content": zod.string().optional(),
+  "color": zod.string().optional()
+})).optional()
+}),
+  "generatedAt": zod.coerce.date()
 })
 
 

@@ -1,0 +1,583 @@
+Bertindaklah sebagai Principal Software Engineer, Enterprise SaaS Architect, PostgreSQL/Supabase Engineer, Security Engineer, dan Technical Delivery Lead.
+
+KERJAKAN IMPLEMENTASI, BUKAN AUDIT ULANG.
+
+JANGAN bertanya kepada saya.
+
+JANGAN meminta konfirmasi.
+
+Ambil keputusan teknis paling aman berdasarkan source code aktual, hasil implementasi WP-00/WP-01, dan dokumen spesifikasi P0.
+
+===========================================================
+SUMBER KEBENARAN
+================
+
+Baca terlebih dahulu:
+
+* `docs/specifications/p0-enterprise-foundation-implementation-spec.md`
+* `docs/specifications/p0-work-package-plan.md`
+* `docs/specifications/p0-database-change-plan.md`
+* `docs/specifications/p0-test-and-rollout-plan.md`
+* `docs/specifications/p0-file-impact-matrix.md`
+* `docs/implementation/p0-wp00-wp01-implementation-report.md`
+
+Baca juga implementasi aktual:
+
+* `security/requestContext.ts`
+* `security/tenantResolution.ts`
+* seluruh file yang diubah pada WP-00/WP-01
+* schema, service, route, dan query aktual yang masuk scope WP-02
+
+Jika dokumentasi berbeda dengan kode aktual, gunakan kode aktual dan hasil pengujian terbaru sebagai sumber kebenaran.
+
+===========================================================
+SCOPE IMPLEMENTASI
+==================
+
+Implementasikan hanya:
+
+WP-02 — SHARED REPOSITORY FOUNDATION
+
+JANGAN melanjutkan ke:
+
+* canonical audit log penuh
+* soft delete schema
+* perubahan hard delete
+* quotation migration
+* RLS activation
+* frontend redesign
+* deliverable baru
+
+WP-02 harus menjadi fondasi bersama untuk:
+
+* tenant isolation
+* audit log
+* soft delete
+* canonical quotation
+* worker dan background job
+* export dan SSE pada fase berikutnya
+
+===========================================================
+TUJUAN
+======
+
+Saat ini banyak route dan service melakukan query database langsung.
+
+Hal ini menyebabkan tenant filtering, soft-delete filtering, audit logging, dan transaction handling berisiko diterapkan berbeda-beda di setiap file.
+
+Bangun repository/domain access foundation yang:
+
+1. menerima canonical `RequestContext`;
+2. menerapkan tenant scope secara default;
+3. tidak mempercayai tenantId dari input client;
+4. siap mendukung soft delete tanpa mengimplementasikan kolomnya sekarang;
+5. siap mengeluarkan canonical audit event pada WP berikutnya;
+6. mendukung transaction context;
+7. tidak menjadi generic repository berlebihan;
+8. dapat diadopsi bertahap tanpa membangun ulang aplikasi.
+
+===========================================================
+PRINSIP WAJIB
+=============
+
+* Route tidak boleh menjadi tempat utama query tenant-owned data.
+* Service tidak boleh membuat tenant scope sendiri secara ad hoc.
+* Repository tenant-owned wajib menerima canonical RequestContext.
+* Tenant scope harus menjadi default, bukan parameter opsional biasa.
+* Bypass tenant harus eksplisit, terbatas, dan dapat diaudit.
+* Platform admin tidak otomatis berarti seluruh query bebas tenant.
+* Public token flow tetap memakai resource-derived tenant.
+* Jangan membuat satu BaseRepository besar yang menangani semua domain.
+* Jangan memindahkan seluruh codebase sekaligus.
+* Implementasikan fondasi dan migrasikan domain prioritas sesuai spesifikasi.
+
+===========================================================
+TAHAP 1 — VERIFY BASELINE
+=========================
+
+Sebelum perubahan:
+
+1. Jalankan test suite relevan.
+2. Jalankan full test suite.
+3. Jalankan typecheck.
+4. Jalankan build artifact terdampak.
+5. Catat seluruh failure yang sudah ada sebelum WP-02.
+6. Pastikan 37 test WP-00/WP-01 tetap lulus.
+7. Pastikan total baseline 477/477 atau jumlah aktual terbaru tetap terdokumentasi.
+
+Jangan menyatakan regression sebagai pre-existing tanpa pembuktian.
+
+===========================================================
+TAHAP 2 — QUERY INVENTORY
+=========================
+
+Telusuri source code aktual dan identifikasi query langsung untuk domain prioritas.
+
+Minimal audit:
+
+* projects
+* creative requests/briefs
+* customer workspace
+* quotations
+* deliverables
+* AI jobs
+* installed marketplace tools/packages
+* brand kit
+* asset library
+* review/approval
+* customer/public token resources
+
+Untuk setiap query tenant-owned, klasifikasikan:
+
+* read one
+* read list
+* create
+* update
+* delete
+* aggregate/count
+* join
+* public token lookup
+* worker lookup
+* admin/platform operation
+
+Buat urutan migrasi berdasarkan risiko.
+
+Prioritaskan query yang:
+
+* menerima resource ID dari client;
+* menyentuh data customer;
+* digunakan route publik;
+* digunakan admin portal;
+* mengubah status;
+* melakukan delete;
+* berhubungan dengan quotation;
+* digunakan worker atau export.
+
+===========================================================
+TAHAP 3 — REPOSITORY CONTEXT CONTRACT
+=====================================
+
+Gunakan canonical `RequestContext` yang sudah dibuat pada WP-01.
+
+Buat contract kecil yang diperlukan repository, misalnya secara konseptual:
+
+* request context
+* transaction/database executor
+* includeDeleted untuk penggunaan masa depan
+* audit metadata untuk penggunaan masa depan
+* explicit platform operation mode
+* resource scope
+
+Jangan membuat context kedua yang bersaing dengan `RequestContext`.
+
+Bila perlu membuat tipe turunan, tipe tersebut harus mengacu langsung ke canonical RequestContext.
+
+Repository tidak boleh menerima kombinasi bebas seperti:
+
+* tenantId dari caller
+* actorId terpisah
+* isAdmin boolean terpisah
+
+sebagai pengganti canonical context.
+
+===========================================================
+TAHAP 4 — TENANT SCOPE GUARD
+============================
+
+Bangun helper tenant-scope yang kecil, typed, dan reusable.
+
+Helper harus:
+
+* memastikan tenantId tersedia untuk tenant-owned operation;
+* menolak missing tenant context;
+* menolak tenant mismatch;
+* membedakan global/reference table dan tenant-owned table;
+* tidak dapat dibypass dengan boolean dari input user;
+* tidak mencatat secret atau token;
+* mempertahankan requestId/correlationId pada error/log;
+* kompatibel dengan transaction executor.
+
+Jangan membuat query builder abstrak yang menyembunyikan seluruh SQL/Drizzle behavior.
+
+Tenant condition tetap harus terlihat dan dapat ditinjau pada repository domain.
+
+===========================================================
+TAHAP 5 — DOMAIN REPOSITORIES
+=============================
+
+Buat atau standarkan repository berdasarkan domain nyata.
+
+Mulai dari domain prioritas yang disebutkan dalam work package plan dan file impact matrix.
+
+Minimal evaluasi repository berikut:
+
+1. Project Repository
+2. Request/Brief Repository
+3. Marketplace Installation Repository
+4. Customer Workspace Resource Repository
+5. Job Repository
+6. Deliverable Repository
+7. Quotation Repository Foundation
+
+Quotation repository pada tahap ini hanya fondasi akses aman.
+
+Jangan melakukan canonical quotation cutover sekarang.
+
+Untuk setiap repository:
+
+* tentukan tabel yang ditangani;
+* gunakan RequestContext;
+* enforce tenant pada operasi tenant-owned;
+* sediakan operasi spesifik domain;
+* hindari method terlalu generik seperti arbitrary `findMany(filters: any)`;
+* support transaction executor bila operasi dipanggil dalam transaksi;
+* siapkan pola default exclude-deleted untuk WP soft delete tanpa memerlukan kolom sekarang;
+* jangan mengeluarkan audit event penuh sebelum WP audit log;
+* jangan ubah state machine bisnis tanpa kebutuhan WP-02.
+
+===========================================================
+TAHAP 6 — PRIORITY CONSUMER MIGRATION
+=====================================
+
+Migrasikan consumer prioritas dari query langsung ke repository.
+
+Gunakan `p0-file-impact-matrix.md` sebagai panduan, lalu verifikasi terhadap kode aktual.
+
+Urutan prioritas:
+
+A. Marketplace routes yang diperbaiki di WP-00
+
+Pastikan semua query tenant-owned pada jalur:
+
+* install
+* list installed
+* upgrade
+* enable
+* disable
+* uninstall
+* analytics
+
+menggunakan repository/context foundation.
+
+Jangan menghilangkan perlindungan tenant spoofing WP-00.
+
+B. Catalog/public request routes yang disentuh WP-00
+
+Pastikan create/read resource memakai tenant canonical server-side.
+
+Public input tidak boleh menjadi sumber tenant.
+
+C. Project/customer workspace reads
+
+Migrasikan query yang berisiko membaca resource berdasarkan ID/token tanpa tenant enforcement yang konsisten.
+
+D. Job/deliverable lookup prioritas
+
+Migrasikan akses yang akan menjadi fondasi worker/export pada WP berikutnya.
+
+E. Quotation foundation
+
+Buat repository contract yang dapat mengakses canonical dan legacy quotation secara eksplisit, tetapi:
+
+* jangan freeze legacy create sekarang;
+* jangan memigrasikan data;
+* jangan menghapus dual branch;
+* jangan membuat dual write;
+* jangan mengubah customer-facing behavior.
+
+===========================================================
+TAHAP 7 — DIRECT QUERY POLICY
+=============================
+
+Tentukan dan terapkan policy melalui struktur kode dan test:
+
+* route tidak boleh melakukan direct tenant-owned mutation;
+* repository menjadi boundary tenant enforcement;
+* service menerima RequestContext dan memanggil repository;
+* global/reference data dapat tetap memakai akses langsung bila dibuktikan bukan tenant-owned;
+* migration/script/test fixture memiliki aturan terpisah;
+* platform-level analytics harus memakai API eksplisit, bukan bypass repository biasa.
+
+Jangan melakukan refactor massal seluruh direct query yang tidak termasuk scope.
+
+Namun buat daftar residual direct tenant-owned queries untuk WP berikutnya.
+
+===========================================================
+TAHAP 8 — TRANSACTION SUPPORT
+=============================
+
+Repository foundation harus mendukung:
+
+* normal database client;
+* transaction client/executor;
+* beberapa mutation dalam transaksi yang sama;
+* audit event transactional pada WP-03;
+* soft-delete + audit pada WP berikutnya;
+* quotation transition + audit pada fase quotation.
+
+Jangan membuat transaction manager global yang kompleks.
+
+Ikuti pola Drizzle/database yang sudah dipakai project.
+
+Tambahkan tests bahwa repository memakai executor yang diberikan dan tidak diam-diam kembali ke global DB client di tengah transaksi.
+
+===========================================================
+TAHAP 9 — PLATFORM ADMIN BYPASS
+===============================
+
+Definisikan jalur eksplisit untuk operasi platform-wide.
+
+Aturan:
+
+* platform admin bypass tidak boleh otomatis aktif hanya karena role;
+* caller harus memilih operasi platform scope secara eksplisit;
+* helper harus memverifikasi actorType dan permission;
+* operasi bypass harus memiliki alasan/operation name;
+* siapkan metadata untuk audit log WP-03;
+* jangan expose bypass ke request body/query/header;
+* tenant-owned mutation lintas tenant harus tetap dilarang kecuali operasi administratif yang spesifik.
+
+Tambahkan negative tests untuk bypass palsu.
+
+===========================================================
+TAHAP 10 — ERROR MODEL
+======================
+
+Gunakan model error proyek yang sudah ada.
+
+Minimal behavior:
+
+* missing tenant context → safe failure;
+* cross-tenant resource → 404 atau 403 sesuai surface;
+* repository resource tidak ditemukan → tidak bocorkan tenant lain;
+* unsupported platform operation → forbidden;
+* invalid public-resource scope → safe not found/forbidden;
+* transaction failure → rollback dan error konsisten.
+
+Jangan membuat response error internal berbeda-beda di setiap repository.
+
+===========================================================
+TAHAP 11 — TESTS
+================
+
+Tambahkan unit dan integration tests.
+
+A. Repository Tenant Enforcement
+
+* Tenant A membaca resource Tenant A → berhasil.
+* Tenant A membaca resource Tenant B → gagal aman.
+* Tenant A update resource Tenant B → gagal.
+* Tenant A delete/uninstall resource Tenant B → gagal.
+* List hanya berisi data tenant aktif.
+* Count/analytics tidak mencampur tenant.
+* ID resource valid tetapi tenant salah tidak membocorkan keberadaan.
+* Missing context gagal.
+
+B. Context Integrity
+
+* repository tidak menerima tenant override;
+* legacy adapter tidak dapat mengganti canonical tenant;
+* platform bypass memerlukan permission eksplisit;
+* public-token context hanya bekerja dalam resource scope.
+
+C. Transaction
+
+* executor transaksi digunakan;
+* failure melakukan rollback;
+* repository tidak memakai global client selama transaksi;
+* context tetap sama dalam seluruh transaksi.
+
+D. Marketplace Regression
+
+* seluruh test WP-00 tetap lulus;
+* install/list/upgrade/enable/disable/uninstall tenant-safe;
+* analytics tenant-scoped;
+* spoofing tetap mendapat 403.
+
+E. Public Catalog Regression
+
+* public quote/request-service happy path tetap bekerja;
+* tenant client input tetap diabaikan;
+* resource tersimpan pada tenant canonical;
+* cross-tenant manipulation gagal.
+
+F. Quotation Foundation
+
+* canonical dan legacy read dilakukan melalui method eksplisit;
+* tidak ada accidental dual write;
+* existing customer-facing flow tidak berubah.
+
+G. Direct Query Guard
+
+Tambahkan test/lint-like verification yang masuk akal untuk mencegah route prioritas kembali melakukan direct mutation tenant-owned.
+
+Jangan membuat regex rapuh untuk seluruh codebase bila menimbulkan banyak false positive.
+
+===========================================================
+TAHAP 12 — PERFORMANCE
+======================
+
+Repository migration tidak boleh membuat pola N+1 baru.
+
+Periksa:
+
+* list queries;
+* joins;
+* counts;
+* marketplace analytics;
+* project/workspace loading;
+* quotation lookup;
+* job/deliverable lookup.
+
+Tambahkan index hanya jika memang diperlukan dan sudah termasuk paket database plan yang aman.
+
+Default WP-02 adalah tanpa migration database kecuali ada kebutuhan kritis yang dapat dibuktikan.
+
+Jika index diperlukan:
+
+* dokumentasikan;
+* buat migration kecil;
+* jangan mengaktifkan RLS;
+* jangan menambah soft-delete column;
+* verifikasi query plan bila memungkinkan.
+
+===========================================================
+BATASAN SCOPE
+=============
+
+Jangan pada WP-02:
+
+* menambahkan deleted_at;
+* mengganti hard delete;
+* membuat restore UI;
+* mengubah audit schema;
+* menggabungkan ai_events dengan audit log;
+* mengubah canonicalEventService menjadi audit log;
+* freeze creative_project_quotations;
+* migrasi quotation;
+* aktifkan RLS;
+* ubah seluruh worker payload;
+* ubah SSE channel;
+* redesign portal;
+* menambah AI call;
+* menambah deliverable;
+* memperbaiki typecheck pre-existing yang tidak terkait.
+
+===========================================================
+QUALITY GATES
+=============
+
+WP-02 hanya boleh dinyatakan selesai jika:
+
+* canonical RequestContext digunakan repository baru;
+* tenant-owned repository tidak menerima tenant dari client input;
+* marketplace domain prioritas sudah memakai repository;
+* public catalog flow prioritas sudah memakai repository;
+* transaction executor didukung dan diuji;
+* platform bypass eksplisit dan diuji;
+* cross-tenant read/write/delete tests lulus;
+* seluruh 37 test WP-00/WP-01 tetap lulus;
+* full regression suite lulus;
+* tidak ada regression typecheck baru;
+* build artifact terdampak berhasil;
+* tidak ada perubahan di luar scope;
+* residual direct-query inventory terdokumentasi.
+
+===========================================================
+URUTAN EKSEKUSI
+===============
+
+1. Baca seluruh dokumen sumber.
+2. Verifikasi WP-00/WP-01 implementation.
+3. Jalankan baseline tests/typecheck/build.
+4. Buat query inventory prioritas.
+5. Implementasikan repository context foundation.
+6. Implementasikan tenant-scope guard.
+7. Implementasikan repository domain prioritas.
+8. Migrasikan marketplace consumers.
+9. Jalankan marketplace/security tests.
+10. Migrasikan public catalog consumers.
+11. Jalankan public flow tests.
+12. Implementasikan transaction support.
+13. Implementasikan explicit platform-operation path.
+14. Tambahkan repository integration tests.
+15. Jalankan full suite.
+16. Jalankan typecheck.
+17. Jalankan build.
+18. Jalankan live smoke tests pada jalur prioritas.
+19. Inspeksi diff.
+20. Tulis laporan implementasi.
+
+Jangan menunda pengujian sampai seluruh migrasi selesai.
+
+===========================================================
+DOKUMENTASI HASIL
+=================
+
+Buat:
+
+`docs/implementation/p0-wp02-repository-foundation-implementation-report.md`
+
+Isi minimal:
+
+1. Scope
+2. Baseline
+3. Query Inventory Summary
+4. Repository Architecture Implemented
+5. Context and Tenant Enforcement
+6. Repositories Added/Changed
+7. Consumers Migrated
+8. Direct Queries Remaining
+9. Transaction Support
+10. Platform Scope Operations
+11. Tests Added
+12. Test Results
+13. Typecheck Results
+14. Build Results
+15. Live Smoke Test Results
+16. Database Changes, jika ada
+17. Compatibility Paths
+18. Risks
+19. Rollback Notes
+20. Readiness for WP-03
+
+Perbarui status hanya untuk WP-02.
+
+WP-03 sampai WP-14 tetap untouched.
+
+===========================================================
+GIT DAN SAFETY
+==============
+
+* Jangan membuat commit kecuali environment mewajibkan.
+* Jangan push.
+* Jangan membuat PR.
+* Jangan melakukan formatting massal.
+* Jangan menghapus legacy quotation code.
+* Jangan mengubah schema tanpa alasan kritis.
+* Jangan menyembunyikan pre-existing failures.
+* Jangan mengklaim seluruh codebase sudah memakai repository jika baru domain prioritas yang dimigrasikan.
+* Jangan mengklaim tenant isolation selesai penuh; WP-02 hanya foundation dan initial migration.
+
+===========================================================
+OUTPUT AKHIR
+============
+
+Laporkan:
+
+* repository files yang dibuat/diubah;
+* domain yang sudah dimigrasikan;
+* jumlah direct query yang diganti;
+* jumlah residual direct tenant-owned query;
+* tenant enforcement tests;
+* transaction tests;
+* total test suite;
+* typecheck dan build;
+* live smoke test;
+* database migration jika ada;
+* risiko tersisa;
+* apakah WP-03 Canonical Audit Log siap dimulai.
+
+Jangan melanjutkan otomatis ke WP-03.
+
+Berhenti setelah WP-02 selesai dan seluruh verifikasi tersedia.

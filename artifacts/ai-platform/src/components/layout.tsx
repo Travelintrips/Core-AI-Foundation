@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { 
   Activity, 
   BarChart2,
+  Brain,
   Box, 
   CalendarClock,
   ClipboardCheck,
@@ -30,6 +31,7 @@ import {
   Users2,
   Heart,
   Lightbulb,
+  LayoutTemplate,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -103,6 +105,8 @@ const NAV_SECTIONS = [
       { href: "/affiliates", label: "Affiliates", icon: Users2 },
       { href: "/health-scores", label: "Health Scores", icon: Heart },
       { href: "/ai-insights", label: "AI Insights", icon: Lightbulb },
+      { href: "/creative-intelligence", label: "Creative Intelligence", icon: Brain },
+      { href: "/template-marketplace", label: "Templates", icon: LayoutTemplate },
     ],
   },
   {

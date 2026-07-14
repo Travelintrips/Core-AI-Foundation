@@ -284,6 +284,22 @@ export default function ServiceDetailPage() {
     }
   }, [search]);
 
+  // Arriving from the Template Gallery's "Use This Template" CTA — carry the
+  // template reference into the brief notes so the draft request is tied to it.
+  useEffect(() => {
+    const raw = sessionStorage.getItem("template-selection-seed");
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as { templateId: number; templateName: string; category: string; style: string };
+      setContact((c) => (c.notes
+        ? c
+        : { ...c, notes: `Referensi template: ${parsed.templateName} (${parsed.category} · ${parsed.style})` }));
+    } catch { /* ignore */ }
+    // Consumed once per service-detail visit; clear so it doesn't leak into unrelated requests later.
+    sessionStorage.removeItem("template-selection-seed");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const runQuote = (next: QuoteSelections) => {
     setSelections(next);
     quote.mutate(next);

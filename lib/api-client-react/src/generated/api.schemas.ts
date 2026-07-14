@@ -4608,6 +4608,441 @@ export interface ZipDeliveryView {
   updatedAt?: string;
 }
 
+export interface AnalyzeBrandInput {
+  clientId: string;
+}
+
+export interface BrandDnaDetectedColors {
+  primary?: string | null;
+  secondary?: string | null;
+  accent?: string | null;
+  palette?: string[];
+}
+
+export interface BrandDnaTypography {
+  heading?: string | null;
+  body?: string | null;
+  style?: string;
+}
+
+export interface BrandDnaAudience {
+  primary?: string;
+  secondary?: string;
+  demographics?: string[];
+  psychographics?: string[];
+}
+
+export interface BrandDnaDataSources {
+  brandKitSlots?: number;
+  assetCount?: number;
+  projectCount?: number;
+  memoryCount?: number;
+}
+
+export interface BrandDnaView {
+  clientId: string;
+  brandPersonality: string[];
+  brandVoice: string;
+  writingStyle: string;
+  photographyStyle?: string;
+  illustrationStyle?: string;
+  iconStyle?: string;
+  layoutStyle?: string;
+  visualDensity?: string;
+  spacingStyle?: string;
+  detectedColors?: BrandDnaDetectedColors;
+  colorPsychology?: string[];
+  detectedTypography?: BrandDnaTypography;
+  targetAudience?: BrandDnaAudience;
+  industry?: string;
+  riskProfile?: string;
+  completenessScore: number;
+  consistencyScore: number;
+  confidenceScore: number;
+  dataSourcesSummary?: BrandDnaDataSources;
+  analyzedAt: string;
+}
+
+export type BrandRecommendationPriority = typeof BrandRecommendationPriority[keyof typeof BrandRecommendationPriority];
+
+
+export const BrandRecommendationPriority = {
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+} as const;
+
+export interface BrandRecommendation {
+  type: string;
+  priority: BrandRecommendationPriority;
+  title: string;
+  description: string;
+  expectedImpact: string;
+  missingItems: string[];
+}
+
+export interface BrandRecommendationList {
+  items: BrandRecommendation[];
+  total: number;
+}
+
+export interface BrandConsistencyChecklist {
+  logoCorrect?: boolean;
+  fontCorrect?: boolean;
+  colorCorrect?: boolean;
+  brandVoiceCorrect?: boolean;
+  writingStyleCorrect?: boolean;
+  layoutCorrect?: boolean;
+  photoStyleCorrect?: boolean;
+  illustrationStyleCorrect?: boolean;
+}
+
+export interface BrandConsistencyReport {
+  clientId: string;
+  overallScore: number;
+  checklist: BrandConsistencyChecklist;
+  warnings: string[];
+  suggestions: string[];
+  assetsChecked: number;
+}
+
+export interface CreativeMemoryEntry {
+  key?: string;
+  value?: string;
+  category?: string;
+  source?: string;
+  confidence?: number;
+  updatedAt?: string;
+}
+
+export interface CreativeMemoryProject {
+  projectId?: string;
+  brandName?: string;
+  status?: string;
+  createdAt?: string;
+}
+
+export interface CreativeMemoryView {
+  clientId: string;
+  memories: CreativeMemoryEntry[];
+  projectHistory: CreativeMemoryProject[];
+  totalProjects: number;
+  totalMemories: number;
+}
+
+export interface CreativeDirectorRecommendation {
+  clientId: string;
+  creativeStrategy: string;
+  visualDirection: string;
+  communicationDirection: string;
+  designRecommendations: string[];
+  brandComplianceNotes: string[];
+  templateRecommendations: string[];
+  priorityActions: string[];
+  generatedAt: string;
+}
+
+export interface AdminBrandIntelligenceStats {
+  totalClientsAnalyzed: number;
+  averageCompletenessScore: number;
+  averageConsistencyScore: number;
+  averageConfidenceScore: number;
+  highConfidenceClients: number;
+  clientsWithLogo: number;
+}
+
+export interface WorkspaceBrandIntelligenceDashboard {
+  dna: BrandDnaView | null;
+  recommendations: BrandRecommendation[];
+  consistencyReport: BrandConsistencyReport;
+  memory: CreativeMemoryView;
+}
+
+export type AnalyzeAssetInputAssetSource = typeof AnalyzeAssetInputAssetSource[keyof typeof AnalyzeAssetInputAssetSource];
+
+
+export const AnalyzeAssetInputAssetSource = {
+  brand_kit: 'brand_kit',
+  library: 'library',
+  creative_asset: 'creative_asset',
+} as const;
+
+export interface AnalyzeAssetInput {
+  assetId: number;
+  assetSource: AnalyzeAssetInputAssetSource;
+  clientId: string;
+}
+
+export interface AssetIntelligenceView {
+  id: number;
+  assetId: number;
+  assetSource: string;
+  clientId: string;
+  detectedSubjects?: string[];
+  autoTags?: string[];
+  autoCategory?: string;
+  searchKeywords?: string[];
+  suggestedUsage?: string[];
+  colorPalette?: string[];
+  versionType?: string;
+  isDuplicate: boolean;
+  duplicateOfId?: number | null;
+  versionChainId?: number | null;
+  qualityScore?: number;
+  hasTransparency?: boolean;
+  confidenceScore?: number;
+  analysisFailed: boolean;
+  failureReason?: string | null;
+  analyzedAt: string;
+}
+
+export interface AssetIntelligenceList {
+  items: AssetIntelligenceView[];
+  total: number;
+}
+
+export interface DuplicateGroup {
+  perceptualHash?: string;
+  assetIds?: number[];
+  versionTypes?: string[];
+  recommendation?: string;
+}
+
+export interface DuplicateReport {
+  clientId: string;
+  totalDuplicatesFound: number;
+  duplicateGroups: DuplicateGroup[];
+}
+
+export interface WorkspaceAssetIntelligenceDashboard {
+  items: AssetIntelligenceView[];
+  total: number;
+  duplicates: DuplicateReport;
+}
+
+export interface TemplateColorTheme {
+  primary?: string;
+  secondary?: string;
+  accent?: string;
+  background?: string;
+  text?: string;
+}
+
+export interface TemplateTypography {
+  heading?: string;
+  body?: string;
+  style?: string;
+}
+
+export interface TemplateBrandDnaTags {
+  personalities?: string[];
+  voices?: string[];
+  audiences?: string[];
+  industries?: string[];
+}
+
+export interface TemplatePreviewImages {
+  thumbnail?: string;
+  hero?: string;
+  gallery?: string[];
+}
+
+export type TemplateItemStatus = typeof TemplateItemStatus[keyof typeof TemplateItemStatus];
+
+
+export const TemplateItemStatus = {
+  draft: 'draft',
+  published: 'published',
+  archived: 'archived',
+} as const;
+
+export interface TemplateItem {
+  id: number;
+  templateCode: string;
+  name: string;
+  description?: string | null;
+  category: string;
+  style: string;
+  industry?: string | null;
+  colorTheme?: TemplateColorTheme | null;
+  typography?: TemplateTypography | null;
+  layout?: string | null;
+  supportedPackages?: string[] | null;
+  brandDnaTags?: TemplateBrandDnaTags | null;
+  previewImages?: TemplatePreviewImages | null;
+  pdfPreviewUrl?: string | null;
+  pptPreviewUrl?: string | null;
+  coverImage?: string | null;
+  editable: boolean;
+  isPremium: boolean;
+  version: string;
+  status: TemplateItemStatus;
+  featured: boolean;
+  sortOrder?: number;
+  views: number;
+  selections: number;
+  previewsGenerated: number;
+  conversions: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TemplateList {
+  items: TemplateItem[];
+  total: number;
+}
+
+export interface ScoredTemplate {
+  template: TemplateItem;
+  score: number;
+  reasons: string[];
+}
+
+export interface TemplateRecommendationList {
+  items: ScoredTemplate[];
+}
+
+export interface LivePreviewSection {
+  type?: string;
+  content?: string;
+  color?: string;
+}
+
+export interface LivePreviewConcept {
+  headerBg?: string;
+  headerText?: string;
+  accentColor?: string;
+  fontPairing?: string;
+  layoutType?: string;
+  mockSections?: LivePreviewSection[];
+}
+
+export interface LivePreviewResult {
+  templateId: number;
+  templateName: string;
+  companyName: string;
+  brandColor: string;
+  logoUrl?: string | null;
+  previewConcept: LivePreviewConcept;
+  generatedAt: string;
+}
+
+export interface LivePreviewInput {
+  companyName: string;
+  brandColor: string;
+  logoUrl?: string;
+  industry?: string;
+}
+
+export interface TemplateAnalyticsCategoryStat {
+  category?: string;
+  count?: number;
+  totalViews?: number;
+}
+
+export interface TemplateAnalyticsStyleStat {
+  style?: string;
+  count?: number;
+  totalSelections?: number;
+}
+
+export interface TemplateAnalyticsSummary {
+  totalViews?: number | null;
+  totalSelections?: number | null;
+  totalPreviews?: number | null;
+  totalConversions?: number | null;
+  templateCount?: number | null;
+}
+
+export interface TemplateAnalyticsTopItem {
+  id?: number;
+  name?: string;
+  category?: string;
+  views?: number;
+  conversions?: number;
+}
+
+export interface TemplateAnalyticsStats {
+  summary: TemplateAnalyticsSummary;
+  topByViews: TemplateAnalyticsTopItem[];
+  topByConversions: TemplateAnalyticsTopItem[];
+  byCategory: TemplateAnalyticsCategoryStat[];
+  byStyle: TemplateAnalyticsStyleStat[];
+}
+
+export interface TemplateEvolutionEntry {
+  id?: number;
+  name?: string;
+  category?: string;
+  style?: string;
+  views?: number;
+  conversions?: number;
+  previewsGenerated?: number;
+  recommendation?: string;
+}
+
+export interface TemplateEvolution {
+  underperforming: TemplateEvolutionEntry[];
+  needsRevision: TemplateEvolutionEntry[];
+  topConverters: TemplateEvolutionEntry[];
+}
+
+export interface IndustryShowcaseItem {
+  industry: string;
+  topTemplate?: TemplateItem | null;
+  totalTemplates: number;
+}
+
+export interface IndustryShowcase {
+  items: IndustryShowcaseItem[];
+}
+
+export type TemplateEventInputEventType = typeof TemplateEventInputEventType[keyof typeof TemplateEventInputEventType];
+
+
+export const TemplateEventInputEventType = {
+  view: 'view',
+  selected: 'selected',
+  preview_generated: 'preview_generated',
+  portfolio_viewed: 'portfolio_viewed',
+  conversion: 'conversion',
+  favorited: 'favorited',
+} as const;
+
+export type TemplateEventInputMetadata = { [key: string]: unknown };
+
+export interface TemplateEventInput {
+  eventType: TemplateEventInputEventType;
+  clientId?: string;
+  sessionId?: string;
+  metadata?: TemplateEventInputMetadata;
+}
+
+export interface CreateTemplateInput {
+  templateCode: string;
+  name: string;
+  description?: string;
+  category: string;
+  style: string;
+  industry?: string;
+  colorTheme?: TemplateColorTheme;
+  typography?: TemplateTypography;
+  layout?: string;
+  supportedPackages?: string[];
+  brandDnaTags?: TemplateBrandDnaTags;
+  previewImages?: TemplatePreviewImages;
+  editable?: boolean;
+  isPremium?: boolean;
+  version?: string;
+  featured?: boolean;
+  sortOrder?: number;
+}
+
+export interface WorkspaceTemplatesDashboard {
+  gallery: TemplateList;
+  recommended: ScoredTemplate[];
+}
+
 export type AbTestTestType = typeof AbTestTestType[keyof typeof AbTestTestType];
 
 
@@ -5050,6 +5485,46 @@ export type AdminAssetLibraryStats200 = { [key: string]: unknown };
 
 export type AdminZipDeliveryStats200 = { [key: string]: unknown };
 
+export type AdminAnalyzeAssetByIdBodyAssetSource = typeof AdminAnalyzeAssetByIdBodyAssetSource[keyof typeof AdminAnalyzeAssetByIdBodyAssetSource];
+
+
+export const AdminAnalyzeAssetByIdBodyAssetSource = {
+  brand_kit: 'brand_kit',
+  library: 'library',
+  creative_asset: 'creative_asset',
+} as const;
+
+export type AdminAnalyzeAssetByIdBody = {
+  assetSource: AdminAnalyzeAssetByIdBodyAssetSource;
+  clientId: string;
+};
+
+export type GetAdminAssetIntelligenceParams = {
+source?: GetAdminAssetIntelligenceSource;
+};
+
+export type GetAdminAssetIntelligenceSource = typeof GetAdminAssetIntelligenceSource[keyof typeof GetAdminAssetIntelligenceSource];
+
+
+export const GetAdminAssetIntelligenceSource = {
+  brand_kit: 'brand_kit',
+  library: 'library',
+  creative_asset: 'creative_asset',
+} as const;
+
+export type AnalyzeWorkspaceAssetBodyAssetSource = typeof AnalyzeWorkspaceAssetBodyAssetSource[keyof typeof AnalyzeWorkspaceAssetBodyAssetSource];
+
+
+export const AnalyzeWorkspaceAssetBodyAssetSource = {
+  brand_kit: 'brand_kit',
+  library: 'library',
+  creative_asset: 'creative_asset',
+} as const;
+
+export type AnalyzeWorkspaceAssetBody = {
+  assetSource?: AnalyzeWorkspaceAssetBodyAssetSource;
+};
+
 export type AdminGetCustomerAssets200 = { [key: string]: unknown };
 
 export type GetFunnelAnalyticsParams = {
@@ -5155,5 +5630,104 @@ export type GetCpReviewTimeline200 = {
   reviewStatus: string;
   totalEvents: number;
   events: CpTimelineEvent[];
+};
+
+export type ListTemplatesAdminParams = {
+category?: string;
+industry?: string;
+style?: string;
+status?: ListTemplatesAdminStatus;
+isPremium?: boolean;
+featured?: boolean;
+sortBy?: ListTemplatesAdminSortBy;
+search?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListTemplatesAdminStatus = typeof ListTemplatesAdminStatus[keyof typeof ListTemplatesAdminStatus];
+
+
+export const ListTemplatesAdminStatus = {
+  draft: 'draft',
+  published: 'published',
+  archived: 'archived',
+} as const;
+
+export type ListTemplatesAdminSortBy = typeof ListTemplatesAdminSortBy[keyof typeof ListTemplatesAdminSortBy];
+
+
+export const ListTemplatesAdminSortBy = {
+  popular: 'popular',
+  newest: 'newest',
+  conversions: 'conversions',
+  selections: 'selections',
+} as const;
+
+export type PublishTemplate200 = {
+  ok?: boolean;
+};
+
+export type ArchiveTemplate200 = {
+  ok?: boolean;
+};
+
+export type RecordTemplateEventAdmin200 = {
+  ok?: boolean;
+};
+
+export type ListTemplatesPublicParams = {
+category?: string;
+industry?: string;
+style?: string;
+isPremium?: boolean;
+featured?: boolean;
+sortBy?: ListTemplatesPublicSortBy;
+search?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListTemplatesPublicSortBy = typeof ListTemplatesPublicSortBy[keyof typeof ListTemplatesPublicSortBy];
+
+
+export const ListTemplatesPublicSortBy = {
+  popular: 'popular',
+  newest: 'newest',
+  conversions: 'conversions',
+  selections: 'selections',
+} as const;
+
+export type GetPublicTemplateRecommendationsParams = {
+industry?: string;
+category?: string;
+limit?: number;
+};
+
+export type RecordTemplateEventPublic200 = {
+  ok?: boolean;
+};
+
+export type GetWorkspaceTemplatesParams = {
+category?: string;
+industry?: string;
+style?: string;
+sortBy?: GetWorkspaceTemplatesSortBy;
+limit?: number;
+offset?: number;
+};
+
+export type GetWorkspaceTemplatesSortBy = typeof GetWorkspaceTemplatesSortBy[keyof typeof GetWorkspaceTemplatesSortBy];
+
+
+export const GetWorkspaceTemplatesSortBy = {
+  popular: 'popular',
+  newest: 'newest',
+} as const;
+
+export type GetWorkspaceTemplateRecommendationsParams = {
+category?: string;
+packageLevel?: string;
+limit?: number;
 };
 

@@ -1,0 +1,224 @@
+Anda adalah TEAM 1 — V4.3 Portfolio Gallery & Live Preview.
+
+Lanjutkan dari checkpoint terakhir.
+
+JANGAN mengulang eksplorasi codebase.
+JANGAN membuat ulang schema, service, route, migration, seed, atau UI yang sudah ditulis.
+JANGAN menghapus pekerjaan parsial.
+
+STATUS TERAKHIR:
+
+- Existing portfolio/template code sudah diaudit
+- DB schema baru sudah mulai dibuat
+- services sudah mulai dibuat
+- routes sudah mulai dibuat
+- OpenAPI paths/schemas sudah mulai ditambahkan
+- migration dan seed sudah mulai dibuat
+- customer UI dan admin UI sudah mulai dibuat
+- template route import sudah diperbaiki
+- kedua App.tsx dan navigation sedang di-wire
+- quota habis sebelum full pipeline dijalankan
+
+TUGAS SEKARANG:
+
+1. Audit git diff hanya untuk perubahan V4.3.
+2. Identifikasi file:
+   - selesai
+   - parsial
+   - belum terhubung
+   - rusak/duplikat
+3. Jangan rewrite file yang sudah benar.
+4. Selesaikan wiring.
+5. Jalankan build dan test.
+6. Tutup seluruh blocker sebelum menambah fitur baru.
+
+==================================================
+A. INVENTORY CHECKPOINT
+==================================================
+
+Buat tabel internal:
+
+File
+Purpose
+Status
+Remaining Work
+Owner
+
+Periksa khusus:
+
+- schema template/portfolio
+- DB exports
+- route registration
+- OpenAPI paths
+- OpenAPI schemas
+- generated types
+- migration
+- seed
+- customer portfolio/template pages
+- admin template/portfolio pages
+- App.tsx
+- navigation/sidebar
+
+Cari file concatenated atau duplicate implementation akibat pekerjaan paralel.
+
+==================================================
+B. SELESAIKAN BACKEND
+==================================================
+
+Pastikan route V4.3 aktif:
+
+PUBLIC:
+- list templates
+- template detail
+- template filters
+- template recommendations
+- portfolio list/detail
+- live customization preview
+- favorite/compare jika memang masuk scope
+
+ADMIN:
+- template CRUD
+- publish/archive
+- versioning
+- portfolio management
+- analytics
+
+Pastikan:
+- route terdaftar satu kali
+- path tidak memiliki duplicate /api prefix
+- validation bekerja
+- public DTO tidak bocor storage path, provider, model, prompt, cost
+- admin auth aktif
+- pagination bounded
+- filters terindeks
+
+==================================================
+C. SELESAIKAN FRONTEND
+==================================================
+
+Customer:
+- template gallery
+- portfolio gallery
+- filters
+- search
+- recommended templates
+- template detail
+- live preview
+- CTA Use Template / Start Project
+
+Admin:
+- template list
+- create/edit
+- publish/archive
+- version
+- portfolio management
+- analytics summary
+
+Pastikan:
+- loading state
+- empty state
+- error state
+- mobile responsive
+- tidak ada mock data jika API real tersedia
+
+==================================================
+D. FILE BERSAMA
+==================================================
+
+Jangan melakukan perubahan besar pada:
+
+- root App.tsx
+- shared sidebar
+- route index
+- openapi.yaml
+- shared schema index
+
+Bila masih perlu perubahan pada file tersebut:
+- buat perubahan minimal
+- dokumentasikan exact lines
+- jangan refactor unrelated code
+
+Integration Lead akan menjadi pemilik akhir file bersama.
+
+==================================================
+E. OPENAPI & CODEGEN
+==================================================
+
+Validasi OpenAPI yang sudah ditulis.
+
+Periksa:
+- duplicate paths
+- duplicate operationId
+- missing schema refs
+- incorrect indentation
+- request/response mismatch
+
+Lalu:
+- jalankan codegen resmi
+- jangan edit generated files manual
+- rebuild api-zod
+- rebuild api-client-react
+- check duplicate exports
+- check stale dist
+
+==================================================
+F. DATABASE & SEED
+==================================================
+
+Pastikan migration:
+- additive
+- non-destructive
+- idempotent sesuai convention repo
+- tidak drop/rename tabel existing
+
+Seed:
+- idempotent
+- tidak duplikat
+- hanya data demo/legal
+- tidak memakai brand nyata tanpa izin
+
+Jangan menjalankan production migration.
+
+==================================================
+G. TEST WAJIB
+==================================================
+
+1. Public template list tampil.
+2. Template detail tampil.
+3. Industry/style filters bekerja.
+4. Recommendation menggunakan Brand DNA.
+5. Live preview menghasilkan preview yang sesuai policy.
+6. Preview tidak membuat project sebelum checkout/payment.
+7. Use Template membuat draft request.
+8. Admin create/edit/publish/archive bekerja.
+9. Template versioning bekerja.
+10. Public DTO aman.
+11. OpenAPI valid.
+12. Codegen deterministic.
+13. Backend typecheck clean.
+14. Customer portal typecheck/build clean.
+15. Admin platform typecheck/build clean.
+16. pnpm run verify clean.
+
+==================================================
+H. FINAL REPORT
+==================================================
+
+Laporkan:
+
+- checkpoint inventory
+- files completed
+- files fixed
+- endpoints active
+- UI routes active
+- DB/migration status
+- seed count
+- OpenAPI operation count
+- tests
+- screenshots
+- verify result
+- remaining limitations
+
+Jangan mulai V4.4.
+Target akhir:
+V4.3 selesai sepenuhnya tanpa membuang pekerjaan parsial yang sudah ada.
