@@ -61,6 +61,7 @@ Re-verified again 2026-07-14 (second import): same pattern — `node_modules` + 
 Re-verified once more later on 2026-07-14 after yet another re-import: identical wipe/fix cycle (`pnpm install` → `build:generated` → `build:api` → restart 4 workflows), no code changes needed, all secrets already present. All 4 services confirmed up via screenshot: customer-portal landing page rendered, ai-platform admin showed login gate as expected, api-server logs showed scheduler/dispatcher/cluster workers started, mockup-sandbox vite server ready.
 
 Re-verified a further time 2026-07-14 (same day, later re-import): identical symptom (`node_modules` + registration wiped), identical fix applied, all 4 services confirmed running again with no code changes.
+Re-verified again 2026-07-14 (another re-import): `node_modules` + artifact/workflow registration wiped. Additionally, `artifacts/api-server/src/routes/templates.ts` had concatenated v1 stub lines (orphaned `router.get(…, requireAdminApiKey, …) => {` openers with no handler bodies, followed by full v2 handlers — causing esbuild "Unexpected export" syntax error). Fix: removed orphaned stubs via sed, stripped erroneous `/api` prefix from admin route paths. Then standard fix (`pnpm install` → `build:generated` → `build:api` → restart 4 workflows). All 4 services confirmed up: customer-portal landing page renders, ai-platform shows staff login gate, api-server scheduler/dispatcher/cluster workers started, mockup-sandbox vite server ready.
 
 ## Key Technical Notes
 ## Database
