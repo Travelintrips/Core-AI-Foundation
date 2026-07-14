@@ -41,6 +41,7 @@ import Payments from "@/pages/payments";
 import PortfolioAdmin from "@/pages/portfolio-admin";
 import CreativeIntelligence from "@/pages/creative-intelligence";
 import TemplateMarketplace from "@/pages/template-marketplace";
+import TemplateEngine from "@/pages/template-engine";
 import CommercialPage from "@/pages/commercial";
 import PromotionsPage from "@/pages/promotions";
 import CouponsPage from "@/pages/coupons";
@@ -96,6 +97,7 @@ function AdminRouter() {
         <Route path="/production-pipeline" component={ProductionPipelinePage} />
         <Route path="/creative-intelligence" component={CreativeIntelligence} />
         <Route path="/template-marketplace" component={TemplateMarketplace} />
+        <Route path="/template-engine" component={TemplateEngine} />
         <Route path="/design-studio" component={DesignStudio} />
         <Route path="/design-studio/:id" component={DesignStudioEditor} />
         <Route component={NotFound} />

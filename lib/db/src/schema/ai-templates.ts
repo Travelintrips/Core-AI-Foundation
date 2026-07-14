@@ -80,3 +80,129 @@ export const aiTemplateAnalyticsTable = appSchema.table("ai_template_analytics",
 });
 
 export type AiTemplateAnalytic = typeof aiTemplateAnalyticsTable.$inferSelect;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// V4.6 — Template Ecosystem (Theme Engine + Layout Engine + Registry + Mappings)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Theme Engine ──────────────────────────────────────────────────────────────
+
+export const aiTemplateThemesTable = appSchema.table("ai_template_themes", {
+  id: serial("id").primaryKey(),
+  themeKey: text("theme_key").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  category: text("category"),                  // category affinity (null = universal)
+  tokensJson: jsonb("tokens_json").notNull().$type<{
+    colors: { primary: string; secondary: string; accent: string; background: string; text: string; surface?: string };
+    typography: { heading: string; body: string; accent?: string; headingWeight?: string };
+    spacing?: string;          // compact | normal | relaxed
+    borderRadius?: string;     // none | small | medium | large | full
+    shadows?: string;          // none | soft | medium | strong
+  }>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export type AiTemplateTheme = typeof aiTemplateThemesTable.$inferSelect;
+export type InsertAiTemplateTheme = typeof aiTemplateThemesTable.$inferInsert;
+
+// ── Layout Engine ─────────────────────────────────────────────────────────────
+
+export const aiTemplateLayoutsTable = appSchema.table("ai_template_layouts", {
+  id: serial("id").primaryKey(),
+  layoutKey: text("layout_key").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  category: text("category").notNull(),        // category affinity
+  layoutType: text("layout_type").notNull(),   // single-column | two-column | grid | magazine | cover-focus
+  structureJson: jsonb("structure_json").notNull().$type<{
+    sections: Array<{ id: string; label: string; order: number; width?: string; span?: number }>;
+    columns?: number;
+    gutter?: string;
+  }>(),
+  minSlots: integer("min_slots").notNull().default(1),
+  maxSlots: integer("max_slots"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export type AiTemplateLayout = typeof aiTemplateLayoutsTable.$inferSelect;
+export type InsertAiTemplateLayout = typeof aiTemplateLayoutsTable.$inferInsert;
+
+// ── Template Registry ─────────────────────────────────────────────────────────
+
+export const aiTemplateRegistryTable = appSchema.table("ai_template_registry", {
+  id: serial("id").primaryKey(),
+  templateKey: text("template_key").notNull().unique(),  // e.g. COMP-PROF-001
+  name: text("name").notNull(),
+  description: text("description"),
+  category: text("category").notNull(),        // Company Profile | Proposal | Pitch Deck | …
+  status: text("status").notNull().default("draft"),  // draft | published | archived
+  currentVersionId: integer("current_version_id"),    // FK resolved below via relations
+  thumbnailUrl: text("thumbnail_url"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export type AiTemplateRegistry = typeof aiTemplateRegistryTable.$inferSelect;
+export type InsertAiTemplateRegistry = typeof aiTemplateRegistryTable.$inferInsert;
+
+// ── Template Versions ─────────────────────────────────────────────────────────
+
+export const aiTemplateVersionsTable = appSchema.table("ai_template_versions", {
+  id: serial("id").primaryKey(),
+  templateId: integer("template_id").notNull().references(() => aiTemplateRegistryTable.id, { onDelete: "cascade" }),
+  versionNumber: integer("version_number").notNull(),
+  status: text("status").notNull().default("draft"),  // draft | published | archived
+  themeId: integer("theme_id").references(() => aiTemplateThemesTable.id),
+  layoutId: integer("layout_id").references(() => aiTemplateLayoutsTable.id),
+  layoutSpecJson: jsonb("layout_spec_json").notNull().default({}).$type<Record<string, unknown>>(),
+  themeOverridesJson: jsonb("theme_overrides_json").notNull().default({}).$type<Record<string, unknown>>(),
+  changelog: text("changelog"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+});
+
+export type AiTemplateVersion = typeof aiTemplateVersionsTable.$inferSelect;
+export type InsertAiTemplateVersion = typeof aiTemplateVersionsTable.$inferInsert;
+
+// ── Brand Mappings ────────────────────────────────────────────────────────────
+
+export const aiTemplateBrandMappingsTable = appSchema.table("ai_template_brand_mappings", {
+  id: serial("id").primaryKey(),
+  templateId: integer("template_id").notNull().references(() => aiTemplateRegistryTable.id, { onDelete: "cascade" }),
+  brandAttribute: text("brand_attribute").notNull(),   // personality | voice | audience | color_family
+  attributeValue: text("attribute_value").notNull(),
+  weight: integer("weight").notNull().default(10),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AiTemplateBrandMapping = typeof aiTemplateBrandMappingsTable.$inferSelect;
+
+// ── Industry Mappings ─────────────────────────────────────────────────────────
+
+export const aiTemplateIndustryMappingsTable = appSchema.table("ai_template_industry_mappings", {
+  id: serial("id").primaryKey(),
+  templateId: integer("template_id").notNull().references(() => aiTemplateRegistryTable.id, { onDelete: "cascade" }),
+  industry: text("industry").notNull(),
+  weight: integer("weight").notNull().default(10),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AiTemplateIndustryMapping = typeof aiTemplateIndustryMappingsTable.$inferSelect;
+
+// ── Package Mappings ──────────────────────────────────────────────────────────
+
+export const aiTemplatePackageMappingsTable = appSchema.table("ai_template_package_mappings", {
+  id: serial("id").primaryKey(),
+  templateId: integer("template_id").notNull().references(() => aiTemplateRegistryTable.id, { onDelete: "cascade" }),
+  serviceCode: text("service_code").notNull(),   // e.g. CP-STARTER | PITCH-PRO
+  weight: integer("weight").notNull().default(10),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AiTemplatePackageMapping = typeof aiTemplatePackageMappingsTable.$inferSelect;

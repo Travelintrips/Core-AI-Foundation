@@ -107,7 +107,6 @@ router.get("/ai/templates", async (req, res) => {
   }
 });
 
-router.get("/ai/templates/:id", async (req, res) => {
 router.get("/ai/templates/:id", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id as string, 10);
@@ -120,7 +119,6 @@ router.get("/ai/templates/:id", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/ai/templates", async (req, res) => {
 router.post("/ai/templates", async (req, res): Promise<void> => {
   try {
     const body = req.body as Record<string, unknown>;
@@ -135,7 +133,6 @@ router.post("/ai/templates", async (req, res): Promise<void> => {
   }
 });
 
-router.patch("/ai/templates/:id", async (req, res) => {
 router.patch("/ai/templates/:id", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id as string, 10);
@@ -148,7 +145,6 @@ router.patch("/ai/templates/:id", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/ai/templates/:id/publish", async (req, res) => {
 router.post("/ai/templates/:id/publish", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id as string, 10);
@@ -160,7 +156,6 @@ router.post("/ai/templates/:id/publish", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/ai/templates/:id/archive", async (req, res) => {
 router.post("/ai/templates/:id/archive", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id as string, 10);
@@ -172,7 +167,6 @@ router.post("/ai/templates/:id/archive", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/ai/templates/:id/event", async (req, res) => {
 router.post("/ai/templates/:id/event", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id as string, 10);
