@@ -7555,6 +7555,671 @@ export const AdminGetProjectZipResponse = zod.object({
 
 
 /**
+ * @summary Admin — overall brand intelligence stats across all clients
+ */
+export const GetAdminBrandIntelligenceStatsResponse = zod.object({
+  "totalClientsAnalyzed": zod.number(),
+  "averageCompletenessScore": zod.number(),
+  "averageConsistencyScore": zod.number(),
+  "averageConfidenceScore": zod.number(),
+  "highConfidenceClients": zod.number(),
+  "clientsWithLogo": zod.number()
+})
+
+
+/**
+ * @summary Admin — trigger Brand DNA analysis for a client
+ */
+export const AdminAnalyzeBrandBody = zod.object({
+  "clientId": zod.string()
+})
+
+export const AdminAnalyzeBrandResponse = zod.object({
+  "clientId": zod.string(),
+  "brandPersonality": zod.array(zod.string()),
+  "brandVoice": zod.string(),
+  "writingStyle": zod.string(),
+  "photographyStyle": zod.string().optional(),
+  "illustrationStyle": zod.string().optional(),
+  "iconStyle": zod.string().optional(),
+  "layoutStyle": zod.string().optional(),
+  "visualDensity": zod.string().optional(),
+  "spacingStyle": zod.string().optional(),
+  "detectedColors": zod.object({
+  "primary": zod.string().nullish(),
+  "secondary": zod.string().nullish(),
+  "accent": zod.string().nullish(),
+  "palette": zod.array(zod.string()).optional()
+}).optional(),
+  "colorPsychology": zod.array(zod.string()).optional(),
+  "detectedTypography": zod.object({
+  "heading": zod.string().nullish(),
+  "body": zod.string().nullish(),
+  "style": zod.string().optional()
+}).optional(),
+  "targetAudience": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "demographics": zod.array(zod.string()).optional(),
+  "psychographics": zod.array(zod.string()).optional()
+}).optional(),
+  "industry": zod.string().optional(),
+  "riskProfile": zod.string().optional(),
+  "completenessScore": zod.number(),
+  "consistencyScore": zod.number(),
+  "confidenceScore": zod.number(),
+  "dataSourcesSummary": zod.object({
+  "brandKitSlots": zod.number().optional(),
+  "assetCount": zod.number().optional(),
+  "projectCount": zod.number().optional(),
+  "memoryCount": zod.number().optional()
+}).optional(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — get stored Brand DNA for a client
+ */
+export const GetAdminBrandDnaParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const GetAdminBrandDnaResponse = zod.object({
+  "clientId": zod.string(),
+  "brandPersonality": zod.array(zod.string()),
+  "brandVoice": zod.string(),
+  "writingStyle": zod.string(),
+  "photographyStyle": zod.string().optional(),
+  "illustrationStyle": zod.string().optional(),
+  "iconStyle": zod.string().optional(),
+  "layoutStyle": zod.string().optional(),
+  "visualDensity": zod.string().optional(),
+  "spacingStyle": zod.string().optional(),
+  "detectedColors": zod.object({
+  "primary": zod.string().nullish(),
+  "secondary": zod.string().nullish(),
+  "accent": zod.string().nullish(),
+  "palette": zod.array(zod.string()).optional()
+}).optional(),
+  "colorPsychology": zod.array(zod.string()).optional(),
+  "detectedTypography": zod.object({
+  "heading": zod.string().nullish(),
+  "body": zod.string().nullish(),
+  "style": zod.string().optional()
+}).optional(),
+  "targetAudience": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "demographics": zod.array(zod.string()).optional(),
+  "psychographics": zod.array(zod.string()).optional()
+}).optional(),
+  "industry": zod.string().optional(),
+  "riskProfile": zod.string().optional(),
+  "completenessScore": zod.number(),
+  "consistencyScore": zod.number(),
+  "confidenceScore": zod.number(),
+  "dataSourcesSummary": zod.object({
+  "brandKitSlots": zod.number().optional(),
+  "assetCount": zod.number().optional(),
+  "projectCount": zod.number().optional(),
+  "memoryCount": zod.number().optional()
+}).optional(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — force re-analyze Brand DNA for a client
+ */
+export const AdminRefreshBrandDnaParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const AdminRefreshBrandDnaResponse = zod.object({
+  "clientId": zod.string(),
+  "brandPersonality": zod.array(zod.string()),
+  "brandVoice": zod.string(),
+  "writingStyle": zod.string(),
+  "photographyStyle": zod.string().optional(),
+  "illustrationStyle": zod.string().optional(),
+  "iconStyle": zod.string().optional(),
+  "layoutStyle": zod.string().optional(),
+  "visualDensity": zod.string().optional(),
+  "spacingStyle": zod.string().optional(),
+  "detectedColors": zod.object({
+  "primary": zod.string().nullish(),
+  "secondary": zod.string().nullish(),
+  "accent": zod.string().nullish(),
+  "palette": zod.array(zod.string()).optional()
+}).optional(),
+  "colorPsychology": zod.array(zod.string()).optional(),
+  "detectedTypography": zod.object({
+  "heading": zod.string().nullish(),
+  "body": zod.string().nullish(),
+  "style": zod.string().optional()
+}).optional(),
+  "targetAudience": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "demographics": zod.array(zod.string()).optional(),
+  "psychographics": zod.array(zod.string()).optional()
+}).optional(),
+  "industry": zod.string().optional(),
+  "riskProfile": zod.string().optional(),
+  "completenessScore": zod.number(),
+  "consistencyScore": zod.number(),
+  "confidenceScore": zod.number(),
+  "dataSourcesSummary": zod.object({
+  "brandKitSlots": zod.number().optional(),
+  "assetCount": zod.number().optional(),
+  "projectCount": zod.number().optional(),
+  "memoryCount": zod.number().optional()
+}).optional(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — get brand improvement recommendations for a client
+ */
+export const GetAdminBrandRecommendationsParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const GetAdminBrandRecommendationsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "type": zod.string(),
+  "priority": zod.enum(['high', 'medium', 'low']),
+  "title": zod.string(),
+  "description": zod.string(),
+  "expectedImpact": zod.string(),
+  "missingItems": zod.array(zod.string())
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Admin — brand consistency report for a client
+ */
+export const GetAdminConsistencyReportParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const GetAdminConsistencyReportResponse = zod.object({
+  "clientId": zod.string(),
+  "overallScore": zod.number(),
+  "checklist": zod.object({
+  "logoCorrect": zod.boolean().optional(),
+  "fontCorrect": zod.boolean().optional(),
+  "colorCorrect": zod.boolean().optional(),
+  "brandVoiceCorrect": zod.boolean().optional(),
+  "writingStyleCorrect": zod.boolean().optional(),
+  "layoutCorrect": zod.boolean().optional(),
+  "photoStyleCorrect": zod.boolean().optional(),
+  "illustrationStyleCorrect": zod.boolean().optional()
+}),
+  "warnings": zod.array(zod.string()),
+  "suggestions": zod.array(zod.string()),
+  "assetsChecked": zod.number()
+})
+
+
+/**
+ * @summary Admin — creative memory for a client
+ */
+export const GetAdminCreativeMemoryParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const GetAdminCreativeMemoryResponse = zod.object({
+  "clientId": zod.string(),
+  "memories": zod.array(zod.object({
+  "key": zod.string().optional(),
+  "value": zod.string().optional(),
+  "category": zod.string().optional(),
+  "source": zod.string().optional(),
+  "confidence": zod.number().optional(),
+  "updatedAt": zod.coerce.date().optional()
+})),
+  "projectHistory": zod.array(zod.object({
+  "projectId": zod.string().optional(),
+  "brandName": zod.string().optional(),
+  "status": zod.string().optional(),
+  "createdAt": zod.coerce.date().optional()
+})),
+  "totalProjects": zod.number(),
+  "totalMemories": zod.number()
+})
+
+
+/**
+ * @summary Admin — AI Creative Director recommendation for a client
+ */
+export const GetAdminCreativeDirectorRecommendationParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const GetAdminCreativeDirectorRecommendationResponse = zod.object({
+  "clientId": zod.string(),
+  "creativeStrategy": zod.string(),
+  "visualDirection": zod.string(),
+  "communicationDirection": zod.string(),
+  "designRecommendations": zod.array(zod.string()),
+  "brandComplianceNotes": zod.array(zod.string()),
+  "templateRecommendations": zod.array(zod.string()),
+  "priorityActions": zod.array(zod.string()),
+  "generatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — trigger asset intelligence analysis
+ */
+export const AdminAnalyzeAssetBody = zod.object({
+  "assetId": zod.number(),
+  "assetSource": zod.enum(['brand_kit', 'library', 'creative_asset']),
+  "clientId": zod.string()
+})
+
+export const AdminAnalyzeAssetResponse = zod.object({
+  "id": zod.number(),
+  "assetId": zod.number(),
+  "assetSource": zod.string(),
+  "clientId": zod.string(),
+  "detectedSubjects": zod.array(zod.string()).optional(),
+  "autoTags": zod.array(zod.string()).optional(),
+  "autoCategory": zod.string().optional(),
+  "searchKeywords": zod.array(zod.string()).optional(),
+  "suggestedUsage": zod.array(zod.string()).optional(),
+  "colorPalette": zod.array(zod.string()).optional(),
+  "versionType": zod.string().optional(),
+  "isDuplicate": zod.boolean(),
+  "duplicateOfId": zod.number().nullish(),
+  "versionChainId": zod.number().nullish(),
+  "qualityScore": zod.number().optional(),
+  "hasTransparency": zod.boolean().optional(),
+  "confidenceScore": zod.number().optional(),
+  "analysisFailed": zod.boolean(),
+  "failureReason": zod.string().nullish(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — analyze a specific asset by ID
+ */
+export const AdminAnalyzeAssetByIdParams = zod.object({
+  "assetId": zod.coerce.number()
+})
+
+export const AdminAnalyzeAssetByIdBody = zod.object({
+  "assetSource": zod.enum(['brand_kit', 'library', 'creative_asset']),
+  "clientId": zod.string()
+})
+
+export const AdminAnalyzeAssetByIdResponse = zod.object({
+  "id": zod.number(),
+  "assetId": zod.number(),
+  "assetSource": zod.string(),
+  "clientId": zod.string(),
+  "detectedSubjects": zod.array(zod.string()).optional(),
+  "autoTags": zod.array(zod.string()).optional(),
+  "autoCategory": zod.string().optional(),
+  "searchKeywords": zod.array(zod.string()).optional(),
+  "suggestedUsage": zod.array(zod.string()).optional(),
+  "colorPalette": zod.array(zod.string()).optional(),
+  "versionType": zod.string().optional(),
+  "isDuplicate": zod.boolean(),
+  "duplicateOfId": zod.number().nullish(),
+  "versionChainId": zod.number().nullish(),
+  "qualityScore": zod.number().optional(),
+  "hasTransparency": zod.boolean().optional(),
+  "confidenceScore": zod.number().optional(),
+  "analysisFailed": zod.boolean(),
+  "failureReason": zod.string().nullish(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — get stored asset intelligence for an asset
+ */
+export const GetAdminAssetIntelligenceParams = zod.object({
+  "assetId": zod.coerce.number()
+})
+
+export const GetAdminAssetIntelligenceQueryParams = zod.object({
+  "source": zod.enum(['brand_kit', 'library', 'creative_asset']).optional()
+})
+
+export const GetAdminAssetIntelligenceResponse = zod.object({
+  "id": zod.number(),
+  "assetId": zod.number(),
+  "assetSource": zod.string(),
+  "clientId": zod.string(),
+  "detectedSubjects": zod.array(zod.string()).optional(),
+  "autoTags": zod.array(zod.string()).optional(),
+  "autoCategory": zod.string().optional(),
+  "searchKeywords": zod.array(zod.string()).optional(),
+  "suggestedUsage": zod.array(zod.string()).optional(),
+  "colorPalette": zod.array(zod.string()).optional(),
+  "versionType": zod.string().optional(),
+  "isDuplicate": zod.boolean(),
+  "duplicateOfId": zod.number().nullish(),
+  "versionChainId": zod.number().nullish(),
+  "qualityScore": zod.number().optional(),
+  "hasTransparency": zod.boolean().optional(),
+  "confidenceScore": zod.number().optional(),
+  "analysisFailed": zod.boolean(),
+  "failureReason": zod.string().nullish(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — duplicate detection report for a client
+ */
+export const GetAdminDuplicateReportParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const GetAdminDuplicateReportResponse = zod.object({
+  "clientId": zod.string(),
+  "totalDuplicatesFound": zod.number(),
+  "duplicateGroups": zod.array(zod.object({
+  "perceptualHash": zod.string().optional(),
+  "assetIds": zod.array(zod.number()).optional(),
+  "versionTypes": zod.array(zod.string()).optional(),
+  "recommendation": zod.string().optional()
+}))
+})
+
+
+/**
+ * @summary Admin — list all asset intelligence for a client
+ */
+export const ListAdminAssetIntelligenceParams = zod.object({
+  "clientId": zod.coerce.string()
+})
+
+export const ListAdminAssetIntelligenceResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "assetId": zod.number(),
+  "assetSource": zod.string(),
+  "clientId": zod.string(),
+  "detectedSubjects": zod.array(zod.string()).optional(),
+  "autoTags": zod.array(zod.string()).optional(),
+  "autoCategory": zod.string().optional(),
+  "searchKeywords": zod.array(zod.string()).optional(),
+  "suggestedUsage": zod.array(zod.string()).optional(),
+  "colorPalette": zod.array(zod.string()).optional(),
+  "versionType": zod.string().optional(),
+  "isDuplicate": zod.boolean(),
+  "duplicateOfId": zod.number().nullish(),
+  "versionChainId": zod.number().nullish(),
+  "qualityScore": zod.number().optional(),
+  "hasTransparency": zod.boolean().optional(),
+  "confidenceScore": zod.number().optional(),
+  "analysisFailed": zod.boolean(),
+  "failureReason": zod.string().nullish(),
+  "analyzedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Customer — get full brand intelligence dashboard (auto-analyzes if not yet done)
+ */
+export const GetWorkspaceBrandIntelligenceParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetWorkspaceBrandIntelligenceResponse = zod.object({
+  "dna": zod.object({
+  "clientId": zod.string(),
+  "brandPersonality": zod.array(zod.string()),
+  "brandVoice": zod.string(),
+  "writingStyle": zod.string(),
+  "photographyStyle": zod.string().optional(),
+  "illustrationStyle": zod.string().optional(),
+  "iconStyle": zod.string().optional(),
+  "layoutStyle": zod.string().optional(),
+  "visualDensity": zod.string().optional(),
+  "spacingStyle": zod.string().optional(),
+  "detectedColors": zod.object({
+  "primary": zod.string().nullish(),
+  "secondary": zod.string().nullish(),
+  "accent": zod.string().nullish(),
+  "palette": zod.array(zod.string()).optional()
+}).optional(),
+  "colorPsychology": zod.array(zod.string()).optional(),
+  "detectedTypography": zod.object({
+  "heading": zod.string().nullish(),
+  "body": zod.string().nullish(),
+  "style": zod.string().optional()
+}).optional(),
+  "targetAudience": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "demographics": zod.array(zod.string()).optional(),
+  "psychographics": zod.array(zod.string()).optional()
+}).optional(),
+  "industry": zod.string().optional(),
+  "riskProfile": zod.string().optional(),
+  "completenessScore": zod.number(),
+  "consistencyScore": zod.number(),
+  "confidenceScore": zod.number(),
+  "dataSourcesSummary": zod.object({
+  "brandKitSlots": zod.number().optional(),
+  "assetCount": zod.number().optional(),
+  "projectCount": zod.number().optional(),
+  "memoryCount": zod.number().optional()
+}).optional(),
+  "analyzedAt": zod.coerce.date()
+}).nullable(),
+  "recommendations": zod.array(zod.object({
+  "type": zod.string(),
+  "priority": zod.enum(['high', 'medium', 'low']),
+  "title": zod.string(),
+  "description": zod.string(),
+  "expectedImpact": zod.string(),
+  "missingItems": zod.array(zod.string())
+})),
+  "consistencyReport": zod.object({
+  "clientId": zod.string(),
+  "overallScore": zod.number(),
+  "checklist": zod.object({
+  "logoCorrect": zod.boolean().optional(),
+  "fontCorrect": zod.boolean().optional(),
+  "colorCorrect": zod.boolean().optional(),
+  "brandVoiceCorrect": zod.boolean().optional(),
+  "writingStyleCorrect": zod.boolean().optional(),
+  "layoutCorrect": zod.boolean().optional(),
+  "photoStyleCorrect": zod.boolean().optional(),
+  "illustrationStyleCorrect": zod.boolean().optional()
+}),
+  "warnings": zod.array(zod.string()),
+  "suggestions": zod.array(zod.string()),
+  "assetsChecked": zod.number()
+}),
+  "memory": zod.object({
+  "clientId": zod.string(),
+  "memories": zod.array(zod.object({
+  "key": zod.string().optional(),
+  "value": zod.string().optional(),
+  "category": zod.string().optional(),
+  "source": zod.string().optional(),
+  "confidence": zod.number().optional(),
+  "updatedAt": zod.coerce.date().optional()
+})),
+  "projectHistory": zod.array(zod.object({
+  "projectId": zod.string().optional(),
+  "brandName": zod.string().optional(),
+  "status": zod.string().optional(),
+  "createdAt": zod.coerce.date().optional()
+})),
+  "totalProjects": zod.number(),
+  "totalMemories": zod.number()
+})
+})
+
+
+/**
+ * @summary Customer — force refresh Brand DNA analysis
+ */
+export const RefreshWorkspaceBrandDnaParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const RefreshWorkspaceBrandDnaResponse = zod.object({
+  "clientId": zod.string(),
+  "brandPersonality": zod.array(zod.string()),
+  "brandVoice": zod.string(),
+  "writingStyle": zod.string(),
+  "photographyStyle": zod.string().optional(),
+  "illustrationStyle": zod.string().optional(),
+  "iconStyle": zod.string().optional(),
+  "layoutStyle": zod.string().optional(),
+  "visualDensity": zod.string().optional(),
+  "spacingStyle": zod.string().optional(),
+  "detectedColors": zod.object({
+  "primary": zod.string().nullish(),
+  "secondary": zod.string().nullish(),
+  "accent": zod.string().nullish(),
+  "palette": zod.array(zod.string()).optional()
+}).optional(),
+  "colorPsychology": zod.array(zod.string()).optional(),
+  "detectedTypography": zod.object({
+  "heading": zod.string().nullish(),
+  "body": zod.string().nullish(),
+  "style": zod.string().optional()
+}).optional(),
+  "targetAudience": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "demographics": zod.array(zod.string()).optional(),
+  "psychographics": zod.array(zod.string()).optional()
+}).optional(),
+  "industry": zod.string().optional(),
+  "riskProfile": zod.string().optional(),
+  "completenessScore": zod.number(),
+  "consistencyScore": zod.number(),
+  "confidenceScore": zod.number(),
+  "dataSourcesSummary": zod.object({
+  "brandKitSlots": zod.number().optional(),
+  "assetCount": zod.number().optional(),
+  "projectCount": zod.number().optional(),
+  "memoryCount": zod.number().optional()
+}).optional(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Customer — AI Creative Director recommendation
+ */
+export const GetWorkspaceCreativeDirectorParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetWorkspaceCreativeDirectorResponse = zod.object({
+  "clientId": zod.string(),
+  "creativeStrategy": zod.string(),
+  "visualDirection": zod.string(),
+  "communicationDirection": zod.string(),
+  "designRecommendations": zod.array(zod.string()),
+  "brandComplianceNotes": zod.array(zod.string()),
+  "templateRecommendations": zod.array(zod.string()),
+  "priorityActions": zod.array(zod.string()),
+  "generatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Customer — list asset intelligence + duplicate report
+ */
+export const GetWorkspaceAssetIntelligenceParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetWorkspaceAssetIntelligenceResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "assetId": zod.number(),
+  "assetSource": zod.string(),
+  "clientId": zod.string(),
+  "detectedSubjects": zod.array(zod.string()).optional(),
+  "autoTags": zod.array(zod.string()).optional(),
+  "autoCategory": zod.string().optional(),
+  "searchKeywords": zod.array(zod.string()).optional(),
+  "suggestedUsage": zod.array(zod.string()).optional(),
+  "colorPalette": zod.array(zod.string()).optional(),
+  "versionType": zod.string().optional(),
+  "isDuplicate": zod.boolean(),
+  "duplicateOfId": zod.number().nullish(),
+  "versionChainId": zod.number().nullish(),
+  "qualityScore": zod.number().optional(),
+  "hasTransparency": zod.boolean().optional(),
+  "confidenceScore": zod.number().optional(),
+  "analysisFailed": zod.boolean(),
+  "failureReason": zod.string().nullish(),
+  "analyzedAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "duplicates": zod.object({
+  "clientId": zod.string(),
+  "totalDuplicatesFound": zod.number(),
+  "duplicateGroups": zod.array(zod.object({
+  "perceptualHash": zod.string().optional(),
+  "assetIds": zod.array(zod.number()).optional(),
+  "versionTypes": zod.array(zod.string()).optional(),
+  "recommendation": zod.string().optional()
+}))
+})
+})
+
+
+/**
+ * @summary Customer — trigger asset intelligence analysis for a single asset
+ */
+export const AnalyzeWorkspaceAssetParams = zod.object({
+  "token": zod.coerce.string(),
+  "assetId": zod.coerce.number()
+})
+
+export const AnalyzeWorkspaceAssetBody = zod.object({
+  "assetSource": zod.enum(['brand_kit', 'library', 'creative_asset']).optional()
+})
+
+export const AnalyzeWorkspaceAssetResponse = zod.object({
+  "id": zod.number(),
+  "assetId": zod.number(),
+  "assetSource": zod.string(),
+  "clientId": zod.string(),
+  "detectedSubjects": zod.array(zod.string()).optional(),
+  "autoTags": zod.array(zod.string()).optional(),
+  "autoCategory": zod.string().optional(),
+  "searchKeywords": zod.array(zod.string()).optional(),
+  "suggestedUsage": zod.array(zod.string()).optional(),
+  "colorPalette": zod.array(zod.string()).optional(),
+  "versionType": zod.string().optional(),
+  "isDuplicate": zod.boolean(),
+  "duplicateOfId": zod.number().nullish(),
+  "versionChainId": zod.number().nullish(),
+  "qualityScore": zod.number().optional(),
+  "hasTransparency": zod.boolean().optional(),
+  "confidenceScore": zod.number().optional(),
+  "analysisFailed": zod.boolean(),
+  "failureReason": zod.string().nullish(),
+  "analyzedAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Admin — force retry ZIP delivery for a project
  */
 export const AdminRetryZipDeliveryParams = zod.object({

@@ -54,3 +54,5 @@
 - [cp-p1-document-engine](cp-p1-document-engine.md) — P1: mapper uses cp* fields from brief_json, package gating, QC service, deliverable manifest endpoint
 - [cp-review-v42c-completion](cp-review-v42c-completion.md) — OpenAPI shared-responses gotcha, fixture/schema drift (tsx doesn't typecheck), watermark must fail-closed, created_project_id text-vs-int bug, pdf-lib install≠externalize
 - [phase-v42d-brand-kit-zip](phase-v42d-brand-kit-zip.md) — V4.2D rules: slot weights, no @/lib/api in portal, ZIP job payload, pdf-lib re-install, route mount order
+- [wp00-wp01-tenant-security](wp00-wp01-tenant-security.md) — canonical RequestContext + tenant resolvers; never trust body/query/header tenantId, resolve server-side via security/tenantResolution.ts
+- [phase-v42e-creative-intelligence](phase-v42e-creative-intelligence.md) — V4.2E: Brand DNA + Asset Intelligence tables/services/routes/UI; admin uses apiFetch not useAdminApi hook

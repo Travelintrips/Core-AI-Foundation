@@ -1,0 +1,844 @@
+Bertindaklah sebagai Principal Software Architect, Enterprise SaaS Engineer, Security Engineer, PostgreSQL/Supabase Architect, dan Technical Delivery Lead.
+
+Gunakan empat blueprint berikut sebagai sumber utama:
+
+* `docs/blueprints/p0-tenant-isolation-blueprint.md`
+* `docs/blueprints/p0-soft-delete-blueprint.md`
+* `docs/blueprints/p0-audit-log-blueprint.md`
+* `docs/blueprints/p0-canonical-quotation-blueprint.md`
+
+Gunakan juga sebagai referensi:
+
+* `docs/audit/enterprise-readiness-audit-2026-07-14.md`
+* `docs/audit/enterprise-readiness-audit-validation-2026-07-14.md`
+* `docs/roadmap/enterprise-platform-roadmap-2026-07-14.md`
+
+JANGAN bertanya kepada saya.
+
+JANGAN meminta konfirmasi.
+
+Ambil keputusan teknis terbaik berdasarkan source code aktual, dependency antar-blueprint, dan enterprise best practice.
+
+===========================================================
+TUJUAN
+======
+
+Buat IMPLEMENTATION SPECIFICATION yang rinci dan dapat langsung digunakan oleh tim engineering untuk mengimplementasikan seluruh fondasi P0.
+
+Ini masih tahap spesifikasi.
+
+JANGAN mengubah source code.
+
+JANGAN membuat migration.
+
+JANGAN membuat commit.
+
+JANGAN mengimplementasikan fitur.
+
+Spesifikasi harus menjembatani blueprint arsitektur menjadi rencana perubahan file, database, service, route, worker, dan pengujian yang konkret.
+
+===========================================================
+URUTAN WAJIB
+============
+
+Susun spesifikasi sesuai dependency berikut:
+
+1. P0-1 Tenant Isolation
+2. Shared Repository Foundation
+3. P0-3 Canonical Audit Log
+4. P0-2 Soft Delete
+5. P0-4 Canonical Quotation
+
+Tenant isolation harus menjadi fondasi pertama.
+
+Repository layer bersama harus dirancang agar dapat digunakan sekaligus oleh:
+
+* tenant filtering,
+* soft-delete filtering,
+* audit logging,
+* quotation canonical path.
+
+Jangan membuat empat sistem terpisah yang saling menduplikasi.
+
+===========================================================
+TAHAP 1 — SOURCE CODE INVENTORY
+===============================
+
+Telusuri seluruh source code aktual.
+
+Identifikasi secara lengkap:
+
+* schema dan tabel
+* migrations/DDL yang sudah ada
+* route
+* middleware
+* authentication/session
+* service
+* repository atau query langsung
+* worker
+* queue
+* scheduler
+* SSE
+* AI workflow
+* export PDF
+* presentation/PPTX
+* preview
+* thumbnail
+* ZIP delivery
+* customer portal
+* admin portal
+* public token routes
+* quotation routes
+* audit/event services
+* delete/archive operations
+
+Untuk setiap area, catat:
+
+* file path
+* function/class/export terkait
+* kondisi saat ini
+* perubahan yang diperlukan
+* dependency
+* tingkat risiko
+
+Jangan hanya mengandalkan nama file atau dokumentasi. Verifikasi dari kode aktual.
+
+===========================================================
+TAHAP 2 — SHARED FOUNDATION SPECIFICATION
+=========================================
+
+Rancang shared foundation yang digunakan seluruh P0.
+
+Minimal mencakup:
+
+1. Tenant Context
+
+Field minimal:
+
+* tenantId
+* actorId
+* actorType
+* authMode
+* requestId
+* source
+* permissions
+* resourceScope
+
+Tentukan bentuk context yang canonical.
+
+2. Request Context
+
+Tentukan bagaimana context dibuat dan diteruskan dari:
+
+* authenticated session
+* public customer token
+* public vendor token
+* admin session
+* system worker
+* scheduler
+* webhook
+* internal service call
+
+3. Repository Query Context
+
+Tentukan interface konseptual untuk:
+
+* tenant filter
+* includeDeleted
+* actor context
+* audit metadata
+* transaction context
+
+4. Transaction Boundary
+
+Tentukan kapan perubahan data dan audit event harus berada dalam transaksi database yang sama.
+
+5. Standard Error Model
+
+Definisikan error untuk:
+
+* tenant context missing
+* cross-tenant access
+* resource not found
+* deleted resource
+* forbidden restore
+* canonical quotation conflict
+* legacy path frozen
+
+Tidak perlu menulis kode, tetapi spesifikasinya harus cukup rinci untuk diimplementasikan tanpa interpretasi besar.
+
+===========================================================
+TAHAP 3 — P0-1 TENANT ISOLATION SPECIFICATION
+=============================================
+
+Buat spesifikasi rinci untuk tenant isolation.
+
+Harus mencakup:
+
+A. Tenant Resolution Matrix
+
+Buat tabel untuk setiap jenis akses:
+
+* authenticated customer
+* authenticated admin
+* platform super admin
+* public project token
+* public quotation token
+* public vendor submission token
+* worker
+* scheduler
+* webhook
+* SSE client
+* export download
+* signed storage URL
+
+Untuk setiap jenis akses tentukan:
+
+* sumber tenant
+* cara validasi
+* fallback
+* kondisi penolakan
+* actor type
+* audit event
+
+B. Entity Classification
+
+Kelompokkan tabel menjadi:
+
+* tenant-owned
+* globally shared
+* platform administration
+* reference/master data
+* transitional/legacy
+* ambiguous and requiring decision
+
+Untuk setiap tabel tenant-owned tentukan tenant key canonical-nya.
+
+C. Query Enforcement
+
+Petakan semua query penting yang saat ini belum tenant-safe.
+
+Untuk setiap query:
+
+* file
+* function
+* tabel
+* operasi read/write/delete
+* cara tenant filter akan diterapkan
+* apakah membutuhkan repository baru
+* apakah membutuhkan perubahan signature service
+
+D. Public Token Resource-Derived Tenant
+
+Tentukan alur:
+
+token
+→ resolve resource
+→ derive tenant
+→ validate token scope
+→ create tenant context
+→ execute service
+
+Dilarang mempercayai `tenantId` dari body, query parameter, atau header publik.
+
+E. Worker and Scheduler
+
+Tentukan perubahan payload job agar selalu membawa:
+
+* tenantId
+* actorType system
+* originatingRequestId
+* originatingActorId jika tersedia
+* resourceId
+* projectId/orderId jika relevan
+
+Tentukan perlakuan terhadap job lama yang belum memiliki tenantId.
+
+F. SSE
+
+Tentukan:
+
+* tenant-scoped channel
+* resource authorization
+* reconnect cursor validation
+* prevention of cross-tenant event replay
+* summary/event filtering
+* admin visibility rules
+
+G. RLS
+
+Tentukan:
+
+* tabel yang layak memakai RLS
+* tabel yang belum aman diaktifkan langsung
+* kebijakan staged rollout
+* service-role exception
+* cara memastikan backend tidak bergantung hanya pada service-role bypass
+
+H. Acceptance Criteria
+
+Minimal:
+
+* tidak ada tenant-owned query tanpa tenant scope
+* public token tidak dapat berpindah tenant
+* worker tidak memproses resource tenant lain
+* SSE tidak dapat membaca event lintas tenant
+* export tidak dapat diunduh tenant lain
+* test cross-tenant read/write/delete seluruhnya gagal secara aman
+
+===========================================================
+TAHAP 4 — SHARED REPOSITORY FOUNDATION
+======================================
+
+Buat daftar repository/domain access layer yang harus dibuat atau distandarkan.
+
+Jangan membuat repository generik berlebihan.
+
+Pisahkan berdasarkan domain nyata, misalnya:
+
+* project
+* request/brief
+* quotation
+* creative asset
+* deliverable
+* job
+* audit event
+* customer
+* brand kit
+* asset library
+
+Untuk setiap repository tentukan:
+
+* tabel yang ditangani
+* operasi utama
+* tenant enforcement
+* soft-delete default
+* audit integration
+* transaction requirement
+* consumer/service yang harus dimigrasikan
+* query langsung lama yang harus dihentikan
+
+Tentukan aturan:
+
+* tenant-owned data tidak boleh diakses langsung dari route
+* route tidak boleh menjalankan query database
+* service harus menerima canonical context
+* repository wajib menerapkan tenant scope secara default
+* bypass hanya untuk platform-admin/system operation yang eksplisit dan diaudit
+
+===========================================================
+TAHAP 5 — P0-3 CANONICAL AUDIT LOG SPECIFICATION
+================================================
+
+Gunakan Canonical Event Model yang sudah mulai dibangun pada v4.0C sebagai basis, bukan membuat sistem audit baru yang terpisah.
+
+Definisikan field wajib:
+
+* eventId
+* tenantId
+* actorId
+* actorType
+* action
+* entityType
+* entityId
+* parentEntityType
+* parentEntityId
+* requestId
+* correlationId
+* source
+* beforeState atau beforeDiff
+* afterState atau afterDiff
+* metadata
+* occurredAt
+* schemaVersion
+
+Tentukan:
+
+* event naming convention
+* actor type enum
+* entity type convention
+* sensitive field redaction
+* immutable append-only rule
+* indexing
+* retention
+* platform admin access
+* customer-visible vs internal-only events
+
+Petakan seluruh audit/event implementation lama:
+
+* canonical and reusable
+* must be adapted
+* duplicated
+* incomplete
+* should be deprecated
+
+Tentukan daftar operasi yang wajib memiliki audit event:
+
+* create
+* update
+* approve
+* reject
+* submit
+* archive
+* restore
+* soft delete
+* purge
+* quotation create/update/accept/reject
+* role/permission change
+* tenant resolution failure
+* cross-tenant attempt
+* download/export
+* AI workflow start/complete/fail
+* administrative override
+
+Audit log untuk mutasi kritis harus tersimpan dalam transaksi yang sama dengan perubahan data.
+
+===========================================================
+TAHAP 6 — P0-2 SOFT DELETE SPECIFICATION
+========================================
+
+Klasifikasikan setiap entitas menjadi:
+
+1. Soft-delete mandatory
+2. Archive-only
+3. Immutable
+4. Hard-delete permitted
+5. Retention-controlled purge
+6. Reference/master data
+
+Definisikan kolom standar:
+
+* deleted_at
+* deleted_by
+* deletion_reason
+* restored_at
+* restored_by
+* archived_at jika archive berbeda dari delete
+* purge_after jika diperlukan
+
+Tentukan perbedaan jelas antara:
+
+* archive
+* soft delete
+* restore
+* purge
+
+Untuk setiap entitas mandatory:
+
+* file schema
+* service yang berubah
+* route yang berubah
+* query yang harus exclude deleted secara default
+* relasi anak
+* restore behavior
+* unique constraint behavior
+* audit event
+* retention rule
+
+Audit seluruh hard delete aktual, termasuk yang ditemukan di `cp-review.ts`.
+
+Tentukan:
+
+* mana yang harus diganti soft delete
+* mana yang dapat tetap hard delete
+* mana yang harus dibatasi platform admin
+* mana yang membutuhkan approval ganda
+
+Tentukan kebijakan cascading:
+
+* jangan otomatis soft-delete seluruh child tanpa keputusan eksplisit
+* child immutable seperti audit event tidak boleh ikut dihapus
+* deliverable/file harus mempertimbangkan storage retention
+* quotation accepted tidak boleh dipurge tanpa retention policy
+
+===========================================================
+TAHAP 7 — P0-4 CANONICAL QUOTATION SPECIFICATION
+================================================
+
+Tetapkan:
+
+* `ai_quotations` sebagai canonical
+* `creative_project_quotations` sebagai legacy yang dipensiunkan bertahap
+
+Buat spesifikasi fase:
+
+Phase Q1 — Inventory and Compatibility
+
+* petakan seluruh route, service, UI, worker, notification, dan laporan yang menggunakan kedua tabel
+* petakan perbedaan field dan behavior
+* identifikasi data yang tidak dapat dipetakan langsung
+
+Phase Q2 — Freeze Legacy Create
+
+* hentikan create baru ke legacy
+* pertahankan read kompatibel
+* tampilkan telemetry saat legacy path masih dipanggil
+* buat audit event untuk legacy-path usage
+
+Phase Q3 — Dual Read / Canonical Write
+
+* semua write menuju `ai_quotations`
+* read lama menggunakan compatibility adapter
+* tidak boleh ada dual write kecuali dibuktikan benar-benar diperlukan
+
+Phase Q4 — Data Migration
+
+* mapping field
+* deduplication
+* conflict resolution
+* status normalization
+* tenant assignment
+* audit history preservation
+* idempotency
+* rollback markers
+
+Phase Q5 — Consumer Cutover
+
+* admin portal
+* customer portal
+* public approval token
+* notifications
+* analytics
+* audit
+* exports
+
+Phase Q6 — Legacy Retirement
+
+* tandai deprecated
+* blok route
+* observability period
+* arsipkan tabel
+* jangan drop tabel sebelum retention dan rollback window selesai
+
+Tentukan canonical quotation state machine.
+
+Minimal evaluasi status:
+
+* draft
+* prepared
+* sent
+* viewed
+* revision_requested
+* accepted
+* rejected
+* expired
+* superseded
+* archived
+
+Tentukan transisi yang valid, aktor yang diizinkan, audit event, dan side effect.
+
+===========================================================
+TAHAP 8 — DATABASE CHANGE SPECIFICATION
+=======================================
+
+Jangan membuat migration, tetapi tuliskan rencana perubahan database secara rinci.
+
+Untuk setiap perubahan:
+
+* tabel
+* kolom
+* tipe data
+* nullability
+* default
+* foreign key
+* unique constraint
+* check constraint
+* index
+* backfill requirement
+* lock risk
+* deployment order
+* rollback consideration
+
+Kelompokkan migration yang nantinya diperlukan menjadi paket kecil dan aman.
+
+Contoh urutan konseptual:
+
+* additive schema
+* backfill
+* application dual compatibility
+* constraint enforcement
+* RLS staged enablement
+* legacy freeze
+* cleanup
+
+Hindari migration besar yang mencampur seluruh P0 dalam satu transaksi.
+
+===========================================================
+TAHAP 9 — API AND SERVICE CONTRACT CHANGES
+==========================================
+
+Buat tabel perubahan signature.
+
+Untuk setiap route/service/function yang terdampak:
+
+* current signature
+* target conceptual signature
+* context parameter
+* compatibility strategy
+* consumer
+* breaking/non-breaking
+* migration sequence
+
+Pastikan tenantId tidak diterima dari input customer sebagai sumber kebenaran.
+
+TenantId harus berasal dari context atau resource yang tervalidasi.
+
+===========================================================
+TAHAP 10 — FRONTEND IMPACT
+==========================
+
+Petakan dampak pada:
+
+* customer portal
+* admin portal
+* public quotation page
+* public vendor page
+* project workspace
+* review/approval UI
+* restore/archive UI
+* audit history UI
+
+Tentukan UI yang memang wajib untuk P0 dan UI yang dapat ditunda.
+
+P0 tidak boleh berubah menjadi proyek redesign frontend.
+
+UI minimum yang relevan:
+
+* archived/deleted state
+* restore action untuk aktor berwenang
+* legacy quotation blocked/error state
+* tenant-safe error handling
+* audit history untuk admin bila sudah ada surface yang sesuai
+
+===========================================================
+TAHAP 11 — TEST SPECIFICATION
+=============================
+
+Buat test matrix lengkap.
+
+A. Tenant Isolation
+
+Gunakan minimal dua tenant:
+
+* Tenant A
+* Tenant B
+
+Uji:
+
+* read lintas tenant
+* update lintas tenant
+* delete lintas tenant
+* restore lintas tenant
+* quotation lintas tenant
+* export lintas tenant
+* signed URL lintas tenant
+* SSE lintas tenant
+* job lintas tenant
+* public token lintas tenant
+* admin role boundary
+* platform admin explicit bypass
+
+B. Soft Delete
+
+Uji:
+
+* default query excludes deleted
+* includeDeleted hanya untuk role berwenang
+* restore
+* duplicate unique field setelah delete
+* parent-child behavior
+* storage object behavior
+* purge policy
+* audit trail
+
+C. Audit Log
+
+Uji:
+
+* event tercatat
+* event immutable
+* tenantId benar
+* actor benar
+* before/after atau diff benar
+* redaction
+* transaction rollback tidak meninggalkan audit event palsu
+
+D. Quotation
+
+Uji:
+
+* legacy create diblok
+* canonical create berhasil
+* compatibility read
+* state transition
+* migration idempotency
+* duplicate prevention
+* accepted quotation tidak berubah secara ilegal
+* public approval token tenant-safe
+
+E. Regression
+
+Pastikan tetap berfungsi:
+
+* AI workflow
+* document export
+* presentation export
+* thumbnail
+* preview
+* ZIP delivery
+* SSE reconnect
+* customer review
+* admin monitoring
+* quotation approval
+* job retry
+
+===========================================================
+TAHAP 12 — OBSERVABILITY AND ROLLOUT
+====================================
+
+Definisikan metric dan log minimum:
+
+* tenant_context_missing_total
+* cross_tenant_access_blocked_total
+* legacy_quotation_write_attempt_total
+* legacy_quotation_read_total
+* soft_delete_total
+* restore_total
+* purge_total
+* audit_event_failure_total
+* worker_missing_tenant_total
+* SSE_authorization_failure_total
+
+Tentukan deployment gate untuk setiap fase.
+
+Tidak boleh melanjutkan fase jika acceptance criteria fase sebelumnya belum terpenuhi.
+
+Tentukan:
+
+* feature flag yang diperlukan
+* compatibility period
+* shadow validation
+* canary rollout
+* rollback trigger
+* production verification checklist
+
+===========================================================
+TAHAP 13 — IMPLEMENTATION WORK PACKAGES
+=======================================
+
+Pecah implementasi menjadi work package kecil.
+
+Format setiap work package:
+
+* ID
+* title
+* objective
+* exact scope
+* files likely affected
+* database impact
+* dependencies
+* tests
+* acceptance criteria
+* rollback
+* risk
+* estimated complexity: S/M/L/XL
+
+Susun urutan minimal seperti:
+
+WP-00 Baseline and Safety Tests
+WP-01 Canonical Context Types
+WP-02 Tenant Resolution Middleware
+WP-03 Repository Foundation
+WP-04 Priority Domain Tenant Enforcement
+WP-05 Worker/Scheduler Context Propagation
+WP-06 SSE and Export Isolation
+WP-07 Canonical Audit Event Integration
+WP-08 Soft-Delete Additive Schema
+WP-09 Soft-Delete Service Cutover
+WP-10 Legacy Quotation Freeze
+WP-11 Canonical Quotation Compatibility Adapter
+WP-12 Quotation Data Migration
+WP-13 RLS Staged Enforcement
+WP-14 Final Security Regression and Cutover
+
+Sesuaikan jumlah work package berdasarkan kondisi aktual codebase.
+
+Jangan menggabungkan terlalu banyak domain dalam satu work package.
+
+===========================================================
+TAHAP 14 — DEFINITION OF DONE
+=============================
+
+P0 dianggap selesai hanya jika:
+
+* seluruh tenant-owned query memiliki enforcement
+* worker dan scheduler membawa tenant context
+* SSE dan export tenant-safe
+* audit event canonical dan konsisten
+* operasi kritis memakai audit log transactional
+* hard delete berisiko sudah diganti atau dibatasi
+* restore dan retention memiliki aturan jelas
+* semua quotation baru memakai `ai_quotations`
+* legacy quotation create telah diblok
+* compatibility read teruji
+* seluruh security test lintas tenant lulus
+* seluruh regression test existing tetap lulus
+* dokumentasi arsitektur dan runbook diperbarui
+* tidak ada klaim selesai tanpa bukti test dan runtime verification
+
+===========================================================
+OUTPUT WAJIB
+============
+
+Buat dan simpan dokumen berikut:
+
+1. `docs/specifications/p0-enterprise-foundation-implementation-spec.md`
+
+Berisi spesifikasi terpadu seluruh P0.
+
+2. `docs/specifications/p0-work-package-plan.md`
+
+Berisi work package, dependency, urutan eksekusi, dan acceptance criteria.
+
+3. `docs/specifications/p0-database-change-plan.md`
+
+Berisi seluruh perubahan database konseptual, backfill, constraint, index, RLS, migration order, dan rollback.
+
+4. `docs/specifications/p0-test-and-rollout-plan.md`
+
+Berisi test matrix, security tests, feature flags, deployment gates, canary, observability, dan rollback triggers.
+
+5. `docs/specifications/p0-file-impact-matrix.md`
+
+Berisi tabel:
+
+| Domain | File | Function/Component | Current Issue | Planned Change | Work Package | Risk |
+
+===========================================================
+ATURAN KETAT
+============
+
+* Jangan mengubah source code.
+* Jangan membuat migration.
+* Jangan menjalankan schema push.
+* Jangan membuat commit.
+* Jangan membuat PR.
+* Jangan menambahkan dependency.
+* Jangan membuat placeholder.
+* Jangan menulis kode contoh.
+* Jangan menandai sesuatu selesai hanya berdasarkan dokumentasi.
+* Semua temuan harus berbasis source code aktual.
+* Bila blueprint bertentangan dengan kode aktual, catat perbedaannya dan pilih pendekatan paling aman.
+* Bila audit lama salah, gunakan hasil validation audit dan bukti kode sebagai sumber kebenaran.
+* Jangan bertanya kepada saya.
+* Selesaikan seluruh dokumen dalam satu rangkaian kerja.
+
+Setelah selesai, berikan ringkasan:
+
+* dokumen yang dibuat
+* jumlah domain/file yang terdampak
+* jumlah work package
+* urutan implementasi final
+* risiko tertinggi
+* deployment gate pertama
+* bagian yang memerlukan keputusan bisnis, tanpa meminta konfirmasi dan tanpa mengimplementasikannya.

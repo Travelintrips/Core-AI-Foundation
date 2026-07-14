@@ -29,6 +29,7 @@ import {
 } from "@workspace/api-zod";
 import * as packageManagerService from "../services/packageManagerService.js";
 import { PackageManagerError } from "../services/packageManagerService.js";
+import { assertClientTenantNotSpoofed, resolveAuthenticatedTenantContext, TenantMismatchError } from "../security/tenantResolution.js";
 
 const router = Router();
 
@@ -45,8 +46,28 @@ function parsePackageParams(req: Request, res: Response): { packageType: "skill"
   return parsed.data;
 }
 
-function parseTenantId(source: unknown): string {
-  return typeof source === "string" && source.length > 0 ? source : "default";
+/**
+ * WP-00 fix (was: `parseTenantId`, which trusted whatever string the client
+ * sent). Tenant is now always resolved server-side from the authenticated
+ * request (session or ADMIN_API_KEY — both already verified by
+ * adminAuthWithExceptions). Any client-supplied `tenantId` that disagrees
+ * with the resolved tenant is treated as a spoofing attempt: rejected with
+ * 403 and logged, never used. Returns null (and has already sent the
+ * response) when the request must be rejected, so callers can
+ * `if (tenantId === null) return;`.
+ */
+function resolveTenantOrReject(req: Request, res: Response, clientSupplied: unknown, routeLabel: string): string | null {
+  const ctx = resolveAuthenticatedTenantContext(req);
+  try {
+    assertClientTenantNotSpoofed(clientSupplied, ctx.tenantId, req, routeLabel);
+  } catch (err) {
+    if (err instanceof TenantMismatchError) {
+      res.status(403).json({ error: "Forbidden" });
+      return null;
+    }
+    throw err;
+  }
+  return ctx.tenantId;
 }
 
 function handlePmError(err: unknown, res: Response): boolean {
@@ -88,9 +109,12 @@ router.get("/ai/marketplace/installed", async (req, res): Promise<void> => {
     res.status(400).json({ error: q.error.message });
     return;
   }
+  const tenantId = resolveTenantOrReject(req, res, q.data.tenantId, "GET /ai/marketplace/installed");
+  if (tenantId === null) return;
+
   const whereClause = q.data.packageType
-    ? and(eq(aiInstalledPackagesTable.tenantId, q.data.tenantId), eq(aiInstalledPackagesTable.packageType, q.data.packageType))
-    : eq(aiInstalledPackagesTable.tenantId, q.data.tenantId);
+    ? and(eq(aiInstalledPackagesTable.tenantId, tenantId), eq(aiInstalledPackagesTable.packageType, q.data.packageType))
+    : eq(aiInstalledPackagesTable.tenantId, tenantId);
 
   const installed = await db
     .select()
@@ -124,8 +148,10 @@ router.post("/ai/marketplace/install", async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
+  const tenantId = resolveTenantOrReject(req, res, body.data.tenantId, "POST /ai/marketplace/install");
+  if (tenantId === null) return;
   try {
-    const row = await packageManagerService.install(body.data.tenantId, body.data.packageType, body.data.packageId, body.data.configuration ?? {});
+    const row = await packageManagerService.install(tenantId, body.data.packageType, body.data.packageId, body.data.configuration ?? {});
     res.status(201).json(row);
   } catch (err) {
     if (!handlePmError(err, res)) throw err;
@@ -135,7 +161,8 @@ router.post("/ai/marketplace/install", async (req, res): Promise<void> => {
 router.patch("/ai/marketplace/:packageType/:id/upgrade", async (req, res): Promise<void> => {
   const params = parsePackageParams(req, res);
   if (!params) return;
-  const tenantId = parseTenantId(req.body?.tenantId);
+  const tenantId = resolveTenantOrReject(req, res, req.body?.tenantId, "PATCH /ai/marketplace/:packageType/:id/upgrade");
+  if (tenantId === null) return;
   try {
     const row = await packageManagerService.upgrade(tenantId, params.packageType, params.id);
     res.json(row);
@@ -147,7 +174,8 @@ router.patch("/ai/marketplace/:packageType/:id/upgrade", async (req, res): Promi
 router.patch("/ai/marketplace/:packageType/:id/enable", async (req, res): Promise<void> => {
   const params = parsePackageParams(req, res);
   if (!params) return;
-  const tenantId = parseTenantId(req.body?.tenantId);
+  const tenantId = resolveTenantOrReject(req, res, req.body?.tenantId, "PATCH /ai/marketplace/:packageType/:id/enable");
+  if (tenantId === null) return;
   try {
     const row = await packageManagerService.enable(tenantId, params.packageType, params.id);
     res.json(row);
@@ -159,7 +187,8 @@ router.patch("/ai/marketplace/:packageType/:id/enable", async (req, res): Promis
 router.patch("/ai/marketplace/:packageType/:id/disable", async (req, res): Promise<void> => {
   const params = parsePackageParams(req, res);
   if (!params) return;
-  const tenantId = parseTenantId(req.body?.tenantId);
+  const tenantId = resolveTenantOrReject(req, res, req.body?.tenantId, "PATCH /ai/marketplace/:packageType/:id/disable");
+  if (tenantId === null) return;
   try {
     const row = await packageManagerService.disable(tenantId, params.packageType, params.id);
     res.json(row);
@@ -171,7 +200,8 @@ router.patch("/ai/marketplace/:packageType/:id/disable", async (req, res): Promi
 router.delete("/ai/marketplace/:packageType/:id", async (req, res): Promise<void> => {
   const params = parsePackageParams(req, res);
   if (!params) return;
-  const tenantId = parseTenantId(req.query?.tenantId);
+  const tenantId = resolveTenantOrReject(req, res, req.query?.tenantId, "DELETE /ai/marketplace/:packageType/:id");
+  if (tenantId === null) return;
   try {
     await packageManagerService.uninstall(tenantId, params.packageType, params.id);
     res.status(204).send();
@@ -197,7 +227,8 @@ router.post("/ai/marketplace/tools/:id/health-check", async (req, res): Promise<
 // ── Analytics ─────────────────────────────────────────────────────────────────
 
 router.get("/ai/marketplace/analytics", async (req, res): Promise<void> => {
-  const tenantId = typeof req.query.tenantId === "string" ? req.query.tenantId : "default";
+  const tenantId = resolveTenantOrReject(req, res, req.query.tenantId, "GET /ai/marketplace/analytics");
+  if (tenantId === null) return;
 
   const [skills, tools, installed] = await Promise.all([
     db.select().from(aiSkillPackagesTable),

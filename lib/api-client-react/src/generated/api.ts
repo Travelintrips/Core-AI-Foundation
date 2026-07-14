@@ -23,7 +23,9 @@ import type {
   AbTest,
   AbTestList,
   AcceptHumanTaskBody,
+  AdminAnalyzeAssetByIdBody,
   AdminAssetLibraryStats200,
+  AdminBrandIntelligenceStats,
   AdminBrandKitStats200,
   AdminGetCustomerAssets200,
   AdminGetCustomerWorkspace200,
@@ -87,10 +89,15 @@ import type {
   AiWorkflowInput,
   AiWorkflowUpdate,
   AnalyticsOverview,
+  AnalyzeAssetInput,
+  AnalyzeBrandInput,
+  AnalyzeWorkspaceAssetBody,
   ApproveCpReviewBody,
   ApproveRequestMargin200,
   ApproveRequestMarginBody,
   AssetFeedbackInput,
+  AssetIntelligenceList,
+  AssetIntelligenceView,
   AssetLibraryItem,
   AssetLibraryList,
   AssetSignedDownload,
@@ -98,10 +105,13 @@ import type {
   AssignHumanTaskBody,
   AuditLogPage,
   BadRequestResponse,
+  BrandConsistencyReport,
+  BrandDnaView,
   BrandKitEnterpriseDetail,
   BrandKitEnterpriseList,
   BrandKitSlotAsset,
   BrandKitSlotHistory,
+  BrandRecommendationList,
   CancelJobBody,
   CatalogAnalytics,
   CheckoutResponse,
@@ -152,6 +162,8 @@ import type {
   CreativeAiAsset,
   CreativeAiImageAnalytics,
   CreativeBriefInput,
+  CreativeDirectorRecommendation,
+  CreativeMemoryView,
   CreativeProject,
   CreativeProjectDetail,
   CreativeProjectStatusUpdate,
@@ -166,6 +178,7 @@ import type {
   DispatcherSettings,
   DispatcherStatus,
   DocumentAccessTokenResult,
+  DuplicateReport,
   EndImpersonationInput,
   ErrorResponse,
   EventListResponse,
@@ -181,6 +194,7 @@ import type {
   GenerateReferralInput,
   GenerateTokenInput,
   GenerateTokenResponse,
+  GetAdminAssetIntelligenceParams,
   GetAgentStatsParams,
   GetAnalyticsUsageParams,
   GetApplicablePromotionsParams,
@@ -308,6 +322,8 @@ import type {
   WorkflowExecution,
   WorkspaceActivityList,
   WorkspaceAnalytics,
+  WorkspaceAssetIntelligenceDashboard,
+  WorkspaceBrandIntelligenceDashboard,
   WorkspaceBrandKitList,
   WorkspaceDocumentList,
   WorkspaceDownloadList,
@@ -19556,6 +19572,1366 @@ export function useAdminGetProjectZip<TData = Awaited<ReturnType<typeof adminGet
 
 
 
+
+export const getGetAdminBrandIntelligenceStatsUrl = () => {
+
+
+
+
+  return `/api/ai/brand-intelligence/stats`
+}
+
+/**
+ * @summary Admin — overall brand intelligence stats across all clients
+ */
+export const getAdminBrandIntelligenceStats = async ( options?: RequestInit): Promise<AdminBrandIntelligenceStats> => {
+
+  return customFetch<AdminBrandIntelligenceStats>(getGetAdminBrandIntelligenceStatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminBrandIntelligenceStatsQueryKey = () => {
+    return [
+    `/api/ai/brand-intelligence/stats`
+    ] as const;
+    }
+
+
+export const getGetAdminBrandIntelligenceStatsQueryOptions = <TData = Awaited<ReturnType<typeof getAdminBrandIntelligenceStats>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminBrandIntelligenceStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminBrandIntelligenceStatsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminBrandIntelligenceStats>>> = ({ signal }) => getAdminBrandIntelligenceStats({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminBrandIntelligenceStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminBrandIntelligenceStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminBrandIntelligenceStats>>>
+export type GetAdminBrandIntelligenceStatsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — overall brand intelligence stats across all clients
+ */
+
+export function useGetAdminBrandIntelligenceStats<TData = Awaited<ReturnType<typeof getAdminBrandIntelligenceStats>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminBrandIntelligenceStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminBrandIntelligenceStatsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAdminAnalyzeBrandUrl = () => {
+
+
+
+
+  return `/api/ai/brand-intelligence/analyze`
+}
+
+/**
+ * @summary Admin — trigger Brand DNA analysis for a client
+ */
+export const adminAnalyzeBrand = async (analyzeBrandInput: AnalyzeBrandInput, options?: RequestInit): Promise<BrandDnaView> => {
+
+  return customFetch<BrandDnaView>(getAdminAnalyzeBrandUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(analyzeBrandInput)
+  }
+);}
+
+
+
+
+export const getAdminAnalyzeBrandMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminAnalyzeBrand>>, TError,{data: BodyType<AnalyzeBrandInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminAnalyzeBrand>>, TError,{data: BodyType<AnalyzeBrandInput>}, TContext> => {
+
+const mutationKey = ['adminAnalyzeBrand'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminAnalyzeBrand>>, {data: BodyType<AnalyzeBrandInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  adminAnalyzeBrand(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminAnalyzeBrandMutationResult = NonNullable<Awaited<ReturnType<typeof adminAnalyzeBrand>>>
+    export type AdminAnalyzeBrandMutationBody = BodyType<AnalyzeBrandInput>
+    export type AdminAnalyzeBrandMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Admin — trigger Brand DNA analysis for a client
+ */
+export const useAdminAnalyzeBrand = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminAnalyzeBrand>>, TError,{data: BodyType<AnalyzeBrandInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminAnalyzeBrand>>,
+        TError,
+        {data: BodyType<AnalyzeBrandInput>},
+        TContext
+      > => {
+      return useMutation(getAdminAnalyzeBrandMutationOptions(options));
+    }
+
+export const getGetAdminBrandDnaUrl = (clientId: string,) => {
+
+
+
+
+  return `/api/ai/brand-intelligence/${clientId}`
+}
+
+/**
+ * @summary Admin — get stored Brand DNA for a client
+ */
+export const getAdminBrandDna = async (clientId: string, options?: RequestInit): Promise<BrandDnaView> => {
+
+  return customFetch<BrandDnaView>(getGetAdminBrandDnaUrl(clientId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminBrandDnaQueryKey = (clientId: string,) => {
+    return [
+    `/api/ai/brand-intelligence/${clientId}`
+    ] as const;
+    }
+
+
+export const getGetAdminBrandDnaQueryOptions = <TData = Awaited<ReturnType<typeof getAdminBrandDna>>, TError = ErrorType<ErrorResponse>>(clientId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminBrandDna>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminBrandDnaQueryKey(clientId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminBrandDna>>> = ({ signal }) => getAdminBrandDna(clientId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: clientId !== null && clientId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminBrandDna>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminBrandDnaQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminBrandDna>>>
+export type GetAdminBrandDnaQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Admin — get stored Brand DNA for a client
+ */
+
+export function useGetAdminBrandDna<TData = Awaited<ReturnType<typeof getAdminBrandDna>>, TError = ErrorType<ErrorResponse>>(
+ clientId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminBrandDna>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminBrandDnaQueryOptions(clientId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAdminRefreshBrandDnaUrl = (clientId: string,) => {
+
+
+
+
+  return `/api/ai/brand-intelligence/${clientId}/refresh`
+}
+
+/**
+ * @summary Admin — force re-analyze Brand DNA for a client
+ */
+export const adminRefreshBrandDna = async (clientId: string, options?: RequestInit): Promise<BrandDnaView> => {
+
+  return customFetch<BrandDnaView>(getAdminRefreshBrandDnaUrl(clientId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getAdminRefreshBrandDnaMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminRefreshBrandDna>>, TError,{clientId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminRefreshBrandDna>>, TError,{clientId: string}, TContext> => {
+
+const mutationKey = ['adminRefreshBrandDna'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminRefreshBrandDna>>, {clientId: string}> = (props) => {
+          const {clientId} = props ?? {};
+
+          return  adminRefreshBrandDna(clientId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminRefreshBrandDnaMutationResult = NonNullable<Awaited<ReturnType<typeof adminRefreshBrandDna>>>
+
+    export type AdminRefreshBrandDnaMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Admin — force re-analyze Brand DNA for a client
+ */
+export const useAdminRefreshBrandDna = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminRefreshBrandDna>>, TError,{clientId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminRefreshBrandDna>>,
+        TError,
+        {clientId: string},
+        TContext
+      > => {
+      return useMutation(getAdminRefreshBrandDnaMutationOptions(options));
+    }
+
+export const getGetAdminBrandRecommendationsUrl = (clientId: string,) => {
+
+
+
+
+  return `/api/ai/brand-intelligence/${clientId}/recommendations`
+}
+
+/**
+ * @summary Admin — get brand improvement recommendations for a client
+ */
+export const getAdminBrandRecommendations = async (clientId: string, options?: RequestInit): Promise<BrandRecommendationList> => {
+
+  return customFetch<BrandRecommendationList>(getGetAdminBrandRecommendationsUrl(clientId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminBrandRecommendationsQueryKey = (clientId: string,) => {
+    return [
+    `/api/ai/brand-intelligence/${clientId}/recommendations`
+    ] as const;
+    }
+
+
+export const getGetAdminBrandRecommendationsQueryOptions = <TData = Awaited<ReturnType<typeof getAdminBrandRecommendations>>, TError = ErrorType<unknown>>(clientId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminBrandRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminBrandRecommendationsQueryKey(clientId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminBrandRecommendations>>> = ({ signal }) => getAdminBrandRecommendations(clientId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: clientId !== null && clientId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminBrandRecommendations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminBrandRecommendationsQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminBrandRecommendations>>>
+export type GetAdminBrandRecommendationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — get brand improvement recommendations for a client
+ */
+
+export function useGetAdminBrandRecommendations<TData = Awaited<ReturnType<typeof getAdminBrandRecommendations>>, TError = ErrorType<unknown>>(
+ clientId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminBrandRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminBrandRecommendationsQueryOptions(clientId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAdminConsistencyReportUrl = (clientId: string,) => {
+
+
+
+
+  return `/api/ai/brand-intelligence/${clientId}/consistency-report`
+}
+
+/**
+ * @summary Admin — brand consistency report for a client
+ */
+export const getAdminConsistencyReport = async (clientId: string, options?: RequestInit): Promise<BrandConsistencyReport> => {
+
+  return customFetch<BrandConsistencyReport>(getGetAdminConsistencyReportUrl(clientId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminConsistencyReportQueryKey = (clientId: string,) => {
+    return [
+    `/api/ai/brand-intelligence/${clientId}/consistency-report`
+    ] as const;
+    }
+
+
+export const getGetAdminConsistencyReportQueryOptions = <TData = Awaited<ReturnType<typeof getAdminConsistencyReport>>, TError = ErrorType<unknown>>(clientId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminConsistencyReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminConsistencyReportQueryKey(clientId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminConsistencyReport>>> = ({ signal }) => getAdminConsistencyReport(clientId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: clientId !== null && clientId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminConsistencyReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminConsistencyReportQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminConsistencyReport>>>
+export type GetAdminConsistencyReportQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — brand consistency report for a client
+ */
+
+export function useGetAdminConsistencyReport<TData = Awaited<ReturnType<typeof getAdminConsistencyReport>>, TError = ErrorType<unknown>>(
+ clientId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminConsistencyReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminConsistencyReportQueryOptions(clientId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAdminCreativeMemoryUrl = (clientId: string,) => {
+
+
+
+
+  return `/api/ai/brand-intelligence/${clientId}/creative-memory`
+}
+
+/**
+ * @summary Admin — creative memory for a client
+ */
+export const getAdminCreativeMemory = async (clientId: string, options?: RequestInit): Promise<CreativeMemoryView> => {
+
+  return customFetch<CreativeMemoryView>(getGetAdminCreativeMemoryUrl(clientId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminCreativeMemoryQueryKey = (clientId: string,) => {
+    return [
+    `/api/ai/brand-intelligence/${clientId}/creative-memory`
+    ] as const;
+    }
+
+
+export const getGetAdminCreativeMemoryQueryOptions = <TData = Awaited<ReturnType<typeof getAdminCreativeMemory>>, TError = ErrorType<unknown>>(clientId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminCreativeMemory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminCreativeMemoryQueryKey(clientId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminCreativeMemory>>> = ({ signal }) => getAdminCreativeMemory(clientId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: clientId !== null && clientId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminCreativeMemory>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminCreativeMemoryQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminCreativeMemory>>>
+export type GetAdminCreativeMemoryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — creative memory for a client
+ */
+
+export function useGetAdminCreativeMemory<TData = Awaited<ReturnType<typeof getAdminCreativeMemory>>, TError = ErrorType<unknown>>(
+ clientId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminCreativeMemory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminCreativeMemoryQueryOptions(clientId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAdminCreativeDirectorRecommendationUrl = (clientId: string,) => {
+
+
+
+
+  return `/api/ai/brand-intelligence/${clientId}/creative-director`
+}
+
+/**
+ * @summary Admin — AI Creative Director recommendation for a client
+ */
+export const getAdminCreativeDirectorRecommendation = async (clientId: string, options?: RequestInit): Promise<CreativeDirectorRecommendation> => {
+
+  return customFetch<CreativeDirectorRecommendation>(getGetAdminCreativeDirectorRecommendationUrl(clientId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminCreativeDirectorRecommendationQueryKey = (clientId: string,) => {
+    return [
+    `/api/ai/brand-intelligence/${clientId}/creative-director`
+    ] as const;
+    }
+
+
+export const getGetAdminCreativeDirectorRecommendationQueryOptions = <TData = Awaited<ReturnType<typeof getAdminCreativeDirectorRecommendation>>, TError = ErrorType<unknown>>(clientId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminCreativeDirectorRecommendation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminCreativeDirectorRecommendationQueryKey(clientId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminCreativeDirectorRecommendation>>> = ({ signal }) => getAdminCreativeDirectorRecommendation(clientId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: clientId !== null && clientId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminCreativeDirectorRecommendation>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminCreativeDirectorRecommendationQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminCreativeDirectorRecommendation>>>
+export type GetAdminCreativeDirectorRecommendationQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — AI Creative Director recommendation for a client
+ */
+
+export function useGetAdminCreativeDirectorRecommendation<TData = Awaited<ReturnType<typeof getAdminCreativeDirectorRecommendation>>, TError = ErrorType<unknown>>(
+ clientId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminCreativeDirectorRecommendation>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminCreativeDirectorRecommendationQueryOptions(clientId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAdminAnalyzeAssetUrl = () => {
+
+
+
+
+  return `/api/ai/asset-intelligence/analyze`
+}
+
+/**
+ * @summary Admin — trigger asset intelligence analysis
+ */
+export const adminAnalyzeAsset = async (analyzeAssetInput: AnalyzeAssetInput, options?: RequestInit): Promise<AssetIntelligenceView> => {
+
+  return customFetch<AssetIntelligenceView>(getAdminAnalyzeAssetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(analyzeAssetInput)
+  }
+);}
+
+
+
+
+export const getAdminAnalyzeAssetMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminAnalyzeAsset>>, TError,{data: BodyType<AnalyzeAssetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminAnalyzeAsset>>, TError,{data: BodyType<AnalyzeAssetInput>}, TContext> => {
+
+const mutationKey = ['adminAnalyzeAsset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminAnalyzeAsset>>, {data: BodyType<AnalyzeAssetInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  adminAnalyzeAsset(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminAnalyzeAssetMutationResult = NonNullable<Awaited<ReturnType<typeof adminAnalyzeAsset>>>
+    export type AdminAnalyzeAssetMutationBody = BodyType<AnalyzeAssetInput>
+    export type AdminAnalyzeAssetMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Admin — trigger asset intelligence analysis
+ */
+export const useAdminAnalyzeAsset = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminAnalyzeAsset>>, TError,{data: BodyType<AnalyzeAssetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminAnalyzeAsset>>,
+        TError,
+        {data: BodyType<AnalyzeAssetInput>},
+        TContext
+      > => {
+      return useMutation(getAdminAnalyzeAssetMutationOptions(options));
+    }
+
+export const getAdminAnalyzeAssetByIdUrl = (assetId: number,) => {
+
+
+
+
+  return `/api/ai/asset-intelligence/analyze/${assetId}`
+}
+
+/**
+ * @summary Admin — analyze a specific asset by ID
+ */
+export const adminAnalyzeAssetById = async (assetId: number,
+    adminAnalyzeAssetByIdBody: AdminAnalyzeAssetByIdBody, options?: RequestInit): Promise<AssetIntelligenceView> => {
+
+  return customFetch<AssetIntelligenceView>(getAdminAnalyzeAssetByIdUrl(assetId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(adminAnalyzeAssetByIdBody)
+  }
+);}
+
+
+
+
+export const getAdminAnalyzeAssetByIdMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminAnalyzeAssetById>>, TError,{assetId: number;data: BodyType<AdminAnalyzeAssetByIdBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminAnalyzeAssetById>>, TError,{assetId: number;data: BodyType<AdminAnalyzeAssetByIdBody>}, TContext> => {
+
+const mutationKey = ['adminAnalyzeAssetById'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminAnalyzeAssetById>>, {assetId: number;data: BodyType<AdminAnalyzeAssetByIdBody>}> = (props) => {
+          const {assetId,data} = props ?? {};
+
+          return  adminAnalyzeAssetById(assetId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminAnalyzeAssetByIdMutationResult = NonNullable<Awaited<ReturnType<typeof adminAnalyzeAssetById>>>
+    export type AdminAnalyzeAssetByIdMutationBody = BodyType<AdminAnalyzeAssetByIdBody>
+    export type AdminAnalyzeAssetByIdMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Admin — analyze a specific asset by ID
+ */
+export const useAdminAnalyzeAssetById = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminAnalyzeAssetById>>, TError,{assetId: number;data: BodyType<AdminAnalyzeAssetByIdBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminAnalyzeAssetById>>,
+        TError,
+        {assetId: number;data: BodyType<AdminAnalyzeAssetByIdBody>},
+        TContext
+      > => {
+      return useMutation(getAdminAnalyzeAssetByIdMutationOptions(options));
+    }
+
+export const getGetAdminAssetIntelligenceUrl = (assetId: number,
+    params?: GetAdminAssetIntelligenceParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/ai/asset-intelligence/${assetId}?${stringifiedParams}` : `/api/ai/asset-intelligence/${assetId}`
+}
+
+/**
+ * @summary Admin — get stored asset intelligence for an asset
+ */
+export const getAdminAssetIntelligence = async (assetId: number,
+    params?: GetAdminAssetIntelligenceParams, options?: RequestInit): Promise<AssetIntelligenceView> => {
+
+  return customFetch<AssetIntelligenceView>(getGetAdminAssetIntelligenceUrl(assetId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminAssetIntelligenceQueryKey = (assetId: number,
+    params?: GetAdminAssetIntelligenceParams,) => {
+    return [
+    `/api/ai/asset-intelligence/${assetId}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAdminAssetIntelligenceQueryOptions = <TData = Awaited<ReturnType<typeof getAdminAssetIntelligence>>, TError = ErrorType<ErrorResponse>>(assetId: number,
+    params?: GetAdminAssetIntelligenceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminAssetIntelligence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminAssetIntelligenceQueryKey(assetId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminAssetIntelligence>>> = ({ signal }) => getAdminAssetIntelligence(assetId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: assetId !== null && assetId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminAssetIntelligence>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminAssetIntelligenceQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminAssetIntelligence>>>
+export type GetAdminAssetIntelligenceQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Admin — get stored asset intelligence for an asset
+ */
+
+export function useGetAdminAssetIntelligence<TData = Awaited<ReturnType<typeof getAdminAssetIntelligence>>, TError = ErrorType<ErrorResponse>>(
+ assetId: number,
+    params?: GetAdminAssetIntelligenceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminAssetIntelligence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminAssetIntelligenceQueryOptions(assetId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAdminDuplicateReportUrl = (clientId: string,) => {
+
+
+
+
+  return `/api/ai/asset-intelligence/duplicates/${clientId}`
+}
+
+/**
+ * @summary Admin — duplicate detection report for a client
+ */
+export const getAdminDuplicateReport = async (clientId: string, options?: RequestInit): Promise<DuplicateReport> => {
+
+  return customFetch<DuplicateReport>(getGetAdminDuplicateReportUrl(clientId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminDuplicateReportQueryKey = (clientId: string,) => {
+    return [
+    `/api/ai/asset-intelligence/duplicates/${clientId}`
+    ] as const;
+    }
+
+
+export const getGetAdminDuplicateReportQueryOptions = <TData = Awaited<ReturnType<typeof getAdminDuplicateReport>>, TError = ErrorType<unknown>>(clientId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminDuplicateReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminDuplicateReportQueryKey(clientId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminDuplicateReport>>> = ({ signal }) => getAdminDuplicateReport(clientId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: clientId !== null && clientId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminDuplicateReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminDuplicateReportQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminDuplicateReport>>>
+export type GetAdminDuplicateReportQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — duplicate detection report for a client
+ */
+
+export function useGetAdminDuplicateReport<TData = Awaited<ReturnType<typeof getAdminDuplicateReport>>, TError = ErrorType<unknown>>(
+ clientId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminDuplicateReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminDuplicateReportQueryOptions(clientId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListAdminAssetIntelligenceUrl = (clientId: string,) => {
+
+
+
+
+  return `/api/ai/asset-intelligence/client/${clientId}`
+}
+
+/**
+ * @summary Admin — list all asset intelligence for a client
+ */
+export const listAdminAssetIntelligence = async (clientId: string, options?: RequestInit): Promise<AssetIntelligenceList> => {
+
+  return customFetch<AssetIntelligenceList>(getListAdminAssetIntelligenceUrl(clientId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAdminAssetIntelligenceQueryKey = (clientId: string,) => {
+    return [
+    `/api/ai/asset-intelligence/client/${clientId}`
+    ] as const;
+    }
+
+
+export const getListAdminAssetIntelligenceQueryOptions = <TData = Awaited<ReturnType<typeof listAdminAssetIntelligence>>, TError = ErrorType<unknown>>(clientId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminAssetIntelligence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAdminAssetIntelligenceQueryKey(clientId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminAssetIntelligence>>> = ({ signal }) => listAdminAssetIntelligence(clientId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: clientId !== null && clientId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminAssetIntelligence>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAdminAssetIntelligenceQueryResult = NonNullable<Awaited<ReturnType<typeof listAdminAssetIntelligence>>>
+export type ListAdminAssetIntelligenceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — list all asset intelligence for a client
+ */
+
+export function useListAdminAssetIntelligence<TData = Awaited<ReturnType<typeof listAdminAssetIntelligence>>, TError = ErrorType<unknown>>(
+ clientId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminAssetIntelligence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAdminAssetIntelligenceQueryOptions(clientId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetWorkspaceBrandIntelligenceUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/brand-intelligence`
+}
+
+/**
+ * @summary Customer — get full brand intelligence dashboard (auto-analyzes if not yet done)
+ */
+export const getWorkspaceBrandIntelligence = async (token: string, options?: RequestInit): Promise<WorkspaceBrandIntelligenceDashboard> => {
+
+  return customFetch<WorkspaceBrandIntelligenceDashboard>(getGetWorkspaceBrandIntelligenceUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorkspaceBrandIntelligenceQueryKey = (token: string,) => {
+    return [
+    `/api/public/customer/workspace/${token}/brand-intelligence`
+    ] as const;
+    }
+
+
+export const getGetWorkspaceBrandIntelligenceQueryOptions = <TData = Awaited<ReturnType<typeof getWorkspaceBrandIntelligence>>, TError = ErrorType<unknown>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceBrandIntelligence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkspaceBrandIntelligenceQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkspaceBrandIntelligence>>> = ({ signal }) => getWorkspaceBrandIntelligence(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceBrandIntelligence>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorkspaceBrandIntelligenceQueryResult = NonNullable<Awaited<ReturnType<typeof getWorkspaceBrandIntelligence>>>
+export type GetWorkspaceBrandIntelligenceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Customer — get full brand intelligence dashboard (auto-analyzes if not yet done)
+ */
+
+export function useGetWorkspaceBrandIntelligence<TData = Awaited<ReturnType<typeof getWorkspaceBrandIntelligence>>, TError = ErrorType<unknown>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceBrandIntelligence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorkspaceBrandIntelligenceQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRefreshWorkspaceBrandDnaUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/brand-intelligence/refresh`
+}
+
+/**
+ * @summary Customer — force refresh Brand DNA analysis
+ */
+export const refreshWorkspaceBrandDna = async (token: string, options?: RequestInit): Promise<BrandDnaView> => {
+
+  return customFetch<BrandDnaView>(getRefreshWorkspaceBrandDnaUrl(token),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRefreshWorkspaceBrandDnaMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshWorkspaceBrandDna>>, TError,{token: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof refreshWorkspaceBrandDna>>, TError,{token: string}, TContext> => {
+
+const mutationKey = ['refreshWorkspaceBrandDna'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshWorkspaceBrandDna>>, {token: string}> = (props) => {
+          const {token} = props ?? {};
+
+          return  refreshWorkspaceBrandDna(token,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefreshWorkspaceBrandDnaMutationResult = NonNullable<Awaited<ReturnType<typeof refreshWorkspaceBrandDna>>>
+
+    export type RefreshWorkspaceBrandDnaMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Customer — force refresh Brand DNA analysis
+ */
+export const useRefreshWorkspaceBrandDna = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshWorkspaceBrandDna>>, TError,{token: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof refreshWorkspaceBrandDna>>,
+        TError,
+        {token: string},
+        TContext
+      > => {
+      return useMutation(getRefreshWorkspaceBrandDnaMutationOptions(options));
+    }
+
+export const getGetWorkspaceCreativeDirectorUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/brand-intelligence/creative-director`
+}
+
+/**
+ * @summary Customer — AI Creative Director recommendation
+ */
+export const getWorkspaceCreativeDirector = async (token: string, options?: RequestInit): Promise<CreativeDirectorRecommendation> => {
+
+  return customFetch<CreativeDirectorRecommendation>(getGetWorkspaceCreativeDirectorUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorkspaceCreativeDirectorQueryKey = (token: string,) => {
+    return [
+    `/api/public/customer/workspace/${token}/brand-intelligence/creative-director`
+    ] as const;
+    }
+
+
+export const getGetWorkspaceCreativeDirectorQueryOptions = <TData = Awaited<ReturnType<typeof getWorkspaceCreativeDirector>>, TError = ErrorType<unknown>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceCreativeDirector>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkspaceCreativeDirectorQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkspaceCreativeDirector>>> = ({ signal }) => getWorkspaceCreativeDirector(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceCreativeDirector>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorkspaceCreativeDirectorQueryResult = NonNullable<Awaited<ReturnType<typeof getWorkspaceCreativeDirector>>>
+export type GetWorkspaceCreativeDirectorQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Customer — AI Creative Director recommendation
+ */
+
+export function useGetWorkspaceCreativeDirector<TData = Awaited<ReturnType<typeof getWorkspaceCreativeDirector>>, TError = ErrorType<unknown>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceCreativeDirector>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorkspaceCreativeDirectorQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetWorkspaceAssetIntelligenceUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/asset-intelligence`
+}
+
+/**
+ * @summary Customer — list asset intelligence + duplicate report
+ */
+export const getWorkspaceAssetIntelligence = async (token: string, options?: RequestInit): Promise<WorkspaceAssetIntelligenceDashboard> => {
+
+  return customFetch<WorkspaceAssetIntelligenceDashboard>(getGetWorkspaceAssetIntelligenceUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorkspaceAssetIntelligenceQueryKey = (token: string,) => {
+    return [
+    `/api/public/customer/workspace/${token}/asset-intelligence`
+    ] as const;
+    }
+
+
+export const getGetWorkspaceAssetIntelligenceQueryOptions = <TData = Awaited<ReturnType<typeof getWorkspaceAssetIntelligence>>, TError = ErrorType<unknown>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceAssetIntelligence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkspaceAssetIntelligenceQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkspaceAssetIntelligence>>> = ({ signal }) => getWorkspaceAssetIntelligence(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceAssetIntelligence>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorkspaceAssetIntelligenceQueryResult = NonNullable<Awaited<ReturnType<typeof getWorkspaceAssetIntelligence>>>
+export type GetWorkspaceAssetIntelligenceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Customer — list asset intelligence + duplicate report
+ */
+
+export function useGetWorkspaceAssetIntelligence<TData = Awaited<ReturnType<typeof getWorkspaceAssetIntelligence>>, TError = ErrorType<unknown>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceAssetIntelligence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorkspaceAssetIntelligenceQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAnalyzeWorkspaceAssetUrl = (token: string,
+    assetId: number,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/asset-intelligence/analyze/${assetId}`
+}
+
+/**
+ * @summary Customer — trigger asset intelligence analysis for a single asset
+ */
+export const analyzeWorkspaceAsset = async (token: string,
+    assetId: number,
+    analyzeWorkspaceAssetBody?: AnalyzeWorkspaceAssetBody, options?: RequestInit): Promise<AssetIntelligenceView> => {
+
+  return customFetch<AssetIntelligenceView>(getAnalyzeWorkspaceAssetUrl(token,assetId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(analyzeWorkspaceAssetBody)
+  }
+);}
+
+
+
+
+export const getAnalyzeWorkspaceAssetMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeWorkspaceAsset>>, TError,{token: string;assetId: number;data?: BodyType<AnalyzeWorkspaceAssetBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof analyzeWorkspaceAsset>>, TError,{token: string;assetId: number;data?: BodyType<AnalyzeWorkspaceAssetBody>}, TContext> => {
+
+const mutationKey = ['analyzeWorkspaceAsset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof analyzeWorkspaceAsset>>, {token: string;assetId: number;data?: BodyType<AnalyzeWorkspaceAssetBody>}> = (props) => {
+          const {token,assetId,data} = props ?? {};
+
+          return  analyzeWorkspaceAsset(token,assetId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AnalyzeWorkspaceAssetMutationResult = NonNullable<Awaited<ReturnType<typeof analyzeWorkspaceAsset>>>
+    export type AnalyzeWorkspaceAssetMutationBody = BodyType<AnalyzeWorkspaceAssetBody> | undefined
+    export type AnalyzeWorkspaceAssetMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Customer — trigger asset intelligence analysis for a single asset
+ */
+export const useAnalyzeWorkspaceAsset = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof analyzeWorkspaceAsset>>, TError,{token: string;assetId: number;data?: BodyType<AnalyzeWorkspaceAssetBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof analyzeWorkspaceAsset>>,
+        TError,
+        {token: string;assetId: number;data?: BodyType<AnalyzeWorkspaceAssetBody>},
+        TContext
+      > => {
+      return useMutation(getAnalyzeWorkspaceAssetMutationOptions(options));
+    }
 
 export const getAdminRetryZipDeliveryUrl = (projectId: string,) => {
 

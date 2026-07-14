@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, FolderKanban, Download, Receipt, Palette,
   Bell, UserCircle, LifeBuoy, Sparkles, Menu, X, Award, Gift,
-  Settings,
+  Settings, Brain,
 } from "lucide-react";
 import { useState } from "react";
 import { useWorkspaceNotifications } from "@/hooks/use-workspace";
@@ -22,6 +22,7 @@ export function WorkspaceLayout({ token, children }: { token: string; children: 
     { href: "/downloads",     label: t('workspace.nav.downloads'),      icon: Download },
     { href: "/invoices",      label: t('workspace.nav.invoices'),       icon: Receipt },
     { href: "/brand-kit",     label: t('workspace.nav.brandKit'),       icon: Palette },
+    { href: "/brand-intelligence", label: t('workspace.nav.brandIntelligence', 'Brand Intelligence'), icon: Brain },
     { href: "/notifications", label: t('workspace.nav.notifications'),  icon: Bell },
     { href: "/affiliate",     label: t('workspace.nav.affiliate'),      icon: Award },
     { href: "/referral",      label: t('workspace.nav.referral'),       icon: Gift },

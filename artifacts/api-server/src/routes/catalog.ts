@@ -48,6 +48,7 @@ import {
 import { getGateForServiceQuotation, gateIsCleared } from "../services/commercialGateService.js";
 import { creativeAiAssetsTable } from "@workspace/db";
 import { scoreFromAssetMetadata } from "../services/companyProfileQcService.js";
+import { resolvePublicRequestTenantId } from "../security/tenantResolution.js";
 
 // Statuses that must only be reached once the commercial gate (if one exists
 // for this request's quotation) has been verified or waived. Without this
@@ -324,13 +325,20 @@ router.post("/ai/catalog/services/:id/quote", async (req, res): Promise<void> =>
   const { service, pkg } = loaded;
   if (!(await assertServiceIsPubliclyRequestable(service.categoryId, res))) return;
 
+  // WP-00 fix: this is a public, unauthenticated route — a client-supplied
+  // tenantId has no legitimate meaning here (no session/resource token to
+  // verify it against) and previously fed straight into tax-rule lookup.
+  // Always use the server's canonical tenant (null = default tenant, per
+  // this table's convention); never the client value.
+  const tenantId = resolvePublicRequestTenantId(body.tenantId, req, "POST /ai/catalog/services/:id/quote");
+
   const breakdown = await generatePricingSnapshot(
     service,
     pkg,
     body.pricingModelSelected ?? service.pricingModel,
     body,
     body.discount ?? 0,
-    body.tenantId ?? null,
+    tenantId,
   );
 
   // Customer-facing quote preview never includes internal cost/margin.
@@ -354,19 +362,26 @@ router.post("/ai/catalog/services/:id/request", async (req, res): Promise<void> 
   const { service, pkg } = loaded;
   if (!(await assertServiceIsPubliclyRequestable(service.categoryId, res))) return;
 
+  // WP-00 fix: public route, no session/token to verify a client-supplied
+  // tenantId against — never trust it for tax calculation or for the value
+  // persisted on the row. Always resolve server-side (null = default
+  // tenant, per this table's convention).
+  const tenantId = resolvePublicRequestTenantId(parsed.data.tenantId, req, "POST /ai/catalog/services/:id/request");
+
   const breakdown = await generatePricingSnapshot(
     service,
     pkg,
     parsed.data.pricingModelSelected ?? service.pricingModel,
     parsed.data as PricingSelections,
     0,
-    parsed.data.tenantId ?? null,
+    tenantId,
   );
 
   const [row] = await db
     .insert(aiServiceRequestsTable)
     .values({
       ...parsed.data,
+      tenantId,
       requestId: randomUUID(),
       status: "draft",
       currency: breakdown.currency,

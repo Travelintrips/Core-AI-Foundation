@@ -39,6 +39,8 @@ import AutomationPage from "@/pages/automation";
 import AIInsightsPage from "@/pages/ai-insights";
 import Payments from "@/pages/payments";
 import PortfolioAdmin from "@/pages/portfolio-admin";
+import CreativeIntelligence from "@/pages/creative-intelligence";
+import TemplateMarketplace from "@/pages/template-marketplace";
 import CommercialPage from "@/pages/commercial";
 import PromotionsPage from "@/pages/promotions";
 import CouponsPage from "@/pages/coupons";
@@ -88,6 +90,8 @@ function AdminRouter() {
         <Route path="/referrals" component={ReferralsPage} />
         <Route path="/health-scores" component={HealthScoresPage} />
         <Route path="/observability" component={ObservabilityPage} />
+        <Route path="/creative-intelligence" component={CreativeIntelligence} />
+        <Route path="/template-marketplace" component={TemplateMarketplace} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
