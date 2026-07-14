@@ -7664,3 +7664,473 @@ export const RecordAbVariantMetricResponse = zod.object({
 })
 
 
+/**
+ * Resolve the review token, mark as viewed, and return full context including document state, versions, comments, and QC scores.
+ * @summary Get CP review context
+ */
+export const GetPublicCpReviewParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetPublicCpReviewResponse = zod.object({
+  "reviewId": zod.number(),
+  "projectId": zod.string(),
+  "clientName": zod.string(),
+  "reviewStatus": zod.enum(['shared', 'viewed', 'revision_requested', 'approved', 'rejected', 'revoked']),
+  "brandName": zod.string(),
+  "businessType": zod.string(),
+  "documentReady": zod.boolean(),
+  "documentVersion": zod.number().nullish(),
+  "documentUrl": zod.string().nullish().describe('null when watermarked'),
+  "watermarked": zod.boolean(),
+  "filesUnlocked": zod.boolean(),
+  "pageCount": zod.number().nullish(),
+  "sectionsIncluded": zod.array(zod.string()),
+  "sectionsSkipped": zod.array(zod.string()),
+  "packageLevel": zod.string().nullish(),
+  "pageTarget": zod.number().nullish(),
+  "qcScore": zod.number().nullish(),
+  "qcPassed": zod.boolean().nullish(),
+  "qcDimensions": zod.record(zod.string(), zod.unknown()).nullish(),
+  "qcWarnings": zod.array(zod.string()),
+  "currentVersion": zod.object({
+  "id": zod.number(),
+  "version": zod.number(),
+  "versionLabel": zod.string().nullable(),
+  "reason": zod.string().nullish(),
+  "revisionNotes": zod.string().nullish(),
+  "sectionsIncluded": zod.array(zod.string()),
+  "qcScore": zod.number().nullish(),
+  "qcPassed": zod.boolean().nullish(),
+  "qcDimensions": zod.record(zod.string(), zod.unknown()).nullish(),
+  "approved": zod.boolean(),
+  "approvedAt": zod.coerce.date().nullish(),
+  "approvedBy": zod.string().nullish(),
+  "sentForReviewAt": zod.coerce.date().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+}).nullish(),
+  "totalVersions": zod.number(),
+  "totalComments": zod.number(),
+  "resolvedComments": zod.number(),
+  "pendingComments": zod.number(),
+  "comments": zod.array(zod.object({
+  "id": zod.number(),
+  "reviewId": zod.number(),
+  "projectId": zod.string(),
+  "documentVersionId": zod.number().nullish(),
+  "parentCommentId": zod.number().nullish().describe('null for top-level comments'),
+  "pageNumber": zod.number().nullish(),
+  "positionX": zod.number().nullish(),
+  "positionY": zod.number().nullish(),
+  "sectionId": zod.string().nullish().describe('null for page-level comments'),
+  "comment": zod.string(),
+  "authorName": zod.string(),
+  "authorType": zod.enum(['client', 'admin']),
+  "priority": zod.enum(['low', 'normal', 'high', 'urgent']),
+  "status": zod.enum(['open', 'resolved', 'archived']),
+  "resolvedBy": zod.string().nullish(),
+  "resolvedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "createdAt": zod.coerce.date(),
+  "sharedAt": zod.coerce.date().nullish(),
+  "approvedAt": zod.coerce.date().nullish(),
+  "rejectedAt": zod.coerce.date().nullish(),
+  "revisionRequestedAt": zod.coerce.date().nullish()
+})
+
+
+/**
+ * If filesUnlocked is false, returns a server-rendered watermarked PDF binary.
+ * If filesUnlocked is true, redirects (302) to the clean Supabase signed URL.
+ * @summary Serve PDF (watermarked or clean redirect)
+ */
+export const GetCpReviewPdfParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetCpReviewPdfResponse = zod.unknown()
+
+
+/**
+ * @summary List all document versions
+ */
+export const GetCpReviewVersionsParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetCpReviewVersionsResponseItem = zod.object({
+  "id": zod.number(),
+  "version": zod.number(),
+  "versionLabel": zod.string().nullable(),
+  "reason": zod.string().nullish(),
+  "revisionNotes": zod.string().nullish(),
+  "sectionsIncluded": zod.array(zod.string()),
+  "qcScore": zod.number().nullish(),
+  "qcPassed": zod.boolean().nullish(),
+  "qcDimensions": zod.record(zod.string(), zod.unknown()).nullish(),
+  "approved": zod.boolean(),
+  "approvedAt": zod.coerce.date().nullish(),
+  "approvedBy": zod.string().nullish(),
+  "sentForReviewAt": zod.coerce.date().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const GetCpReviewVersionsResponse = zod.array(GetCpReviewVersionsResponseItem)
+
+
+/**
+ * @summary Get a single document version by version number
+ */
+export const GetCpReviewVersionByIdParams = zod.object({
+  "token": zod.coerce.string(),
+  "versionId": zod.coerce.number()
+})
+
+export const GetCpReviewVersionByIdResponse = zod.object({
+  "id": zod.number(),
+  "version": zod.number(),
+  "versionLabel": zod.string().nullable(),
+  "reason": zod.string().nullish(),
+  "revisionNotes": zod.string().nullish(),
+  "sectionsIncluded": zod.array(zod.string()),
+  "qcScore": zod.number().nullish(),
+  "qcPassed": zod.boolean().nullish(),
+  "qcDimensions": zod.record(zod.string(), zod.unknown()).nullish(),
+  "approved": zod.boolean(),
+  "approvedAt": zod.coerce.date().nullish(),
+  "approvedBy": zod.string().nullish(),
+  "sentForReviewAt": zod.coerce.date().nullish(),
+  "createdBy": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Section-level diff between two versions
+ */
+export const CompareCpReviewVersionsParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const CompareCpReviewVersionsQueryParams = zod.object({
+  "v1": zod.coerce.number().describe('Base version number'),
+  "v2": zod.coerce.number().describe('Compare version number')
+})
+
+export const CompareCpReviewVersionsResponse = zod.object({
+  "v1": zod.object({
+  "version": zod.number(),
+  "versionLabel": zod.string().nullable(),
+  "qcScore": zod.number().nullish()
+}),
+  "v2": zod.object({
+  "version": zod.number(),
+  "versionLabel": zod.string().nullable(),
+  "qcScore": zod.number().nullish()
+}),
+  "diff": zod.object({
+  "added": zod.array(zod.string()).describe('Sections new in v2'),
+  "removed": zod.array(zod.string()).describe('Sections dropped from v1'),
+  "unchanged": zod.array(zod.string()).describe('Sections in both'),
+  "totalChanged": zod.number()
+})
+})
+
+
+/**
+ * @summary List comments with threaded replies
+ */
+export const GetCpReviewCommentsParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetCpReviewCommentsQueryParams = zod.object({
+  "page": zod.coerce.number().nullish().describe('Filter by page number'),
+  "section": zod.coerce.string().nullish().describe('Filter by section key'),
+  "status": zod.enum(['open', 'resolved', 'archived']).nullish()
+})
+
+export const GetCpReviewCommentsResponse = zod.object({
+  "total": zod.number(),
+  "open": zod.number(),
+  "resolved": zod.number(),
+  "comments": zod.array(zod.object({
+  "id": zod.number(),
+  "reviewId": zod.number(),
+  "projectId": zod.string(),
+  "documentVersionId": zod.number().nullish(),
+  "parentCommentId": zod.number().nullish().describe('null for top-level comments'),
+  "pageNumber": zod.number().nullish(),
+  "positionX": zod.number().nullish(),
+  "positionY": zod.number().nullish(),
+  "sectionId": zod.string().nullish().describe('null for page-level comments'),
+  "comment": zod.string(),
+  "authorName": zod.string(),
+  "authorType": zod.enum(['client', 'admin']),
+  "priority": zod.enum(['low', 'normal', 'high', 'urgent']),
+  "status": zod.enum(['open', 'resolved', 'archived']),
+  "resolvedBy": zod.string().nullish(),
+  "resolvedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "replies": zod.array(zod.object({
+  "id": zod.number(),
+  "reviewId": zod.number(),
+  "projectId": zod.string(),
+  "documentVersionId": zod.number().nullish(),
+  "parentCommentId": zod.number().nullish().describe('null for top-level comments'),
+  "pageNumber": zod.number().nullish(),
+  "positionX": zod.number().nullish(),
+  "positionY": zod.number().nullish(),
+  "sectionId": zod.string().nullish().describe('null for page-level comments'),
+  "comment": zod.string(),
+  "authorName": zod.string(),
+  "authorType": zod.enum(['client', 'admin']),
+  "priority": zod.enum(['low', 'normal', 'high', 'urgent']),
+  "status": zod.enum(['open', 'resolved', 'archived']),
+  "resolvedBy": zod.string().nullish(),
+  "resolvedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})).optional()
+})))
+})
+
+
+/**
+ * @summary Add a page or section comment
+ */
+export const AddCpReviewCommentParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+
+
+export const addCpReviewCommentBodyPriorityDefault = `normal`;
+
+export const AddCpReviewCommentBody = zod.object({
+  "comment": zod.string().min(1),
+  "authorName": zod.string().min(1),
+  "pageNumber": zod.number().nullish(),
+  "positionX": zod.number().nullish(),
+  "positionY": zod.number().nullish(),
+  "sectionId": zod.string().nullish(),
+  "parentCommentId": zod.number().nullish().describe('null for top-level comments'),
+  "priority": zod.enum(['low', 'normal', 'high', 'urgent']).default(addCpReviewCommentBodyPriorityDefault),
+  "documentVersionId": zod.number().nullish()
+})
+
+export const AddCpReviewCommentResponse = zod.object({
+  "id": zod.number(),
+  "reviewId": zod.number(),
+  "projectId": zod.string(),
+  "documentVersionId": zod.number().nullish(),
+  "parentCommentId": zod.number().nullish().describe('null for top-level comments'),
+  "pageNumber": zod.number().nullish(),
+  "positionX": zod.number().nullish(),
+  "positionY": zod.number().nullish(),
+  "sectionId": zod.string().nullish().describe('null for page-level comments'),
+  "comment": zod.string(),
+  "authorName": zod.string(),
+  "authorType": zod.enum(['client', 'admin']),
+  "priority": zod.enum(['low', 'normal', 'high', 'urgent']),
+  "status": zod.enum(['open', 'resolved', 'archived']),
+  "resolvedBy": zod.string().nullish(),
+  "resolvedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Edit or resolve/reopen a comment (client only)
+ */
+export const PatchCpReviewCommentParams = zod.object({
+  "token": zod.coerce.string(),
+  "commentId": zod.coerce.number()
+})
+
+
+
+
+export const PatchCpReviewCommentBody = zod.object({
+  "comment": zod.string().min(1).optional(),
+  "status": zod.enum(['open', 'resolved', 'archived']).optional()
+})
+
+export const PatchCpReviewCommentResponse = zod.object({
+  "id": zod.number(),
+  "reviewId": zod.number(),
+  "projectId": zod.string(),
+  "documentVersionId": zod.number().nullish(),
+  "parentCommentId": zod.number().nullish().describe('null for top-level comments'),
+  "pageNumber": zod.number().nullish(),
+  "positionX": zod.number().nullish(),
+  "positionY": zod.number().nullish(),
+  "sectionId": zod.string().nullish().describe('null for page-level comments'),
+  "comment": zod.string(),
+  "authorName": zod.string(),
+  "authorType": zod.enum(['client', 'admin']),
+  "priority": zod.enum(['low', 'normal', 'high', 'urgent']),
+  "status": zod.enum(['open', 'resolved', 'archived']),
+  "resolvedBy": zod.string().nullish(),
+  "resolvedAt": zod.coerce.date().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete own open comment
+ */
+export const DeleteCpReviewCommentParams = zod.object({
+  "token": zod.coerce.string(),
+  "commentId": zod.coerce.number()
+})
+
+export const DeleteCpReviewCommentResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Approve document — requires confirmed:true checkbox
+ */
+export const ApproveCpReviewParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const ApproveCpReviewBody = zod.object({
+  "confirmed": zod.literal(true).describe('Must be true — customer must check the approval checkbox')
+})
+
+export const ApproveCpReviewResponse = zod.object({
+  "success": zod.boolean(),
+  "status": zod.string()
+})
+
+
+/**
+ * @summary Request a revision with structured notes
+ */
+export const RequestCpReviewRevisionParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+
+export const requestCpReviewRevisionBodyPriorityDefault = `normal`;
+
+export const RequestCpReviewRevisionBody = zod.object({
+  "notes": zod.string().min(1),
+  "selectedPages": zod.array(zod.number()).nullish(),
+  "selectedSections": zod.array(zod.string()).nullish(),
+  "priority": zod.enum(['low', 'normal', 'high', 'urgent']).default(requestCpReviewRevisionBodyPriorityDefault)
+})
+
+export const RequestCpReviewRevisionResponse = zod.object({
+  "success": zod.boolean(),
+  "status": zod.string(),
+  "pages": zod.array(zod.number()).optional(),
+  "sections": zod.array(zod.string()).optional(),
+  "priority": zod.string().optional()
+})
+
+
+/**
+ * @summary Reject document — requires reason
+ */
+export const RejectCpReviewParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+
+
+
+export const RejectCpReviewBody = zod.object({
+  "reason": zod.string().min(1).describe('Detailed reason for rejection (required)')
+})
+
+export const RejectCpReviewResponse = zod.object({
+  "success": zod.boolean(),
+  "status": zod.string()
+})
+
+
+/**
+ * @summary Full chronological event timeline
+ */
+export const GetCpReviewTimelineParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetCpReviewTimelineResponse = zod.object({
+  "reviewId": zod.number(),
+  "projectId": zod.string(),
+  "reviewStatus": zod.string(),
+  "totalEvents": zod.number(),
+  "events": zod.array(zod.object({
+  "type": zod.string(),
+  "label": zod.string(),
+  "actor": zod.string().nullish(),
+  "meta": zod.record(zod.string(), zod.unknown()).nullish(),
+  "timestamp": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Review KPI stats (comment counts, QC, payment lock)
+ */
+export const GetCpReviewStatsParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetCpReviewStatsResponse = zod.object({
+  "reviewId": zod.number(),
+  "reviewStatus": zod.string(),
+  "currentVersion": zod.string().nullish(),
+  "totalVersions": zod.number(),
+  "totalComments": zod.number(),
+  "openComments": zod.number(),
+  "resolvedComments": zod.number(),
+  "highPriorityPending": zod.number(),
+  "commentsByPage": zod.record(zod.string(), zod.number()).optional(),
+  "commentsBySection": zod.record(zod.string(), zod.number()).optional(),
+  "qcScore": zod.number().nullish(),
+  "qcPassed": zod.boolean().nullish(),
+  "filesUnlocked": zod.boolean(),
+  "approvedAt": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary Review KPI dashboard (extended stats)
+ */
+export const GetCpReviewDashboardParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetCpReviewDashboardResponse = zod.object({
+  "reviewId": zod.number(),
+  "reviewStatus": zod.string(),
+  "currentVersion": zod.string().nullish(),
+  "totalVersions": zod.number(),
+  "totalComments": zod.number(),
+  "openComments": zod.number(),
+  "resolvedComments": zod.number(),
+  "pendingRevisions": zod.number(),
+  "highPriorityPending": zod.number(),
+  "qcScore": zod.number().nullish(),
+  "qcPassed": zod.boolean().nullish(),
+  "filesUnlocked": zod.boolean(),
+  "approvalStatus": zod.string(),
+  "approvedAt": zod.coerce.date().nullish(),
+  "sharedAt": zod.coerce.date().nullish(),
+  "revisionRequestedAt": zod.coerce.date().nullish()
+})
+
+

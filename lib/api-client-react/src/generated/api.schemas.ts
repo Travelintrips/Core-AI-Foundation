@@ -5,6 +5,255 @@
  * AI Platform Enterprise API
  * OpenAPI spec version: 0.1.0
  */
+export type CpReviewContextReviewStatus = typeof CpReviewContextReviewStatus[keyof typeof CpReviewContextReviewStatus];
+
+
+export const CpReviewContextReviewStatus = {
+  shared: 'shared',
+  viewed: 'viewed',
+  revision_requested: 'revision_requested',
+  approved: 'approved',
+  rejected: 'rejected',
+  revoked: 'revoked',
+} as const;
+
+export type CpReviewContextQcDimensions = { [key: string]: unknown } | null;
+
+export type CpDocumentVersionQcDimensions = { [key: string]: unknown } | null;
+
+export interface CpDocumentVersion {
+  id: number;
+  version: number;
+  versionLabel: string | null;
+  reason?: string | null;
+  revisionNotes?: string | null;
+  sectionsIncluded: string[];
+  qcScore?: number | null;
+  qcPassed?: boolean | null;
+  qcDimensions?: CpDocumentVersionQcDimensions;
+  approved: boolean;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
+  sentForReviewAt?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+}
+
+export type CpPageCommentAuthorType = typeof CpPageCommentAuthorType[keyof typeof CpPageCommentAuthorType];
+
+
+export const CpPageCommentAuthorType = {
+  client: 'client',
+  admin: 'admin',
+} as const;
+
+export type CpPageCommentPriority = typeof CpPageCommentPriority[keyof typeof CpPageCommentPriority];
+
+
+export const CpPageCommentPriority = {
+  low: 'low',
+  normal: 'normal',
+  high: 'high',
+  urgent: 'urgent',
+} as const;
+
+export type CpPageCommentStatus = typeof CpPageCommentStatus[keyof typeof CpPageCommentStatus];
+
+
+export const CpPageCommentStatus = {
+  open: 'open',
+  resolved: 'resolved',
+  archived: 'archived',
+} as const;
+
+export interface CpPageComment {
+  id: number;
+  reviewId: number;
+  projectId: string;
+  documentVersionId?: number | null;
+  /** null for top-level comments */
+  parentCommentId?: number | null;
+  pageNumber?: number | null;
+  positionX?: number | null;
+  positionY?: number | null;
+  /** null for page-level comments */
+  sectionId?: string | null;
+  comment: string;
+  authorName: string;
+  authorType: CpPageCommentAuthorType;
+  priority: CpPageCommentPriority;
+  status: CpPageCommentStatus;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CpReviewContext {
+  reviewId: number;
+  projectId: string;
+  clientName: string;
+  reviewStatus: CpReviewContextReviewStatus;
+  brandName: string;
+  businessType: string;
+  documentReady: boolean;
+  documentVersion?: number | null;
+  /** null when watermarked */
+  documentUrl?: string | null;
+  watermarked: boolean;
+  filesUnlocked: boolean;
+  pageCount?: number | null;
+  sectionsIncluded: string[];
+  sectionsSkipped: string[];
+  packageLevel?: string | null;
+  pageTarget?: number | null;
+  qcScore?: number | null;
+  qcPassed?: boolean | null;
+  qcDimensions?: CpReviewContextQcDimensions;
+  qcWarnings: string[];
+  currentVersion?: CpDocumentVersion | null;
+  totalVersions: number;
+  totalComments: number;
+  resolvedComments: number;
+  pendingComments: number;
+  comments: CpPageComment[];
+  createdAt: string;
+  sharedAt?: string | null;
+  approvedAt?: string | null;
+  rejectedAt?: string | null;
+  revisionRequestedAt?: string | null;
+}
+
+export type CpPageCommentThread = CpPageComment & {
+  replies?: CpPageComment[];
+};
+
+export type CpVersionDiffV1 = {
+  version: number;
+  versionLabel: string | null;
+  qcScore?: number | null;
+};
+
+export type CpVersionDiffV2 = {
+  version: number;
+  versionLabel: string | null;
+  qcScore?: number | null;
+};
+
+export type CpVersionDiffDiff = {
+  /** Sections new in v2 */
+  added: string[];
+  /** Sections dropped from v1 */
+  removed: string[];
+  /** Sections in both */
+  unchanged: string[];
+  totalChanged: number;
+};
+
+export interface CpVersionDiff {
+  v1: CpVersionDiffV1;
+  v2: CpVersionDiffV2;
+  diff: CpVersionDiffDiff;
+}
+
+export type CpAddCommentInputPriority = typeof CpAddCommentInputPriority[keyof typeof CpAddCommentInputPriority];
+
+
+export const CpAddCommentInputPriority = {
+  low: 'low',
+  normal: 'normal',
+  high: 'high',
+  urgent: 'urgent',
+} as const;
+
+export interface CpAddCommentInput {
+  /** @minLength 1 */
+  comment: string;
+  /** @minLength 1 */
+  authorName: string;
+  pageNumber?: number | null;
+  positionX?: number | null;
+  positionY?: number | null;
+  sectionId?: string | null;
+  /** null for top-level comments */
+  parentCommentId?: number | null;
+  priority?: CpAddCommentInputPriority;
+  documentVersionId?: number | null;
+}
+
+export type CpRevisionInputPriority = typeof CpRevisionInputPriority[keyof typeof CpRevisionInputPriority];
+
+
+export const CpRevisionInputPriority = {
+  low: 'low',
+  normal: 'normal',
+  high: 'high',
+  urgent: 'urgent',
+} as const;
+
+export interface CpRevisionInput {
+  /** @minLength 1 */
+  notes: string;
+  selectedPages?: number[] | null;
+  selectedSections?: string[] | null;
+  priority?: CpRevisionInputPriority;
+}
+
+export interface CpActionResult {
+  success: boolean;
+  status: string;
+}
+
+export type CpTimelineEventMeta = { [key: string]: unknown } | null;
+
+export interface CpTimelineEvent {
+  type: string;
+  label: string;
+  actor?: string | null;
+  meta?: CpTimelineEventMeta;
+  timestamp: string;
+}
+
+export type CpReviewStatsCommentsByPage = {[key: string]: number};
+
+export type CpReviewStatsCommentsBySection = {[key: string]: number};
+
+export interface CpReviewStats {
+  reviewId: number;
+  reviewStatus: string;
+  currentVersion?: string | null;
+  totalVersions: number;
+  totalComments: number;
+  openComments: number;
+  resolvedComments: number;
+  highPriorityPending: number;
+  commentsByPage?: CpReviewStatsCommentsByPage;
+  commentsBySection?: CpReviewStatsCommentsBySection;
+  qcScore?: number | null;
+  qcPassed?: boolean | null;
+  filesUnlocked: boolean;
+  approvedAt?: string | null;
+}
+
+export interface CpReviewDashboard {
+  reviewId: number;
+  reviewStatus: string;
+  currentVersion?: string | null;
+  totalVersions: number;
+  totalComments: number;
+  openComments: number;
+  resolvedComments: number;
+  pendingRevisions: number;
+  highPriorityPending: number;
+  qcScore?: number | null;
+  qcPassed?: boolean | null;
+  filesUnlocked: boolean;
+  approvalStatus: string;
+  approvedAt?: string | null;
+  sharedAt?: string | null;
+  revisionRequestedAt?: string | null;
+}
+
 export type CompanyProfileConditionalQuestionType = typeof CompanyProfileConditionalQuestionType[keyof typeof CompanyProfileConditionalQuestionType];
 
 
@@ -4277,6 +4526,26 @@ export interface RecordAbMetricInput {
   metric: RecordAbMetricInputMetric;
 }
 
+export type NotFoundResponse = {
+  error: string;
+};
+
+export type GoneResponse = {
+  error: string;
+};
+
+export type BadRequestResponse = {
+  error: string;
+};
+
+export type ForbiddenResponse = {
+  error: string;
+};
+
+export type ConflictResponse = {
+  error: string;
+};
+
 export type ListModelsParams = {
 /**
  * @nullable
@@ -4605,5 +4874,88 @@ referrerProfileId?: number;
 
 export type GetCommercialAnalyticsParams = {
 days?: number;
+};
+
+export type CompareCpReviewVersionsParams = {
+/**
+ * Base version number
+ */
+v1: number;
+/**
+ * Compare version number
+ */
+v2: number;
+};
+
+export type GetCpReviewCommentsParams = {
+/**
+ * Filter by page number
+ */
+page?: number | null;
+/**
+ * Filter by section key
+ */
+section?: string | null;
+status?: GetCpReviewCommentsStatus;
+};
+
+export type GetCpReviewCommentsStatus = typeof GetCpReviewCommentsStatus[keyof typeof GetCpReviewCommentsStatus] | null;
+
+
+export const GetCpReviewCommentsStatus = {
+  open: 'open',
+  resolved: 'resolved',
+  archived: 'archived',
+} as const;
+
+export type GetCpReviewComments200 = {
+  total: number;
+  open: number;
+  resolved: number;
+  comments: CpPageCommentThread[];
+};
+
+export type PatchCpReviewCommentBodyStatus = typeof PatchCpReviewCommentBodyStatus[keyof typeof PatchCpReviewCommentBodyStatus];
+
+
+export const PatchCpReviewCommentBodyStatus = {
+  open: 'open',
+  resolved: 'resolved',
+  archived: 'archived',
+} as const;
+
+export type PatchCpReviewCommentBody = {
+  /** @minLength 1 */
+  comment?: string;
+  status?: PatchCpReviewCommentBodyStatus;
+};
+
+export type ApproveCpReviewBody = {
+  /** Must be true — customer must check the approval checkbox */
+  confirmed: true;
+};
+
+export type RequestCpReviewRevision200 = {
+  success: boolean;
+  status: string;
+  pages?: number[];
+  sections?: string[];
+  priority?: string;
+};
+
+export type RejectCpReviewBody = {
+  /**
+     * Detailed reason for rejection (required)
+     * @minLength 1
+     */
+  reason: string;
+};
+
+export type GetCpReviewTimeline200 = {
+  reviewId: number;
+  projectId: string;
+  reviewStatus: string;
+  totalEvents: number;
+  events: CpTimelineEvent[];
 };
 

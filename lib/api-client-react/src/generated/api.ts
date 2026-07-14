@@ -84,12 +84,14 @@ import type {
   AiWorkflowInput,
   AiWorkflowUpdate,
   AnalyticsOverview,
+  ApproveCpReviewBody,
   ApproveRequestMargin200,
   ApproveRequestMarginBody,
   AssetFeedbackInput,
   AssetStatusUpdate,
   AssignHumanTaskBody,
   AuditLogPage,
+  BadRequestResponse,
   CancelJobBody,
   CatalogAnalytics,
   CheckoutResponse,
@@ -109,13 +111,24 @@ import type {
   CommercialGateVerifyInput,
   CommercialGateWaiveInput,
   CompanyProfileBriefScore,
+  CompareCpReviewVersionsParams,
   CompleteHumanTaskBody,
+  ConflictResponse,
   ContinueLivePreviewBody,
   ConvertReferralInput,
   CostAnalyticsResponse,
   Coupon,
   CouponList,
   CouponValidationResult,
+  CpActionResult,
+  CpAddCommentInput,
+  CpDocumentVersion,
+  CpPageComment,
+  CpReviewContext,
+  CpReviewDashboard,
+  CpReviewStats,
+  CpRevisionInput,
+  CpVersionDiff,
   CreateAbTestInput,
   CreateAffiliateInput,
   CreateCouponInput,
@@ -148,6 +161,7 @@ import type {
   EventTimelineResponse,
   FeedbackEntry,
   FeedbackInput,
+  ForbiddenResponse,
   FunnelAnalytics,
   GenerateImageBody,
   GenerateImageResponse,
@@ -162,9 +176,13 @@ import type {
   GetCommercialAnalyticsParams,
   GetCompanyProfileBriefReadiness200,
   GetCostAnalyticsParams,
+  GetCpReviewComments200,
+  GetCpReviewCommentsParams,
+  GetCpReviewTimeline200,
   GetCreativeImageAnalyticsParams,
   GetFunnelAnalyticsParams,
   GetLivePreviewSessionCount200,
+  GoneResponse,
   HealthStatus,
   HumanTask,
   HumanTaskDetail,
@@ -207,12 +225,14 @@ import type {
   MarkNotificationReadInput,
   MemoryEntry,
   MemoryEntryInput,
+  NotFoundResponse,
   OkResponse,
   OrchestratorExecuteInput,
   OrchestratorResult,
   OrchestratorSession,
   OverrideCompanyProfileBriefGuard200,
   OverrideCompanyProfileBriefGuardBody,
+  PatchCpReviewCommentBody,
   PauseQueue200,
   PaymentKpi,
   PaymentProofInput,
@@ -239,11 +259,13 @@ import type {
   ReferralStats,
   RegisterClusterWorkerBody,
   RegisterWorkerBody,
+  RejectCpReviewBody,
   RejectHumanTaskBody,
   RenewLeaseBody,
   RepeatOrderDraft,
   RepeatOrderInput,
   ReprioritizeJobBody,
+  RequestCpReviewRevision200,
   ResumeQueue200,
   RevokeFileDownloadTokenBody,
   RotateTokenInput,
@@ -20507,4 +20529,1158 @@ export const useRecordAbVariantMetric = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getRecordAbVariantMetricMutationOptions(options));
     }
+
+export const getGetPublicCpReviewUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}`
+}
+
+/**
+ * Resolve the review token, mark as viewed, and return full context including document state, versions, comments, and QC scores.
+ * @summary Get CP review context
+ */
+export const getPublicCpReview = async (token: string, options?: RequestInit): Promise<CpReviewContext> => {
+
+  return customFetch<CpReviewContext>(getGetPublicCpReviewUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicCpReviewQueryKey = (token: string,) => {
+    return [
+    `/api/public/cp-review/${token}`
+    ] as const;
+    }
+
+
+export const getGetPublicCpReviewQueryOptions = <TData = Awaited<ReturnType<typeof getPublicCpReview>>, TError = ErrorType<NotFoundResponse | GoneResponse>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicCpReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicCpReviewQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicCpReview>>> = ({ signal }) => getPublicCpReview(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicCpReview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicCpReviewQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicCpReview>>>
+export type GetPublicCpReviewQueryError = ErrorType<NotFoundResponse | GoneResponse>
+
+
+/**
+ * @summary Get CP review context
+ */
+
+export function useGetPublicCpReview<TData = Awaited<ReturnType<typeof getPublicCpReview>>, TError = ErrorType<NotFoundResponse | GoneResponse>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicCpReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicCpReviewQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCpReviewPdfUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/pdf`
+}
+
+/**
+ * If filesUnlocked is false, returns a server-rendered watermarked PDF binary.
+ * If filesUnlocked is true, redirects (302) to the clean Supabase signed URL.
+ * @summary Serve PDF (watermarked or clean redirect)
+ */
+export const getCpReviewPdf = async (token: string, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetCpReviewPdfUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCpReviewPdfQueryKey = (token: string,) => {
+    return [
+    `/api/public/cp-review/${token}/pdf`
+    ] as const;
+    }
+
+
+export const getGetCpReviewPdfQueryOptions = <TData = Awaited<ReturnType<typeof getCpReviewPdf>>, TError = ErrorType<void | NotFoundResponse | GoneResponse>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewPdf>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCpReviewPdfQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCpReviewPdf>>> = ({ signal }) => getCpReviewPdf(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCpReviewPdf>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCpReviewPdfQueryResult = NonNullable<Awaited<ReturnType<typeof getCpReviewPdf>>>
+export type GetCpReviewPdfQueryError = ErrorType<void | NotFoundResponse | GoneResponse>
+
+
+/**
+ * @summary Serve PDF (watermarked or clean redirect)
+ */
+
+export function useGetCpReviewPdf<TData = Awaited<ReturnType<typeof getCpReviewPdf>>, TError = ErrorType<void | NotFoundResponse | GoneResponse>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewPdf>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCpReviewPdfQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCpReviewVersionsUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/versions`
+}
+
+/**
+ * @summary List all document versions
+ */
+export const getCpReviewVersions = async (token: string, options?: RequestInit): Promise<CpDocumentVersion[]> => {
+
+  return customFetch<CpDocumentVersion[]>(getGetCpReviewVersionsUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCpReviewVersionsQueryKey = (token: string,) => {
+    return [
+    `/api/public/cp-review/${token}/versions`
+    ] as const;
+    }
+
+
+export const getGetCpReviewVersionsQueryOptions = <TData = Awaited<ReturnType<typeof getCpReviewVersions>>, TError = ErrorType<NotFoundResponse>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCpReviewVersionsQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCpReviewVersions>>> = ({ signal }) => getCpReviewVersions(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCpReviewVersions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCpReviewVersionsQueryResult = NonNullable<Awaited<ReturnType<typeof getCpReviewVersions>>>
+export type GetCpReviewVersionsQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary List all document versions
+ */
+
+export function useGetCpReviewVersions<TData = Awaited<ReturnType<typeof getCpReviewVersions>>, TError = ErrorType<NotFoundResponse>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCpReviewVersionsQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCpReviewVersionByIdUrl = (token: string,
+    versionId: number,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/versions/${versionId}`
+}
+
+/**
+ * @summary Get a single document version by version number
+ */
+export const getCpReviewVersionById = async (token: string,
+    versionId: number, options?: RequestInit): Promise<CpDocumentVersion> => {
+
+  return customFetch<CpDocumentVersion>(getGetCpReviewVersionByIdUrl(token,versionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCpReviewVersionByIdQueryKey = (token: string,
+    versionId: number,) => {
+    return [
+    `/api/public/cp-review/${token}/versions/${versionId}`
+    ] as const;
+    }
+
+
+export const getGetCpReviewVersionByIdQueryOptions = <TData = Awaited<ReturnType<typeof getCpReviewVersionById>>, TError = ErrorType<NotFoundResponse>>(token: string,
+    versionId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewVersionById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCpReviewVersionByIdQueryKey(token,versionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCpReviewVersionById>>> = ({ signal }) => getCpReviewVersionById(token,versionId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined && versionId !== null && versionId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCpReviewVersionById>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCpReviewVersionByIdQueryResult = NonNullable<Awaited<ReturnType<typeof getCpReviewVersionById>>>
+export type GetCpReviewVersionByIdQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Get a single document version by version number
+ */
+
+export function useGetCpReviewVersionById<TData = Awaited<ReturnType<typeof getCpReviewVersionById>>, TError = ErrorType<NotFoundResponse>>(
+ token: string,
+    versionId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewVersionById>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCpReviewVersionByIdQueryOptions(token,versionId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCompareCpReviewVersionsUrl = (token: string,
+    params: CompareCpReviewVersionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/cp-review/${token}/versions/compare?${stringifiedParams}` : `/api/public/cp-review/${token}/versions/compare`
+}
+
+/**
+ * @summary Section-level diff between two versions
+ */
+export const compareCpReviewVersions = async (token: string,
+    params: CompareCpReviewVersionsParams, options?: RequestInit): Promise<CpVersionDiff> => {
+
+  return customFetch<CpVersionDiff>(getCompareCpReviewVersionsUrl(token,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getCompareCpReviewVersionsQueryKey = (token: string,
+    params?: CompareCpReviewVersionsParams,) => {
+    return [
+    `/api/public/cp-review/${token}/versions/compare`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getCompareCpReviewVersionsQueryOptions = <TData = Awaited<ReturnType<typeof compareCpReviewVersions>>, TError = ErrorType<BadRequestResponse | NotFoundResponse>>(token: string,
+    params: CompareCpReviewVersionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof compareCpReviewVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCompareCpReviewVersionsQueryKey(token,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof compareCpReviewVersions>>> = ({ signal }) => compareCpReviewVersions(token,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof compareCpReviewVersions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type CompareCpReviewVersionsQueryResult = NonNullable<Awaited<ReturnType<typeof compareCpReviewVersions>>>
+export type CompareCpReviewVersionsQueryError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+
+/**
+ * @summary Section-level diff between two versions
+ */
+
+export function useCompareCpReviewVersions<TData = Awaited<ReturnType<typeof compareCpReviewVersions>>, TError = ErrorType<BadRequestResponse | NotFoundResponse>>(
+ token: string,
+    params: CompareCpReviewVersionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof compareCpReviewVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getCompareCpReviewVersionsQueryOptions(token,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCpReviewCommentsUrl = (token: string,
+    params?: GetCpReviewCommentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/cp-review/${token}/comments?${stringifiedParams}` : `/api/public/cp-review/${token}/comments`
+}
+
+/**
+ * @summary List comments with threaded replies
+ */
+export const getCpReviewComments = async (token: string,
+    params?: GetCpReviewCommentsParams, options?: RequestInit): Promise<GetCpReviewComments200> => {
+
+  return customFetch<GetCpReviewComments200>(getGetCpReviewCommentsUrl(token,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCpReviewCommentsQueryKey = (token: string,
+    params?: GetCpReviewCommentsParams,) => {
+    return [
+    `/api/public/cp-review/${token}/comments`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCpReviewCommentsQueryOptions = <TData = Awaited<ReturnType<typeof getCpReviewComments>>, TError = ErrorType<NotFoundResponse>>(token: string,
+    params?: GetCpReviewCommentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewComments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCpReviewCommentsQueryKey(token,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCpReviewComments>>> = ({ signal }) => getCpReviewComments(token,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCpReviewComments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCpReviewCommentsQueryResult = NonNullable<Awaited<ReturnType<typeof getCpReviewComments>>>
+export type GetCpReviewCommentsQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary List comments with threaded replies
+ */
+
+export function useGetCpReviewComments<TData = Awaited<ReturnType<typeof getCpReviewComments>>, TError = ErrorType<NotFoundResponse>>(
+ token: string,
+    params?: GetCpReviewCommentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewComments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCpReviewCommentsQueryOptions(token,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAddCpReviewCommentUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/comments`
+}
+
+/**
+ * @summary Add a page or section comment
+ */
+export const addCpReviewComment = async (token: string,
+    cpAddCommentInput: CpAddCommentInput, options?: RequestInit): Promise<CpPageComment> => {
+
+  return customFetch<CpPageComment>(getAddCpReviewCommentUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(cpAddCommentInput)
+  }
+);}
+
+
+
+
+export const getAddCpReviewCommentMutationOptions = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addCpReviewComment>>, TError,{token: string;data: BodyType<CpAddCommentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addCpReviewComment>>, TError,{token: string;data: BodyType<CpAddCommentInput>}, TContext> => {
+
+const mutationKey = ['addCpReviewComment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addCpReviewComment>>, {token: string;data: BodyType<CpAddCommentInput>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  addCpReviewComment(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddCpReviewCommentMutationResult = NonNullable<Awaited<ReturnType<typeof addCpReviewComment>>>
+    export type AddCpReviewCommentMutationBody = BodyType<CpAddCommentInput>
+    export type AddCpReviewCommentMutationError = ErrorType<BadRequestResponse | NotFoundResponse>
+
+    /**
+ * @summary Add a page or section comment
+ */
+export const useAddCpReviewComment = <TError = ErrorType<BadRequestResponse | NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addCpReviewComment>>, TError,{token: string;data: BodyType<CpAddCommentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addCpReviewComment>>,
+        TError,
+        {token: string;data: BodyType<CpAddCommentInput>},
+        TContext
+      > => {
+      return useMutation(getAddCpReviewCommentMutationOptions(options));
+    }
+
+export const getPatchCpReviewCommentUrl = (token: string,
+    commentId: number,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/comments/${commentId}`
+}
+
+/**
+ * @summary Edit or resolve/reopen a comment (client only)
+ */
+export const patchCpReviewComment = async (token: string,
+    commentId: number,
+    patchCpReviewCommentBody: PatchCpReviewCommentBody, options?: RequestInit): Promise<CpPageComment> => {
+
+  return customFetch<CpPageComment>(getPatchCpReviewCommentUrl(token,commentId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(patchCpReviewCommentBody)
+  }
+);}
+
+
+
+
+export const getPatchCpReviewCommentMutationOptions = <TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchCpReviewComment>>, TError,{token: string;commentId: number;data: BodyType<PatchCpReviewCommentBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchCpReviewComment>>, TError,{token: string;commentId: number;data: BodyType<PatchCpReviewCommentBody>}, TContext> => {
+
+const mutationKey = ['patchCpReviewComment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchCpReviewComment>>, {token: string;commentId: number;data: BodyType<PatchCpReviewCommentBody>}> = (props) => {
+          const {token,commentId,data} = props ?? {};
+
+          return  patchCpReviewComment(token,commentId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchCpReviewCommentMutationResult = NonNullable<Awaited<ReturnType<typeof patchCpReviewComment>>>
+    export type PatchCpReviewCommentMutationBody = BodyType<PatchCpReviewCommentBody>
+    export type PatchCpReviewCommentMutationError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Edit or resolve/reopen a comment (client only)
+ */
+export const usePatchCpReviewComment = <TError = ErrorType<BadRequestResponse | ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchCpReviewComment>>, TError,{token: string;commentId: number;data: BodyType<PatchCpReviewCommentBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof patchCpReviewComment>>,
+        TError,
+        {token: string;commentId: number;data: BodyType<PatchCpReviewCommentBody>},
+        TContext
+      > => {
+      return useMutation(getPatchCpReviewCommentMutationOptions(options));
+    }
+
+export const getDeleteCpReviewCommentUrl = (token: string,
+    commentId: number,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/comments/${commentId}`
+}
+
+/**
+ * @summary Delete own open comment
+ */
+export const deleteCpReviewComment = async (token: string,
+    commentId: number, options?: RequestInit): Promise<OkResponse> => {
+
+  return customFetch<OkResponse>(getDeleteCpReviewCommentUrl(token,commentId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteCpReviewCommentMutationOptions = <TError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCpReviewComment>>, TError,{token: string;commentId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteCpReviewComment>>, TError,{token: string;commentId: number}, TContext> => {
+
+const mutationKey = ['deleteCpReviewComment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteCpReviewComment>>, {token: string;commentId: number}> = (props) => {
+          const {token,commentId} = props ?? {};
+
+          return  deleteCpReviewComment(token,commentId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteCpReviewCommentMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCpReviewComment>>>
+
+    export type DeleteCpReviewCommentMutationError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>
+
+    /**
+ * @summary Delete own open comment
+ */
+export const useDeleteCpReviewComment = <TError = ErrorType<ForbiddenResponse | NotFoundResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCpReviewComment>>, TError,{token: string;commentId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteCpReviewComment>>,
+        TError,
+        {token: string;commentId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteCpReviewCommentMutationOptions(options));
+    }
+
+export const getApproveCpReviewUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/approve`
+}
+
+/**
+ * @summary Approve document — requires confirmed:true checkbox
+ */
+export const approveCpReview = async (token: string,
+    approveCpReviewBody: ApproveCpReviewBody, options?: RequestInit): Promise<CpActionResult> => {
+
+  return customFetch<CpActionResult>(getApproveCpReviewUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(approveCpReviewBody)
+  }
+);}
+
+
+
+
+export const getApproveCpReviewMutationOptions = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveCpReview>>, TError,{token: string;data: BodyType<ApproveCpReviewBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveCpReview>>, TError,{token: string;data: BodyType<ApproveCpReviewBody>}, TContext> => {
+
+const mutationKey = ['approveCpReview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveCpReview>>, {token: string;data: BodyType<ApproveCpReviewBody>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  approveCpReview(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveCpReviewMutationResult = NonNullable<Awaited<ReturnType<typeof approveCpReview>>>
+    export type ApproveCpReviewMutationBody = BodyType<ApproveCpReviewBody>
+    export type ApproveCpReviewMutationError = ErrorType<BadRequestResponse | ConflictResponse>
+
+    /**
+ * @summary Approve document — requires confirmed:true checkbox
+ */
+export const useApproveCpReview = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveCpReview>>, TError,{token: string;data: BodyType<ApproveCpReviewBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveCpReview>>,
+        TError,
+        {token: string;data: BodyType<ApproveCpReviewBody>},
+        TContext
+      > => {
+      return useMutation(getApproveCpReviewMutationOptions(options));
+    }
+
+export const getRequestCpReviewRevisionUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/request-revision`
+}
+
+/**
+ * @summary Request a revision with structured notes
+ */
+export const requestCpReviewRevision = async (token: string,
+    cpRevisionInput: CpRevisionInput, options?: RequestInit): Promise<RequestCpReviewRevision200> => {
+
+  return customFetch<RequestCpReviewRevision200>(getRequestCpReviewRevisionUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(cpRevisionInput)
+  }
+);}
+
+
+
+
+export const getRequestCpReviewRevisionMutationOptions = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestCpReviewRevision>>, TError,{token: string;data: BodyType<CpRevisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestCpReviewRevision>>, TError,{token: string;data: BodyType<CpRevisionInput>}, TContext> => {
+
+const mutationKey = ['requestCpReviewRevision'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestCpReviewRevision>>, {token: string;data: BodyType<CpRevisionInput>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  requestCpReviewRevision(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestCpReviewRevisionMutationResult = NonNullable<Awaited<ReturnType<typeof requestCpReviewRevision>>>
+    export type RequestCpReviewRevisionMutationBody = BodyType<CpRevisionInput>
+    export type RequestCpReviewRevisionMutationError = ErrorType<BadRequestResponse | ConflictResponse>
+
+    /**
+ * @summary Request a revision with structured notes
+ */
+export const useRequestCpReviewRevision = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestCpReviewRevision>>, TError,{token: string;data: BodyType<CpRevisionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestCpReviewRevision>>,
+        TError,
+        {token: string;data: BodyType<CpRevisionInput>},
+        TContext
+      > => {
+      return useMutation(getRequestCpReviewRevisionMutationOptions(options));
+    }
+
+export const getRejectCpReviewUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/reject`
+}
+
+/**
+ * @summary Reject document — requires reason
+ */
+export const rejectCpReview = async (token: string,
+    rejectCpReviewBody: RejectCpReviewBody, options?: RequestInit): Promise<CpActionResult> => {
+
+  return customFetch<CpActionResult>(getRejectCpReviewUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(rejectCpReviewBody)
+  }
+);}
+
+
+
+
+export const getRejectCpReviewMutationOptions = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectCpReview>>, TError,{token: string;data: BodyType<RejectCpReviewBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rejectCpReview>>, TError,{token: string;data: BodyType<RejectCpReviewBody>}, TContext> => {
+
+const mutationKey = ['rejectCpReview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rejectCpReview>>, {token: string;data: BodyType<RejectCpReviewBody>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  rejectCpReview(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RejectCpReviewMutationResult = NonNullable<Awaited<ReturnType<typeof rejectCpReview>>>
+    export type RejectCpReviewMutationBody = BodyType<RejectCpReviewBody>
+    export type RejectCpReviewMutationError = ErrorType<BadRequestResponse | ConflictResponse>
+
+    /**
+ * @summary Reject document — requires reason
+ */
+export const useRejectCpReview = <TError = ErrorType<BadRequestResponse | ConflictResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectCpReview>>, TError,{token: string;data: BodyType<RejectCpReviewBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rejectCpReview>>,
+        TError,
+        {token: string;data: BodyType<RejectCpReviewBody>},
+        TContext
+      > => {
+      return useMutation(getRejectCpReviewMutationOptions(options));
+    }
+
+export const getGetCpReviewTimelineUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/timeline`
+}
+
+/**
+ * @summary Full chronological event timeline
+ */
+export const getCpReviewTimeline = async (token: string, options?: RequestInit): Promise<GetCpReviewTimeline200> => {
+
+  return customFetch<GetCpReviewTimeline200>(getGetCpReviewTimelineUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCpReviewTimelineQueryKey = (token: string,) => {
+    return [
+    `/api/public/cp-review/${token}/timeline`
+    ] as const;
+    }
+
+
+export const getGetCpReviewTimelineQueryOptions = <TData = Awaited<ReturnType<typeof getCpReviewTimeline>>, TError = ErrorType<NotFoundResponse>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewTimeline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCpReviewTimelineQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCpReviewTimeline>>> = ({ signal }) => getCpReviewTimeline(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCpReviewTimeline>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCpReviewTimelineQueryResult = NonNullable<Awaited<ReturnType<typeof getCpReviewTimeline>>>
+export type GetCpReviewTimelineQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Full chronological event timeline
+ */
+
+export function useGetCpReviewTimeline<TData = Awaited<ReturnType<typeof getCpReviewTimeline>>, TError = ErrorType<NotFoundResponse>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewTimeline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCpReviewTimelineQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCpReviewStatsUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/stats`
+}
+
+/**
+ * @summary Review KPI stats (comment counts, QC, payment lock)
+ */
+export const getCpReviewStats = async (token: string, options?: RequestInit): Promise<CpReviewStats> => {
+
+  return customFetch<CpReviewStats>(getGetCpReviewStatsUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCpReviewStatsQueryKey = (token: string,) => {
+    return [
+    `/api/public/cp-review/${token}/stats`
+    ] as const;
+    }
+
+
+export const getGetCpReviewStatsQueryOptions = <TData = Awaited<ReturnType<typeof getCpReviewStats>>, TError = ErrorType<NotFoundResponse>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCpReviewStatsQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCpReviewStats>>> = ({ signal }) => getCpReviewStats(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCpReviewStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCpReviewStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getCpReviewStats>>>
+export type GetCpReviewStatsQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Review KPI stats (comment counts, QC, payment lock)
+ */
+
+export function useGetCpReviewStats<TData = Awaited<ReturnType<typeof getCpReviewStats>>, TError = ErrorType<NotFoundResponse>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCpReviewStatsQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCpReviewDashboardUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/cp-review/${token}/dashboard`
+}
+
+/**
+ * @summary Review KPI dashboard (extended stats)
+ */
+export const getCpReviewDashboard = async (token: string, options?: RequestInit): Promise<CpReviewDashboard> => {
+
+  return customFetch<CpReviewDashboard>(getGetCpReviewDashboardUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCpReviewDashboardQueryKey = (token: string,) => {
+    return [
+    `/api/public/cp-review/${token}/dashboard`
+    ] as const;
+    }
+
+
+export const getGetCpReviewDashboardQueryOptions = <TData = Awaited<ReturnType<typeof getCpReviewDashboard>>, TError = ErrorType<NotFoundResponse>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCpReviewDashboardQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCpReviewDashboard>>> = ({ signal }) => getCpReviewDashboard(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCpReviewDashboard>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCpReviewDashboardQueryResult = NonNullable<Awaited<ReturnType<typeof getCpReviewDashboard>>>
+export type GetCpReviewDashboardQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Review KPI dashboard (extended stats)
+ */
+
+export function useGetCpReviewDashboard<TData = Awaited<ReturnType<typeof getCpReviewDashboard>>, TError = ErrorType<NotFoundResponse>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCpReviewDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCpReviewDashboardQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

@@ -66,13 +66,16 @@ async function seedFixture() {
   let project = existingProject;
   if (!project) {
     [project] = await db.insert(creativeProjectsTable).values({
-      projectId:      FIXTURE_PROJECT_ID,
-      projectNumber:  "CP-FIXTURE-001",
-      brandName:      FIXTURE_BRAND,
-      businessType:   "Technology Consulting",
-      status:         "in_progress",
-      generationStatus: "completed",
-      sourceType:     "catalog",
+      projectId:        FIXTURE_PROJECT_ID,
+      brandName:        FIXTURE_BRAND,
+      businessType:     "Technology Consulting",
+      targetMarket:     "Enterprise B2B clients in Southeast Asia",
+      productOrService: "Company Profile document design",
+      goal:             "Present a polished company profile for enterprise pitches",
+      status:           "in_progress",
+      sourceType:       "direct",
+      paymentStatus:    "pending",
+      filesUnlocked:    false,
     }).returning({ projectId: creativeProjectsTable.projectId });
     console.log("  ✅ Project created:", FIXTURE_PROJECT_ID);
   } else {
@@ -90,10 +93,13 @@ async function seedFixture() {
   if (!existingAsset) {
     const [asset] = await db.insert(creativeAiAssetsTable).values({
       projectId:  FIXTURE_PROJECT_ID,
+      provider:   "fixture",
+      model:      "fixture-static-pdf",
       assetType:  "document",
-      assetRole:  "primary",
-      // Use a publicly accessible PDF for testing
-      imageUrl:   "https://www.w3.org/WAI/WCAG21/wcag21.pdf",
+      prompt:     "Fixture Company Profile document (static PDF for dev/testing)",
+      category:   "company_profile",
+      // Use a publicly accessible, stable PDF for testing (watermark fetch source)
+      imageUrl:   "https://pdfobject.com/pdf/sample.pdf",
       status:     "completed",
       version:    2,
       metadata: {
@@ -130,7 +136,6 @@ async function seedFixture() {
       projectId:        FIXTURE_PROJECT_ID,
       clientName:       "Alex Fixture",
       clientEmail:      "fixture@dev.local",
-      reviewToken:      null, // stored as hash only
       reviewTokenHash:  TOKEN_HASH,
       reviewTokenPlain: null,
       status:           "viewed",

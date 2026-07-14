@@ -5874,7 +5874,7 @@ paths:
               properties:
                 reason:
                   type: string
-                  minLength: 10
+                  minLength: 1
                   description: Detailed reason for rejection (required)
       responses:
         "200":
@@ -5941,6 +5941,52 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
 
 components:
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string }
+    Gone:
+      description: Resource no longer available (expired or revoked)
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string }
+    BadRequest:
+      description: Invalid request payload or parameters
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string }
+    Forbidden:
+      description: Action not permitted for this actor
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string }
+    Conflict:
+      description: State changed concurrently or resource already in a terminal state
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string }
   schemas:
     CpReviewContext:
       type: object

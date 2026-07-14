@@ -1,0 +1,262 @@
+Lanjutkan V4.2C — Customer Review Experience dari checkpoint terakhir.
+
+JANGAN mengulang eksplorasi.
+JANGAN mengulang DDL.
+JANGAN membuat review system baru.
+JANGAN lanjut ke V4.2D sebelum V4.2C benar-benar selesai.
+
+STATUS TERAKHIR:
+
+- cpPageCommentsTable dan cpDocumentVersionsTable sudah tersedia
+- lib/db sudah di-rebuild
+- TypeScript errors sudah resolved
+- reject endpoint sedang ditambahkan
+- timeline endpoint sedang ditambahkan
+- OpenAPI cp-review paths sedang ditulis
+- fixture seed script sudah dibuat
+- quota habis tepat setelah openapi.yaml diedit
+
+==================================================
+1. VALIDASI OPENAPI YANG BARU DIEDIT
+==================================================
+
+Buka bagian cp-review di openapi.yaml.
+
+Periksa:
+
+- YAML valid
+- tidak ada duplicate paths
+- tidak ada duplicate operationId
+- semua indentation benar
+- schemas referenced benar-benar ada
+- request body dan response shape sesuai route aktual
+- token path param terdokumentasi
+- error responses terdokumentasi
+
+Route minimum yang wajib terdokumentasi:
+
+GET review detail
+GET document
+GET preview
+GET versions
+GET version detail
+GET compare
+GET comments
+POST comment
+PATCH comment
+POST reply
+POST resolve
+POST reopen
+POST approve
+POST request revision
+POST reject
+GET timeline
+GET stats
+
+Gunakan path aktual sebagai source of truth.
+
+==================================================
+2. SELESAIKAN REJECT & TIMELINE ROUTES
+==================================================
+
+Pastikan reject:
+
+- membutuhkan reason
+- hanya current active review
+- tidak boleh overwrite terminal state
+- masuk audit log
+- publish event
+- return customer-safe DTO
+
+Pastikan timeline:
+
+- berasal dari event/history nyata
+- tidak membuat fake status
+- urut kronologis
+- tidak membocorkan prompt, model, token, cost, stack trace, atau internal notes
+
+==================================================
+3. JALANKAN CODEGEN
+==================================================
+
+Setelah OpenAPI valid:
+
+- jalankan pipeline codegen resmi
+- rebuild api-zod
+- rebuild api-client-react
+- jangan edit generated file manual
+- cek duplicate export
+- cek stale dist
+- cek generated headers
+
+Jika generated hooks belum dipakai frontend:
+- pertahankan manual hooks sementara
+- gunakan generated types jika aman
+- dokumentasikan manual fetch yang tersisa
+
+==================================================
+4. JALANKAN FIXTURE
+==================================================
+
+Jalankan fixture seed script yang sudah dibuat.
+
+Fixture minimum:
+
+- 1 valid Company Profile review token
+- 1 locked project
+- 2 document versions
+- 1 current version
+- 1 PDF preview
+- 1 watermarked preview
+- 3 page comments
+- 1 section comment
+- 1 reply thread
+- 1 resolved comment
+- timeline events
+- review stats
+- payment lock state
+
+Fixture harus:
+- idempotent
+- development-only
+- removable
+- tidak memakai token production
+
+==================================================
+5. SMOKE TEST END-TO-END
+==================================================
+
+Dengan token valid, verifikasi:
+
+1. Review page membuka data nyata.
+2. PDF viewer tampil.
+3. Thumbnail sidebar tampil.
+4. Page navigation bekerja.
+5. Zoom dan fit-width bekerja.
+6. Comment drawer tampil.
+7. Page comment terikat ke halaman yang benar.
+8. Section comment tampil.
+9. Reply thread bekerja.
+10. Resolve dan reopen bekerja.
+11. Version selector tampil.
+12. Compare mode menampilkan added/removed/changed sections.
+13. Watermark preview tampil saat locked.
+14. Final file tidak dapat diakses saat locked.
+15. Approve memerlukan confirmation checkbox.
+16. Revision request membuat revision cycle.
+17. Reject memerlukan reason.
+18. Timeline tampil.
+19. Stats tampil.
+20. Customer DTO aman.
+
+==================================================
+6. STATE MACHINE TEST
+==================================================
+
+Verifikasi:
+
+- approve hanya current version
+- stale version approve ditolak
+- approved version immutable
+- revision request membuat version baru
+- reject membutuhkan reason
+- terminal state tidak dioverwrite
+- edit comment hanya oleh author dan unresolved
+- resolved comment tidak dapat diedit
+- cross-project access ditolak
+- invalid token ditolak
+
+==================================================
+7. WATERMARK TEST
+==================================================
+
+Pastikan:
+
+- watermark benar-benar tertanam di PDF derived preview
+- final PDF tetap tanpa watermark
+- original file tetap private
+- locked user hanya mendapat preview
+- unlocked user mendapat signed final access
+- storage path tidak bocor
+- preview access dapat expire
+
+==================================================
+8. SCREENSHOT VERIFICATION
+==================================================
+
+Ambil screenshot:
+
+- desktop review page
+- mobile review page
+- PDF viewer
+- comments drawer
+- page comment
+- reply thread
+- version selector
+- version compare
+- watermark preview
+- approve modal
+- revision form
+- reject form
+- timeline/stats
+
+Pastikan:
+- tidak ada 404
+- tidak ada blank page
+- tidak ada overflow
+- tidak ada broken PDF
+- tidak ada raw backend error
+
+==================================================
+9. TEST & BUILD
+==================================================
+
+Jalankan:
+
+- unit tests cp-review
+- integration tests cp-review
+- frontend tests
+- lib/db build
+- api-server build
+- customer-portal build
+- OpenAPI validation
+- codegen determinism
+- pnpm run verify
+
+Semua harus clean.
+
+==================================================
+10. FINAL REPORT V4.2C
+==================================================
+
+Berikan laporan:
+
+- TypeScript fix status
+- reject route
+- timeline route
+- OpenAPI operations added
+- codegen status
+- generated packages status
+- fixture details
+- endpoint smoke test
+- watermark result
+- version compare result
+- comment/thread result
+- approval/revision/reject result
+- screenshots
+- test totals
+- build status
+- pnpm run verify result
+- known limitations
+
+JANGAN lanjut ke V4.2D jika masih ada:
+- build error
+- test failure
+- invalid OpenAPI
+- broken screenshot
+- state-machine bug
+- watermark bug
+
+TARGET AKHIR:
+
+V4.2C selesai end-to-end, terdokumentasi, type-safe, tervalidasi visual, dan aman untuk customer.

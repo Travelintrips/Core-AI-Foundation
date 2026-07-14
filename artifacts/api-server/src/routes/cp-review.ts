@@ -126,14 +126,22 @@ async function getLatestCpAsset(projectId: string) {
 // ── Helper: determine filesUnlocked status ────────────────────────────────────
 
 async function getFilesUnlocked(projectId: string): Promise<boolean> {
-  // Look up the service request for this project
+  // Primary source of truth: creative_projects.files_unlocked (kept in sync by the
+  // payment-verification flow — see dual-commercial-flow).
+  const [project] = await db
+    .select({ filesUnlocked: creativeProjectsTable.filesUnlocked })
+    .from(creativeProjectsTable)
+    .where(eq(creativeProjectsTable.projectId, projectId))
+    .limit(1);
+
+  if (project?.filesUnlocked) return true;
+
+  // Fallback: look up the service request for this project.
+  // created_project_id stores the client-facing project UUID directly (text), not the row id.
   const [sr] = await db
     .select({ status: aiServiceRequestsTable.status })
     .from(aiServiceRequestsTable)
-    .where(eq(aiServiceRequestsTable.createdProjectId,
-      // find the db row id for this project UUID
-      sql`(SELECT id FROM ai_platform.creative_projects WHERE project_id = ${projectId} LIMIT 1)`
-    ))
+    .where(eq(aiServiceRequestsTable.createdProjectId, projectId))
     .limit(1);
 
   // filesUnlocked when service request is in completed/files_unlocked status
@@ -286,9 +294,10 @@ router.get("/public/cp-review/:token/pdf", async (req, res): Promise<void> => {
     });
     res.send(pdfBytes);
   } catch (err) {
-    // Fallback: redirect to source PDF if watermarking fails
-    res.set("X-Watermark-Error", "true");
-    res.redirect(302, asset.imageUrl);
+    // SECURITY: never fall back to the clean/unwatermarked source when the
+    // document is supposed to be locked — that would leak the full-resolution
+    // file to a client who hasn't paid/been approved. Fail closed instead.
+    res.status(502).json({ error: "Unable to prepare a watermarked preview right now. Please try again shortly." });
   }
 });
 
