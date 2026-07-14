@@ -33,6 +33,11 @@ import {
   creativeAiAssetsTable,
   creativeAiClientReviewsTable,
 } from "@workspace/db";
+import {
+  pairEventsWithSummaries,
+  type EventWithSummary,
+  type SummaryContext,
+} from "./executionSummaryService.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Canonical Event Types
@@ -130,6 +135,9 @@ const STEP_PIPELINE: readonly string[] = [
   "Copy Production",
   "Quality Control",
 ];
+
+/** V4.1 — read-only export so executionSummaryService can build next-step context without a second query. */
+export const CANONICAL_STEP_PIPELINE: readonly string[] = STEP_PIPELINE;
 
 const STEP_ROLE_KEY: Record<string, string> = {
   "Brand Strategy":    "brand-strategist",
@@ -618,6 +626,20 @@ export async function getEventsForProject(
   projectId: string,
   internalProjectId: number,
 ): Promise<CanonicalEvent[]> {
+  const { events } = await loadEventsAndContext(projectId, internalProjectId);
+  return events;
+}
+
+/**
+ * V4.1 — Same query/projection as getEventsForProject, but also returns the
+ * small, customer-safe SummaryContext needed to derive ExecutionSummary
+ * next-step/customerAction fields. Shares the exact same DB round-trip — no
+ * extra query is issued for the summary layer.
+ */
+async function loadEventsAndContext(
+  projectId: string,
+  internalProjectId: number,
+): Promise<{ events: CanonicalEvent[]; context: SummaryContext }> {
   const [projectRows, stepRows, assetRows, reviewRows] = await Promise.all([
     db
       .select({
@@ -707,7 +729,37 @@ export async function getEventsForProject(
   // Sort by createdAt ASC (chronological order)
   allEvents.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
-  return allEvents;
+  // ── V4.1 summary context — customer-safe, no raw rows leak out ───────────
+  const latestReview = reviewRows.length > 0
+    ? reviewRows.reduce((latest, r) => (r.createdAt > latest.createdAt ? r : latest))
+    : null;
+  const context: SummaryContext = {
+    steps: STEP_PIPELINE.map((stepName) => {
+      const row = stepRows.find((s) => s.stepName === stepName);
+      return { stepName, status: row?.status ?? "pending" };
+    }),
+    latestReviewStatus: latestReview?.status ?? null,
+    filesUnlocked: false, // caller (customerWorkspaceService) overrides with the real flag when known
+    artifactCount: assetRows.filter((a) => a.status === "completed" || a.status === "approved").length,
+  };
+
+  return { events: allEvents, context };
+}
+
+/**
+ * V4.1 — Fetch events for a single project paired with their deterministic
+ * ExecutionSummary. `filesUnlocked` must be passed by the caller (it is not
+ * derivable from the tables this service reads) so the summary layer never
+ * has to guess it.
+ */
+export async function getEventsWithSummariesForProject(
+  projectId: string,
+  internalProjectId: number,
+  opts: { filesUnlocked?: boolean } = {},
+): Promise<EventWithSummary[]> {
+  const { events, context } = await loadEventsAndContext(projectId, internalProjectId);
+  const resolvedContext: SummaryContext = { ...context, filesUnlocked: opts.filesUnlocked ?? false };
+  return pairEventsWithSummaries(events, resolvedContext);
 }
 
 /**

@@ -1,0 +1,814 @@
+PHASE 2 — CREATIVE AI SMART CHOICE BRIEF FORM
+OBJECTIVE
+
+Phase 1 UI Foundation sudah selesai.
+
+Sekarang gunakan seluruh reusable component yang sudah tersedia di:
+
+src/components/creative-ui/
+
+untuk mengubah halaman brief Creative AI menjadi lebih user-friendly.
+
+Prinsip utama:
+
+User memilih opsi yang tersedia terlebih dahulu. Input teks hanya muncul jika user memilih “Lainnya” atau memang membutuhkan jawaban khusus.
+
+Fokus fase ini adalah Smart Choice Form dan Progressive Disclosure.
+
+Jangan mengimplementasikan AI Assistant, website scraping, AI autofill, atau recommendation API pada fase ini. Fitur tersebut akan dikerjakan pada fase berikutnya.
+
+KONDISI EXISTING YANG WAJIB DIPERTAHANKAN
+
+Jangan mengubah:
+
+Backend API
+Database
+Database schema
+Routes
+Request ID flow
+Order flow
+Pricing
+Approval
+Production pipeline
+Autosave
+Draft restore
+Existing mutations dan hooks
+Existing submit payload contract
+Existing validation business rules
+
+Route harus tetap:
+
+/request-service/:requestId/brief
+
+Hooks existing tetap digunakan:
+
+useStartBrief
+useSaveBrief
+useRequestDetail
+
+saveBrief.mutate() tidak boleh diganti kontraknya.
+
+Bila pilihan visual membutuhkan struktur frontend tambahan, lakukan mapping ke bentuk data existing sebelum autosave dan submit.
+
+Jangan menambah field database hanya untuk menyimpan pilihan baru.
+
+1. AUDIT SEBELUM IMPLEMENTASI
+
+Sebelum mengubah kode:
+
+Baca seluruh src/pages/brief.tsx.
+Identifikasi semua step brief existing.
+Identifikasi struktur state/form data.
+Identifikasi payload yang dikirim melalui saveBrief.mutate().
+Identifikasi field wajib dan opsional.
+Identifikasi service/package-specific fields.
+Pastikan seluruh jawaban lama dari draft tetap bisa dimuat.
+Pastikan data lama berbentuk string tetap kompatibel dengan komponen baru.
+
+Tulis temuan singkat sebelum melakukan implementasi.
+
+Jangan membuat field baru secara sembarangan.
+
+2. BUSINESS INDUSTRY — SEARCHABLE SMART CHOICE
+
+Pada pertanyaan:
+
+Apa industri bisnis Anda?
+
+gunakan TagSelector, SuggestionGroup, atau komponen reusable Phase 1 yang paling sesuai.
+
+Gunakan single select.
+
+Daftar industri minimal:
+
+E-commerce
+Marketplace
+Retail
+Technology
+Software
+Artificial Intelligence
+Startup
+Fintech
+Banking
+Insurance
+Healthcare
+Hospital
+Clinic
+Pharmacy
+Education
+School
+University
+Restaurant
+Kuliner & F&B
+Cafe
+Coffee Shop
+Bakery
+Hotel
+Travel
+Tourism
+Logistics
+Freight Forwarding
+Shipping
+Warehousing
+Export Import
+Trading
+Manufacturing
+Factory
+Construction
+Property
+Real Estate
+Architecture
+Interior Design
+Consulting
+Law Firm
+Accounting
+Creative Agency
+Marketing Agency
+Media
+Entertainment
+Fashion
+Beauty
+Cosmetics
+Jewelry
+Furniture
+Agriculture
+Plantation
+Seafood
+Fishery
+Mining
+Coal
+Palm Oil
+Coconut Product
+Charcoal
+Automotive
+Car Dealer
+Motorcycle
+Fitness
+Gym
+Sport Center
+Event Organizer
+Wedding
+Photography
+Government
+Nonprofit / NGO
+Professional Services
+Lainnya
+
+Tampilkan:
+
+6 sampai 10 quick suggestions secara default.
+Search untuk menemukan pilihan lainnya.
+Pilihan terpilih harus jelas.
+Hanya satu industri yang dapat dipilih.
+
+Jika user memilih:
+
+Lainnya
+
+tampilkan input:
+
+Tuliskan industri bisnis Anda
+
+Input custom tidak boleh muncul sebelum “Lainnya” dipilih.
+
+Jika user kemudian memilih industri standar, hapus atau nonaktifkan custom industry agar tidak terjadi dua nilai.
+
+3. COMPANY SIZE — SELECTION CARDS
+
+Pertanyaan:
+
+Berapa ukuran perusahaan Anda?
+
+Ganti dropdown existing menjadi SelectionCard.
+
+Pilihan:
+
+Personal / Individu
+1 orang
+
+Startup / Tim Kecil
+2–10 orang
+
+Usaha Kecil
+11–50 orang
+
+Perusahaan Menengah
+51–200 orang
+
+Enterprise
+Lebih dari 200 orang
+
+Gunakan ikon yang sesuai.
+
+Ketentuan:
+
+Single select.
+Card terpilih memiliki border dan glow.
+Nilai tetap dipetakan ke value yang diterima form existing.
+Draft lama dari dropdown harus otomatis cocok dengan card yang sesuai.
+Field tetap opsional jika sebelumnya opsional.
+4. WEBSITE DAN SOCIAL MEDIA
+
+Pertanyaan website/media sosial tetap berupa input karena membutuhkan URL.
+
+Namun tingkatkan UX:
+
+Label: Website atau media sosial bisnis
+Placeholder: https://websiteanda.com atau @username
+Tampilkan helper text bahwa satu link utama sudah cukup.
+Jangan melakukan scraping atau API fetch pada fase ini.
+Validasi URL existing tetap dipertahankan.
+Jangan memaksa user mengisi protokol jika validasi existing mendukung format tanpa protokol.
+
+Tambahkan quick option:
+
+Belum punya website atau media sosial
+
+Jika dipilih:
+
+Input URL dinonaktifkan atau disembunyikan.
+Nilai disimpan dalam bentuk yang kompatibel dengan payload existing.
+Jangan menyimpan boolean baru ke database jika field tersebut belum tersedia.
+5. PROJECT GOAL — MULTI-SELECT FIRST
+
+Pada pertanyaan:
+
+Apa tujuan utama project ini?
+
+jangan langsung menampilkan textarea kosong sebagai input utama.
+
+Gunakan MultiChoiceChip, OptionGrid, atau TagSelector.
+
+Pilihan:
+
+Meningkatkan brand awareness
+Meningkatkan penjualan
+Mendapatkan lebih banyak leads
+Memperkenalkan produk baru
+Melakukan rebranding
+Membuat bisnis terlihat lebih profesional
+Membangun kepercayaan pelanggan
+Meningkatkan engagement media sosial
+Meningkatkan konversi website
+Mencari investor
+Menarik distributor atau reseller
+Memasuki pasar internasional
+Membuat materi promosi
+Memperkuat identitas brand
+Lainnya
+
+Ketentuan:
+
+Multi-select.
+User boleh memilih maksimal 5 tujuan.
+Tampilkan counter seperti 2 dari maksimal 5 dipilih.
+Minimal satu tujuan wajib dipilih karena field ini required.
+Klik chip yang sama kembali akan membatalkan pilihan.
+Tampilkan error existing dengan HelperText.
+
+Jika memilih Lainnya, tampilkan textarea:
+
+Jelaskan tujuan lain yang ingin dicapai
+
+Textarea hanya muncul jika Lainnya aktif.
+
+Mapping ke data existing
+
+Jika field backend masih berupa string:
+
+Gabungkan pilihan menjadi string yang stabil dan mudah dibaca.
+Gunakan separator yang konsisten.
+Sertakan custom value bila ada.
+Saat draft dibuka kembali, parse string tersebut ke pilihan visual jika memungkinkan.
+Jangan mengubah tipe payload backend.
+
+Contoh penyimpanan:
+
+Meningkatkan brand awareness; Meningkatkan penjualan; Lainnya: Mendapatkan sertifikasi pasar global
+
+Buat helper parser dan serializer yang reusable, bukan logic tersebar di JSX.
+
+6. SUCCESS METRICS — GUIDED METRICS
+
+Pada pertanyaan:
+
+Bagaimana Anda mengukur kesuksesan project ini?
+
+field tetap opsional.
+
+Gunakan pilihan multi-select:
+
+Peningkatan penjualan
+Peningkatan jumlah leads
+Peningkatan inquiry pelanggan
+Peningkatan engagement
+Peningkatan followers
+Peningkatan traffic website
+Peningkatan conversion rate
+Lebih banyak distributor atau reseller
+Brand terlihat lebih profesional
+Brand lebih mudah dikenali
+Meningkatkan kepercayaan pelanggan
+Mendapatkan investor
+Mencapai target peluncuran
+Belum menentukan metrik
+Lainnya
+
+Jika user memilih pilihan terukur, tampilkan input detail opsional:
+
+Tambahkan target angka atau periode waktu
+
+Placeholder:
+
+Contoh: 1.000 engagement dalam 7 hari atau penjualan naik 10%
+
+Jika user memilih:
+
+Belum menentukan metrik
+
+pilihan tersebut harus eksklusif:
+
+Hapus pilihan metric lainnya.
+Sembunyikan input target angka.
+Jangan tampilkan error karena field ini opsional.
+
+Jika memilih metrik lain setelah “Belum menentukan metrik”, hapus status tersebut.
+
+7. EXISTING ASSETS — CHECKLIST FIRST
+
+Pada pertanyaan:
+
+Apakah Anda sudah punya materi yang bisa kami gunakan?
+
+gunakan multi-select visual.
+
+Pilihan:
+
+Logo
+Brand guideline
+Company profile
+Foto produk
+Foto perusahaan / kantor
+Video
+Website
+Konten media sosial
+Copywriting
+Katalog atau brosur
+Packaging
+Presentasi
+Data atau dokumen pendukung
+Belum punya aset
+Lainnya
+
+Ketentuan:
+
+Multi-select.
+Belum punya aset bersifat eksklusif.
+Jika Belum punya aset dipilih, hapus pilihan lainnya.
+Jika aset lain dipilih, hapus Belum punya aset.
+Jika Lainnya dipilih, tampilkan input custom.
+Tetap sediakan textarea kecil opsional untuk catatan aset.
+
+Gunakan UploadDropzone yang sudah dibuat hanya jika upload memang sudah didukung backend existing.
+
+Jika backend upload belum tersedia pada brief ini:
+
+Jangan membuat upload palsu.
+Jangan menyimpan file hanya ke local state seolah sudah berhasil.
+Tampilkan komponen upload dalam kondisi disabled dengan label yang jelas hanya jika memang diperlukan.
+Lebih baik tidak memasang upload daripada membuat UX palsu.
+8. STYLE PREFERENCE — VISUAL CHOICE
+
+Untuk field gaya visual, gunakan SelectionCard, ChoiceChip, atau OptionGrid.
+
+Pilihan:
+
+Minimalis
+Modern
+Corporate
+Premium
+Luxury
+Elegant
+Classic
+Bold
+Playful
+Creative
+Natural
+Industrial
+Teknologi
+Monokrom
+Colorful
+Editorial
+Clean
+Futuristic
+Tidak yakin — beri rekomendasi
+Lainnya
+
+Ketentuan:
+
+Maksimal 3 pilihan.
+Tampilkan deskripsi singkat pada hover atau card.
+Gunakan ikon sederhana bila sesuai.
+Jangan membuat thumbnail eksternal atau mengambil gambar dari internet.
+Jika memilih Tidak yakin — beri rekomendasi, buat eksklusif terhadap style lainnya.
+Jika memilih style lain, hapus pilihan Tidak yakin.
+Jika memilih Lainnya, tampilkan input custom.
+
+Contoh deskripsi:
+
+Minimalis — sederhana, bersih, dan banyak ruang kosong
+Corporate — profesional, terpercaya, dan formal
+Luxury — eksklusif, premium, dan berkelas
+Playful — ramah, energik, dan penuh karakter
+Natural — organik, hangat, dan dekat dengan alam
+9. COLOR PREFERENCE
+
+Gunakan ColorPicker Phase 1.
+
+Preset:
+
+Biru
+Hitam
+Putih
+Merah
+Hijau
+Ungu
+Oranye
+Cokelat
+Emas
+Abu-abu
+Silver
+Pastel
+Earth tone
+Tidak ada preferensi
+
+Ketentuan:
+
+Multi-select maksimal 3 warna/preset.
+Tidak ada preferensi bersifat eksklusif.
+Tampilkan input custom warna hanya melalui opsi:
+Warna lainnya.
+Jangan memaksa user memilih warna jika field sebelumnya opsional.
+Tetap sinkronkan ke text field existing menggunakan serializer.
+Draft string lama harus tetap ditampilkan.
+10. TARGET AUDIENCE
+
+Untuk field target audience, gunakan multi-select chips:
+
+Konsumen umum
+B2C
+B2B
+Perusahaan
+UMKM
+Startup
+Investor
+Pemerintah
+Distributor
+Reseller
+Retail customer
+Profesional
+Pelajar / mahasiswa
+Keluarga
+Anak muda
+Premium market
+Pasar lokal
+International buyer
+Lainnya
+
+Ketentuan:
+
+Maksimal 4 pilihan.
+Jika Lainnya, tampilkan input custom.
+Jangan membuat field baru jika target audience belum punya property sendiri.
+Mapping harus mengikuti field existing yang paling tepat.
+Jangan memasukkan target audience ke field yang berbeda tanpa dokumentasi jelas.
+11. LANGUAGE PREFERENCE
+
+Jika halaman existing memiliki pilihan bahasa, gunakan ChoiceChip.
+
+Pilihan:
+
+Bahasa Indonesia
+English
+Bilingual — Indonesia & English
+
+Single select.
+
+Pertahankan value backend existing.
+
+12. PRIORITY
+
+Jika ada field prioritas existing, tampilkan pilihan:
+
+Kualitas terbaik
+Kecepatan pengerjaan
+Efisiensi anggaran
+Keseimbangan kualitas dan kecepatan
+Belum yakin
+
+Single select.
+
+Jangan menambah field priority bila tidak ada di form existing.
+
+13. CONDITIONAL SECTIONS BERDASARKAN LAYANAN
+
+Brief harus tetap mengikuti layanan/package yang dibeli user.
+
+Jangan menampilkan semua field untuk semua layanan.
+
+Buat konfigurasi frontend yang menentukan section berdasarkan service type atau package.
+
+Contoh:
+
+Brand Identity
+
+Tampilkan:
+
+Business information
+Goal
+Audience
+Style
+Color
+Existing assets
+Brand personality
+Competitor/reference
+Logo Design
+
+Tampilkan:
+
+Business information
+Goal
+Audience
+Style
+Color
+Logo type preference
+Symbols to use/avoid
+Existing assets
+Company Profile
+
+Tampilkan:
+
+Business information
+Goal
+Audience
+Language
+Existing company materials
+Number or type of sections jika field existing mendukung
+Style
+Reference
+Pitch Deck
+
+Tampilkan:
+
+Business information
+Objective
+Audience type
+Funding/stakeholder context jika field existing mendukung
+Existing data
+Language
+Style
+Social Media Design
+
+Tampilkan:
+
+Platform
+Campaign goal
+Audience
+Style
+Color
+Content assets
+
+Ketentuan utama:
+
+Gunakan data/config, bukan conditional JSX besar yang berulang.
+Jangan membuat asumsi field yang belum tersedia.
+Field baru hanya boleh berupa representasi frontend atas data existing.
+Seluruh service yang sebelumnya berjalan harus tetap dapat membuka, menyimpan, dan submit brief.
+14. PROGRESSIVE DISCLOSURE
+
+Jangan tampilkan input custom sejak awal.
+
+Input custom hanya muncul bila user memilih:
+
+Lainnya
+
+Detail target hanya muncul jika user memilih metric.
+
+URL hanya aktif jika user tidak memilih “Belum punya”.
+
+Catatan tambahan ditampilkan sebagai link atau tombol:
+
++ Tambahkan detail
+
+Tujuannya mengurangi beban visual.
+
+Gunakan AnimatePresence untuk transisi ringan.
+
+Jangan menggunakan animasi berlebihan.
+
+15. REQUIRED FIELD VALIDATION
+
+Pertahankan validasi business existing.
+
+Perbaiki presentation error:
+
+Error tampil tepat di bawah group terkait.
+Gunakan HelperText.
+Saat user memilih jawaban valid, error hilang langsung.
+Step tidak boleh lanjut bila required field belum valid.
+Fokus otomatis ke section error pertama.
+Tambahkan aria-invalid.
+Jangan hanya mengandalkan warna merah.
+Tampilkan ikon dan pesan yang jelas.
+
+Contoh:
+
+Pilih minimal satu tujuan project sebelum melanjutkan.
+
+Bukan:
+
+Invalid field.
+16. AUTOSAVE DAN DRAFT RESTORE
+
+Autosave existing wajib tetap bekerja.
+
+Tambahkan dukungan agar perubahan dari chips/cards ikut memicu autosave yang sama.
+
+Ketentuan:
+
+Jangan membuat sistem autosave kedua.
+Jangan menambah interval baru jika sudah ada.
+Gunakan state/form flow existing.
+Jangan membuat request API untuk setiap hover atau search.
+Autosave hanya saat value benar-benar berubah.
+Hindari race condition.
+Draft lama harus tetap bisa dipulihkan.
+Custom Lainnya harus dipulihkan dengan benar.
+Status “Saved just now” harus tetap valid.
+
+Buat unit helper:
+
+serializeMultiChoice()
+parseMultiChoice()
+normalizeLegacyValue()
+
+Tempatkan di utility yang sesuai.
+
+Tambahkan test untuk parser/serializer jika project sudah memiliki test framework.
+
+17. COPYWRITING UI
+
+Gunakan bahasa Indonesia yang ramah dan jelas.
+
+Contoh heading:
+
+Informasi Bisnis
+Ceritakan sedikit tentang bisnis Anda.
+Tujuan Project
+Apa yang ingin Anda capai melalui project ini?
+Target Audiens
+Siapa yang paling ingin Anda jangkau?
+Gaya Visual
+Pilih tampilan yang paling sesuai dengan karakter brand Anda.
+
+Hindari bahasa teknis seperti:
+
+Enter project objective metadata
+
+Pertahankan konsistensi kapitalisasi.
+
+18. RESPONSIVE DESIGN
+
+Desktop:
+
+Chips dan cards tampil dalam grid.
+Lebar konten tetap nyaman dibaca.
+Jangan membuat pilihan terlalu rapat.
+
+Mobile:
+
+Minimum touch target 44px.
+Card menjadi 1 atau 2 kolom sesuai ruang.
+Tidak ada horizontal overflow.
+Tombol Kembali dan Lanjut mudah dijangkau.
+Search TagSelector tidak menutupi pilihan.
+Keyboard mobile tidak menutup textarea custom.
+Progress tetap ringkas.
+19. PERFORMANCE
+
+Jangan menggunakan React.memo, useMemo, atau useCallback secara membabi buta.
+
+Gunakan hanya bila benar-benar mengurangi re-render.
+
+Pastikan:
+
+Search list tidak berat.
+Daftar pilihan didefinisikan di luar component bila statis.
+Mapping konfigurasi tidak dibuat ulang setiap render.
+Tidak ada state ganda yang bisa berbeda antara chip dan field value.
+Satu source of truth untuk setiap jawaban.
+Tidak ada infinite autosave loop.
+20. TESTING WAJIB
+
+Lakukan pengujian minimal:
+
+Functional
+Pilih industri standar.
+Pilih Lainnya, isi custom industry.
+Kembali ke industri standar.
+Multi-select project goal.
+Batas maksimal pilihan bekerja.
+Required validation bekerja.
+Pilih Belum menentukan metrik.
+Pilih Belum punya aset.
+Pilih Tidak ada preferensi warna.
+Draft restore memulihkan pilihan.
+Autosave berjalan.
+Refresh halaman tidak merusak state.
+Navigasi Back/Next bekerja.
+Submit tetap menghasilkan payload valid.
+Compatibility
+Brief lama berbentuk text tetap terbuka.
+Semua service/package existing tetap dapat mengisi brief.
+Tidak ada perubahan API.
+Tidak ada perubahan database.
+Tidak ada perubahan pricing.
+Tidak ada perubahan production pipeline.
+Responsive
+Desktop.
+Tablet.
+Mobile 375px.
+Tidak ada overflow horizontal.
+Build
+
+Jalankan:
+
+npm run typecheck
+npm run test
+npm run build
+
+Gunakan command sesuai package manager project jika bukan npm.
+
+Jangan menganggap selesai hanya karena build berhasil. Lakukan pengecekan visual halaman brief.
+
+21. JANGAN LAKUKAN PADA PHASE 2
+
+Jangan implementasikan:
+
+Floating AI assistant
+AI chat
+AI recommendations dari model
+Website scraping
+Website metadata extraction
+Logo analysis
+Image analysis
+AI autofill
+Backend recommendation endpoint
+Database schema baru
+Perubahan pricing
+Perubahan production workflow
+Upload palsu
+Hardcoded fake AI response
+
+Semua fitur tersebut bukan bagian Phase 2.
+
+22. ACCEPTANCE CRITERIA
+
+Phase 2 dianggap selesai hanya jika:
+
+User dapat menyelesaikan sebagian besar brief dengan memilih chips/cards.
+Text input custom hanya muncul melalui Lainnya atau detail tambahan.
+Required validation tetap bekerja.
+Autosave tetap bekerja.
+Draft lama tetap kompatibel.
+Payload backend tidak berubah tipe atau kontraknya.
+Semua layanan existing tetap dapat memakai brief.
+Tidak ada backend, database, pricing, atau production workflow yang berubah.
+Mobile responsive.
+Build dan tests lolos.
+Tidak ada input visual yang hanya dekoratif tanpa tersimpan.
+Tidak ada data yang hilang saat berpindah step.
+23. LAPORAN AKHIR
+
+Setelah implementasi, berikan laporan dengan format:
+
+Laporan — Phase 2: Creative AI Smart Choice Brief Form
+
+1. Hasil audit form existing
+2. Komponen Phase 1 yang digunakan
+3. Field yang diubah menjadi smart choice
+4. Conditional input “Lainnya”
+5. Parser/serializer yang dibuat
+6. Conditional section berdasarkan layanan
+7. Kompatibilitas draft lama
+8. Validasi dan autosave
+9. File yang dibuat
+10. File yang dimodifikasi
+11. Test yang dijalankan
+12. Hasil typecheck
+13. Hasil build
+14. Hasil visual verification
+15. Konfirmasi tidak ada perubahan backend/API/database/pricing/workflow
+16. Masalah atau batasan yang masih ada
+
+Jangan hanya menuliskan bahwa implementasi selesai. Sertakan bukti hasil pengujian dan jelaskan mapping antara pilihan visual dengan payload existing.

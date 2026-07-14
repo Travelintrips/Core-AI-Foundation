@@ -36,9 +36,29 @@ export interface CanonicalEvent {
 
 export type ConnectionStatus = 'connecting' | 'live' | 'reconnecting' | 'offline' | 'unavailable';
 
+/**
+ * V4.1 — deterministic, customer-safe summary paired with a CanonicalEvent.
+ * Mirrors artifacts/api-server/src/services/executionSummaryService.ts.
+ * Never contains prompts, reasoning, raw provider output, cost, or errors.
+ */
+export interface ExecutionSummary {
+  sourceEventId: string;
+  eventType: string;
+  title: string;
+  summary: string;
+  whyItMatters: string;
+  nextStep: string | null;
+  status: 'info' | 'success' | 'warning' | 'error';
+  customerAction: { kind: 'view_review' | 'view_files' | 'view_payments' | 'contact_support'; label: string } | null;
+  isDerived: true;
+  artifactCount: number;
+}
+
 export interface RuntimeEventStreamState {
   connectionStatus: ConnectionStatus;
   events: CanonicalEvent[];
+  /** V4.1 — keyed by CanonicalEvent.eventId. May be missing for an event; callers must tolerate that. */
+  summariesByEventId: Record<string, ExecutionSummary>;
   lastEventAt: Date | null;
   reconnectCount: number;
   isStale: boolean;
@@ -65,6 +85,17 @@ export function mergeEvents(
   for (const e of existing) map.set(e.eventId, e);
   for (const e of incoming) map.set(e.eventId, e);
   return Array.from(map.values()).sort(compareByCursor);
+}
+
+/** V4.1 — merge summaries by eventId. Additive/optional: missing entries are simply absent. */
+export function mergeSummaries(
+  existing: Record<string, ExecutionSummary>,
+  incoming: ExecutionSummary[],
+): Record<string, ExecutionSummary> {
+  if (incoming.length === 0) return existing;
+  const merged = { ...existing };
+  for (const s of incoming) merged[s.sourceEventId] = s;
+  return merged;
 }
 
 // ─── URLs ──────────────────────────────────────────────────────────────────────
@@ -95,6 +126,7 @@ export function useRuntimeEventStream({
   const [state, setState] = useState<RuntimeEventStreamState>({
     connectionStatus: 'connecting',
     events: [],
+    summariesByEventId: {},
     lastEventAt: null,
     reconnectCount: 0,
     isStale: false,
@@ -106,6 +138,7 @@ export function useRuntimeEventStream({
   const fallbackTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectCountRef = useRef(0);
   const eventsRef = useRef<CanonicalEvent[]>([]);
+  const summariesRef = useRef<Record<string, ExecutionSummary>>({});
   const isCompletedRef = useRef(false);
   const isFallbackRef = useRef(false);
 
@@ -120,11 +153,18 @@ export function useRuntimeEventStream({
   }, []);
 
   const addEvents = useCallback(
-    (incoming: CanonicalEvent[]) => {
-      if (incoming.length === 0) return;
+    (incoming: CanonicalEvent[], incomingSummaries: ExecutionSummary[] = []) => {
+      if (incoming.length === 0 && incomingSummaries.length === 0) return;
       const merged = mergeEvents(eventsRef.current, incoming);
       eventsRef.current = merged;
-      setState((prev) => ({ ...prev, events: merged, lastEventAt: new Date() }));
+      const mergedSummaries = mergeSummaries(summariesRef.current, incomingSummaries);
+      summariesRef.current = mergedSummaries;
+      setState((prev) => ({
+        ...prev,
+        events: merged,
+        summariesByEventId: mergedSummaries,
+        lastEventAt: new Date(),
+      }));
       resetStaleTimer();
     },
     [resetStaleTimer],
@@ -153,8 +193,8 @@ export function useRuntimeEventStream({
       try {
         const res = await fetch(restUrl(token, projectNumber));
         if (!res.ok) return;
-        const data = (await res.json()) as { events?: CanonicalEvent[] };
-        if (data.events?.length) addEvents(data.events);
+        const data = (await res.json()) as { events?: CanonicalEvent[]; summaries?: ExecutionSummary[] };
+        if (data.events?.length) addEvents(data.events, data.summaries ?? []);
       } catch {
         /* ignore — next poll will retry */
       }
@@ -188,8 +228,8 @@ export function useRuntimeEventStream({
 
     es.addEventListener('snapshot', (e: MessageEvent) => {
       try {
-        const data = JSON.parse(e.data as string) as { events?: CanonicalEvent[] };
-        if (data.events) addEvents(data.events);
+        const data = JSON.parse(e.data as string) as { events?: CanonicalEvent[]; summaries?: ExecutionSummary[] };
+        if (data.events) addEvents(data.events, data.summaries ?? []);
       } catch { /* ignore */ }
       setStatus('live');
       stopFallback();
@@ -198,8 +238,8 @@ export function useRuntimeEventStream({
 
     es.addEventListener('runtime.event', (e: MessageEvent) => {
       try {
-        const data = JSON.parse(e.data as string) as { event?: CanonicalEvent };
-        if (data.event) addEvents([data.event]);
+        const data = JSON.parse(e.data as string) as { event?: CanonicalEvent; summary?: ExecutionSummary };
+        if (data.event) addEvents([data.event], data.summary ? [data.summary] : []);
       } catch { /* ignore */ }
       setStatus('live');
       resetStaleTimer();
@@ -305,6 +345,7 @@ export function useRuntimeEventStream({
     isCompletedRef.current = false;
     reconnectCountRef.current = 0;
     eventsRef.current = [];
+    summariesRef.current = {};
     connect();
 
     return () => {

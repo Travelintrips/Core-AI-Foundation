@@ -12,6 +12,7 @@ import analyticsRouter from "./analytics";
 import settingsRouter from "./settings";
 
 import creativeAiRouter from "./creative-ai";
+import imageBatchRouter from "./image-batch";
 import capabilitiesRouter from "./capabilities";
 import feedbackRouter from "./feedback";
 import clientMemoryRouter from "./client-memory";
@@ -55,11 +56,15 @@ import customerHealthRouter from "./customerHealth";
 import commercialAnalyticsRouter from "./commercialAnalytics";
 import storageRouter from "./storage";
 import observabilityRouter from "./observability";
+import internalAuthRouter from "./internal-auth";
+import internalCatalogRouter from "./internal-catalog";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(storageRouter);
+router.use(internalAuthRouter);
+router.use(internalCatalogRouter);
 router.use(agentsRouter);
 router.use(registryRouter);
 router.use(orchestratorRouter);
@@ -71,6 +76,7 @@ router.use(auditRouter);
 router.use(analyticsRouter);
 router.use(settingsRouter);
 router.use(creativeAiRouter);
+router.use(imageBatchRouter);
 router.use(capabilitiesRouter);
 router.use(feedbackRouter);
 router.use(clientMemoryRouter);

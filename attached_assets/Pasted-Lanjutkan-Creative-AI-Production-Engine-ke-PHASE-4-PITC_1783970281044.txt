@@ -1,0 +1,1190 @@
+Lanjutkan Creative AI Production Engine ke:
+
+# PHASE 4 — PITCH DECK PRESENTATION ENGINE
+
+Phase 3 Multi-Service Document Export sudah selesai dan terverifikasi.
+
+Fondasi yang sudah tersedia dan tidak boleh dirusak:
+
+* Creative Document Engine generik
+* `DocumentDefinition` registry
+* Company Profile PDF
+* Brand Strategy PDF
+* Copywriting PDF
+* Creative Consultation PDF
+* Brand Identity Guideline PDF
+* shared storage, validation, idempotency, recovery, dan completion guard
+* project status `generating_document`
+* secure customer download
+* 192 tests lulus
+* real PDFKit smoke tests berhasil
+* Brand Identity mewajibkan logo asset
+
+Scope Phase 4 hanya:
+
+1. Pitch Deck PPTX editable
+2. Presentation Engine generik
+3. Pitch Deck PDF preview
+4. Slide thumbnail atau cover preview
+5. Storage dan asset records
+6. Workflow dan completion rules
+7. Customer Downloads dan preview
+8. Admin production metadata
+9. Automated tests
+10. Real smoke test
+
+Jangan mengerjakan:
+
+* Video
+* FFmpeg
+* Voice-over
+* Subtitle
+* ZIP packaging
+* DOCX
+* Logo batch
+* Social media batch
+* Packaging mockup
+* Brand guideline changes
+* Layanan presentasi lain selain Pitch Deck
+
+---
+
+# 1. Recovery dan audit singkat
+
+Sebelum menulis kode:
+
+1. Jalankan `git status`.
+2. Baca implementasi Phase 3.
+3. Audit service catalog aktual untuk Pitch Deck.
+4. Pastikan service code atau slug sebenarnya.
+5. Audit workflow Pitch Deck saat ini.
+6. Audit structured output Pitch Deck dari agent.
+7. Audit existing `pdf_export` atau placeholder yang sebelumnya dipakai Pitch Deck.
+8. Audit `creative_ai_assets` dan metadata yang bisa dipakai untuk:
+
+   * PPTX
+   * PDF preview
+   * thumbnail
+9. Audit customer Downloads page.
+10. Audit admin production monitor.
+11. Audit build configuration API server.
+
+Jangan menebak service slug, package limit, atau output schema.
+
+---
+
+# 2. Dependency
+
+Tambahkan library PPTX yang stabil:
+
+```text
+pptxgenjs
+```
+
+Gunakan versi terbaru yang kompatibel dengan Node dan TypeScript project saat ini.
+
+Untuk PDF preview, audit kemampuan environment terlebih dahulu.
+
+Urutan preferensi:
+
+1. Gunakan converter yang sudah tersedia di environment.
+2. Gunakan LibreOffice headless hanya jika tersedia dan deployment mendukung.
+3. Gunakan renderer atau conversion service yang sudah ada.
+4. Jika conversion PPTX ke PDF tidak tersedia di environment production, buat strategi fallback yang jujur dan terdokumentasi.
+
+Jangan:
+
+* mengklaim PDF preview berhasil jika hanya membuat file kosong
+* mengubah ekstensi PPTX menjadi PDF
+* membuat PDF berisi JSON mentah
+* menambahkan dependency besar tanpa memeriksa deployment
+
+PPTX adalah deliverable utama wajib.
+
+PDF preview wajib hanya jika conversion pipeline nyata berhasil pada environment target.
+
+Jika environment tidak mendukung conversion, status Phase 4 harus dilaporkan parsial dan jangan false-completed untuk deliverable PDF yang diwajibkan katalog.
+
+---
+
+# 3. Presentation Engine generik
+
+Bangun Presentation Engine terpisah dari Document Engine.
+
+Struktur yang disarankan:
+
+```text
+services/presentation/
+├── creativePresentationRegistry.ts
+├── creativePresentationWorkerService.ts
+├── presentationTypes.ts
+├── presentationValidationService.ts
+├── presentationStorageService.ts
+├── presentationAssetResolver.ts
+├── presentationOverflowService.ts
+├── presentationThumbnailService.ts
+├── presentationPdfPreviewService.ts
+├── presentationThemeService.ts
+└── mappers/
+    └── pitchDeckPresentationMapper.ts
+```
+
+Nama boleh disesuaikan dengan repository.
+
+Jangan mencampurkan logic PPTX ke `creativeDocumentRegistry.ts`.
+
+Gunakan registry tersendiri:
+
+```ts
+type CreativePresentationType =
+  | "pitch_deck";
+```
+
+Contoh definition:
+
+```ts
+type PresentationDefinition = {
+  presentationType: CreativePresentationType;
+  serviceCodes: string[];
+  filenamePrefix: string;
+  minimumSlideCount: number;
+  maximumSlideCount: number;
+  requiresPdfPreview: boolean;
+  requiresImages: boolean;
+  mapper: PresentationMapper;
+  contentGenerator?: PresentationContentGenerator;
+  validateInput: PresentationInputValidator;
+};
+```
+
+---
+
+# 4. Presentation specification
+
+Gunakan structured specification.
+
+Contoh:
+
+```ts
+type CreativePresentationSpec = {
+  presentationType: "pitch_deck";
+  title: string;
+  subtitle?: string;
+  companyName?: string;
+  theme: PresentationTheme;
+  slides: PresentationSlideSpec[];
+  metadata?: Record<string, unknown>;
+};
+```
+
+Theme:
+
+```ts
+type PresentationTheme = {
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  backgroundColor: string;
+  textColor: string;
+  mutedTextColor: string;
+  headingFont?: string;
+  bodyFont?: string;
+  logoAssetUrl?: string;
+};
+```
+
+Slide types minimum:
+
+```ts
+type PresentationSlideSpec =
+  | CoverSlide
+  | SectionSlide
+  | ContentSlide
+  | ProblemSlide
+  | SolutionSlide
+  | MetricsSlide
+  | TimelineSlide
+  | ComparisonSlide
+  | MarketSlide
+  | TeamSlide
+  | FinancialSlide
+  | AskSlide
+  | ClosingSlide;
+```
+
+Setiap slide dapat memiliki:
+
+* title
+* subtitle
+* body
+* bullets
+* metrics
+* image
+* logo
+* chart data
+* table data
+* timeline items
+* source notes
+* speaker notes
+
+Jangan memasukkan seluruh structured JSON sebagai satu text box.
+
+---
+
+# 5. Pitch Deck slide structure
+
+Pitch Deck standar harus mendukung struktur berikut:
+
+1. Cover
+2. Executive Summary
+3. Problem
+4. Market Opportunity
+5. Solution
+6. Product or Service
+7. How It Works
+8. Business Model
+9. Target Market
+10. Competitive Landscape
+11. Competitive Advantage
+12. Go-to-Market Strategy
+13. Traction
+14. Key Metrics
+15. Financial Overview
+16. Team
+17. Roadmap
+18. Funding Ask or Partnership Ask
+19. Use of Funds jika tersedia
+20. Closing
+
+Jangan memaksa semua slide muncul.
+
+Section tanpa data:
+
+* dilewati
+* tidak diisi placeholder
+* dicatat dalam generation report
+
+Minimum slide count untuk fixture standar:
+
+```text
+10 slides
+```
+
+Maximum default:
+
+```text
+20 slides
+```
+
+Gunakan entitlement atau package limit jika tersedia.
+
+Jangan hard-code jumlah slide berdasarkan nama paket bila katalog menyimpan limit.
+
+---
+
+# 6. Content generation
+
+Gunakan structured Pitch Deck result yang sudah tersedia jika valid.
+
+Urutan prioritas:
+
+1. Existing structured result
+2. Normalize existing result
+3. LLM call tambahan hanya jika struktur belum cukup
+
+Jika LLM digunakan, output harus berbentuk JSON terstruktur.
+
+Validasi dengan schema.
+
+Prompt harus melarang model mengarang:
+
+* revenue
+* profit
+* valuation
+* market share
+* user count
+* customer names
+* funding history
+* partnerships
+* certifications
+* team credentials
+* financial forecast
+
+kecuali data tersedia pada brief atau source data.
+
+Data yang tidak tersedia boleh ditulis sebagai recommendation internal, tetapi jangan ditampilkan sebagai fakta.
+
+Catat:
+
+* provider
+* model
+* tokens
+* cost
+* latency
+* purpose
+
+---
+
+# 7. Slide layouts
+
+Buat layout reusable.
+
+Minimal:
+
+* `renderCoverSlide()`
+* `renderSectionSlide()`
+* `renderContentSlide()`
+* `renderProblemSolutionSlide()`
+* `renderMetricsSlide()`
+* `renderTimelineSlide()`
+* `renderComparisonSlide()`
+* `renderMarketSlide()`
+* `renderTeamSlide()`
+* `renderFinancialSlide()`
+* `renderAskSlide()`
+* `renderClosingSlide()`
+
+Gunakan:
+
+* consistent margins
+* grid system
+* title hierarchy
+* footer
+* slide number
+* brand colors
+* logo positioning
+* image cropping
+* aspect ratio preservation
+* readable contrast
+
+Jangan membuat 20 slide dengan layout identik.
+
+---
+
+# 8. Text overflow protection
+
+Text overflow adalah acceptance criterion kritis.
+
+Buat helper seperti:
+
+```ts
+fitTextToBox()
+truncateWithReport()
+splitContentAcrossSlides()
+```
+
+Aturan:
+
+* jangan biarkan text keluar dari slide
+* jangan gunakan font terlalu kecil hanya agar semua teks muat
+* minimum body font yang masuk akal
+* split menjadi continuation slide jika diperlukan
+* catat slide split dalam generation report
+* bullet count dibatasi
+* paragraph panjang diringkas atau dipisah
+* title panjang harus ditangani
+
+Testing harus memeriksa overflow secara deterministik sejauh memungkinkan.
+
+---
+
+# 9. Image handling
+
+Pitch Deck dapat menggunakan:
+
+* project logo
+* approved generated images
+* company images
+* product images
+* relevant project assets
+
+Asset harus:
+
+* milik project yang benar
+* storage object tersedia
+* MIME type valid
+* file size dalam limit
+* approved atau memenuhi QC policy
+* tidak berasal dari project customer lain
+
+Image handling:
+
+* preserve aspect ratio
+* support contain dan cover
+* crop secara aman
+* fallback ke layout tanpa gambar
+* optional image gagal tidak boleh merusak seluruh deck
+* required logo failure harus dicatat
+
+Jangan mengambil gambar internet secara bebas tanpa source policy.
+
+---
+
+# 10. Charts dan financial slides
+
+Chart harus dibuat dari data yang benar-benar tersedia.
+
+Supported chart minimum:
+
+* bar chart
+* line chart
+* pie or donut chart
+* simple metric cards
+
+Financial slide hanya tampil jika data tersedia.
+
+Jangan membuat angka fiktif.
+
+Jika hanya ada asumsi atau projection:
+
+* label jelas sebagai projection
+* tampilkan source/assumption notes
+* jangan campur actual dengan projection tanpa label
+
+Jika data tidak ada, skip financial slide atau tampilkan financial model recommendation tanpa angka.
+
+---
+
+# 11. Speaker notes
+
+Tambahkan speaker notes jika `pptxgenjs` mendukung dengan stabil.
+
+Speaker notes dapat berisi:
+
+* talking points
+* source notes
+* assumptions
+* presenter guidance
+
+Jangan memasukkan:
+
+* internal system prompt
+* API key
+* raw chain of thought
+* provider secrets
+* confidential debug data
+
+Speaker notes bersifat customer deliverable jika katalog menjanjikannya.
+
+Jika tidak dijanjikan, notes tetap optional.
+
+---
+
+# 12. PPTX rendering
+
+Presentation Engine harus menghasilkan PPTX nyata.
+
+Validasi minimal:
+
+* buffer tersedia
+* file size lebih dari nol
+* PPTX adalah ZIP valid
+* memiliki `[Content_Types].xml`
+* memiliki `ppt/presentation.xml`
+* memiliki slide XML files
+* slide count sesuai
+* tidak ada slide kosong wajib
+* title metadata tersedia
+* file dapat dibuka di PowerPoint atau Google Slides
+
+Gunakan extension:
+
+```text
+.pptx
+```
+
+MIME:
+
+```text
+application/vnd.openxmlformats-officedocument.presentationml.presentation
+```
+
+Jangan hanya memeriksa ekstensi.
+
+---
+
+# 13. PPTX validation service
+
+Buat validator, misalnya:
+
+```ts
+validateGeneratedPresentation()
+```
+
+Validasi:
+
+1. ZIP signature valid.
+2. Required PPTX XML entries tersedia.
+3. Slide count sama dengan spec.
+4. Slide count memenuhi minimum.
+5. File size lebih dari nol.
+6. Metadata title tersedia.
+7. Tidak ada duplicate slide relationship yang rusak.
+8. Tidak ada placeholder marker.
+9. Tidak ada string `undefined`, `null`, atau `[object Object]` dalam text XML.
+10. Tidak ada asset dari project lain.
+
+Jika menggunakan ZIP parser tambahan, pilih dependency ringan dan stabil.
+
+---
+
+# 14. PDF preview
+
+Buat `presentationPdfPreviewService.ts`.
+
+Output:
+
+* Pitch Deck PDF preview
+* page count harus sama atau mendekati slide count
+* valid `%PDF-`
+* file size lebih dari nol
+* stored sebagai asset terpisah
+
+Document type atau asset metadata harus membedakan:
+
+```text
+pitch_deck_pptx
+pitch_deck_pdf_preview
+pitch_deck_thumbnail
+```
+
+Jika conversion membutuhkan external binary:
+
+* cek availability saat startup
+* return structured error jika tidak tersedia
+* jangan false-completed
+* catat capability pada health/admin monitor
+
+Jika katalog mewajibkan PDF dan PPTX, project hanya completed setelah keduanya valid.
+
+Jika katalog hanya mewajibkan PPTX dan PDF adalah preview optional, kegagalan PDF preview tidak boleh menggagalkan final PPTX, tetapi harus dilaporkan.
+
+Gunakan order snapshot atau service definition sebagai source of truth.
+
+---
+
+# 15. Thumbnail
+
+Buat thumbnail cover atau preview slide pertama.
+
+Output:
+
+* PNG atau WebP
+* aspect ratio 16:9
+* file size lebih dari nol
+* asset milik project
+* storage verified
+
+Jika environment tidak dapat merender PPTX menjadi gambar secara langsung, gunakan rendering dari source slide spec yang sama untuk membuat thumbnail cover.
+
+Jangan screenshot dari URL publik yang tidak aman.
+
+---
+
+# 16. Worker
+
+Buat presentation worker nyata, misalnya:
+
+```text
+executePitchDeckPresentationExportJob()
+```
+
+Atau worker generik berdasarkan registry.
+
+Flow:
+
+1. Load job.
+2. Resolve presentation type.
+3. Load project/request/brief/output.
+4. Validate ownership.
+5. Resolve existing valid assets.
+6. Resolve entitlement.
+7. Normalize/generate slide content.
+8. Map to `CreativePresentationSpec`.
+9. Resolve visual assets.
+10. Render PPTX.
+11. Validate PPTX.
+12. Upload PPTX.
+13. Verify upload.
+14. Create/update asset record.
+15. Generate PDF preview jika required/supported.
+16. Generate thumbnail.
+17. Validate outputs.
+18. Record generation report.
+19. Return completion result.
+20. Let completion guard finish job.
+
+Untuk service selain Pitch Deck:
+
+* tetap unsupported
+* jangan fallback ke Pitch Deck mapper
+
+---
+
+# 17. Job type
+
+Gunakan job type yang jelas.
+
+Preferensi:
+
+```text
+pptx_export
+```
+
+atau:
+
+```text
+presentation_export
+```
+
+Jika schema job type sudah berbentuk string, tambahkan secara backward-compatible.
+
+Jangan menggunakan `pdf_export` untuk PPTX.
+
+Completion guard harus memiliki requirement baru:
+
+```ts
+presentation_export: {
+  requiresAsset: true,
+  allowedMimeTypes: [
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  ]
+}
+```
+
+Jika job menghasilkan beberapa output, completion result harus mereferensikan semua required asset IDs.
+
+---
+
+# 18. Workflow integration
+
+Pitch Deck workflow harus:
+
+1. Generate brief.
+2. Generate structured slide content.
+3. Generate/select images jika diperlukan.
+4. Masuk status `generating_presentation`.
+5. Enqueue presentation export satu kali.
+6. Generate PPTX.
+7. Generate PDF preview jika required.
+8. Generate thumbnail.
+9. Validate required deliverables.
+10. Complete project.
+
+Tambahkan status:
+
+```text
+generating_presentation
+```
+
+Ke:
+
+* backend status types
+* customer portal status labels
+* AI platform status labels
+* admin production monitor
+* progress display
+
+Jangan tampilkan blank state.
+
+---
+
+# 19. Completion policy
+
+Project Pitch Deck hanya completed jika semua required deliverables dari order snapshot tersedia.
+
+Contoh:
+
+```text
+Required:
+- PPTX
+
+Optional:
+- PDF preview
+- thumbnail
+```
+
+Atau:
+
+```text
+Required:
+- PPTX
+- PDF preview
+```
+
+Gunakan katalog aktual.
+
+Jangan hard-code asumsi.
+
+Completion harus memeriksa:
+
+* correct project ID
+* correct asset type
+* correct MIME
+* storage object exists
+* file size valid
+* presentation validation passed
+* PDF validation passed jika required
+* no placeholder
+* no false completion
+
+---
+
+# 20. Asset records
+
+PPTX asset metadata:
+
+* project ID
+* request ID
+* job ID
+* owner ID
+* asset type `presentation`
+* presentation type `pitch_deck`
+* output format `pptx`
+* filename
+* MIME
+* storage path
+* file size
+* checksum
+* slide count
+* version
+* final deliverable
+* validation status
+* generated timestamp
+* render duration
+
+PDF preview metadata:
+
+* asset type `document` atau `presentation_preview`
+* presentation type `pitch_deck`
+* output format `pdf`
+* page count
+* source PPTX asset ID
+* preview true
+* final deliverable berdasarkan catalog requirement
+
+Thumbnail metadata:
+
+* asset type `thumbnail`
+* source presentation asset ID
+* dimensions
+* MIME
+* storage path
+
+Gunakan metadata JSON jika schema existing mendukung.
+
+---
+
+# 21. Storage paths
+
+Gunakan path terstruktur:
+
+```text
+creative-projects/{ownerId}/{projectId}/{jobId}/presentations/pitch-deck-v{version}.pptx
+creative-projects/{ownerId}/{projectId}/{jobId}/presentations/pitch-deck-v{version}.pdf
+creative-projects/{ownerId}/{projectId}/{jobId}/previews/pitch-deck-v{version}-cover.webp
+```
+
+Sanitasi seluruh filename.
+
+Final deliverable tidak boleh disimpan di public bucket tanpa payment gate.
+
+---
+
+# 22. Idempotency
+
+Pertahankan pola shared document worker.
+
+Perilaku:
+
+* valid PPTX asset + object exists → reuse
+* PPTX record ada, object hilang → regenerate same version
+* PDF preview hilang tetapi PPTX valid → regenerate preview saja
+* thumbnail hilang → regenerate thumbnail saja
+* failed upload → no completed asset
+* retry → no duplicate final asset
+* approved revision → next version
+* active export job → jangan enqueue duplicate
+
+Gunakan deterministic keys.
+
+---
+
+# 23. Customer portal
+
+Customer workspace harus menampilkan:
+
+* Pitch Deck
+* PPTX badge
+* PDF Preview badge
+* slide count
+* file size
+* generated date
+* version
+* thumbnail
+* open preview
+* download PPTX
+* download PDF jika tersedia
+* failed state
+* generating presentation progress
+
+Jangan:
+
+* tampilkan storage path
+* tampilkan provider cost
+* tampilkan tombol PDF jika file tidak ada
+* tampilkan status completed jika hanya thumbnail tersedia
+
+Gunakan generic Downloads page jika memungkinkan.
+
+---
+
+# 24. Admin production monitor
+
+Tampilkan:
+
+* presentation type
+* slide count
+* PPTX status
+* PDF preview status
+* thumbnail status
+* file size
+* version
+* render duration
+* conversion capability
+* provider/model
+* cost
+* validation result
+* retry PPTX
+* retry PDF conversion
+* retry thumbnail
+* error code
+
+Retry output tertentu tidak boleh selalu mengulang seluruh deck.
+
+---
+
+# 25. Error codes
+
+Gunakan structured errors.
+
+Tambahkan bila diperlukan:
+
+* `PRESENTATION_TYPE_UNSUPPORTED`
+* `PRESENTATION_CONTENT_MISSING`
+* `PRESENTATION_CONTENT_INVALID`
+* `PRESENTATION_RENDER_FAILED`
+* `PRESENTATION_VALIDATION_FAILED`
+* `PRESENTATION_UPLOAD_FAILED`
+* `PRESENTATION_UPLOAD_VERIFICATION_FAILED`
+* `PRESENTATION_OVERFLOW_DETECTED`
+* `PRESENTATION_REQUIRED_ASSET_MISSING`
+* `PPTX_CONVERSION_UNAVAILABLE`
+* `PPTX_TO_PDF_FAILED`
+* `PRESENTATION_THUMBNAIL_FAILED`
+* `REQUIRED_PRESENTATION_DELIVERABLE_MISSING`
+
+Customer tidak boleh melihat stack trace.
+
+---
+
+# 26. Security
+
+Pertahankan:
+
+* project ownership
+* tenant isolation
+* signed access
+* payment gate
+* no public final PPTX
+* safe image fetching
+* SSRF protection
+* file size limits
+* sanitized filenames
+* no secret inside speaker notes
+* no cross-project images
+* no raw internal prompt in deliverable
+* no provider credentials in generation report customer-facing
+
+---
+
+# 27. Testing wajib
+
+## Registry dan resolution
+
+1. Pitch Deck service resolves to `pitch_deck`.
+2. Unsupported presentation service is rejected.
+3. Document services do not resolve as presentations.
+4. Presentation definition contains correct limits.
+
+## Mapper
+
+5. Structured result maps to correct slide types.
+6. Missing optional sections are skipped.
+7. No facts are fabricated.
+8. Long content is split or reduced safely.
+9. Empty slides are not created.
+10. Slide count respects entitlement.
+
+## Renderer
+
+11. Real PPTX buffer is produced.
+12. ZIP signature is valid.
+13. Required PPTX XML entries exist.
+14. Slide count is correct.
+15. Title metadata exists.
+16. Images preserve aspect ratio.
+17. Bullets render correctly.
+18. Charts render from real data.
+19. Long text does not overflow.
+20. Continuation slides are created where required.
+21. No `undefined`, `null`, or `[object Object]` appears in XML.
+
+## Worker
+
+22. Fresh Pitch Deck creates PPTX asset.
+23. Storage upload is verified.
+24. Asset ownership is correct.
+25. MIME type is correct.
+26. File size is valid.
+27. Checksum is recorded.
+28. Slide count is recorded.
+29. Existing valid asset is reused.
+30. Missing storage object regenerates.
+31. Retry does not duplicate asset.
+32. Upload failure marks job failed.
+33. Validation failure marks job failed.
+34. Completion guard accepts valid PPTX.
+35. Completion guard rejects missing PPTX.
+36. Cross-project asset is rejected.
+
+## PDF preview
+
+37. PDF preview is valid if conversion supported.
+38. `%PDF-` magic bytes exist.
+39. Preview page count is reasonable.
+40. Conversion failure is structured.
+41. Optional preview failure does not fail project when preview is optional.
+42. Required preview failure blocks completion when catalog requires it.
+
+## Thumbnail
+
+43. Thumbnail has correct aspect ratio.
+44. Thumbnail storage verified.
+45. Thumbnail failure behavior follows requirement policy.
+
+## Workflow
+
+46. Project enters `generating_presentation`.
+47. Export job enqueued only once.
+48. Text completion alone does not complete project.
+49. Image completion alone does not complete project.
+50. Project completes only after required presentation assets.
+51. Retry does not create duplicate active jobs.
+52. Failed export propagates honest project state.
+
+## Frontend
+
+53. PPTX badge renders.
+54. Slide count renders.
+55. PDF preview appears only when valid.
+56. Download button appears only for valid file.
+57. Internal storage path is hidden.
+58. `generating_presentation` status is styled.
+59. Failed state remains visible.
+
+## Regression
+
+60. All Phase 1B tests remain passing.
+61. All Document Engine tests remain passing.
+62. All five PDF services remain functional.
+
+---
+
+# 28. Real smoke test
+
+Run one real Pitch Deck smoke test using a realistic Indonesian B2B company brief.
+
+Fixture should include:
+
+* company name
+* problem
+* solution
+* target market
+* business model
+* competitive advantage
+* go-to-market
+* traction or milestones
+* roadmap
+* team
+* ask
+* logo or one approved image
+
+Do not use confidential customer data.
+
+Verify:
+
+* structured content generated
+* slide spec created
+* at least 10 slides
+* PPTX rendered
+* ZIP structure valid
+* PPTX opens successfully
+* no obvious text overflow
+* images embedded
+* asset uploaded
+* storage object exists
+* asset row created
+* checksum recorded
+* slide count recorded
+* thumbnail generated
+* PDF preview generated if supported
+* secure download works
+* project completed only after required output
+
+Record:
+
+* presentation type
+* filename
+* slide count
+* PPTX file size
+* checksum
+* render duration
+* asset ID
+* storage verification
+* PDF preview result
+* thumbnail result
+* secure access result
+
+Do not expose signed tokens.
+
+---
+
+# 29. Manual visual review
+
+Automated tests are not enough for slides.
+
+Render or inspect all smoke-test slides visually.
+
+Review:
+
+* text overflow
+* clipped text
+* image distortion
+* contrast
+* alignment
+* margin consistency
+* title hierarchy
+* slide numbering
+* empty spaces
+* crowded layouts
+* duplicate content
+* broken characters
+* chart readability
+* footer consistency
+
+Document any visual defects found and fix them before final report.
+
+Do not claim visual quality based only on file validity.
+
+---
+
+# 30. Verification order
+
+Run:
+
+1. Presentation mapper tests.
+2. PPTX renderer tests.
+3. PPTX validator tests.
+4. Worker tests.
+5. Workflow tests.
+6. Frontend tests.
+7. Phase 1B regression tests.
+8. Document Engine regression tests.
+9. Full API suite.
+10. API typecheck.
+11. API build.
+12. Customer portal typecheck.
+13. Customer portal build.
+14. AI platform typecheck/build.
+15. Real smoke test.
+16. Manual slide review.
+17. `git diff --check`.
+18. Final diff review.
+
+---
+
+# 31. Final diff review
+
+Ensure no:
+
+* stub presentation worker
+* fake PDF preview
+* duplicated storage code
+* duplicated completion logic
+* dead import
+* debug log
+* hard-coded credential
+* public final PPTX URL
+* raw JSON slide
+* customer secret
+* cross-project asset
+* unrelated changes
+* destructive migration
+* unverified claim
+
+---
+
+# 32. Final report
+
+Report:
+
+* audited service code
+* Presentation Engine architecture
+* registry and definitions
+* mapper structure
+* rendering layouts
+* overflow protection
+* visual asset handling
+* chart handling
+* PPTX validation
+* PDF preview strategy
+* thumbnail strategy
+* worker flow
+* workflow changes
+* completion policy
+* asset metadata
+* idempotency
+* security
+* files created
+* files modified
+* dependencies
+* migrations
+* endpoints
+* test count
+* typecheck results
+* build results
+* smoke-test result
+* manual visual-review result
+
+Use table:
+
+| Output      | Filename | Slides/Pages | File Size | Checksum | Storage Verified | Secure Access |
+| ----------- | -------- | -----------: | --------: | -------- | ---------------- | ------------- |
+| PPTX        |          |              |           |          |                  |               |
+| PDF Preview |          |              |           |          |                  |               |
+| Thumbnail   |          |              |           |          |                  |               |
+
+Do not claim Phase 4 complete unless:
+
+* a real editable PPTX is generated
+* the PPTX has multiple real slides
+* the file passes structural validation
+* the file can be opened
+* slide layouts are visually reviewed
+* required assets are stored
+* secure download works
+* project does not false-complete
+* all regression tests pass
+
+If PDF conversion cannot run in the deployment environment, state that limitation honestly and confirm whether PDF preview is optional or required by the actual catalog before marking the phase complete.

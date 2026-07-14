@@ -1,0 +1,683 @@
+Lanjutkan Creative AI Production Engine ke:
+
+# PHASE 2 — CREATIVE DOCUMENT ENGINE DAN COMPANY PROFILE PDF NYATA
+
+Phase 1B Production Safety sudah selesai.
+
+Fondasi yang sudah tersedia dan tidak boleh dirusak:
+
+* stub workers sekarang melempar `WorkerNotImplementedError`
+* file-producing jobs melewati `validateJobCompletion()`
+* file-producing jobs tidak dapat completed tanpa asset valid
+* storage object diverifikasi
+* file access endpoint memiliki structured error
+* customer portal memiliki failed state
+* audit false completion sudah tersedia
+* seluruh test Phase 1B lulus
+
+Scope fase ini hanya:
+
+1. Creative Document Engine generik
+2. Company Profile PDF nyata
+3. Penyimpanan PDF ke Supabase Storage
+4. Asset record dan download customer
+5. Preview dasar Company Profile
+6. Testing end-to-end Company Profile
+
+Jangan mengerjakan pada fase ini:
+
+* Pitch Deck
+* PPTX
+* DOCX
+* ZIP
+* Video
+* Brand Guideline
+* Logo batch
+* Social Media batch
+* Voice-over
+* Subtitle
+* FFmpeg
+* Fitur layanan lain
+
+## 1. Audit ulang sebelum implementasi
+
+Sebelum menulis kode, baca hasil Phase 1B dan audit file berikut:
+
+* `artifacts/api-server/src/services/jobWorkerService.ts`
+* `artifacts/api-server/src/services/jobDispatcherService.ts`
+* `artifacts/api-server/src/services/jobCompletionGuard.ts`
+* `artifacts/api-server/src/services/portfolioStorageService.ts`
+* `artifacts/api-server/src/services/supabaseStorage.ts`
+* `artifacts/api-server/src/services/serviceRequestConversionService.ts`
+* `artifacts/api-server/src/routes/files.ts`
+* schema `creative_ai_assets`
+* schema `creative_projects`
+* schema `creative_project_steps`
+* schema `ai_service_requests`
+* katalog dan workflow `company-profile`
+* customer workspace/detail project
+
+Jangan membuat sistem storage baru jika service yang ada dapat digunakan.
+
+Jangan menduplikasi signed URL, ownership gate, atau payment gate.
+
+## 2. Bangun Creative Document Engine generik
+
+Buat service generik, misalnya:
+
+`creativeDocumentService.ts`
+
+Gunakan nama lain hanya jika lebih sesuai dengan struktur repository.
+
+Engine harus menerima document specification terstruktur, bukan HTML mentah yang tidak terkontrol.
+
+Contoh contract:
+
+```ts
+type CreativeDocumentSpec = {
+  documentType: string;
+  title: string;
+  subtitle?: string;
+  company?: {
+    name?: string;
+    logoUrl?: string;
+    website?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+  };
+  theme?: {
+    primaryColor?: string;
+    secondaryColor?: string;
+    accentColor?: string;
+    fontFamily?: string;
+  };
+  cover?: {
+    title: string;
+    subtitle?: string;
+    imageUrl?: string;
+    tagline?: string;
+  };
+  sections: CreativeDocumentSection[];
+  footer?: {
+    text?: string;
+    showPageNumber?: boolean;
+  };
+  metadata?: Record<string, unknown>;
+};
+```
+
+Section minimal mendukung:
+
+```ts
+type CreativeDocumentSection =
+  | {
+      type: "heading";
+      title: string;
+      subtitle?: string;
+    }
+  | {
+      type: "paragraph";
+      text: string;
+    }
+  | {
+      type: "bullets";
+      items: string[];
+    }
+  | {
+      type: "image";
+      imageUrl: string;
+      caption?: string;
+      alt?: string;
+    }
+  | {
+      type: "keyMetrics";
+      items: Array<{
+        label: string;
+        value: string;
+      }>;
+    }
+  | {
+      type: "table";
+      headers: string[];
+      rows: string[][];
+    }
+  | {
+      type: "quote";
+      text: string;
+      attribution?: string;
+    }
+  | {
+      type: "pageBreak";
+    };
+```
+
+Buat schema validation menggunakan library validation yang sudah tersedia di repository.
+
+Input invalid harus gagal dengan error terstruktur dan tidak menghasilkan PDF setengah jadi.
+
+## 3. Rendering PDF
+
+Gunakan `pdfkit` yang sudah tersedia.
+
+PDF harus benar-benar memiliki layout profesional, minimal:
+
+* ukuran A4 portrait
+* margin konsisten
+* cover page
+* judul dan subjudul
+* warna brand
+* section heading
+* paragraph wrapping
+* bullet lists
+* image placement
+* image caption
+* table sederhana
+* key metrics cards atau blocks
+* footer
+* nomor halaman
+* automatic page break
+* closing page
+
+Jangan hanya:
+
+* menulis JSON mentah
+* menempel seluruh teks dalam satu halaman
+* membuat PDF berupa screenshot tunggal
+* membuat PDF kosong dengan cover saja
+* membuat file berisi placeholder
+
+Buat layout helper agar fungsi renderer tidak menjadi satu file monolitik.
+
+Contoh helper:
+
+* `renderCoverPage()`
+* `renderSectionHeading()`
+* `renderParagraph()`
+* `renderBullets()`
+* `renderImageBlock()`
+* `renderTable()`
+* `renderFooter()`
+* `ensurePageSpace()`
+
+Gunakan nama sesuai style repository.
+
+## 4. Company Profile content mapper
+
+Buat mapper khusus Company Profile, misalnya:
+
+`companyProfileDocumentMapper.ts`
+
+Mapper mengubah hasil agent atau `result_json` menjadi `CreativeDocumentSpec`.
+
+Jangan mengikat Document Engine langsung ke schema Company Profile.
+
+Struktur minimum Company Profile:
+
+1. Cover
+2. About the Company
+3. Company Overview
+4. Vision
+5. Mission
+6. Core Values
+7. Products or Services
+8. Competitive Advantages
+9. Industries or Customers Served
+10. Operational Capabilities
+11. Milestones or Experience
+12. Team or Organization
+13. Certifications or Legality, jika tersedia
+14. Contact Information
+15. Closing Page
+
+Section yang datanya tidak tersedia:
+
+* jangan mengarang fakta perusahaan
+* jangan menampilkan placeholder seperti `Lorem ipsum`
+* boleh dilewati
+* catat missing field dalam generation report internal
+
+## 5. Konten AI
+
+Gunakan hasil content generation yang sudah tersedia apabila workflow Company Profile sudah menghasilkan structured content.
+
+Apabila output saat ini belum terstruktur dengan cukup baik:
+
+* perbaiki prompt atau output schema agent Company Profile
+* gunakan structured JSON
+* validasi semua section
+* jangan mengandalkan parsing teks bebas yang rapuh
+
+Jangan membuat panggilan LLM tambahan tanpa kebutuhan nyata.
+
+Apabila perlu tambahan panggilan LLM:
+
+* catat provider
+* model
+* token usage
+* biaya
+* latency
+* purpose
+
+Tetap gunakan AI model router yang sudah tersedia.
+
+## 6. Gambar
+
+Gunakan asset gambar yang sudah tersedia dari project jika relevan.
+
+Gambar dapat berasal dari:
+
+* cover image
+* generated image
+* uploaded logo
+* uploaded company photo
+* existing creative asset
+
+Persyaratan:
+
+* download image secara aman
+* validasi MIME type
+* batasi file size
+* pertahankan aspect ratio
+* tangani image gagal tanpa merusak seluruh PDF
+* gunakan fallback visual sederhana, bukan broken image icon
+* jangan memasukkan base64 sangat besar ke database
+
+PDF tetap boleh dibuat apabila satu gambar optional gagal, tetapi kegagalan tersebut harus masuk generation report.
+
+Cover image yang wajib harus mengikuti konfigurasi entitlement atau workflow.
+
+## 7. PDF worker nyata
+
+Ganti perilaku `pdf_export` khusus Company Profile menjadi worker nyata.
+
+Alur:
+
+1. Load job payload.
+2. Validasi job type dan project ownership.
+3. Load project, service request, brief, dan output AI.
+4. Build Company Profile document spec.
+5. Render PDF ke temporary buffer atau temporary file.
+6. Validasi PDF.
+7. Upload ke Supabase Storage.
+8. Buat atau update `creative_ai_assets`.
+9. Return structured result yang memenuhi completion guard.
+10. Baru izinkan dispatcher memanggil `completeJob()`.
+
+Jangan menonaktifkan completion guard.
+
+Untuk jenis PDF lain yang belum diimplementasikan:
+
+* tetap throw `WorkerNotImplementedError`
+* jangan mencoba merender generic output yang belum memiliki mapper
+
+Gunakan dispatch berdasarkan document type atau service slug.
+
+## 8. Validasi PDF sebelum upload
+
+Tambahkan validator, misalnya:
+
+`validateGeneratedPdf()`
+
+Validasi minimal:
+
+* buffer tersedia
+* file size lebih dari nol
+* magic bytes dimulai dengan `%PDF-`
+* MIME type `application/pdf`
+* page count dapat dibaca jika library tersedia
+* minimal 3 halaman untuk fixture standar Company Profile
+* tidak hanya berisi halaman kosong
+* judul atau metadata document tersedia
+* output bukan placeholder
+
+Jangan hanya mempercayai ekstensi `.pdf`.
+
+Jika page count membutuhkan dependency baru, pilih dependency ringan dan stabil. Jangan menambahkan library besar tanpa alasan.
+
+## 9. Storage path
+
+Gunakan struktur path yang konsisten:
+
+```text
+creative-projects/{companyId}/{projectId}/{jobId}/documents/company-profile-{version}.pdf
+```
+
+Jika `companyId` tidak tersedia, gunakan tenant atau owner identifier yang memang digunakan codebase.
+
+Hindari:
+
+* nama file dari input customer tanpa sanitasi
+* path traversal
+* bucket public untuk final deliverable
+* URL permanen yang melewati payment gate
+
+Final deliverable tetap menggunakan signed access mechanism yang ada.
+
+## 10. Asset record
+
+Pastikan asset record untuk PDF menyimpan metadata yang sesuai.
+
+Gunakan schema yang sudah ada sejauh memungkinkan.
+
+Metadata minimal:
+
+* project ID
+* service request ID jika tersedia
+* job ID
+* owner or tenant ID
+* asset type `document`
+* document type `company_profile`
+* file name
+* MIME type
+* storage path
+* file size bytes
+* checksum jika tersedia
+* page count
+* status
+* provider metadata jika ada
+* generated timestamp
+* version number
+* is final deliverable
+* is temporary preview = false
+
+Jika kolom tertentu belum tersedia:
+
+* gunakan metadata JSON bila memang sudah menjadi pola project
+* migration hanya jika benar-benar diperlukan untuk querying atau integrity
+* jangan mengubah schema besar tanpa kebutuhan
+
+## 11. Idempotency
+
+Retry job tidak boleh menghasilkan asset duplikat tidak terkendali.
+
+Gunakan key idempotency berdasarkan:
+
+* job ID
+* project ID
+* document type
+* version atau attempt yang sah
+
+Perilaku retry:
+
+* jika file valid dan asset record sudah lengkap, return existing valid deliverable
+* jika asset record ada tetapi storage file hilang, regenerate dan repair record
+* jika upload gagal, jangan membuat asset final palsu
+* jika render gagal, temporary file harus dibersihkan
+* jangan membuat project completed dua kali
+
+## 12. Versioning
+
+Company Profile harus mendukung minimal version metadata.
+
+Versi pertama:
+
+```text
+v1
+```
+
+Pada regenerate atau revision yang sah:
+
+```text
+v2
+v3
+```
+
+Jangan overwrite file lama tanpa audit trail.
+
+Customer workspace untuk fase ini cukup menampilkan versi terbaru, tetapi struktur backend jangan menghalangi future version history.
+
+## 13. Generation report
+
+Simpan generation report internal sebagai JSON result atau metadata.
+
+Isi minimal:
+
+* document type
+* section count
+* page count
+* included images
+* failed optional images
+* missing optional sections
+* render start
+* render end
+* render duration
+* file size
+* checksum
+* storage path
+* asset ID
+* provider and model usage
+* validation result
+
+Generation report tidak harus dapat didownload customer pada fase ini.
+
+## 14. Customer portal
+
+Pada detail project Company Profile tampilkan:
+
+* status production
+* nama file
+* tipe file PDF
+* jumlah halaman
+* file size
+* generated date
+* versi
+* tombol preview atau open PDF
+* tombol download
+
+Ketentuan:
+
+* tombol download hanya muncul jika valid final asset ada
+* payment and files-unlocked gate tetap berlaku
+* status failed menampilkan error state dari Phase 1B
+* jangan menggunakan URL storage public
+* jangan menampilkan internal storage path
+* jangan menampilkan provider cost kepada customer
+
+Untuk preview:
+
+* gunakan secure file access yang sudah tersedia
+* boleh membuka PDF di tab baru
+* tidak perlu membuat full embedded viewer kompleks pada fase ini jika browser preview sudah memadai
+
+## 15. Admin production monitor
+
+Tambahkan informasi untuk Company Profile job:
+
+* output file name
+* asset ID
+* storage validation
+* file size
+* page count
+* render duration
+* validation status
+* retry action
+* error detail
+
+Jangan membuat halaman admin baru jika monitor existing dapat diperluas.
+
+## 16. Status propagation
+
+Project Company Profile hanya boleh completed apabila:
+
+* semua required text steps selesai
+* required image steps selesai atau sesuai entitlement
+* PDF final valid
+* asset record ada
+* storage object ada
+* completion guard lulus
+
+Jangan menyelesaikan project hanya karena `pdf_export` job selesai.
+
+Pastikan completion policy memeriksa required deliverables dari order snapshot atau workflow definition.
+
+## 17. Existing false-completed Company Profile
+
+Jangan otomatis mengubah semua historical data pada implementasi ini.
+
+Namun setelah engine tersedia, sediakan cara aman untuk admin:
+
+* retry PDF generation pada project terdampak
+* generate PDF dari existing valid content tanpa mengulang semua AI generation
+* membuat asset record yang benar
+* mengembalikan project ke completed hanya setelah PDF valid
+
+Gunakan job retry atau repair job yang diaudit.
+
+## 18. Security
+
+Validasi:
+
+* customer hanya dapat mengakses project miliknya
+* admin route tetap membutuhkan admin authorization
+* file token tidak dapat digunakan lintas project
+* storage path tidak berasal langsung dari input customer
+* remote image URL dibatasi atau divalidasi untuk mengurangi SSRF
+* batasi image file size
+* batasi jumlah halaman dan section
+* sanitasi metadata PDF
+* jangan menulis API key, prompt internal, atau secret ke PDF
+
+## 19. Testing wajib
+
+Tambahkan test minimal:
+
+### Document Engine unit tests
+
+1. Document spec valid menghasilkan PDF buffer.
+2. Buffer dimulai dengan `%PDF-`.
+3. Paragraph panjang berpindah halaman.
+4. Bullet list dirender.
+5. Page number tersedia.
+6. Image optional gagal tidak merusak render.
+7. Invalid document spec ditolak.
+8. Empty section tidak menghasilkan placeholder.
+9. Unsafe file name disanitasi.
+
+### Company Profile mapper tests
+
+10. Structured Company Profile result dipetakan ke section yang benar.
+11. Missing optional section dilewati.
+12. Fakta yang tidak tersedia tidak dikarang.
+13. Contact section hanya berisi data yang tersedia.
+
+### Worker integration tests
+
+14. Company Profile `pdf_export` membuat asset nyata.
+15. PDF di-upload ke storage.
+16. Asset record memiliki project dan owner yang benar.
+17. File size lebih dari nol.
+18. MIME type benar.
+19. Completion guard menerima valid PDF.
+20. Completion guard menolak missing PDF.
+21. Retry tidak membuat duplicate final asset.
+22. Storage upload gagal menyebabkan job failed.
+23. PDF validation gagal menyebabkan job failed.
+24. Project tidak completed sebelum PDF valid.
+25. Files gate tidak berubah tanpa aturan payment.
+26. Customer lain tidak dapat download file.
+27. Existing valid asset dapat digunakan secara idempotent.
+
+### Frontend tests
+
+28. Download button muncul hanya jika asset valid.
+29. Failed Company Profile menampilkan danger state.
+30. Metadata halaman dan ukuran file ditampilkan.
+31. Internal storage path tidak ditampilkan.
+
+## 20. Smoke test nyata
+
+Gunakan satu fixture Company Profile yang realistis.
+
+Fixture minimal memiliki:
+
+* company name
+* tagline
+* about
+* vision
+* mission
+* services
+* competitive advantages
+* contact information
+* cover image atau generated image
+
+Jalankan workflow end-to-end.
+
+Buktikan:
+
+* job queued
+* job running
+* PDF dirender
+* PDF divalidasi
+* PDF di-upload
+* asset record dibuat
+* storage object exists
+* job completed
+* project completed hanya setelah PDF valid
+* customer dapat membuka/download melalui secure file access
+
+Laporkan hasil nyata:
+
+* project ID atau fixture identifier internal
+* nama file
+* ukuran file
+* jumlah halaman
+* checksum
+* asset type
+* storage verification
+* render duration
+* signed access result
+* test result
+* typecheck result
+* build result
+
+Jangan menampilkan token download rahasia dalam laporan.
+
+## 21. Verification commands
+
+Jalankan:
+
+* typecheck API server
+* unit tests Document Engine
+* integration tests Company Profile
+* existing Phase 1B tests
+* API build
+* customer portal test
+* customer portal build
+* admin platform build jika terdampak
+* smoke test nyata
+
+Pastikan test Phase 1B tetap lulus.
+
+## 22. Laporan akhir
+
+Laporkan:
+
+* arsitektur Document Engine
+* file yang dibuat
+* file yang diubah
+* dependency baru
+* migration
+* endpoint
+* schema atau metadata yang dipakai
+* status propagation
+* idempotency strategy
+* security protections
+* hasil seluruh test
+* hasil build
+* hasil smoke test
+* bukti PDF nyata
+* ukuran dan jumlah halaman
+* risiko tersisa
+
+Jangan mengklaim Phase 2 selesai apabila:
+
+* PDF hanya berupa cover
+* file tidak dapat dibuka
+* file tidak tersimpan
+* asset record tidak ada
+* customer tidak dapat download
+* completion guard dilewati
+* project completed sebelum PDF valid
+
+Phase 2 dianggap selesai hanya apabila satu order Company Profile nyata menghasilkan PDF multi-halaman yang valid, tersimpan, dapat diakses secara aman, dan ditampilkan di customer workspace.

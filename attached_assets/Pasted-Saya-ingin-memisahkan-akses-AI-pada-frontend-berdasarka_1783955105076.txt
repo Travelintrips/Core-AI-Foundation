@@ -1,0 +1,587 @@
+Saya ingin memisahkan akses AI pada frontend berdasarkan jenis pengguna.
+
+KONDISI SAAT INI
+
+Platform memiliki 15 kategori AI:
+
+1. Creative AI
+2. Marketing AI
+3. Sales AI
+4. Finance AI
+5. Accounting AI
+6. Tax AI
+7. HR & Payroll AI
+8. Legal AI
+9. Logistics AI
+10. Customs & PPJK AI
+11. Procurement AI
+12. Trading AI
+13. Data Analytics AI
+14. Executive AI
+15. Customer Service AI
+
+Saat ini hanya Creative AI yang sudah benar-benar siap digunakan customer secara end-to-end.
+
+Creative AI sudah memiliki flow:
+
+* pilih layanan;
+* isi brief;
+* kalkulasi harga;
+* checkout;
+* pembayaran;
+* AI production;
+* image generation;
+* automatic QC;
+* customer review;
+* revisi;
+* approval;
+* download hasil final.
+
+Empat belas kategori lainnya masih digunakan untuk kebutuhan internal perusahaan dan belum boleh ditampilkan atau diakses oleh customer umum.
+
+TUJUAN IMPLEMENTASI
+
+Buat pemisahan frontend dan akses sebagai berikut:
+
+A. CUSTOMER / PUBLIC PORTAL
+
+Customer umum hanya boleh melihat dan menggunakan Creative AI.
+
+B. INTERNAL AI PORTAL
+
+Semua kategori AI dapat dilihat dan digunakan oleh akun internal yang memiliki role:
+
+* owner;
+* admin;
+* manager;
+* internal_staff.
+
+Jangan hanya menyembunyikan menu dari frontend.
+
+Wajib menerapkan:
+
+1. menu guard;
+2. route guard;
+3. backend authorization;
+4. API permission;
+5. tenant dan role validation;
+6. audit log untuk akses internal.
+
+ARSITEKTUR YANG DIINGINKAN
+
+Gunakan satu monorepo dan backend yang sama, tetapi pisahkan pengalaman frontend.
+
+Struktur yang disarankan:
+
+```text
+apps/
+  creative-portal/
+  ai-admin/
+
+artifacts/
+  api-server/
+```
+
+Jika struktur repository saat ini berbeda, gunakan struktur existing dan lakukan perubahan seminimal mungkin. Jangan membuat aplikasi duplikat jika frontend yang ada dapat dipisahkan secara aman.
+
+PORTAL CUSTOMER
+
+Portal customer hanya menampilkan:
+
+```text
+Creative AI
+├── Logo Design
+├── Social Media Design
+├── Banner
+├── Flyer
+├── Brochure
+├── Packaging
+├── Product Image
+├── Company Profile
+├── Presentation
+├── Copywriting
+├── Image Enhancement
+└── Video Creative
+```
+
+Customer tidak boleh melihat:
+
+* Finance AI;
+* Accounting AI;
+* Tax AI;
+* HR & Payroll AI;
+* Legal AI;
+* Logistics AI;
+* Customs & PPJK AI;
+* Procurement AI;
+* Trading AI;
+* Data Analytics AI;
+* Executive AI;
+* Marketing AI internal;
+* Sales AI internal;
+* Customer Service AI internal.
+
+Hapus kategori internal dari:
+
+* homepage customer;
+* katalog customer;
+* navigation;
+* sidebar;
+* search;
+* recommendation;
+* API response kategori publik;
+* sitemap;
+* metadata;
+* dashboard customer;
+* direct URL access.
+
+Jika customer mencoba membuka URL internal secara langsung, tampilkan:
+
+```text
+403 — Anda tidak memiliki izin untuk mengakses halaman ini.
+```
+
+Jangan mengarahkan customer ke halaman internal.
+
+ROUTE CUSTOMER
+
+Gunakan atau pertahankan route seperti:
+
+```text
+/creative
+/creative/services
+/creative/brief
+/creative/orders
+/creative/orders/:id
+/creative/review/:token
+/creative/download/:id
+/customer/profile
+/customer/billing
+```
+
+Pastikan customer hanya bisa mengakses order miliknya sendiri.
+
+INTERNAL AI PORTAL
+
+Buat atau gunakan area internal:
+
+```text
+/internal
+/internal/creative
+/internal/marketing
+/internal/sales
+/internal/finance
+/internal/accounting
+/internal/tax
+/internal/hr-payroll
+/internal/legal
+/internal/logistics
+/internal/customs-ppjk
+/internal/procurement
+/internal/trading
+/internal/data-analytics
+/internal/executive
+/internal/customer-service
+```
+
+Semua route `/internal/*` wajib menggunakan:
+
+```text
+requireAuth
+requireInternalRole
+```
+
+Role yang diperbolehkan:
+
+```text
+owner
+admin
+manager
+internal_staff
+```
+
+Customer biasa tidak boleh memiliki akses walaupun mengetahui URL internal.
+
+AKUN ADMIN AWAL
+
+Provision satu akun admin internal awal dengan email:
+
+```text
+abing2267@gmail.com
+```
+
+Ketentuan keamanan:
+
+1. Jangan menulis password dalam source code frontend.
+2. Jangan menyimpan password plaintext di database.
+3. Jangan menaruh password di GitHub, log, seed terbuka, atau response API.
+4. Ambil initial password dari environment variable:
+
+```text
+INITIAL_INTERNAL_ADMIN_PASSWORD
+```
+
+5. Password harus di-hash menggunakan mekanisme authentication yang sudah digunakan project.
+6. Jika menggunakan Supabase Auth, buat user melalui admin/server-side API, bukan dari frontend.
+7. Tambahkan profil internal:
+
+```text
+email: abing2267@gmail.com
+role: owner
+account_type: internal
+status: active
+must_change_password: true
+```
+
+8. Pada login pertama, user wajib mengganti password sebelum bisa menggunakan modul internal.
+9. Jangan menampilkan nilai environment variable di log.
+10. Seed harus idempotent: jika akun sudah ada, jangan membuat duplikat dan jangan mereset password tanpa perintah eksplisit.
+
+Gunakan environment variable pada Replit Secrets:
+
+```text
+INITIAL_INTERNAL_ADMIN_EMAIL=abing2267@gmail.com
+INITIAL_INTERNAL_ADMIN_PASSWORD=<diisi melalui Replit Secrets>
+```
+
+Jangan mengisi nilai password langsung ke file `.env.example`.
+
+AUTHORIZATION BACKEND
+
+Buat middleware atau gunakan middleware existing:
+
+```ts
+requireAuth
+requireCustomer
+requireInternalRole
+requireRole
+```
+
+Contoh logika:
+
+```ts
+const INTERNAL_ROLES = [
+  "owner",
+  "admin",
+  "manager",
+  "internal_staff",
+];
+```
+
+`requireInternalRole` harus:
+
+1. memastikan user login;
+2. membaca profil user dari database;
+3. memastikan status user aktif;
+4. memastikan account_type adalah internal;
+5. memastikan role termasuk internal role;
+6. mencatat akses sensitif ke audit log;
+7. mengembalikan 401 jika belum login;
+8. mengembalikan 403 jika role tidak sesuai.
+
+Jangan percaya role yang dikirim dari client, localStorage, query parameter, atau request body.
+
+Role harus dibaca dari session/auth token dan dikonfirmasi ke database.
+
+KATALOG AI
+
+Ubah schema atau konfigurasi kategori AI agar memiliki field:
+
+```ts
+visibility:
+  | "public"
+  | "internal"
+  | "disabled";
+
+commercialStatus:
+  | "commercial_ready"
+  | "internal_only"
+  | "beta"
+  | "disabled";
+```
+
+Konfigurasi awal:
+
+```text
+Creative AI:
+visibility = public
+commercialStatus = commercial_ready
+```
+
+Kategori lainnya:
+
+```text
+visibility = internal
+commercialStatus = internal_only
+```
+
+Endpoint katalog publik hanya boleh mengembalikan kategori:
+
+```text
+visibility = public
+```
+
+Endpoint internal boleh mengembalikan kategori public dan internal setelah role diverifikasi.
+
+Contoh endpoint:
+
+```text
+GET /api/ai/catalog/public
+GET /api/internal/ai/catalog
+```
+
+Jangan menggunakan satu endpoint yang mengirim semua kategori lalu menyembunyikannya di frontend.
+
+FRONTEND ROUTE GUARD
+
+Buat komponen seperti:
+
+```tsx
+<RequireAuth />
+<RequireInternalRole />
+<RequireCustomer />
+```
+
+Ketika session sedang diperiksa, tampilkan loading state.
+
+Jangan menampilkan halaman internal sesaat sebelum role selesai diverifikasi.
+
+SIDEBAR INTERNAL
+
+Sidebar internal menampilkan:
+
+```text
+Dashboard
+Creative AI
+Marketing AI
+Sales AI
+Finance AI
+Accounting AI
+Tax AI
+HR & Payroll AI
+Legal AI
+Logistics AI
+Customs & PPJK AI
+Procurement AI
+Trading AI
+Data Analytics AI
+Executive AI
+Customer Service AI
+AI Workforce
+Jobs
+Execution Monitor
+Cost Tracking
+Audit Logs
+Settings
+```
+
+Terapkan permission lebih rinci bila sistem role-permission sudah tersedia.
+
+Contoh:
+
+```text
+owner:
+semua akses
+
+admin:
+semua operasional kecuali pengaturan owner tertentu
+
+manager:
+akses kategori dan laporan yang diizinkan
+
+internal_staff:
+hanya modul yang diberikan
+```
+
+SECURITY HARDENING
+
+Audit dan pastikan:
+
+* tidak ada admin password di source code;
+* tidak ada role admin yang dapat diubah dari frontend;
+* tidak ada endpoint internal tanpa middleware;
+* tidak ada IDOR pada order, file, hasil AI, dan pekerjaan;
+* customer hanya melihat datanya sendiri;
+* file internal menggunakan signed URL;
+* signed URL memiliki masa berlaku;
+* download memverifikasi ownership atau internal permission;
+* audit log mencatat user, aksi, resource, waktu, IP jika tersedia, dan hasil;
+* login memiliki rate limiting;
+* error login tidak membocorkan apakah email terdaftar;
+* session cookie aman jika menggunakan cookie;
+* CORS dibatasi;
+* API key provider AI hanya tersedia di server;
+* internal AI execution tidak dapat dipanggil customer melalui endpoint manual.
+
+MIGRASI DATABASE
+
+Jika field berikut belum tersedia, buat migration yang aman:
+
+```text
+user_profiles.account_type
+user_profiles.role
+user_profiles.status
+user_profiles.must_change_password
+
+ai_categories.visibility
+ai_categories.commercial_status
+```
+
+Gunakan nilai default yang aman.
+
+Jangan mengubah seluruh user lama menjadi admin.
+
+Customer lama harus tetap:
+
+```text
+account_type = customer
+role = customer
+status = active
+```
+
+Tambahkan index jika diperlukan pada:
+
+```text
+user_profiles.user_id
+user_profiles.email
+user_profiles.role
+user_profiles.account_type
+ai_categories.visibility
+```
+
+UI CUSTOMER
+
+Pada halaman customer:
+
+* fokuskan branding pada Creative AI Studio;
+* hilangkan narasi bahwa semua kategori sudah commercial-ready;
+* tampilkan hanya layanan yang benar-benar bisa diproduksi;
+* pertahankan order, payment, review, revision, dan download;
+* jangan tampilkan badge internal;
+* jangan tampilkan menu “Enterprise AI” kepada customer umum.
+
+Boleh tampilkan CTA non-transaksional:
+
+```text
+Butuh implementasi Enterprise AI untuk perusahaan?
+Hubungi tim kami.
+```
+
+CTA tersebut hanya membuka form konsultasi, bukan katalog internal.
+
+UI INTERNAL
+
+Pada login internal, arahkan ke:
+
+```text
+/internal
+```
+
+Dashboard internal menampilkan:
+
+* kategori AI;
+* pekerjaan aktif;
+* status worker;
+* usage token;
+* biaya model;
+* job queue;
+* hasil eksekusi;
+* error;
+* audit log;
+* customer Creative AI;
+* order dan pembayaran Creative AI.
+
+FORCE CHANGE PASSWORD
+
+Jika:
+
+```text
+must_change_password = true
+```
+
+User hanya boleh mengakses:
+
+```text
+/internal/change-password
+/logout
+```
+
+Semua route internal lainnya harus diblokir sampai password berhasil diubah.
+
+Setelah berhasil:
+
+```text
+must_change_password = false
+password_changed_at = current timestamp
+```
+
+TESTING WAJIB
+
+Buat dan jalankan test berikut:
+
+1. Public catalog hanya mengembalikan Creative AI.
+2. Customer tidak melihat kategori internal.
+3. Customer membuka `/internal` mendapat 403 atau diarahkan ke login.
+4. Customer login tetap tidak bisa membuka `/internal`.
+5. Admin internal dapat membuka semua kategori.
+6. User internal dengan status suspended ditolak.
+7. Role dari request body tidak dapat menaikkan privilege.
+8. API internal tanpa token mengembalikan 401.
+9. API internal dengan customer token mengembalikan 403.
+10. Direct URL kategori internal diblokir.
+11. Creative AI order flow customer tetap berjalan.
+12. Customer A tidak bisa membuka order Customer B.
+13. Seed admin tidak membuat user duplikat.
+14. Password tidak muncul dalam log atau API response.
+15. User dengan `must_change_password=true` dipaksa mengganti password.
+16. Setelah mengganti password, user dapat masuk dashboard internal.
+17. Build frontend customer berhasil.
+18. Build frontend internal berhasil.
+19. Typecheck backend berhasil.
+20. Tidak ada secret yang ikut ter-commit.
+
+VERIFIKASI MANUAL
+
+Lakukan pengujian dengan dua akun:
+
+Akun customer biasa:
+
+* hanya melihat Creative AI;
+* bisa membuat order;
+* tidak bisa mengakses internal.
+
+Akun internal:
+
+```text
+abing2267@gmail.com
+```
+
+* login menggunakan initial password dari Replit Secrets;
+* dipaksa mengganti password saat login pertama;
+* dapat mengakses seluruh Internal AI Portal setelah password diubah.
+
+OUTPUT YANG SAYA INGINKAN
+
+Setelah implementasi, berikan laporan:
+
+1. arsitektur yang digunakan;
+2. file yang dibuat;
+3. file yang diubah;
+4. migration yang dijalankan;
+5. route public;
+6. route internal;
+7. middleware authorization;
+8. cara provisioning akun admin;
+9. hasil testing;
+10. hasil build dan typecheck;
+11. bukti bahwa customer tidak bisa mengakses internal;
+12. bukti bahwa password tidak di-hardcode;
+13. risiko atau pekerjaan lanjutan yang masih tersisa.
+
+Jangan hanya membuat mockup UI.
+
+Implementasikan end-to-end pada frontend, backend, authentication, database, route protection, API permission, dan testing.
+
+Jangan mengubah workflow Creative AI yang sudah berjalan kecuali diperlukan untuk pemisahan akses.
+
+Jangan menghapus 14 kategori internal. Ubah menjadi internal-only dan pastikan tetap tersedia untuk admin perusahaan.

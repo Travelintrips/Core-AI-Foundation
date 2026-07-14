@@ -40,11 +40,12 @@ import { hashToken } from "./clientReviewService.js";
 import { generateDownloadToken } from "./signedUrlService.js";
 import { buildProjectRuntimeSnapshot, type ProjectRuntimeSnapshot } from "./runtimeRosterService.js";
 import {
-  getEventsForProject,
+  getEventsWithSummariesForProject,
   getEventsForProjects,
   filterForActivityFeed,
   type CanonicalEvent,
 } from "./canonicalEventService.js";
+import type { ExecutionSummary, EventWithSummary } from "./executionSummaryService.js";
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -470,6 +471,12 @@ export interface ProjectDetail {
   runtime: ProjectRuntimeSnapshot;
   /** V4.0C — canonical event stream for this project. Sorted chronologically. */
   events: CanonicalEvent[];
+  /**
+   * V4.1 — deterministic, customer-safe summaries paired 1:1 with `events`
+   * (same length, same order, same indices). Additive only — clients that
+   * only read `events` are unaffected.
+   */
+  eventSummaries: ExecutionSummary[];
 }
 
 export async function getProjectDetail(
@@ -526,12 +533,16 @@ export async function getProjectDetail(
 
   const invoices = found.internalProjectId ? await listInvoicesForProjects([found]) : [];
 
-  const [runtime, events] = await Promise.all([
+  const [runtime, eventPairs] = await Promise.all([
     buildProjectRuntimeSnapshot(found.internalProjectId),
     found.internalProjectId
-      ? getEventsForProject(found.projectNumber, found.internalProjectId)
-      : Promise.resolve([] as CanonicalEvent[]),
+      ? getEventsWithSummariesForProject(found.projectNumber, found.internalProjectId, {
+          filesUnlocked: found.filesUnlocked,
+        })
+      : Promise.resolve([] as EventWithSummary[]),
   ]);
+  const events = eventPairs.map((p) => p.event);
+  const eventSummaries = eventPairs.map((p) => p.summary);
 
   return {
     overview: {
@@ -549,6 +560,7 @@ export async function getProjectDetail(
     invoices,
     runtime,
     events,
+    eventSummaries,
   };
 }
 
@@ -580,6 +592,36 @@ export interface WorkspaceDownloadItem {
   revisionNotes: string | null;
   locked: boolean;
   createdAt: string;
+  /** Present for document assets (PDF). */
+  pageCount?: number | null;
+  /** File size in bytes — present for document assets. */
+  fileSizeBytes?: number | null;
+  /** Structured document type, e.g. "brand_strategy". */
+  documentType?: string | null;
+  /** MIME type of the asset. */
+  mimeType?: string | null;
+  /** Present for presentation assets (PPTX) — number of slides. */
+  slideCount?: number | null;
+}
+
+function formatDocumentTitle(documentType: string): string {
+  const labels: Record<string, string> = {
+    company_profile:          "Company Profile PDF",
+    brand_strategy:           "Brand Strategy PDF",
+    copywriting:              "Copywriting PDF",
+    creative_consultation:    "Creative Consultation PDF",
+    brand_identity_guideline: "Brand Identity Guideline PDF",
+  };
+  return labels[documentType] ?? documentType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+const PPTX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
+function formatPresentationTitle(presentationType: string): string {
+  const labels: Record<string, string> = {
+    pitch_deck: "Pitch Deck (PPTX)",
+  };
+  return labels[presentationType] ?? presentationType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function guessCategory(assetType: string, category: string | null): string {
@@ -603,9 +645,19 @@ async function listDownloadsForProjects(
   const byId = new Map(projects.map((p) => [p.projectNumber, p]));
   return assets.map((a) => {
     const proj = byId.get(a.projectId);
+    const meta = (a.metadata ?? {}) as Record<string, unknown>;
+    const isDoc = a.assetType === "document";
+    const isPresentation = a.assetType === "presentation";
+    const docType = isDoc ? (a.category ?? null) : null;
+    const presentationType = isPresentation ? (a.category ?? null) : null;
+    const title = isDoc
+      ? `${proj?.brandName ?? "Asset"} — ${formatDocumentTitle(docType ?? "document")} v${a.version}`
+      : isPresentation
+        ? `${proj?.brandName ?? "Asset"} — ${formatPresentationTitle(presentationType ?? "presentation")} v${a.version}`
+        : `${proj?.brandName ?? "Asset"} — ${a.assetType} #${a.id}`;
     return {
       id: a.id,
-      title: `${proj?.brandName ?? "Asset"} — ${a.assetType} #${a.id}`,
+      title,
       category: guessCategory(a.assetType, a.category),
       projectNumber: a.projectId,
       projectName: proj?.brandName ?? a.projectId,
@@ -615,6 +667,13 @@ async function listDownloadsForProjects(
       revisionNotes: a.revisionNotes,
       locked: !(proj?.filesUnlocked ?? false),
       createdAt: a.createdAt.toISOString(),
+      pageCount:    isDoc ? (typeof meta["pageCount"]    === "number" ? meta["pageCount"]    : null) : null,
+      fileSizeBytes: (isDoc || isPresentation) ? (typeof meta["fileSizeBytes"] === "number" ? meta["fileSizeBytes"] : null) : null,
+      documentType: docType ?? presentationType,
+      mimeType:     isDoc ? (typeof meta["mimeType"] === "string" ? meta["mimeType"] : "application/pdf")
+                  : isPresentation ? (typeof meta["mimeType"] === "string" ? meta["mimeType"] : PPTX_MIME_TYPE)
+                  : null,
+      slideCount:   isPresentation ? (typeof meta["slideCount"] === "number" ? meta["slideCount"] : null) : null,
     };
   });
 }

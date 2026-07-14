@@ -11,9 +11,13 @@
  * releaseJob()  — release without completing (requeue)
  */
 
-import { eq, and, inArray, sql } from "drizzle-orm";
-import { db, aiJobsTable, aiWorkersTable, aiModelsTable, aiProvidersTable, aiPortfolioAssetsTable } from "@workspace/db";
+import { eq, and, inArray, desc, sql } from "drizzle-orm";
+import {
+  db, aiJobsTable, aiWorkersTable, aiModelsTable, aiProvidersTable, aiPortfolioAssetsTable,
+  creativeProjectsTable, creativeProjectStepsTable, creativeAiAssetsTable,
+} from "@workspace/db";
 import type { AiJob, AiWorker } from "@workspace/db";
+import { createHash } from "crypto";
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
 import { executeAI } from "./aiExecutionService.js";
@@ -23,6 +27,25 @@ import { getProviderApiKey } from "./aiSecretService.js";
 import { archiveReplicateAsset, optimizeArchivedAsset, generateAssetThumbnail } from "./portfolioStorageService.js";
 import { maybeFinalizePortfolioPublish } from "./demoPortfolioGeneratorService.js";
 import { logger } from "../lib/logger.js";
+import { WorkerNotImplementedError } from "./jobCompletionGuard.js";
+import { resolveProjectDocumentType } from "./creativeProjectDocumentType.js";
+import {
+  executeGenericPdfExportJob,
+  getSupportedDocumentTypes,
+} from "./creativeDocumentWorkerService.js";
+import { initDocumentRegistry } from "./creativeDocumentRegistry.js";
+import { initPresentationRegistry } from "./presentation/creativePresentationRegistry.js";
+import { getSupportedPresentationTypes, executeGenericPresentationExportJob } from "./presentation/creativePresentationWorkerService.js";
+import { resolveProjectPresentationType } from "./creativeProjectPresentationType.js";
+import { initImageBatchRegistry } from "./image-batch/imageBatchRegistryInit.js";
+import { getSupportedImageBatchTypes } from "./image-batch/creativeImageBatchRegistry.js";
+import { executeGenericImageBatchExportJob } from "./image-batch/creativeImageBatchWorkerService.js";
+import { resolveProjectImageBatchType } from "./creativeProjectImageBatchType.js";
+
+// Register all document type definitions at module load time.
+initDocumentRegistry();
+initPresentationRegistry();
+initImageBatchRegistry();
 
 // ── Real AI execution helpers ───────────────────────────────────────────────
 
@@ -447,6 +470,7 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
  * Extend this switch to add new job types as the platform grows.
  */
 export async function executeJob(job: AiJob, workerId: number): Promise<Record<string, unknown>> {
+  process.stdout.write(`###EXECJOB### jobId=${job.id} jobType=${JSON.stringify(job.jobType)} typeof=${typeof job.jobType}\n`);
   logger.info({ jobId: job.id, jobType: job.jobType, jobTypeJson: JSON.stringify(job.jobType) }, "[executeJob] dispatching");
   switch (job.jobType) {
     case "llm_inference":
@@ -465,7 +489,7 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
       return executeImageJob(job);
 
     case "image_qc":
-      return { message: "Image QC dispatched", jobId: job.id };
+      throw new WorkerNotImplementedError("image_qc");
 
     // ── Sprint P2.1.1 — background asset lifecycle jobs ──────────────────────
     case "archive_asset":
@@ -477,17 +501,50 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
     case "generate_thumbnail":
       return executeGenerateThumbnailJob(job);
 
-    case "pdf_export":
-      return { message: "PDF export dispatched", jobId: job.id };
+    case "pdf_export": {
+      const pdfProjectId = (job.payloadJson as { projectId?: number } | null)?.projectId;
+      const [pdfProject] = typeof pdfProjectId === "number"
+        ? await db.select().from(creativeProjectsTable).where(eq(creativeProjectsTable.id, pdfProjectId))
+        : [];
+      const documentType = pdfProject ? await resolveProjectDocumentType(pdfProject) : null;
+      if (documentType && getSupportedDocumentTypes().includes(documentType)) {
+        return executeGenericPdfExportJob(job, documentType);
+      }
+      throw new WorkerNotImplementedError(`pdf_export for document type '${documentType ?? "unknown"}'`);
+    }
+
+    case "pptx_export": {
+      const pptxProjectId = (job.payloadJson as { projectId?: number } | null)?.projectId;
+      const [pptxProject] = typeof pptxProjectId === "number"
+        ? await db.select().from(creativeProjectsTable).where(eq(creativeProjectsTable.id, pptxProjectId))
+        : [];
+      const presentationType = pptxProject ? await resolveProjectPresentationType(pptxProject) : null;
+      if (presentationType && getSupportedPresentationTypes().includes(presentationType)) {
+        return executeGenericPresentationExportJob(job, presentationType);
+      }
+      throw new WorkerNotImplementedError(`pptx_export for presentation type '${presentationType ?? "unknown"}'`);
+    }
+
+    case "image_batch_export": {
+      const batchProjectId = (job.payloadJson as { projectId?: number } | null)?.projectId;
+      const [batchProject] = typeof batchProjectId === "number"
+        ? await db.select().from(creativeProjectsTable).where(eq(creativeProjectsTable.id, batchProjectId))
+        : [];
+      const batchType = batchProject ? await resolveProjectImageBatchType(batchProject) : null;
+      if (batchType && getSupportedImageBatchTypes().includes(batchType)) {
+        return executeGenericImageBatchExportJob(job, batchType);
+      }
+      throw new WorkerNotImplementedError(`image_batch_export for batch type '${batchType ?? "unknown"}'`);
+    }
 
     case "csv_export":
-      return { message: "CSV export dispatched", jobId: job.id };
+      throw new WorkerNotImplementedError("csv_export");
 
     case "analytics":
-      return { message: "Analytics job dispatched", jobId: job.id };
+      throw new WorkerNotImplementedError("analytics");
 
     case "cleanup":
-      return { message: "Cleanup job dispatched", jobId: job.id };
+      throw new WorkerNotImplementedError("cleanup");
 
     case "noop":
       // Used for seed / testing
@@ -601,6 +658,36 @@ export async function retryJob(
       completedAt:  now,
       updatedAt:    now,
     };
+
+    if (job.jobType === "pdf_export") {
+      const pdfProjectId = (job.payloadJson as { projectId?: number } | null)?.projectId;
+      if (typeof pdfProjectId === "number") {
+        const { markProjectDocumentFailed } = await import("./companyProfilePdfWorkerService.js");
+        await markProjectDocumentFailed(pdfProjectId, errorMessage).catch((err) => {
+          logger.warn({ err, pdfProjectId }, "[jobWorker] Failed to flag project as failed after exhausted pdf_export retries");
+        });
+      }
+    }
+
+    if (job.jobType === "image_batch_export") {
+      const batchProjectId = (job.payloadJson as { projectId?: number } | null)?.projectId;
+      if (typeof batchProjectId === "number") {
+        const { markProjectImageBatchFailed } = await import("./image-batch/creativeImageBatchWorkerService.js");
+        await markProjectImageBatchFailed(batchProjectId, errorMessage).catch((err) => {
+          logger.warn({ err, batchProjectId }, "[jobWorker] Failed to flag project as failed after exhausted image_batch_export retries");
+        });
+      }
+    }
+
+    if (job.jobType === "pptx_export") {
+      const pptxProjectId = (job.payloadJson as { projectId?: number } | null)?.projectId;
+      if (typeof pptxProjectId === "number") {
+        const { markProjectPresentationFailed } = await import("./presentation/creativePresentationWorkerService.js");
+        await markProjectPresentationFailed(pptxProjectId, errorMessage).catch((err) => {
+          logger.warn({ err, pptxProjectId }, "[jobWorker] Failed to flag project as failed after exhausted pptx_export retries");
+        });
+      }
+    }
   } else {
     let nextRetryAt: Date | null = null;
     if (job.retryStrategy === "exponential") {

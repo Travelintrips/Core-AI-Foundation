@@ -20,6 +20,7 @@ import { eq, and, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { db, aiJobsTable, aiWorkersTable } from "@workspace/db";
 import { claimJob, executeJob, completeJob, retryJob } from "./jobWorkerService.js";
+import { validateJobCompletion } from "./jobCompletionGuard.js";
 import {
   registerWorker,
   renewLease,
@@ -355,6 +356,11 @@ export async function dispatch(workerId: number): Promise<"completed" | "failed"
 
     try {
       const result = await executeJob(job, workerId);
+      // ── Phase 1B: completion guard ──────────────────────────────────────
+      // File-producing jobs must have a real asset reference in their result.
+      // If validation fails it throws DeliverableValidationError, which is
+      // caught below and treated as a job failure — never as a completion.
+      validateJobCompletion(job.jobType, result);
       await completeJob(job.id, workerId, result);
       _processedToday++;
       logger.debug({ jobId: job.id }, "[dispatcher] Job completed");
@@ -363,7 +369,7 @@ export async function dispatch(workerId: number): Promise<"completed" | "failed"
       const errMsg = execErr instanceof Error ? execErr.message : String(execErr);
       await retryJob(job.id, workerId, errMsg);
       _failedToday++;
-      logger.warn({ jobId: job.id, err: errMsg }, "[dispatcher] Job failed — retried");
+      logger.warn({ jobId: job.id, jobType: job.jobType, err: errMsg }, "[dispatcher] Job failed — retried");
       return "failed";
     }
   } catch (err) {

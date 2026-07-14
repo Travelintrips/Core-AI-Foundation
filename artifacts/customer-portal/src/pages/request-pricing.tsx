@@ -10,6 +10,7 @@ import { PriceBreakdown } from "@/components/commercial/price-breakdown";
 import { PaymentInstructionCard } from "@/components/commercial/payment-instruction-card";
 import { CommercialErrorState } from "@/components/commercial/commercial-error-state";
 import { useTranslation } from "@/lib/i18n";
+import { DashboardAccessButton } from "@/components/commercial/dashboard-access-button";
 
 function formatMoney(amount: number | string, currency = "IDR") {
   const num = typeof amount === "string" ? parseFloat(amount) : amount;
@@ -234,7 +235,12 @@ export default function RequestPricingPage() {
           </div>
         )}
 
-        {stage === "in_production" || stage === "done" ? <NoActionRequiredPanel /> : null}
+        {stage === "in_production" || stage === "done" ? (
+          <>
+            <NoActionRequiredPanel />
+            <DashboardAccessButton email={request.customerEmail} className="mb-6" />
+          </>
+        ) : null}
 
         {/* Status panels for custom/enterprise flow */}
         {request.serviceFlow !== "fixed_price" && stage === "quotation_pending" && (

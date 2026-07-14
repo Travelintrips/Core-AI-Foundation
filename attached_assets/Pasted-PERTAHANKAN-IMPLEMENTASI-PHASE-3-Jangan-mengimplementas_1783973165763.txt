@@ -1,0 +1,511 @@
+PERTAHANKAN IMPLEMENTASI PHASE 3
+
+Jangan mengimplementasikan ulang:
+
+computeBriefRecommendations
+industry profiles
+service profiles
+goal rules
+audience rules
+context adapter
+apply adapter
+recommendation UI
+brief serializer
+autosave
+
+Gunakan code existing sebagai source of truth.
+
+Satu-satunya patch UI produksi Phase 3 yang sudah dilakukan adalah perbaikan mobile wrapping pada:
+
+RecommendationItem.tsx
+
+Jangan dibatalkan.
+
+2. INVESTIGASI KONTRADIKSI AUTH TERLEBIH DAHULU
+
+Laporan Phase 2.2 sebelumnya menyatakan:
+
+POST /api/ai/catalog/services/:id/request
+
+sudah termasuk PUBLIC_ROUTE_RULES dan berhasil tanpa admin key.
+
+Laporan Phase 3 menyatakan endpoint tersebut masih menerima 401 saat QA.
+
+Jangan langsung mengubah middleware.
+
+Lakukan reproduksi terkontrol dengan:
+
+ADMIN_API_KEY aktif
+server terbaru sudah restart
+build/source terbaru digunakan
+tanpa header admin
+service ID public yang valid
+
+Catat:
+
+HTTP method
+full URL
+req.originalUrl
+req.baseUrl
+req.path
+status code
+response body
+middleware yang menolak
+commit/diff aktif
+3. PERIKSA IMPLEMENTASI ADMIN AUTH SAAT INI
+
+Baca:
+
+artifacts/api-server/src/middleware/adminAuth.ts
+artifacts/api-server/src/middleware/__tests__/adminAuth.test.ts
+mounting router catalog
+route POST /services/:id/request
+API server bootstrap
+
+Pastikan rule yang diharapkan masih ada.
+
+Contoh expected rule secara konsep:
+
+{
+  method: "POST",
+  pattern: /^\/ai\/catalog\/services\/[^/]+\/request$/
+}
+
+Tetapi gunakan format path yang benar berdasarkan nilai nyata req.path atau req.originalUrl.
+
+Jangan menebak.
+
+4. VERIFIKASI APAKAH TEST PALSU POSITIF
+
+Periksa unit test auth Phase 2.2.
+
+Pastikan test benar-benar merepresentasikan Express mounting nyata.
+
+Risiko yang harus dicek:
+
+test mengisi req.path berbeda dari production;
+test tidak mengisi originalUrl;
+test middleware secara langsung tanpa router mount;
+regex cocok pada test tetapi tidak pada server;
+service route memiliki prefix tambahan;
+trailing slash berbeda;
+query string memengaruhi matching;
+route server sebenarnya berada di path lain.
+
+Bila test tidak mencerminkan runtime Express, perbaiki test harness.
+
+5. BEDAKAN AUTH 401 DARI BUSINESS VALIDATION
+
+Pastikan status gagal benar-benar berasal dari adminAuth.
+
+Jangan salah menyimpulkan error berikut sebagai admin auth:
+
+service tidak public
+service tidak aktif
+kategori disembunyikan
+invalid service ID
+tenant tidak cocok
+payload validation gagal
+rate limit
+request body tidak lengkap
+
+Tambahkan identifikasi aman pada development/test, misalnya error code internal:
+
+ADMIN_AUTH_REQUIRED
+SERVICE_NOT_PUBLIC
+INVALID_SERVICE_REQUEST
+
+Jangan expose secret atau middleware internals ke customer production.
+
+6. HOTFIX HANYA JIKA REGRESI TERBUKTI
+
+Jika endpoint benar-benar diblokir oleh adminAuthWithExceptions, lakukan patch terkecil.
+
+Ketentuan:
+
+method-aware;
+regex anchored;
+hanya route create request public;
+tidak membuka list/admin mutation route;
+tidak membuka PATCH/DELETE;
+tidak menggunakan substring;
+tidak menggunakan prefix luas;
+tidak mengirim admin key ke frontend.
+
+Pastikan route customer tetap menjalankan:
+
+Zod validation
+assertServiceIsPubliclyRequestable
+global rate limiter
+service/category visibility validation
+tenant resolution existing
+7. TEST MATRIX AUTH WAJIB
+
+Jalankan dengan ADMIN_API_KEY aktif.
+
+Public service detail
+GET /api/ai/catalog/services/:id
+tanpa key → 200
+Quote
+POST /api/ai/catalog/services/:id/quote
+tanpa key + payload valid → 200
+Create request
+POST /api/ai/catalog/services/:id/request
+tanpa key + payload valid → success status existing
+Invalid request
+payload invalid → 400
+service tidak public → 403/404 sesuai desain
+service tidak ditemukan → 404
+Admin mutations
+PATCH /api/ai/catalog/services/:id tanpa key → 401
+DELETE /api/ai/catalog/services/:id tanpa key → 401
+POST /api/ai/catalog/services tanpa key → 401
+Credentials
+wrong key → 401
+valid key → admin endpoint berhasil
+Preflight
+OPTIONS create-request → 204
+8. CUSTOMER FLOW VERIFICATION
+
+Setelah auth verification, jalankan flow nyata:
+
+List katalog
+→ buka service detail
+→ hitung quote
+→ buat request
+→ buka request melalui authorization existing
+→ mulai brief
+→ isi brief
+→ gunakan rekomendasi intelligence
+→ autosave
+→ refresh
+→ server hydration
+→ review
+
+Verifikasi request creation tidak memakai:
+
+x-admin-key
+VITE_ADMIN_API_KEY
+ADMIN_API_KEY query parameter
+9. TAMBAHKAN DEVELOPMENT DEBUG PANEL
+
+Phase 3 sudah menghasilkan result.debug, tetapi belum memiliki UI development.
+
+Tambahkan komponen kecil:
+
+BriefIntelligenceDebugPanel.tsx
+
+Hanya render jika:
+
+import.meta.env.DEV
+
+dan sebaiknya juga membutuhkan toggle/query flag seperti:
+
+?briefDebug=1
+
+Informasi yang boleh tampil:
+
+engine version
+matched industry key
+matched service type
+fallback used
+completeness
+raw score per recommendation
+source contributions
+applied rules
+warnings
+
+Jangan tampilkan:
+
+request token
+admin key
+authorization header
+customer email
+customer phone
+raw server credential
+
+Panel default collapsed.
+
+Tidak boleh masuk atau terlihat pada production build.
+
+10. LENGKAPI CONFLICT RULE YANG MASIH KURANG
+
+Saat ini conflict rule baru mencakup:
+
+luxury + playful
+government + playful
+corporate + colorful
+
+Tambahkan rule non-blocking berikut.
+
+Premium audience + highly colorful/playful
+
+Pesan:
+
+Gaya sangat colorful atau playful dapat mengurangi kesan premium. Pertimbangkan penggunaannya sebagai aksen, bukan gaya utama.
+No assets + photography-dependent recommendation
+
+Jika user memilih:
+
+Belum punya aset
+
+dan rekomendasi mengandalkan foto produk/kantor/factory existing:
+
+Arah visual ini membutuhkan aset foto. Pertimbangkan image generation, stock imagery, atau sesi fotografi.
+
+Jangan menghapus rekomendasi tersebut.
+
+Speed priority + excessive optional deliverables
+
+Jika priority adalah speed dan recommendation menghasilkan terlalu banyak deliverable tambahan nonessential:
+
+Untuk target pengerjaan cepat, prioritaskan deliverable inti terlebih dahulu.
+
+Warning harus:
+
+non-blocking;
+memiliki stable code;
+severity;
+affected keys;
+deterministic;
+diuji.
+11. PERBAIKI APPLY LIMIT CONSISTENCY
+
+Audit nilai berikut dari laporan:
+
+STYLE_MAX=5
+COLOR_MAX=5
+AUDIENCE_MAX=6
+
+Bandingkan dengan batas UI Phase 2:
+
+style maksimal 3
+color maksimal 3
+audience maksimal 4
+
+Ini berpotensi inkonsisten.
+
+Gunakan satu source of truth untuk selection limits.
+
+Jangan biarkan apply adapter memasukkan lebih banyak pilihan daripada UI dapat tampilkan atau edit.
+
+Expected:
+
+style max = batas UI nyata
+color max = batas UI nyata
+audience max = batas UI nyata
+
+Import limit dari shared option registry/config, jangan hardcode ulang.
+
+Tambahkan regression tests.
+
+12. AUDIT UNKNOWN INDUSTRY SEMANTICS
+
+Laporan menyebut:
+
+Developer properti perumahan
+
+berhasil cocok ke profile Property, tetapi UI tetap menampilkan badge:
+
+Industri belum spesifik
+
+Periksa semantics usedFallbackIndustry.
+
+Bedakan:
+
+exact profile match
+alias profile match
+generic fallback
+
+Gunakan model seperti:
+
+matchType: "exact" | "alias" | "generic-fallback"
+
+UI warning “Industri belum spesifik” hanya boleh tampil pada:
+
+generic-fallback
+
+Alias yang berhasil mengarah ke profile spesifik tidak seharusnya dianggap generic fallback.
+
+Contoh:
+
+developer properti → Property
+arang/briket → Charcoal
+kopi/kedai kopi → Coffee Shop
+
+Semua ini harus dianggap matched profile, walaupun melalui alias.
+
+13. AUDIT EXPORT IMPORT PROFILE RESOLUTION
+
+Laporan menyebut input:
+
+Ekspor impor / logistik
+
+cocok ke profile Logistics, bukan Export Import.
+
+Tentukan aturan yang lebih tepat dan deterministik.
+
+Untuk multi-keyword:
+
+gunakan exact phrase priority;
+gunakan alias specificity;
+jangan hanya memilih keyword pertama secara kebetulan.
+
+Contoh expected:
+
+"export import" → export-import
+"ekspor impor" → export-import
+"logistics" → logistics
+"freight forwarding" → freight-forwarding
+"ekspor impor dan logistik" → profile paling spesifik atau combined rule yang terdokumentasi
+
+Jangan membuat fuzzy matcher kompleks.
+
+Gunakan ordered alias registry dengan specificity score bila perlu.
+
+Tambahkan tests.
+
+14. VERIFIKASI BUTTON LABEL DAN APPLY MODE
+
+Laporan menyebut beberapa label tombol:
+
+Gunakan semua
+Gunakan semua rekomendasi
+Gunakan semua untuk field yang masih kosong
+
+Pastikan UI tidak membingungkan.
+
+Gunakan label konsisten:
+
+Gunakan
+Gunakan kategori ini
+Terapkan ke field kosong
+
+Tambahkan helper text:
+
+Pilihan yang sudah Anda isi tidak akan diganti.
+
+Jangan mengubah mode actual:
+
+apply-all-empty-only
+15. VERIFIKASI DENGAN WIZARD ASLI
+
+Visual Phase 3 sebelumnya menggunakan QA harness langsung.
+
+Sekarang lakukan minimal satu verifikasi melalui wizard asli:
+
+/request-service/:requestId/brief
+
+Gunakan request development aman.
+
+Flow:
+
+hydrate request
+→ pilih industry
+→ pilih goal
+→ panel recommendation muncul
+→ apply recommendation
+→ pindah step
+→ kembali
+→ refresh
+→ verify saved value
+→ review
+
+Harness boleh dipakai untuk isolated test, tetapi minimal satu flow harus melewati integrasi asli.
+
+Hapus data QA setelah selesai.
+
+16. TEST WAJIB
+
+Tambahkan atau perbarui test untuk:
+
+auth create-request runtime path
+admin route tetap protected
+alias match tidak dianggap generic fallback
+unknown industry dianggap generic fallback
+export-import exact phrase priority
+style apply tidak melewati max
+color apply tidak melewati max
+audience apply tidak melewati max
+premium + colorful warning
+no-assets + photography warning
+speed + excessive deliverables warning
+debug panel production hidden
+debug panel development toggle
+17. COMMAND VERIFICATION
+
+Jalankan:
+
+pnpm --filter @workspace/api-server test
+pnpm --filter @workspace/api-server exec tsc --noEmit
+pnpm --filter @workspace/customer-portal exec vitest run
+pnpm --filter @workspace/customer-portal exec tsc --noEmit
+pnpm --filter @workspace/customer-portal run build
+pnpm run build:api
+
+Sesuaikan bila command workspace berbeda.
+
+Lakukan server restart sebelum curl runtime test.
+
+18. ACCEPTANCE CRITERIA
+
+Phase 3.1 selesai hanya jika:
+
+Status endpoint create-request dipastikan dengan bukti runtime.
+Jika ada regresi auth, regresi diperbaiki.
+Unit test auth mencerminkan Express mount nyata.
+Admin mutation tetap protected.
+Public create request tidak memakai admin key.
+Debug panel development tersedia.
+Debug panel tidak tampil di production.
+Tiga conflict rule tambahan tersedia.
+Apply limits sama dengan UI limits.
+Alias match dibedakan dari generic fallback.
+Export Import alias resolution deterministik.
+Wizard asli berhasil diverifikasi.
+Apply memicu autosave existing.
+Refresh memulihkan hasil apply.
+Payload backend tidak berubah.
+Typecheck lulus.
+Tests lulus.
+Build frontend dan backend lulus.
+Tidak ada AI API call.
+Tidak ada perubahan database/pricing/production workflow.
+19. LAPORAN AKHIR
+
+Gunakan format:
+
+Laporan — Phase 3.1: Regression Verification & Intelligence Completion
+
+1. Hasil investigasi kontradiksi auth
+2. Root cause sebenarnya
+3. Runtime path values
+4. Status endpoint sebelum patch
+5. Patch auth jika diperlukan
+6. Status endpoint setelah patch
+7. Admin route regression tests
+8. Customer create-request flow
+9. Debug panel development
+10. Production debug protection
+11. Conflict rules baru
+12. Shared selection limits
+13. Alias vs fallback semantics
+14. Export Import matching
+15. Wizard integration verification
+16. Autosave verification
+17. Server hydration verification
+18. File dibuat
+19. File dimodifikasi
+20. Tests ditambahkan
+21. Hasil API tests
+22. Hasil frontend tests
+23. Hasil typecheck
+24. Hasil frontend build
+25. Hasil backend build
+26. Hasil browser console
+27. Hasil network verification
+28. Konfirmasi tidak ada AI API call
+29. Konfirmasi tidak ada perubahan database/pricing/workflow
+30. Risiko atau batasan tersisa
+
+Jangan menyatakan endpoint auth bermasalah atau sudah aman hanya berdasarkan unit test. Sertakan hasil request runtime dengan ADMIN_API_KEY aktif.

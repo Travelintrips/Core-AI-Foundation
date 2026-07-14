@@ -8,10 +8,11 @@
  *
  * Route: /request-service/:requestId/results
  */
-import { useParams } from "wouter";
+import { useParams, Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { FlowStepper } from "@/components/flow-stepper";
 import { useRequestDetail } from "@/hooks/use-catalog";
+import { DashboardAccessButton } from "@/components/commercial/dashboard-access-button";
 import {
   Loader2,
   CheckCircle2,
@@ -23,6 +24,7 @@ import {
   CreditCard,
   AlertCircle,
   Unlock,
+  ArrowLeft,
 } from "lucide-react";
 
 function formatCurrency(amount: number | null | undefined, currency = "IDR") {
@@ -37,6 +39,12 @@ export default function RequestResultsPage() {
 
   return (
     <Layout>
+      <div className="container mx-auto px-4 md:px-8 pt-6 max-w-3xl">
+        <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group">
+          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+          Kembali
+        </Link>
+      </div>
       <div className="border-b border-border/40 bg-muted/20">
         <div className="container mx-auto px-4 md:px-8 max-w-3xl">
           <FlowStepper currentStep="selesai" />
@@ -194,6 +202,12 @@ export default function RequestResultsPage() {
                 </p>
               </div>
             )}
+
+            {/* Dashboard access — makes the "cek dashboard Anda" copy above an
+                actual link instead of a dead reference. */}
+            <div className="flex justify-center mb-6">
+              <DashboardAccessButton email={data.customerEmail} />
+            </div>
 
             {/* Contact footer */}
             <div className="mt-10 text-center text-sm text-muted-foreground">

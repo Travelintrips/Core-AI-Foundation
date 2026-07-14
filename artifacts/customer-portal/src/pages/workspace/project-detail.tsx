@@ -24,7 +24,7 @@ import {
   Shield, CreditCard, Package,
 } from "lucide-react";
 import { WorkspaceAiWorkforce, CurrentAiTask } from "@/components/workspace-ai-workforce";
-import { WorkspaceActivityFeed } from "@/components/workspace-activity-feed";
+import { WorkspaceActivityFeed, type ActivityItemContext } from "@/components/workspace-activity-feed";
 import { WorkspaceProjectHealth } from "@/components/workspace-project-health";
 import { WorkspaceProjectTimeline } from "@/components/workspace-timeline";
 
@@ -53,7 +53,7 @@ function fileStatusBadge(status: string) {
 }
 
 /* ─── Insight banner ─────────────────────────────────────────── */
-type InsightVariant = "info" | "warning" | "success" | "action";
+type InsightVariant = "info" | "warning" | "success" | "action" | "danger";
 type Insight = { variant: InsightVariant; icon: React.ReactNode; title: string; message: string };
 
 function getInsight(
@@ -63,6 +63,14 @@ function getInsight(
   reviewStatus: string | null,
   progress: number,
 ): Insight | null {
+  if (stage === "failed") {
+    return {
+      variant: "danger",
+      icon: <AlertCircle className="w-4 h-4" />,
+      title: "Produksi Belum Berhasil",
+      message: "Dokumen belum berhasil dibuat. Tim produksi telah menerima laporan kegagalan dan proses dapat dijalankan ulang oleh admin.",
+    };
+  }
   if (stage === "completed" || stage === "delivered") {
     return { variant: "success", icon: <CheckCircle2 className="w-4 h-4" />, title: "Project Complete", message: "Your project has been delivered. Download your files below." };
   }
@@ -86,6 +94,7 @@ const INSIGHT_STYLES: Record<InsightVariant, { bg: string; border: string; text:
   warning: { bg: "bg-amber-50",    border: "border-amber-200",    text: "text-amber-700" },
   success: { bg: "bg-emerald-50",  border: "border-emerald-200",  text: "text-emerald-700" },
   action:  { bg: "bg-violet-50",   border: "border-violet-200",   text: "text-violet-700" },
+  danger:  { bg: "bg-red-50",      border: "border-red-200",      text: "text-red-700" },
 };
 
 /* ─── Right-panel divider ────────────────────────────────────── */
@@ -186,6 +195,40 @@ export default function WorkspaceProjectDetailPage({
     }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activityData, sseStream.events]);
+
+  // V4.1 — expandable per-activity-item context (whyItMatters/nextStep/customerAction),
+  // keyed by resourceId (== CanonicalEvent.eventId for SSE-sourced items). Rest-sourced
+  // items with no matching eventId simply don't expand.
+  const activityContextByResourceId = useMemo((): Record<string, ActivityItemContext> => {
+    const map: Record<string, ActivityItemContext> = {};
+    for (const [eventId, summary] of Object.entries(sseStream.summariesByEventId)) {
+      map[eventId] = {
+        whyItMatters: summary.whyItMatters,
+        nextStep: summary.nextStep,
+        customerAction: summary.customerAction,
+      };
+    }
+    return map;
+  }, [sseStream.summariesByEventId]);
+
+  // V4.1 — deterministic context for whichever step is running right now, used by
+  // both the timeline (under the current step) and the Current Task card.
+  const currentStepSummary = useMemo(() => {
+    const currentStep = data?.timeline.find((s) => s.current);
+    if (!currentStep) return undefined;
+    const match = sseStream.events
+      .filter((e) => e.eventType === "step.started" || e.eventType === "step.completed")
+      .reverse()
+      .find((e) => {
+        const stepName = (e.metadata as { stepName?: string } | undefined)?.stepName;
+        return stepName === currentStep.label || stepName === currentStep.stage;
+      });
+    if (!match) return undefined;
+    const summary = sseStream.summariesByEventId[match.eventId];
+    if (!summary) return undefined;
+    return { whyItMatters: summary.whyItMatters, nextStep: summary.nextStep };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.timeline, sseStream.events, sseStream.summariesByEventId]);
 
   /* ── Loading ── */
   if (isLoading) {
@@ -296,6 +339,7 @@ export default function WorkspaceProjectDetailPage({
             deliveryDate={overview.deliveryDate}
             filesCount={data.deliverables.length}
             startedAt={overview.createdAt}
+            summary={currentStepSummary}
           />
           <PanelDivider />
         </>
@@ -310,11 +354,11 @@ export default function WorkspaceProjectDetailPage({
 
       {/* Activity — merged REST + SSE canonical events */}
       <PanelDivider />
-      <WorkspaceActivityFeed items={mergedActivityItems} maxItems={8} />
+      <WorkspaceActivityFeed items={mergedActivityItems} maxItems={8} contextByResourceId={activityContextByResourceId} />
 
       {/* Timeline */}
       <PanelDivider />
-      <WorkspaceProjectTimeline steps={data.timeline} />
+      <WorkspaceProjectTimeline steps={data.timeline} currentSummary={currentStepSummary} />
 
       {/* Health */}
       <PanelDivider />

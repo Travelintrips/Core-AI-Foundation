@@ -142,6 +142,31 @@ export async function downloadFromSupabase(path: string): Promise<Buffer> {
 }
 
 /**
+ * Check whether a storage object exists in Supabase without downloading it.
+ * Uses a HEAD request — no data transfer.
+ * Returns false for network errors (treated as "not found" to prevent false positives).
+ */
+export async function storageObjectExists(path: string): Promise<boolean> {
+  try {
+    const { url, serviceKey } = getCredentials();
+    const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+
+    const res = await fetch(
+      `${url}/storage/v1/object/${SUPABASE_STORAGE_BUCKET}/${cleanPath}`,
+      {
+        method: "HEAD",
+        headers: authHeaders(serviceKey),
+      }
+    );
+
+    return res.ok; // 200 = exists; 404/403/etc = does not exist
+  } catch (err) {
+    logger.warn({ err, path }, "[supabaseStorage] storageObjectExists check failed — treating as missing");
+    return false;
+  }
+}
+
+/**
  * Get the permanent public CDN URL for a storage path.
  * Does not make a network call — constructs URL from env config.
  */

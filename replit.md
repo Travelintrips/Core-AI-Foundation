@@ -1,65 +1,68 @@
 # AI Enterprise Platform
 
-A full-stack AI agency management platform — pnpm monorepo with three live artifacts and a shared library layer.
+A full-stack AI enterprise platform built as a pnpm monorepo. Supports multi-provider AI dispatch, a customer creative studio portal, job scheduling, event bus, human task center, and quotation/invoicing flows.
 
 ## Architecture
 
-| Artifact | Path | Preview | Port | Description |
-|---|---|---|---|---|
-| **API Server** | `artifacts/api-server` | `/api` | 8080 | Express + Node.js backend, Supabase/PostgreSQL, job engine, scheduler, event bus, worker cluster |
-| **AI Platform** | `artifacts/ai-platform` | `/admin/` | 20785 | React/Vite admin dashboard — providers, agents, orchestration, analytics |
-| **Customer Portal** | `artifacts/customer-portal` | `/` | 23434 | React/Vite client-facing portal — service catalog, submissions, workspace |
-| **Mockup Sandbox** | `artifacts/mockup-sandbox` | `/__mockup` | 8081 | Vite dev server for UI component mockups on canvas |
+| Artifact | URL | Description |
+|---|---|---|
+| `artifacts/customer-portal` | `/` (port 23434) | Customer-facing Creative AI Studio portal |
+| `artifacts/ai-platform` | `/admin/` (port 20785) | Internal staff admin panel |
+| `artifacts/api-server` | `/api` (port 8080) | Express + Drizzle ORM backend |
+| `artifacts/mockup-sandbox` | `/__mockup` | UI component preview sandbox |
 
-## Shared Libraries
+### Shared libraries (`lib/`)
+- `@workspace/api-spec` — OpenAPI spec + codegen (orval)
+- `@workspace/api-client-react` — Generated React Query hooks
+- `@workspace/api-zod` — Generated Zod schemas
+- `@workspace/db` — Drizzle ORM schema + Supabase client
 
-- `lib/api-spec` — OpenAPI spec + orval codegen
-- `lib/api-client-react` — Generated React Query hooks
-- `lib/api-zod` — Generated Zod validation schemas
+## How to run
 
-## How to Run
-
-All workflows are configured and start automatically. To manually restart:
+All workflows start automatically. To restart manually:
 
 ```bash
-# Install dependencies (only needed after fresh clone/import)
+# Install dependencies (run once after import)
 pnpm install
 
-# Build api-server
-pnpm --filter @workspace/api-server run build
+# Build shared libraries & API server
+pnpm run build:generated   # codegen from OpenAPI spec
+pnpm run build:libs        # TypeScript project references
+pnpm run build:api         # esbuild api-server → dist/
 
-# Run individual services
-pnpm --filter @workspace/api-server run dev
-pnpm --filter @workspace/ai-platform run dev
-pnpm --filter @workspace/customer-portal run dev
+# Seed the database (first run)
+pnpm --filter @workspace/api-server run seed
 ```
 
-## Environment & Secrets
+## Environment Variables
 
-All secrets are configured in the Replit environment (`.replit` `[userenv]` sections):
+All API keys and Supabase credentials are configured in `.replit` under `[userenv]`.
 
-- **AI Providers**: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `COHERE_API_KEY`, `REPLICATE_API_TOKEN`
-- **Database (dev)**: `SUPABASE_DEV_DATABASE_URL` / `SUPABASE_DATABASE_URL_DEV`
-- **Database (prod)**: `SUPABASE_PROD_DATABASE_URL` / `SUPABASE_DATABASE_URL`
-- **Supabase**: `SUPABASE_URL_DEV`, `SUPABASE_ANON_KEY_DEV`, `SUPABASE_SERVICE_ROLE_KEY_DEV` (and prod equivalents)
-- **Email (SMTP)**: `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_PORT`, `SMTP_FROM`
-- **Fonnte (WhatsApp)**: `FONNTE_TOKEN`
-- **Admin auth**: `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY` (same value, used by middleware + frontend)
-- **Session**: `SESSION_SECRET`
+**Required secrets (set in Replit Secrets):**
+- `SESSION_SECRET` — JWT signing secret for internal sessions ✅ set
+- `ADMIN_API_KEY` — Master key for admin API endpoints (⚠️ not set — admin panel API calls will return 401)
+- `VITE_ADMIN_API_KEY` — Same value as ADMIN_API_KEY, exposed to the frontend
 
-Database uses a dedicated `ai_platform` schema in Supabase (not `public`). The environment is picked via `NODE_ENV`: development → dev credentials, production → prod credentials.
+**Optional secrets:**
+- `INITIAL_INTERNAL_ADMIN_EMAIL` / `INITIAL_INTERNAL_ADMIN_PASSWORD` — Used by seed script to create first admin user
+
+## Re-import Setup (2026-07-13)
+
+After a GitHub re-import, artifacts and workflows were re-registered automatically once requested. `ADMIN_API_KEY`/`VITE_ADMIN_API_KEY` were missing (not part of the imported secrets) — generated a fresh random value and stored both as shared env vars (matching values, since `VITE_ADMIN_API_KEY` is bundled into the frontend anyway and isn't a true secret). All 4 services verified running: api-server (8080), ai-platform admin (20785, shows login gate as expected), customer-portal (23434, renders landing page), mockup-sandbox (8081).
+
+Note: artifact/workflow registration lives outside git, so it does not survive re-imports even though the code and secrets are unaffected. If a future re-import shows "no workflows configured" again, just ask to re-register — it does not need a fresh setup from scratch.
+Re-verified again the same day after another re-import wiped artifact/workflow registration (registration doesn't survive git-based re-imports even though `artifact.toml` files stay on disk). Ran post-merge setup to restore all 4 artifacts/workflows; all secrets were already present, all services came back up clean with no code changes needed.
+A second re-import wiped `node_modules` and artifact/workflow registration again. Fix: `pnpm install`, then `pnpm run build:generated` (orval codegen + libs typecheck) and `pnpm run build:api` (esbuild bundle) before restarting workflows — otherwise `vite: not found` / `Cannot find package 'esbuild'` errors on first boot. All 4 services re-verified running afterward.
 
 ## Key Technical Notes
+## Database
 
-- **GitHub re-import**: restores all artifacts/workflows automatically via `scripts/post-merge.sh`
-- **Concatenated file bug**: GitHub imports can merge old+new versions of files end-to-end — fix by keeping v2 and removing v1 (affected `src/routes/storage.ts` and `src/lib/objectStorage.ts`)
-- **Zod imports**: never import `zod` or `zod/v4` directly in `api-server` routes — use `@workspace/api-zod` schemas only
-- **agentId**: DB column is `number`, API schema is `string|null` — always `parseInt(agentId, 10)` before querying
-- **Seed**: run `pnpm --filter @workspace/api-server run seed` (or POST `/api/ai/seed/all`) to populate providers, models, and the Brand Strategist agent
-- **drizzle-kit push**: proposes dropping the entire `ai_platform` schema even for additive changes — hand-write DDL for new tables instead
+- **Development:** Supabase project `xssrfshdrtdfupgqwfdw` (ap-southeast-2)
+- **Production:** Supabase project `nzdweipzckfszczzqtuw` (ap-southeast-2)
+- Schema lives in `ai_platform` (not `public`) — always set `search_path` for raw SQL
+- Use hand-written DDL for new tables (drizzle-kit push proposes dropping the whole schema)
 
 ## User Preferences
 
-- Keep the project's existing structure and stack
-- Maintain the `ai_platform` Supabase schema (not `public`)
-- Do not use `drizzle-kit push` for production migrations — hand-write DDL
+- Keep existing project structure and stack — do not restructure
+- Use pnpm for all package management

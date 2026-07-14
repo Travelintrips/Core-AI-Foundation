@@ -26,6 +26,8 @@ export const creativeProjectsTable = appSchema.table("creative_projects", {
   // waiting_payment | deposit_paid | waiting_payment_verification | payment_verified |
   // waiting_remaining_payment | remaining_paid | ready_to_build | building | internal_review |
   // waiting_client_review | revision | approved | completed
+  // Document Engine (Phase 3): generating_document — held until the PDF has rendered.
+  // Presentation Engine (Phase 4): generating_presentation — held until the PPTX has rendered.
   status: text("status").notNull().default("pending"),
   // Commercial terms — full_payment | deposit | subscription | purchase_order
   paymentPolicy: text("payment_policy").notNull().default("full_payment"),

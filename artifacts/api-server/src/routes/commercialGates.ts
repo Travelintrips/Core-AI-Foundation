@@ -8,7 +8,7 @@
  * POST /api/commercial-gates/:id/fail    — fail a gate (requires reason)
  * POST /api/commercial-gates/:id/waive   — waive a gate (requires waivedBy + reason)
  * GET  /api/commercial-gates/:id         — fetch a single gate
- * GET  /api/commercial-gates             — list gates (optionally ?quotationId=)
+ * GET  /api/commercial-gates             — list gates (optionally ?quotationId= or ?serviceRequestId=)
  */
 import { Router } from "express";
 import { eq } from "drizzle-orm";
@@ -18,7 +18,27 @@ import {
   failGate,
   waiveGate,
 } from "../services/commercialGateService.js";
-import { checkAndMaybeConvert } from "../services/serviceRequestConversionService.js";
+import {
+  checkAndMaybeConvert,
+  checkAndMaybeConvertByServiceQuotation,
+} from "../services/serviceRequestConversionService.js";
+
+// Fires the right conversion path depending on which flow the gate belongs
+// to (legacy creative_project_quotations vs. new service-catalog ai_quotations).
+// Without this, service-catalog requests never get a createdProjectId after
+// their gate clears, so they can never reach "completed" and customers never
+// see their results (see .agents/memory/... commercial-gate conversion gap).
+function triggerConversion(gate: { quotationId: number | null; serviceQuotationId: number | null }) {
+  if (gate.quotationId != null) {
+    checkAndMaybeConvert(gate.quotationId).catch((err) => {
+      console.warn("[commercial-gates] checkAndMaybeConvert non-fatal error:", err);
+    });
+  } else if (gate.serviceQuotationId != null) {
+    checkAndMaybeConvertByServiceQuotation(gate.serviceQuotationId).catch((err) => {
+      console.warn("[commercial-gates] checkAndMaybeConvertByServiceQuotation non-fatal error:", err);
+    });
+  }
+}
 
 const router = Router();
 
@@ -31,12 +51,22 @@ function parseId(raw: string | undefined): number | null {
 
 router.get("/commercial-gates", async (req, res): Promise<void> => {
   const quotationId = req.query.quotationId ? parseInt(String(req.query.quotationId), 10) : null;
-  const rows = quotationId && !Number.isNaN(quotationId)
-    ? await db
-        .select()
-        .from(aiCommercialGatesTable)
-        .where(eq(aiCommercialGatesTable.quotationId, quotationId))
-    : await db.select().from(aiCommercialGatesTable);
+  const serviceRequestId = req.query.serviceRequestId ? parseInt(String(req.query.serviceRequestId), 10) : null;
+
+  let rows;
+  if (serviceRequestId && !Number.isNaN(serviceRequestId)) {
+    rows = await db
+      .select()
+      .from(aiCommercialGatesTable)
+      .where(eq(aiCommercialGatesTable.serviceRequestId, serviceRequestId));
+  } else if (quotationId && !Number.isNaN(quotationId)) {
+    rows = await db
+      .select()
+      .from(aiCommercialGatesTable)
+      .where(eq(aiCommercialGatesTable.quotationId, quotationId));
+  } else {
+    rows = await db.select().from(aiCommercialGatesTable);
+  }
   res.json(rows);
 });
 
@@ -73,11 +103,7 @@ router.post("/commercial-gates/:id/verify", async (req, res): Promise<void> => {
     const gate = await verifyGate(id, verifiedBy, verifiedAmount, referenceNumber);
 
     // Attempt conversion now that gate is cleared (fire-and-forget)
-    if (gate.quotationId != null) {
-      checkAndMaybeConvert(gate.quotationId).catch((err) => {
-        console.warn("[commercial-gates] checkAndMaybeConvert non-fatal error:", err);
-      });
-    }
+    triggerConversion(gate);
 
     res.json(gate);
   } catch (err) {
@@ -119,11 +145,7 @@ router.post("/commercial-gates/:id/waive", async (req, res): Promise<void> => {
     const gate = await waiveGate(id, waivedBy, reason);
 
     // Attempt conversion now that gate is cleared (fire-and-forget)
-    if (gate.quotationId != null) {
-      checkAndMaybeConvert(gate.quotationId).catch((err) => {
-        console.warn("[commercial-gates] checkAndMaybeConvert non-fatal error:", err);
-      });
-    }
+    triggerConversion(gate);
 
     res.json(gate);
   } catch (err) {

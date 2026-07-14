@@ -1,0 +1,525 @@
+AUDIT AUTH MIDDLEWARE SEBELUM MENGUBAH KODE
+
+Baca seluruh implementasi yang berkaitan dengan:
+
+ADMIN_API_KEY
+admin auth middleware
+global API middleware
+public route exemptions
+customer portal auth
+request token validation
+brief routes
+service catalog routes
+request-service routes
+
+Cari:
+
+lokasi middleware dipasang;
+urutan middleware;
+daftar route exemption;
+penggunaan req.path;
+penggunaan req.originalUrl;
+router mounting prefix;
+exact match vs prefix match;
+method-specific authorization;
+route publik yang terlindungi token;
+route admin yang mungkin memiliki pola URL mirip dengan route publik.
+
+Dokumentasikan hasil audit terlebih dahulu.
+
+Jangan langsung menambahkan daftar exemption tanpa memahami urutan middleware.
+
+2. PETAKAN SEMUA KELAS ENDPOINT
+
+Kelompokkan endpoint ke dalam kategori berikut.
+
+A. Public anonymous
+
+Endpoint yang memang boleh dibuka tanpa login atau admin key.
+
+Contoh, sesuaikan dengan route nyata:
+
+GET service catalog
+GET public service detail
+GET public package detail
+GET public portfolio/sample
+health endpoint yang memang publik
+B. Public customer action
+
+Endpoint yang digunakan customer tetapi harus tetap memiliki validasi tertentu.
+
+Contoh:
+
+POST membuat service request
+GET detail request dengan public token
+POST start brief dengan request token
+PATCH/POST save brief dengan request token
+POST submit brief dengan request token
+customer approval token routes
+customer quote token routes
+
+Route ini tidak memakai ADMIN_API_KEY, tetapi tetap wajib menggunakan mekanisme existing seperti:
+
+public token
+request token
+portal customer session
+ownership validation
+signed link
+C. Authenticated portal customer
+
+Endpoint yang membutuhkan customer authentication/session.
+
+D. Admin
+
+Endpoint yang wajib admin session, admin role, atau ADMIN_API_KEY.
+
+E. Internal/system
+
+Endpoint untuk:
+
+worker
+webhook
+scheduler
+internal service
+queue
+automation
+
+Endpoint ini tidak boleh menjadi publik karena hotfix.
+
+Buat matriks audit minimal:
+
+Method
+Path
+Current middleware
+Expected access
+Required credential
+Hotfix action
+3. JANGAN GUNAKAN EXEMPTION BERBASIS SUBSTRING
+
+Hindari implementasi seperti:
+
+if (req.path.includes("public")) next();
+
+atau:
+
+if (req.originalUrl.startsWith("/api/request")) next();
+
+karena terlalu luas dan dapat membuka endpoint admin dengan nama yang mirip.
+
+Gunakan route matching yang eksplisit dan method-aware.
+
+Contoh konsep:
+
+type PublicRouteRule = {
+  method: string;
+  pattern: RegExp;
+};
+
+Atau gunakan mounting middleware per-router jika arsitektur memungkinkan.
+
+Lebih baik:
+
+app.use("/api/admin", requireAdmin);
+
+daripada memasang admin middleware global lalu membuat puluhan pengecualian.
+
+Namun jangan melakukan refactor besar jika perubahan kecil yang aman sudah cukup.
+
+4. PREFER ROUTER-LEVEL SECURITY
+
+Jika saat ini ADMIN_API_KEY diterapkan secara global terhadap seluruh API, evaluasi apakah dapat dipersempit menjadi hanya router yang memang admin/internal.
+
+Target arsitektur:
+
+/api/public/*        → public middleware
+/api/portal/*        → portal/customer auth
+/api/admin/*         → admin auth
+/api/internal/*      → internal auth
+/api/webhooks/*      → webhook signature auth
+
+Jika struktur route existing belum sebersih itu, jangan memindahkan seluruh API secara masif.
+
+Lakukan perubahan minimal yang menghasilkan policy jelas.
+
+5. IDENTIFIKASI ENDPOINT YANG SAAT INI TERBLOKIR
+
+Reproduksi error 401 pada endpoint nyata.
+
+Minimal uji:
+
+GET detail layanan publik
+POST create service request
+GET request detail pelanggan
+POST/GET start brief
+PATCH/POST save brief
+GET request detail dengan token
+
+Catat:
+
+URL;
+method;
+status sebelum hotfix;
+middleware yang menolak;
+expected credential.
+
+Jangan menebak berdasarkan nama file saja.
+
+6. PERBAIKI HANYA ROUTE YANG MEMANG PUBLIC/CUSTOMER
+
+Setelah audit, perbarui auth policy agar endpoint tersebut tidak meminta:
+
+ADMIN_API_KEY
+
+Namun tetap pertahankan validasi existing.
+
+Contoh:
+
+Membuat service request
+
+Boleh publik hanya jika desain existing memang mengizinkan anonymous request.
+
+Tetap jalankan:
+
+input validation;
+rate limiting;
+spam protection jika ada;
+tenant/company resolution;
+allowed service validation;
+payload sanitization.
+Request detail
+
+Tidak boleh menjadi:
+
+GET /request/:id
+
+tanpa validasi.
+
+Harus tetap memakai salah satu:
+
+publicToken
+customer session
+ownership check
+signed request token
+Brief
+
+Start, save, dan submit brief harus tetap terkait dengan:
+
+request ownership
+public token
+brief token
+portal customer identity
+
+sesuai implementasi existing.
+
+Melepas admin middleware bukan berarti melepas route authorization.
+
+7. METHOD-SPECIFIC RULES
+
+Jangan menganggap semua method pada path yang sama memiliki policy sama.
+
+Contoh:
+
+GET /api/services/:id
+
+mungkin publik.
+
+Tetapi:
+
+PATCH /api/services/:id
+DELETE /api/services/:id
+
+harus admin.
+
+Pastikan exemption memperhitungkan method.
+
+Contoh yang benar secara konsep:
+
+GET /api/services/:id          public
+PATCH /api/services/:id        admin
+DELETE /api/services/:id       admin
+
+Bukan:
+
+/api/services/*
+
+semuanya publik.
+
+8. PERTAHANKAN ADMIN SECURITY
+
+Verifikasi bahwa route berikut tetap menolak request tanpa credential admin:
+
+admin service management
+admin pricing
+admin request management
+admin approval
+admin customer list
+admin analytics
+admin configuration
+AI provider/model settings
+worker controls
+cost controls
+upload administration
+
+Uji tiga kondisi:
+
+tanpa key/session → 401 atau 403
+key salah → 401 atau 403
+key/admin valid → berhasil
+
+Gunakan status code konsisten dengan sistem existing.
+
+9. PERTAHANKAN INTERNAL DAN WEBHOOK SECURITY
+
+Periksa agar hotfix tidak membuka:
+
+worker callbacks
+job dispatch
+scheduler endpoints
+internal sync
+payment webhook
+provider webhook
+AI callback
+storage callback
+
+Webhook harus tetap menggunakan signature verification atau secret existing, bukan ADMIN_API_KEY jika memang desainnya demikian.
+
+Jangan memasukkan webhook ke public exemption generik.
+
+10. SECURITY REGRESSION TESTS
+
+Tambahkan automated tests untuk policy akses.
+
+Minimal test matrix:
+
+Public catalog
+GET tanpa ADMIN_API_KEY → 200
+GET dengan key salah → tetap mengikuti public policy
+Create request
+POST payload valid tanpa ADMIN_API_KEY → berhasil sesuai flow
+POST payload invalid → 400
+POST service tidak valid → 400/404
+Public request detail
+GET token valid → 200
+GET tanpa token → 401/403/404 sesuai existing policy
+GET token salah → 401/403/404
+GET token milik request lain → ditolak
+Brief
+start brief dengan token valid → berhasil
+save brief dengan token valid → berhasil
+save tanpa token → ditolak
+save dengan token salah → ditolak
+submit dengan token valid → berhasil
+Admin
+GET admin route tanpa admin credential → ditolak
+GET admin route dengan key salah → ditolak
+GET admin route dengan credential valid → berhasil
+PATCH admin route tanpa credential → ditolak
+Method separation
+GET public service detail → berhasil
+PATCH service detail tanpa admin → ditolak
+DELETE service detail tanpa admin → ditolak
+Internal
+internal route tanpa secret → ditolak
+11. RATE LIMITING DAN ABUSE PROTECTION
+
+Karena create request dapat menjadi public, verifikasi bahwa route tersebut memiliki perlindungan yang wajar.
+
+Gunakan mekanisme existing jika tersedia:
+
+rate limiter
+captcha
+honeypot
+duplicate request detection
+IP throttling
+request size limit
+
+Jangan menambahkan dependency besar pada hotfix ini.
+
+Jika belum ada rate limiting, laporkan sebagai risiko terpisah. Jangan memperluas scope tanpa kebutuhan.
+
+12. CORS DAN PREFLIGHT
+
+Pastikan middleware auth tidak memblokir:
+
+OPTIONS
+
+untuk route frontend customer yang valid.
+
+Uji:
+
+OPTIONS create request
+OPTIONS request detail
+OPTIONS brief save
+
+Preflight harus sukses untuk origin yang memang diizinkan.
+
+Jangan membuat CORS menjadi wildcard jika sebelumnya memakai allowlist.
+
+13. ERROR RESPONSE
+
+Pastikan pelanggan tidak menerima pesan menyesatkan seperti:
+
+Missing ADMIN_API_KEY
+
+pada route publik.
+
+Untuk route customer yang gagal authorization, gunakan error sesuai mekanisme existing, misalnya:
+
+Invalid or expired request token
+Access denied
+Request not found
+
+Jangan expose:
+
+secret name;
+middleware internals;
+stack trace;
+expected admin key format.
+14. LOGGING
+
+Tambahkan logging secukupnya untuk mendeteksi auth rejection.
+
+Jangan log:
+
+ADMIN_API_KEY
+public token penuh
+authorization header
+cookie mentah
+customer data sensitif
+
+Token boleh dimasking jika memang perlu debugging.
+
+Hapus temporary console logs sebelum selesai.
+
+15. END-TO-END CUSTOMER FLOW VERIFICATION
+
+Setelah hotfix, lakukan alur nyata:
+
+Buka daftar layanan tanpa admin key
+→ buka detail layanan
+→ pilih layanan
+→ buat request baru
+→ buka request customer
+→ mulai brief
+→ isi jawaban
+→ autosave
+→ refresh browser
+→ server hydration memuat brief
+→ submit brief
+
+Pastikan tidak ada request yang meminta ADMIN_API_KEY.
+
+Periksa browser network dan console.
+
+16. ADMIN FLOW VERIFICATION
+
+Uji juga:
+
+Admin login/key valid
+→ buka admin requests
+→ lihat detail request
+→ ubah status bila fixture mendukung
+→ buka konfigurasi layanan
+
+Pastikan hotfix tidak merusak admin.
+
+17. TEST DENGAN ADMIN_API_KEY AKTIF
+
+Seluruh verifikasi wajib dilakukan ketika environment memiliki:
+
+ADMIN_API_KEY
+
+Jangan hanya menguji saat variable tersebut kosong.
+
+Minimal skenario:
+
+ADMIN_API_KEY aktif
+customer tanpa key
+admin tanpa key
+admin dengan key salah
+admin dengan key valid
+
+Ini penting karena bug hanya muncul saat key diaktifkan.
+
+18. JANGAN GUNAKAN FRONTEND WORKAROUND
+
+Dilarang:
+
+mengirim ADMIN_API_KEY dari frontend;
+menyimpan admin key di localStorage;
+memasukkan admin key ke Vite env public;
+menambahkan key ke query string;
+menaruh key dalam source code browser;
+membuat frontend proxy yang membocorkan key.
+
+ADMIN_API_KEY hanya boleh berada di server/internal environment.
+
+19. BUILD DAN TEST
+
+Jalankan command sesuai project:
+
+npx tsc --noEmit
+npx vitest run
+npm run build
+
+Jika backend memiliki test command terpisah, jalankan juga.
+
+Selain itu lakukan:
+
+API smoke tests;
+browser customer flow;
+admin flow;
+network verification;
+CORS preflight test;
+auth negative tests.
+20. ACCEPTANCE CRITERIA
+
+Hotfix selesai hanya jika:
+
+Customer dapat melihat layanan tanpa ADMIN_API_KEY.
+Customer dapat membuat service request tanpa ADMIN_API_KEY.
+Customer dapat membuka request menggunakan authorization existing.
+Customer dapat start/save/submit brief menggunakan token/session existing.
+Request detail tidak dapat diakses hanya dengan menebak ID.
+Admin endpoint tetap terlindungi.
+Internal endpoint tetap terlindungi.
+PATCH/DELETE route tidak ikut menjadi publik.
+ADMIN_API_KEY tidak pernah dikirim ke browser.
+CORS preflight berfungsi.
+Error publik tidak menyebut admin key.
+Test matrix lulus.
+Alur customer end-to-end berhasil saat ADMIN_API_KEY aktif.
+Tidak ada perubahan database/schema/pricing/workflow.
+Tidak ada wildcard exemption berbahaya.
+21. LAPORAN AKHIR
+
+Gunakan format berikut:
+
+Laporan — Phase 2.2: Public Customer Route Auth Hotfix
+
+1. Root cause
+2. Lokasi middleware bermasalah
+3. Daftar endpoint yang sebelumnya terkena 401
+4. Klasifikasi public/customer/admin/internal
+5. Perubahan auth policy
+6. Route yang dibuat public
+7. Authorization yang tetap berlaku pada route customer
+8. Route admin yang diverifikasi tetap protected
+9. Route internal/webhook yang diverifikasi
+10. Method-specific protection
+11. CORS/preflight verification
+12. Customer E2E flow
+13. Admin flow
+14. Negative auth tests
+15. File dibuat
+16. File dimodifikasi
+17. Test ditambahkan
+18. Hasil typecheck
+19. Hasil test
+20. Hasil build
+21. Hasil browser network verification
+22. Konfirmasi ADMIN_API_KEY tidak masuk frontend
+23. Konfirmasi tidak ada perubahan database/pricing/workflow
+24. Risiko atau batasan tersisa
+
+Sertakan nama route dan status HTTP hasil pengujian. Jangan hanya menulis “endpoint publik sudah diperbaiki”.

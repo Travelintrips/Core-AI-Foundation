@@ -1,0 +1,439 @@
+RESUME PHASE V4.1 — AI EXECUTION SUMMARY LAYER
+
+Pekerjaan sebelumnya berhenti karena daily quota limit.
+
+JANGAN mengulang implementasi dari awal.
+
+JANGAN membuat service summary kedua.
+
+JANGAN mengubah arsitektur yang sudah dibuat.
+
+Lanjutkan dari kondisi codebase aktual dan selesaikan verifikasi, manual testing, build, serta laporan final.
+
+==================================================
+KONTEKS PROGRES TERAKHIR
+==================================================
+
+Log terakhir menyatakan:
+
+- import type baru telah ditambahkan;
+- backend wiring telah diselesaikan;
+- overview.filesUnlocked tersedia dan sudah dipakai;
+- execution summary telah dihubungkan ke SSE route;
+- unused import telah dibersihkan;
+- backend typecheck clean;
+- 24 backend tests pass;
+- tests untuk getEventsWithSummariesForProject ditambahkan;
+- frontend wiring telah diselesaikan;
+- frontend typecheck clean;
+- full frontend test suite dijalankan;
+- workflows restart clean;
+- agent mulai mencari live project untuk screenshot;
+- proses berhenti karena quota.
+
+Implementasi belum boleh dinyatakan selesai sampai seluruh verifikasi dan laporan final selesai.
+
+==================================================
+LANGKAH 1 — INSPECT CURRENT STATE
+==================================================
+
+Sebelum mengubah kode:
+
+1. Jalankan git status dan git diff.
+2. Identifikasi semua file V4.1 yang baru atau berubah.
+3. Baca implementasi backend dan frontend secara menyeluruh.
+4. Cari TODO, stub, partial wiring, unreachable branch, unused export, duplicate template, atau unsafe fallback.
+5. Jangan mengganti implementasi yang sudah benar.
+
+Berikan ringkasan singkat:
+
+- files added;
+- files modified;
+- backend implementation complete/incomplete;
+- frontend implementation complete/incomplete;
+- tests already present;
+- verification still missing.
+
+Setelah itu langsung lanjut.
+
+==================================================
+LANGKAH 2 — VERIFY SUMMARY ARCHITECTURE
+==================================================
+
+Pastikan hanya ada satu execution summary layer.
+
+Audit:
+
+- ExecutionSummary type;
+- deterministic summary builder;
+- public step dictionary;
+- why-it-matters mapping;
+- next-step derivation;
+- customer action derivation;
+- canonical event wrapper;
+- REST events response;
+- project detail response;
+- SSE snapshot;
+- SSE runtime.event payload;
+- frontend parsing;
+- activity feed;
+- current task;
+- timeline.
+
+Pastikan tidak ada summary logic kedua di frontend.
+
+Frontend hanya boleh merender atau menggunakan safe fallback bila summary tidak tersedia.
+
+==================================================
+LANGKAH 3 — VERIFY DETERMINISM
+==================================================
+
+Pastikan:
+
+- same CanonicalEvent + same context menghasilkan summary yang sama;
+- tidak ada Date.now(), Math.random(), hash-based fake values, atau LLM call;
+- cursor tetap berdasarkan canonical event;
+- summary tidak mengubah event ordering;
+- reconnect menghasilkan summary yang sama;
+- duplicate event tidak membuat duplicate summary.
+
+Tambahkan test jika bagian ini belum tercakup.
+
+==================================================
+LANGKAH 4 — VERIFY SECURITY
+==================================================
+
+Audit allowlist summary input dan output.
+
+Pastikan output summary tidak mengandung:
+
+- prompt;
+- systemPrompt;
+- hiddenPrompt;
+- reasoning;
+- chain-of-thought;
+- raw output;
+- raw provider response;
+- stack trace;
+- internal error detail;
+- API key;
+- token;
+- secret;
+- internal cost;
+- margin;
+- provider credentials;
+- confidential customer data yang tidak perlu.
+
+Jalankan test recursive terhadap:
+
+- title;
+- summary;
+- whyItMatters;
+- nextStep;
+- customerAction;
+- serialized SSE payload.
+
+Jangan hanya mengecek metadata object.
+
+==================================================
+LANGKAH 5 — VERIFY BACKEND TESTS
+==================================================
+
+Jalankan ulang seluruh test backend.
+
+Pastikan minimal tercakup:
+
+1. project started;
+2. step started;
+3. step completed;
+4. worker assigned;
+5. worker completed;
+6. artifact created;
+7. artifact approved;
+8. review requested;
+9. review approved;
+10. revision requested;
+11. failed step safe summary;
+12. blocked step safe summary;
+13. unknown step fallback;
+14. unknown worker fallback;
+15. next-step derivation;
+16. completed project no next step;
+17. customer action present only when valid;
+18. no fabricated customer action;
+19. filesUnlocked permission;
+20. artifact CTA hidden while locked;
+21. artifact CTA visible when allowed;
+22. deterministic summary;
+23. banned field leakage;
+24. event + summary API wrapper;
+25. SSE snapshot summary;
+26. SSE runtime.event summary;
+27. reconnect/dedup unchanged.
+
+Laporkan jumlah total tests dan hasilnya.
+
+==================================================
+LANGKAH 6 — VERIFY FRONTEND TESTS
+==================================================
+
+Jalankan full frontend test suite dan catat hasil aktual.
+
+Pastikan minimal tercakup:
+
+- compact activity item;
+- expand/collapse;
+- why-it-matters;
+- next-step;
+- customer CTA;
+- failure summary;
+- summary missing fallback;
+- SSE summary merge;
+- duplicate summary dedup;
+- keyboard interaction;
+- aria-expanded;
+- mobile wrapping;
+- Current Task summary;
+- Timeline summary;
+- locked artifact state;
+- permitted artifact CTA.
+
+Jika suite sebelumnya berhenti atau hasilnya tidak tercatat, jalankan ulang.
+
+==================================================
+LANGKAH 7 — VERIFY REST AND SSE PAYLOADS
+==================================================
+
+Verifikasi response nyata atau mocked integration untuk:
+
+A. REST project events:
+GET /.../projects/:projectNumber/events
+
+B. Project detail:
+GET /.../projects/:projectNumber
+
+C. SSE snapshot
+
+D. SSE runtime.event
+
+Pastikan wrapper konsisten, misalnya:
+
+{
+  event: CanonicalEvent,
+  summary: ExecutionSummary | null
+}
+
+Atau shape final yang sudah dipilih.
+
+Pastikan existing clients tetap kompatibel.
+
+==================================================
+LANGKAH 8 — MANUAL VERIFICATION
+==================================================
+
+Cari test data dengan aman. Jangan mengubah data customer produksi.
+
+Gunakan existing dev/seed project atau test fixture.
+
+Verifikasi minimal:
+
+A. Running project
+- worker role nyata;
+- task summary tampil;
+- what happened jelas;
+- no fake progress;
+- next step berasal dari workflow;
+- SSE updates without refresh bila event dapat dipicu dengan aman.
+
+B. Completed step
+- title dan summary jelas;
+- why-it-matters tersedia;
+- next worker/step benar.
+
+C. Artifact generated
+- artifact summary benar;
+- CTA hanya muncul jika filesUnlocked/permission mengizinkan;
+- locked artifact tidak dapat dibuka.
+
+D. Human review
+- review.requested/approved/revision summary customer-safe;
+- no reviewer-internal data leak.
+
+E. Failed or blocked step
+- pesan aman;
+- tidak ada raw error/provider failure detail;
+- customer action hanya muncul jika nyata.
+
+F. No-runtime project
+- honest fallback;
+- no fabricated summary;
+- no fake current worker.
+
+Verifikasi desktop 1440px dan mobile 390px.
+
+Ambil screenshot bila tooling tersedia.
+
+Jika live token tidak tersedia, gunakan safe dev fixture atau visual verification dengan mocked test route. Jangan memanipulasi token customer nyata.
+
+==================================================
+LANGKAH 9 — ACCESSIBILITY VERIFICATION
+==================================================
+
+Pastikan:
+
+- expandable summary memiliki aria-expanded;
+- aria-controls valid;
+- focus-visible;
+- keyboard Enter/Space;
+- icon decorative aria-hidden;
+- status update aria-live polite;
+- timestamp accessible;
+- CTA label jelas;
+- mobile touch target minimal 44px;
+- reduced-motion respected.
+
+==================================================
+LANGKAH 10 — PERFORMANCE VERIFICATION
+==================================================
+
+Periksa:
+
+- no DB query per event;
+- summary context loaded once per project;
+- no N+1 worker/artifact/review lookup;
+- SSE poller tidak melakukan summary query tambahan per subscriber;
+- summary derivation in-memory;
+- no unbounded frontend event list;
+- no duplicate React Query invalidation loop;
+- no excessive re-render on heartbeat;
+- bundle impact.
+
+Laporkan bundle sebelum/sesudah jika tersedia.
+
+==================================================
+LANGKAH 11 — FINAL TYPECHECK AND BUILD
+==================================================
+
+Wajib jalankan:
+
+- backend typecheck;
+- frontend typecheck;
+- API server build;
+- customer portal production build.
+
+Jangan hanya mengandalkan dev server.
+
+Perbaiki hanya error terkait V4.1 atau pre-existing corruption yang benar-benar memblokir verifikasi.
+
+==================================================
+LANGKAH 12 — DO NOT DO
+==================================================
+
+Jangan:
+
+- memanggil LLM untuk summary;
+- membuat summary table;
+- mengubah CanonicalEvent breaking;
+- mengubah SSE cursor;
+- membuat WebSocket;
+- mengaktifkan ai_jobs;
+- membuat fake progress;
+- membuat fake ETA;
+- mengubah artifact/review business flow;
+- membuat route baru yang duplicate;
+- mengerjakan V4.2.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+V4.1 selesai hanya jika:
+
+- customer-relevant events memiliki deterministic execution summary;
+- summary customer-safe;
+- no chain-of-thought;
+- what happened tampil;
+- why it matters tampil bila relevan;
+- next step berasal dari workflow;
+- customer action hanya muncul jika valid;
+- REST dan SSE membawa summary secara konsisten;
+- activity feed/current task/timeline terintegrasi;
+- reconnect/dedup tetap benar;
+- no sensitive leakage;
+- backend/frontend tests lulus;
+- backend/frontend typecheck lulus;
+- API/customer portal build lulus;
+- manual verification selesai.
+
+==================================================
+OUTPUT FINAL WAJIB
+==================================================
+
+# V4.1 AI Execution Summary Layer
+
+## Resume Audit
+
+## Audit Findings
+
+## Summary Architecture
+
+## ExecutionSummary Model
+
+## Deterministic Template Library
+
+## Public Step Dictionary
+
+## Why-It-Matters Mapping
+
+## Next-Step Derivation
+
+## Customer Action Logic
+
+## REST API Changes
+
+## SSE Changes
+
+## Activity Feed Changes
+
+## Current Task Changes
+
+## Timeline Changes
+
+## Artifact Permission Behavior
+
+## Failure Summary Safety
+
+## Security Verification
+
+## Accessibility Verification
+
+## Performance Verification
+
+## Backend Tests
+
+## Frontend Tests
+
+## Manual Verification
+- running
+- completed
+- artifact
+- review
+- failed/blocked
+- no-runtime
+- desktop
+- mobile
+
+## Files Changed
+
+## Bundle Impact
+
+## Typecheck Results
+
+## Build Results
+
+## Remaining Non-Blocking Gaps
+
+## Recommendation for V4.2
+
+Jangan lanjut ke V4.2.
+Jangan mengklaim selesai bila manual verification, final build, atau full tests belum selesai.

@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useParams } from "wouter";
+import { useParams, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { WorkspaceLayout } from "@/components/workspace-layout";
 import { useToast } from "@/hooks/use-toast";
 import {
   Link2, QrCode, MousePointer, TrendingUp, DollarSign,
-  Clock, CheckCircle2, Copy, Loader2, Users, Award, BarChart3,
+  Clock, CheckCircle2, Copy, Loader2, Users, Award, BarChart3, ArrowLeft,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -82,6 +82,10 @@ export default function AffiliateWorkspacePage() {
 
   return (
     <WorkspaceLayout token={token}>
+      <Link href={`/workspace/${token}`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6 group">
+        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+        Kembali ke Dashboard
+      </Link>
       <div className="max-w-3xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-serif font-semibold mb-1">Program Afiliasi</h1>
         <p className="text-sm text-muted-foreground mb-8">

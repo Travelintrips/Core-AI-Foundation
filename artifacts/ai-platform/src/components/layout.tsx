@@ -33,6 +33,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
+import { useInternalAuth } from "@/hooks/use-internal-auth";
+import { LogOut } from "lucide-react";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -118,6 +120,7 @@ const NAV_SECTIONS = [
 export function Layout({ children }: LayoutProps) {
   const [location] = useLocation();
   const { data: health, isLoading } = useHealthCheck();
+  const { user, logout } = useInternalAuth();
 
   const isOnline = !isLoading && health?.status === 'ok';
 
@@ -202,6 +205,29 @@ export function Layout({ children }: LayoutProps) {
             </div>
           ))}
         </div>
+
+        {/* Signed-in staff account */}
+        {user && (
+          <div className="px-4 py-3 flex-shrink-0 flex items-center justify-between gap-2" style={{ borderTop: '1px solid #1E3057' }}>
+            <div className="min-w-0">
+              <div className="text-xs font-medium truncate" style={{ color: '#F0F4FF' }} data-testid="text-current-user-email">
+                {user.email}
+              </div>
+              <div className="text-[10px] uppercase tracking-widest" style={{ color: '#4F6494' }} data-testid="text-current-user-role">
+                {user.role.replace('_', ' ')}
+              </div>
+            </div>
+            <button
+              onClick={() => logout()}
+              className="flex-shrink-0 p-1.5 rounded-md hover:bg-white/5"
+              style={{ color: '#6B82B0' }}
+              title="Log out"
+              data-testid="button-logout"
+            >
+              <LogOut className="size-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* System status */}
         <div className="px-4 py-3 flex-shrink-0" style={{ borderTop: '1px solid #1E3057' }}>

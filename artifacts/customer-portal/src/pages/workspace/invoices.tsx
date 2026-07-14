@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { Link } from "wouter";
 import { WorkspaceLayout } from "@/components/workspace-layout";
 import { useWorkspaceInvoices, useSubmitPaymentProof } from "@/hooks/use-workspace";
 import { useQueryClient } from "@tanstack/react-query";
@@ -6,7 +7,7 @@ import { fmtMoney, fmtDate } from "@/lib/workspace-format";
 import {
   Loader2, Receipt, FileText, Download, Printer, RefreshCw,
   AlertCircle, CheckCircle2, Clock, X, Send, Info, Banknote,
-  Upload, Image, Eye, Trash2,
+  Upload, Image, Eye, Trash2, ArrowLeft,
 } from "lucide-react";
 import { PaymentInstructionCard } from "@/components/commercial/payment-instruction-card";
 
@@ -457,6 +458,10 @@ export default function WorkspaceInvoicesPage({ params }: { params: { token: str
         />
       )}
 
+      <Link href={`/workspace/${token}`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6 group">
+        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+        Kembali ke Dashboard
+      </Link>
       <div className="mb-6">
         <div className="flex items-start justify-between gap-4">
           <div>

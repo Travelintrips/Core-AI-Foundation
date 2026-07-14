@@ -7,7 +7,7 @@ import {
   Scale, Truck, Package, TrendingUp, Briefcase, Headphones, BarChart2,
   RotateCcw, Filter, ChevronDown, Zap, Shield, X, Eye, Building2,
   Globe, LayoutGrid, ChevronRight, Award, Flame, BadgeCheck, Lock,
-  ChevronUp, SlidersHorizontal, History, Hash, Cpu,
+  ChevronUp, SlidersHorizontal, History, Hash, Cpu, ArrowLeft,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -29,21 +29,33 @@ function mockCompleted(id: number) {
   return ((id * 11 + 7) % 180) + 42;
 }
 
+// Parses strings like "30-60 menit", "2-4 jam", "5-7 hari", "2 minggu" into a
+// day-equivalent number so comparisons/sorts/filters (all expressed in days)
+// are correct regardless of unit. Falls back to 7 for non-numeric estimates
+// like "Ongoing, bulanan".
 function deliveryDays(est: string): number {
-  const m = est.match(/(\d+)/);
-  return m ? parseInt(m[1]) : 7;
+  const m = est.toLowerCase().match(/(\d+)(?:\s*[-–]\s*\d+)?\s*(menit|jam|hari|minggu|bulan)/);
+  if (!m) return 7;
+  const value = parseInt(m[1], 10);
+  switch (m[2]) {
+    case "menit": return value / (24 * 60);
+    case "jam": return value / 24;
+    case "minggu": return value * 7;
+    case "bulan": return value * 30;
+    default: return value; // hari
+  }
 }
 
-type BadgeKind = "Enterprise" | "Fast Delivery" | "New" | "Most Popular" | "Trending" | "Human Reviewed" | "Commercial Ready";
+type BadgeKind = "Enterprise" | "Pengiriman Cepat" | "Baru" | "Terpopuler" | "Trending" | "Direview Manusia" | "Siap Komersial";
 
 function serviceBadge(s: CatalogService): { label: BadgeKind; color: string } | null {
   if (s.serviceFlow === "enterprise") return { label: "Enterprise", color: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" };
-  if (s.humanReview && s.id % 5 === 1) return { label: "Human Reviewed", color: "bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30" };
-  if (deliveryDays(s.estimatedDelivery) <= 2) return { label: "Fast Delivery", color: "bg-[#22D3EE]/10 text-[#22D3EE] border-[#22D3EE]/30" };
+  if (s.humanReview && s.id % 5 === 1) return { label: "Direview Manusia", color: "bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30" };
+  if (deliveryDays(s.estimatedDelivery) <= 2) return { label: "Pengiriman Cepat", color: "bg-[#22D3EE]/10 text-[#22D3EE] border-[#22D3EE]/30" };
   if (s.id % 7 === 0) return { label: "Trending", color: "bg-[#F97316]/10 text-[#F97316] border-[#F97316]/30" };
-  if (s.id % 4 === 0) return { label: "New", color: "bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30" };
-  if (s.id % 3 === 0) return { label: "Most Popular", color: "bg-[#7C6EFA]/10 text-[#7C6EFA] border-[#7C6EFA]/30" };
-  if (s.serviceFlow === "fixed_price" && s.id % 2 === 0) return { label: "Commercial Ready", color: "bg-[#8B5CF6]/10 text-[#8B5CF6] border-[#8B5CF6]/30" };
+  if (s.id % 4 === 0) return { label: "Baru", color: "bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30" };
+  if (s.id % 3 === 0) return { label: "Terpopuler", color: "bg-[#7C6EFA]/10 text-[#7C6EFA] border-[#7C6EFA]/30" };
+  if (s.serviceFlow === "fixed_price" && s.id % 2 === 0) return { label: "Siap Komersial", color: "bg-[#8B5CF6]/10 text-[#8B5CF6] border-[#8B5CF6]/30" };
   return null;
 }
 
@@ -93,8 +105,8 @@ const SORT_KEYS: { key: SortKey; tKey: string; icon: React.ElementType }[] = [
 const RECENT_SEARCH_KEY = "apex_recent_searches";
 const RECENTLY_VIEWED_KEY = "apex_recently_viewed";
 const POPULAR_SEARCHES = [
-  "Brand Strategy", "Legal Document", "Finance Report",
-  "Marketing Campaign", "HR Analytics", "Logistics AI",
+  "Strategi Brand", "Dokumen Legal", "Laporan Keuangan",
+  "Kampanye Marketing", "Analitik HR", "Logistics AI",
 ];
 
 // ── Animation variants ────────────────────────────────────────────────────────
@@ -306,7 +318,7 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
             href={`/services/${s.id}`}
             onClick={() => onView(s.id)}
             className="btn-primary !py-2 !px-4 !text-xs gap-1.5 flex items-center"
-            aria-label={`View detail for ${s.serviceName}`}
+            aria-label={`Lihat detail untuk ${s.serviceName}`}
           >
             {t('services.card.viewDetail')}
             <ArrowRight className="w-3.5 h-3.5" />
@@ -335,6 +347,12 @@ interface Filters {
   minRating: number;
   flow: string;
 }
+
+const FLOW_LABELS: Record<string, string> = {
+  fixed_price: "Harga Pasti",
+  custom_project: "Project Kustom",
+  enterprise: "Enterprise",
+};
 
 const DEFAULT_FILTERS: Filters = {
   maxPrice: 999_999_999,
@@ -519,7 +537,7 @@ function FilterSidebar({
             <button
               onClick={onReset}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-[#2E4270] text-sm text-[#8B9BC4] hover:text-[#F0F4FF] hover:border-[#7C6EFA] transition-all duration-150"
-              aria-label="Reset all filters"
+              aria-label="Reset semua filter"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               {t('services.filter.clearFilters', { count: activeCount })}
@@ -801,7 +819,7 @@ export default function ServicesPage() {
     }
 
     if (filters.maxPrice < 999_999_999) {
-      list = list.filter((s) => Number(s.startingPrice) <= filters.maxPrice || s.currency === "IDR");
+      list = list.filter((s) => Number(s.startingPrice) <= filters.maxPrice);
     }
 
     if (filters.maxDelivery < 30) {
@@ -876,6 +894,12 @@ export default function ServicesPage() {
   return (
     <Layout>
       <div className="bg-[#060B18] text-[#F0F4FF] min-h-screen">
+        <div className="container mx-auto px-4 pt-6 max-w-5xl">
+          <Link href="/" className="inline-flex items-center gap-1.5 text-sm transition-colors group" style={{ color: '#8B9BC4' }}>
+            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+            Kembali
+          </Link>
+        </div>
 
         {/* ── Hero ──────────────────────────────────────────────────────── */}
         <section className="relative overflow-hidden bg-[#060B18] border-b border-[#243352]">
@@ -1017,7 +1041,7 @@ export default function ServicesPage() {
               className="flex items-center gap-2 py-3 overflow-x-auto"
               style={{ scrollbarWidth: "none" }}
               role="navigation"
-              aria-label="Service categories"
+              aria-label="Kategori layanan"
             >
               <button
                 onClick={() => setCategoryId(undefined)}
@@ -1069,7 +1093,7 @@ export default function ServicesPage() {
                 {/* First card: hero size spanning 2 cols */}
                 {featured[0] && (() => {
                   const s = featured[0];
-                  const badge = serviceBadge(s) ?? { label: "Featured", color: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" };
+                  const badge = serviceBadge(s) ?? { label: "Unggulan" as BadgeKind, color: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" };
                   return (
                     <motion.div
                       key={s.id}
@@ -1104,15 +1128,15 @@ export default function ServicesPage() {
                           <div className="flex items-center gap-4 text-xs text-[#8B9BC4] mb-4">
                             <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 fill-[#F59E0B] text-[#F59E0B]" />{mockRating(s.id)}</span>
                             <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-[#22D3EE]" />{s.estimatedDelivery}</span>
-                            {s.humanReview && <span className="flex items-center gap-1 text-[#7C6EFA]"><Shield className="w-3.5 h-3.5" />Human Review</span>}
+                            {s.humanReview && <span className="flex items-center gap-1 text-[#7C6EFA]"><Shield className="w-3.5 h-3.5" />Review Manusia</span>}
                           </div>
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="text-[11px] text-[#8B9BC4] mb-0.5">Starting from</p>
+                              <p className="text-[11px] text-[#8B9BC4] mb-0.5">Mulai dari</p>
                               <p style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-bold text-lg text-[#F0F4FF]">{formatPrice(s.startingPrice, s.currency)}</p>
                             </div>
                             <div className="flex items-center gap-2 text-sm font-semibold text-[#7C6EFA] group-hover:gap-3 transition-all">
-                              View Detail <ArrowRight className="w-4 h-4" />
+                              Lihat Detail <ArrowRight className="w-4 h-4" />
                             </div>
                           </div>
                         </div>
@@ -1123,7 +1147,7 @@ export default function ServicesPage() {
 
                 {/* Remaining 3 cards */}
                 {featured.slice(1).map((s, idx) => {
-                  const badge = serviceBadge(s) ?? { label: "Featured", color: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" };
+                  const badge = serviceBadge(s) ?? { label: "Unggulan" as BadgeKind, color: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" };
                   return (
                     <motion.div
                       key={s.id}
@@ -1215,7 +1239,7 @@ export default function ServicesPage() {
                     localStorage.removeItem(RECENTLY_VIEWED_KEY);
                   }}
                   className="text-xs text-[#8B9BC4] hover:text-[#F0F4FF] transition-colors ml-2"
-                  aria-label="Clear recently viewed"
+                  aria-label="Hapus riwayat dilihat"
                 >
                   {t('services.clear')}
                 </button>
@@ -1255,7 +1279,7 @@ export default function ServicesPage() {
                 <button
                   onClick={() => setSidebarOpen(true)}
                   className="lg:hidden flex items-center gap-2 px-4 py-2 rounded-xl border border-[#2E4270] text-sm font-medium text-[#F0F4FF] hover:border-[#7C6EFA]/40 transition-colors bg-[#0D1526] relative"
-                  aria-label="Open filters"
+                  aria-label="Buka filter"
                 >
                   <Filter className="w-4 h-4" />
                   {t('services.filter.title')}
@@ -1289,8 +1313,8 @@ export default function ServicesPage() {
                     )}
                     {filters.flow && (
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#8B5CF6]/10 border border-[#8B5CF6]/30 text-[11px] text-[#8B5CF6]">
-                        {filters.flow.replace(/_/g, " ")}
-                        <button onClick={() => setFilters(f => ({ ...f, flow: "" }))} className="hover:text-white ml-0.5" aria-label="Remove flow filter"><X className="w-2.5 h-2.5" /></button>
+                        {FLOW_LABELS[filters.flow] ?? filters.flow.replace(/_/g, " ")}
+                        <button onClick={() => setFilters(f => ({ ...f, flow: "" }))} className="hover:text-white ml-0.5" aria-label="Hapus filter tipe layanan"><X className="w-2.5 h-2.5" /></button>
                       </span>
                     )}
                   </div>
@@ -1307,7 +1331,7 @@ export default function ServicesPage() {
                     onClick={() => setSortOpen((v) => !v)}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl border border-[#2E4270] text-sm font-medium text-[#F0F4FF] hover:border-[#7C6EFA]/40 transition-colors bg-[#0D1526]"
                     aria-expanded={sortOpen}
-                    aria-label="Sort services"
+                    aria-label="Urutkan layanan"
                   >
                     <activeSort.icon className="w-3.5 h-3.5 text-[#8B9BC4]" />
                     <span className="text-[#8B9BC4] hidden sm:inline">{t('services.sortLabel')}</span>

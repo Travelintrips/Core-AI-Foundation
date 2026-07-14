@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import {
   CheckCircle2, ArrowRight, Sparkles, Copy, Check,
-  LayoutDashboard, FileText, Clock, Users, Bell, Star, Headphones,
+  LayoutDashboard, FileText, Clock, Users, Bell, Star, Headphones, ArrowLeft,
 } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 
@@ -107,6 +107,15 @@ export default function SuccessPage() {
   return (
     <Layout>
       <Confetti active={confettiOn} />
+
+      <div className="container mx-auto px-4 pt-6 max-w-2xl">
+        <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group">
+          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+          Kembali ke Beranda
+        </Link>
+      </div>
+
+
       <section className="relative min-h-screen py-16 px-4"
         style={{ background: "linear-gradient(160deg, #FAFAF7 0%, #FFF7ED 50%, #FAFAF7 100%)" }}>
         <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[400px] rounded-full blur-[100px] opacity-30"

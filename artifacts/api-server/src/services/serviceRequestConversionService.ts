@@ -27,6 +27,7 @@ import {
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
 import { runCreativeBriefWorkflow } from "./creativeWorkflowRunner.js";
+import { generateScheduleForProject, type PaymentPolicy } from "./paymentScheduleService.js";
 import {
   getGateForQuotation,
   getGateForServiceQuotation,
@@ -80,6 +81,8 @@ export async function convertServiceRequestToProject(
 
   let projectId: string;
   let quotationDbId: number;
+  let quotationTotal: number;
+  let quotationCurrency: string;
 
   if (gate.quotationId != null) {
     // ── Legacy path: creative_project_quotations ──
@@ -102,6 +105,8 @@ export async function convertServiceRequestToProject(
 
     projectId = project.projectId;
     quotationDbId = quotation.id;
+    quotationTotal = quotation.total;
+    quotationCurrency = quotation.currency;
   } else if (gate.serviceQuotationId != null) {
     // ── Service-catalog path: ai_quotations ──
     const [serviceQuotation] = await db
@@ -154,6 +159,8 @@ export async function convertServiceRequestToProject(
       projectId = newProject.projectId;
     }
     quotationDbId = serviceQuotation.id;
+    quotationTotal = Number(serviceQuotation.total) || 0;
+    quotationCurrency = serviceQuotation.currency;
   } else {
     return { alreadyConverted: false, createdProjectId: null, skipped: "no_quotation_id" };
   }
@@ -166,6 +173,22 @@ export async function convertServiceRequestToProject(
     .limit(1);
 
   if (!project) return { alreadyConverted: false, createdProjectId: null, skipped: "project_not_found" };
+
+  // Ensure a payment schedule exists for this project. Previously, only the
+  // fixed_price public checkout path generated one — the quotation/custom
+  // flow left creative_projects.filesUnlocked permanently false with no way
+  // for the customer to ever submit payment proof. generateScheduleForProject
+  // is idempotent (no-op if a schedule already exists), so this is safe to
+  // call unconditionally on every conversion.
+  await generateScheduleForProject({
+    projectId: project.id,
+    paymentPolicy: project.paymentPolicy as PaymentPolicy,
+    depositPercentage: project.depositPercentage,
+    totalAmount: quotationTotal,
+    currency: quotationCurrency,
+  }).catch((err) => {
+    console.warn(`[conversion] generateScheduleForProject non-fatal error for project ${project.id}:`, err);
+  });
 
   // All preconditions met — perform the conversion in a transaction
 

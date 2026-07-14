@@ -142,6 +142,16 @@ export type WorkspaceDownload = {
   revisionNotes: string | null;
   locked: boolean;
   createdAt: string;
+  /** Page count — present for PDF document assets. */
+  pageCount?: number | null;
+  /** File size in bytes — present for PDF document assets. */
+  fileSizeBytes?: number | null;
+  /** Structured document type, e.g. "brand_strategy". */
+  documentType?: string | null;
+  /** MIME type of the asset. */
+  mimeType?: string | null;
+  /** Slide count — present for PPTX presentation assets. */
+  slideCount?: number | null;
 };
 
 export type WorkspaceInvoice = {

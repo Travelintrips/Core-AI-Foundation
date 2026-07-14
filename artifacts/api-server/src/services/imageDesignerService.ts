@@ -408,12 +408,13 @@ async function persistImageBuffer(
   contentType: string,
   brandSlug: string,
   role: string,
+  pathPrefix?: string,
 ): Promise<string | null> {
   try {
     const { isSupabaseStorageAvailable, uploadToSupabase } = await import("../lib/supabaseStorage.js");
     if (!isSupabaseStorageAvailable()) return null;
     const ext = contentType.includes("png") ? "png" : contentType.includes("jpeg") ? "jpg" : "webp";
-    const storagePath = `demo-portfolios/${brandSlug}/${role}-${Date.now()}.${ext}`;
+    const storagePath = `${pathPrefix ?? `demo-portfolios/${brandSlug}`}/${role}-${Date.now()}.${ext}`;
     return await uploadToSupabase(storagePath, buffer, contentType);
   } catch {
     return null;
@@ -462,7 +463,7 @@ interface AssetAttemptResult {
 export async function generateNamedAssetSet(
   brief: Record<string, unknown>,
   roles: NamedAssetRole[],
-  opts?: { maxRetryPerAsset?: number; maxQualityRetryPerAsset?: number },
+  opts?: { maxRetryPerAsset?: number; maxQualityRetryPerAsset?: number; storagePathPrefix?: string },
 ): Promise<GeneratedNamedAsset[]> {
   const guardrails = await readGuardrails();
   const maxRetry = Math.max(0, opts?.maxRetryPerAsset ?? Math.min(guardrails.maxRetryPerProvider, 2));
@@ -580,7 +581,7 @@ export async function generateNamedAssetSet(
       const qcImageRef = finalBuffer ? `data:${contentType};base64,${finalBuffer.toString("base64")}` : imageUrl;
       const qc = await reviewImage(brief, qcPrompt, qcImageRef);
       const persistedUrl = finalBuffer
-        ? await persistImageBuffer(finalBuffer, contentType, brandSlug, role.role)
+        ? await persistImageBuffer(finalBuffer, contentType, brandSlug, role.role, opts?.storagePathPrefix)
         : null;
 
       return {
@@ -841,9 +842,30 @@ export async function runImageDesignerPipeline(
       });
     }
 
+    // ── Persist to Supabase Storage (prevents expiring Replicate URLs) ─────────
+    let persistedUrl: string | null = null;
+    let storagePath: string | null = null;
+    if (imageUrl && imageStatus === "completed") {
+      try {
+        const raw = await fetch(imageUrl);
+        if (raw.ok) {
+          const buf = Buffer.from(await raw.arrayBuffer());
+          const ct = raw.headers.get("content-type") || "image/webp";
+          const ext = ct.includes("png") ? "png" : ct.includes("jpeg") ? "jpg" : "webp";
+          const pathKey = `creative-assets/${projectUuid}/image-concepts/concept-${i + 1}-${Date.now()}.${ext}`;
+          persistedUrl = await persistImageBuffer(buf, ct, projectUuid, `concept-${i + 1}`, `creative-assets/${projectUuid}/image-concepts`);
+          if (persistedUrl) storagePath = pathKey;
+        }
+      } catch (err) {
+        console.error(`[imageDesigner] Failed to persist concept ${i + 1} to Supabase:`, err);
+      }
+    }
+    // Use Supabase URL if available, otherwise keep Replicate URL as fallback
+    const finalImageUrl = persistedUrl ?? imageUrl;
+
     // QC review (runs even if image failed — scores the prompt quality)
     try {
-      const qc = await reviewImage(brief, p.prompt, imageUrl ?? "not generated");
+      const qc = await reviewImage(brief, p.prompt, finalImageUrl ?? "not generated");
       qcScore = qc.score;
       qcNotes = qc.notes;
 
@@ -868,7 +890,8 @@ export async function runImageDesignerPipeline(
       .update(creativeAiAssetsTable)
       .set({
         model: usedModel,
-        imageUrl,
+        imageUrl: finalImageUrl,
+        storagePath: storagePath ?? undefined,
         status: imageStatus,
         qcScore,
         qcNotes: qcNotes ?? (generationError ? `Generation failed: ${generationError}` : null),

@@ -5,6 +5,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Layout } from "@/components/layout";
 import NotFound from "@/pages/not-found";
+import Login from "@/pages/login";
+import ChangePassword from "@/pages/change-password";
+import { InternalAuthProvider } from "@/hooks/use-internal-auth";
+import { RequireAuth } from "@/components/require-auth";
 
 import Dashboard from "@/pages/dashboard";
 import Analytics from "@/pages/analytics";
@@ -94,17 +98,26 @@ function App() {
   return (
     <ThemeProvider defaultTheme="dark" storageKey="ai-platform-theme">
       <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Switch>
-              {/* Public client review page — no admin Layout */}
-              <Route path="/review/creative/:token" component={ClientReviewPage} />
-              {/* Admin platform */}
-              <Route component={AdminRouter} />
-            </Switch>
-          </WouterRouter>
-          <Toaster />
-        </TooltipProvider>
+        <InternalAuthProvider>
+          <TooltipProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Switch>
+                {/* Public client review page — no admin Layout, no internal login required */}
+                <Route path="/review/creative/:token" component={ClientReviewPage} />
+                {/* Internal staff auth — reachable without a session */}
+                <Route path="/login" component={Login} />
+                <Route path="/change-password" component={ChangePassword} />
+                {/* Everything else is the internal portal — requires an active staff session */}
+                <Route>
+                  <RequireAuth>
+                    <AdminRouter />
+                  </RequireAuth>
+                </Route>
+              </Switch>
+            </WouterRouter>
+            <Toaster />
+          </TooltipProvider>
+        </InternalAuthProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );

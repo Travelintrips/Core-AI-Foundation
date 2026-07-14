@@ -1,0 +1,589 @@
+RESUME PHASE 3 — VERIFY, FIX, AND COMPLETE BRIEF INTELLIGENCE ENGINE
+
+Phase 3 sudah dikerjakan sebagian besar.
+
+Status terakhir:
+
+- brief.tsx sudah diubah untuk memakai shared registry
+- context-adapter.ts sudah dibuat
+- apply-adapter.ts sudah dibuat
+- index barrel sudah dibuat
+- build berhasil
+- visual verification baru dimulai
+- quota agent habis sebelum verifikasi selesai
+TUJUAN
+
+Jangan mengimplementasikan ulang Phase 3.
+
+Lanjutkan dari state codebase saat ini dan lakukan:
+
+audit perubahan yang sudah ada;
+jalankan seluruh test;
+selesaikan visual verification;
+verifikasi recommendation engine secara nyata;
+perbaiki hanya bug yang ditemukan;
+buat laporan akhir Phase 3 berdasarkan bukti.
+
+Jangan membuat fitur baru di luar acceptance criteria Phase 3.
+
+1. BACA MEMORY DAN DIFF TERLEBIH DAHULU
+
+Sebelum mengubah kode:
+
+baca file memory/resume Phase 3 jika ada di .agents/memory/;
+jalankan git status;
+jalankan git diff --stat;
+periksa seluruh diff Phase 3;
+identifikasi file baru dan file yang dimodifikasi;
+pastikan tidak ada pekerjaan sebelumnya yang tertimpa.
+
+Baca minimal:
+
+src/pages/brief.tsx
+src/features/brief-intelligence/**
+src/components/creative-ui/**/*Recommendation*
+src/lib/brief-utils.ts
+src/config/brief-service-config.ts
+
+Sesuaikan path dengan struktur nyata.
+
+Laporkan singkat apa yang sudah selesai dan apa yang belum.
+
+2. JANGAN REIMPLEMENTASI
+
+Dilarang:
+
+membuat engine kedua;
+membuat registry baru jika registry sudah ada;
+menduplikasi context adapter;
+menduplikasi apply adapter;
+memindahkan semua file tanpa kebutuhan;
+mengganti arsitektur hanya karena preferensi agent baru;
+menghapus pekerjaan sebelumnya yang sudah benar;
+mengubah backend, database, pricing, atau production workflow.
+
+Gunakan implementasi existing sebagai source of truth.
+
+3. AUDIT KELENGKAPAN PHASE 3
+
+Periksa apakah implementasi saat ini benar-benar mencakup:
+
+types/domain model
+stable keys
+industry profiles
+service profiles
+goal rules
+audience rules
+company-size rules
+priority rules
+scoring
+deduplication
+confidence
+reasons
+sources
+conflict warnings
+completeness
+custom-industry fallback
+context adapter
+apply adapter
+recommendation UI
+apply single
+apply category
+apply all empty-only
+user-selection protection
+engine version
+development debug mode
+tests
+
+Buat checklist status:
+
+Implemented
+Partial
+Missing
+Incorrect
+
+Jangan menambah item yang tidak diminta pada spesifikasi Phase 3.
+
+4. VERIFY ENGINE DETERMINISM
+
+Jalankan engine dua kali dengan input identik.
+
+Pastikan:
+
+urutan recommendation sama;
+score sama;
+confidence sama;
+reasons sama;
+warnings sama;
+tie-break stabil;
+tidak ada nilai random;
+generatedAt boleh berbeda jika memang bagian metadata, tetapi hasil recommendation harus sama.
+
+Tambahkan test jika determinism belum diuji.
+
+5. VERIFY REQUIRED SAMPLE CONTEXTS
+
+Jalankan engine menggunakan minimal lima contoh berikut.
+
+A. Coffee Shop + Brand Identity
+
+Harus menghasilkan arah yang relevan seperti:
+
+warm
+friendly
+modern
+minimal
+natural
+brown
+cream
+earth tone
+packaging
+social media kit
+B. Export Import + Company Profile
+
+Harus mengarah ke:
+
+corporate
+professional
+trustworthy
+international
+blue
+white
+gray/dark navy
+company profile structure
+presentation
+sales brochure
+global trade visual
+C. Charcoal + Company Profile
+
+Harus mengarah ke:
+
+industrial
+premium
+reliable
+black
+gold
+dark gray
+product catalog
+specification sheet
+factory/container/port visual
+technical-professional tone
+D. Technology + Pitch Deck
+
+Harus mengarah ke:
+
+modern
+minimal
+technology
+blue/purple
+investor
+storytelling
+problem-solution
+data visualization
+clear CTA
+E. Unknown Custom Industry + Default Service
+
+Harus:
+
+tidak crash;
+memakai fallback;
+confidence lebih rendah;
+menampilkan warning bahwa profile spesifik belum tersedia;
+tetap menghasilkan recommendation umum.
+
+Catat contoh output nyata:
+
+recommendation
+confidence
+reason
+source
+score internal
+
+Score mentah cukup untuk laporan developer, jangan tampilkan ke customer production.
+
+6. VERIFY ALIAS MATCHING
+
+Uji minimal alias berikut:
+
+kopi → coffee-shop
+kedai kopi → coffee-shop
+cargo → logistics/freight-forwarding
+forwarding → freight-forwarding
+export import → export-import
+arang → charcoal
+briquette → charcoal
+developer property → real-estate/property
+AI → artificial-intelligence
+artificial intelligence → artificial-intelligence
+
+Pastikan normalization:
+
+case-insensitive;
+trim whitespace;
+toleran hyphen;
+toleran slash;
+tidak melakukan fuzzy match terlalu luas.
+7. VERIFY SCORING DAN DEDUPLICATION
+
+Pastikan recommendation yang datang dari beberapa sumber:
+
+industry
+service
+goal
+audience
+company size
+priority
+assets
+
+digabung menjadi satu item berdasarkan stable key.
+
+Item hasil merge harus:
+
+mengakumulasi score;
+menggabungkan source tanpa duplikasi;
+menggabungkan reason yang relevan;
+tetap berada dalam category yang benar;
+tidak muncul dua kali dengan label berbeda.
+
+Contoh:
+
+Corporate
+
+yang direkomendasikan oleh industry dan audience B2B harus tampil satu kali, bukan dua card.
+
+8. VERIFY CONFIDENCE
+
+Periksa mapping score → confidence.
+
+Pastikan:
+
+high hanya untuk dukungan kuat;
+medium untuk dukungan cukup;
+low untuk fallback atau sinyal lemah;
+confidence tidak bergantung pada urutan array;
+unknown industry tidak diberi high confidence tanpa alasan lain yang kuat.
+
+Dokumentasikan threshold nyata yang digunakan.
+
+9. VERIFY CONFLICT DETECTION
+
+Uji minimal:
+
+Government + Playful
+B2B Corporate + Childlike/Playful
+Premium Market + sangat colorful
+No Assets + recommendation yang butuh existing photography
+Speed Priority + terlalu banyak deliverables tambahan
+
+Pastikan warning:
+
+non-blocking;
+mempunyai code;
+mempunyai severity;
+menjelaskan konflik;
+tidak menghapus pilihan user;
+tidak mengubah form otomatis.
+
+Jangan membuat warning palsu pada kombinasi yang sebenarnya wajar.
+
+10. VERIFY USER-SELECTION PROTECTION
+
+Gunakan brief dengan pilihan existing:
+
+Style: Classic
+Color: Red
+Audience: Government
+
+Lalu jalankan engine yang merekomendasikan:
+
+Modern
+Blue
+Corporate
+
+Pastikan:
+
+pilihan user tetap ada;
+recommendation hanya ditampilkan sebagai alternatif;
+apply-all-empty-only tidak menimpa style/color/audience;
+custom text tetap utuh;
+hasil apply melaporkan item yang dilewati;
+batas maksimal selection tidak dilanggar.
+11. VERIFY APPLY MODES
+
+Uji seluruh mode apply adapter.
+
+apply-single
+hanya satu item diterapkan;
+field lain tidak berubah;
+serializer existing tetap valid.
+apply-category
+hanya category terpilih diterapkan;
+maksimal pilihan dihormati;
+duplicate tidak ditambahkan;
+user selection tidak ditimpa.
+apply-all-empty-only
+hanya field kosong yang diisi;
+field terisi dilewati;
+custom value tidak dihapus;
+hasil mengembalikan applied, skipped, dan warnings;
+tidak mengubah service/package/order scope.
+
+Tambahkan unit tests jika ada gap.
+
+12. VERIFY BRIEF PAYLOAD COMPATIBILITY
+
+Setelah recommendation diterapkan:
+
+pastikan BriefData tetap memakai struktur existing;
+pastikan string serializer kompatibel;
+pastikan saveBrief.mutate({ requestId, brief }) tidak berubah;
+pastikan server hydration tetap dapat membaca hasil apply;
+pastikan review page menampilkan hasil recommendation;
+pastikan refresh browser memulihkan nilai yang diterapkan;
+pastikan legacy parser masih bekerja.
+
+Jangan menyimpan object recommendation ke field backend string.
+
+13. VERIFY AUTOSAVE
+
+Periksa browser network atau test harness.
+
+Expected:
+
+Saat engine menghitung ulang recommendation
+0 autosave request
+Saat user membuka recommendation panel
+0 autosave request
+Saat user menekan Gunakan
+1 state change
+→ autosave existing setelah debounce
+Saat user menekan Gunakan Semua
+1 consolidated brief update
+→ bukan satu request per recommendation
+
+Pastikan tidak ada:
+
+infinite autosave loop;
+autosave karena generatedAt;
+autosave karena memo/result object berubah;
+duplicate save request;
+save pada initial hydration.
+14. VISUAL VERIFICATION WAJIB
+
+Selesaikan visual verification yang sebelumnya belum selesai.
+
+Gunakan request/fixture development yang aman.
+
+Verifikasi minimal:
+
+Coffee Shop + Brand Identity
+Export Import + Company Profile
+Charcoal + Company Profile
+Technology + Pitch Deck
+Unknown custom industry
+
+Untuk setiap contoh, periksa:
+
+panel muncul setelah context minimum tersedia;
+layout tidak menutupi form;
+heading jelas;
+recommendation category terbaca;
+reason tampil;
+confidence label tampil;
+tombol Gunakan bekerja;
+tombol Gunakan kategori ini bekerja;
+tombol Gunakan semua bekerja;
+warning tampil bila relevan;
+applied/skipped feedback tampil;
+user dapat kembali mengedit form;
+review menunjukkan nilai terbaru.
+
+Ambil screenshot development sebagai bukti bila workflow agent mendukung.
+
+15. MOBILE VERIFICATION
+
+Uji viewport minimal:
+
+375 × 812
+
+Pastikan:
+
+tidak ada horizontal overflow;
+recommendation drawer/panel dapat dibuka dan ditutup;
+card tidak terlalu sempit;
+tombol dapat ditekan;
+sticky navigation tidak menutupi panel;
+modal konfirmasi tidak keluar viewport;
+focus dan scroll tetap masuk akal;
+applied feedback terlihat.
+
+Jangan menyatakan mobile verified hanya dari responsive classes.
+
+16. BROWSER CONSOLE DAN NETWORK
+
+Periksa:
+
+console error
+React warning
+key warning
+hydration warning
+infinite render
+failed API request
+duplicate autosave
+unexpected recommendation request
+
+Expected:
+
+Tidak ada network call untuk menghitung recommendation.
+
+Recommendation engine harus lokal.
+
+17. DEBUG MODE
+
+Pastikan debug mode:
+
+hanya aktif di development;
+tidak muncul di production build;
+tidak menampilkan token;
+tidak menampilkan request ID sensitif;
+menampilkan profile match, source contribution, raw score, dan version bila diperlukan.
+
+Jika debug mode belum lengkap tetapi bukan blocker customer flow, lengkapi hanya sesuai spesifikasi awal.
+
+18. TEST COMMANDS
+
+Jalankan command sesuai workspace nyata.
+
+Minimal:
+
+pnpm typecheck
+pnpm test
+pnpm build
+
+Atau command package-specific yang benar.
+
+Jalankan khusus test engine juga, misalnya:
+
+pnpm vitest run src/features/brief-intelligence
+
+Jangan hanya menjalankan frontend build.
+
+Laporkan jumlah test dan hasilnya.
+
+19. PERBAIKI HANYA BUG YANG TERBUKTI
+
+Jika visual/test menemukan bug:
+
+dokumentasikan gejalanya;
+identifikasi root cause;
+lakukan patch terkecil;
+tambah regression test;
+jalankan ulang test;
+verifikasi visual ulang.
+
+Jangan melakukan redesign besar.
+
+20. CLEANUP
+
+Sebelum selesai:
+
+hapus console log sementara;
+hapus debug fixture production;
+hapus import mati;
+hapus duplicate registry;
+pastikan old local option arrays tidak tersisa di brief.tsx;
+pastikan guided-chips.tsx hanya dihapus jika benar-benar zero references;
+pastikan tidak ada TODO kritis yang disembunyikan;
+pastikan source registry hanya satu.
+
+Jangan hapus file yang masih digunakan halaman lain.
+
+21. ACCEPTANCE CRITERIA
+
+Phase 3 dianggap selesai hanya jika:
+
+Engine deterministic.
+Lima sample context menghasilkan recommendation relevan.
+Alias matching bekerja.
+Duplicate recommendation digabung.
+Score, reason, source, dan confidence tersedia.
+Conflict warning bekerja.
+Unknown industry fallback aman.
+User selection tidak ditimpa.
+Apply single bekerja.
+Apply category bekerja.
+Apply all empty-only bekerja.
+Selection limit dihormati.
+Autosave tidak berjalan saat calculation.
+Apply memicu satu autosave flow existing.
+Payload backend tidak berubah.
+Server/local draft hydration tetap bekerja.
+Review menampilkan nilai applied.
+Desktop visual verification selesai.
+Mobile 375px selesai.
+Console bersih.
+Tidak ada network call recommendation.
+Typecheck lulus.
+Test lulus.
+Build lulus.
+Tidak ada perubahan backend/database/pricing/workflow.
+22. LAPORAN AKHIR
+
+Gunakan format:
+
+Laporan — Phase 3: Creative AI Brief Intelligence Engine
+
+1. Status saat resume
+2. Hasil audit implementasi existing
+3. Bug yang ditemukan
+4. Bug yang diperbaiki
+5. Arsitektur engine
+6. Stable key dan registry
+7. Industry profile coverage
+8. Service profile coverage
+9. Goal/audience/company-size/priority rules
+10. Scoring dan deterministic tie-break
+11. Deduplication
+12. Confidence thresholds
+13. Reasons dan sources
+14. Conflict detection
+15. Completeness calculation
+16. Unknown industry fallback
+17. Context adapter
+18. Apply adapter
+19. User-selection protection
+20. UI recommendation panel
+21. Autosave verification
+22. Payload compatibility
+23. Contoh nyata Coffee Shop
+24. Contoh nyata Export Import
+25. Contoh nyata Charcoal
+26. Contoh nyata Technology
+27. Contoh nyata Unknown Industry
+28. File dibuat
+29. File dimodifikasi
+30. File dihapus
+31. Unit tests
+32. Component tests
+33. Hasil typecheck
+34. Hasil test
+35. Hasil build
+36. Hasil desktop visual verification
+37. Hasil mobile verification
+38. Hasil browser console
+39. Hasil network verification
+40. Konfirmasi tidak ada AI API call
+41. Konfirmasi tidak ada perubahan database/API/pricing/workflow
+42. Risiko atau batasan tersisa
+
+Untuk lima sample context, tampilkan minimal:
+
+input context
+top recommendations
+confidence
+reason
+source
+warning
+hasil apply
+
+Jangan menulis ulang seluruh Phase 3. Selesaikan, verifikasi, patch bug yang nyata, lalu tutup dengan laporan berbasis bukti.

@@ -206,18 +206,23 @@ export async function verifyPayment(
   let paymentStatus = project.paymentStatus;
   let productionStarted = false;
 
+  // Production may already have finished (or failed) by the time a payment gets
+  // verified — e.g. admin skipped the commercial gate and ran production directly.
+  // Never let a payment-status transition clobber that terminal production state.
+  const productionAlreadyTerminal = project.status === "completed" || project.status === "failed";
+
   if (fullyPaid) {
     paymentStatus = "paid";
     filesUnlocked = true;
-    if (schedule.paymentType === "remaining_balance") {
-      nextStatus = "remaining_paid";
-    } else {
-      nextStatus = "payment_verified";
+    if (!productionAlreadyTerminal) {
+      nextStatus = schedule.paymentType === "remaining_balance" ? "remaining_paid" : "payment_verified";
     }
   } else if (anyPaid) {
     paymentStatus = "partially_paid";
-    if (schedule.paymentType === "deposit") nextStatus = "deposit_paid";
-    else if (schedule.paymentType === "subscription_charge") nextStatus = "payment_verified";
+    if (!productionAlreadyTerminal) {
+      if (schedule.paymentType === "deposit") nextStatus = "deposit_paid";
+      else if (schedule.paymentType === "subscription_charge") nextStatus = "payment_verified";
+    }
   }
 
   await db

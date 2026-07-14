@@ -24,7 +24,7 @@ export const globalLimiter = rateLimit({
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
-  handler: jsonHandler("Too many requests, please try again later."),
+  handler: jsonHandler("Terlalu banyak permintaan untuk sementara. Silakan coba lagi dalam beberapa menit."),
   skip: (req) => req.method === "OPTIONS",
 });
 
@@ -34,7 +34,7 @@ export const paymentLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  handler: jsonHandler("Too many payment requests. Please wait before trying again."),
+  handler: jsonHandler("Terlalu banyak permintaan pembayaran untuk sementara. Silakan tunggu sebelum mencoba lagi."),
 });
 
 /** 10 req per 10 min — AI brief, image generation, live preview */
@@ -43,7 +43,7 @@ export const aiGenerationLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  handler: jsonHandler("Too many AI generation requests. Please wait 10 minutes."),
+  handler: jsonHandler("Terlalu banyak permintaan AI untuk sementara. Silakan tunggu 10 menit sebelum mencoba lagi."),
 });
 
 /** 30 req per 10 min — client review token access, comments */
@@ -52,7 +52,7 @@ export const clientReviewLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  handler: jsonHandler("Too many review requests. Please try again shortly."),
+  handler: jsonHandler("Terlalu banyak permintaan review untuk sementara. Silakan coba lagi sesaat lagi."),
 });
 
 /** 10 req per 10 min — file upload and signed-URL generation */
@@ -61,7 +61,16 @@ export const uploadLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  handler: jsonHandler("Too many upload requests. Please wait before uploading again."),
+  handler: jsonHandler("Terlalu banyak permintaan unggah untuk sementara. Silakan tunggu sebelum mengunggah lagi."),
+});
+
+/** 8 req per 15 min per IP — internal staff login (brute-force guard) */
+export const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonHandler("Terlalu banyak percobaan login untuk sementara. Silakan tunggu sebelum mencoba lagi."),
 });
 
 // Satisfy eslint unused-var warning

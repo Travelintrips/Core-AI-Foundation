@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import { WorkspaceLayout } from "@/components/workspace-layout";
 import { useWorkspaceProfile, useUpdateWorkspaceProfile, type WorkspaceProfile } from "@/hooks/use-workspace";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Save, Building2, User, CreditCard, Palette, Check } from "lucide-react";
+import { Loader2, Save, Building2, User, CreditCard, Palette, Check, ArrowLeft } from "lucide-react";
 
 function FieldInput({
   label,
@@ -103,6 +104,10 @@ export default function WorkspaceProfilePage({ params }: { params: { token: stri
   return (
     <WorkspaceLayout token={token}>
       {/* Header */}
+      <Link href={`/workspace/${token}`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6 group">
+        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+        Kembali ke Dashboard
+      </Link>
       <div className="mb-6">
         <h1 className="text-3xl font-serif font-medium mb-1">My Profile</h1>
         <p className="text-muted-foreground">Keep your company and billing details up to date.</p>

@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   FileText,
   MessageSquare,
+  ArrowLeft,
 } from "lucide-react";
 
 function stepForProject(status: string, reviewStatus: string): string {
@@ -65,6 +66,12 @@ export default function ProjectPage({
 
   return (
     <Layout>
+      <div className="container mx-auto px-4 md:px-8 pt-6 max-w-5xl">
+        <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group">
+          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+          Kembali
+        </Link>
+      </div>
       {/* Stepper */}
       <div className="border-b border-border/40 bg-muted/20">
         <div className="container mx-auto px-4 md:px-8 max-w-5xl">

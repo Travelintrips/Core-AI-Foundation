@@ -135,6 +135,8 @@ router.get(
       internalProjectId,
       afterCursor,
       isProjectTerminal: isTerminal,
+      // V4.1 — real flag, used only for ExecutionSummary derivation (never guessed downstream).
+      filesUnlocked: detail.overview.filesUnlocked,
     });
 
     if (!result.ok) {

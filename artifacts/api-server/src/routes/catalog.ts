@@ -13,7 +13,7 @@
  * GET        /ai/catalog/analytics
  */
 import { Router } from "express";
-import { eq, desc, and, ne } from "drizzle-orm";
+import { eq, desc, and, ne, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import {
   db,
@@ -82,6 +82,31 @@ function parseId(raw: string | undefined, res: import("express").Response): numb
   }
   return id;
 }
+
+// ── Public catalog (customer-facing, no auth) ──────────────────────────────
+//
+// This is the ONLY catalog endpoint the customer portal may call. It never
+// returns a category whose visibility isn't "public" — currently just
+// Creative AI. Bypasses adminAuthWithExceptions via an exact-path exception
+// in middleware/adminAuth.ts (PUBLIC_PATH_PREFIXES).
+router.get("/ai/catalog/public", async (_req, res): Promise<void> => {
+  const categories = await db
+    .select()
+    .from(aiServiceCategoriesTable)
+    .where(eq(aiServiceCategoriesTable.visibility, "public"))
+    .orderBy(aiServiceCategoriesTable.displayOrder, aiServiceCategoriesTable.name);
+
+  const publicCategoryIds = categories.map((c) => c.id);
+  const services = publicCategoryIds.length
+    ? await db
+        .select()
+        .from(aiServicesTable)
+        .where(and(inArray(aiServicesTable.categoryId, publicCategoryIds), eq(aiServicesTable.status, "active")))
+        .orderBy(aiServicesTable.serviceName)
+    : [];
+
+  res.json({ categories, services });
+});
 
 // ── Categories ────────────────────────────────────────────────────────────────
 
@@ -261,6 +286,25 @@ async function loadServiceAndPackage(serviceId: number, packageId: number | null
   return { service, pkg };
 }
 
+/**
+ * Customer-facing transactional guard: a quote/order can only be placed
+ * against a service whose category is visibility='public' (Creative AI
+ * today). Blocks a customer from buying/requesting an internal-only
+ * service even if they guess a valid serviceId.
+ */
+async function assertServiceIsPubliclyRequestable(categoryId: number, res: import("express").Response): Promise<boolean> {
+  const [category] = await db
+    .select()
+    .from(aiServiceCategoriesTable)
+    .where(eq(aiServiceCategoriesTable.id, categoryId))
+    .limit(1);
+  if (!category || category.visibility !== "public") {
+    res.status(403).json({ error: "This service is not available for customer purchase." });
+    return false;
+  }
+  return true;
+}
+
 router.post("/ai/catalog/services/:id/quote", async (req, res): Promise<void> => {
   const serviceId = parseId(req.params.id, res);
   if (serviceId === null) return;
@@ -269,6 +313,7 @@ router.post("/ai/catalog/services/:id/quote", async (req, res): Promise<void> =>
   const loaded = await loadServiceAndPackage(serviceId, body.packageId, res);
   if (!loaded) return;
   const { service, pkg } = loaded;
+  if (!(await assertServiceIsPubliclyRequestable(service.categoryId, res))) return;
 
   const breakdown = await generatePricingSnapshot(
     service,
@@ -298,6 +343,7 @@ router.post("/ai/catalog/services/:id/request", async (req, res): Promise<void> 
   const loaded = await loadServiceAndPackage(serviceId, parsed.data.packageId, res);
   if (!loaded) return;
   const { service, pkg } = loaded;
+  if (!(await assertServiceIsPubliclyRequestable(service.categoryId, res))) return;
 
   const breakdown = await generatePricingSnapshot(
     service,
@@ -424,7 +470,7 @@ router.patch("/ai/catalog/requests/:id/status", async (req, res): Promise<void> 
       const [project] = await db
         .select({ status: creativeProjectsTable.status })
         .from(creativeProjectsTable)
-        .where(eq(creativeProjectsTable.id, Number(finalProjectId)))
+        .where(eq(creativeProjectsTable.projectId, finalProjectId))
         .limit(1);
       if (!project || project.status !== "completed") {
         res.status(409).json({ error: `Cannot move to "${status}": linked project ${finalProjectId} is not marked completed.` });
@@ -727,12 +773,23 @@ router.get("/ai/catalog/analytics", async (_req, res): Promise<void> => {
       }
     : null;
 
-  // Average delivery time: parse leading integer out of estimatedDelivery strings like "3-5 days"
+  // Average delivery time: parse estimatedDelivery strings like "3-5 hari",
+  // "30-60 menit", "2-4 jam" into a day-equivalent number. Only matching a
+  // bare leading integer (old behavior) misreads "30-60 menit" as 30 days.
   const deliveryDays: number[] = [];
   for (const r of requests) {
     const service = serviceById.get(r.serviceId);
-    const match = service?.estimatedDelivery?.match(/(\d+)/);
-    if (match) deliveryDays.push(parseInt(match[1], 10));
+    const match = service?.estimatedDelivery?.toLowerCase().match(/(\d+)(?:\s*[-–]\s*\d+)?\s*(menit|jam|hari|minggu|bulan)/);
+    if (match) {
+      const value = parseInt(match[1], 10);
+      const days =
+        match[2] === "menit" ? value / (24 * 60) :
+        match[2] === "jam" ? value / 24 :
+        match[2] === "minggu" ? value * 7 :
+        match[2] === "bulan" ? value * 30 :
+        value; // hari
+      deliveryDays.push(days);
+    }
   }
   const averageDeliveryTimeDays = deliveryDays.length
     ? Math.round((deliveryDays.reduce((a, b) => a + b, 0) / deliveryDays.length) * 10) / 10
