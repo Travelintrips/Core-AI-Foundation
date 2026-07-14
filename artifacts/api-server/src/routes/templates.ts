@@ -28,7 +28,7 @@
  */
 
 import { Router } from "express";
-import { requireAdminApiKey } from "../middleware/adminAuth.js";
+import { adminAuth as requireAdminApiKey } from "../middleware/adminAuth.js";
 import {
   listTemplates,
   getTemplate,
