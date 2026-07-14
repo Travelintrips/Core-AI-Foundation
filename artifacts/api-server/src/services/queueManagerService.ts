@@ -32,6 +32,13 @@ export interface EnqueueJobInput {
   estimatedCost?: number | null;
   estimatedDuration?: number | null;
   managerOverride?: number | null;
+  /**
+   * WP-06 — server-resolved tenant that owns this job. Stamped into
+   * payloadJson as `_tenantId` so workers can reconstruct context without
+   * a DB round-trip. Must be a server-validated value, never taken from
+   * unverified client input.
+   */
+  tenantId?: string;
 }
 
 export interface QueueFilter {
@@ -83,10 +90,18 @@ export async function enqueue(input: EnqueueJobInput) {
 
   const jobCode = `JOB-${randomUUID().slice(0, 8).toUpperCase()}`;
 
+  // WP-06 — Stamp server-resolved tenantId into payloadJson so workers can
+  // reconstruct RequestContext without a DB round-trip. The reserved key
+  // `_tenantId` is never read from client input — it is always written here.
+  const payloadJson: Record<string, unknown> = {
+    ...(input.payloadJson ?? {}),
+    ...(input.tenantId ? { _tenantId: input.tenantId } : {}),
+  };
+
   const insert: InsertAiJob = {
     jobCode,
     jobType:           input.jobType,
-    payloadJson:       input.payloadJson ?? {},
+    payloadJson,
     priority:          input.priority ?? 50,
     priorityScore:     String(score),
     executionPlanId:   input.executionPlanId ?? null,

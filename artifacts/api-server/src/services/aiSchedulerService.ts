@@ -20,6 +20,7 @@ import { db, aiSchedulesTable, aiScheduleRunsTable } from "@workspace/db";
 import type { AiSchedule, InsertAiSchedule } from "@workspace/db";
 import { CronExpressionParser } from "cron-parser";
 import { enqueue } from "./queueManagerService.js";
+import { DEFAULT_TENANT_ID } from "../security/tenantResolution.js";
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
 import { logger } from "../lib/logger.js";
@@ -359,6 +360,14 @@ export async function createJobFromSchedule(schedule: AiSchedule): Promise<{ job
   const config = (schedule.targetConfigJson ?? {}) as Record<string, unknown>;
   const jobType = (config["jobType"] as string) ?? "scheduled_task";
 
+  // WP-06 — Propagate tenant context from schedule config or fall back to the
+  // platform default. The scheduler is a trusted actor (system/scheduler),
+  // so this value is always server-controlled, never client-supplied.
+  const tenantId =
+    typeof config["tenantId"] === "string" && config["tenantId"].length > 0
+      ? config["tenantId"]
+      : DEFAULT_TENANT_ID;
+
   const job = await enqueue({
     jobType,
     payloadJson: {
@@ -370,6 +379,8 @@ export async function createJobFromSchedule(schedule: AiSchedule): Promise<{ job
     departmentId: coerceNullableNumber(config["departmentId"]),
     employeeId: coerceNullableNumber(config["employeeId"]),
     maxRetry: coerceNumber(config["maxRetry"], 3),
+    // WP-06 — stamp resolved tenantId so workers can reconstruct context.
+    tenantId,
   });
 
   return { jobId: job.id };
