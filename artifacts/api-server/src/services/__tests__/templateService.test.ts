@@ -247,7 +247,8 @@ describe("✓ Recommendation engine", () => {
   });
 
   it("limit defaults to 5", () => {
-    const limit = Math.min(undefined ?? 5, 10);
+    const providedLimit: number | undefined = undefined;
+    const limit = Math.min(providedLimit ?? 5, 10);
     expect(limit).toBe(5);
   });
 });

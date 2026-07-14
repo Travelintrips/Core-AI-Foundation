@@ -61,6 +61,8 @@ tags:
     description: Admin visibility into customer workspaces — impersonation, token rotation, analytics
   - name: production-pipeline
     description: V4.4 Creative Production Pipeline — 7-stage orchestration with retry, visualization, and monitoring
+  - name: templates
+    description: V4.3 Template Marketplace — gallery, live customization preview, Brand DNA recommendations, admin CRUD/versioning
 paths:
   /healthz:
     get:
@@ -6863,6 +6865,339 @@ paths:
                   $ref: "#/components/schemas/ProductionPipeline"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  # ── V4.3: Template Marketplace (admin) ──────────────────────────────────────
+
+  /ai/templates:
+    get:
+      operationId: listTemplatesAdmin
+      tags: [templates]
+      summary: Admin — list/filter templates
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: industry, schema: { type: string } }
+        - { in: query, name: style, schema: { type: string } }
+        - { in: query, name: status, schema: { type: string, enum: [draft, published, archived] } }
+        - { in: query, name: isPremium, schema: { type: boolean } }
+        - { in: query, name: featured, schema: { type: boolean } }
+        - { in: query, name: sortBy, schema: { type: string, enum: [popular, newest, conversions, selections] } }
+        - { in: query, name: search, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer } }
+        - { in: query, name: offset, schema: { type: integer } }
+      responses:
+        "200":
+          description: Template list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateList" }
+    post:
+      operationId: createTemplate
+      tags: [templates]
+      summary: Admin — create a template
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateTemplateInput" }
+      responses:
+        "201":
+          description: Created template
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateItem" }
+
+  /ai/templates/stats:
+    get:
+      operationId: getTemplateAnalyticsStats
+      tags: [templates]
+      summary: Admin — template analytics stats
+      security: [{ adminKey: [] }]
+      responses:
+        "200":
+          description: Analytics stats
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateAnalyticsStats" }
+
+  /ai/templates/evolution:
+    get:
+      operationId: getTemplateEvolutionRecommendations
+      tags: [templates]
+      summary: Admin — evolution recommendations (underperforming/needs-revision/top-converters)
+      security: [{ adminKey: [] }]
+      responses:
+        "200":
+          description: Evolution recommendations
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateEvolution" }
+
+  /ai/templates/industry-showcase:
+    get:
+      operationId: getTemplateIndustryShowcaseAdmin
+      tags: [templates]
+      summary: Admin — industry showcase (top template per industry)
+      security: [{ adminKey: [] }]
+      responses:
+        "200":
+          description: Industry showcase
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryShowcase" }
+
+  /ai/templates/{id}:
+    get:
+      operationId: getTemplateAdmin
+      tags: [templates]
+      summary: Admin — get one template
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Template
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateItem" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateTemplate
+      tags: [templates]
+      summary: Admin — update a template
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateTemplateInput" }
+      responses:
+        "200":
+          description: Updated template
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateItem" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ai/templates/{id}/publish:
+    post:
+      operationId: publishTemplate
+      tags: [templates]
+      summary: Admin — publish a template
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Published
+          content:
+            application/json:
+              schema: { type: object, properties: { ok: { type: boolean } } }
+
+  /ai/templates/{id}/archive:
+    post:
+      operationId: archiveTemplate
+      tags: [templates]
+      summary: Admin — archive a template
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Archived
+          content:
+            application/json:
+              schema: { type: object, properties: { ok: { type: boolean } } }
+
+  /ai/templates/{id}/event:
+    post:
+      operationId: recordTemplateEventAdmin
+      tags: [templates]
+      summary: Admin — record a template event
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TemplateEventInput" }
+      responses:
+        "200":
+          description: Recorded
+          content:
+            application/json:
+              schema: { type: object, properties: { ok: { type: boolean } } }
+
+  # ── V4.3: Template Marketplace (public) ─────────────────────────────────────
+
+  /public/templates:
+    get:
+      operationId: listTemplatesPublic
+      tags: [templates]
+      summary: Public — template gallery (published only)
+      parameters:
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: industry, schema: { type: string } }
+        - { in: query, name: style, schema: { type: string } }
+        - { in: query, name: isPremium, schema: { type: boolean } }
+        - { in: query, name: featured, schema: { type: boolean } }
+        - { in: query, name: sortBy, schema: { type: string, enum: [popular, newest, conversions, selections] } }
+        - { in: query, name: search, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer } }
+        - { in: query, name: offset, schema: { type: integer } }
+      responses:
+        "200":
+          description: Template list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateList" }
+
+  /public/templates/industry-showcase:
+    get:
+      operationId: getTemplateIndustryShowcasePublic
+      tags: [templates]
+      summary: Public — industry showcase
+      responses:
+        "200":
+          description: Industry showcase
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryShowcase" }
+
+  /public/templates/recommended:
+    get:
+      operationId: getPublicTemplateRecommendations
+      tags: [templates]
+      summary: Public — anonymous recommendations by industry/category
+      parameters:
+        - { in: query, name: industry, schema: { type: string } }
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer } }
+      responses:
+        "200":
+          description: Recommended templates
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateRecommendationList" }
+
+  /public/templates/{id}:
+    get:
+      operationId: getTemplatePublic
+      tags: [templates]
+      summary: Public — get one template (published only), records a view
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Template
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateItem" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/templates/{id}/preview:
+    post:
+      operationId: generateTemplateLivePreviewPublic
+      tags: [templates]
+      summary: Public — generate a live customization preview
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LivePreviewInput" }
+      responses:
+        "200":
+          description: Live preview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LivePreviewResult" }
+
+  /public/templates/{id}/event:
+    post:
+      operationId: recordTemplateEventPublic
+      tags: [templates]
+      summary: Public — record a template event (view/selected/etc.)
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TemplateEventInput" }
+      responses:
+        "200":
+          description: Recorded
+          content:
+            application/json:
+              schema: { type: object, properties: { ok: { type: boolean } } }
+
+  # ── V4.3: Template Marketplace (customer workspace) ─────────────────────────
+
+  /public/customer/workspace/{token}/templates:
+    get:
+      operationId: getWorkspaceTemplates
+      tags: [templates]
+      summary: Customer — template gallery + Brand DNA recommendations
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: industry, schema: { type: string } }
+        - { in: query, name: style, schema: { type: string } }
+        - { in: query, name: sortBy, schema: { type: string, enum: [popular, newest] } }
+        - { in: query, name: limit, schema: { type: integer } }
+        - { in: query, name: offset, schema: { type: integer } }
+      responses:
+        "200":
+          description: Gallery + recommendations
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkspaceTemplatesDashboard" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/customer/workspace/{token}/templates/recommended:
+    get:
+      operationId: getWorkspaceTemplateRecommendations
+      tags: [templates]
+      summary: Customer — top templates by Brand DNA match
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: packageLevel, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer } }
+      responses:
+        "200":
+          description: Recommended templates
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateRecommendationList" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/customer/workspace/{token}/templates/{id}/preview:
+    post:
+      operationId: generateWorkspaceTemplateLivePreview
+      tags: [templates]
+      summary: Customer — generate a live customization preview
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LivePreviewInput" }
+      responses:
+        "200":
+          description: Live preview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LivePreviewResult" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
 components:
   responses:

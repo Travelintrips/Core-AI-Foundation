@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { Layout } from "@/components/layout";
 import { useCategories, useServices, type CatalogService, type ServiceCategory } from "@/hooks/use-catalog";
 import {
@@ -715,10 +715,12 @@ function SectionHeader({
 
 export default function ServicesPage() {
   const { t } = useTranslation();
+  const searchQuery = useSearch();
 
   const SORT_OPTIONS = SORT_KEYS.map((o) => ({ ...o, label: t(o.tKey) }));
 
   const [search, setSearch] = useState("");
+  const [templateSeed, setTemplateSeed] = useState<{ templateId: number; templateName: string; category: string; style: string } | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
@@ -735,6 +737,31 @@ export default function ServicesPage() {
 
   const { data: categories = [], isLoading: loadingCategories } = useCategories();
   const { data: allServices = [], isLoading: loadingServices } = useServices(undefined);
+
+  // Arriving from the Template Gallery's "Use This Template" CTA: read the
+  // seed left in sessionStorage and pre-select the matching service category.
+  useEffect(() => {
+    const params = new URLSearchParams(searchQuery);
+    const templateId = params.get("templateId");
+    if (!templateId) return;
+    try {
+      const raw = sessionStorage.getItem("template-selection-seed");
+      if (raw) {
+        const parsed = JSON.parse(raw) as { templateId: number; templateName: string; category: string; style: string };
+        if (String(parsed.templateId) === templateId) setTemplateSeed(parsed);
+      }
+    } catch { /* ignore */ }
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (!templateSeed || categories.length === 0) return;
+    const match = categories.find(
+      (c) => c.name.toLowerCase() === templateSeed.category.toLowerCase()
+        || templateSeed.category.toLowerCase().includes(c.name.toLowerCase())
+        || c.name.toLowerCase().includes(templateSeed.category.toLowerCase()),
+    );
+    if (match) setCategoryId(match.id);
+  }, [templateSeed, categories]);
 
   // Load persisted state
   useEffect(() => {
@@ -899,6 +926,21 @@ export default function ServicesPage() {
             <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
             Kembali
           </Link>
+
+          {templateSeed && (
+            <div className="mt-4 flex items-center justify-between gap-3 px-4 py-3 rounded-xl border"
+              style={{ background: "rgba(124,110,250,0.08)", borderColor: "rgba(124,110,250,0.3)" }}>
+              <p className="text-sm text-[#C9BFFF]">
+                <span className="font-semibold">Dari template:</span> {templateSeed.templateName} ({templateSeed.category} · {templateSeed.style}) — layanan berikut disaring agar cocok.
+              </p>
+              <button
+                onClick={() => { setTemplateSeed(null); setCategoryId(undefined); }}
+                className="text-xs text-[#8B9BC4] hover:text-white transition-colors flex-shrink-0"
+              >
+                Bersihkan
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ── Hero ──────────────────────────────────────────────────────── */}

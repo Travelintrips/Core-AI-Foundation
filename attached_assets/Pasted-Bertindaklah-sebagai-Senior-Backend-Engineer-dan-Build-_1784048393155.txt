@@ -1,0 +1,129 @@
+Bertindaklah sebagai Senior Backend Engineer dan Build Stability Engineer.
+
+===========================================================
+TUJUAN
+======
+
+Lakukan HOTFIX TERPISAH untuk memperbaiki build api-server yang saat ini gagal karena:
+
+* `routes/templates.ts`
+* mengimpor `requireAdminApiKey`
+* tetapi symbol tersebut sudah tidak ada di
+  `middleware/adminAuth.ts`
+
+Ini adalah pre-existing issue.
+
+JANGAN mencampurkan pekerjaan ini dengan WP-03.
+
+JANGAN mengubah tenant isolation.
+
+JANGAN mengubah repository foundation.
+
+JANGAN mengubah audit log.
+
+JANGAN mengubah soft delete.
+
+===========================================================
+TUGAS
+=====
+
+1.
+
+Cari penyebab sebenarnya mengapa:
+
+`requireAdminApiKey`
+
+tidak lagi tersedia.
+
+Tentukan apakah:
+
+* fungsi diganti nama,
+* dipindahkan,
+* dihapus,
+* atau memang sudah obsolete.
+
+2.
+
+Audit seluruh project.
+
+Cari semua penggunaan:
+
+* requireAdminApiKey
+* admin api key middleware
+* admin auth middleware
+* alias
+* wrapper
+
+3.
+
+Tentukan implementasi yang canonical.
+
+4.
+
+Perbaiki seluruh import yang rusak.
+
+5.
+
+Jangan mengembalikan API lama hanya demi build hijau.
+
+Gunakan implementasi canonical yang benar.
+
+6.
+
+Jika route memang sudah obsolete,
+
+hapus dependency yang tidak diperlukan,
+
+tetapi jangan mengubah behavior endpoint.
+
+===========================================================
+VERIFIKASI
+==========
+
+Setelah selesai:
+
+* api-server build
+* typecheck
+* route compile
+* import graph
+* startup
+* smoke test
+
+Pastikan:
+
+tidak ada import error.
+
+===========================================================
+OUTPUT
+======
+
+Buat laporan:
+
+docs/implementation/preexisting-build-hotfix-report.md
+
+berisi:
+
+* root cause
+* files changed
+* canonical middleware yang digunakan
+* hasil build
+* hasil startup
+* hasil smoke test
+
+===========================================================
+BATASAN
+=======
+
+Ini bukan bagian WP-03.
+
+Jangan menyentuh implementasi tenant.
+
+Jangan menyentuh repository.
+
+Jangan menyentuh quotation.
+
+Jangan menyentuh audit log.
+
+Jangan mengubah behavior bisnis.
+
+Hanya selesaikan build blocker ini.

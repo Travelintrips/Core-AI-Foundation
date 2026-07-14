@@ -5827,3 +5827,102 @@ export type GetCpReviewTimeline200 = {
   events: CpTimelineEvent[];
 };
 
+export type ListTemplatesAdminParams = {
+category?: string;
+industry?: string;
+style?: string;
+status?: ListTemplatesAdminStatus;
+isPremium?: boolean;
+featured?: boolean;
+sortBy?: ListTemplatesAdminSortBy;
+search?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListTemplatesAdminStatus = typeof ListTemplatesAdminStatus[keyof typeof ListTemplatesAdminStatus];
+
+
+export const ListTemplatesAdminStatus = {
+  draft: 'draft',
+  published: 'published',
+  archived: 'archived',
+} as const;
+
+export type ListTemplatesAdminSortBy = typeof ListTemplatesAdminSortBy[keyof typeof ListTemplatesAdminSortBy];
+
+
+export const ListTemplatesAdminSortBy = {
+  popular: 'popular',
+  newest: 'newest',
+  conversions: 'conversions',
+  selections: 'selections',
+} as const;
+
+export type PublishTemplate200 = {
+  ok?: boolean;
+};
+
+export type ArchiveTemplate200 = {
+  ok?: boolean;
+};
+
+export type RecordTemplateEventAdmin200 = {
+  ok?: boolean;
+};
+
+export type ListTemplatesPublicParams = {
+category?: string;
+industry?: string;
+style?: string;
+isPremium?: boolean;
+featured?: boolean;
+sortBy?: ListTemplatesPublicSortBy;
+search?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListTemplatesPublicSortBy = typeof ListTemplatesPublicSortBy[keyof typeof ListTemplatesPublicSortBy];
+
+
+export const ListTemplatesPublicSortBy = {
+  popular: 'popular',
+  newest: 'newest',
+  conversions: 'conversions',
+  selections: 'selections',
+} as const;
+
+export type GetPublicTemplateRecommendationsParams = {
+industry?: string;
+category?: string;
+limit?: number;
+};
+
+export type RecordTemplateEventPublic200 = {
+  ok?: boolean;
+};
+
+export type GetWorkspaceTemplatesParams = {
+category?: string;
+industry?: string;
+style?: string;
+sortBy?: GetWorkspaceTemplatesSortBy;
+limit?: number;
+offset?: number;
+};
+
+export type GetWorkspaceTemplatesSortBy = typeof GetWorkspaceTemplatesSortBy[keyof typeof GetWorkspaceTemplatesSortBy];
+
+
+export const GetWorkspaceTemplatesSortBy = {
+  popular: 'popular',
+  newest: 'newest',
+} as const;
+
+export type GetWorkspaceTemplateRecommendationsParams = {
+category?: string;
+packageLevel?: string;
+limit?: number;
+};
+
