@@ -1,0 +1,611 @@
+Lanjutkan ke V4.2E — Creative Asset Intelligence & AI Creative Director.
+
+STATUS SAAT INI
+
+✅ V4.2A
+Brief Intelligence
+
+✅ V4.2B
+Document Engine + QC
+
+✅ V4.2C
+Customer Review Experience
+
+✅ V4.2D
+Brand Kit Enterprise
+Asset Library
+ZIP Delivery
+Download Center
+
+Creative AI Core sudah stabil.
+
+JANGAN mengubah:
+
+- Queue
+- Dispatcher
+- Worker Cluster
+- Event Bus
+- Payment Gate
+- Commercial Layer
+- Review System
+- Document Engine
+- Presentation Engine
+
+Reuse semua modul yang sudah ada.
+
+==========================================================
+TARGET
+==========================================================
+
+Bangun AI Creative Director dan Creative Asset Intelligence.
+
+Tujuan:
+
+AI tidak lagi sekadar membuat desain.
+
+AI harus memahami identitas visual customer dan menggunakannya secara otomatis pada seluruh project berikutnya.
+
+==========================================================
+WORKSTREAM 1
+BRAND DNA ENGINE
+==========================================================
+
+Buat service baru:
+
+creativeBrandIntelligenceService.ts
+
+Fungsi:
+
+analyzeBrand()
+
+Input:
+
+Brand Kit
+Company Profile
+Website
+Social Media
+Logo
+Brand Guideline
+Asset Library
+Project History
+
+Output:
+
+Brand DNA
+
+Contoh output:
+
+Brand Personality
+
+Professional
+
+Corporate
+
+Minimalist
+
+Luxury
+
+Industrial
+
+Modern
+
+Friendly
+
+Formal
+
+Energetic
+
+Brand Voice
+
+Formal
+
+Friendly
+
+Technical
+
+Executive
+
+Luxury
+
+Writing Style
+
+Short
+
+Long
+
+Corporate
+
+Marketing
+
+Photography Style
+
+Real
+
+Studio
+
+Lifestyle
+
+Industrial
+
+Minimalist
+
+Illustration Style
+
+Flat
+
+Outline
+
+3D
+
+Isometric
+
+Icon Style
+
+Outline
+
+Filled
+
+Minimal
+
+Corporate
+
+Layout Style
+
+Corporate
+
+Magazine
+
+Modern
+
+Executive
+
+Color Psychology
+
+Typography Style
+
+Spacing Style
+
+Visual Density
+
+Target Audience
+
+Industry
+
+Risk Profile
+
+Output harus deterministic.
+
+Tidak boleh mengarang.
+
+==========================================================
+WORKSTREAM 2
+AUTO ASSET ANALYZER
+==========================================================
+
+Semua asset baru otomatis dianalisis.
+
+Support:
+
+Logo
+
+Photo
+
+Illustration
+
+PDF
+
+PPT
+
+DOC
+
+PNG
+
+JPG
+
+SVG
+
+AI harus:
+
+Detect:
+
+Office
+
+Warehouse
+
+Factory
+
+CEO
+
+Employee
+
+Product
+
+Certificate
+
+Vehicle
+
+Building
+
+Document
+
+Event
+
+Meeting
+
+Customer
+
+Supplier
+
+Lalu otomatis:
+
+Tag
+
+Category
+
+Search keyword
+
+Suggested usage
+
+Preview
+
+==========================================================
+WORKSTREAM 3
+DUPLICATE & VERSION DETECTION
+==========================================================
+
+AI harus mendeteksi:
+
+Duplicate logo
+
+Old logo
+
+New logo
+
+Transparent logo
+
+Dark version
+
+Light version
+
+Icon version
+
+Landscape
+
+Portrait
+
+Horizontal
+
+Vertical
+
+Version chain otomatis.
+
+==========================================================
+WORKSTREAM 4
+BRAND CONSISTENCY ENGINE
+==========================================================
+
+Semua output Creative AI diperiksa.
+
+Checklist:
+
+Logo benar
+
+Font benar
+
+Color benar
+
+Brand Voice benar
+
+Writing Style benar
+
+Layout benar
+
+Photo Style benar
+
+Illustration Style benar
+
+Output:
+
+Brand Consistency Score
+
+0-100
+
+Jika kurang dari threshold:
+
+Warning
+
+Saran perbaikan
+
+==========================================================
+WORKSTREAM 5
+SMART RECOMMENDATION
+==========================================================
+
+AI memberikan rekomendasi.
+
+Contoh:
+
+Belum upload:
+
+Office
+
+Factory
+
+Warehouse
+
+CEO
+
+Team
+
+Product
+
+Certificate
+
+Brand Guideline
+
+Social Media
+
+Website
+
+Lalu tampilkan:
+
+Recommended Uploads
+
+Expected Impact
+
+Priority
+
+==========================================================
+WORKSTREAM 6
+CREATIVE MEMORY
+==========================================================
+
+Semua project tersimpan sebagai:
+
+Creative Memory.
+
+Project berikutnya otomatis menggunakan:
+
+Brand DNA
+
+Tone
+
+Style
+
+Layout
+
+Color
+
+Typography
+
+Photo Style
+
+Writing Style
+
+Customer tidak perlu briefing ulang.
+
+==========================================================
+WORKSTREAM 7
+AI CREATIVE DIRECTOR
+==========================================================
+
+Tambahkan AI Digital Employee baru.
+
+Nama:
+
+AI Creative Director
+
+Department:
+
+Creative
+
+Kemampuan:
+
+Analyze Brand
+
+Choose Style
+
+Choose Layout
+
+Recommend Template
+
+Maintain Brand Consistency
+
+Review Design
+
+Review Copywriting
+
+Review Presentation
+
+Review Company Profile
+
+Output:
+
+Creative Strategy
+
+Visual Direction
+
+Communication Direction
+
+Design Recommendation
+
+Brand Compliance
+
+AI Creative Director menjadi orchestrator Creative AI.
+
+==========================================================
+WORKSTREAM 8
+CUSTOMER UI
+==========================================================
+
+Tambahkan halaman:
+
+Brand Intelligence
+
+Isi:
+
+Brand DNA
+
+Completeness Score
+
+Consistency Score
+
+Detected Style
+
+Detected Colors
+
+Detected Typography
+
+Detected Voice
+
+Detected Audience
+
+Recommendations
+
+Creative Memory
+
+Asset Intelligence
+
+==========================================================
+WORKSTREAM 9
+ADMIN UI
+==========================================================
+
+Tambahkan:
+
+Creative Intelligence Dashboard
+
+Menampilkan:
+
+Brand Score
+
+Consistency
+
+Assets
+
+Recommendations
+
+Duplicate Detection
+
+Brand Memory
+
+Creative Director Recommendation
+
+==========================================================
+WORKSTREAM 10
+API
+==========================================================
+
+Tambahkan endpoint:
+
+Analyze Brand
+
+Refresh Brand DNA
+
+Refresh Asset Analysis
+
+Brand Recommendations
+
+Creative Memory
+
+Consistency Report
+
+Duplicate Report
+
+Asset Intelligence
+
+Creative Director Recommendation
+
+==========================================================
+WORKSTREAM 11
+OPENAPI
+==========================================================
+
+Tambahkan semua endpoint.
+
+Generate:
+
+Zod
+
+Hooks
+
+Types
+
+==========================================================
+WORKSTREAM 12
+TEST
+==========================================================
+
+Minimal:
+
+✓ Brand DNA generated
+
+✓ Duplicate detection
+
+✓ Asset auto tagging
+
+✓ Recommendation engine
+
+✓ Creative Memory
+
+✓ Brand consistency
+
+✓ Creative Director
+
+✓ OpenAPI
+
+✓ Codegen
+
+✓ Verify
+
+==========================================================
+SCREENSHOT
+==========================================================
+
+Brand Intelligence
+
+Creative Director
+
+Asset Analysis
+
+Duplicate Detection
+
+Recommendations
+
+Creative Memory
+
+==========================================================
+FINAL REPORT
+==========================================================
+
+Laporkan:
+
+- files berubah
+- endpoint baru
+- Brand DNA
+- Asset Intelligence
+- Duplicate Detection
+- Recommendation Engine
+- Creative Memory
+- Creative Director
+- tests
+- screenshots
+- OpenAPI count
+- verify
+- known limitations
+
+JANGAN lanjut ke:
+
+Finance AI
+
+Legal AI
+
+Marketing AI
+
+Template Marketplace
+
+Portfolio Gallery
+
+Target akhir:
+
+Creative AI menjadi sistem yang benar-benar memahami identitas brand customer, memiliki memori kreatif, menjaga konsistensi seluruh desain dan dokumen, serta mampu bertindak sebagai AI Creative Director yang mengarahkan semua output kreatif secara otomatis.

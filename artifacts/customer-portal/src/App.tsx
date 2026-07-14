@@ -29,8 +29,11 @@ const WorkspaceProjectsPage      = lazy(() => import('@/pages/workspace/projects
 const WorkspaceProjectDetailPage = lazy(() => import('@/pages/workspace/project-detail'));
 const WorkspaceDownloadsPage     = lazy(() => import('@/pages/workspace/downloads'));
 const WorkspaceInvoicesPage      = lazy(() => import('@/pages/workspace/invoices'));
-const WorkspaceBrandKitPage      = lazy(() => import('@/pages/workspace/brand-kit'));
-const WorkspaceAssetLibraryPage  = lazy(() => import('@/pages/workspace/asset-library'));
+const WorkspaceBrandKitPage         = lazy(() => import('@/pages/workspace/brand-kit'));
+const WorkspaceAssetLibraryPage     = lazy(() => import('@/pages/workspace/asset-library'));
+const WorkspaceBrandIntelligencePage = lazy(() => import('@/pages/workspace/brand-intelligence'));
+const TemplateGalleryPage            = lazy(() => import('@/pages/template-gallery'));
+const PortfolioGalleryPage           = lazy(() => import('@/pages/portfolio-gallery'));
 const WorkspaceNotificationsPage = lazy(() => import('@/pages/workspace/notifications'));
 const WorkspaceProfilePage       = lazy(() => import('@/pages/workspace/profile'));
 const WorkspaceSupportPage       = lazy(() => import('@/pages/workspace/support'));
@@ -113,6 +116,9 @@ function Router() {
         <Route path="/workspace/:token/invoices" component={WorkspaceInvoicesPage} />
         <Route path="/workspace/:token/brand-kit" component={WorkspaceBrandKitPage} />
         <Route path="/workspace/:token/assets" component={WorkspaceAssetLibraryPage} />
+        <Route path="/workspace/:token/brand-intelligence" component={WorkspaceBrandIntelligencePage} />
+        <Route path="/template-gallery" component={TemplateGalleryPage} />
+        <Route path="/portfolio-gallery" component={PortfolioGalleryPage} />
         <Route path="/workspace/:token/notifications" component={WorkspaceNotificationsPage} />
         <Route path="/workspace/:token/profile" component={WorkspaceProfilePage} />
         <Route path="/workspace/:token/support" component={WorkspaceSupportPage} />
