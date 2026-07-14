@@ -55,5 +55,7 @@
 - [cp-review-v42c-completion](cp-review-v42c-completion.md) — OpenAPI shared-responses gotcha, fixture/schema drift (tsx doesn't typecheck), watermark must fail-closed, created_project_id text-vs-int bug, pdf-lib install≠externalize
 - [phase-v42d-brand-kit-zip](phase-v42d-brand-kit-zip.md) — V4.2D rules: slot weights, no @/lib/api in portal, ZIP job payload, pdf-lib re-install, route mount order
 - [wp00-wp01-tenant-security](wp00-wp01-tenant-security.md) — canonical RequestContext + tenant resolvers; never trust body/query/header tenantId, resolve server-side via security/tenantResolution.ts
+- [wp02-repository-foundation](wp02-repository-foundation.md) — RepositoryContext wraps RequestContext (no 2nd context type); only Marketplace domain fully migrated, others deferred
+- [admin-auth-canonical-pattern](admin-auth-canonical-pattern.md) — admin-key gating is one global app.ts mount (adminAuthWithExceptions), never per-route middleware; templates.ts's requireAdminApiKey never existed, was dead import
 - [phase-v42e-creative-intelligence](phase-v42e-creative-intelligence.md) — V4.2E: Brand DNA + Asset Intelligence tables/services/routes/UI; admin uses apiFetch not useAdminApi hook
 - [phase-v43-templates-portfolio](phase-v43-templates-portfolio.md) — V4.3: Express 5 params string|string[] middleware quirk, migration pool convention, use-template→draft-request seed pattern

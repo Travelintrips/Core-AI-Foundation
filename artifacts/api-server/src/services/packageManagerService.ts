@@ -25,6 +25,25 @@ import {
 } from "@workspace/db";
 import { publishSafe } from "./aiEventBusService.js";
 import { logAudit } from "./aiAuditService.js";
+import { adaptLegacyTenantContext } from "../security/requestContext.js";
+import { makeRepositoryContext } from "../repositories/types.js";
+import * as installationRepo from "../repositories/packageInstallationRepository.js";
+
+/**
+ * WP-02: this module still takes a bare `tenantId` string (its callers —
+ * routes/marketplace.ts — already resolve+validate that string server-side
+ * per WP-00; changing this module's public signature is out of WP-02's
+ * scope). Internally, every DB access now goes through
+ * repositories/packageInstallationRepository.ts, wrapped in a
+ * RepositoryContext built via `adaptLegacyTenantContext` — the transitional
+ * adapter WP-01 added exactly for call sites like this one. Behavior is
+ * unchanged; only where the queries live has moved.
+ */
+function repoCtx(tenantId: string, requestId = `pkgmgr_${Date.now()}_${Math.random().toString(36).slice(2)}`) {
+  return makeRepositoryContext(
+    adaptLegacyTenantContext({ tenantId, source: "internal_service", requestId }),
+  );
+}
 
 export type PackageType = "skill" | "tool";
 
@@ -55,17 +74,7 @@ async function getCatalogPackage(packageType: PackageType, packageId: number): P
 }
 
 async function findInstallation(tenantId: string, packageType: PackageType, packageId: number): Promise<AiInstalledPackage | undefined> {
-  const [row] = await db
-    .select()
-    .from(aiInstalledPackagesTable)
-    .where(
-      and(
-        eq(aiInstalledPackagesTable.tenantId, tenantId),
-        eq(aiInstalledPackagesTable.packageType, packageType),
-        eq(aiInstalledPackagesTable.packageId, packageId),
-      ),
-    );
-  return row;
+  return installationRepo.findInstallation(repoCtx(tenantId), packageType, packageId);
 }
 
 /**
@@ -124,18 +133,8 @@ export async function install(
   // The DB-level unique constraint on (tenantId, packageId, packageType) is the
   // final backstop; its violation is translated to ALREADY_INSTALLED by the
   // route layer (Postgres error code 23505).
-  const row = await db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select()
-      .from(aiInstalledPackagesTable)
-      .where(
-        and(
-          eq(aiInstalledPackagesTable.tenantId, tenantId),
-          eq(aiInstalledPackagesTable.packageType, packageType),
-          eq(aiInstalledPackagesTable.packageId, packageId),
-        ),
-      )
-      .for("update");
+  const row = await installationRepo.withTransaction(repoCtx(tenantId), async (txCtx) => {
+    const existing = await installationRepo.findInstallation(txCtx, packageType, packageId, { forUpdate: true });
     if (existing) throw new PackageManagerError(`${packageType} ${packageId} already installed for tenant ${tenantId}`, "ALREADY_INSTALLED");
 
     const dep = await validateDependencies(tenantId, pkg);
@@ -147,18 +146,12 @@ export async function install(
       );
     }
 
-    const [inserted] = await tx
-      .insert(aiInstalledPackagesTable)
-      .values({
-        tenantId,
-        packageId,
-        packageType,
-        installedVersion: pkg.version,
-        enabled: true,
-        configurationJson: configuration,
-      })
-      .returning();
-    return inserted;
+    return installationRepo.insertInstallation(txCtx, {
+      packageType,
+      packageId,
+      installedVersion: pkg.version,
+      configurationJson: configuration,
+    });
   });
   if (!row) throw new Error("Failed to install package");
 
@@ -173,11 +166,7 @@ export async function upgrade(tenantId: string, packageType: PackageType, packag
   const existing = await findInstallation(tenantId, packageType, packageId);
   if (!existing) throw new PackageManagerError(`${packageType} ${packageId} is not installed for tenant ${tenantId}`, "NOT_INSTALLED");
 
-  const [row] = await db
-    .update(aiInstalledPackagesTable)
-    .set({ installedVersion: pkg.version })
-    .where(eq(aiInstalledPackagesTable.id, existing.id))
-    .returning();
+  const row = await installationRepo.updateInstallationById(repoCtx(tenantId), existing.id, { installedVersion: pkg.version });
   if (!row) throw new Error("Failed to upgrade package");
 
   await logAudit("marketplace", "package_upgraded", String(packageId), packageType, "success", { tenantId, version: pkg.version, from: existing.installedVersion });
@@ -190,11 +179,7 @@ async function setEnabled(tenantId: string, packageType: PackageType, packageId:
   const existing = await findInstallation(tenantId, packageType, packageId);
   if (!existing) throw new PackageManagerError(`${packageType} ${packageId} is not installed for tenant ${tenantId}`, "NOT_INSTALLED");
 
-  const [row] = await db
-    .update(aiInstalledPackagesTable)
-    .set({ enabled })
-    .where(eq(aiInstalledPackagesTable.id, existing.id))
-    .returning();
+  const row = await installationRepo.updateInstallationById(repoCtx(tenantId), existing.id, { enabled });
   if (!row) throw new Error("Failed to update package");
 
   await logAudit("marketplace", enabled ? "package_enabled" : "package_disabled", String(packageId), packageType, "success", { tenantId });
@@ -212,7 +197,7 @@ export async function uninstall(tenantId: string, packageType: PackageType, pack
   const existing = await findInstallation(tenantId, packageType, packageId);
   if (!existing) throw new PackageManagerError(`${packageType} ${packageId} is not installed for tenant ${tenantId}`, "NOT_INSTALLED");
 
-  await db.delete(aiInstalledPackagesTable).where(eq(aiInstalledPackagesTable.id, existing.id));
+  await installationRepo.deleteInstallationById(repoCtx(tenantId), existing.id);
 
   await logAudit("marketplace", "package_removed", String(packageId), packageType, "success", { tenantId });
   publishSafe({ eventType: "package.removed", sourceModule: "marketplace", sourceId: String(existing.id), payload: { tenantId, packageType, packageId } });
