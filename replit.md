@@ -60,6 +60,7 @@ Re-verified again 2026-07-14 (second import): same pattern — `node_modules` + 
 Re-verified once more later on 2026-07-14 after yet another re-import: identical wipe/fix cycle (`pnpm install` → `build:generated` → `build:api` → restart 4 workflows), no code changes needed, all secrets already present. All 4 services confirmed up via screenshot: customer-portal landing page rendered, ai-platform admin showed login gate as expected, api-server logs showed scheduler/dispatcher/cluster workers started, mockup-sandbox vite server ready.
 
 Re-verified a further time 2026-07-14 (same day, later re-import): identical symptom (`node_modules` + registration wiped), identical fix applied, all 4 services confirmed running again with no code changes.
+Re-verified again 2026-07-14: same wipe pattern. Additionally found concatenation bug in `artifacts/api-server/src/routes/templates.ts` — GitHub import had merged stale v1 route openers before each of the 10 admin routes; removed the stale lines. Fix: `pnpm install` → `build:generated` → `build:api` → restart 4 workflows. All 4 services confirmed up, customer-portal landing page renders correctly.
 
 ## Key Technical Notes
 ## Database
