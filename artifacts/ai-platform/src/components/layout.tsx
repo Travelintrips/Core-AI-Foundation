@@ -32,6 +32,7 @@ import {
   Heart,
   Lightbulb,
   LayoutTemplate,
+  Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -58,6 +59,7 @@ const NAV_SECTIONS = [
       { href: "/agents", label: "Agents", icon: Users },
       { href: "/orchestrator", label: "Orchestrator", icon: Play },
       { href: "/creative-ai", label: "Creative AI", icon: Sparkles },
+      { href: "/production-pipeline", label: "Production Pipeline", icon: GitMerge },
     ],
   },
   {
@@ -106,7 +108,14 @@ const NAV_SECTIONS = [
       { href: "/health-scores", label: "Health Scores", icon: Heart },
       { href: "/ai-insights", label: "AI Insights", icon: Lightbulb },
       { href: "/creative-intelligence", label: "Creative Intelligence", icon: Brain },
-      { href: "/template-marketplace", label: "Templates", icon: LayoutTemplate },
+      { href: "/template-marketplace", label: "Template Marketplace", icon: LayoutTemplate },
+      { href: "/template-engine", label: "Template Engine", icon: Layers },
+    ],
+  },
+  {
+    label: "Creative",
+    items: [
+      { href: "/design-studio", label: "Design Studio", icon: LayoutTemplate },
     ],
   },
   {

@@ -12,3 +12,5 @@ After a project is re-imported from GitHub, `listArtifacts()` can return empty a
 **Caution:** if the post-merge script also runs a schema push (e.g. `drizzle-kit push`), it may prompt interactively and fail (stdin is closed on this runtime) — check the diff before forcing it, since a naive `push --force` can drop tables with real data.
 
 **Never write a DB connection string (or any credential) into `.replit` via `setEnvVars`** — even to alias an existing var under a different name. `.replit` is plaintext and version-tracked. If a required env var name differs from what an existing plaintext var already provides, add a fallback read in code (`process.env.A || process.env.B`) instead of duplicating the value into a new var.
+
+**Don't assume every build/runtime error after a re-import is caused by the wipe itself.** Real code bugs (unused-import mismatches, missing exports) can be sitting in the repo from before the import and only surface now because this is the first fresh build. Fix them normally (they're small, isolated) rather than assuming registration restoration alone will resolve every error.

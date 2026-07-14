@@ -39,6 +39,10 @@ export const creativeProjectsTable = appSchema.table("creative_projects", {
   result: jsonb("result"), // aggregated final output from all agents
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  // WP-04: soft delete — NULL = active, non-NULL = soft-deleted
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  // WP-05: archive — NULL = not archived, non-NULL = archived (orthogonal to deletedAt)
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
 });
 
 export const insertCreativeProjectSchema = createInsertSchema(creativeProjectsTable).omit({
