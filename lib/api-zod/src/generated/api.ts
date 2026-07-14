@@ -1235,6 +1235,8 @@ export const DeleteMemoryEntryResponse = zod.void()
 export const ListAuditLogsQueryParams = zod.object({
   "module": zod.coerce.string().nullish(),
   "action": zod.coerce.string().nullish(),
+  "tenantId": zod.coerce.string().nullish(),
+  "actorType": zod.coerce.string().nullish(),
   "limit": zod.coerce.number().nullish(),
   "offset": zod.coerce.number().nullish()
 })
@@ -1247,6 +1249,8 @@ export const ListAuditLogsResponse = zod.object({
   "resourceId": zod.string().nullish(),
   "resourceType": zod.string().nullish(),
   "actorId": zod.string().nullish(),
+  "tenantId": zod.string().nullish().describe('Nullable — legacy rows and platform-wide\/system events have no single owning tenant (WP-03).'),
+  "actorType": zod.union([zod.literal('internal_user'),zod.literal('customer'),zod.literal('public_token'),zod.literal('system'),zod.literal('worker'),zod.literal(null)]).nullish().describe('Coarse actor category (WP-03). Nullable for legacy rows written before this field existed.'),
   "details": zod.object({
 
 }).passthrough().nullish(),

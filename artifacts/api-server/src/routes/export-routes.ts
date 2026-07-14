@@ -9,6 +9,7 @@ import { Router } from "express";
 import { eq, desc, sql } from "drizzle-orm";
 import { db, creativeProjectsTable, creativeProjectStepsTable, aiCostRecordsTable } from "@workspace/db";
 import { logAudit } from "../services/aiAuditService.js";
+import { resolveAuthenticatedTenantContext } from "../security/tenantResolution.js";
 
 const router = Router();
 
@@ -85,6 +86,9 @@ function projectToMarkdown(
 // ── Export: Markdown ──────────────────────────────────────────────────────────
 
 router.get("/creative-ai/projects/:id/export/markdown", async (req, res): Promise<void> => {
+  // WP-06 — resolve tenant context for audit trail; tenant is never taken from
+  // client-supplied params.
+  const ctx = resolveAuthenticatedTenantContext(req);
   const { id } = req.params;
 
   const [project] = await db
@@ -106,7 +110,10 @@ router.get("/creative-ai/projects/:id/export/markdown", async (req, res): Promis
   const markdown = projectToMarkdown(project, steps);
   const filename = `${project.brandName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-creative-brief.md`;
 
-  await logAudit("creative-ai", "export_markdown", project.projectId, "creative_project", "success", {});
+  await logAudit("creative-ai", "export_markdown", project.projectId, "creative_project", "success", {
+    tenantId: ctx.tenantId,
+    actorId: ctx.actorId,
+  });
 
   res.setHeader("Content-Type", "text/markdown; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
@@ -116,6 +123,12 @@ router.get("/creative-ai/projects/:id/export/markdown", async (req, res): Promis
 // ── Export: Analytics CSV ─────────────────────────────────────────────────────
 
 router.get("/ai/analytics/export/csv", async (req, res): Promise<void> => {
+  // WP-06 — server-resolved tenant context; filters export to the actor's
+  // tenant so cross-tenant data leakage is impossible even if query params
+  // are tampered with.
+  const ctx = resolveAuthenticatedTenantContext(req);
+  const tenantId = ctx.tenantId;
+
   const days = Math.min(parseInt(String(req.query.days ?? "30"), 10), 365);
   const provider = typeof req.query.provider === "string" ? req.query.provider : null;
   const agent = typeof req.query.agent === "string" ? req.query.agent : null;
@@ -132,6 +145,12 @@ router.get("/ai/analytics/export/csv", async (req, res): Promise<void> => {
   }
   if (agent) {
     query = query.where(sql`agent_slug = ${agent}`) as typeof query;
+  }
+  // WP-06 — tenant isolation: only return cost records belonging to this tenant.
+  // In single-tenant mode today, tenantId is always "default", so no data is
+  // excluded; this guard becomes meaningful when real multi-tenancy ships.
+  if (tenantId) {
+    query = query.where(sql`tenant_id = ${tenantId}`) as typeof query;
   }
 
   const rows = await query;
@@ -162,7 +181,12 @@ router.get("/ai/analytics/export/csv", async (req, res): Promise<void> => {
     ),
   ].join("\r\n");
 
-  await logAudit("analytics", "export_csv", "system", "ai_cost_records", "success", { rows: rows.length, days });
+  await logAudit("analytics", "export_csv", "system", "ai_cost_records", "success", {
+    rows: rows.length,
+    days,
+    tenantId,
+    actorId: ctx.actorId,
+  });
 
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="analytics-cost-report-${days}d.csv"`);

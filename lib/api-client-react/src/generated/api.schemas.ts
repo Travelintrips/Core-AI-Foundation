@@ -950,6 +950,21 @@ export interface MemoryEntryInput {
 }
 
 /**
+ * Coarse actor category (WP-03). Nullable for legacy rows written before this field existed.
+ * @nullable
+ */
+export type AuditLogActorType = typeof AuditLogActorType[keyof typeof AuditLogActorType] | null;
+
+
+export const AuditLogActorType = {
+  internal_user: 'internal_user',
+  customer: 'customer',
+  public_token: 'public_token',
+  system: 'system',
+  worker: 'worker',
+} as const;
+
+/**
  * @nullable
  */
 export type AuditLogDetails = { [key: string]: unknown } | null;
@@ -975,6 +990,16 @@ export interface AuditLog {
   resourceType?: string | null;
   /** @nullable */
   actorId?: string | null;
+  /**
+     * Nullable — legacy rows and platform-wide/system events have no single owning tenant (WP-03).
+     * @nullable
+     */
+  tenantId?: string | null;
+  /**
+     * Coarse actor category (WP-03). Nullable for legacy rows written before this field existed.
+     * @nullable
+     */
+  actorType?: AuditLogActorType;
   /** @nullable */
   details?: AuditLogDetails;
   status?: AuditLogStatus;
@@ -5660,6 +5685,14 @@ module?: string | null;
  * @nullable
  */
 action?: string | null;
+/**
+ * @nullable
+ */
+tenantId?: string | null;
+/**
+ * @nullable
+ */
+actorType?: string | null;
 /**
  * @nullable
  */
