@@ -1,0 +1,128 @@
+Kerjakan secara bertahap. Jangan skip fitur inti, tetapi deprioritaskan fitur yang tidak menghambat customer flow.
+
+URUTAN PRIORITAS:
+
+PHASE 1 — WAJIB SEKARANG
+
+1. Admin — Mark Missing Data
+
+Tambahkan kemampuan admin untuk:
+- menandai field brief yang masih kurang
+- memberi catatan kepada customer
+- mengubah status brief menjadi needs_information
+- mengirim customer kembali ke brief
+- memblokir generation jika required data belum lengkap
+- audit log siapa yang menandai dan alasannya
+
+AI tidak boleh mengarang fakta untuk menggantikan data yang hilang.
+
+2. Watermark Preview
+
+Sebelum pelunasan:
+- PDF preview wajib watermark
+- image preview wajib watermark
+- PPTX tidak boleh diunduh
+- file final tidak boleh diakses
+- original URL tidak boleh public
+
+Setelah payment verified:
+- watermark tidak dipakai pada final file
+- signed download URL aktif
+
+3. PDF Viewer di Review Page
+
+Pada halaman review:
+- tampilkan PDF inline
+- page navigation
+- zoom
+- comment per page
+- approve
+- request revision
+- reject
+- mobile responsive
+- fallback download preview jika browser tidak support viewer
+
+PHASE 2 — SETELAH FLOW UTAMA STABIL
+
+4. Analytics Tracking
+
+Track minimal:
+- service viewed
+- package selected
+- brief started
+- brief completed
+- payment verified
+- generation started
+- PDF generated
+- PPTX generated
+- review opened
+- revision requested
+- approved
+- downloaded
+
+Gunakan event bus existing.
+Jangan buat analytics engine baru.
+
+5. ZIP Package Download
+
+Setelah project selesai dan payment lunas:
+- kumpulkan PDF
+- PPTX
+- DOCX jika tersedia
+- images
+- manifest
+- version info
+
+Buat ZIP secara background.
+ZIP hanya tersedia melalui signed URL.
+Jangan blokir completion hanya karena ZIP generation gagal.
+
+PHASE 3 — BOLEH DITUNDA
+
+6. Version Comparison
+
+Version history tetap wajib disimpan sekarang:
+- version number
+- created date
+- revision reason
+- changed sections
+- approval status
+
+Tetapi fitur visual compare side-by-side boleh ditunda.
+
+Untuk sekarang cukup:
+- pilih version
+- lihat version
+- download preview version
+- lihat revision notes
+
+JANGAN DITUNDA:
+
+- anti-fabrication
+- package limits
+- payment lock
+- admin missing-data workflow
+- PDF preview/review
+- version history dasar
+
+JANGAN REWRITE:
+- Document Engine
+- Presentation Engine
+- Brand Kit
+- Client Review
+- Payment Gate
+- Queue
+- Event Bus
+
+Pastikan:
+- OpenAPI clean
+- codegen clean
+- pnpm run verify clean
+- production build clean
+
+Final report harus menjelaskan:
+- Phase 1 yang selesai
+- Phase 2 yang selesai atau tersisa
+- fitur yang sengaja ditunda
+- alasan penundaan
+- known limitations
