@@ -46,6 +46,8 @@ import {
   BriefIncompleteError,
 } from "../services/companyProfileBriefIntelligence.js";
 import { getGateForServiceQuotation, gateIsCleared } from "../services/commercialGateService.js";
+import { creativeAiAssetsTable } from "@workspace/db";
+import { scoreFromAssetMetadata } from "../services/companyProfileQcService.js";
 
 // Statuses that must only be reached once the commercial gate (if one exists
 // for this request's quotation) has been verified or waived. Without this
@@ -1298,4 +1300,197 @@ router.post("/public/catalog/requests/:requestId/checkout", async (req, res): Pr
   });
 });
 
+// ── Public: Company Profile deliverable manifest (P1.4) ───────────────────────
+//
+// GET /public/catalog/requests/:requestId/deliverable-manifest
+//
+// Returns all generated documents and images for a service request, with
+// per-document QC scores for Company Profile requests.
+// Public route — authenticated only by the requestId (UUID/token-style).
+
+router.get("/public/catalog/requests/:requestId/deliverable-manifest", async (req, res): Promise<void> => {
+  const { requestId } = req.params as { requestId: string };
+  if (!requestId || requestId.length < 8) {
+    res.status(400).json({ error: "Invalid requestId" });
+    return;
+  }
+
+  // Load service request + package info
+  const [request] = await db
+    .select({
+      id:               aiServiceRequestsTable.id,
+      requestId:        aiServiceRequestsTable.requestId,
+      status:           aiServiceRequestsTable.status,
+      serviceId:        aiServiceRequestsTable.serviceId,
+      packageId:        aiServiceRequestsTable.packageId,
+      createdProjectId: aiServiceRequestsTable.createdProjectId,
+    })
+    .from(aiServiceRequestsTable)
+    .where(eq(aiServiceRequestsTable.requestId, requestId))
+    .limit(1);
+
+  if (!request) {
+    res.status(404).json({ error: "Service request not found" });
+    return;
+  }
+
+  // Resolve service code and package info in parallel
+  const [serviceRow, packageRow] = await Promise.all([
+    request.serviceId
+      ? db
+          .select({ serviceCode: aiServicesTable.serviceCode, serviceName: aiServicesTable.serviceName })
+          .from(aiServicesTable)
+          .where(eq(aiServicesTable.id, request.serviceId))
+          .limit(1)
+          .then((rows) => rows[0] ?? null)
+      : Promise.resolve(null),
+    request.packageId
+      ? db
+          .select({
+            packageName:  aiServicePackagesTable.packageName,
+            packageLevel: aiServicePackagesTable.packageLevel,
+            deliverablesJson: aiServicePackagesTable.deliverablesJson,
+          })
+          .from(aiServicePackagesTable)
+          .where(eq(aiServicePackagesTable.id, request.packageId))
+          .limit(1)
+          .then((rows) => rows[0] ?? null)
+      : Promise.resolve(null),
+  ]);
+
+  // If no project has been created yet, return an empty manifest
+  if (!request.createdProjectId) {
+    res.json({
+      requestId,
+      serviceCode:   serviceRow?.serviceCode ?? null,
+      serviceName:   serviceRow?.serviceName ?? null,
+      packageName:   packageRow?.packageName ?? null,
+      packageLevel:  packageRow?.packageLevel ?? null,
+      status:        request.status,
+      deliverables:  [],
+      summary: {
+        totalDocuments: 0,
+        totalImages:    0,
+        overallQcScore: null,
+        packageLevel:   packageRow?.packageLevel ?? null,
+        packageName:    packageRow?.packageName ?? null,
+      },
+    });
+    return;
+  }
+
+  // Load the creative project to get the UUID-style projectId
+  const [project] = await db
+    .select({ projectId: creativeProjectsTable.projectId, status: creativeProjectsTable.status })
+    .from(creativeProjectsTable)
+    .where(eq(creativeProjectsTable.id, request.createdProjectId))
+    .limit(1);
+
+  if (!project) {
+    res.status(404).json({ error: "Creative project not found for this request" });
+    return;
+  }
+
+  // Load all completed assets for this project
+  const assets = await db
+    .select({
+      id:          creativeAiAssetsTable.id,
+      assetType:   creativeAiAssetsTable.assetType,
+      category:    creativeAiAssetsTable.category,
+      status:      creativeAiAssetsTable.status,
+      imageUrl:    creativeAiAssetsTable.imageUrl,
+      storagePath: creativeAiAssetsTable.storagePath,
+      version:     creativeAiAssetsTable.version,
+      metadata:    creativeAiAssetsTable.metadata,
+      createdAt:   creativeAiAssetsTable.createdAt,
+    })
+    .from(creativeAiAssetsTable)
+    .where(
+      and(
+        eq(creativeAiAssetsTable.projectId, project.projectId),
+        inArray(creativeAiAssetsTable.status, ["completed", "approved"]),
+      ),
+    )
+    .orderBy(desc(creativeAiAssetsTable.createdAt));
+
+  const isCP = isCompanyProfileServiceCode(serviceRow?.serviceCode);
+
+  const deliverables = assets.map((asset) => {
+    const meta = (asset.metadata ?? {}) as Record<string, unknown>;
+    const generationReport = (meta["generationReport"] ?? {}) as Record<string, unknown>;
+
+    // QC scoring — only for Company Profile documents
+    const qcResult =
+      isCP && asset.assetType === "document"
+        ? scoreFromAssetMetadata(meta)
+        : null;
+
+    return {
+      assetId:        asset.id,
+      assetType:      asset.assetType,
+      documentType:   asset.category,
+      status:         asset.status,
+      version:        asset.version,
+      downloadUrl:    asset.imageUrl ?? null,
+      storagePath:    asset.storagePath ?? null,
+      generatedAt:    (meta["generatedAt"] as string | undefined) ?? null,
+      pageCount:      (meta["pageCount"] as number | undefined) ?? null,
+      fileSizeBytes:  (meta["fileSizeBytes"] as number | undefined) ?? null,
+      mimeType:       (meta["mimeType"] as string | undefined) ?? null,
+      // Document-specific manifest data
+      sectionsIncluded: Array.isArray(generationReport["sectionsIncluded"])
+        ? generationReport["sectionsIncluded"]
+        : undefined,
+      sectionsSkipped: Array.isArray(generationReport["sectionsSkipped"])
+        ? (generationReport["sectionsSkipped"] as Array<{ sectionId: string; reason?: string }>)
+            .map((s) => ({ sectionId: s.sectionId, reason: s.reason }))
+        : undefined,
+      packageLevel:  (generationReport["packageLevel"] as string | undefined) ?? null,
+      pageTarget:    (generationReport["pageTarget"] as number | undefined) ?? null,
+      // QC
+      qc: qcResult
+        ? {
+            qcScore:    qcResult.qcScore,
+            passed:     qcResult.passed,
+            dimensions: qcResult.dimensions,
+            warnings:   qcResult.warnings,
+          }
+        : null,
+    };
+  });
+
+  const documentDeliverables = deliverables.filter((d) => d.assetType === "document");
+  const imageDeliverables    = deliverables.filter((d) => d.assetType === "image");
+
+  const qcScores = documentDeliverables
+    .map((d) => d.qc?.qcScore)
+    .filter((s): s is number => typeof s === "number");
+
+  const overallQcScore =
+    qcScores.length > 0
+      ? Math.round(qcScores.reduce((a, b) => a + b, 0) / qcScores.length)
+      : null;
+
+  res.json({
+    requestId,
+    serviceCode:  serviceRow?.serviceCode ?? null,
+    serviceName:  serviceRow?.serviceName ?? null,
+    packageName:  packageRow?.packageName ?? null,
+    packageLevel: packageRow?.packageLevel ?? null,
+    projectId:    project.projectId,
+    projectStatus: project.status,
+    status:       request.status,
+    deliverables,
+    summary: {
+      totalDocuments: documentDeliverables.length,
+      totalImages:    imageDeliverables.length,
+      overallQcScore,
+      packageLevel:   packageRow?.packageLevel ?? null,
+      packageName:    packageRow?.packageName ?? null,
+      packageDeliverables: packageRow?.deliverablesJson ?? null,
+    },
+  });
+});
+
 export default router;
+
