@@ -4820,6 +4820,229 @@ export interface WorkspaceAssetIntelligenceDashboard {
   duplicates: DuplicateReport;
 }
 
+export interface TemplateColorTheme {
+  primary?: string;
+  secondary?: string;
+  accent?: string;
+  background?: string;
+  text?: string;
+}
+
+export interface TemplateTypography {
+  heading?: string;
+  body?: string;
+  style?: string;
+}
+
+export interface TemplateBrandDnaTags {
+  personalities?: string[];
+  voices?: string[];
+  audiences?: string[];
+  industries?: string[];
+}
+
+export interface TemplatePreviewImages {
+  thumbnail?: string;
+  hero?: string;
+  gallery?: string[];
+}
+
+export type TemplateItemStatus = typeof TemplateItemStatus[keyof typeof TemplateItemStatus];
+
+
+export const TemplateItemStatus = {
+  draft: 'draft',
+  published: 'published',
+  archived: 'archived',
+} as const;
+
+export interface TemplateItem {
+  id: number;
+  templateCode: string;
+  name: string;
+  description?: string | null;
+  category: string;
+  style: string;
+  industry?: string | null;
+  colorTheme?: TemplateColorTheme | null;
+  typography?: TemplateTypography | null;
+  layout?: string | null;
+  supportedPackages?: string[] | null;
+  brandDnaTags?: TemplateBrandDnaTags | null;
+  previewImages?: TemplatePreviewImages | null;
+  pdfPreviewUrl?: string | null;
+  pptPreviewUrl?: string | null;
+  coverImage?: string | null;
+  editable: boolean;
+  isPremium: boolean;
+  version: string;
+  status: TemplateItemStatus;
+  featured: boolean;
+  sortOrder?: number;
+  views: number;
+  selections: number;
+  previewsGenerated: number;
+  conversions: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TemplateList {
+  items: TemplateItem[];
+  total: number;
+}
+
+export interface ScoredTemplate {
+  template: TemplateItem;
+  score: number;
+  reasons: string[];
+}
+
+export interface TemplateRecommendationList {
+  items: ScoredTemplate[];
+}
+
+export interface LivePreviewSection {
+  type?: string;
+  content?: string;
+  color?: string;
+}
+
+export interface LivePreviewConcept {
+  headerBg?: string;
+  headerText?: string;
+  accentColor?: string;
+  fontPairing?: string;
+  layoutType?: string;
+  mockSections?: LivePreviewSection[];
+}
+
+export interface LivePreviewResult {
+  templateId: number;
+  templateName: string;
+  companyName: string;
+  brandColor: string;
+  logoUrl?: string | null;
+  previewConcept: LivePreviewConcept;
+  generatedAt: string;
+}
+
+export interface LivePreviewInput {
+  companyName: string;
+  brandColor: string;
+  logoUrl?: string;
+  industry?: string;
+}
+
+export interface TemplateAnalyticsCategoryStat {
+  category?: string;
+  count?: number;
+  totalViews?: number;
+}
+
+export interface TemplateAnalyticsStyleStat {
+  style?: string;
+  count?: number;
+  totalSelections?: number;
+}
+
+export interface TemplateAnalyticsSummary {
+  totalViews?: number | null;
+  totalSelections?: number | null;
+  totalPreviews?: number | null;
+  totalConversions?: number | null;
+  templateCount?: number | null;
+}
+
+export interface TemplateAnalyticsTopItem {
+  id?: number;
+  name?: string;
+  category?: string;
+  views?: number;
+  conversions?: number;
+}
+
+export interface TemplateAnalyticsStats {
+  summary: TemplateAnalyticsSummary;
+  topByViews: TemplateAnalyticsTopItem[];
+  topByConversions: TemplateAnalyticsTopItem[];
+  byCategory: TemplateAnalyticsCategoryStat[];
+  byStyle: TemplateAnalyticsStyleStat[];
+}
+
+export interface TemplateEvolutionEntry {
+  id?: number;
+  name?: string;
+  category?: string;
+  style?: string;
+  views?: number;
+  conversions?: number;
+  previewsGenerated?: number;
+  recommendation?: string;
+}
+
+export interface TemplateEvolution {
+  underperforming: TemplateEvolutionEntry[];
+  needsRevision: TemplateEvolutionEntry[];
+  topConverters: TemplateEvolutionEntry[];
+}
+
+export interface IndustryShowcaseItem {
+  industry: string;
+  topTemplate?: TemplateItem | null;
+  totalTemplates: number;
+}
+
+export interface IndustryShowcase {
+  items: IndustryShowcaseItem[];
+}
+
+export type TemplateEventInputEventType = typeof TemplateEventInputEventType[keyof typeof TemplateEventInputEventType];
+
+
+export const TemplateEventInputEventType = {
+  view: 'view',
+  selected: 'selected',
+  preview_generated: 'preview_generated',
+  portfolio_viewed: 'portfolio_viewed',
+  conversion: 'conversion',
+  favorited: 'favorited',
+} as const;
+
+export type TemplateEventInputMetadata = { [key: string]: unknown };
+
+export interface TemplateEventInput {
+  eventType: TemplateEventInputEventType;
+  clientId?: string;
+  sessionId?: string;
+  metadata?: TemplateEventInputMetadata;
+}
+
+export interface CreateTemplateInput {
+  templateCode: string;
+  name: string;
+  description?: string;
+  category: string;
+  style: string;
+  industry?: string;
+  colorTheme?: TemplateColorTheme;
+  typography?: TemplateTypography;
+  layout?: string;
+  supportedPackages?: string[];
+  brandDnaTags?: TemplateBrandDnaTags;
+  previewImages?: TemplatePreviewImages;
+  editable?: boolean;
+  isPremium?: boolean;
+  version?: string;
+  featured?: boolean;
+  sortOrder?: number;
+}
+
+export interface WorkspaceTemplatesDashboard {
+  gallery: TemplateList;
+  recommended: ScoredTemplate[];
+}
+
 export type AbTestTestType = typeof AbTestTestType[keyof typeof AbTestTestType];
 
 
@@ -5407,5 +5630,104 @@ export type GetCpReviewTimeline200 = {
   reviewStatus: string;
   totalEvents: number;
   events: CpTimelineEvent[];
+};
+
+export type ListTemplatesAdminParams = {
+category?: string;
+industry?: string;
+style?: string;
+status?: ListTemplatesAdminStatus;
+isPremium?: boolean;
+featured?: boolean;
+sortBy?: ListTemplatesAdminSortBy;
+search?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListTemplatesAdminStatus = typeof ListTemplatesAdminStatus[keyof typeof ListTemplatesAdminStatus];
+
+
+export const ListTemplatesAdminStatus = {
+  draft: 'draft',
+  published: 'published',
+  archived: 'archived',
+} as const;
+
+export type ListTemplatesAdminSortBy = typeof ListTemplatesAdminSortBy[keyof typeof ListTemplatesAdminSortBy];
+
+
+export const ListTemplatesAdminSortBy = {
+  popular: 'popular',
+  newest: 'newest',
+  conversions: 'conversions',
+  selections: 'selections',
+} as const;
+
+export type PublishTemplate200 = {
+  ok?: boolean;
+};
+
+export type ArchiveTemplate200 = {
+  ok?: boolean;
+};
+
+export type RecordTemplateEventAdmin200 = {
+  ok?: boolean;
+};
+
+export type ListTemplatesPublicParams = {
+category?: string;
+industry?: string;
+style?: string;
+isPremium?: boolean;
+featured?: boolean;
+sortBy?: ListTemplatesPublicSortBy;
+search?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListTemplatesPublicSortBy = typeof ListTemplatesPublicSortBy[keyof typeof ListTemplatesPublicSortBy];
+
+
+export const ListTemplatesPublicSortBy = {
+  popular: 'popular',
+  newest: 'newest',
+  conversions: 'conversions',
+  selections: 'selections',
+} as const;
+
+export type GetPublicTemplateRecommendationsParams = {
+industry?: string;
+category?: string;
+limit?: number;
+};
+
+export type RecordTemplateEventPublic200 = {
+  ok?: boolean;
+};
+
+export type GetWorkspaceTemplatesParams = {
+category?: string;
+industry?: string;
+style?: string;
+sortBy?: GetWorkspaceTemplatesSortBy;
+limit?: number;
+offset?: number;
+};
+
+export type GetWorkspaceTemplatesSortBy = typeof GetWorkspaceTemplatesSortBy[keyof typeof GetWorkspaceTemplatesSortBy];
+
+
+export const GetWorkspaceTemplatesSortBy = {
+  popular: 'popular',
+  newest: 'newest',
+} as const;
+
+export type GetWorkspaceTemplateRecommendationsParams = {
+category?: string;
+packageLevel?: string;
+limit?: number;
 };
 

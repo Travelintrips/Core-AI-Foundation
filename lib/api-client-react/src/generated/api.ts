@@ -95,6 +95,7 @@ import type {
   ApproveCpReviewBody,
   ApproveRequestMargin200,
   ApproveRequestMarginBody,
+  ArchiveTemplate200,
   AssetFeedbackInput,
   AssetIntelligenceList,
   AssetIntelligenceView,
@@ -159,6 +160,7 @@ import type {
   CreateScheduleBody,
   CreateSubscriptionBody,
   CreateSupportTicketInput,
+  CreateTemplateInput,
   CreativeAiAsset,
   CreativeAiImageAnalytics,
   CreativeBriefInput,
@@ -207,6 +209,9 @@ import type {
   GetCreativeImageAnalyticsParams,
   GetFunnelAnalyticsParams,
   GetLivePreviewSessionCount200,
+  GetPublicTemplateRecommendationsParams,
+  GetWorkspaceTemplateRecommendationsParams,
+  GetWorkspaceTemplatesParams,
   GoneResponse,
   HealthStatus,
   HumanTask,
@@ -215,6 +220,7 @@ import type {
   HumanTaskStats,
   ImpersonateCustomerInput,
   ImpersonateCustomerResult,
+  IndustryShowcase,
   InsightList,
   JobPage,
   JobStats,
@@ -239,12 +245,16 @@ import type {
   ListScheduleRunsParams,
   ListSchedulesParams,
   ListServicesParams,
+  ListTemplatesAdminParams,
+  ListTemplatesPublicParams,
   ListWorkflowExecutionsParams,
   ListWorkspaceDownloadsParams,
   ListWorkspaceInvoiceDocumentsParams,
   ListWorkspaceInvoicesParams,
   ListWorkspaceNotificationsParams,
   ListWorkspaceProjectsParams,
+  LivePreviewInput,
+  LivePreviewResult,
   ManualUnlockInput,
   ManualUnlockProjectFiles200,
   MarkAllNotificationsReadResult,
@@ -274,11 +284,14 @@ import type {
   ProviderBreakdown,
   PublicProjectReview,
   PublishEventBody,
+  PublishTemplate200,
   QueueFilterBody,
   ReassignHumanTaskBody,
   RebalanceCluster200,
   RecordAbMetricInput,
   RecordPortfolioView200,
+  RecordTemplateEventAdmin200,
+  RecordTemplateEventPublic200,
   RecoverStaleWorkers200,
   RedeemCouponInput,
   Referral,
@@ -308,6 +321,12 @@ import type {
   SubmitPaymentProof200,
   SubscriptionListResponse,
   TagAssetLibraryItemBody,
+  TemplateAnalyticsStats,
+  TemplateEventInput,
+  TemplateEvolution,
+  TemplateItem,
+  TemplateList,
+  TemplateRecommendationList,
   TickDispatcher200,
   TrackClickInput,
   TrackConversionInput,
@@ -337,6 +356,7 @@ import type {
   WorkspaceSummary,
   WorkspaceSupportTicket,
   WorkspaceSupportTicketList,
+  WorkspaceTemplatesDashboard,
   ZipDeliveryView
 } from './api.schemas';
 
@@ -24984,4 +25004,1463 @@ export function useGetCpReviewDashboard<TData = Awaited<ReturnType<typeof getCpR
 
 
 
+
+export const getListTemplatesAdminUrl = (params?: ListTemplatesAdminParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/ai/templates?${stringifiedParams}` : `/api/ai/templates`
+}
+
+/**
+ * @summary Admin — list/filter templates
+ */
+export const listTemplatesAdmin = async (params?: ListTemplatesAdminParams, options?: RequestInit): Promise<TemplateList> => {
+
+  return customFetch<TemplateList>(getListTemplatesAdminUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTemplatesAdminQueryKey = (params?: ListTemplatesAdminParams,) => {
+    return [
+    `/api/ai/templates`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListTemplatesAdminQueryOptions = <TData = Awaited<ReturnType<typeof listTemplatesAdmin>>, TError = ErrorType<unknown>>(params?: ListTemplatesAdminParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTemplatesAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTemplatesAdminQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTemplatesAdmin>>> = ({ signal }) => listTemplatesAdmin(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTemplatesAdmin>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTemplatesAdminQueryResult = NonNullable<Awaited<ReturnType<typeof listTemplatesAdmin>>>
+export type ListTemplatesAdminQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — list/filter templates
+ */
+
+export function useListTemplatesAdmin<TData = Awaited<ReturnType<typeof listTemplatesAdmin>>, TError = ErrorType<unknown>>(
+ params?: ListTemplatesAdminParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTemplatesAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTemplatesAdminQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateTemplateUrl = () => {
+
+
+
+
+  return `/api/ai/templates`
+}
+
+/**
+ * @summary Admin — create a template
+ */
+export const createTemplate = async (createTemplateInput: CreateTemplateInput, options?: RequestInit): Promise<TemplateItem> => {
+
+  return customFetch<TemplateItem>(getCreateTemplateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createTemplateInput)
+  }
+);}
+
+
+
+
+export const getCreateTemplateMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTemplate>>, TError,{data: BodyType<CreateTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTemplate>>, TError,{data: BodyType<CreateTemplateInput>}, TContext> => {
+
+const mutationKey = ['createTemplate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTemplate>>, {data: BodyType<CreateTemplateInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createTemplate(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTemplateMutationResult = NonNullable<Awaited<ReturnType<typeof createTemplate>>>
+    export type CreateTemplateMutationBody = BodyType<CreateTemplateInput>
+    export type CreateTemplateMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Admin — create a template
+ */
+export const useCreateTemplate = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTemplate>>, TError,{data: BodyType<CreateTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTemplate>>,
+        TError,
+        {data: BodyType<CreateTemplateInput>},
+        TContext
+      > => {
+      return useMutation(getCreateTemplateMutationOptions(options));
+    }
+
+export const getGetTemplateAnalyticsStatsUrl = () => {
+
+
+
+
+  return `/api/ai/templates/stats`
+}
+
+/**
+ * @summary Admin — template analytics stats
+ */
+export const getTemplateAnalyticsStats = async ( options?: RequestInit): Promise<TemplateAnalyticsStats> => {
+
+  return customFetch<TemplateAnalyticsStats>(getGetTemplateAnalyticsStatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTemplateAnalyticsStatsQueryKey = () => {
+    return [
+    `/api/ai/templates/stats`
+    ] as const;
+    }
+
+
+export const getGetTemplateAnalyticsStatsQueryOptions = <TData = Awaited<ReturnType<typeof getTemplateAnalyticsStats>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTemplateAnalyticsStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTemplateAnalyticsStatsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTemplateAnalyticsStats>>> = ({ signal }) => getTemplateAnalyticsStats({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTemplateAnalyticsStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTemplateAnalyticsStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getTemplateAnalyticsStats>>>
+export type GetTemplateAnalyticsStatsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — template analytics stats
+ */
+
+export function useGetTemplateAnalyticsStats<TData = Awaited<ReturnType<typeof getTemplateAnalyticsStats>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTemplateAnalyticsStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTemplateAnalyticsStatsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetTemplateEvolutionRecommendationsUrl = () => {
+
+
+
+
+  return `/api/ai/templates/evolution`
+}
+
+/**
+ * @summary Admin — evolution recommendations (underperforming/needs-revision/top-converters)
+ */
+export const getTemplateEvolutionRecommendations = async ( options?: RequestInit): Promise<TemplateEvolution> => {
+
+  return customFetch<TemplateEvolution>(getGetTemplateEvolutionRecommendationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTemplateEvolutionRecommendationsQueryKey = () => {
+    return [
+    `/api/ai/templates/evolution`
+    ] as const;
+    }
+
+
+export const getGetTemplateEvolutionRecommendationsQueryOptions = <TData = Awaited<ReturnType<typeof getTemplateEvolutionRecommendations>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTemplateEvolutionRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTemplateEvolutionRecommendationsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTemplateEvolutionRecommendations>>> = ({ signal }) => getTemplateEvolutionRecommendations({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTemplateEvolutionRecommendations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTemplateEvolutionRecommendationsQueryResult = NonNullable<Awaited<ReturnType<typeof getTemplateEvolutionRecommendations>>>
+export type GetTemplateEvolutionRecommendationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — evolution recommendations (underperforming/needs-revision/top-converters)
+ */
+
+export function useGetTemplateEvolutionRecommendations<TData = Awaited<ReturnType<typeof getTemplateEvolutionRecommendations>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTemplateEvolutionRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTemplateEvolutionRecommendationsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetTemplateIndustryShowcaseAdminUrl = () => {
+
+
+
+
+  return `/api/ai/templates/industry-showcase`
+}
+
+/**
+ * @summary Admin — industry showcase (top template per industry)
+ */
+export const getTemplateIndustryShowcaseAdmin = async ( options?: RequestInit): Promise<IndustryShowcase> => {
+
+  return customFetch<IndustryShowcase>(getGetTemplateIndustryShowcaseAdminUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTemplateIndustryShowcaseAdminQueryKey = () => {
+    return [
+    `/api/ai/templates/industry-showcase`
+    ] as const;
+    }
+
+
+export const getGetTemplateIndustryShowcaseAdminQueryOptions = <TData = Awaited<ReturnType<typeof getTemplateIndustryShowcaseAdmin>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTemplateIndustryShowcaseAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTemplateIndustryShowcaseAdminQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTemplateIndustryShowcaseAdmin>>> = ({ signal }) => getTemplateIndustryShowcaseAdmin({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTemplateIndustryShowcaseAdmin>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTemplateIndustryShowcaseAdminQueryResult = NonNullable<Awaited<ReturnType<typeof getTemplateIndustryShowcaseAdmin>>>
+export type GetTemplateIndustryShowcaseAdminQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — industry showcase (top template per industry)
+ */
+
+export function useGetTemplateIndustryShowcaseAdmin<TData = Awaited<ReturnType<typeof getTemplateIndustryShowcaseAdmin>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTemplateIndustryShowcaseAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTemplateIndustryShowcaseAdminQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetTemplateAdminUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/templates/${id}`
+}
+
+/**
+ * @summary Admin — get one template
+ */
+export const getTemplateAdmin = async (id: number, options?: RequestInit): Promise<TemplateItem> => {
+
+  return customFetch<TemplateItem>(getGetTemplateAdminUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTemplateAdminQueryKey = (id: number,) => {
+    return [
+    `/api/ai/templates/${id}`
+    ] as const;
+    }
+
+
+export const getGetTemplateAdminQueryOptions = <TData = Awaited<ReturnType<typeof getTemplateAdmin>>, TError = ErrorType<NotFoundResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTemplateAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTemplateAdminQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTemplateAdmin>>> = ({ signal }) => getTemplateAdmin(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTemplateAdmin>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTemplateAdminQueryResult = NonNullable<Awaited<ReturnType<typeof getTemplateAdmin>>>
+export type GetTemplateAdminQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Admin — get one template
+ */
+
+export function useGetTemplateAdmin<TData = Awaited<ReturnType<typeof getTemplateAdmin>>, TError = ErrorType<NotFoundResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTemplateAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTemplateAdminQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateTemplateUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/templates/${id}`
+}
+
+/**
+ * @summary Admin — update a template
+ */
+export const updateTemplate = async (id: number,
+    createTemplateInput: CreateTemplateInput, options?: RequestInit): Promise<TemplateItem> => {
+
+  return customFetch<TemplateItem>(getUpdateTemplateUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createTemplateInput)
+  }
+);}
+
+
+
+
+export const getUpdateTemplateMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTemplate>>, TError,{id: number;data: BodyType<CreateTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateTemplate>>, TError,{id: number;data: BodyType<CreateTemplateInput>}, TContext> => {
+
+const mutationKey = ['updateTemplate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateTemplate>>, {id: number;data: BodyType<CreateTemplateInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateTemplate(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateTemplateMutationResult = NonNullable<Awaited<ReturnType<typeof updateTemplate>>>
+    export type UpdateTemplateMutationBody = BodyType<CreateTemplateInput>
+    export type UpdateTemplateMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Admin — update a template
+ */
+export const useUpdateTemplate = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTemplate>>, TError,{id: number;data: BodyType<CreateTemplateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateTemplate>>,
+        TError,
+        {id: number;data: BodyType<CreateTemplateInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateTemplateMutationOptions(options));
+    }
+
+export const getPublishTemplateUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/templates/${id}/publish`
+}
+
+/**
+ * @summary Admin — publish a template
+ */
+export const publishTemplate = async (id: number, options?: RequestInit): Promise<PublishTemplate200> => {
+
+  return customFetch<PublishTemplate200>(getPublishTemplateUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getPublishTemplateMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof publishTemplate>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof publishTemplate>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['publishTemplate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof publishTemplate>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  publishTemplate(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PublishTemplateMutationResult = NonNullable<Awaited<ReturnType<typeof publishTemplate>>>
+
+    export type PublishTemplateMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Admin — publish a template
+ */
+export const usePublishTemplate = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof publishTemplate>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof publishTemplate>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getPublishTemplateMutationOptions(options));
+    }
+
+export const getArchiveTemplateUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/templates/${id}/archive`
+}
+
+/**
+ * @summary Admin — archive a template
+ */
+export const archiveTemplate = async (id: number, options?: RequestInit): Promise<ArchiveTemplate200> => {
+
+  return customFetch<ArchiveTemplate200>(getArchiveTemplateUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getArchiveTemplateMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveTemplate>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof archiveTemplate>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['archiveTemplate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof archiveTemplate>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  archiveTemplate(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ArchiveTemplateMutationResult = NonNullable<Awaited<ReturnType<typeof archiveTemplate>>>
+
+    export type ArchiveTemplateMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Admin — archive a template
+ */
+export const useArchiveTemplate = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveTemplate>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof archiveTemplate>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getArchiveTemplateMutationOptions(options));
+    }
+
+export const getRecordTemplateEventAdminUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/templates/${id}/event`
+}
+
+/**
+ * @summary Admin — record a template event
+ */
+export const recordTemplateEventAdmin = async (id: number,
+    templateEventInput: TemplateEventInput, options?: RequestInit): Promise<RecordTemplateEventAdmin200> => {
+
+  return customFetch<RecordTemplateEventAdmin200>(getRecordTemplateEventAdminUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(templateEventInput)
+  }
+);}
+
+
+
+
+export const getRecordTemplateEventAdminMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordTemplateEventAdmin>>, TError,{id: number;data: BodyType<TemplateEventInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordTemplateEventAdmin>>, TError,{id: number;data: BodyType<TemplateEventInput>}, TContext> => {
+
+const mutationKey = ['recordTemplateEventAdmin'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordTemplateEventAdmin>>, {id: number;data: BodyType<TemplateEventInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  recordTemplateEventAdmin(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordTemplateEventAdminMutationResult = NonNullable<Awaited<ReturnType<typeof recordTemplateEventAdmin>>>
+    export type RecordTemplateEventAdminMutationBody = BodyType<TemplateEventInput>
+    export type RecordTemplateEventAdminMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Admin — record a template event
+ */
+export const useRecordTemplateEventAdmin = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordTemplateEventAdmin>>, TError,{id: number;data: BodyType<TemplateEventInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordTemplateEventAdmin>>,
+        TError,
+        {id: number;data: BodyType<TemplateEventInput>},
+        TContext
+      > => {
+      return useMutation(getRecordTemplateEventAdminMutationOptions(options));
+    }
+
+export const getListTemplatesPublicUrl = (params?: ListTemplatesPublicParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/templates?${stringifiedParams}` : `/api/public/templates`
+}
+
+/**
+ * @summary Public — template gallery (published only)
+ */
+export const listTemplatesPublic = async (params?: ListTemplatesPublicParams, options?: RequestInit): Promise<TemplateList> => {
+
+  return customFetch<TemplateList>(getListTemplatesPublicUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTemplatesPublicQueryKey = (params?: ListTemplatesPublicParams,) => {
+    return [
+    `/api/public/templates`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListTemplatesPublicQueryOptions = <TData = Awaited<ReturnType<typeof listTemplatesPublic>>, TError = ErrorType<unknown>>(params?: ListTemplatesPublicParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTemplatesPublic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTemplatesPublicQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTemplatesPublic>>> = ({ signal }) => listTemplatesPublic(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTemplatesPublic>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTemplatesPublicQueryResult = NonNullable<Awaited<ReturnType<typeof listTemplatesPublic>>>
+export type ListTemplatesPublicQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Public — template gallery (published only)
+ */
+
+export function useListTemplatesPublic<TData = Awaited<ReturnType<typeof listTemplatesPublic>>, TError = ErrorType<unknown>>(
+ params?: ListTemplatesPublicParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTemplatesPublic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTemplatesPublicQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetTemplateIndustryShowcasePublicUrl = () => {
+
+
+
+
+  return `/api/public/templates/industry-showcase`
+}
+
+/**
+ * @summary Public — industry showcase
+ */
+export const getTemplateIndustryShowcasePublic = async ( options?: RequestInit): Promise<IndustryShowcase> => {
+
+  return customFetch<IndustryShowcase>(getGetTemplateIndustryShowcasePublicUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTemplateIndustryShowcasePublicQueryKey = () => {
+    return [
+    `/api/public/templates/industry-showcase`
+    ] as const;
+    }
+
+
+export const getGetTemplateIndustryShowcasePublicQueryOptions = <TData = Awaited<ReturnType<typeof getTemplateIndustryShowcasePublic>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTemplateIndustryShowcasePublic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTemplateIndustryShowcasePublicQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTemplateIndustryShowcasePublic>>> = ({ signal }) => getTemplateIndustryShowcasePublic({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTemplateIndustryShowcasePublic>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTemplateIndustryShowcasePublicQueryResult = NonNullable<Awaited<ReturnType<typeof getTemplateIndustryShowcasePublic>>>
+export type GetTemplateIndustryShowcasePublicQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Public — industry showcase
+ */
+
+export function useGetTemplateIndustryShowcasePublic<TData = Awaited<ReturnType<typeof getTemplateIndustryShowcasePublic>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTemplateIndustryShowcasePublic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTemplateIndustryShowcasePublicQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPublicTemplateRecommendationsUrl = (params?: GetPublicTemplateRecommendationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/templates/recommended?${stringifiedParams}` : `/api/public/templates/recommended`
+}
+
+/**
+ * @summary Public — anonymous recommendations by industry/category
+ */
+export const getPublicTemplateRecommendations = async (params?: GetPublicTemplateRecommendationsParams, options?: RequestInit): Promise<TemplateRecommendationList> => {
+
+  return customFetch<TemplateRecommendationList>(getGetPublicTemplateRecommendationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicTemplateRecommendationsQueryKey = (params?: GetPublicTemplateRecommendationsParams,) => {
+    return [
+    `/api/public/templates/recommended`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPublicTemplateRecommendationsQueryOptions = <TData = Awaited<ReturnType<typeof getPublicTemplateRecommendations>>, TError = ErrorType<unknown>>(params?: GetPublicTemplateRecommendationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicTemplateRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicTemplateRecommendationsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicTemplateRecommendations>>> = ({ signal }) => getPublicTemplateRecommendations(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicTemplateRecommendations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicTemplateRecommendationsQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicTemplateRecommendations>>>
+export type GetPublicTemplateRecommendationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Public — anonymous recommendations by industry/category
+ */
+
+export function useGetPublicTemplateRecommendations<TData = Awaited<ReturnType<typeof getPublicTemplateRecommendations>>, TError = ErrorType<unknown>>(
+ params?: GetPublicTemplateRecommendationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicTemplateRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicTemplateRecommendationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetTemplatePublicUrl = (id: number,) => {
+
+
+
+
+  return `/api/public/templates/${id}`
+}
+
+/**
+ * @summary Public — get one template (published only), records a view
+ */
+export const getTemplatePublic = async (id: number, options?: RequestInit): Promise<TemplateItem> => {
+
+  return customFetch<TemplateItem>(getGetTemplatePublicUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTemplatePublicQueryKey = (id: number,) => {
+    return [
+    `/api/public/templates/${id}`
+    ] as const;
+    }
+
+
+export const getGetTemplatePublicQueryOptions = <TData = Awaited<ReturnType<typeof getTemplatePublic>>, TError = ErrorType<NotFoundResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTemplatePublic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTemplatePublicQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTemplatePublic>>> = ({ signal }) => getTemplatePublic(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTemplatePublic>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTemplatePublicQueryResult = NonNullable<Awaited<ReturnType<typeof getTemplatePublic>>>
+export type GetTemplatePublicQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Public — get one template (published only), records a view
+ */
+
+export function useGetTemplatePublic<TData = Awaited<ReturnType<typeof getTemplatePublic>>, TError = ErrorType<NotFoundResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTemplatePublic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTemplatePublicQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGenerateTemplateLivePreviewPublicUrl = (id: number,) => {
+
+
+
+
+  return `/api/public/templates/${id}/preview`
+}
+
+/**
+ * @summary Public — generate a live customization preview
+ */
+export const generateTemplateLivePreviewPublic = async (id: number,
+    livePreviewInput: LivePreviewInput, options?: RequestInit): Promise<LivePreviewResult> => {
+
+  return customFetch<LivePreviewResult>(getGenerateTemplateLivePreviewPublicUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(livePreviewInput)
+  }
+);}
+
+
+
+
+export const getGenerateTemplateLivePreviewPublicMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateTemplateLivePreviewPublic>>, TError,{id: number;data: BodyType<LivePreviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateTemplateLivePreviewPublic>>, TError,{id: number;data: BodyType<LivePreviewInput>}, TContext> => {
+
+const mutationKey = ['generateTemplateLivePreviewPublic'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateTemplateLivePreviewPublic>>, {id: number;data: BodyType<LivePreviewInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  generateTemplateLivePreviewPublic(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateTemplateLivePreviewPublicMutationResult = NonNullable<Awaited<ReturnType<typeof generateTemplateLivePreviewPublic>>>
+    export type GenerateTemplateLivePreviewPublicMutationBody = BodyType<LivePreviewInput>
+    export type GenerateTemplateLivePreviewPublicMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Public — generate a live customization preview
+ */
+export const useGenerateTemplateLivePreviewPublic = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateTemplateLivePreviewPublic>>, TError,{id: number;data: BodyType<LivePreviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateTemplateLivePreviewPublic>>,
+        TError,
+        {id: number;data: BodyType<LivePreviewInput>},
+        TContext
+      > => {
+      return useMutation(getGenerateTemplateLivePreviewPublicMutationOptions(options));
+    }
+
+export const getRecordTemplateEventPublicUrl = (id: number,) => {
+
+
+
+
+  return `/api/public/templates/${id}/event`
+}
+
+/**
+ * @summary Public — record a template event (view/selected/etc.)
+ */
+export const recordTemplateEventPublic = async (id: number,
+    templateEventInput: TemplateEventInput, options?: RequestInit): Promise<RecordTemplateEventPublic200> => {
+
+  return customFetch<RecordTemplateEventPublic200>(getRecordTemplateEventPublicUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(templateEventInput)
+  }
+);}
+
+
+
+
+export const getRecordTemplateEventPublicMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordTemplateEventPublic>>, TError,{id: number;data: BodyType<TemplateEventInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordTemplateEventPublic>>, TError,{id: number;data: BodyType<TemplateEventInput>}, TContext> => {
+
+const mutationKey = ['recordTemplateEventPublic'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordTemplateEventPublic>>, {id: number;data: BodyType<TemplateEventInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  recordTemplateEventPublic(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordTemplateEventPublicMutationResult = NonNullable<Awaited<ReturnType<typeof recordTemplateEventPublic>>>
+    export type RecordTemplateEventPublicMutationBody = BodyType<TemplateEventInput>
+    export type RecordTemplateEventPublicMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Public — record a template event (view/selected/etc.)
+ */
+export const useRecordTemplateEventPublic = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordTemplateEventPublic>>, TError,{id: number;data: BodyType<TemplateEventInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordTemplateEventPublic>>,
+        TError,
+        {id: number;data: BodyType<TemplateEventInput>},
+        TContext
+      > => {
+      return useMutation(getRecordTemplateEventPublicMutationOptions(options));
+    }
+
+export const getGetWorkspaceTemplatesUrl = (token: string,
+    params?: GetWorkspaceTemplatesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/customer/workspace/${token}/templates?${stringifiedParams}` : `/api/public/customer/workspace/${token}/templates`
+}
+
+/**
+ * @summary Customer — template gallery + Brand DNA recommendations
+ */
+export const getWorkspaceTemplates = async (token: string,
+    params?: GetWorkspaceTemplatesParams, options?: RequestInit): Promise<WorkspaceTemplatesDashboard> => {
+
+  return customFetch<WorkspaceTemplatesDashboard>(getGetWorkspaceTemplatesUrl(token,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorkspaceTemplatesQueryKey = (token: string,
+    params?: GetWorkspaceTemplatesParams,) => {
+    return [
+    `/api/public/customer/workspace/${token}/templates`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetWorkspaceTemplatesQueryOptions = <TData = Awaited<ReturnType<typeof getWorkspaceTemplates>>, TError = ErrorType<NotFoundResponse>>(token: string,
+    params?: GetWorkspaceTemplatesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceTemplates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkspaceTemplatesQueryKey(token,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkspaceTemplates>>> = ({ signal }) => getWorkspaceTemplates(token,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceTemplates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorkspaceTemplatesQueryResult = NonNullable<Awaited<ReturnType<typeof getWorkspaceTemplates>>>
+export type GetWorkspaceTemplatesQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Customer — template gallery + Brand DNA recommendations
+ */
+
+export function useGetWorkspaceTemplates<TData = Awaited<ReturnType<typeof getWorkspaceTemplates>>, TError = ErrorType<NotFoundResponse>>(
+ token: string,
+    params?: GetWorkspaceTemplatesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceTemplates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorkspaceTemplatesQueryOptions(token,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetWorkspaceTemplateRecommendationsUrl = (token: string,
+    params?: GetWorkspaceTemplateRecommendationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/customer/workspace/${token}/templates/recommended?${stringifiedParams}` : `/api/public/customer/workspace/${token}/templates/recommended`
+}
+
+/**
+ * @summary Customer — top templates by Brand DNA match
+ */
+export const getWorkspaceTemplateRecommendations = async (token: string,
+    params?: GetWorkspaceTemplateRecommendationsParams, options?: RequestInit): Promise<TemplateRecommendationList> => {
+
+  return customFetch<TemplateRecommendationList>(getGetWorkspaceTemplateRecommendationsUrl(token,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorkspaceTemplateRecommendationsQueryKey = (token: string,
+    params?: GetWorkspaceTemplateRecommendationsParams,) => {
+    return [
+    `/api/public/customer/workspace/${token}/templates/recommended`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetWorkspaceTemplateRecommendationsQueryOptions = <TData = Awaited<ReturnType<typeof getWorkspaceTemplateRecommendations>>, TError = ErrorType<NotFoundResponse>>(token: string,
+    params?: GetWorkspaceTemplateRecommendationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceTemplateRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkspaceTemplateRecommendationsQueryKey(token,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkspaceTemplateRecommendations>>> = ({ signal }) => getWorkspaceTemplateRecommendations(token,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceTemplateRecommendations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorkspaceTemplateRecommendationsQueryResult = NonNullable<Awaited<ReturnType<typeof getWorkspaceTemplateRecommendations>>>
+export type GetWorkspaceTemplateRecommendationsQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Customer — top templates by Brand DNA match
+ */
+
+export function useGetWorkspaceTemplateRecommendations<TData = Awaited<ReturnType<typeof getWorkspaceTemplateRecommendations>>, TError = ErrorType<NotFoundResponse>>(
+ token: string,
+    params?: GetWorkspaceTemplateRecommendationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceTemplateRecommendations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorkspaceTemplateRecommendationsQueryOptions(token,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGenerateWorkspaceTemplateLivePreviewUrl = (token: string,
+    id: number,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/templates/${id}/preview`
+}
+
+/**
+ * @summary Customer — generate a live customization preview
+ */
+export const generateWorkspaceTemplateLivePreview = async (token: string,
+    id: number,
+    livePreviewInput: LivePreviewInput, options?: RequestInit): Promise<LivePreviewResult> => {
+
+  return customFetch<LivePreviewResult>(getGenerateWorkspaceTemplateLivePreviewUrl(token,id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(livePreviewInput)
+  }
+);}
+
+
+
+
+export const getGenerateWorkspaceTemplateLivePreviewMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateWorkspaceTemplateLivePreview>>, TError,{token: string;id: number;data: BodyType<LivePreviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateWorkspaceTemplateLivePreview>>, TError,{token: string;id: number;data: BodyType<LivePreviewInput>}, TContext> => {
+
+const mutationKey = ['generateWorkspaceTemplateLivePreview'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateWorkspaceTemplateLivePreview>>, {token: string;id: number;data: BodyType<LivePreviewInput>}> = (props) => {
+          const {token,id,data} = props ?? {};
+
+          return  generateWorkspaceTemplateLivePreview(token,id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateWorkspaceTemplateLivePreviewMutationResult = NonNullable<Awaited<ReturnType<typeof generateWorkspaceTemplateLivePreview>>>
+    export type GenerateWorkspaceTemplateLivePreviewMutationBody = BodyType<LivePreviewInput>
+    export type GenerateWorkspaceTemplateLivePreviewMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Customer — generate a live customization preview
+ */
+export const useGenerateWorkspaceTemplateLivePreview = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateWorkspaceTemplateLivePreview>>, TError,{token: string;id: number;data: BodyType<LivePreviewInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateWorkspaceTemplateLivePreview>>,
+        TError,
+        {token: string;id: number;data: BodyType<LivePreviewInput>},
+        TContext
+      > => {
+      return useMutation(getGenerateWorkspaceTemplateLivePreviewMutationOptions(options));
+    }
 

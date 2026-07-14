@@ -1,6 +1,9 @@
 /**
  * templates.ts — V4.3 Template Marketplace routes (admin + public).
  *
+ * All paths below are relative to the app-level "/api" mount in app.ts —
+ * do NOT re-add an "/api" prefix here (that would double it up).
+ *
  * Admin routes (x-admin-api-key):
  *   GET    /api/ai/templates                          list / filter
  *   GET    /api/ai/templates/stats                    analytics stats
@@ -28,7 +31,7 @@
  */
 
 import { Router } from "express";
-import { requireAdminApiKey } from "../middleware/adminAuth.js";
+import { adminAuth as requireAdminApiKey } from "../middleware/adminAuth.js";
 import {
   listTemplates,
   getTemplate,
@@ -52,7 +55,7 @@ const router = Router();
 
 // ── Admin Routes ──────────────────────────────────────────────────────────────
 
-router.get("/api/ai/templates/stats", requireAdminApiKey, async (req, res) => {
+router.get("/ai/templates/stats", requireAdminApiKey, async (req, res) => {
   try {
     const stats = await getTemplateAnalyticsStats();
     res.json(stats);
@@ -61,7 +64,7 @@ router.get("/api/ai/templates/stats", requireAdminApiKey, async (req, res) => {
   }
 });
 
-router.get("/api/ai/templates/evolution", requireAdminApiKey, async (req, res) => {
+router.get("/ai/templates/evolution", requireAdminApiKey, async (req, res) => {
   try {
     const recs = await getTemplateEvolutionRecommendations();
     res.json(recs);
@@ -70,7 +73,7 @@ router.get("/api/ai/templates/evolution", requireAdminApiKey, async (req, res) =
   }
 });
 
-router.get("/api/ai/templates/industry-showcase", requireAdminApiKey, async (req, res) => {
+router.get("/ai/templates/industry-showcase", requireAdminApiKey, async (req, res) => {
   try {
     const showcase = await getIndustryShowcase();
     res.json({ items: showcase });
@@ -79,7 +82,7 @@ router.get("/api/ai/templates/industry-showcase", requireAdminApiKey, async (req
   }
 });
 
-router.get("/api/ai/templates", requireAdminApiKey, async (req, res) => {
+router.get("/ai/templates", requireAdminApiKey, async (req, res) => {
   try {
     const {
       category, industry, style, status, isPremium, featured,
@@ -103,23 +106,24 @@ router.get("/api/ai/templates", requireAdminApiKey, async (req, res) => {
   }
 });
 
-router.get("/api/ai/templates/:id", requireAdminApiKey, async (req, res) => {
+router.get("/ai/templates/:id", requireAdminApiKey, async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    const id = parseInt(req.params.id as string, 10);
+    if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
     const t = await getTemplate(id);
-    if (!t) return res.status(404).json({ error: "not found" });
+    if (!t) { res.status(404).json({ error: "not found" }); return; }
     res.json(t);
   } catch (e: unknown) {
     res.status(500).json({ error: e instanceof Error ? e.message : "internal error" });
   }
 });
 
-router.post("/api/ai/templates", requireAdminApiKey, async (req, res) => {
+router.post("/ai/templates", requireAdminApiKey, async (req, res): Promise<void> => {
   try {
     const body = req.body as Record<string, unknown>;
     if (!body.templateCode || !body.name || !body.category || !body.style) {
-      return res.status(400).json({ error: "templateCode, name, category, style required" });
+      res.status(400).json({ error: "templateCode, name, category, style required" });
+      return;
     }
     const t = await createTemplate(body as Parameters<typeof createTemplate>[0]);
     res.status(201).json(t);
@@ -128,22 +132,22 @@ router.post("/api/ai/templates", requireAdminApiKey, async (req, res) => {
   }
 });
 
-router.patch("/api/ai/templates/:id", requireAdminApiKey, async (req, res) => {
+router.patch("/ai/templates/:id", requireAdminApiKey, async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    const id = parseInt(req.params.id as string, 10);
+    if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
     const t = await updateTemplate(id, req.body as Record<string, unknown>);
-    if (!t) return res.status(404).json({ error: "not found" });
+    if (!t) { res.status(404).json({ error: "not found" }); return; }
     res.json(t);
   } catch (e: unknown) {
     res.status(500).json({ error: e instanceof Error ? e.message : "internal error" });
   }
 });
 
-router.post("/api/ai/templates/:id/publish", requireAdminApiKey, async (req, res) => {
+router.post("/ai/templates/:id/publish", requireAdminApiKey, async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    const id = parseInt(req.params.id as string, 10);
+    if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
     await publishTemplate(id);
     res.json({ ok: true });
   } catch (e: unknown) {
@@ -151,10 +155,10 @@ router.post("/api/ai/templates/:id/publish", requireAdminApiKey, async (req, res
   }
 });
 
-router.post("/api/ai/templates/:id/archive", requireAdminApiKey, async (req, res) => {
+router.post("/ai/templates/:id/archive", requireAdminApiKey, async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    const id = parseInt(req.params.id as string, 10);
+    if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
     await archiveTemplate(id);
     res.json({ ok: true });
   } catch (e: unknown) {
@@ -162,12 +166,12 @@ router.post("/api/ai/templates/:id/archive", requireAdminApiKey, async (req, res
   }
 });
 
-router.post("/api/ai/templates/:id/event", requireAdminApiKey, async (req, res) => {
+router.post("/ai/templates/:id/event", requireAdminApiKey, async (req, res): Promise<void> => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    const id = parseInt(req.params.id as string, 10);
+    if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
     const { eventType, clientId, sessionId, metadata } = req.body as Record<string, unknown>;
-    if (!eventType) return res.status(400).json({ error: "eventType required" });
+    if (!eventType) { res.status(400).json({ error: "eventType required" }); return; }
     await recordTemplateEvent(id, eventType as "view", {
       clientId: clientId as string | undefined,
       sessionId: sessionId as string | undefined,
@@ -181,7 +185,7 @@ router.post("/api/ai/templates/:id/event", requireAdminApiKey, async (req, res) 
 
 // ── Public Routes ─────────────────────────────────────────────────────────────
 
-router.get("/api/public/templates/industry-showcase", async (req, res) => {
+router.get("/public/templates/industry-showcase", async (req, res) => {
   try {
     const showcase = await getIndustryShowcase();
     res.json({ items: showcase });
@@ -190,7 +194,7 @@ router.get("/api/public/templates/industry-showcase", async (req, res) => {
   }
 });
 
-router.get("/api/public/templates/recommended", async (req, res) => {
+router.get("/public/templates/recommended", async (req, res) => {
   try {
     const { industry, category, limit } = req.query as Record<string, string>;
     const items = await getPublicRecommendations({
@@ -204,7 +208,7 @@ router.get("/api/public/templates/recommended", async (req, res) => {
   }
 });
 
-router.get("/api/public/templates", async (req, res) => {
+router.get("/public/templates", async (req, res) => {
   try {
     const {
       category, industry, style, isPremium, featured,
@@ -228,12 +232,12 @@ router.get("/api/public/templates", async (req, res) => {
   }
 });
 
-router.get("/api/public/templates/:id", async (req, res) => {
+router.get("/public/templates/:id", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
     const t = await getTemplate(id);
-    if (!t || t.status !== "published") return res.status(404).json({ error: "not found" });
+    if (!t || t.status !== "published") { res.status(404).json({ error: "not found" }); return; }
     // async fire-and-forget view count
     recordTemplateEvent(id, "view", { sessionId: req.headers["x-session-id"] as string | undefined }).catch(() => {});
     res.json(t);
@@ -242,12 +246,12 @@ router.get("/api/public/templates/:id", async (req, res) => {
   }
 });
 
-router.post("/api/public/templates/:id/preview", async (req, res) => {
+router.post("/public/templates/:id/preview", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
     const { companyName, brandColor, logoUrl, industry } = req.body as Record<string, string>;
-    if (!companyName || !brandColor) return res.status(400).json({ error: "companyName, brandColor required" });
+    if (!companyName || !brandColor) { res.status(400).json({ error: "companyName, brandColor required" }); return; }
     const preview = await generateLivePreview({ templateId: id, companyName, brandColor, logoUrl, industry });
     res.json(preview);
   } catch (e: unknown) {
@@ -255,12 +259,12 @@ router.post("/api/public/templates/:id/preview", async (req, res) => {
   }
 });
 
-router.post("/api/public/templates/:id/event", async (req, res) => {
+router.post("/public/templates/:id/event", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
     const { eventType, clientId, sessionId, metadata } = req.body as Record<string, unknown>;
-    if (!eventType) return res.status(400).json({ error: "eventType required" });
+    if (!eventType) { res.status(400).json({ error: "eventType required" }); return; }
     await recordTemplateEvent(id, eventType as "view", {
       clientId: clientId as string | undefined,
       sessionId: sessionId as string | undefined,
@@ -277,19 +281,19 @@ router.post("/api/public/templates/:id/event", async (req, res) => {
 async function resolveToken(token: string): Promise<{ clientId: string; emailHash: string } | null> {
   try {
     const result = await resolveWorkspaceSession(token);
-    if (result.type === "not_found") return null;
-    const emailHash = result.session?.emailHash ?? "";
+    if (!result.ok) return null;
+    const emailHash = result.session.emailHash;
     return { clientId: emailHash, emailHash };
   } catch {
     return null;
   }
 }
 
-router.get("/api/public/customer/workspace/:token/templates", async (req, res) => {
+router.get("/public/customer/workspace/:token/templates", async (req, res): Promise<void> => {
   try {
     const { category, industry, style, sortBy, limit, offset } = req.query as Record<string, string>;
     const client = await resolveToken(req.params.token);
-    if (!client) return res.status(404).json({ error: "workspace not found" });
+    if (!client) { res.status(404).json({ error: "workspace not found" }); return; }
 
     const [gallery, recommended] = await Promise.all([
       listTemplates({
@@ -308,10 +312,10 @@ router.get("/api/public/customer/workspace/:token/templates", async (req, res) =
   }
 });
 
-router.get("/api/public/customer/workspace/:token/templates/recommended", async (req, res) => {
+router.get("/public/customer/workspace/:token/templates/recommended", async (req, res): Promise<void> => {
   try {
     const client = await resolveToken(req.params.token);
-    if (!client) return res.status(404).json({ error: "workspace not found" });
+    if (!client) { res.status(404).json({ error: "workspace not found" }); return; }
     const { category, packageLevel, limit } = req.query as Record<string, string>;
     const recs = await getTemplateRecommendations({
       clientId: client.clientId,
@@ -325,14 +329,14 @@ router.get("/api/public/customer/workspace/:token/templates/recommended", async 
   }
 });
 
-router.post("/api/public/customer/workspace/:token/templates/:id/preview", async (req, res) => {
+router.post("/public/customer/workspace/:token/templates/:id/preview", async (req, res): Promise<void> => {
   try {
     const client = await resolveToken(req.params.token);
-    if (!client) return res.status(404).json({ error: "workspace not found" });
+    if (!client) { res.status(404).json({ error: "workspace not found" }); return; }
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
+    if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
     const { companyName, brandColor, logoUrl, industry } = req.body as Record<string, string>;
-    if (!companyName || !brandColor) return res.status(400).json({ error: "companyName, brandColor required" });
+    if (!companyName || !brandColor) { res.status(400).json({ error: "companyName, brandColor required" }); return; }
     const preview = await generateLivePreview({ templateId: id, companyName, brandColor, logoUrl, industry });
     res.json(preview);
   } catch (e: unknown) {
