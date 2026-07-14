@@ -470,6 +470,7 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
  * Extend this switch to add new job types as the platform grows.
  */
 export async function executeJob(job: AiJob, workerId: number): Promise<Record<string, unknown>> {
+  process.stdout.write(`###EXECJOB### jobId=${job.id} jobType=${JSON.stringify(job.jobType)} typeof=${typeof job.jobType}\n`);
   logger.info({ jobId: job.id, jobType: job.jobType, jobTypeJson: JSON.stringify(job.jobType) }, "[executeJob] dispatching");
   switch (job.jobType) {
     case "llm_inference":
