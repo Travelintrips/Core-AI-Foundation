@@ -1,16 +1,36 @@
 import type { Request, Response, NextFunction } from "express";
+import { verifySessionToken, getInternalUserById, SESSION_COOKIE_NAME } from "../services/internalAuthService.js";
 
 /**
  * Admin API key middleware.
  *
- * Reads ADMIN_API_KEY from env. If the env var is not set, the middleware
- * allows all traffic (development fail-open).
+ * Accepts either:
+ *   1. A valid ADMIN_API_KEY in one of these headers:
+ *        Authorization: Bearer <key>
+ *        x-admin-key: <key>
+ *        x-admin-api-key: <key>
+ *   2. A valid internal user session cookie (from the Internal AI Portal login).
+ *      Any active internal user session is treated as having admin access.
  *
- * Accepted header formats:
- *   Authorization: Bearer <key>
- *   x-admin-key: <key>
+ * If ADMIN_API_KEY is not set in development, the middleware allows all traffic
+ * (dev fail-open convenience).
  */
-export function adminAuth(req: Request, res: Response, next: NextFunction): void {
+export async function adminAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  // ── Path 1: session cookie from internal user login ───────────────────────
+  const sessionToken = (req.cookies as Record<string, string> | undefined)?.[SESSION_COOKIE_NAME];
+  if (sessionToken) {
+    const payload = verifySessionToken(sessionToken);
+    if (payload) {
+      const user = await getInternalUserById(payload.sub);
+      if (user && user.status === "active" && user.accountType === "internal") {
+        req.internalUser = user;
+        next();
+        return;
+      }
+    }
+  }
+
+  // ── Path 2: ADMIN_API_KEY header ──────────────────────────────────────────
   const adminKey = process.env["ADMIN_API_KEY"];
 
   if (!adminKey) {
