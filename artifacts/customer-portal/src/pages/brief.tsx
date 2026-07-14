@@ -13,7 +13,7 @@ import { DEFAULT_COLOR_PRESETS } from "@/components/creative-ui/ColorPicker";
 import { useToast } from "@/hooks/use-toast";
 import { useRequestDetail, useSaveBrief, useStartBrief, useServiceDetail } from "@/hooks/use-catalog";
 import {
-  ArrowLeft, ArrowRight, CheckCircle2, Loader2, Plus,
+  ArrowLeft, ArrowRight, CheckCircle2, Loader2, Plus, AlertCircle,
   Building2, Target, Users, Palette, Package, Calendar, ClipboardList,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -198,12 +198,16 @@ const TOTAL_STEPS = STEPS.length;
 
 type FieldErrors = Partial<Record<keyof BriefData, string>>;
 
-function validateStep(step: number, brief: BriefData): FieldErrors {
+function validateStep(step: number, brief: BriefData, isCP = false): FieldErrors {
   const errors: FieldErrors = {};
   if (step === 1) {
     const ind = brief.companyIndustry.trim();
     if (!ind || ind === "Lainnya")
       errors.companyIndustry = "Pilih atau tuliskan industri bisnis Anda sebelum melanjutkan";
+    if (isCP && !brief.cpLegalName.trim())
+      errors.cpLegalName = "Nama resmi perusahaan wajib diisi";
+    if (isCP && !brief.cpContactEmail.trim() && !brief.cpContactPhone.trim())
+      errors.cpContactEmail = "Minimal email atau nomor telepon kontak wajib diisi";
   }
   if (step === 2 && !hasAnySelection(brief.primaryGoal))
     errors.primaryGoal = "Pilih minimal satu tujuan project sebelum melanjutkan";
@@ -257,6 +261,15 @@ export default function BriefPage() {
   const serviceConfig = useMemo(
     () => getServiceConfig(serviceType),
     [serviceType],
+  );
+  const isCompanyProfile = serviceType === "company_profile";
+
+  // CP — resolved industry group for conditional questions (mirrors backend logic)
+  const cpIndustryGroup = useMemo(
+    () => isCompanyProfile
+      ? resolveCpIndustryGroup(brief.cpBusinessTypeDetail || brief.companyIndustry)
+      : null,
+    [isCompanyProfile, brief.cpBusinessTypeDetail, brief.companyIndustry],
   );
 
   // ── Start brief ─────────────────────────────────────────────────────────────
@@ -540,7 +553,7 @@ export default function BriefPage() {
   // ── Navigation ───────────────────────────────────────────────────────────────
 
   const handleNext = useCallback(() => {
-    const stepErrors = validateStep(currentStep, brief);
+    const stepErrors = validateStep(currentStep, brief, isCompanyProfile);
     if (Object.keys(stepErrors).length > 0) {
       setErrors(stepErrors);
       const firstField = Object.keys(stepErrors)[0] as keyof BriefData;
@@ -824,6 +837,89 @@ export default function BriefPage() {
                     )}
                   </AnimatePresence>
                 </FieldItem>
+
+                {/* ── Company Profile — Identity & Contact ──────────────── */}
+                {isCompanyProfile && (
+                  <>
+                    <FieldItem id="cpLegalName" label="Nama resmi perusahaan (sesuai akta)" required error={errors.cpLegalName}>
+                      <input
+                        id="brief-cpLegalName"
+                        className="input-field"
+                        value={brief.cpLegalName}
+                        onChange={(e) => handleChange("cpLegalName", e.target.value)}
+                        placeholder="Contoh: PT Maju Bersama Indonesia"
+                        aria-invalid={!!errors.cpLegalName}
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="cpBusinessTypeDetail" label="Jenis & bidang usaha spesifik" optional hint="Contoh: Distributor produk FMCG, Manufaktur komponen otomotif">
+                      <input
+                        id="brief-cpBusinessTypeDetail"
+                        className="input-field"
+                        value={brief.cpBusinessTypeDetail}
+                        onChange={(e) => handleChange("cpBusinessTypeDetail", e.target.value)}
+                        placeholder="Jelaskan bidang usaha secara lebih spesifik"
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="cpYearEstablished" label="Tahun berdiri" optional>
+                      <input
+                        id="brief-cpYearEstablished"
+                        className="input-field"
+                        type="number"
+                        min={1900}
+                        max={new Date().getFullYear()}
+                        value={brief.cpYearEstablished}
+                        onChange={(e) => handleChange("cpYearEstablished", e.target.value)}
+                        placeholder="Contoh: 2010"
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="cpContactEmail" label="Email kontak utama perusahaan" required={!brief.cpContactPhone.trim()} error={errors.cpContactEmail} hint="Email atau nomor telepon minimal salah satu wajib diisi">
+                      <input
+                        id="brief-cpContactEmail"
+                        className="input-field"
+                        type="email"
+                        value={brief.cpContactEmail}
+                        onChange={(e) => handleChange("cpContactEmail", e.target.value)}
+                        placeholder="info@perusahaan.co.id"
+                        aria-invalid={!!errors.cpContactEmail}
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="cpContactPhone" label="Nomor telepon / WhatsApp" optional>
+                      <input
+                        id="brief-cpContactPhone"
+                        className="input-field"
+                        type="tel"
+                        value={brief.cpContactPhone}
+                        onChange={(e) => handleChange("cpContactPhone", e.target.value)}
+                        placeholder="+62-21-123456 atau 0811-xxxx-xxxx"
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="cpContactAddress" label="Alamat kantor/operasional" optional>
+                      <textarea
+                        id="brief-cpContactAddress"
+                        className="input-field min-h-[72px]"
+                        value={brief.cpContactAddress}
+                        onChange={(e) => handleChange("cpContactAddress", e.target.value)}
+                        placeholder="Jl. Industri No. 1, Kawasan Industri Bekasi, Jawa Barat"
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="cpContactWebsite" label="Website / media sosial perusahaan" optional>
+                      <input
+                        id="brief-cpContactWebsite"
+                        className="input-field"
+                        type="url"
+                        value={brief.cpContactWebsite}
+                        onChange={(e) => handleChange("cpContactWebsite", e.target.value)}
+                        placeholder="https://perusahaan.co.id atau @perusahaan"
+                      />
+                    </FieldItem>
+                  </>
+                )}
               </SectionCard>
             )}
 
@@ -944,6 +1040,62 @@ export default function BriefPage() {
                       </AnimatePresence>
                     )}
                   </FieldItem>
+                )}
+
+
+                {/* ── Company Profile — Narasi Perusahaan ────────────────── */}
+                {isCompanyProfile && (
+                  <>
+                    <FieldItem id="cpValueProposition" label="Value proposition — mengapa pelanggan harus memilih Anda?" required hint="1–3 kalimat yang membedakan Anda dari kompetitor">
+                      <textarea
+                        id="brief-cpValueProposition"
+                        className="input-field min-h-[80px]"
+                        value={brief.cpValueProposition}
+                        onChange={(e) => handleChange("cpValueProposition", e.target.value)}
+                        placeholder="Contoh: Kami adalah satu-satunya distributor bersertifikat ISO 9001 di wilayah Sumatra dengan pengiriman 24 jam."
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="cpCompanyHistory" label="Sejarah singkat perusahaan" optional hint="Minimal salah satu dari sejarah, visi, atau misi wajib diisi">
+                      <textarea
+                        id="brief-cpCompanyHistory"
+                        className="input-field min-h-[80px]"
+                        value={brief.cpCompanyHistory}
+                        onChange={(e) => handleChange("cpCompanyHistory", e.target.value)}
+                        placeholder="Contoh: Didirikan tahun 2005 oleh Budi Santoso untuk melayani kebutuhan baja konstruksi di Jawa..."
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="cpVision" label="Visi perusahaan" optional>
+                      <textarea
+                        id="brief-cpVision"
+                        className="input-field min-h-[60px]"
+                        value={brief.cpVision}
+                        onChange={(e) => handleChange("cpVision", e.target.value)}
+                        placeholder="Contoh: Menjadi mitra logistik terpercaya di Asia Tenggara pada 2030."
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="cpMission" label="Misi perusahaan" optional>
+                      <textarea
+                        id="brief-cpMission"
+                        className="input-field min-h-[60px]"
+                        value={brief.cpMission}
+                        onChange={(e) => handleChange("cpMission", e.target.value)}
+                        placeholder="Contoh: Memberikan solusi pengiriman tepat waktu dengan teknologi tracking real-time."
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="cpCompanyValues" label="Nilai-nilai perusahaan (core values)" optional>
+                      <input
+                        id="brief-cpCompanyValues"
+                        className="input-field"
+                        value={brief.cpCompanyValues}
+                        onChange={(e) => handleChange("cpCompanyValues", e.target.value)}
+                        placeholder="Contoh: Integritas, Inovasi, Kepuasan Pelanggan"
+                      />
+                    </FieldItem>
+                  </>
                 )}
               </SectionCard>
             )}
@@ -1136,6 +1288,48 @@ export default function BriefPage() {
                     )}
                   </FieldItem>
                 )}
+
+
+                {/* ── Company Profile — Legalitas, Kepercayaan & Aset Visual ── */}
+                {isCompanyProfile && (
+                  <>
+                    <FieldItem id="cpCertifications" label="Sertifikasi & penghargaan" optional hint="ISO, SNI, BPOM, atau penghargaan industri lainnya">
+                      <input id="brief-cpCertifications" className="input-field"
+                        value={brief.cpCertifications} onChange={(e) => handleChange("cpCertifications", e.target.value)}
+                        placeholder="Contoh: ISO 9001:2015, SNI, Halal MUI, PROPER Emas 2023" />
+                    </FieldItem>
+
+                    <FieldItem id="cpOrganizationStructure" label="Struktur organisasi (ringkas)" optional>
+                      <textarea id="brief-cpOrganizationStructure" className="input-field min-h-[60px]"
+                        value={brief.cpOrganizationStructure} onChange={(e) => handleChange("cpOrganizationStructure", e.target.value)}
+                        placeholder="Contoh: CEO → 3 GM (Operasi, Keuangan, Pemasaran) → 12 Manajer" />
+                    </FieldItem>
+
+                    <FieldItem id="cpSustainability" label="Komitmen lingkungan & sosial (ESG)" optional>
+                      <textarea id="brief-cpSustainability" className="input-field min-h-[60px]"
+                        value={brief.cpSustainability} onChange={(e) => handleChange("cpSustainability", e.target.value)}
+                        placeholder="Contoh: Panel surya 500 kWp, program CSR beasiswa 50 siswa/tahun" />
+                    </FieldItem>
+
+                    <FieldItem id="cpUploadedLogo" label="Link logo perusahaan" optional hint="URL logo resolusi tinggi (PNG/SVG) atau link Google Drive/Dropbox">
+                      <input id="brief-cpUploadedLogo" className="input-field" type="url"
+                        value={brief.cpUploadedLogo} onChange={(e) => handleChange("cpUploadedLogo", e.target.value)}
+                        placeholder="https://drive.google.com/file/d/xxxx atau https://cdn.perusahaan.com/logo.png" />
+                    </FieldItem>
+
+                    <FieldItem id="cpUploadedPhotos" label="Link foto gedung / produk / tim" optional hint="Link Google Drive folder atau beberapa URL foto (pisahkan dengan koma)">
+                      <textarea id="brief-cpUploadedPhotos" className="input-field min-h-[60px]"
+                        value={brief.cpUploadedPhotos} onChange={(e) => handleChange("cpUploadedPhotos", e.target.value)}
+                        placeholder="https://drive.google.com/drive/folders/xxxx" />
+                    </FieldItem>
+
+                    <FieldItem id="cpReferenceDocuments" label="Dokumen referensi (annual report, brosur lama, dll)" optional>
+                      <textarea id="brief-cpReferenceDocuments" className="input-field min-h-[60px]"
+                        value={brief.cpReferenceDocuments} onChange={(e) => handleChange("cpReferenceDocuments", e.target.value)}
+                        placeholder="https://drive.google.com/file/d/xxxx — annual report 2023, brosur produk" />
+                    </FieldItem>
+                  </>
+                )}
               </SectionCard>
             )}
 
@@ -1154,6 +1348,21 @@ export default function BriefPage() {
                     aria-describedby={errors.outputFormats ? "brief-outputFormats-error" : undefined}
                   />
                 </FieldItem>
+
+                {isCompanyProfile && (
+                  <FieldItem id="cpPageTarget" label="Target jumlah halaman company profile" optional hint="Estimasi panjang dokumen yang diinginkan">
+                    <input
+                      id="brief-cpPageTarget"
+                      className="input-field"
+                      type="number"
+                      min={4}
+                      max={100}
+                      value={brief.cpPageTarget}
+                      onChange={(e) => handleChange("cpPageTarget", e.target.value)}
+                      placeholder="Contoh: 20 (default 16–24 halaman)"
+                    />
+                  </FieldItem>
+                )}
 
                 {serviceConfig.step5.showLanguage && (
                   <FieldItem id="outputLanguage" label="Bahasa konten" optional>
@@ -1252,6 +1461,7 @@ export default function BriefPage() {
                 onEditStep={jumpToStep}
                 confirmed={reviewConfirmed}
                 onConfirmChange={setReviewConfirmed}
+                isCompanyProfile={isCompanyProfile}
               />
             )}
           </motion.div>
@@ -1457,10 +1667,11 @@ const REVIEW_SECTIONS = [
 ];
 
 function ReviewStep({
-  brief, onEditStep, confirmed, onConfirmChange,
+  brief, onEditStep, confirmed, onConfirmChange, isCompanyProfile,
 }: {
   brief: BriefData; onEditStep: (step: number) => void;
   confirmed: boolean; onConfirmChange: (v: boolean) => void;
+  isCompanyProfile?: boolean;
 }) {
   const sections = REVIEW_SECTIONS.map((s) => ({
     heading: s.heading, step: s.step, icon: s.icon,
@@ -1469,13 +1680,103 @@ function ReviewStep({
       .filter((r) => r.value),
   })).filter((s) => s.rows.length > 0);
 
+  // ── Company Profile extra review sections ────────────────────────────────
+  const cpSections: typeof sections = isCompanyProfile
+    ? [
+        {
+          heading: "Identitas Perusahaan", step: 1, icon: Building2,
+          rows: [
+            { label: "Nama Resmi",     value: brief.cpLegalName },
+            { label: "Jenis Usaha",    value: brief.cpBusinessTypeDetail },
+            { label: "Tahun Berdiri",  value: brief.cpYearEstablished },
+            { label: "Email Kontak",   value: brief.cpContactEmail },
+            { label: "Telepon",        value: brief.cpContactPhone },
+            { label: "Alamat",         value: brief.cpContactAddress },
+            { label: "Website",        value: brief.cpContactWebsite },
+          ].filter((r) => r.value),
+        },
+        {
+          heading: "Narasi Perusahaan", step: 2, icon: Target,
+          rows: [
+            { label: "Value Proposition", value: brief.cpValueProposition },
+            { label: "Sejarah",           value: brief.cpCompanyHistory },
+            { label: "Visi",              value: brief.cpVision },
+            { label: "Misi",              value: brief.cpMission },
+            { label: "Core Values",       value: brief.cpCompanyValues },
+          ].filter((r) => r.value),
+        },
+        {
+          heading: "Layanan & Operasi", step: 3, icon: Users,
+          rows: [
+            { label: "Produk/Jasa",       value: brief.cpProductsServices },
+            { label: "Cakupan Wilayah",   value: brief.cpGeographicCoverage },
+            { label: "Klien Utama",       value: brief.cpClientsPartners },
+            { label: "Portofolio",        value: brief.cpProjectExperience },
+            { label: "Tim Kunci",         value: brief.cpKeyPeople },
+            { label: "Fasilitas",         value: brief.cpFacilities },
+            { label: "Kapasitas",         value: brief.cpProductionCapacity },
+          ].filter((r) => r.value),
+        },
+        {
+          heading: "Legalitas & Aset Visual", step: 4, icon: Palette,
+          rows: [
+            { label: "Sertifikasi",     value: brief.cpCertifications },
+            { label: "Dokumen Legal",   value: brief.cpLegalDocuments },
+            { label: "Org. Struktur",   value: brief.cpOrganizationStructure },
+            { label: "ESG / Sustainab", value: brief.cpSustainability },
+            { label: "Logo",            value: brief.cpUploadedLogo },
+            { label: "Foto",            value: brief.cpUploadedPhotos },
+            { label: "Dok. Referensi",  value: brief.cpReferenceDocuments },
+          ].filter((r) => r.value),
+        },
+        {
+          heading: "Skema Dokumen", step: 5, icon: Package,
+          rows: [
+            { label: "Target Halaman", value: brief.cpPageTarget },
+          ].filter((r) => r.value),
+        },
+      ].filter((s) => s.rows.length > 0)
+    : [];
+
+  // ── CP readiness check (client-side mirror of backend guard) ─────────────
+  const cpMissing = isCompanyProfile ? getCompanyProfileMissingFields(brief) : [];
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground leading-relaxed">
         Tinjau ringkasan brief Anda sebelum mengirim. Tim kami akan mempelajari detail ini untuk menyiapkan proposal harga yang tepat.
       </p>
 
-      <SummaryCard sections={sections} onEditStep={onEditStep} />
+      {/* Company Profile readiness banner */}
+      {isCompanyProfile && (
+        <div className={`rounded-xl border p-4 ${cpMissing.length === 0 ? "border-emerald-500/40 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5"}`}>
+          <div className="flex items-center gap-2 mb-1">
+            {cpMissing.length === 0 ? (
+              <><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Brief company profile siap untuk produksi AI</span></>
+            ) : (
+              <><AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+              <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Beberapa field penting belum diisi ({cpMissing.length} item)</span></>
+            )}
+          </div>
+          {cpMissing.length > 0 && (
+            <ul className="mt-2 space-y-0.5">
+              {cpMissing.map((m) => (
+                <li key={m} className="text-xs text-amber-600 dark:text-amber-300 flex items-center gap-1.5">
+                  <span className="w-1 h-1 rounded-full bg-amber-500 shrink-0" /> {m}
+                </li>
+              ))}
+            </ul>
+          )}
+          {cpMissing.length > 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Anda tetap dapat mengirim brief ini. Tim kami akan menghubungi Anda jika ada informasi tambahan yang diperlukan.
+            </p>
+          )}
+        </div>
+      )}
+
+      <SummaryCard sections={[...sections, ...cpSections]} onEditStep={onEditStep} />
 
       <p className="text-xs text-muted-foreground leading-relaxed">
         Draft ini tersimpan hanya di perangkat/browser Anda sampai dikirim. File yang Anda referensikan tidak dibagikan ke pihak lain di luar tim project ini.

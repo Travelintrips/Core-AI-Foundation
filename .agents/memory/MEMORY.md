@@ -50,3 +50,4 @@
 - [brief-intelligence-engine](brief-intelligence-engine.md) — Field-mapping rule (chip fields merge, advisory categories are empty-only bullets in specialRequirements) + apply-mode contract
 - [ai-service-catalog-orphan-rows](ai-service-catalog-orphan-rows.md) — seedCatalog.ts SERVICES array is not the full set of live ai_services rows; DB can hold orphan codes it never touches
 - [phase-v41-execution-summary](phase-v41-execution-summary.md) — additive-wrapper pattern for derived customer-safe views over CanonicalEvents; type-only import breaks circularity; eventId/sourceEventId regex collision gotcha
+- [cp-brief-wizard-p0](cp-brief-wizard-p0.md) — Company Profile P0: all 27 cp* fields wired into brief wizard steps 1-5, validateStep isCP param, ReviewStep readiness banner, 40 backend tests passing

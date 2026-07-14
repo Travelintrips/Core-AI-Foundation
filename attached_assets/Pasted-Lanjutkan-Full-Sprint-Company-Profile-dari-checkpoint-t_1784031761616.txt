@@ -1,0 +1,204 @@
+Lanjutkan Full Sprint Company Profile dari checkpoint terakhir.
+
+JANGAN mengulang audit.
+JANGAN mengulang eksplorasi codebase.
+JANGAN mengulang codegen jika tidak ada perubahan OpenAPI.
+
+STATUS TERAKHIR:
+
+- Workstream 1 (P0) sudah diimplementasikan sebagian besar.
+- Codegen berhasil clean.
+- Backend schema, API, production guard, dan conditional brief sudah mulai terhubung.
+- Quota habis saat frontend wiring.
+- Frontend build sudah diperbaiki.
+- Vite akan mengambil file hasil perbaikan pada HMR berikutnya.
+- Tidak ada TypeScript error baru dari file yang disentuh.
+- Error yang tersisa merupakan pre-existing dan tidak berasal dari perubahan P0.
+
+==================================================
+LANJUTKAN DARI CHECKPOINT TERAKHIR
+==================================================
+
+Jangan mengulang pekerjaan.
+
+Mulai dari:
+
+1. Selesaikan frontend wiring P0
+2. Jalankan seluruh test P0
+3. Verifikasi end-to-end
+4. Baru setelah P0 benar-benar PASS lanjut ke P1
+
+==================================================
+P0 HARUS BENAR-BENAR SELESAI
+==================================================
+
+Pastikan seluruh field baru muncul di:
+
+- Brief Assistant
+- Brief Wizard
+- Brief API
+- Database
+- Mapper
+- Preview
+- Runtime
+
+Pastikan conditional questions bekerja berdasarkan industry.
+
+Pastikan readiness scoring menghasilkan:
+
+- identity
+- story
+- service
+- legal
+- visual
+- contact
+- scope
+- overall
+
+Pastikan production guard bekerja.
+
+Jika brief belum memenuhi syarat:
+
+JANGAN menjalankan AI workflow.
+
+Return:
+
+code:
+BRIEF_INCOMPLETE
+
+beserta:
+
+- missingFields
+- readinessScore
+- nextQuestions
+
+==================================================
+FRONTEND
+==================================================
+
+Pastikan UI benar-benar memakai field baru.
+
+Tidak boleh hanya tersimpan di backend.
+
+Verifikasi:
+
+- field tampil
+- validation tampil
+- conditional question berubah
+- progress berubah
+- recommendation berubah
+- score berubah
+- review page membaca field baru
+
+==================================================
+TEST P0
+==================================================
+
+Jalankan:
+
+Backend
+
+Frontend
+
+Integration
+
+Smoke
+
+E2E
+
+Verifikasi:
+
+✓ incomplete brief ditolak
+
+✓ complete brief lolos
+
+✓ admin override bekerja
+
+✓ audit log dibuat
+
+✓ conditional questions berubah sesuai industry
+
+✓ readiness score benar
+
+==================================================
+SETELAH P0 PASS
+==================================================
+
+Baru lanjut ke:
+
+WORKSTREAM 2 (P1)
+
+Jangan kerjakan seluruh P1 sekaligus.
+
+Urutan:
+
+1.
+Document sections
+
+2.
+Package enforcement
+
+3.
+QC score
+
+4.
+Deliverable manifest
+
+Setiap bagian selesai:
+
+- test
+- verify
+- baru lanjut berikutnya
+
+==================================================
+JANGAN MENYENTUH
+==================================================
+
+Creative Workflow
+
+Dispatcher
+
+Queue
+
+Worker Cluster
+
+Pricing
+
+Commercial
+
+Finance
+
+Legal
+
+Marketplace
+
+Event Bus selain event yang memang diperlukan.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Berikan laporan terpisah:
+
+P0
+
+- files
+- API
+- UI
+- tests
+- screenshots
+- verify status
+
+P1
+
+- progress
+- percentage
+- tests
+- known limitations
+
+Jangan menyatakan Full Sprint selesai sebelum:
+
+✓ P0 PASS
+✓ P1 PASS
+
+dan seluruh test pada kedua workstream tersebut lulus.
