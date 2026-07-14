@@ -25,7 +25,7 @@ export function adminAuth(req: Request, res: Response, next: NextFunction): void
   }
 
   const authHeader = req.headers["authorization"] as string | undefined;
-  const xAdminKey = req.headers["x-admin-key"] as string | undefined;
+  const xAdminKey = (req.headers["x-admin-key"] ?? req.headers["x-admin-api-key"]) as string | undefined;
 
   let token: string | null = null;
 
