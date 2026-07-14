@@ -346,7 +346,7 @@ export async function getTemplateEvolutionRecommendations() {
     .from(aiTemplatesTable)
     .where(and(
       eq(aiTemplatesTable.status, "published"),
-      sql`${aiTemplatesTable.previews_generated} > 5`,
+      sql`${aiTemplatesTable.previewsGenerated} > 5`,
       sql`${aiTemplatesTable.conversions} < 2`,
     ))
     .orderBy(desc(aiTemplatesTable.previewsGenerated))

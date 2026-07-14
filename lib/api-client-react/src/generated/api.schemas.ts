@@ -5206,6 +5206,201 @@ export interface RecordAbMetricInput {
   metric: RecordAbMetricInputMetric;
 }
 
+export type ProductionPipelineStatus = typeof ProductionPipelineStatus[keyof typeof ProductionPipelineStatus];
+
+
+export const ProductionPipelineStatus = {
+  pending: 'pending',
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+/**
+ * Aggregated stats — totalStages, completedStages, failedStages, totalLatencyMs, stageBreakdown
+ * @nullable
+ */
+export type ProductionPipelineExecutionSummary = { [key: string]: unknown } | null;
+
+export interface ProductionPipeline {
+  id: number;
+  /** UUID string — client-facing run identifier */
+  runId: string;
+  projectId: number;
+  status: ProductionPipelineStatus;
+  /** @nullable */
+  currentStage?: string | null;
+  /** @nullable */
+  startedAt?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+  /** @nullable */
+  errorMessage?: string | null;
+  retryCount: number;
+  /**
+     * Aggregated stats — totalStages, completedStages, failedStages, totalLatencyMs, stageBreakdown
+     * @nullable
+     */
+  executionSummary?: ProductionPipelineExecutionSummary;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ProductionPipelineStageStageName = typeof ProductionPipelineStageStageName[keyof typeof ProductionPipelineStageStageName];
+
+
+export const ProductionPipelineStageStageName = {
+  creative_director: 'creative_director',
+  copywriter: 'copywriter',
+  designer: 'designer',
+  presentation: 'presentation',
+  qa: 'qa',
+  renderer: 'renderer',
+  customer_review: 'customer_review',
+} as const;
+
+export type ProductionPipelineStageStatus = typeof ProductionPipelineStageStatus[keyof typeof ProductionPipelineStageStatus];
+
+
+export const ProductionPipelineStageStatus = {
+  pending: 'pending',
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+  skipped: 'skipped',
+  waiting_retry: 'waiting_retry',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ProductionPipelineStageInput = { [key: string]: unknown } | null;
+
+/**
+ * @nullable
+ */
+export type ProductionPipelineStageOutput = { [key: string]: unknown } | null;
+
+export interface ProductionPipelineStage {
+  id: number;
+  /** FK to ai_production_pipelines.id */
+  runId: number;
+  stageName: ProductionPipelineStageStageName;
+  stageOrder: number;
+  status: ProductionPipelineStageStatus;
+  /** @nullable */
+  input?: ProductionPipelineStageInput;
+  /** @nullable */
+  output?: ProductionPipelineStageOutput;
+  /** @nullable */
+  startedAt?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+  /** @nullable */
+  latencyMs?: number | null;
+  retryCount: number;
+  /** @nullable */
+  errorMessage?: string | null;
+  /** @nullable */
+  agentSlug?: string | null;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  provider?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ProductionPipelineDetail = ProductionPipeline & {
+  stages: ProductionPipelineStage[];
+};
+
+export interface StartProductionPipelineInput {
+  /** Creative project UUID or integer ID */
+  projectId: string;
+  /** Override an already-running pipeline */
+  forceRestart?: boolean;
+}
+
+export interface StartProductionPipelineResult {
+  runId: string;
+  message: string;
+  pipeline: ProductionPipeline;
+}
+
+/**
+ * Stage to retry from. Omit to retry from the first failed stage.
+ * @nullable
+ */
+export type RetryPipelineStageInputStageName = typeof RetryPipelineStageInputStageName[keyof typeof RetryPipelineStageInputStageName] | null;
+
+
+export const RetryPipelineStageInputStageName = {
+  creative_director: 'creative_director',
+  copywriter: 'copywriter',
+  designer: 'designer',
+  presentation: 'presentation',
+  qa: 'qa',
+  renderer: 'renderer',
+  customer_review: 'customer_review',
+  null: 'null',
+} as const;
+
+export interface RetryPipelineStageInput {
+  /**
+     * Stage to retry from. Omit to retry from the first failed stage.
+     * @nullable
+     */
+  stageName?: RetryPipelineStageInputStageName;
+}
+
+export interface RetryPipelineStageResult {
+  runId: string;
+  retried: boolean;
+  /** @nullable */
+  stageName?: string | null;
+  message?: string;
+}
+
+export interface CancelProductionPipelineResult {
+  runId: string;
+  status: string;
+  message: string;
+}
+
+export interface PipelineStageStat {
+  stageName: string;
+  totalCount: number;
+  completedCount: number;
+  failedCount: number;
+  skippedCount: number;
+  /** @nullable */
+  avgLatencyMs?: number | null;
+}
+
+export interface PipelineTotals {
+  totalRuns: number;
+  runningRuns: number;
+  completedRuns: number;
+  failedRuns: number;
+  cancelledRuns: number;
+  pendingRuns: number;
+}
+
+export interface PipelineStageDefinition {
+  name: string;
+  order: number;
+  label: string;
+}
+
+export interface PipelineMonitoringStatsResult {
+  totals: PipelineTotals;
+  stageStats: PipelineStageStat[];
+  recentRuns: ProductionPipeline[];
+  stageDefinitions: PipelineStageDefinition[];
+}
+
 export type NotFoundResponse = {
   error: string;
 };
@@ -5739,5 +5934,104 @@ export type GetCpReviewTimeline200 = {
   reviewStatus: string;
   totalEvents: number;
   events: CpTimelineEvent[];
+};
+
+export type ListTemplatesAdminParams = {
+category?: string;
+industry?: string;
+style?: string;
+status?: ListTemplatesAdminStatus;
+isPremium?: boolean;
+featured?: boolean;
+sortBy?: ListTemplatesAdminSortBy;
+search?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListTemplatesAdminStatus = typeof ListTemplatesAdminStatus[keyof typeof ListTemplatesAdminStatus];
+
+
+export const ListTemplatesAdminStatus = {
+  draft: 'draft',
+  published: 'published',
+  archived: 'archived',
+} as const;
+
+export type ListTemplatesAdminSortBy = typeof ListTemplatesAdminSortBy[keyof typeof ListTemplatesAdminSortBy];
+
+
+export const ListTemplatesAdminSortBy = {
+  popular: 'popular',
+  newest: 'newest',
+  conversions: 'conversions',
+  selections: 'selections',
+} as const;
+
+export type PublishTemplate200 = {
+  ok?: boolean;
+};
+
+export type ArchiveTemplate200 = {
+  ok?: boolean;
+};
+
+export type RecordTemplateEventAdmin200 = {
+  ok?: boolean;
+};
+
+export type ListTemplatesPublicParams = {
+category?: string;
+industry?: string;
+style?: string;
+isPremium?: boolean;
+featured?: boolean;
+sortBy?: ListTemplatesPublicSortBy;
+search?: string;
+limit?: number;
+offset?: number;
+};
+
+export type ListTemplatesPublicSortBy = typeof ListTemplatesPublicSortBy[keyof typeof ListTemplatesPublicSortBy];
+
+
+export const ListTemplatesPublicSortBy = {
+  popular: 'popular',
+  newest: 'newest',
+  conversions: 'conversions',
+  selections: 'selections',
+} as const;
+
+export type GetPublicTemplateRecommendationsParams = {
+industry?: string;
+category?: string;
+limit?: number;
+};
+
+export type RecordTemplateEventPublic200 = {
+  ok?: boolean;
+};
+
+export type GetWorkspaceTemplatesParams = {
+category?: string;
+industry?: string;
+style?: string;
+sortBy?: GetWorkspaceTemplatesSortBy;
+limit?: number;
+offset?: number;
+};
+
+export type GetWorkspaceTemplatesSortBy = typeof GetWorkspaceTemplatesSortBy[keyof typeof GetWorkspaceTemplatesSortBy];
+
+
+export const GetWorkspaceTemplatesSortBy = {
+  popular: 'popular',
+  newest: 'newest',
+} as const;
+
+export type GetWorkspaceTemplateRecommendationsParams = {
+category?: string;
+packageLevel?: string;
+limit?: number;
 };
 

@@ -1,21 +1,9 @@
 /**
  * V4.3 migration — ai_templates + ai_template_analytics
  * Hand-written DDL (avoids drizzle-kit dropping the ai_platform schema).
- * Run: pnpm migrate:v43
+ * Run: pnpm --filter @workspace/api-server run migrate:v43
  */
-import { Pool } from "pg";
-
-const connectionString =
-  process.env.NODE_ENV === "production"
-    ? process.env.SUPABASE_PROD_DATABASE_URL
-    : process.env.SUPABASE_DEV_DATABASE_URL;
-
-if (!connectionString) {
-  console.error("❌ No database URL found (SUPABASE_DEV_DATABASE_URL / SUPABASE_PROD_DATABASE_URL)");
-  process.exit(1);
-}
-
-const pool = new Pool({ connectionString, max: 1 });
+import { pool } from "@workspace/db";
 
 async function run() {
   const client = await pool.connect();

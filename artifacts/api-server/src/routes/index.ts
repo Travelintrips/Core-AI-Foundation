@@ -66,6 +66,7 @@ import brandIntelligenceRouter from "./brand-intelligence";
 import assetIntelligenceRouter from "./asset-intelligence";
 import templatesRouter from "./templates";
 import portfolioGalleryRouter from "./portfolio-gallery";
+import productionPipelineRouter from "./production-pipeline";
 
 const router: IRouter = Router();
 
@@ -123,6 +124,7 @@ router.use(brandIntelligenceRouter);
 router.use(assetIntelligenceRouter);
 router.use(templatesRouter);
 router.use(portfolioGalleryRouter);
+router.use(productionPipelineRouter);
 router.use(customerWorkspaceSseRouter);
 router.use(customerWorkspaceDocumentsRouter);
 router.use(adminCustomerWorkspaceRouter);

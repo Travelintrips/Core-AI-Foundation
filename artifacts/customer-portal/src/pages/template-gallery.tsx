@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -84,10 +84,35 @@ function LivePreviewPane({
   onClose: () => void;
 }) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [companyName, setCompanyName] = useState("");
   const [brandColor, setBrandColor] = useState(template.colorTheme?.primary ?? "#6366F1");
   const [logoUrl, setLogoUrl] = useState("");
   const [preview, setPreview] = useState<LivePreviewResult | null>(null);
+
+  const useTemplate = () => {
+    // Record a "selected" conversion-intent event (fire-and-forget, non-blocking).
+    fetch(`/api/public/templates/${template.id}/event`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventType: "selected" }),
+    }).catch(() => {});
+
+    // Carry the template's identity forward so the service picker / brief can
+    // pre-fill category and reference the template (mirrors the existing
+    // "live-preview-seed" pattern used by service-detail.tsx).
+    sessionStorage.setItem(
+      "template-selection-seed",
+      JSON.stringify({
+        templateId: template.id,
+        templateName: template.name,
+        category: template.category,
+        style: template.style,
+      }),
+    );
+
+    setLocation(`/services?templateId=${template.id}&templateCategory=${encodeURIComponent(template.category)}`);
+  };
 
   const previewMutation = useMutation({
     mutationFn: () =>
@@ -217,9 +242,12 @@ function LivePreviewPane({
 
           {/* CTA */}
           <div className="flex gap-3 pt-2">
-            <Link href="/services" className="flex-1 py-3 rounded-xl text-center font-semibold text-sm border border-violet-500/50 text-violet-300 hover:bg-violet-500/10 transition-colors">
+            <button
+              onClick={useTemplate}
+              className="flex-1 py-3 rounded-xl text-center font-semibold text-sm border border-violet-500/50 text-violet-300 hover:bg-violet-500/10 transition-colors"
+            >
               Use This Template →
-            </Link>
+            </button>
             <button onClick={onClose} className="px-6 py-3 rounded-xl text-sm font-medium text-slate-400 hover:text-white transition-colors">
               Cancel
             </button>

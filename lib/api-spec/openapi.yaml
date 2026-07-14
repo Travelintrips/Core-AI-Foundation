@@ -61,6 +61,10 @@ tags:
     description: V4.2E Auto Asset Analyzer — auto-tagging, duplicate detection, version chains
   - name: customer-workspace-admin
     description: Admin visibility into customer workspaces — impersonation, token rotation, analytics
+  - name: production-pipeline
+    description: V4.4 Creative Production Pipeline — 7-stage orchestration with retry, visualization, and monitoring
+  - name: templates
+    description: V4.3 Template Marketplace — gallery, live customization preview, Brand DNA recommendations, admin CRUD/versioning
 paths:
   /healthz:
     get:
@@ -6888,6 +6892,496 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CpReviewDashboard" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ── V4.4 Creative Production Pipeline ─────────────────────────────────────
+
+  /creative-ai/production-pipeline:
+    post:
+      operationId: startProductionPipeline
+      tags: [production-pipeline]
+      summary: Start a 7-stage production pipeline for a creative project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartProductionPipelineInput"
+      responses:
+        "202":
+          description: Pipeline started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartProductionPipelineResult"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Pipeline already running for this project
+
+  /creative-ai/production-pipeline/monitoring:
+    get:
+      operationId: getPipelineMonitoringStats
+      tags: [production-pipeline]
+      summary: Get aggregate monitoring stats for all pipeline runs
+      responses:
+        "200":
+          description: Monitoring statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PipelineMonitoringStatsResult"
+
+  /creative-ai/production-pipeline/{runId}:
+    get:
+      operationId: getProductionPipeline
+      tags: [production-pipeline]
+      summary: Get pipeline run detail with all stages
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Pipeline run UUID
+      responses:
+        "200":
+          description: Pipeline detail with stages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductionPipelineDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /creative-ai/production-pipeline/{runId}/stages:
+    get:
+      operationId: listProductionPipelineStages
+      tags: [production-pipeline]
+      summary: List all stages for a pipeline run
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of pipeline stages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductionPipelineStage"
+
+  /creative-ai/production-pipeline/{runId}/retry:
+    post:
+      operationId: retryPipelineStage
+      tags: [production-pipeline]
+      summary: Retry a failed pipeline stage (or resume from last failure)
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetryPipelineStageInput"
+      responses:
+        "200":
+          description: Retry initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetryPipelineStageResult"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Pipeline is already running or cancelled
+
+  /creative-ai/production-pipeline/{runId}/cancel:
+    post:
+      operationId: cancelProductionPipeline
+      tags: [production-pipeline]
+      summary: Cancel an in-progress or pending pipeline run
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pipeline cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelProductionPipelineResult"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Cannot cancel a completed pipeline
+
+  /creative-ai/projects/{projectId}/pipeline:
+    get:
+      operationId: listProjectPipelineRuns
+      tags: [production-pipeline]
+      summary: List all pipeline runs for a creative project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Project UUID or integer ID
+      responses:
+        "200":
+          description: List of pipeline runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductionPipeline"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── V4.3: Template Marketplace (admin) ──────────────────────────────────────
+
+  /ai/templates:
+    get:
+      operationId: listTemplatesAdmin
+      tags: [templates]
+      summary: Admin — list/filter templates
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: industry, schema: { type: string } }
+        - { in: query, name: style, schema: { type: string } }
+        - { in: query, name: status, schema: { type: string, enum: [draft, published, archived] } }
+        - { in: query, name: isPremium, schema: { type: boolean } }
+        - { in: query, name: featured, schema: { type: boolean } }
+        - { in: query, name: sortBy, schema: { type: string, enum: [popular, newest, conversions, selections] } }
+        - { in: query, name: search, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer } }
+        - { in: query, name: offset, schema: { type: integer } }
+      responses:
+        "200":
+          description: Template list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateList" }
+    post:
+      operationId: createTemplate
+      tags: [templates]
+      summary: Admin — create a template
+      security: [{ adminKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateTemplateInput" }
+      responses:
+        "201":
+          description: Created template
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateItem" }
+
+  /ai/templates/stats:
+    get:
+      operationId: getTemplateAnalyticsStats
+      tags: [templates]
+      summary: Admin — template analytics stats
+      security: [{ adminKey: [] }]
+      responses:
+        "200":
+          description: Analytics stats
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateAnalyticsStats" }
+
+  /ai/templates/evolution:
+    get:
+      operationId: getTemplateEvolutionRecommendations
+      tags: [templates]
+      summary: Admin — evolution recommendations (underperforming/needs-revision/top-converters)
+      security: [{ adminKey: [] }]
+      responses:
+        "200":
+          description: Evolution recommendations
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateEvolution" }
+
+  /ai/templates/industry-showcase:
+    get:
+      operationId: getTemplateIndustryShowcaseAdmin
+      tags: [templates]
+      summary: Admin — industry showcase (top template per industry)
+      security: [{ adminKey: [] }]
+      responses:
+        "200":
+          description: Industry showcase
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryShowcase" }
+
+  /ai/templates/{id}:
+    get:
+      operationId: getTemplateAdmin
+      tags: [templates]
+      summary: Admin — get one template
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Template
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateItem" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateTemplate
+      tags: [templates]
+      summary: Admin — update a template
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateTemplateInput" }
+      responses:
+        "200":
+          description: Updated template
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateItem" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ai/templates/{id}/publish:
+    post:
+      operationId: publishTemplate
+      tags: [templates]
+      summary: Admin — publish a template
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Published
+          content:
+            application/json:
+              schema: { type: object, properties: { ok: { type: boolean } } }
+
+  /ai/templates/{id}/archive:
+    post:
+      operationId: archiveTemplate
+      tags: [templates]
+      summary: Admin — archive a template
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Archived
+          content:
+            application/json:
+              schema: { type: object, properties: { ok: { type: boolean } } }
+
+  /ai/templates/{id}/event:
+    post:
+      operationId: recordTemplateEventAdmin
+      tags: [templates]
+      summary: Admin — record a template event
+      security: [{ adminKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TemplateEventInput" }
+      responses:
+        "200":
+          description: Recorded
+          content:
+            application/json:
+              schema: { type: object, properties: { ok: { type: boolean } } }
+
+  # ── V4.3: Template Marketplace (public) ─────────────────────────────────────
+
+  /public/templates:
+    get:
+      operationId: listTemplatesPublic
+      tags: [templates]
+      summary: Public — template gallery (published only)
+      parameters:
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: industry, schema: { type: string } }
+        - { in: query, name: style, schema: { type: string } }
+        - { in: query, name: isPremium, schema: { type: boolean } }
+        - { in: query, name: featured, schema: { type: boolean } }
+        - { in: query, name: sortBy, schema: { type: string, enum: [popular, newest, conversions, selections] } }
+        - { in: query, name: search, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer } }
+        - { in: query, name: offset, schema: { type: integer } }
+      responses:
+        "200":
+          description: Template list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateList" }
+
+  /public/templates/industry-showcase:
+    get:
+      operationId: getTemplateIndustryShowcasePublic
+      tags: [templates]
+      summary: Public — industry showcase
+      responses:
+        "200":
+          description: Industry showcase
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryShowcase" }
+
+  /public/templates/recommended:
+    get:
+      operationId: getPublicTemplateRecommendations
+      tags: [templates]
+      summary: Public — anonymous recommendations by industry/category
+      parameters:
+        - { in: query, name: industry, schema: { type: string } }
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer } }
+      responses:
+        "200":
+          description: Recommended templates
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateRecommendationList" }
+
+  /public/templates/{id}:
+    get:
+      operationId: getTemplatePublic
+      tags: [templates]
+      summary: Public — get one template (published only), records a view
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Template
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateItem" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/templates/{id}/preview:
+    post:
+      operationId: generateTemplateLivePreviewPublic
+      tags: [templates]
+      summary: Public — generate a live customization preview
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LivePreviewInput" }
+      responses:
+        "200":
+          description: Live preview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LivePreviewResult" }
+
+  /public/templates/{id}/event:
+    post:
+      operationId: recordTemplateEventPublic
+      tags: [templates]
+      summary: Public — record a template event (view/selected/etc.)
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TemplateEventInput" }
+      responses:
+        "200":
+          description: Recorded
+          content:
+            application/json:
+              schema: { type: object, properties: { ok: { type: boolean } } }
+
+  # ── V4.3: Template Marketplace (customer workspace) ─────────────────────────
+
+  /public/customer/workspace/{token}/templates:
+    get:
+      operationId: getWorkspaceTemplates
+      tags: [templates]
+      summary: Customer — template gallery + Brand DNA recommendations
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: industry, schema: { type: string } }
+        - { in: query, name: style, schema: { type: string } }
+        - { in: query, name: sortBy, schema: { type: string, enum: [popular, newest] } }
+        - { in: query, name: limit, schema: { type: integer } }
+        - { in: query, name: offset, schema: { type: integer } }
+      responses:
+        "200":
+          description: Gallery + recommendations
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkspaceTemplatesDashboard" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/customer/workspace/{token}/templates/recommended:
+    get:
+      operationId: getWorkspaceTemplateRecommendations
+      tags: [templates]
+      summary: Customer — top templates by Brand DNA match
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: packageLevel, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer } }
+      responses:
+        "200":
+          description: Recommended templates
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateRecommendationList" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/customer/workspace/{token}/templates/{id}/preview:
+    post:
+      operationId: generateWorkspaceTemplateLivePreview
+      tags: [templates]
+      summary: Customer — generate a live customization preview
+      parameters:
+        - { in: path, name: token, required: true, schema: { type: string } }
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LivePreviewInput" }
+      responses:
+        "200":
+          description: Live preview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LivePreviewResult" }
         "404": { $ref: "#/components/responses/NotFound" }
 
 components:
@@ -14019,3 +14513,217 @@ components:
       required: [metric]
       properties:
         metric: { type: string, enum: [impressions,clicks,checkouts,conversions] }
+
+    # ── V4.4 Creative Production Pipeline schemas ─────────────────────────────
+
+    ProductionPipeline:
+      type: object
+      required: [id, runId, projectId, status, retryCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        runId:
+          type: string
+          description: UUID string — client-facing run identifier
+        projectId:
+          type: integer
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        currentStage:
+          type: [string, "null"]
+        startedAt:
+          type: [string, "null"]
+          format: date-time
+        completedAt:
+          type: [string, "null"]
+          format: date-time
+        errorMessage:
+          type: [string, "null"]
+        retryCount:
+          type: integer
+        executionSummary:
+          type: [object, "null"]
+          description: Aggregated stats — totalStages, completedStages, failedStages, totalLatencyMs, stageBreakdown
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProductionPipelineStage:
+      type: object
+      required: [id, runId, stageName, stageOrder, status, retryCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        runId:
+          type: integer
+          description: FK to ai_production_pipelines.id
+        stageName:
+          type: string
+          enum: [creative_director, copywriter, designer, presentation, qa, renderer, customer_review]
+        stageOrder:
+          type: integer
+        status:
+          type: string
+          enum: [pending, running, completed, failed, skipped, waiting_retry]
+        input:
+          type: [object, "null"]
+        output:
+          type: [object, "null"]
+        startedAt:
+          type: [string, "null"]
+          format: date-time
+        completedAt:
+          type: [string, "null"]
+          format: date-time
+        latencyMs:
+          type: [integer, "null"]
+        retryCount:
+          type: integer
+        errorMessage:
+          type: [string, "null"]
+        agentSlug:
+          type: [string, "null"]
+        model:
+          type: [string, "null"]
+        provider:
+          type: [string, "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProductionPipelineDetail:
+      allOf:
+        - $ref: "#/components/schemas/ProductionPipeline"
+        - type: object
+          required: [stages]
+          properties:
+            stages:
+              type: array
+              items:
+                $ref: "#/components/schemas/ProductionPipelineStage"
+
+    StartProductionPipelineInput:
+      type: object
+      required: [projectId]
+      properties:
+        projectId:
+          type: string
+          description: Creative project UUID or integer ID
+        forceRestart:
+          type: boolean
+          default: false
+          description: Override an already-running pipeline
+
+    StartProductionPipelineResult:
+      type: object
+      required: [runId, message, pipeline]
+      properties:
+        runId:
+          type: string
+        message:
+          type: string
+        pipeline:
+          $ref: "#/components/schemas/ProductionPipeline"
+
+    RetryPipelineStageInput:
+      type: object
+      properties:
+        stageName:
+          type: [string, "null"]
+          description: Stage to retry from. Omit to retry from the first failed stage.
+          enum: [creative_director, copywriter, designer, presentation, qa, renderer, customer_review, "null"]
+
+    RetryPipelineStageResult:
+      type: object
+      required: [runId, retried]
+      properties:
+        runId:
+          type: string
+        retried:
+          type: boolean
+        stageName:
+          type: [string, "null"]
+        message:
+          type: string
+
+    CancelProductionPipelineResult:
+      type: object
+      required: [runId, status, message]
+      properties:
+        runId:
+          type: string
+        status:
+          type: string
+        message:
+          type: string
+
+    PipelineStageStat:
+      type: object
+      required: [stageName, totalCount, completedCount, failedCount, skippedCount]
+      properties:
+        stageName:
+          type: string
+        totalCount:
+          type: integer
+        completedCount:
+          type: integer
+        failedCount:
+          type: integer
+        skippedCount:
+          type: integer
+        avgLatencyMs:
+          type: [number, "null"]
+
+    PipelineTotals:
+      type: object
+      required: [totalRuns, runningRuns, completedRuns, failedRuns, cancelledRuns, pendingRuns]
+      properties:
+        totalRuns:
+          type: integer
+        runningRuns:
+          type: integer
+        completedRuns:
+          type: integer
+        failedRuns:
+          type: integer
+        cancelledRuns:
+          type: integer
+        pendingRuns:
+          type: integer
+
+    PipelineStageDefinition:
+      type: object
+      required: [name, order, label]
+      properties:
+        name:
+          type: string
+        order:
+          type: integer
+        label:
+          type: string
+
+    PipelineMonitoringStatsResult:
+      type: object
+      required: [totals, stageStats, recentRuns, stageDefinitions]
+      properties:
+        totals:
+          $ref: "#/components/schemas/PipelineTotals"
+        stageStats:
+          type: array
+          items:
+            $ref: "#/components/schemas/PipelineStageStat"
+        recentRuns:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductionPipeline"
+        stageDefinitions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PipelineStageDefinition"
