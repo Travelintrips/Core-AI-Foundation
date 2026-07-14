@@ -1,0 +1,525 @@
+Bertindaklah sebagai Principal Product Architect, AI Solution Architect, Enterprise Software Auditor, dan UX Architect.
+
+JANGAN mengimplementasikan fitur apapun.
+
+JANGAN mengubah source code.
+
+JANGAN membuat commit.
+
+Tugas Anda hanya melakukan AUDIT MENYELURUH terhadap seluruh project Creative Platform dan menghasilkan laporan yang sangat detail.
+
+=====================================================
+TUJUAN AUDIT
+=====================================================
+
+Saya ingin mengetahui apakah platform Creative Agency AI yang saya bangun sudah benar-benar lengkap sebagai produk enterprise.
+
+Audit harus dilakukan berdasarkan seluruh source code yang ada, bukan berdasarkan asumsi.
+
+Jika menemukan sesuatu yang belum selesai, jelaskan secara spesifik.
+
+Jika menemukan overlap, jelaskan.
+
+Jika menemukan fitur yang tidak pernah dipakai, jelaskan.
+
+Jika menemukan desain yang kurang tepat, jelaskan alasannya.
+
+=====================================================
+YANG HARUS DIAUDIT
+=====================================================
+
+Audit seluruh sistem mulai dari:
+
+• Frontend
+• Backend
+• Database
+• AI Workflow
+• AI Agent
+• Customer Portal
+• Admin Portal
+• Export Engine
+• Presentation Engine
+• Company Profile Engine
+• Brand Strategy
+• Creative Direction
+• Copywriting
+• Quality Control
+• Creative Consultant
+• Approval Workflow
+• Brief Assistant
+• Versioning
+• Template System
+• Storage
+• OpenAPI
+• Background Worker
+• Queue
+• SSE
+• Authentication
+• Authorization
+• Audit Log
+
+=====================================================
+1. PRODUCT FLOW AUDIT
+=====================================================
+
+Petakan flow sebenarnya.
+
+Client
+↓
+
+Brief
+
+↓
+
+AI Agent
+
+↓
+
+Approval
+
+↓
+
+Deliverable
+
+↓
+
+Revision
+
+↓
+
+Final Delivery
+
+↓
+
+History
+
+↓
+
+Export
+
+Cari:
+
+• langkah yang hilang
+• langkah yang duplikat
+• bottleneck
+• proses yang terlalu rumit
+• proses yang bisa diotomatisasi
+
+=====================================================
+2. AI AGENT AUDIT
+=====================================================
+
+Audit seluruh AI Agent.
+
+Untuk setiap agent tampilkan:
+
+Nama Agent
+
+Tujuan
+
+Input
+
+Output
+
+Dependency
+
+AI yang dipanggil
+
+Workflow
+
+Dipakai dimana
+
+Dipanggil siapa
+
+Status
+
+Missing feature
+
+Overlap
+
+Opportunity
+
+Berikan skor:
+
+Completeness
+
+Scalability
+
+Maintainability
+
+Enterprise Readiness
+
+=====================================================
+3. DELIVERABLE AUDIT
+=====================================================
+
+Audit semua deliverable.
+
+Misalnya:
+
+Company Profile
+
+Pitch Deck
+
+Brand Guideline
+
+Creative Strategy
+
+Presentation
+
+Copywriting
+
+Social Media
+
+Packaging
+
+Logo
+
+Landing Page
+
+Banner
+
+Poster
+
+Proposal
+
+Laporan Creative Consultant
+
+Untuk setiap deliverable:
+
+• siapa yang membuat
+• AI apa saja yang terlibat
+• apakah workflow sudah lengkap
+• apakah ada revisi
+• apakah ada approval
+• apakah ada versioning
+• apakah export lengkap
+• apakah metadata lengkap
+
+=====================================================
+4. DATABASE AUDIT
+=====================================================
+
+Audit:
+
+Schema
+
+Relationship
+
+Foreign key
+
+Normalization
+
+Duplicate field
+
+Unused table
+
+Unused column
+
+Missing index
+
+Audit log
+
+Versioning
+
+History
+
+Soft delete
+
+Tenant isolation
+
+=====================================================
+5. CUSTOMER EXPERIENCE AUDIT
+=====================================================
+
+Audit pengalaman customer.
+
+Mulai dari:
+
+buat project
+
+isi brief
+
+jawab AI
+
+review
+
+approve
+
+download
+
+revisi
+
+history
+
+Cari:
+
+• UX membingungkan
+• terlalu banyak klik
+• informasi kurang jelas
+• loading yang tidak perlu
+• langkah yang bisa dipersingkat
+
+=====================================================
+6. ADMIN EXPERIENCE AUDIT
+=====================================================
+
+Audit seluruh admin.
+
+Apakah admin dapat:
+
+monitor project
+
+review
+
+override
+
+approve
+
+reject
+
+lihat history
+
+lihat AI reasoning
+
+lihat cost
+
+lihat token
+
+lihat progress
+
+Cari workflow yang kurang efisien.
+
+=====================================================
+7. CREATIVE CONSULTANT AUDIT
+=====================================================
+
+Audit khusus Creative Consultant.
+
+Apakah hanya menggabungkan hasil AI?
+
+Ataukah benar-benar bertindak sebagai Creative Consultant?
+
+Harus dicek apakah sudah memiliki:
+
+Executive Summary
+
+Business Analysis
+
+Brand Audit
+
+Marketing Audit
+
+Creative Direction Summary
+
+Risk Analysis
+
+Priority Actions
+
+Roadmap
+
+Recommendation
+
+Consultant Notes
+
+Decision Support
+
+Business Insight
+
+Gap Analysis
+
+ROI Recommendation
+
+Implementation Checklist
+
+Jika belum ada, jelaskan.
+
+=====================================================
+8. BUSINESS VALUE AUDIT
+=====================================================
+
+Audit apakah platform benar-benar membantu bisnis.
+
+Misalnya:
+
+branding
+
+marketing
+
+sales
+
+conversion
+
+lead generation
+
+pitching
+
+investor
+
+B2B
+
+B2C
+
+=====================================================
+9. FEATURE GAP ANALYSIS
+=====================================================
+
+Cari semua fitur yang masih kurang.
+
+Kelompokkan menjadi:
+
+Critical
+
+High Priority
+
+Medium
+
+Low
+
+Nice to Have
+
+JANGAN langsung menyarankan implementasi.
+
+=====================================================
+10. ENTERPRISE READINESS
+=====================================================
+
+Nilai:
+
+Security
+
+Scalability
+
+Performance
+
+Multi Tenant
+
+Maintainability
+
+Extensibility
+
+AI Architecture
+
+Cost Efficiency
+
+Reliability
+
+Observability
+
+=====================================================
+11. AI COST AUDIT
+=====================================================
+
+Audit:
+
+Apakah AI dipanggil berulang?
+
+Apakah prompt terlalu panjang?
+
+Apakah ada cache?
+
+Apakah context terlalu besar?
+
+Apakah ada token yang terbuang?
+
+Bagaimana optimasinya?
+
+=====================================================
+12. DUPLICATION AUDIT
+=====================================================
+
+Cari:
+
+duplicate workflow
+
+duplicate database
+
+duplicate AI
+
+duplicate endpoint
+
+duplicate UI
+
+duplicate export
+
+duplicate service
+
+=====================================================
+13. FINAL SCORE
+=====================================================
+
+Berikan skor 0-100 untuk:
+
+Architecture
+
+UX
+
+AI Workflow
+
+Automation
+
+Maintainability
+
+Scalability
+
+Business Value
+
+Enterprise Readiness
+
+Customer Experience
+
+Admin Experience
+
+Creative Consultant
+
+Overall Platform
+
+=====================================================
+14. PRIORITY ROADMAP
+=====================================================
+
+JANGAN implementasi.
+
+Buat roadmap:
+
+Phase 1
+
+Phase 2
+
+Phase 3
+
+Phase 4
+
+Phase 5
+
+berdasarkan dampak bisnis terbesar.
+
+=====================================================
+OUTPUT
+=====================================================
+
+Saya hanya ingin laporan audit.
+
+Tidak boleh mengubah source code.
+
+Tidak boleh membuat commit.
+
+Tidak boleh membuat migration.
+
+Tidak boleh membuat refactor.
+
+Tidak boleh membuat PR.
+
+Tidak boleh membuat TODO.
+
+Tidak boleh mengimplementasikan fitur.
+
+Laporan harus berdasarkan source code aktual yang ada, lengkap dengan referensi file, modul, service, route, komponen, dan alasan teknis dari setiap temuan.
+
+Jika suatu fitur ternyata sudah ada, katakan sudah ada.
+
+Jika belum ada, jelaskan mengapa.
+
+Jika ada overlap, jelaskan secara rinci.
+
+Audit harus objektif, kritis, dan berbasis bukti dari codebase.
