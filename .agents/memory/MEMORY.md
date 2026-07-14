@@ -47,3 +47,4 @@
 - [phase3-document-engine](phase3-document-engine.md) — Generic PDF worker + registry; 4 new doc types; mapper mock rule; requiresLogo guard; fetch mock in tests
 - [phase4-presentation-engine](phase4-presentation-engine.md) — pptxgenjs default-export interop gotcha; PDFKit auto-pagination silently desyncs page count near page margins; honest spec-rendered PDF fallback pattern
 - [phase4a-brief-assistant](phase4a-brief-assistant.md) — Rule-based brief assistant: file structure, key invariants, BriefRecommendationPanel prop names, wiring pattern in brief.tsx
+- [brief-intelligence-engine](brief-intelligence-engine.md) — Field-mapping rule (chip fields merge, advisory categories are empty-only bullets in specialRequirements) + apply-mode contract
