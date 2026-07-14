@@ -13,7 +13,9 @@
     "reset:admin-password": "tsx --tsconfig tsconfig.json src/resetAdminPassword.ts",
     "test": "vitest run",
     "creative:audit-false-completions": "tsx --tsconfig tsconfig.json src/scripts/auditFalseCompletions.ts",
-    "migrate:v42e": "tsx --tsconfig tsconfig.json src/migrate-v42e.ts"
+    "migrate:v42e": "tsx --tsconfig tsconfig.json src/migrate-v42e.ts",
+    "migrate:v43": "tsx --tsconfig tsconfig.json src/migrate-v43.ts",
+    "seed:templates": "tsx --tsconfig tsconfig.json src/seedTemplates.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.21.0",

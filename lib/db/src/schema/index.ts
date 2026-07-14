@@ -78,3 +78,4 @@ export * from "./ai-asset-library";
 export * from "./ai-zip-deliveries";
 export * from "./ai-brand-dna";
 export * from "./ai-asset-intelligence";
+export * from "./ai-templates";

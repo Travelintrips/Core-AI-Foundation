@@ -105,6 +105,7 @@ const NAV_SECTIONS = [
       { href: "/health-scores", label: "Health Scores", icon: Heart },
       { href: "/ai-insights", label: "AI Insights", icon: Lightbulb },
       { href: "/creative-intelligence", label: "Creative Intelligence", icon: Brain },
+      { href: "/template-marketplace", label: "Templates", icon: LayoutTemplate },
     ],
   },
   {

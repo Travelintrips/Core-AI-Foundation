@@ -64,6 +64,7 @@ import assetLibraryRouter from "./asset-library";
 import zipDeliveryRouter from "./zip-delivery";
 import brandIntelligenceRouter from "./brand-intelligence";
 import assetIntelligenceRouter from "./asset-intelligence";
+import templatesRouter from "./templates";
 
 const router: IRouter = Router();
 
@@ -119,6 +120,7 @@ router.use(assetLibraryRouter);
 router.use(zipDeliveryRouter);
 router.use(brandIntelligenceRouter);
 router.use(assetIntelligenceRouter);
+router.use(templatesRouter);
 router.use(customerWorkspaceSseRouter);
 router.use(customerWorkspaceDocumentsRouter);
 router.use(adminCustomerWorkspaceRouter);

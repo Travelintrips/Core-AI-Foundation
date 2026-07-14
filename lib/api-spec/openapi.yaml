@@ -13422,6 +13422,247 @@ components:
         total: { type: integer }
         duplicates: { $ref: "#/components/schemas/DuplicateReport" }
 
+    # ── V4.3 schemas ──────────────────────────────────────────────────────────
+
+    TemplateColorTheme:
+      type: object
+      properties:
+        primary: { type: string }
+        secondary: { type: string }
+        accent: { type: string }
+        background: { type: string }
+        text: { type: string }
+
+    TemplateTypography:
+      type: object
+      properties:
+        heading: { type: string }
+        body: { type: string }
+        style: { type: string }
+
+    TemplateBrandDnaTags:
+      type: object
+      properties:
+        personalities: { type: array, items: { type: string } }
+        voices: { type: array, items: { type: string } }
+        audiences: { type: array, items: { type: string } }
+        industries: { type: array, items: { type: string } }
+
+    TemplatePreviewImages:
+      type: object
+      properties:
+        thumbnail: { type: string }
+        hero: { type: string }
+        gallery: { type: array, items: { type: string } }
+
+    TemplateItem:
+      type: object
+      required: [id, templateCode, name, category, style, status, featured, editable, isPremium, version, views, selections, previewsGenerated, conversions, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        templateCode: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        category: { type: string }
+        style: { type: string }
+        industry: { type: string, nullable: true }
+        colorTheme: { $ref: "#/components/schemas/TemplateColorTheme", nullable: true }
+        typography: { $ref: "#/components/schemas/TemplateTypography", nullable: true }
+        layout: { type: string, nullable: true }
+        supportedPackages: { type: array, items: { type: string }, nullable: true }
+        brandDnaTags: { $ref: "#/components/schemas/TemplateBrandDnaTags", nullable: true }
+        previewImages: { $ref: "#/components/schemas/TemplatePreviewImages", nullable: true }
+        pdfPreviewUrl: { type: string, nullable: true }
+        pptPreviewUrl: { type: string, nullable: true }
+        coverImage: { type: string, nullable: true }
+        editable: { type: boolean }
+        isPremium: { type: boolean }
+        version: { type: string }
+        status: { type: string, enum: [draft, published, archived] }
+        featured: { type: boolean }
+        sortOrder: { type: integer }
+        views: { type: integer }
+        selections: { type: integer }
+        previewsGenerated: { type: integer }
+        conversions: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    TemplateList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/TemplateItem" } }
+        total: { type: integer }
+
+    ScoredTemplate:
+      type: object
+      required: [template, score, reasons]
+      properties:
+        template: { $ref: "#/components/schemas/TemplateItem" }
+        score: { type: integer }
+        reasons: { type: array, items: { type: string } }
+
+    TemplateRecommendationList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ScoredTemplate" } }
+
+    LivePreviewSection:
+      type: object
+      properties:
+        type: { type: string }
+        content: { type: string }
+        color: { type: string }
+
+    LivePreviewConcept:
+      type: object
+      properties:
+        headerBg: { type: string }
+        headerText: { type: string }
+        accentColor: { type: string }
+        fontPairing: { type: string }
+        layoutType: { type: string }
+        mockSections: { type: array, items: { $ref: "#/components/schemas/LivePreviewSection" } }
+
+    LivePreviewResult:
+      type: object
+      required: [templateId, templateName, companyName, brandColor, previewConcept, generatedAt]
+      properties:
+        templateId: { type: integer }
+        templateName: { type: string }
+        companyName: { type: string }
+        brandColor: { type: string }
+        logoUrl: { type: string, nullable: true }
+        previewConcept: { $ref: "#/components/schemas/LivePreviewConcept" }
+        generatedAt: { type: string, format: date-time }
+
+    LivePreviewInput:
+      type: object
+      required: [companyName, brandColor]
+      properties:
+        companyName: { type: string }
+        brandColor: { type: string }
+        logoUrl: { type: string }
+        industry: { type: string }
+
+    TemplateAnalyticsCategoryStat:
+      type: object
+      properties:
+        category: { type: string }
+        count: { type: integer }
+        totalViews: { type: integer }
+
+    TemplateAnalyticsStyleStat:
+      type: object
+      properties:
+        style: { type: string }
+        count: { type: integer }
+        totalSelections: { type: integer }
+
+    TemplateAnalyticsSummary:
+      type: object
+      properties:
+        totalViews: { type: integer, nullable: true }
+        totalSelections: { type: integer, nullable: true }
+        totalPreviews: { type: integer, nullable: true }
+        totalConversions: { type: integer, nullable: true }
+        templateCount: { type: integer, nullable: true }
+
+    TemplateAnalyticsTopItem:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        category: { type: string }
+        views: { type: integer }
+        conversions: { type: integer }
+
+    TemplateAnalyticsStats:
+      type: object
+      required: [summary, topByViews, topByConversions, byCategory, byStyle]
+      properties:
+        summary: { $ref: "#/components/schemas/TemplateAnalyticsSummary" }
+        topByViews: { type: array, items: { $ref: "#/components/schemas/TemplateAnalyticsTopItem" } }
+        topByConversions: { type: array, items: { $ref: "#/components/schemas/TemplateAnalyticsTopItem" } }
+        byCategory: { type: array, items: { $ref: "#/components/schemas/TemplateAnalyticsCategoryStat" } }
+        byStyle: { type: array, items: { $ref: "#/components/schemas/TemplateAnalyticsStyleStat" } }
+
+    TemplateEvolutionEntry:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        category: { type: string }
+        style: { type: string }
+        views: { type: integer }
+        conversions: { type: integer }
+        previewsGenerated: { type: integer }
+        recommendation: { type: string }
+
+    TemplateEvolution:
+      type: object
+      required: [underperforming, needsRevision, topConverters]
+      properties:
+        underperforming: { type: array, items: { $ref: "#/components/schemas/TemplateEvolutionEntry" } }
+        needsRevision: { type: array, items: { $ref: "#/components/schemas/TemplateEvolutionEntry" } }
+        topConverters: { type: array, items: { $ref: "#/components/schemas/TemplateEvolutionEntry" } }
+
+    IndustryShowcaseItem:
+      type: object
+      required: [industry, totalTemplates]
+      properties:
+        industry: { type: string }
+        topTemplate: { $ref: "#/components/schemas/TemplateItem", nullable: true }
+        totalTemplates: { type: integer }
+
+    IndustryShowcase:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/IndustryShowcaseItem" } }
+
+    TemplateEventInput:
+      type: object
+      required: [eventType]
+      properties:
+        eventType: { type: string, enum: [view, selected, preview_generated, portfolio_viewed, conversion, favorited] }
+        clientId: { type: string }
+        sessionId: { type: string }
+        metadata: { type: object }
+
+    CreateTemplateInput:
+      type: object
+      required: [templateCode, name, category, style]
+      properties:
+        templateCode: { type: string }
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        style: { type: string }
+        industry: { type: string }
+        colorTheme: { $ref: "#/components/schemas/TemplateColorTheme" }
+        typography: { $ref: "#/components/schemas/TemplateTypography" }
+        layout: { type: string }
+        supportedPackages: { type: array, items: { type: string } }
+        brandDnaTags: { $ref: "#/components/schemas/TemplateBrandDnaTags" }
+        previewImages: { $ref: "#/components/schemas/TemplatePreviewImages" }
+        editable: { type: boolean }
+        isPremium: { type: boolean }
+        version: { type: string }
+        featured: { type: boolean }
+        sortOrder: { type: integer }
+
+    WorkspaceTemplatesDashboard:
+      type: object
+      required: [gallery, recommended]
+      properties:
+        gallery: { $ref: "#/components/schemas/TemplateList" }
+        recommended: { type: array, items: { $ref: "#/components/schemas/ScoredTemplate" } }
+
+    # ── End V4.3 schemas ──────────────────────────────────────────────────────
+
     # ── End V4.2E schemas ──────────────────────────────────────────────────────
 
     # ── End V4.2D schemas ─────────────────────────────────────────────────────
