@@ -141,6 +141,8 @@ export interface Subscriber {
   readonly token: string;
   readonly projectId: string;
   readonly internalProjectId: number;
+  /** WP-07 — tenant that owns this subscriber; never taken from client input. */
+  readonly tenantId: string;
   lastActivityAt: number;
   heartbeatTimer: ReturnType<typeof setInterval> | null;
   idleTimer: ReturnType<typeof setTimeout> | null;
@@ -153,6 +155,8 @@ export interface Subscriber {
 interface ProjectChannel {
   readonly projectId: string;
   readonly internalProjectId: number;
+  /** WP-07 — tenant that owns this channel; set on first subscriber, validated on every subsequent one. */
+  readonly tenantId: string;
   /** V4.1 — passed through to the summary layer's next-step/customerAction derivation. Never guessed here. */
   filesUnlocked: boolean;
   subscribers: Set<Subscriber>;
@@ -340,6 +344,12 @@ export interface RegisterOptions {
   isProjectTerminal: boolean;
   /** V4.1 — real flag from the caller; used only for ExecutionSummary derivation. */
   filesUnlocked?: boolean;
+  /**
+   * WP-07 — tenant that owns this subscription. Must be a server-resolved value
+   * (never from client input). When provided, is validated against the existing
+   * channel's tenantId (if any). A mismatch is rejected with 403.
+   */
+  tenantId?: string;
 }
 
 export type RegisterResult =
@@ -362,12 +372,17 @@ export async function registerSubscriber(opts: RegisterOptions): Promise<Registe
     return { ok: false, status: 429, error: "Too many SSE connections for this workspace" };
   }
 
+  // ── WP-07: Resolve effective tenantId ────────────────────────────────────
+  // Fall back to "default" if caller didn't provide one (single-tenant today).
+  const tenantId = opts.tenantId ?? "default";
+
   // ── Get or create channel ─────────────────────────────────────────────────
   let channel = channels.get(opts.projectId);
   if (!channel) {
     channel = {
       projectId: opts.projectId,
       internalProjectId: opts.internalProjectId,
+      tenantId,
       filesUnlocked: opts.filesUnlocked ?? false,
       subscribers: new Set(),
       pollTimer: null,
@@ -376,6 +391,16 @@ export async function registerSubscriber(opts: RegisterOptions): Promise<Registe
     };
     channels.set(opts.projectId, channel);
   } else {
+    // WP-07: Tenant isolation guard — reject cross-tenant reconnects.
+    // A channel is owned by whichever tenant created it; any subsequent
+    // subscriber that presents a different tenantId is rejected immediately.
+    if (channel.tenantId !== tenantId) {
+      logger.warn(
+        { projectId: opts.projectId, channelTenant: channel.tenantId, requestTenant: tenantId },
+        "[sse] WP-07 tenant mismatch — rejecting subscriber",
+      );
+      return { ok: false, status: 403, error: "Tenant mismatch for this project stream" };
+    }
     // Keep the flag fresh — a later subscriber may know a more current value.
     channel.filesUnlocked = opts.filesUnlocked ?? channel.filesUnlocked;
   }
@@ -384,6 +409,19 @@ export async function registerSubscriber(opts: RegisterOptions): Promise<Registe
     // Clean up empty channel if we just created it
     if (channel.subscribers.size === 0) channels.delete(opts.projectId);
     return { ok: false, status: 429, error: "Too many connections for this project" };
+  }
+
+  // ── WP-07: Reconnect validation — cursor tenant must match channel tenant ─
+  // When a client reconnects with a Last-Event-ID cursor, we verify the
+  // channel's tenantId hasn't changed since the cursor was issued. Because
+  // the cursor is an opaque base64url blob (not a signed token), this
+  // check is the lightweight guard: same channel → same tenant → safe.
+  if (opts.afterCursor !== null && channel.tenantId !== tenantId) {
+    logger.warn(
+      { projectId: opts.projectId, channelTenant: channel.tenantId, requestTenant: tenantId },
+      "[sse] WP-07 reconnect tenant mismatch — cursor rejected",
+    );
+    return { ok: false, status: 403, error: "Cursor tenant mismatch — reconnect rejected" };
   }
 
   // ── Create subscriber ─────────────────────────────────────────────────────
@@ -395,6 +433,7 @@ export async function registerSubscriber(opts: RegisterOptions): Promise<Registe
     token: opts.token,
     projectId: opts.projectId,
     internalProjectId: opts.internalProjectId,
+    tenantId,
     lastActivityAt: Date.now(),
     heartbeatTimer: null,
     idleTimer: null,

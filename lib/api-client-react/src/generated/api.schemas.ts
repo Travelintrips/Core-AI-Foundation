@@ -950,6 +950,21 @@ export interface MemoryEntryInput {
 }
 
 /**
+ * Coarse actor category (WP-03). Nullable for legacy rows written before this field existed.
+ * @nullable
+ */
+export type AuditLogActorType = typeof AuditLogActorType[keyof typeof AuditLogActorType] | null;
+
+
+export const AuditLogActorType = {
+  internal_user: 'internal_user',
+  customer: 'customer',
+  public_token: 'public_token',
+  system: 'system',
+  worker: 'worker',
+} as const;
+
+/**
  * @nullable
  */
 export type AuditLogDetails = { [key: string]: unknown } | null;
@@ -975,6 +990,16 @@ export interface AuditLog {
   resourceType?: string | null;
   /** @nullable */
   actorId?: string | null;
+  /**
+     * Nullable — legacy rows and platform-wide/system events have no single owning tenant (WP-03).
+     * @nullable
+     */
+  tenantId?: string | null;
+  /**
+     * Coarse actor category (WP-03). Nullable for legacy rows written before this field existed.
+     * @nullable
+     */
+  actorType?: AuditLogActorType;
   /** @nullable */
   details?: AuditLogDetails;
   status?: AuditLogStatus;
@@ -5043,6 +5068,289 @@ export interface WorkspaceTemplatesDashboard {
   recommended: ScoredTemplate[];
 }
 
+export type DesignElementType = typeof DesignElementType[keyof typeof DesignElementType];
+
+
+export const DesignElementType = {
+  text: 'text',
+  image: 'image',
+  rect: 'rect',
+  circle: 'circle',
+  line: 'line',
+  frame: 'frame',
+} as const;
+
+export interface DesignElement {
+  id: string;
+  name: string;
+  type: DesignElementType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  opacity: number;
+  zIndex: number;
+  locked: boolean;
+  visible: boolean;
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+  borderRadius: number;
+  text?: string | null;
+  fontSize?: number | null;
+  fontFamily?: string | null;
+  fontWeight?: string | null;
+  textAlign?: string | null;
+  color?: string | null;
+  lineHeight?: number | null;
+  src?: string | null;
+  objectFit?: string | null;
+}
+
+export interface CanvasState {
+  width: number;
+  height: number;
+  background: string;
+  elements: DesignElement[];
+}
+
+export type DesignProjectStatus = typeof DesignProjectStatus[keyof typeof DesignProjectStatus];
+
+
+export const DesignProjectStatus = {
+  draft: 'draft',
+  active: 'active',
+  archived: 'archived',
+} as const;
+
+export interface DesignProject {
+  id: number;
+  name: string;
+  description?: string | null;
+  canvasWidth: number;
+  canvasHeight: number;
+  templateId?: number | null;
+  brandDnaId?: number | null;
+  currentVersionId?: number | null;
+  status: DesignProjectStatus;
+  tags?: string[];
+  thumbnailUrl?: string | null;
+  elementCount: number;
+  versionCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DesignProjectList {
+  items: DesignProject[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface CreateDesignProjectInput {
+  name: string;
+  description?: string;
+  canvasWidth?: number;
+  canvasHeight?: number;
+  templateId?: number;
+  brandDnaId?: number;
+  tags?: string[];
+  initialState?: CanvasState;
+}
+
+export type UpdateDesignProjectInputStatus = typeof UpdateDesignProjectInputStatus[keyof typeof UpdateDesignProjectInputStatus];
+
+
+export const UpdateDesignProjectInputStatus = {
+  draft: 'draft',
+  active: 'active',
+  archived: 'archived',
+} as const;
+
+export interface UpdateDesignProjectInput {
+  name?: string;
+  description?: string;
+  status?: UpdateDesignProjectInputStatus;
+  tags?: string[];
+  thumbnailUrl?: string;
+}
+
+export interface DesignCanvasResponse {
+  projectId: number;
+  versionId: number;
+  versionNumber: number;
+  canvasState: CanvasState;
+  savedAt: string;
+}
+
+export interface SaveCanvasInput {
+  canvasState: CanvasState;
+  label?: string;
+}
+
+export interface DesignVersion {
+  id: number;
+  projectId: number;
+  versionNumber: number;
+  label?: string | null;
+  elementCount: number;
+  canvasState?: CanvasState;
+  createdAt: string;
+}
+
+export interface DesignVersionList {
+  items: DesignVersion[];
+  total: number;
+}
+
+export type ExportDesignInputFormat = typeof ExportDesignInputFormat[keyof typeof ExportDesignInputFormat];
+
+
+export const ExportDesignInputFormat = {
+  png: 'png',
+  pdf: 'pdf',
+  svg: 'svg',
+  json: 'json',
+} as const;
+
+export interface ExportDesignInput {
+  format: ExportDesignInputFormat;
+  scale?: number;
+  quality?: number;
+}
+
+export interface ExportDesignResult {
+  format: string;
+  url: string;
+  dataUrl?: string | null;
+  expiresAt: string;
+}
+
+export type AiRegenerateInputElementType = typeof AiRegenerateInputElementType[keyof typeof AiRegenerateInputElementType];
+
+
+export const AiRegenerateInputElementType = {
+  text: 'text',
+  image: 'image',
+  style: 'style',
+} as const;
+
+export interface AiRegenerateInput {
+  elementId: string;
+  elementType: AiRegenerateInputElementType;
+  prompt: string;
+  brandDnaId?: number;
+  currentContent?: string;
+  style?: string;
+  tone?: string;
+}
+
+export interface AiSuggestion {
+  id: string;
+  content: string;
+  reasoning?: string | null;
+  preview?: string | null;
+}
+
+export interface AiRegenerateResult {
+  elementId: string;
+  elementType: string;
+  suggestions: AiSuggestion[];
+  brandAligned: boolean;
+  confidence: number;
+}
+
+export interface PortfolioGalleryCard {
+  id: number;
+  serviceId: number;
+  slug?: string | null;
+  title: string;
+  shortDescription?: string | null;
+  industry: string;
+  style: string;
+  coverImage?: string | null;
+  rating?: string | null;
+  views?: number;
+  featured?: boolean;
+  packageLabel?: string | null;
+  deliveryTime?: string | null;
+}
+
+export type PortfolioGallerySearchResultPagination = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+export interface PortfolioGallerySearchResult {
+  items: PortfolioGalleryCard[];
+  pagination: PortfolioGallerySearchResultPagination;
+}
+
+export interface PortfolioGalleryIndustryShowcaseItem {
+  industry: string;
+  totalPortfolios: number;
+  topPortfolio?: PortfolioGalleryCard | null;
+}
+
+export interface PortfolioGalleryIndustryShowcase {
+  items: PortfolioGalleryIndustryShowcaseItem[];
+}
+
+export interface PortfolioGalleryShowcase {
+  featured: PortfolioGalleryCard[];
+  industries: PortfolioGalleryIndustryShowcaseItem[];
+}
+
+export interface PortfolioGalleryCompareInput {
+  /**
+     * @minItems 2
+     * @maxItems 4
+     */
+  ids: number[];
+}
+
+export type PortfolioGalleryCompareItem = PortfolioGalleryCard & ({
+  businessSize?: string | null;
+  deliveryDays?: number | null;
+  deliverables?: string[];
+  tools?: string[];
+  completedProjects?: number;
+});
+
+export interface PortfolioGalleryCompareResult {
+  items: PortfolioGalleryCompareItem[];
+}
+
+export interface PortfolioGalleryRecommendations {
+  basedOnBrandDna: boolean;
+  items: PortfolioGalleryCard[];
+}
+
+export interface PortfolioGalleryFavoritesList {
+  items: PortfolioGalleryCard[];
+}
+
+export interface PortfolioGalleryFavoriteInput {
+  portfolioId: number;
+}
+
+export interface PortfolioGallerySearchTerm {
+  term: string;
+  count: number;
+}
+
+export interface PortfolioGalleryAnalytics {
+  totalSearches: number;
+  totalFavoriteEvents: number;
+  totalCompareEvents: number;
+  activeFavorites: number;
+  topSearchTerms: PortfolioGallerySearchTerm[];
+}
+
 export type AbTestTestType = typeof AbTestTestType[keyof typeof AbTestTestType];
 
 
@@ -5117,6 +5425,201 @@ export interface RecordAbMetricInput {
   metric: RecordAbMetricInputMetric;
 }
 
+export type ProductionPipelineStatus = typeof ProductionPipelineStatus[keyof typeof ProductionPipelineStatus];
+
+
+export const ProductionPipelineStatus = {
+  pending: 'pending',
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+/**
+ * Aggregated stats — totalStages, completedStages, failedStages, totalLatencyMs, stageBreakdown
+ * @nullable
+ */
+export type ProductionPipelineExecutionSummary = { [key: string]: unknown } | null;
+
+export interface ProductionPipeline {
+  id: number;
+  /** UUID string — client-facing run identifier */
+  runId: string;
+  projectId: number;
+  status: ProductionPipelineStatus;
+  /** @nullable */
+  currentStage?: string | null;
+  /** @nullable */
+  startedAt?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+  /** @nullable */
+  errorMessage?: string | null;
+  retryCount: number;
+  /**
+     * Aggregated stats — totalStages, completedStages, failedStages, totalLatencyMs, stageBreakdown
+     * @nullable
+     */
+  executionSummary?: ProductionPipelineExecutionSummary;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ProductionPipelineStageStageName = typeof ProductionPipelineStageStageName[keyof typeof ProductionPipelineStageStageName];
+
+
+export const ProductionPipelineStageStageName = {
+  creative_director: 'creative_director',
+  copywriter: 'copywriter',
+  designer: 'designer',
+  presentation: 'presentation',
+  qa: 'qa',
+  renderer: 'renderer',
+  customer_review: 'customer_review',
+} as const;
+
+export type ProductionPipelineStageStatus = typeof ProductionPipelineStageStatus[keyof typeof ProductionPipelineStageStatus];
+
+
+export const ProductionPipelineStageStatus = {
+  pending: 'pending',
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+  skipped: 'skipped',
+  waiting_retry: 'waiting_retry',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ProductionPipelineStageInput = { [key: string]: unknown } | null;
+
+/**
+ * @nullable
+ */
+export type ProductionPipelineStageOutput = { [key: string]: unknown } | null;
+
+export interface ProductionPipelineStage {
+  id: number;
+  /** FK to ai_production_pipelines.id */
+  runId: number;
+  stageName: ProductionPipelineStageStageName;
+  stageOrder: number;
+  status: ProductionPipelineStageStatus;
+  /** @nullable */
+  input?: ProductionPipelineStageInput;
+  /** @nullable */
+  output?: ProductionPipelineStageOutput;
+  /** @nullable */
+  startedAt?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+  /** @nullable */
+  latencyMs?: number | null;
+  retryCount: number;
+  /** @nullable */
+  errorMessage?: string | null;
+  /** @nullable */
+  agentSlug?: string | null;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  provider?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ProductionPipelineDetail = ProductionPipeline & {
+  stages: ProductionPipelineStage[];
+};
+
+export interface StartProductionPipelineInput {
+  /** Creative project UUID or integer ID */
+  projectId: string;
+  /** Override an already-running pipeline */
+  forceRestart?: boolean;
+}
+
+export interface StartProductionPipelineResult {
+  runId: string;
+  message: string;
+  pipeline: ProductionPipeline;
+}
+
+/**
+ * Stage to retry from. Omit to retry from the first failed stage.
+ * @nullable
+ */
+export type RetryPipelineStageInputStageName = typeof RetryPipelineStageInputStageName[keyof typeof RetryPipelineStageInputStageName] | null;
+
+
+export const RetryPipelineStageInputStageName = {
+  creative_director: 'creative_director',
+  copywriter: 'copywriter',
+  designer: 'designer',
+  presentation: 'presentation',
+  qa: 'qa',
+  renderer: 'renderer',
+  customer_review: 'customer_review',
+  null: 'null',
+} as const;
+
+export interface RetryPipelineStageInput {
+  /**
+     * Stage to retry from. Omit to retry from the first failed stage.
+     * @nullable
+     */
+  stageName?: RetryPipelineStageInputStageName;
+}
+
+export interface RetryPipelineStageResult {
+  runId: string;
+  retried: boolean;
+  /** @nullable */
+  stageName?: string | null;
+  message?: string;
+}
+
+export interface CancelProductionPipelineResult {
+  runId: string;
+  status: string;
+  message: string;
+}
+
+export interface PipelineStageStat {
+  stageName: string;
+  totalCount: number;
+  completedCount: number;
+  failedCount: number;
+  skippedCount: number;
+  /** @nullable */
+  avgLatencyMs?: number | null;
+}
+
+export interface PipelineTotals {
+  totalRuns: number;
+  runningRuns: number;
+  completedRuns: number;
+  failedRuns: number;
+  cancelledRuns: number;
+  pendingRuns: number;
+}
+
+export interface PipelineStageDefinition {
+  name: string;
+  order: number;
+  label: string;
+}
+
+export interface PipelineMonitoringStatsResult {
+  totals: PipelineTotals;
+  stageStats: PipelineStageStat[];
+  recentRuns: ProductionPipeline[];
+  stageDefinitions: PipelineStageDefinition[];
+}
+
 export type NotFoundResponse = {
   error: string;
 };
@@ -5182,6 +5685,14 @@ module?: string | null;
  * @nullable
  */
 action?: string | null;
+/**
+ * @nullable
+ */
+tenantId?: string | null;
+/**
+ * @nullable
+ */
+actorType?: string | null;
 /**
  * @nullable
  */
@@ -5370,6 +5881,26 @@ export const ContinueLivePreviewBodyConcept = {
 
 export type ContinueLivePreviewBody = {
   concept: ContinueLivePreviewBodyConcept;
+};
+
+export type SearchPortfolioGalleryParams = {
+q?: string;
+industry?: string;
+style?: string;
+page?: number;
+pageSize?: number;
+};
+
+export type GetWorkspacePortfolioGalleryRecommendedParams = {
+limit?: number;
+};
+
+export type AddWorkspacePortfolioGalleryFavorite200 = {
+  ok: boolean;
+};
+
+export type RemoveWorkspacePortfolioGalleryFavorite200 = {
+  ok: boolean;
 };
 
 export type StartBrief200 = {
@@ -5729,5 +6260,15 @@ export type GetWorkspaceTemplateRecommendationsParams = {
 category?: string;
 packageLevel?: string;
 limit?: number;
+};
+
+export type ListDesignProjectsParams = {
+status?: string;
+page?: number;
+pageSize?: number;
+};
+
+export type ArchiveDesignProject200 = {
+  ok: boolean;
 };
 
