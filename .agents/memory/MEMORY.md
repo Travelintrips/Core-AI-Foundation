@@ -59,3 +59,4 @@
 - [admin-auth-canonical-pattern](admin-auth-canonical-pattern.md) — admin-key gating is one global app.ts mount (adminAuthWithExceptions), never per-route middleware; templates.ts's requireAdminApiKey never existed, was dead import
 - [phase-v42e-creative-intelligence](phase-v42e-creative-intelligence.md) — V4.2E: Brand DNA + Asset Intelligence tables/services/routes/UI; admin uses apiFetch not useAdminApi hook
 - [phase-v43-templates-portfolio](phase-v43-templates-portfolio.md) — V4.3: Express 5 params string|string[] middleware quirk, migration pool convention, use-template→draft-request seed pattern
+- [wp03-audit-log](wp03-audit-log.md) — audit actor-type vocab differs from RequestContext's; diff-then-redact order matters; logAudit dual signature; auditHook.ts is a standalone new file

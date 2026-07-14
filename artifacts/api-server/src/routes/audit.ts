@@ -19,6 +19,9 @@ router.get("/ai/audit-logs", async (req, res): Promise<void> => {
   let filtered = allLogs;
   if (query.data.module != null) filtered = filtered.filter(l => l.module === query.data.module);
   if (query.data.action != null) filtered = filtered.filter(l => l.action === query.data.action);
+  // WP-03 additions — additive-only filters, existing consumers (audit.tsx) are unaffected.
+  if (query.data.tenantId != null) filtered = filtered.filter(l => l.tenantId === query.data.tenantId);
+  if (query.data.actorType != null) filtered = filtered.filter(l => l.actorType === query.data.actorType);
 
   const total = filtered.length;
   const items = filtered.slice(offset, offset + limit);

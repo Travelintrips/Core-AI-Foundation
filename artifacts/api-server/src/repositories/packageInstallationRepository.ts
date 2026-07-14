@@ -22,6 +22,10 @@ import { eq, and } from "drizzle-orm";
 import { db, aiInstalledPackagesTable, type AiInstalledPackage } from "@workspace/db";
 import { requireTenantId } from "./tenantScope.js";
 import { resolveExecutor, withExecutor, type RepositoryContext, type DbExecutor } from "./types.js";
+import { emitRepositoryAuditRecord } from "./auditHook.js";
+
+const AUDIT_MODULE = "marketplace";
+const AUDIT_RESOURCE_TYPE = "installed_package";
 
 export type PackageType = "skill" | "tool";
 
@@ -89,6 +93,17 @@ export async function insertInstallation(
       configurationJson: values.configurationJson,
     })
     .returning();
+
+  // WP-03: every write on this pilot domain produces exactly one audit row —
+  // no manual logAudit call needed at the packageManagerService.ts call site.
+  await emitRepositoryAuditRecord(ctx, {
+    module: AUDIT_MODULE,
+    operation: "create",
+    action: "package_installed",
+    resourceType: AUDIT_RESOURCE_TYPE,
+    resourceId: row.id,
+    after: row as unknown as Record<string, unknown>,
+  });
   return row;
 }
 
@@ -102,16 +117,52 @@ export async function updateInstallationById(
   // already validated the id belongs to this tenant.
   const tenantId = requireTenantId(ctx);
   const executor = resolveExecutor(ctx, db) as DbExecutor;
+  const before = await findInstallationById(ctx, id);
   const [row] = await executor
     .update(aiInstalledPackagesTable)
     .set(patch)
     .where(and(eq(aiInstalledPackagesTable.id, id), eq(aiInstalledPackagesTable.tenantId, tenantId)))
     .returning();
+
+  if (row) {
+    await emitRepositoryAuditRecord(ctx, {
+      module: AUDIT_MODULE,
+      operation: "update",
+      action: "package_updated",
+      resourceType: AUDIT_RESOURCE_TYPE,
+      resourceId: id,
+      before: before as unknown as Record<string, unknown> | undefined,
+      after: row as unknown as Record<string, unknown>,
+    });
+  }
   return row;
 }
 
 export async function deleteInstallationById(ctx: RepositoryContext, id: number): Promise<void> {
   const tenantId = requireTenantId(ctx);
   const executor = resolveExecutor(ctx, db) as DbExecutor;
+  const before = await findInstallationById(ctx, id);
   await executor.delete(aiInstalledPackagesTable).where(and(eq(aiInstalledPackagesTable.id, id), eq(aiInstalledPackagesTable.tenantId, tenantId)));
+
+  if (before) {
+    await emitRepositoryAuditRecord(ctx, {
+      module: AUDIT_MODULE,
+      operation: "delete",
+      action: "package_removed",
+      resourceType: AUDIT_RESOURCE_TYPE,
+      resourceId: id,
+      before: before as unknown as Record<string, unknown>,
+    });
+  }
+}
+
+/** Internal helper: fetch a single row by (tenant-scoped) id, for before/after audit snapshots. */
+async function findInstallationById(ctx: RepositoryContext, id: number): Promise<AiInstalledPackage | undefined> {
+  const tenantId = requireTenantId(ctx);
+  const executor = resolveExecutor(ctx, db) as DbExecutor;
+  const rows = await executor
+    .select()
+    .from(aiInstalledPackagesTable)
+    .where(and(eq(aiInstalledPackagesTable.id, id), eq(aiInstalledPackagesTable.tenantId, tenantId)));
+  return rows[0];
 }

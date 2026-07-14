@@ -1027,6 +1027,18 @@ paths:
             type:
               - string
               - "null"
+        - name: tenantId
+          in: query
+          schema:
+            type:
+              - string
+              - "null"
+        - name: actorType
+          in: query
+          schema:
+            type:
+              - string
+              - "null"
         - name: limit
           in: query
           schema:
@@ -8377,6 +8389,23 @@ components:
           type:
             - string
             - "null"
+        tenantId:
+          type:
+            - string
+            - "null"
+          description: Nullable — legacy rows and platform-wide/system events have no single owning tenant (WP-03).
+        actorType:
+          type:
+            - string
+            - "null"
+          enum:
+            - internal_user
+            - customer
+            - public_token
+            - system
+            - worker
+            - null
+          description: Coarse actor category (WP-03). Nullable for legacy rows written before this field existed.
         details:
           type:
             - object
