@@ -22,6 +22,10 @@ export const aiInstalledPackagesTable = appSchema.table("ai_installed_packages",
 
   installedAt: timestamp("installed_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  // WP-04: soft delete — NULL = active, non-NULL = soft-deleted
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  // WP-05: archive — NULL = not archived, non-NULL = archived (orthogonal to deletedAt)
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
 }, (t) => ({
   tenantPackageUnique: unique().on(t.tenantId, t.packageId, t.packageType),
 }));

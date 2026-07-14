@@ -28,6 +28,9 @@ import { archiveReplicateAsset, optimizeArchivedAsset, generateAssetThumbnail } 
 import { maybeFinalizePortfolioPublish } from "./demoPortfolioGeneratorService.js";
 import { logger } from "../lib/logger.js";
 import { WorkerNotImplementedError } from "./jobCompletionGuard.js";
+import { createSystemContext } from "../security/requestContext.js";
+import { DEFAULT_TENANT_ID } from "../security/tenantResolution.js";
+import type { RequestContext } from "../security/requestContext.js";
 import { resolveProjectDocumentType } from "./creativeProjectDocumentType.js";
 import {
   executeGenericPdfExportJob,
@@ -47,6 +50,35 @@ import { executeZipDeliveryJob } from "./zipDeliveryService.js";
 initDocumentRegistry();
 initPresentationRegistry();
 initImageBatchRegistry();
+
+// ── WP-06: Worker context factory ────────────────────────────────────────────
+
+/**
+ * Build a RequestContext for a worker executing a specific job.
+ * The tenantId is extracted from the job's `_tenantId` payload field
+ * (stamped by enqueue() — never from unverified client input).
+ * Falls back to DEFAULT_TENANT_ID for legacy jobs that predate WP-06.
+ */
+export function buildWorkerContext(job: AiJob): RequestContext {
+  const payload = (job.payloadJson ?? {}) as Record<string, unknown>;
+  const tenantId =
+    typeof payload["_tenantId"] === "string" && payload["_tenantId"].length > 0
+      ? payload["_tenantId"]
+      : DEFAULT_TENANT_ID;
+
+  return createSystemContext({
+    tenantId,
+    actorType: "worker",
+    source: "worker",
+    requestId: `job-${job.id}-${job.jobCode ?? ""}`,
+    correlationId: `job-${job.id}`,
+    metadata: {
+      jobId: job.id,
+      jobType: job.jobType ?? "",
+      jobCode: job.jobCode ?? "",
+    },
+  });
+}
 
 // ── Real AI execution helpers ───────────────────────────────────────────────
 
@@ -471,8 +503,14 @@ export async function claimJob(workerId: number): Promise<AiJob | null> {
  * Extend this switch to add new job types as the platform grows.
  */
 export async function executeJob(job: AiJob, workerId: number): Promise<Record<string, unknown>> {
+  // WP-06 — Build a RequestContext for this job so downstream handlers have
+  // a structured, tenant-scoped identity without DB round-trips.
+  const workerCtx = buildWorkerContext(job);
   process.stdout.write(`###EXECJOB### jobId=${job.id} jobType=${JSON.stringify(job.jobType)} typeof=${typeof job.jobType}\n`);
-  logger.info({ jobId: job.id, jobType: job.jobType, jobTypeJson: JSON.stringify(job.jobType) }, "[executeJob] dispatching");
+  logger.info(
+    { jobId: job.id, jobType: job.jobType, tenantId: workerCtx.tenantId, actorType: workerCtx.actorType },
+    "[executeJob] dispatching",
+  );
   switch (job.jobType) {
     case "llm_inference":
       return executeTextJob(job, "LLM inference");

@@ -27,6 +27,7 @@ import {
   removeSubscriber,
   decodeCursor,
 } from "../services/sseManager.js";
+import { DEFAULT_TENANT_ID } from "../security/tenantResolution.js";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
@@ -137,6 +138,8 @@ router.get(
       isProjectTerminal: isTerminal,
       // V4.1 — real flag, used only for ExecutionSummary derivation (never guessed downstream).
       filesUnlocked: detail.overview.filesUnlocked,
+      // WP-07 — server-resolved tenant; never taken from client input.
+      tenantId: DEFAULT_TENANT_ID,
     });
 
     if (!result.ok) {

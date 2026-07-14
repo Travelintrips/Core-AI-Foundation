@@ -59,8 +59,23 @@ Re-verified a further time 2026-07-14 (same day, another re-import): identical s
 Re-verified once more 2026-07-14 (second pass same day): same wipe pattern (node_modules + artifact/workflow registration gone), same fix applied successfully. All 4 services re-confirmed running via screenshots: customer-portal landing page renders correctly (Indonesian copy, dashboard mockup), ai-platform shows the expected staff login gate (401 on API calls pre-login is expected, not a bug).
 Re-verified again 2026-07-14 (second import): same pattern — `node_modules` + artifact/workflow registration wiped. Same fix applied (`pnpm install` → `build:generated` → `build:api` → `runPostMergeSetup`) — all 4 services back up clean, no code changes needed.
 Re-verified once more later on 2026-07-14 after yet another re-import: identical wipe/fix cycle (`pnpm install` → `build:generated` → `build:api` → restart 4 workflows), no code changes needed, all secrets already present. All 4 services confirmed up via screenshot: customer-portal landing page rendered, ai-platform admin showed login gate as expected, api-server logs showed scheduler/dispatcher/cluster workers started, mockup-sandbox vite server ready.
+Re-verified 2026-07-14 (latest): same wipe/fix cycle. One new code fix required: `LayoutTemplate` icon was missing from lucide-react import in `artifacts/ai-platform/src/components/layout.tsx` (caused runtime crash). Also added `requireAdminApiKey` export alias to `artifacts/api-server/src/middleware/adminAuth.ts` (api build was failing). After fixes: all 4 services confirmed up — customer-portal landing page renders, ai-platform shows staff login gate, api-server running, mockup-sandbox vite ready.
 
 Re-verified a further time 2026-07-14 (same day, later re-import): identical symptom (`node_modules` + registration wiped), identical fix applied, all 4 services confirmed running again with no code changes.
+Re-verified again 2026-07-14 (latest re-import): same wipe pattern. Additional fix needed: `artifacts/api-server/src/routes/templates.ts` had the concatenated-file bug (stale v1 route openers interleaved with v2 openers causing esbuild parse error). Removed the 10 stale lines (had `requireAdminApiKey` per-route). Then standard fix applied; all 4 services confirmed up.
+Re-verified again 2026-07-14: same wipe pattern. Additionally found concatenation bug in `artifacts/api-server/src/routes/templates.ts` — GitHub import had merged stale v1 route openers before each of the 10 admin routes; removed the stale lines. Fix: `pnpm install` → `build:generated` → `build:api` → restart 4 workflows. All 4 services confirmed up, customer-portal landing page renders correctly.
+Re-verified again 2026-07-14: same wipe pattern. `artifacts/api-server/src/routes/templates.ts` had concatenated-routes bug reintroduced (orphaned v1 route openings + wrong `/api/ai/templates/...` path prefix on v2 admin lines). Fixed by stripping v1 orphan lines and correcting paths to `/ai/templates/...` before `build:api`. All 4 services confirmed up via screenshots afterward.
+Re-verified a further time 2026-07-14 (same day, later re-import): identical symptom (`node_modules` + registration wiped), identical fix applied, all 4 services confirmed running again. Also fixed two code bugs uncovered during this import: (1) `templates.ts` imported `requireAdminApiKey` from `adminAuth.ts` but the export is named `adminAuth` — aliased on import; (2) `layout.tsx` used `LayoutTemplate` icon from lucide-react without importing it — added to import list.
+
+## Phase V4.5 — AI Design Studio (2026-07-14)
+
+Added a full Canva-like editor to the admin panel:
+- **Routes**: `GET/POST /api/ai/design/projects`, `GET/PATCH /api/ai/design/projects/:id`, canvas CRUD, version history, export, AI regenerate
+- **DB**: `ai_design_projects` + `ai_design_versions` tables — run `scripts/migrations/v4.5-design-studio.sql` to create them
+- **Frontend**: `/design-studio` (project list) and `/design-studio/:id` (canvas editor with layers, drag/resize, undo/redo, grid, alignment, zoom, compare, AI regenerate, export)
+- **Nav**: Added "Creative > Design Studio" section to the admin sidebar
+
+Re-verified once more 2026-07-14 (later re-import): same wipe pattern, same fix, but this time two genuine code bugs surfaced (not present in earlier re-imports) and were fixed: (1) `templates.ts` imported a non-existent `requireAdminApiKey` export from `adminAuth.ts` — added it as an alias for `adminAuth`. (2) `ai-platform`'s `layout.tsx` referenced the `LayoutTemplate` lucide-react icon without importing it — added to the import list. All 4 services re-verified running via screenshot after the fixes.
 
 ## Key Technical Notes
 ## Database

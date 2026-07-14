@@ -577,6 +577,7 @@ export const en = {
       notifications: "Notifications",
       affiliate: "Affiliate",
       referral: "Referral",
+      favorites: "Favorites",
       profile: "Profile",
       support: "Support",
       settings: "Settings",

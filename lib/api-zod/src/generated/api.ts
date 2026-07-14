@@ -5736,6 +5736,247 @@ export const GetPortfolioAnalyticsResponse = zod.object({
 
 
 /**
+ * @summary Free-text search across published portfolios (public, no auth)
+ */
+export const SearchPortfolioGalleryQueryParams = zod.object({
+  "q": zod.coerce.string().optional(),
+  "industry": zod.coerce.string().optional(),
+  "style": zod.coerce.string().optional(),
+  "page": zod.coerce.number().optional(),
+  "pageSize": zod.coerce.number().optional()
+})
+
+export const SearchPortfolioGalleryResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "slug": zod.string().nullish(),
+  "title": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "coverImage": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "packageLabel": zod.string().nullish(),
+  "deliveryTime": zod.string().nullish()
+})),
+  "pagination": zod.object({
+  "page": zod.number(),
+  "pageSize": zod.number(),
+  "total": zod.number(),
+  "totalPages": zod.number()
+})
+})
+
+
+/**
+ * @summary Industry showcase — published portfolios grouped by industry
+ */
+export const GetPortfolioGalleryIndustriesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "industry": zod.string(),
+  "totalPortfolios": zod.number(),
+  "topPortfolio": zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "slug": zod.string().nullish(),
+  "title": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "coverImage": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "packageLabel": zod.string().nullish(),
+  "deliveryTime": zod.string().nullish()
+}).nullish()
+}))
+})
+
+
+/**
+ * @summary Public showcase bundle (featured + top industries) for the pre-purchase landing page
+ */
+export const GetPortfolioGalleryShowcaseResponse = zod.object({
+  "featured": zod.array(zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "slug": zod.string().nullish(),
+  "title": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "coverImage": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "packageLabel": zod.string().nullish(),
+  "deliveryTime": zod.string().nullish()
+})),
+  "industries": zod.array(zod.object({
+  "industry": zod.string(),
+  "totalPortfolios": zod.number(),
+  "topPortfolio": zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "slug": zod.string().nullish(),
+  "title": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "coverImage": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "packageLabel": zod.string().nullish(),
+  "deliveryTime": zod.string().nullish()
+}).nullish()
+}))
+})
+
+
+/**
+ * @summary Compare 2-4 published portfolios side by side
+ */
+export const comparePortfolioGalleryBodyIdsMin = 2;
+export const comparePortfolioGalleryBodyIdsMax = 4;
+
+
+
+export const ComparePortfolioGalleryBody = zod.object({
+  "ids": zod.array(zod.number()).min(comparePortfolioGalleryBodyIdsMin).max(comparePortfolioGalleryBodyIdsMax)
+})
+
+export const ComparePortfolioGalleryResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "slug": zod.string().nullish(),
+  "title": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "coverImage": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "packageLabel": zod.string().nullish(),
+  "deliveryTime": zod.string().nullish()
+}).and(zod.object({
+  "businessSize": zod.string().nullish(),
+  "deliveryDays": zod.number().nullish(),
+  "deliverables": zod.array(zod.string()).optional(),
+  "tools": zod.array(zod.string()).optional(),
+  "completedProjects": zod.number().optional()
+})))
+})
+
+
+/**
+ * @summary Brand-DNA-aware portfolio recommendations for a customer workspace
+ */
+export const GetWorkspacePortfolioGalleryRecommendedParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetWorkspacePortfolioGalleryRecommendedQueryParams = zod.object({
+  "limit": zod.coerce.number().optional()
+})
+
+export const GetWorkspacePortfolioGalleryRecommendedResponse = zod.object({
+  "basedOnBrandDna": zod.boolean(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "slug": zod.string().nullish(),
+  "title": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "coverImage": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "packageLabel": zod.string().nullish(),
+  "deliveryTime": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary List a customer's favorited portfolios
+ */
+export const ListWorkspacePortfolioGalleryFavoritesParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const ListWorkspacePortfolioGalleryFavoritesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "slug": zod.string().nullish(),
+  "title": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "coverImage": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "packageLabel": zod.string().nullish(),
+  "deliveryTime": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary Favorite a portfolio
+ */
+export const AddWorkspacePortfolioGalleryFavoriteParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const AddWorkspacePortfolioGalleryFavoriteBody = zod.object({
+  "portfolioId": zod.number()
+})
+
+export const AddWorkspacePortfolioGalleryFavoriteResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Unfavorite a portfolio
+ */
+export const RemoveWorkspacePortfolioGalleryFavoriteParams = zod.object({
+  "token": zod.coerce.string(),
+  "portfolioId": zod.coerce.number()
+})
+
+export const RemoveWorkspacePortfolioGalleryFavoriteResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Admin analytics for the Portfolio Gallery module (search, favorites, compare usage)
+ */
+export const GetPortfolioGalleryAnalyticsResponse = zod.object({
+  "totalSearches": zod.number(),
+  "totalFavoriteEvents": zod.number(),
+  "totalCompareEvents": zod.number(),
+  "activeFavorites": zod.number(),
+  "topSearchTerms": zod.array(zod.object({
+  "term": zod.string(),
+  "count": zod.number()
+}))
+})
+
+
+/**
  * @summary Mark a service request as brief in progress (customer-facing, no auth required)
  */
 export const StartBriefParams = zod.object({
@@ -9639,6 +9880,223 @@ export const GetCpReviewDashboardResponse = zod.object({
 
 
 /**
+ * @summary Start a 7-stage production pipeline for a creative project
+ */
+export const startProductionPipelineBodyForceRestartDefault = false;
+
+export const StartProductionPipelineBody = zod.object({
+  "projectId": zod.string().describe('Creative project UUID or integer ID'),
+  "forceRestart": zod.boolean().default(startProductionPipelineBodyForceRestartDefault).describe('Override an already-running pipeline')
+})
+
+export const StartProductionPipelineResponse = zod.object({
+  "runId": zod.string(),
+  "message": zod.string(),
+  "pipeline": zod.object({
+  "id": zod.number(),
+  "runId": zod.string().describe('UUID string — client-facing run identifier'),
+  "projectId": zod.number(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'cancelled']),
+  "currentStage": zod.string().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "retryCount": zod.number(),
+  "executionSummary": zod.object({
+
+}).passthrough().nullish().describe('Aggregated stats — totalStages, completedStages, failedStages, totalLatencyMs, stageBreakdown'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+})
+
+
+/**
+ * @summary Get aggregate monitoring stats for all pipeline runs
+ */
+export const GetPipelineMonitoringStatsResponse = zod.object({
+  "totals": zod.object({
+  "totalRuns": zod.number(),
+  "runningRuns": zod.number(),
+  "completedRuns": zod.number(),
+  "failedRuns": zod.number(),
+  "cancelledRuns": zod.number(),
+  "pendingRuns": zod.number()
+}),
+  "stageStats": zod.array(zod.object({
+  "stageName": zod.string(),
+  "totalCount": zod.number(),
+  "completedCount": zod.number(),
+  "failedCount": zod.number(),
+  "skippedCount": zod.number(),
+  "avgLatencyMs": zod.number().nullish()
+})),
+  "recentRuns": zod.array(zod.object({
+  "id": zod.number(),
+  "runId": zod.string().describe('UUID string — client-facing run identifier'),
+  "projectId": zod.number(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'cancelled']),
+  "currentStage": zod.string().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "retryCount": zod.number(),
+  "executionSummary": zod.object({
+
+}).passthrough().nullish().describe('Aggregated stats — totalStages, completedStages, failedStages, totalLatencyMs, stageBreakdown'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "stageDefinitions": zod.array(zod.object({
+  "name": zod.string(),
+  "order": zod.number(),
+  "label": zod.string()
+}))
+})
+
+
+/**
+ * @summary Get pipeline run detail with all stages
+ */
+export const GetProductionPipelineParams = zod.object({
+  "runId": zod.coerce.string().describe('Pipeline run UUID')
+})
+
+export const GetProductionPipelineResponse = zod.object({
+  "id": zod.number(),
+  "runId": zod.string().describe('UUID string — client-facing run identifier'),
+  "projectId": zod.number(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'cancelled']),
+  "currentStage": zod.string().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "retryCount": zod.number(),
+  "executionSummary": zod.object({
+
+}).passthrough().nullish().describe('Aggregated stats — totalStages, completedStages, failedStages, totalLatencyMs, stageBreakdown'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "stages": zod.array(zod.object({
+  "id": zod.number(),
+  "runId": zod.number().describe('FK to ai_production_pipelines.id'),
+  "stageName": zod.enum(['creative_director', 'copywriter', 'designer', 'presentation', 'qa', 'renderer', 'customer_review']),
+  "stageOrder": zod.number(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'skipped', 'waiting_retry']),
+  "input": zod.object({
+
+}).passthrough().nullish(),
+  "output": zod.object({
+
+}).passthrough().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "latencyMs": zod.number().nullish(),
+  "retryCount": zod.number(),
+  "errorMessage": zod.string().nullish(),
+  "agentSlug": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "provider": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+}))
+
+
+/**
+ * @summary List all stages for a pipeline run
+ */
+export const ListProductionPipelineStagesParams = zod.object({
+  "runId": zod.coerce.string()
+})
+
+export const ListProductionPipelineStagesResponseItem = zod.object({
+  "id": zod.number(),
+  "runId": zod.number().describe('FK to ai_production_pipelines.id'),
+  "stageName": zod.enum(['creative_director', 'copywriter', 'designer', 'presentation', 'qa', 'renderer', 'customer_review']),
+  "stageOrder": zod.number(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'skipped', 'waiting_retry']),
+  "input": zod.object({
+
+}).passthrough().nullish(),
+  "output": zod.object({
+
+}).passthrough().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "latencyMs": zod.number().nullish(),
+  "retryCount": zod.number(),
+  "errorMessage": zod.string().nullish(),
+  "agentSlug": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "provider": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListProductionPipelineStagesResponse = zod.array(ListProductionPipelineStagesResponseItem)
+
+
+/**
+ * @summary Retry a failed pipeline stage (or resume from last failure)
+ */
+export const RetryPipelineStageParams = zod.object({
+  "runId": zod.coerce.string()
+})
+
+export const RetryPipelineStageBody = zod.object({
+  "stageName": zod.enum(['creative_director', 'copywriter', 'designer', 'presentation', 'qa', 'renderer', 'customer_review', 'null']).nullish().describe('Stage to retry from. Omit to retry from the first failed stage.')
+})
+
+export const RetryPipelineStageResponse = zod.object({
+  "runId": zod.string(),
+  "retried": zod.boolean(),
+  "stageName": zod.string().nullish(),
+  "message": zod.string().optional()
+})
+
+
+/**
+ * @summary Cancel an in-progress or pending pipeline run
+ */
+export const CancelProductionPipelineParams = zod.object({
+  "runId": zod.coerce.string()
+})
+
+export const CancelProductionPipelineResponse = zod.object({
+  "runId": zod.string(),
+  "status": zod.string(),
+  "message": zod.string()
+})
+
+
+/**
+ * @summary List all pipeline runs for a creative project
+ */
+export const ListProjectPipelineRunsParams = zod.object({
+  "projectId": zod.coerce.string().describe('Project UUID or integer ID')
+})
+
+export const ListProjectPipelineRunsResponseItem = zod.object({
+  "id": zod.number(),
+  "runId": zod.string().describe('UUID string — client-facing run identifier'),
+  "projectId": zod.number(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'cancelled']),
+  "currentStage": zod.string().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "retryCount": zod.number(),
+  "executionSummary": zod.object({
+
+}).passthrough().nullish().describe('Aggregated stats — totalStages, completedStages, failedStages, totalLatencyMs, stageBreakdown'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListProjectPipelineRunsResponse = zod.array(ListProjectPipelineRunsResponseItem)
+
+
+/**
  * @summary Admin — list/filter templates
  */
 export const ListTemplatesAdminQueryParams = zod.object({
@@ -10675,6 +11133,507 @@ export const GenerateWorkspaceTemplateLivePreviewResponse = zod.object({
 })).optional()
 }),
   "generatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List design projects
+ */
+export const ListDesignProjectsQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "page": zod.coerce.number().optional(),
+  "pageSize": zod.coerce.number().optional()
+})
+
+export const ListDesignProjectsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "canvasWidth": zod.number(),
+  "canvasHeight": zod.number(),
+  "templateId": zod.number().nullish(),
+  "brandDnaId": zod.number().nullish(),
+  "currentVersionId": zod.number().nullish(),
+  "status": zod.enum(['draft', 'active', 'archived']),
+  "tags": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "elementCount": zod.number(),
+  "versionCount": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
+})
+
+
+/**
+ * @summary Create a new design project
+ */
+export const CreateDesignProjectBody = zod.object({
+  "name": zod.string(),
+  "description": zod.string().optional(),
+  "canvasWidth": zod.number().optional(),
+  "canvasHeight": zod.number().optional(),
+  "templateId": zod.number().optional(),
+  "brandDnaId": zod.number().optional(),
+  "tags": zod.array(zod.string()).optional(),
+  "initialState": zod.object({
+  "width": zod.number(),
+  "height": zod.number(),
+  "background": zod.string(),
+  "elements": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.enum(['text', 'image', 'rect', 'circle', 'line', 'frame']),
+  "x": zod.number(),
+  "y": zod.number(),
+  "width": zod.number(),
+  "height": zod.number(),
+  "rotation": zod.number(),
+  "opacity": zod.number(),
+  "zIndex": zod.number(),
+  "locked": zod.boolean(),
+  "visible": zod.boolean(),
+  "fill": zod.string(),
+  "stroke": zod.string(),
+  "strokeWidth": zod.number(),
+  "borderRadius": zod.number(),
+  "text": zod.string().nullish(),
+  "fontSize": zod.number().nullish(),
+  "fontFamily": zod.string().nullish(),
+  "fontWeight": zod.string().nullish(),
+  "textAlign": zod.string().nullish(),
+  "color": zod.string().nullish(),
+  "lineHeight": zod.number().nullish(),
+  "src": zod.string().nullish(),
+  "objectFit": zod.string().nullish()
+}))
+}).optional()
+})
+
+export const CreateDesignProjectResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "canvasWidth": zod.number(),
+  "canvasHeight": zod.number(),
+  "templateId": zod.number().nullish(),
+  "brandDnaId": zod.number().nullish(),
+  "currentVersionId": zod.number().nullish(),
+  "status": zod.enum(['draft', 'active', 'archived']),
+  "tags": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "elementCount": zod.number(),
+  "versionCount": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get a design project
+ */
+export const GetDesignProjectParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetDesignProjectResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "canvasWidth": zod.number(),
+  "canvasHeight": zod.number(),
+  "templateId": zod.number().nullish(),
+  "brandDnaId": zod.number().nullish(),
+  "currentVersionId": zod.number().nullish(),
+  "status": zod.enum(['draft', 'active', 'archived']),
+  "tags": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "elementCount": zod.number(),
+  "versionCount": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update project metadata
+ */
+export const UpdateDesignProjectParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateDesignProjectBody = zod.object({
+  "name": zod.string().optional(),
+  "description": zod.string().optional(),
+  "status": zod.enum(['draft', 'active', 'archived']).optional(),
+  "tags": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().optional()
+})
+
+export const UpdateDesignProjectResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "canvasWidth": zod.number(),
+  "canvasHeight": zod.number(),
+  "templateId": zod.number().nullish(),
+  "brandDnaId": zod.number().nullish(),
+  "currentVersionId": zod.number().nullish(),
+  "status": zod.enum(['draft', 'active', 'archived']),
+  "tags": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "elementCount": zod.number(),
+  "versionCount": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Archive a design project
+ */
+export const ArchiveDesignProjectParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ArchiveDesignProjectResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Get the current canvas state
+ */
+export const GetDesignCanvasParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetDesignCanvasResponse = zod.object({
+  "projectId": zod.number(),
+  "versionId": zod.number(),
+  "versionNumber": zod.number(),
+  "canvasState": zod.object({
+  "width": zod.number(),
+  "height": zod.number(),
+  "background": zod.string(),
+  "elements": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.enum(['text', 'image', 'rect', 'circle', 'line', 'frame']),
+  "x": zod.number(),
+  "y": zod.number(),
+  "width": zod.number(),
+  "height": zod.number(),
+  "rotation": zod.number(),
+  "opacity": zod.number(),
+  "zIndex": zod.number(),
+  "locked": zod.boolean(),
+  "visible": zod.boolean(),
+  "fill": zod.string(),
+  "stroke": zod.string(),
+  "strokeWidth": zod.number(),
+  "borderRadius": zod.number(),
+  "text": zod.string().nullish(),
+  "fontSize": zod.number().nullish(),
+  "fontFamily": zod.string().nullish(),
+  "fontWeight": zod.string().nullish(),
+  "textAlign": zod.string().nullish(),
+  "color": zod.string().nullish(),
+  "lineHeight": zod.number().nullish(),
+  "src": zod.string().nullish(),
+  "objectFit": zod.string().nullish()
+}))
+}),
+  "savedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Save canvas state (creates a new version)
+ */
+export const SaveDesignCanvasParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const SaveDesignCanvasBody = zod.object({
+  "canvasState": zod.object({
+  "width": zod.number(),
+  "height": zod.number(),
+  "background": zod.string(),
+  "elements": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.enum(['text', 'image', 'rect', 'circle', 'line', 'frame']),
+  "x": zod.number(),
+  "y": zod.number(),
+  "width": zod.number(),
+  "height": zod.number(),
+  "rotation": zod.number(),
+  "opacity": zod.number(),
+  "zIndex": zod.number(),
+  "locked": zod.boolean(),
+  "visible": zod.boolean(),
+  "fill": zod.string(),
+  "stroke": zod.string(),
+  "strokeWidth": zod.number(),
+  "borderRadius": zod.number(),
+  "text": zod.string().nullish(),
+  "fontSize": zod.number().nullish(),
+  "fontFamily": zod.string().nullish(),
+  "fontWeight": zod.string().nullish(),
+  "textAlign": zod.string().nullish(),
+  "color": zod.string().nullish(),
+  "lineHeight": zod.number().nullish(),
+  "src": zod.string().nullish(),
+  "objectFit": zod.string().nullish()
+}))
+}),
+  "label": zod.string().optional()
+})
+
+export const SaveDesignCanvasResponse = zod.object({
+  "projectId": zod.number(),
+  "versionId": zod.number(),
+  "versionNumber": zod.number(),
+  "canvasState": zod.object({
+  "width": zod.number(),
+  "height": zod.number(),
+  "background": zod.string(),
+  "elements": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.enum(['text', 'image', 'rect', 'circle', 'line', 'frame']),
+  "x": zod.number(),
+  "y": zod.number(),
+  "width": zod.number(),
+  "height": zod.number(),
+  "rotation": zod.number(),
+  "opacity": zod.number(),
+  "zIndex": zod.number(),
+  "locked": zod.boolean(),
+  "visible": zod.boolean(),
+  "fill": zod.string(),
+  "stroke": zod.string(),
+  "strokeWidth": zod.number(),
+  "borderRadius": zod.number(),
+  "text": zod.string().nullish(),
+  "fontSize": zod.number().nullish(),
+  "fontFamily": zod.string().nullish(),
+  "fontWeight": zod.string().nullish(),
+  "textAlign": zod.string().nullish(),
+  "color": zod.string().nullish(),
+  "lineHeight": zod.number().nullish(),
+  "src": zod.string().nullish(),
+  "objectFit": zod.string().nullish()
+}))
+}),
+  "savedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List all versions of a design project
+ */
+export const ListDesignVersionsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListDesignVersionsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "versionNumber": zod.number(),
+  "label": zod.string().nullish(),
+  "elementCount": zod.number(),
+  "canvasState": zod.object({
+  "width": zod.number(),
+  "height": zod.number(),
+  "background": zod.string(),
+  "elements": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.enum(['text', 'image', 'rect', 'circle', 'line', 'frame']),
+  "x": zod.number(),
+  "y": zod.number(),
+  "width": zod.number(),
+  "height": zod.number(),
+  "rotation": zod.number(),
+  "opacity": zod.number(),
+  "zIndex": zod.number(),
+  "locked": zod.boolean(),
+  "visible": zod.boolean(),
+  "fill": zod.string(),
+  "stroke": zod.string(),
+  "strokeWidth": zod.number(),
+  "borderRadius": zod.number(),
+  "text": zod.string().nullish(),
+  "fontSize": zod.number().nullish(),
+  "fontFamily": zod.string().nullish(),
+  "fontWeight": zod.string().nullish(),
+  "textAlign": zod.string().nullish(),
+  "color": zod.string().nullish(),
+  "lineHeight": zod.number().nullish(),
+  "src": zod.string().nullish(),
+  "objectFit": zod.string().nullish()
+}))
+}).optional(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Get a specific version
+ */
+export const GetDesignVersionParams = zod.object({
+  "id": zod.coerce.number(),
+  "versionId": zod.coerce.number()
+})
+
+export const GetDesignVersionResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "versionNumber": zod.number(),
+  "label": zod.string().nullish(),
+  "elementCount": zod.number(),
+  "canvasState": zod.object({
+  "width": zod.number(),
+  "height": zod.number(),
+  "background": zod.string(),
+  "elements": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.enum(['text', 'image', 'rect', 'circle', 'line', 'frame']),
+  "x": zod.number(),
+  "y": zod.number(),
+  "width": zod.number(),
+  "height": zod.number(),
+  "rotation": zod.number(),
+  "opacity": zod.number(),
+  "zIndex": zod.number(),
+  "locked": zod.boolean(),
+  "visible": zod.boolean(),
+  "fill": zod.string(),
+  "stroke": zod.string(),
+  "strokeWidth": zod.number(),
+  "borderRadius": zod.number(),
+  "text": zod.string().nullish(),
+  "fontSize": zod.number().nullish(),
+  "fontFamily": zod.string().nullish(),
+  "fontWeight": zod.string().nullish(),
+  "textAlign": zod.string().nullish(),
+  "color": zod.string().nullish(),
+  "lineHeight": zod.number().nullish(),
+  "src": zod.string().nullish(),
+  "objectFit": zod.string().nullish()
+}))
+}).optional(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Restore a specific version as the current canvas state
+ */
+export const RestoreDesignVersionParams = zod.object({
+  "id": zod.coerce.number(),
+  "versionId": zod.coerce.number()
+})
+
+export const RestoreDesignVersionResponse = zod.object({
+  "projectId": zod.number(),
+  "versionId": zod.number(),
+  "versionNumber": zod.number(),
+  "canvasState": zod.object({
+  "width": zod.number(),
+  "height": zod.number(),
+  "background": zod.string(),
+  "elements": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.enum(['text', 'image', 'rect', 'circle', 'line', 'frame']),
+  "x": zod.number(),
+  "y": zod.number(),
+  "width": zod.number(),
+  "height": zod.number(),
+  "rotation": zod.number(),
+  "opacity": zod.number(),
+  "zIndex": zod.number(),
+  "locked": zod.boolean(),
+  "visible": zod.boolean(),
+  "fill": zod.string(),
+  "stroke": zod.string(),
+  "strokeWidth": zod.number(),
+  "borderRadius": zod.number(),
+  "text": zod.string().nullish(),
+  "fontSize": zod.number().nullish(),
+  "fontFamily": zod.string().nullish(),
+  "fontWeight": zod.string().nullish(),
+  "textAlign": zod.string().nullish(),
+  "color": zod.string().nullish(),
+  "lineHeight": zod.number().nullish(),
+  "src": zod.string().nullish(),
+  "objectFit": zod.string().nullish()
+}))
+}),
+  "savedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Export the design as PNG/PDF/SVG/JSON
+ */
+export const ExportDesignParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ExportDesignBody = zod.object({
+  "format": zod.enum(['png', 'pdf', 'svg', 'json']),
+  "scale": zod.number().optional(),
+  "quality": zod.number().optional()
+})
+
+export const ExportDesignResponse = zod.object({
+  "format": zod.string(),
+  "url": zod.string(),
+  "dataUrl": zod.string().nullish(),
+  "expiresAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Use AI to regenerate a design element
+ */
+export const AiRegenerateElementParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AiRegenerateElementBody = zod.object({
+  "elementId": zod.string(),
+  "elementType": zod.enum(['text', 'image', 'style']),
+  "prompt": zod.string(),
+  "brandDnaId": zod.number().optional(),
+  "currentContent": zod.string().optional(),
+  "style": zod.string().optional(),
+  "tone": zod.string().optional()
+})
+
+export const AiRegenerateElementResponse = zod.object({
+  "elementId": zod.string(),
+  "elementType": zod.string(),
+  "suggestions": zod.array(zod.object({
+  "id": zod.string(),
+  "content": zod.string(),
+  "reasoning": zod.string().nullish(),
+  "preview": zod.string().nullish()
+})),
+  "brandAligned": zod.boolean(),
+  "confidence": zod.number()
 })
 
 
