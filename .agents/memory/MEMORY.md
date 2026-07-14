@@ -61,3 +61,4 @@
 - [phase-v43-portfolio-gallery](phase-v43-portfolio-gallery.md) — route files must omit the app-level `/api` prefix (silent 404 otherwise); migrations reuse shared `pool`; `/portfolio-gallery` route name already owned by another team
 - [phase-v44-production-pipeline](phase-v44-production-pipeline.md) — V4.4 7-stage pipeline: migrate pool import rule, stage ordering, orval naming, pre-existing verify failures
 - [phase-v43-templates-portfolio](phase-v43-templates-portfolio.md) — V4.3: Express 5 params string|string[] middleware quirk, migration pool convention, use-template→draft-request seed pattern
+- [wp04-wp05-soft-delete](wp04-wp05-soft-delete.md) — soft delete pattern: softDeleteGuard helper, self-referential db.transaction mock, purge requires platform scope + platformOperation
