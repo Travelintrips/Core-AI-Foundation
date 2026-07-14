@@ -29,6 +29,8 @@ function mockCompleted(id: number) {
 }
 
 function deliveryDays(est: string): number {
+  if (/menit/i.test(est)) return 0.1;   // minutes → same-day, essentially instant
+  if (/jam/i.test(est))   return 0.5;   // hours   → same-day
   const m = est.match(/(\d+)/);
   return m ? parseInt(m[1]) : 7;
 }
