@@ -62,6 +62,8 @@ import type {
   AiProvider,
   AiProviderInput,
   AiProviderUpdate,
+  AiRegenerateInput,
+  AiRegenerateResult,
   AiSchedule,
   AiService,
   AiServiceCategory,
@@ -95,6 +97,7 @@ import type {
   ApproveCpReviewBody,
   ApproveRequestMargin200,
   ApproveRequestMarginBody,
+  ArchiveDesignProject200,
   AssetFeedbackInput,
   AssetIntelligenceList,
   AssetIntelligenceView,
@@ -153,6 +156,7 @@ import type {
   CreateAffiliateInput,
   CreateAssetLibraryInput,
   CreateCouponInput,
+  CreateDesignProjectInput,
   CreateHumanTaskBody,
   CreateJobBody,
   CreatePromotionInput,
@@ -174,6 +178,11 @@ import type {
   CustomerHealthScore,
   CustomerProjectSubmission,
   CustomerSubmissionResult,
+  DesignCanvasResponse,
+  DesignProject,
+  DesignProjectList,
+  DesignVersion,
+  DesignVersionList,
   DispatchResult,
   DispatcherSettings,
   DispatcherStatus,
@@ -183,6 +192,8 @@ import type {
   ErrorResponse,
   EventListResponse,
   EventTimelineResponse,
+  ExportDesignInput,
+  ExportDesignResult,
   FeedbackEntry,
   FeedbackInput,
   ForbiddenResponse,
@@ -226,6 +237,7 @@ import type {
   ListAssetLibraryParams,
   ListAuditLogsParams,
   ListCommercialGatesParams,
+  ListDesignProjectsParams,
   ListEventsParams,
   ListHumanTasksParams,
   ListJobsParams,
@@ -298,6 +310,7 @@ import type {
   RevokeFileDownloadTokenBody,
   RotateTokenInput,
   RotateTokenResult,
+  SaveCanvasInput,
   SchedulePage,
   ScheduleRunPage,
   SchedulerSettings,
@@ -312,6 +325,7 @@ import type {
   TrackClickInput,
   TrackConversionInput,
   TrackFunnelEventInput,
+  UpdateDesignProjectInput,
   UpdateScheduleBody,
   UpdateSubscriptionBody,
   UpsertBrandKitSlotInput,
@@ -24984,4 +24998,897 @@ export function useGetCpReviewDashboard<TData = Awaited<ReturnType<typeof getCpR
 
 
 
+
+export const getListDesignProjectsUrl = (params?: ListDesignProjectsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/ai/design/projects?${stringifiedParams}` : `/api/ai/design/projects`
+}
+
+/**
+ * @summary List design projects
+ */
+export const listDesignProjects = async (params?: ListDesignProjectsParams, options?: RequestInit): Promise<DesignProjectList> => {
+
+  return customFetch<DesignProjectList>(getListDesignProjectsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDesignProjectsQueryKey = (params?: ListDesignProjectsParams,) => {
+    return [
+    `/api/ai/design/projects`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListDesignProjectsQueryOptions = <TData = Awaited<ReturnType<typeof listDesignProjects>>, TError = ErrorType<unknown>>(params?: ListDesignProjectsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDesignProjects>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDesignProjectsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDesignProjects>>> = ({ signal }) => listDesignProjects(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDesignProjects>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDesignProjectsQueryResult = NonNullable<Awaited<ReturnType<typeof listDesignProjects>>>
+export type ListDesignProjectsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List design projects
+ */
+
+export function useListDesignProjects<TData = Awaited<ReturnType<typeof listDesignProjects>>, TError = ErrorType<unknown>>(
+ params?: ListDesignProjectsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDesignProjects>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDesignProjectsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateDesignProjectUrl = () => {
+
+
+
+
+  return `/api/ai/design/projects`
+}
+
+/**
+ * @summary Create a new design project
+ */
+export const createDesignProject = async (createDesignProjectInput: CreateDesignProjectInput, options?: RequestInit): Promise<DesignProject> => {
+
+  return customFetch<DesignProject>(getCreateDesignProjectUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createDesignProjectInput)
+  }
+);}
+
+
+
+
+export const getCreateDesignProjectMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDesignProject>>, TError,{data: BodyType<CreateDesignProjectInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createDesignProject>>, TError,{data: BodyType<CreateDesignProjectInput>}, TContext> => {
+
+const mutationKey = ['createDesignProject'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDesignProject>>, {data: BodyType<CreateDesignProjectInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createDesignProject(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateDesignProjectMutationResult = NonNullable<Awaited<ReturnType<typeof createDesignProject>>>
+    export type CreateDesignProjectMutationBody = BodyType<CreateDesignProjectInput>
+    export type CreateDesignProjectMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a new design project
+ */
+export const useCreateDesignProject = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDesignProject>>, TError,{data: BodyType<CreateDesignProjectInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createDesignProject>>,
+        TError,
+        {data: BodyType<CreateDesignProjectInput>},
+        TContext
+      > => {
+      return useMutation(getCreateDesignProjectMutationOptions(options));
+    }
+
+export const getGetDesignProjectUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/design/projects/${id}`
+}
+
+/**
+ * @summary Get a design project
+ */
+export const getDesignProject = async (id: number, options?: RequestInit): Promise<DesignProject> => {
+
+  return customFetch<DesignProject>(getGetDesignProjectUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDesignProjectQueryKey = (id: number,) => {
+    return [
+    `/api/ai/design/projects/${id}`
+    ] as const;
+    }
+
+
+export const getGetDesignProjectQueryOptions = <TData = Awaited<ReturnType<typeof getDesignProject>>, TError = ErrorType<NotFoundResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDesignProject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDesignProjectQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDesignProject>>> = ({ signal }) => getDesignProject(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDesignProject>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDesignProjectQueryResult = NonNullable<Awaited<ReturnType<typeof getDesignProject>>>
+export type GetDesignProjectQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Get a design project
+ */
+
+export function useGetDesignProject<TData = Awaited<ReturnType<typeof getDesignProject>>, TError = ErrorType<NotFoundResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDesignProject>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDesignProjectQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateDesignProjectUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/design/projects/${id}`
+}
+
+/**
+ * @summary Update project metadata
+ */
+export const updateDesignProject = async (id: number,
+    updateDesignProjectInput: UpdateDesignProjectInput, options?: RequestInit): Promise<DesignProject> => {
+
+  return customFetch<DesignProject>(getUpdateDesignProjectUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateDesignProjectInput)
+  }
+);}
+
+
+
+
+export const getUpdateDesignProjectMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDesignProject>>, TError,{id: number;data: BodyType<UpdateDesignProjectInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateDesignProject>>, TError,{id: number;data: BodyType<UpdateDesignProjectInput>}, TContext> => {
+
+const mutationKey = ['updateDesignProject'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateDesignProject>>, {id: number;data: BodyType<UpdateDesignProjectInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateDesignProject(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateDesignProjectMutationResult = NonNullable<Awaited<ReturnType<typeof updateDesignProject>>>
+    export type UpdateDesignProjectMutationBody = BodyType<UpdateDesignProjectInput>
+    export type UpdateDesignProjectMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update project metadata
+ */
+export const useUpdateDesignProject = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDesignProject>>, TError,{id: number;data: BodyType<UpdateDesignProjectInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateDesignProject>>,
+        TError,
+        {id: number;data: BodyType<UpdateDesignProjectInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateDesignProjectMutationOptions(options));
+    }
+
+export const getArchiveDesignProjectUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/design/projects/${id}/archive`
+}
+
+/**
+ * @summary Archive a design project
+ */
+export const archiveDesignProject = async (id: number, options?: RequestInit): Promise<ArchiveDesignProject200> => {
+
+  return customFetch<ArchiveDesignProject200>(getArchiveDesignProjectUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getArchiveDesignProjectMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveDesignProject>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof archiveDesignProject>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['archiveDesignProject'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof archiveDesignProject>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  archiveDesignProject(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ArchiveDesignProjectMutationResult = NonNullable<Awaited<ReturnType<typeof archiveDesignProject>>>
+
+    export type ArchiveDesignProjectMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Archive a design project
+ */
+export const useArchiveDesignProject = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof archiveDesignProject>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof archiveDesignProject>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getArchiveDesignProjectMutationOptions(options));
+    }
+
+export const getGetDesignCanvasUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/design/projects/${id}/canvas`
+}
+
+/**
+ * @summary Get the current canvas state
+ */
+export const getDesignCanvas = async (id: number, options?: RequestInit): Promise<DesignCanvasResponse> => {
+
+  return customFetch<DesignCanvasResponse>(getGetDesignCanvasUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDesignCanvasQueryKey = (id: number,) => {
+    return [
+    `/api/ai/design/projects/${id}/canvas`
+    ] as const;
+    }
+
+
+export const getGetDesignCanvasQueryOptions = <TData = Awaited<ReturnType<typeof getDesignCanvas>>, TError = ErrorType<NotFoundResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDesignCanvas>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDesignCanvasQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDesignCanvas>>> = ({ signal }) => getDesignCanvas(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDesignCanvas>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDesignCanvasQueryResult = NonNullable<Awaited<ReturnType<typeof getDesignCanvas>>>
+export type GetDesignCanvasQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Get the current canvas state
+ */
+
+export function useGetDesignCanvas<TData = Awaited<ReturnType<typeof getDesignCanvas>>, TError = ErrorType<NotFoundResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDesignCanvas>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDesignCanvasQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveDesignCanvasUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/design/projects/${id}/canvas`
+}
+
+/**
+ * @summary Save canvas state (creates a new version)
+ */
+export const saveDesignCanvas = async (id: number,
+    saveCanvasInput: SaveCanvasInput, options?: RequestInit): Promise<DesignCanvasResponse> => {
+
+  return customFetch<DesignCanvasResponse>(getSaveDesignCanvasUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(saveCanvasInput)
+  }
+);}
+
+
+
+
+export const getSaveDesignCanvasMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveDesignCanvas>>, TError,{id: number;data: BodyType<SaveCanvasInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveDesignCanvas>>, TError,{id: number;data: BodyType<SaveCanvasInput>}, TContext> => {
+
+const mutationKey = ['saveDesignCanvas'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveDesignCanvas>>, {id: number;data: BodyType<SaveCanvasInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  saveDesignCanvas(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveDesignCanvasMutationResult = NonNullable<Awaited<ReturnType<typeof saveDesignCanvas>>>
+    export type SaveDesignCanvasMutationBody = BodyType<SaveCanvasInput>
+    export type SaveDesignCanvasMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Save canvas state (creates a new version)
+ */
+export const useSaveDesignCanvas = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveDesignCanvas>>, TError,{id: number;data: BodyType<SaveCanvasInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveDesignCanvas>>,
+        TError,
+        {id: number;data: BodyType<SaveCanvasInput>},
+        TContext
+      > => {
+      return useMutation(getSaveDesignCanvasMutationOptions(options));
+    }
+
+export const getListDesignVersionsUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/design/projects/${id}/versions`
+}
+
+/**
+ * @summary List all versions of a design project
+ */
+export const listDesignVersions = async (id: number, options?: RequestInit): Promise<DesignVersionList> => {
+
+  return customFetch<DesignVersionList>(getListDesignVersionsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDesignVersionsQueryKey = (id: number,) => {
+    return [
+    `/api/ai/design/projects/${id}/versions`
+    ] as const;
+    }
+
+
+export const getListDesignVersionsQueryOptions = <TData = Awaited<ReturnType<typeof listDesignVersions>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDesignVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDesignVersionsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDesignVersions>>> = ({ signal }) => listDesignVersions(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDesignVersions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDesignVersionsQueryResult = NonNullable<Awaited<ReturnType<typeof listDesignVersions>>>
+export type ListDesignVersionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all versions of a design project
+ */
+
+export function useListDesignVersions<TData = Awaited<ReturnType<typeof listDesignVersions>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDesignVersions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDesignVersionsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetDesignVersionUrl = (id: number,
+    versionId: number,) => {
+
+
+
+
+  return `/api/ai/design/projects/${id}/versions/${versionId}`
+}
+
+/**
+ * @summary Get a specific version
+ */
+export const getDesignVersion = async (id: number,
+    versionId: number, options?: RequestInit): Promise<DesignVersion> => {
+
+  return customFetch<DesignVersion>(getGetDesignVersionUrl(id,versionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDesignVersionQueryKey = (id: number,
+    versionId: number,) => {
+    return [
+    `/api/ai/design/projects/${id}/versions/${versionId}`
+    ] as const;
+    }
+
+
+export const getGetDesignVersionQueryOptions = <TData = Awaited<ReturnType<typeof getDesignVersion>>, TError = ErrorType<NotFoundResponse>>(id: number,
+    versionId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDesignVersion>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDesignVersionQueryKey(id,versionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDesignVersion>>> = ({ signal }) => getDesignVersion(id,versionId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && versionId !== null && versionId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDesignVersion>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDesignVersionQueryResult = NonNullable<Awaited<ReturnType<typeof getDesignVersion>>>
+export type GetDesignVersionQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Get a specific version
+ */
+
+export function useGetDesignVersion<TData = Awaited<ReturnType<typeof getDesignVersion>>, TError = ErrorType<NotFoundResponse>>(
+ id: number,
+    versionId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDesignVersion>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDesignVersionQueryOptions(id,versionId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRestoreDesignVersionUrl = (id: number,
+    versionId: number,) => {
+
+
+
+
+  return `/api/ai/design/projects/${id}/versions/${versionId}/restore`
+}
+
+/**
+ * @summary Restore a specific version as the current canvas state
+ */
+export const restoreDesignVersion = async (id: number,
+    versionId: number, options?: RequestInit): Promise<DesignCanvasResponse> => {
+
+  return customFetch<DesignCanvasResponse>(getRestoreDesignVersionUrl(id,versionId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRestoreDesignVersionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreDesignVersion>>, TError,{id: number;versionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreDesignVersion>>, TError,{id: number;versionId: number}, TContext> => {
+
+const mutationKey = ['restoreDesignVersion'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreDesignVersion>>, {id: number;versionId: number}> = (props) => {
+          const {id,versionId} = props ?? {};
+
+          return  restoreDesignVersion(id,versionId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreDesignVersionMutationResult = NonNullable<Awaited<ReturnType<typeof restoreDesignVersion>>>
+
+    export type RestoreDesignVersionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Restore a specific version as the current canvas state
+ */
+export const useRestoreDesignVersion = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreDesignVersion>>, TError,{id: number;versionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restoreDesignVersion>>,
+        TError,
+        {id: number;versionId: number},
+        TContext
+      > => {
+      return useMutation(getRestoreDesignVersionMutationOptions(options));
+    }
+
+export const getExportDesignUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/design/projects/${id}/export`
+}
+
+/**
+ * @summary Export the design as PNG/PDF/SVG/JSON
+ */
+export const exportDesign = async (id: number,
+    exportDesignInput: ExportDesignInput, options?: RequestInit): Promise<ExportDesignResult> => {
+
+  return customFetch<ExportDesignResult>(getExportDesignUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(exportDesignInput)
+  }
+);}
+
+
+
+
+export const getExportDesignMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportDesign>>, TError,{id: number;data: BodyType<ExportDesignInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportDesign>>, TError,{id: number;data: BodyType<ExportDesignInput>}, TContext> => {
+
+const mutationKey = ['exportDesign'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportDesign>>, {id: number;data: BodyType<ExportDesignInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  exportDesign(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportDesignMutationResult = NonNullable<Awaited<ReturnType<typeof exportDesign>>>
+    export type ExportDesignMutationBody = BodyType<ExportDesignInput>
+    export type ExportDesignMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Export the design as PNG/PDF/SVG/JSON
+ */
+export const useExportDesign = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportDesign>>, TError,{id: number;data: BodyType<ExportDesignInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof exportDesign>>,
+        TError,
+        {id: number;data: BodyType<ExportDesignInput>},
+        TContext
+      > => {
+      return useMutation(getExportDesignMutationOptions(options));
+    }
+
+export const getAiRegenerateElementUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/design/projects/${id}/ai/regenerate`
+}
+
+/**
+ * @summary Use AI to regenerate a design element
+ */
+export const aiRegenerateElement = async (id: number,
+    aiRegenerateInput: AiRegenerateInput, options?: RequestInit): Promise<AiRegenerateResult> => {
+
+  return customFetch<AiRegenerateResult>(getAiRegenerateElementUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(aiRegenerateInput)
+  }
+);}
+
+
+
+
+export const getAiRegenerateElementMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof aiRegenerateElement>>, TError,{id: number;data: BodyType<AiRegenerateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof aiRegenerateElement>>, TError,{id: number;data: BodyType<AiRegenerateInput>}, TContext> => {
+
+const mutationKey = ['aiRegenerateElement'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof aiRegenerateElement>>, {id: number;data: BodyType<AiRegenerateInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  aiRegenerateElement(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AiRegenerateElementMutationResult = NonNullable<Awaited<ReturnType<typeof aiRegenerateElement>>>
+    export type AiRegenerateElementMutationBody = BodyType<AiRegenerateInput>
+    export type AiRegenerateElementMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Use AI to regenerate a design element
+ */
+export const useAiRegenerateElement = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof aiRegenerateElement>>, TError,{id: number;data: BodyType<AiRegenerateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof aiRegenerateElement>>,
+        TError,
+        {id: number;data: BodyType<AiRegenerateInput>},
+        TContext
+      > => {
+      return useMutation(getAiRegenerateElementMutationOptions(options));
+    }
 

@@ -59,6 +59,8 @@ tags:
     description: V4.2E Auto Asset Analyzer — auto-tagging, duplicate detection, version chains
   - name: customer-workspace-admin
     description: Admin visibility into customer workspaces — impersonation, token rotation, analytics
+  - name: design-studio
+    description: V4.5 AI Design Studio — visual canvas editor with layers, drag-drop, AI generation, and version control
 paths:
   /healthz:
     get:
@@ -6704,6 +6706,196 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/CpReviewDashboard" }
         "404": { $ref: "#/components/responses/NotFound" }
+
+  # ── V4.5 Design Studio ────────────────────────────────────────────────────────
+  /ai/design/projects:
+    get:
+      operationId: listDesignProjects
+      tags: [design-studio]
+      summary: List design projects
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: List of design projects
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DesignProjectList" }
+    post:
+      operationId: createDesignProject
+      tags: [design-studio]
+      summary: Create a new design project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateDesignProjectInput" }
+      responses:
+        "201":
+          description: Created design project
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DesignProject" }
+  /ai/design/projects/{id}:
+    get:
+      operationId: getDesignProject
+      tags: [design-studio]
+      summary: Get a design project
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Design project
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DesignProject" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateDesignProject
+      tags: [design-studio]
+      summary: Update project metadata
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateDesignProjectInput" }
+      responses:
+        "200":
+          description: Updated design project
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DesignProject" }
+  /ai/design/projects/{id}/archive:
+    post:
+      operationId: archiveDesignProject
+      tags: [design-studio]
+      summary: Archive a design project
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Archived
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+  /ai/design/projects/{id}/canvas:
+    get:
+      operationId: getDesignCanvas
+      tags: [design-studio]
+      summary: Get the current canvas state
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Canvas state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DesignCanvasResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: saveDesignCanvas
+      tags: [design-studio]
+      summary: Save canvas state (creates a new version)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaveCanvasInput" }
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DesignCanvasResponse" }
+  /ai/design/projects/{id}/versions:
+    get:
+      operationId: listDesignVersions
+      tags: [design-studio]
+      summary: List all versions of a design project
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: List of versions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DesignVersionList" }
+  /ai/design/projects/{id}/versions/{versionId}:
+    get:
+      operationId: getDesignVersion
+      tags: [design-studio]
+      summary: Get a specific version
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: versionId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Design version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DesignVersion" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /ai/design/projects/{id}/versions/{versionId}/restore:
+    post:
+      operationId: restoreDesignVersion
+      tags: [design-studio]
+      summary: Restore a specific version as the current canvas state
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: versionId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Restored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DesignCanvasResponse" }
+  /ai/design/projects/{id}/export:
+    post:
+      operationId: exportDesign
+      tags: [design-studio]
+      summary: Export the design as PNG/PDF/SVG/JSON
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExportDesignInput" }
+      responses:
+        "200":
+          description: Export result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExportDesignResult" }
+  /ai/design/projects/{id}/ai/regenerate:
+    post:
+      operationId: aiRegenerateElement
+      tags: [design-studio]
+      summary: Use AI to regenerate a design element
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AiRegenerateInput" }
+      responses:
+        "200":
+          description: AI generation result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AiRegenerateResult" }
+  # ── End V4.5 Design Studio ───────────────────────────────────────────────────
 
 components:
   responses:
@@ -13660,6 +13852,182 @@ components:
       properties:
         gallery: { $ref: "#/components/schemas/TemplateList" }
         recommended: { type: array, items: { $ref: "#/components/schemas/ScoredTemplate" } }
+
+    # ── V4.5 Design Studio schemas ────────────────────────────────────────────
+    DesignElement:
+      type: object
+      required: [id, name, type, x, y, width, height, rotation, opacity, zIndex, locked, visible, fill, stroke, strokeWidth, borderRadius]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [text, image, rect, circle, line, frame] }
+        x: { type: number }
+        y: { type: number }
+        width: { type: number }
+        height: { type: number }
+        rotation: { type: number }
+        opacity: { type: number }
+        zIndex: { type: integer }
+        locked: { type: boolean }
+        visible: { type: boolean }
+        fill: { type: string }
+        stroke: { type: string }
+        strokeWidth: { type: number }
+        borderRadius: { type: number }
+        text: { type: string, nullable: true }
+        fontSize: { type: number, nullable: true }
+        fontFamily: { type: string, nullable: true }
+        fontWeight: { type: string, nullable: true }
+        textAlign: { type: string, nullable: true }
+        color: { type: string, nullable: true }
+        lineHeight: { type: number, nullable: true }
+        src: { type: string, nullable: true }
+        objectFit: { type: string, nullable: true }
+
+    CanvasState:
+      type: object
+      required: [width, height, background, elements]
+      properties:
+        width: { type: integer }
+        height: { type: integer }
+        background: { type: string }
+        elements: { type: array, items: { $ref: "#/components/schemas/DesignElement" } }
+
+    DesignProject:
+      type: object
+      required: [id, name, canvasWidth, canvasHeight, status, createdAt, updatedAt, elementCount, versionCount]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        canvasWidth: { type: integer }
+        canvasHeight: { type: integer }
+        templateId: { type: integer, nullable: true }
+        brandDnaId: { type: integer, nullable: true }
+        currentVersionId: { type: integer, nullable: true }
+        status: { type: string, enum: [draft, active, archived] }
+        tags: { type: array, items: { type: string } }
+        thumbnailUrl: { type: string, nullable: true }
+        elementCount: { type: integer }
+        versionCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    DesignProjectList:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/DesignProject" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    CreateDesignProjectInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        canvasWidth: { type: integer }
+        canvasHeight: { type: integer }
+        templateId: { type: integer }
+        brandDnaId: { type: integer }
+        tags: { type: array, items: { type: string } }
+        initialState: { $ref: "#/components/schemas/CanvasState" }
+
+    UpdateDesignProjectInput:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [draft, active, archived] }
+        tags: { type: array, items: { type: string } }
+        thumbnailUrl: { type: string }
+
+    DesignCanvasResponse:
+      type: object
+      required: [projectId, versionId, versionNumber, canvasState, savedAt]
+      properties:
+        projectId: { type: integer }
+        versionId: { type: integer }
+        versionNumber: { type: integer }
+        canvasState: { $ref: "#/components/schemas/CanvasState" }
+        savedAt: { type: string, format: date-time }
+
+    SaveCanvasInput:
+      type: object
+      required: [canvasState]
+      properties:
+        canvasState: { $ref: "#/components/schemas/CanvasState" }
+        label: { type: string }
+
+    DesignVersion:
+      type: object
+      required: [id, projectId, versionNumber, elementCount, createdAt]
+      properties:
+        id: { type: integer }
+        projectId: { type: integer }
+        versionNumber: { type: integer }
+        label: { type: string, nullable: true }
+        elementCount: { type: integer }
+        canvasState: { $ref: "#/components/schemas/CanvasState" }
+        createdAt: { type: string, format: date-time }
+
+    DesignVersionList:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/DesignVersion" } }
+        total: { type: integer }
+
+    ExportDesignInput:
+      type: object
+      required: [format]
+      properties:
+        format: { type: string, enum: [png, pdf, svg, json] }
+        scale: { type: number }
+        quality: { type: integer }
+
+    ExportDesignResult:
+      type: object
+      required: [format, url, expiresAt]
+      properties:
+        format: { type: string }
+        url: { type: string }
+        dataUrl: { type: string, nullable: true }
+        expiresAt: { type: string, format: date-time }
+
+    AiRegenerateInput:
+      type: object
+      required: [elementId, elementType, prompt]
+      properties:
+        elementId: { type: string }
+        elementType: { type: string, enum: [text, image, style] }
+        prompt: { type: string }
+        brandDnaId: { type: integer }
+        currentContent: { type: string }
+        style: { type: string }
+        tone: { type: string }
+
+    AiSuggestion:
+      type: object
+      required: [id, content]
+      properties:
+        id: { type: string }
+        content: { type: string }
+        reasoning: { type: string, nullable: true }
+        preview: { type: string, nullable: true }
+
+    AiRegenerateResult:
+      type: object
+      required: [elementId, elementType, suggestions, brandAligned, confidence]
+      properties:
+        elementId: { type: string }
+        elementType: { type: string }
+        suggestions: { type: array, items: { $ref: "#/components/schemas/AiSuggestion" } }
+        brandAligned: { type: boolean }
+        confidence: { type: number }
+    # ── End V4.5 Design Studio schemas ────────────────────────────────────────
 
     # ── End V4.3 schemas ──────────────────────────────────────────────────────
 

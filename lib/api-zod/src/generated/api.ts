@@ -9634,3 +9634,504 @@ export const GetCpReviewDashboardResponse = zod.object({
 })
 
 
+/**
+ * @summary List design projects
+ */
+export const ListDesignProjectsQueryParams = zod.object({
+  "status": zod.coerce.string().optional(),
+  "page": zod.coerce.number().optional(),
+  "pageSize": zod.coerce.number().optional()
+})
+
+export const ListDesignProjectsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "canvasWidth": zod.number(),
+  "canvasHeight": zod.number(),
+  "templateId": zod.number().nullish(),
+  "brandDnaId": zod.number().nullish(),
+  "currentVersionId": zod.number().nullish(),
+  "status": zod.enum(['draft', 'active', 'archived']),
+  "tags": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "elementCount": zod.number(),
+  "versionCount": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number()
+})
+
+
+/**
+ * @summary Create a new design project
+ */
+export const CreateDesignProjectBody = zod.object({
+  "name": zod.string(),
+  "description": zod.string().optional(),
+  "canvasWidth": zod.number().optional(),
+  "canvasHeight": zod.number().optional(),
+  "templateId": zod.number().optional(),
+  "brandDnaId": zod.number().optional(),
+  "tags": zod.array(zod.string()).optional(),
+  "initialState": zod.object({
+  "width": zod.number(),
+  "height": zod.number(),
+  "background": zod.string(),
+  "elements": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.enum(['text', 'image', 'rect', 'circle', 'line', 'frame']),
+  "x": zod.number(),
+  "y": zod.number(),
+  "width": zod.number(),
+  "height": zod.number(),
+  "rotation": zod.number(),
+  "opacity": zod.number(),
+  "zIndex": zod.number(),
+  "locked": zod.boolean(),
+  "visible": zod.boolean(),
+  "fill": zod.string(),
+  "stroke": zod.string(),
+  "strokeWidth": zod.number(),
+  "borderRadius": zod.number(),
+  "text": zod.string().nullish(),
+  "fontSize": zod.number().nullish(),
+  "fontFamily": zod.string().nullish(),
+  "fontWeight": zod.string().nullish(),
+  "textAlign": zod.string().nullish(),
+  "color": zod.string().nullish(),
+  "lineHeight": zod.number().nullish(),
+  "src": zod.string().nullish(),
+  "objectFit": zod.string().nullish()
+}))
+}).optional()
+})
+
+export const CreateDesignProjectResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "canvasWidth": zod.number(),
+  "canvasHeight": zod.number(),
+  "templateId": zod.number().nullish(),
+  "brandDnaId": zod.number().nullish(),
+  "currentVersionId": zod.number().nullish(),
+  "status": zod.enum(['draft', 'active', 'archived']),
+  "tags": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "elementCount": zod.number(),
+  "versionCount": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get a design project
+ */
+export const GetDesignProjectParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetDesignProjectResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "canvasWidth": zod.number(),
+  "canvasHeight": zod.number(),
+  "templateId": zod.number().nullish(),
+  "brandDnaId": zod.number().nullish(),
+  "currentVersionId": zod.number().nullish(),
+  "status": zod.enum(['draft', 'active', 'archived']),
+  "tags": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "elementCount": zod.number(),
+  "versionCount": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update project metadata
+ */
+export const UpdateDesignProjectParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateDesignProjectBody = zod.object({
+  "name": zod.string().optional(),
+  "description": zod.string().optional(),
+  "status": zod.enum(['draft', 'active', 'archived']).optional(),
+  "tags": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().optional()
+})
+
+export const UpdateDesignProjectResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "canvasWidth": zod.number(),
+  "canvasHeight": zod.number(),
+  "templateId": zod.number().nullish(),
+  "brandDnaId": zod.number().nullish(),
+  "currentVersionId": zod.number().nullish(),
+  "status": zod.enum(['draft', 'active', 'archived']),
+  "tags": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "elementCount": zod.number(),
+  "versionCount": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Archive a design project
+ */
+export const ArchiveDesignProjectParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ArchiveDesignProjectResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Get the current canvas state
+ */
+export const GetDesignCanvasParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetDesignCanvasResponse = zod.object({
+  "projectId": zod.number(),
+  "versionId": zod.number(),
+  "versionNumber": zod.number(),
+  "canvasState": zod.object({
+  "width": zod.number(),
+  "height": zod.number(),
+  "background": zod.string(),
+  "elements": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.enum(['text', 'image', 'rect', 'circle', 'line', 'frame']),
+  "x": zod.number(),
+  "y": zod.number(),
+  "width": zod.number(),
+  "height": zod.number(),
+  "rotation": zod.number(),
+  "opacity": zod.number(),
+  "zIndex": zod.number(),
+  "locked": zod.boolean(),
+  "visible": zod.boolean(),
+  "fill": zod.string(),
+  "stroke": zod.string(),
+  "strokeWidth": zod.number(),
+  "borderRadius": zod.number(),
+  "text": zod.string().nullish(),
+  "fontSize": zod.number().nullish(),
+  "fontFamily": zod.string().nullish(),
+  "fontWeight": zod.string().nullish(),
+  "textAlign": zod.string().nullish(),
+  "color": zod.string().nullish(),
+  "lineHeight": zod.number().nullish(),
+  "src": zod.string().nullish(),
+  "objectFit": zod.string().nullish()
+}))
+}),
+  "savedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Save canvas state (creates a new version)
+ */
+export const SaveDesignCanvasParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const SaveDesignCanvasBody = zod.object({
+  "canvasState": zod.object({
+  "width": zod.number(),
+  "height": zod.number(),
+  "background": zod.string(),
+  "elements": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.enum(['text', 'image', 'rect', 'circle', 'line', 'frame']),
+  "x": zod.number(),
+  "y": zod.number(),
+  "width": zod.number(),
+  "height": zod.number(),
+  "rotation": zod.number(),
+  "opacity": zod.number(),
+  "zIndex": zod.number(),
+  "locked": zod.boolean(),
+  "visible": zod.boolean(),
+  "fill": zod.string(),
+  "stroke": zod.string(),
+  "strokeWidth": zod.number(),
+  "borderRadius": zod.number(),
+  "text": zod.string().nullish(),
+  "fontSize": zod.number().nullish(),
+  "fontFamily": zod.string().nullish(),
+  "fontWeight": zod.string().nullish(),
+  "textAlign": zod.string().nullish(),
+  "color": zod.string().nullish(),
+  "lineHeight": zod.number().nullish(),
+  "src": zod.string().nullish(),
+  "objectFit": zod.string().nullish()
+}))
+}),
+  "label": zod.string().optional()
+})
+
+export const SaveDesignCanvasResponse = zod.object({
+  "projectId": zod.number(),
+  "versionId": zod.number(),
+  "versionNumber": zod.number(),
+  "canvasState": zod.object({
+  "width": zod.number(),
+  "height": zod.number(),
+  "background": zod.string(),
+  "elements": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.enum(['text', 'image', 'rect', 'circle', 'line', 'frame']),
+  "x": zod.number(),
+  "y": zod.number(),
+  "width": zod.number(),
+  "height": zod.number(),
+  "rotation": zod.number(),
+  "opacity": zod.number(),
+  "zIndex": zod.number(),
+  "locked": zod.boolean(),
+  "visible": zod.boolean(),
+  "fill": zod.string(),
+  "stroke": zod.string(),
+  "strokeWidth": zod.number(),
+  "borderRadius": zod.number(),
+  "text": zod.string().nullish(),
+  "fontSize": zod.number().nullish(),
+  "fontFamily": zod.string().nullish(),
+  "fontWeight": zod.string().nullish(),
+  "textAlign": zod.string().nullish(),
+  "color": zod.string().nullish(),
+  "lineHeight": zod.number().nullish(),
+  "src": zod.string().nullish(),
+  "objectFit": zod.string().nullish()
+}))
+}),
+  "savedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List all versions of a design project
+ */
+export const ListDesignVersionsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListDesignVersionsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "versionNumber": zod.number(),
+  "label": zod.string().nullish(),
+  "elementCount": zod.number(),
+  "canvasState": zod.object({
+  "width": zod.number(),
+  "height": zod.number(),
+  "background": zod.string(),
+  "elements": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.enum(['text', 'image', 'rect', 'circle', 'line', 'frame']),
+  "x": zod.number(),
+  "y": zod.number(),
+  "width": zod.number(),
+  "height": zod.number(),
+  "rotation": zod.number(),
+  "opacity": zod.number(),
+  "zIndex": zod.number(),
+  "locked": zod.boolean(),
+  "visible": zod.boolean(),
+  "fill": zod.string(),
+  "stroke": zod.string(),
+  "strokeWidth": zod.number(),
+  "borderRadius": zod.number(),
+  "text": zod.string().nullish(),
+  "fontSize": zod.number().nullish(),
+  "fontFamily": zod.string().nullish(),
+  "fontWeight": zod.string().nullish(),
+  "textAlign": zod.string().nullish(),
+  "color": zod.string().nullish(),
+  "lineHeight": zod.number().nullish(),
+  "src": zod.string().nullish(),
+  "objectFit": zod.string().nullish()
+}))
+}).optional(),
+  "createdAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Get a specific version
+ */
+export const GetDesignVersionParams = zod.object({
+  "id": zod.coerce.number(),
+  "versionId": zod.coerce.number()
+})
+
+export const GetDesignVersionResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "versionNumber": zod.number(),
+  "label": zod.string().nullish(),
+  "elementCount": zod.number(),
+  "canvasState": zod.object({
+  "width": zod.number(),
+  "height": zod.number(),
+  "background": zod.string(),
+  "elements": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.enum(['text', 'image', 'rect', 'circle', 'line', 'frame']),
+  "x": zod.number(),
+  "y": zod.number(),
+  "width": zod.number(),
+  "height": zod.number(),
+  "rotation": zod.number(),
+  "opacity": zod.number(),
+  "zIndex": zod.number(),
+  "locked": zod.boolean(),
+  "visible": zod.boolean(),
+  "fill": zod.string(),
+  "stroke": zod.string(),
+  "strokeWidth": zod.number(),
+  "borderRadius": zod.number(),
+  "text": zod.string().nullish(),
+  "fontSize": zod.number().nullish(),
+  "fontFamily": zod.string().nullish(),
+  "fontWeight": zod.string().nullish(),
+  "textAlign": zod.string().nullish(),
+  "color": zod.string().nullish(),
+  "lineHeight": zod.number().nullish(),
+  "src": zod.string().nullish(),
+  "objectFit": zod.string().nullish()
+}))
+}).optional(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Restore a specific version as the current canvas state
+ */
+export const RestoreDesignVersionParams = zod.object({
+  "id": zod.coerce.number(),
+  "versionId": zod.coerce.number()
+})
+
+export const RestoreDesignVersionResponse = zod.object({
+  "projectId": zod.number(),
+  "versionId": zod.number(),
+  "versionNumber": zod.number(),
+  "canvasState": zod.object({
+  "width": zod.number(),
+  "height": zod.number(),
+  "background": zod.string(),
+  "elements": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "type": zod.enum(['text', 'image', 'rect', 'circle', 'line', 'frame']),
+  "x": zod.number(),
+  "y": zod.number(),
+  "width": zod.number(),
+  "height": zod.number(),
+  "rotation": zod.number(),
+  "opacity": zod.number(),
+  "zIndex": zod.number(),
+  "locked": zod.boolean(),
+  "visible": zod.boolean(),
+  "fill": zod.string(),
+  "stroke": zod.string(),
+  "strokeWidth": zod.number(),
+  "borderRadius": zod.number(),
+  "text": zod.string().nullish(),
+  "fontSize": zod.number().nullish(),
+  "fontFamily": zod.string().nullish(),
+  "fontWeight": zod.string().nullish(),
+  "textAlign": zod.string().nullish(),
+  "color": zod.string().nullish(),
+  "lineHeight": zod.number().nullish(),
+  "src": zod.string().nullish(),
+  "objectFit": zod.string().nullish()
+}))
+}),
+  "savedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Export the design as PNG/PDF/SVG/JSON
+ */
+export const ExportDesignParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ExportDesignBody = zod.object({
+  "format": zod.enum(['png', 'pdf', 'svg', 'json']),
+  "scale": zod.number().optional(),
+  "quality": zod.number().optional()
+})
+
+export const ExportDesignResponse = zod.object({
+  "format": zod.string(),
+  "url": zod.string(),
+  "dataUrl": zod.string().nullish(),
+  "expiresAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Use AI to regenerate a design element
+ */
+export const AiRegenerateElementParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AiRegenerateElementBody = zod.object({
+  "elementId": zod.string(),
+  "elementType": zod.enum(['text', 'image', 'style']),
+  "prompt": zod.string(),
+  "brandDnaId": zod.number().optional(),
+  "currentContent": zod.string().optional(),
+  "style": zod.string().optional(),
+  "tone": zod.string().optional()
+})
+
+export const AiRegenerateElementResponse = zod.object({
+  "elementId": zod.string(),
+  "elementType": zod.string(),
+  "suggestions": zod.array(zod.object({
+  "id": zod.string(),
+  "content": zod.string(),
+  "reasoning": zod.string().nullish(),
+  "preview": zod.string().nullish()
+})),
+  "brandAligned": zod.boolean(),
+  "confidence": zod.number()
+})
+
+

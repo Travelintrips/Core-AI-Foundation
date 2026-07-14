@@ -65,6 +65,7 @@ import zipDeliveryRouter from "./zip-delivery";
 import brandIntelligenceRouter from "./brand-intelligence";
 import assetIntelligenceRouter from "./asset-intelligence";
 import templatesRouter from "./templates";
+import designStudioRouter from "./design-studio";
 
 const router: IRouter = Router();
 
@@ -133,5 +134,6 @@ router.use(customerHealthRouter);
 router.use(commercialAnalyticsRouter);
 router.use(storageRouter);
 router.use(observabilityRouter);
+router.use(designStudioRouter);
 
 export default router;

@@ -56,3 +56,4 @@
 - [phase-v42d-brand-kit-zip](phase-v42d-brand-kit-zip.md) — V4.2D rules: slot weights, no @/lib/api in portal, ZIP job payload, pdf-lib re-install, route mount order
 - [wp00-wp01-tenant-security](wp00-wp01-tenant-security.md) — canonical RequestContext + tenant resolvers; never trust body/query/header tenantId, resolve server-side via security/tenantResolution.ts
 - [phase-v42e-creative-intelligence](phase-v42e-creative-intelligence.md) — V4.2E: Brand DNA + Asset Intelligence tables/services/routes/UI; admin uses apiFetch not useAdminApi hook
+- [phase-v45-design-studio](phase-v45-design-studio.md) — V4.5 canvas editor; route prefix must be /ai/... not /api/ai/... ; canvas state as JSONB; pre-existing typecheck failures in presentation/zip services

@@ -5043,6 +5043,200 @@ export interface WorkspaceTemplatesDashboard {
   recommended: ScoredTemplate[];
 }
 
+export type DesignElementType = typeof DesignElementType[keyof typeof DesignElementType];
+
+
+export const DesignElementType = {
+  text: 'text',
+  image: 'image',
+  rect: 'rect',
+  circle: 'circle',
+  line: 'line',
+  frame: 'frame',
+} as const;
+
+export interface DesignElement {
+  id: string;
+  name: string;
+  type: DesignElementType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  opacity: number;
+  zIndex: number;
+  locked: boolean;
+  visible: boolean;
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+  borderRadius: number;
+  text?: string | null;
+  fontSize?: number | null;
+  fontFamily?: string | null;
+  fontWeight?: string | null;
+  textAlign?: string | null;
+  color?: string | null;
+  lineHeight?: number | null;
+  src?: string | null;
+  objectFit?: string | null;
+}
+
+export interface CanvasState {
+  width: number;
+  height: number;
+  background: string;
+  elements: DesignElement[];
+}
+
+export type DesignProjectStatus = typeof DesignProjectStatus[keyof typeof DesignProjectStatus];
+
+
+export const DesignProjectStatus = {
+  draft: 'draft',
+  active: 'active',
+  archived: 'archived',
+} as const;
+
+export interface DesignProject {
+  id: number;
+  name: string;
+  description?: string | null;
+  canvasWidth: number;
+  canvasHeight: number;
+  templateId?: number | null;
+  brandDnaId?: number | null;
+  currentVersionId?: number | null;
+  status: DesignProjectStatus;
+  tags?: string[];
+  thumbnailUrl?: string | null;
+  elementCount: number;
+  versionCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DesignProjectList {
+  items: DesignProject[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface CreateDesignProjectInput {
+  name: string;
+  description?: string;
+  canvasWidth?: number;
+  canvasHeight?: number;
+  templateId?: number;
+  brandDnaId?: number;
+  tags?: string[];
+  initialState?: CanvasState;
+}
+
+export type UpdateDesignProjectInputStatus = typeof UpdateDesignProjectInputStatus[keyof typeof UpdateDesignProjectInputStatus];
+
+
+export const UpdateDesignProjectInputStatus = {
+  draft: 'draft',
+  active: 'active',
+  archived: 'archived',
+} as const;
+
+export interface UpdateDesignProjectInput {
+  name?: string;
+  description?: string;
+  status?: UpdateDesignProjectInputStatus;
+  tags?: string[];
+  thumbnailUrl?: string;
+}
+
+export interface DesignCanvasResponse {
+  projectId: number;
+  versionId: number;
+  versionNumber: number;
+  canvasState: CanvasState;
+  savedAt: string;
+}
+
+export interface SaveCanvasInput {
+  canvasState: CanvasState;
+  label?: string;
+}
+
+export interface DesignVersion {
+  id: number;
+  projectId: number;
+  versionNumber: number;
+  label?: string | null;
+  elementCount: number;
+  canvasState?: CanvasState;
+  createdAt: string;
+}
+
+export interface DesignVersionList {
+  items: DesignVersion[];
+  total: number;
+}
+
+export type ExportDesignInputFormat = typeof ExportDesignInputFormat[keyof typeof ExportDesignInputFormat];
+
+
+export const ExportDesignInputFormat = {
+  png: 'png',
+  pdf: 'pdf',
+  svg: 'svg',
+  json: 'json',
+} as const;
+
+export interface ExportDesignInput {
+  format: ExportDesignInputFormat;
+  scale?: number;
+  quality?: number;
+}
+
+export interface ExportDesignResult {
+  format: string;
+  url: string;
+  dataUrl?: string | null;
+  expiresAt: string;
+}
+
+export type AiRegenerateInputElementType = typeof AiRegenerateInputElementType[keyof typeof AiRegenerateInputElementType];
+
+
+export const AiRegenerateInputElementType = {
+  text: 'text',
+  image: 'image',
+  style: 'style',
+} as const;
+
+export interface AiRegenerateInput {
+  elementId: string;
+  elementType: AiRegenerateInputElementType;
+  prompt: string;
+  brandDnaId?: number;
+  currentContent?: string;
+  style?: string;
+  tone?: string;
+}
+
+export interface AiSuggestion {
+  id: string;
+  content: string;
+  reasoning?: string | null;
+  preview?: string | null;
+}
+
+export interface AiRegenerateResult {
+  elementId: string;
+  elementType: string;
+  suggestions: AiSuggestion[];
+  brandAligned: boolean;
+  confidence: number;
+}
+
 export type AbTestTestType = typeof AbTestTestType[keyof typeof AbTestTestType];
 
 
@@ -5630,5 +5824,15 @@ export type GetCpReviewTimeline200 = {
   reviewStatus: string;
   totalEvents: number;
   events: CpTimelineEvent[];
+};
+
+export type ListDesignProjectsParams = {
+status?: string;
+page?: number;
+pageSize?: number;
+};
+
+export type ArchiveDesignProject200 = {
+  ok: boolean;
 };
 

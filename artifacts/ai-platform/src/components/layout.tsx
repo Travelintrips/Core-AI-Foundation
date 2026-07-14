@@ -110,6 +110,12 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    label: "Creative",
+    items: [
+      { href: "/design-studio", label: "Design Studio", icon: LayoutTemplate },
+    ],
+  },
+  {
     label: "Platform",
     items: [
       { href: "/catalog-admin", label: "Catalog Admin", icon: LayoutGrid },

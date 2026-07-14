@@ -61,6 +61,14 @@ Re-verified once more later on 2026-07-14 after yet another re-import: identical
 
 Re-verified a further time 2026-07-14 (same day, later re-import): identical symptom (`node_modules` + registration wiped), identical fix applied, all 4 services confirmed running again. Also fixed two code bugs uncovered during this import: (1) `templates.ts` imported `requireAdminApiKey` from `adminAuth.ts` but the export is named `adminAuth` — aliased on import; (2) `layout.tsx` used `LayoutTemplate` icon from lucide-react without importing it — added to import list.
 
+## Phase V4.5 — AI Design Studio (2026-07-14)
+
+Added a full Canva-like editor to the admin panel:
+- **Routes**: `GET/POST /api/ai/design/projects`, `GET/PATCH /api/ai/design/projects/:id`, canvas CRUD, version history, export, AI regenerate
+- **DB**: `ai_design_projects` + `ai_design_versions` tables — run `scripts/migrations/v4.5-design-studio.sql` to create them
+- **Frontend**: `/design-studio` (project list) and `/design-studio/:id` (canvas editor with layers, drag/resize, undo/redo, grid, alignment, zoom, compare, AI regenerate, export)
+- **Nav**: Added "Creative > Design Studio" section to the admin sidebar
+
 ## Key Technical Notes
 ## Database
 
