@@ -64,3 +64,4 @@
 - [wp03-audit-log](wp03-audit-log.md) — audit actor-type vocab differs from RequestContext's; diff-then-redact order matters; logAudit dual signature; auditHook.ts is a standalone new file
 - [wp04-wp05-soft-delete](wp04-wp05-soft-delete.md) — soft delete pattern: softDeleteGuard helper, self-referential db.transaction mock, purge requires platform scope + platformOperation
 - [phase-v45-design-studio](phase-v45-design-studio.md) — V4.5 canvas editor; route prefix must be /ai/... not /api/ai/... ; canvas state as JSONB; pre-existing typecheck failures in presentation/zip services
+- [wp08-wp11-quotation](wp08-wp11-quotation.md) — Quotation repo write+audit, soft-delete cascade, restore role guard, legacy freeze (410), vi.hoisted() test pattern

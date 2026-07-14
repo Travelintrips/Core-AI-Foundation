@@ -1,5 +1,5 @@
 import { appSchema } from "./_pg-schema";
-import { serial, text, integer, jsonb } from "drizzle-orm/pg-core";
+import { serial, text, integer, jsonb, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { aiQuotationsTable } from "./ai-quotations";
@@ -21,6 +21,9 @@ export const aiQuotationItemsTable = appSchema.table("ai_quotation_items", {
   amount: integer("amount").notNull().default(0),
   metadataJson: jsonb("metadata_json"),
   displayOrder: integer("display_order").notNull().default(0),
+  // WP-09: soft-delete columns
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedBy: text("deleted_by"),
 });
 
 export const insertAiQuotationItemSchema = createInsertSchema(aiQuotationItemsTable).omit({
