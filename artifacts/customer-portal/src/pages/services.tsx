@@ -43,6 +43,10 @@ function deliveryDays(est: string): number {
     case "bulan": return value * 30;
     default: return value; // hari
   }
+  if (/menit/i.test(est)) return 0.1;   // minutes → same-day, essentially instant
+  if (/jam/i.test(est))   return 0.5;   // hours   → same-day
+  const m = est.match(/(\d+)/);
+  return m ? parseInt(m[1]) : 7;
 }
 
 type BadgeKind = "Enterprise" | "Pengiriman Cepat" | "Baru" | "Terpopuler" | "Trending" | "Direview Manusia" | "Siap Komersial";
