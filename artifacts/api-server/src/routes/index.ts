@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import metricsRouter from "./metrics";
 import agentsRouter from "./agents";
 import registryRouter from "./registry";
 import orchestratorRouter from "./orchestrator";
@@ -133,5 +134,6 @@ router.use(customerHealthRouter);
 router.use(commercialAnalyticsRouter);
 router.use(storageRouter);
 router.use(observabilityRouter);
+router.use(metricsRouter);
 
 export default router;

@@ -7,6 +7,12 @@ import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
 import { adminAuthWithExceptions } from "./middleware/adminAuth.js";
 import { globalLimiter } from "./middleware/rateLimiter.js";
+import {
+  suspiciousRequestLogger,
+  addSecurityContext,
+  blockUnknownMethods,
+} from "./middleware/securityHardening.js";
+import { requestCounterMiddleware } from "./routes/metrics.js";
 
 const app: Express = express();
 
@@ -98,6 +104,16 @@ app.use(cookieParser());
 // Without this express-rate-limit cannot identify individual client IPs and
 // buckets all traffic together, causing false 429s.
 app.set("trust proxy", 1);
+
+// ── WP-12 Security hardening ─────────────────────────────────────────────────
+// blockUnknownMethods: rejects non-standard HTTP verbs (PROPFIND, TRACK, etc.)
+// addSecurityContext:  adds X-Request-Id + X-Content-Type-Options to every response
+// suspiciousRequestLogger: logs (but does not block) path-traversal / probe requests
+// requestCounterMiddleware: in-memory request counters for /ai/metrics
+app.use(blockUnknownMethods);
+app.use(addSecurityContext);
+app.use(suspiciousRequestLogger);
+app.use(requestCounterMiddleware);
 
 // ── Global rate limiting (P0-3) ───────────────────────────────────────────────
 // 200 requests per IP per 15 minutes on all /api routes.
