@@ -47,6 +47,8 @@ tags:
   - name: human-tasks
     description: Human Task Center — AI-to-human handoff, review, approval, and escalation
   - name: service-portfolio
+  - name: portfolio-gallery
+    description: V4.3 Portfolio Gallery & Live Preview (Team 1) — public search, industry showcase, compare, favorites, and analytics on top of the existing Portfolio Generator
   - name: service-catalog
     description: AI Service Catalog & Pricing Center — departments, services, packages, and customer requests
   - name: commercial-gates
@@ -4213,6 +4215,189 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PortfolioAnalytics"
+
+  # ── V4.3 Portfolio Gallery & Live Preview (Team 1) — additive only ────────
+  /public/portfolio-gallery/search:
+    get:
+      operationId: searchPortfolioGallery
+      tags: [portfolio-gallery]
+      summary: Free-text search across published portfolios (public, no auth)
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: industry
+          schema: { type: string }
+        - in: query
+          name: style
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: pageSize
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioGallerySearchResult"
+  /public/portfolio-gallery/industries:
+    get:
+      operationId: getPortfolioGalleryIndustries
+      tags: [portfolio-gallery]
+      summary: Industry showcase — published portfolios grouped by industry
+      responses:
+        "200":
+          description: Industry showcase
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioGalleryIndustryShowcase"
+  /public/portfolio-gallery/showcase:
+    get:
+      operationId: getPortfolioGalleryShowcase
+      tags: [portfolio-gallery]
+      summary: Public showcase bundle (featured + top industries) for the pre-purchase landing page
+      responses:
+        "200":
+          description: Showcase bundle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioGalleryShowcase"
+  /public/portfolio-gallery/compare:
+    post:
+      operationId: comparePortfolioGallery
+      tags: [portfolio-gallery]
+      summary: Compare 2-4 published portfolios side by side
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PortfolioGalleryCompareInput"
+      responses:
+        "200":
+          description: Comparison result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioGalleryCompareResult"
+        "400":
+          description: Invalid ids
+  /public/customer/workspace/{token}/portfolio-gallery/recommended:
+    get:
+      operationId: getWorkspacePortfolioGalleryRecommended
+      tags: [portfolio-gallery]
+      summary: Brand-DNA-aware portfolio recommendations for a customer workspace
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Recommendations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioGalleryRecommendations"
+        "404":
+          description: Workspace not found
+  /public/customer/workspace/{token}/portfolio-gallery/favorites:
+    get:
+      operationId: listWorkspacePortfolioGalleryFavorites
+      tags: [portfolio-gallery]
+      summary: List a customer's favorited portfolios
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Favorites
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioGalleryFavoritesList"
+        "404":
+          description: Workspace not found
+    post:
+      operationId: addWorkspacePortfolioGalleryFavorite
+      tags: [portfolio-gallery]
+      summary: Favorite a portfolio
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PortfolioGalleryFavoriteInput"
+      responses:
+        "200":
+          description: Favorited
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+        "400":
+          description: Invalid portfolioId
+        "404":
+          description: Workspace not found
+  /public/customer/workspace/{token}/portfolio-gallery/favorites/{portfolioId}:
+    delete:
+      operationId: removeWorkspacePortfolioGalleryFavorite
+      tags: [portfolio-gallery]
+      summary: Unfavorite a portfolio
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+        - name: portfolioId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Unfavorited
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+        "404":
+          description: Workspace not found
+  /ai/portfolio-gallery/analytics:
+    get:
+      operationId: getPortfolioGalleryAnalytics
+      tags: [portfolio-gallery]
+      summary: Admin analytics for the Portfolio Gallery module (search, favorites, compare usage)
+      responses:
+        "200":
+          description: Analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioGalleryAnalytics"
+
   /public/catalog/requests/{requestId}/start-brief:
     patch:
       operationId: startBrief
@@ -13662,6 +13847,128 @@ components:
         recommended: { type: array, items: { $ref: "#/components/schemas/ScoredTemplate" } }
 
     # ── End V4.3 schemas ──────────────────────────────────────────────────────
+
+    # ── V4.3 Portfolio Gallery & Live Preview (Team 1) schemas — additive ────
+
+    PortfolioGalleryCard:
+      type: object
+      required: [id, serviceId, title, industry, style]
+      properties:
+        id: { type: integer }
+        serviceId: { type: integer }
+        slug: { type: string, nullable: true }
+        title: { type: string }
+        shortDescription: { type: string, nullable: true }
+        industry: { type: string }
+        style: { type: string }
+        coverImage: { type: string, nullable: true }
+        rating: { type: string, nullable: true }
+        views: { type: integer }
+        featured: { type: boolean }
+        packageLabel: { type: string, nullable: true }
+        deliveryTime: { type: string, nullable: true }
+
+    PortfolioGallerySearchResult:
+      type: object
+      required: [items, pagination]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/PortfolioGalleryCard" } }
+        pagination:
+          type: object
+          required: [page, pageSize, total, totalPages]
+          properties:
+            page: { type: integer }
+            pageSize: { type: integer }
+            total: { type: integer }
+            totalPages: { type: integer }
+
+    PortfolioGalleryIndustryShowcaseItem:
+      type: object
+      required: [industry, totalPortfolios]
+      properties:
+        industry: { type: string }
+        totalPortfolios: { type: integer }
+        topPortfolio:
+          allOf: [{ $ref: "#/components/schemas/PortfolioGalleryCard" }]
+          nullable: true
+
+    PortfolioGalleryIndustryShowcase:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/PortfolioGalleryIndustryShowcaseItem" } }
+
+    PortfolioGalleryShowcase:
+      type: object
+      required: [featured, industries]
+      properties:
+        featured: { type: array, items: { $ref: "#/components/schemas/PortfolioGalleryCard" } }
+        industries: { type: array, items: { $ref: "#/components/schemas/PortfolioGalleryIndustryShowcaseItem" } }
+
+    PortfolioGalleryCompareInput:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          minItems: 2
+          maxItems: 4
+          items: { type: integer }
+
+    PortfolioGalleryCompareItem:
+      allOf:
+        - $ref: "#/components/schemas/PortfolioGalleryCard"
+        - type: object
+          properties:
+            businessSize: { type: string, nullable: true }
+            deliveryDays: { type: integer, nullable: true }
+            deliverables: { type: array, items: { type: string } }
+            tools: { type: array, items: { type: string } }
+            completedProjects: { type: integer }
+
+    PortfolioGalleryCompareResult:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/PortfolioGalleryCompareItem" } }
+
+    PortfolioGalleryRecommendations:
+      type: object
+      required: [basedOnBrandDna, items]
+      properties:
+        basedOnBrandDna: { type: boolean }
+        items: { type: array, items: { $ref: "#/components/schemas/PortfolioGalleryCard" } }
+
+    PortfolioGalleryFavoritesList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/PortfolioGalleryCard" } }
+
+    PortfolioGalleryFavoriteInput:
+      type: object
+      required: [portfolioId]
+      properties:
+        portfolioId: { type: integer }
+
+    PortfolioGallerySearchTerm:
+      type: object
+      required: [term, count]
+      properties:
+        term: { type: string }
+        count: { type: integer }
+
+    PortfolioGalleryAnalytics:
+      type: object
+      required: [totalSearches, totalFavoriteEvents, totalCompareEvents, activeFavorites, topSearchTerms]
+      properties:
+        totalSearches: { type: integer }
+        totalFavoriteEvents: { type: integer }
+        totalCompareEvents: { type: integer }
+        activeFavorites: { type: integer }
+        topSearchTerms: { type: array, items: { $ref: "#/components/schemas/PortfolioGallerySearchTerm" } }
+
+    # ── End V4.3 Portfolio Gallery (Team 1) schemas ───────────────────────────
 
     # ── End V4.2E schemas ──────────────────────────────────────────────────────
 

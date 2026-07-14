@@ -15,6 +15,7 @@
     "creative:audit-false-completions": "tsx --tsconfig tsconfig.json src/scripts/auditFalseCompletions.ts",
     "migrate:v42e": "tsx --tsconfig tsconfig.json src/migrate-v42e.ts",
     "migrate:v43": "tsx --tsconfig tsconfig.json src/migrate-v43.ts",
+    "migrate:v43-gallery": "tsx --tsconfig tsconfig.json src/migrate-v43-portfolio-gallery.ts",
     "seed:templates": "tsx --tsconfig tsconfig.json src/seedTemplates.ts"
   },
   "dependencies": {

@@ -53,6 +53,7 @@ export * from "./ai-payment-schedule";
 export * from "./ai-invoices";
 export * from "./ai-service-portfolios";
 export * from "./ai-portfolio-p2";
+export * from "./ai-portfolio-gallery";
 export * from "./customer-profiles";
 export * from "./customer-notification-reads";
 export * from "./customer-support-tickets";

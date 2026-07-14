@@ -5732,6 +5732,247 @@ export const GetPortfolioAnalyticsResponse = zod.object({
 
 
 /**
+ * @summary Free-text search across published portfolios (public, no auth)
+ */
+export const SearchPortfolioGalleryQueryParams = zod.object({
+  "q": zod.coerce.string().optional(),
+  "industry": zod.coerce.string().optional(),
+  "style": zod.coerce.string().optional(),
+  "page": zod.coerce.number().optional(),
+  "pageSize": zod.coerce.number().optional()
+})
+
+export const SearchPortfolioGalleryResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "slug": zod.string().nullish(),
+  "title": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "coverImage": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "packageLabel": zod.string().nullish(),
+  "deliveryTime": zod.string().nullish()
+})),
+  "pagination": zod.object({
+  "page": zod.number(),
+  "pageSize": zod.number(),
+  "total": zod.number(),
+  "totalPages": zod.number()
+})
+})
+
+
+/**
+ * @summary Industry showcase — published portfolios grouped by industry
+ */
+export const GetPortfolioGalleryIndustriesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "industry": zod.string(),
+  "totalPortfolios": zod.number(),
+  "topPortfolio": zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "slug": zod.string().nullish(),
+  "title": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "coverImage": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "packageLabel": zod.string().nullish(),
+  "deliveryTime": zod.string().nullish()
+}).nullish()
+}))
+})
+
+
+/**
+ * @summary Public showcase bundle (featured + top industries) for the pre-purchase landing page
+ */
+export const GetPortfolioGalleryShowcaseResponse = zod.object({
+  "featured": zod.array(zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "slug": zod.string().nullish(),
+  "title": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "coverImage": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "packageLabel": zod.string().nullish(),
+  "deliveryTime": zod.string().nullish()
+})),
+  "industries": zod.array(zod.object({
+  "industry": zod.string(),
+  "totalPortfolios": zod.number(),
+  "topPortfolio": zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "slug": zod.string().nullish(),
+  "title": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "coverImage": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "packageLabel": zod.string().nullish(),
+  "deliveryTime": zod.string().nullish()
+}).nullish()
+}))
+})
+
+
+/**
+ * @summary Compare 2-4 published portfolios side by side
+ */
+export const comparePortfolioGalleryBodyIdsMin = 2;
+export const comparePortfolioGalleryBodyIdsMax = 4;
+
+
+
+export const ComparePortfolioGalleryBody = zod.object({
+  "ids": zod.array(zod.number()).min(comparePortfolioGalleryBodyIdsMin).max(comparePortfolioGalleryBodyIdsMax)
+})
+
+export const ComparePortfolioGalleryResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "slug": zod.string().nullish(),
+  "title": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "coverImage": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "packageLabel": zod.string().nullish(),
+  "deliveryTime": zod.string().nullish()
+}).and(zod.object({
+  "businessSize": zod.string().nullish(),
+  "deliveryDays": zod.number().nullish(),
+  "deliverables": zod.array(zod.string()).optional(),
+  "tools": zod.array(zod.string()).optional(),
+  "completedProjects": zod.number().optional()
+})))
+})
+
+
+/**
+ * @summary Brand-DNA-aware portfolio recommendations for a customer workspace
+ */
+export const GetWorkspacePortfolioGalleryRecommendedParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetWorkspacePortfolioGalleryRecommendedQueryParams = zod.object({
+  "limit": zod.coerce.number().optional()
+})
+
+export const GetWorkspacePortfolioGalleryRecommendedResponse = zod.object({
+  "basedOnBrandDna": zod.boolean(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "slug": zod.string().nullish(),
+  "title": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "coverImage": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "packageLabel": zod.string().nullish(),
+  "deliveryTime": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary List a customer's favorited portfolios
+ */
+export const ListWorkspacePortfolioGalleryFavoritesParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const ListWorkspacePortfolioGalleryFavoritesResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "serviceId": zod.number(),
+  "slug": zod.string().nullish(),
+  "title": zod.string(),
+  "shortDescription": zod.string().nullish(),
+  "industry": zod.string(),
+  "style": zod.string(),
+  "coverImage": zod.string().nullish(),
+  "rating": zod.string().nullish(),
+  "views": zod.number().optional(),
+  "featured": zod.boolean().optional(),
+  "packageLabel": zod.string().nullish(),
+  "deliveryTime": zod.string().nullish()
+}))
+})
+
+
+/**
+ * @summary Favorite a portfolio
+ */
+export const AddWorkspacePortfolioGalleryFavoriteParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const AddWorkspacePortfolioGalleryFavoriteBody = zod.object({
+  "portfolioId": zod.number()
+})
+
+export const AddWorkspacePortfolioGalleryFavoriteResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Unfavorite a portfolio
+ */
+export const RemoveWorkspacePortfolioGalleryFavoriteParams = zod.object({
+  "token": zod.coerce.string(),
+  "portfolioId": zod.coerce.number()
+})
+
+export const RemoveWorkspacePortfolioGalleryFavoriteResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Admin analytics for the Portfolio Gallery module (search, favorites, compare usage)
+ */
+export const GetPortfolioGalleryAnalyticsResponse = zod.object({
+  "totalSearches": zod.number(),
+  "totalFavoriteEvents": zod.number(),
+  "totalCompareEvents": zod.number(),
+  "activeFavorites": zod.number(),
+  "topSearchTerms": zod.array(zod.object({
+  "term": zod.string(),
+  "count": zod.number()
+}))
+})
+
+
+/**
  * @summary Mark a service request as brief in progress (customer-facing, no auth required)
  */
 export const StartBriefParams = zod.object({

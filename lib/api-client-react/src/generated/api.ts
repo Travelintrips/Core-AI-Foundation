@@ -23,6 +23,7 @@ import type {
   AbTest,
   AbTestList,
   AcceptHumanTaskBody,
+  AddWorkspacePortfolioGalleryFavorite200,
   AdminAnalyzeAssetByIdBody,
   AdminAssetLibraryStats200,
   AdminBrandIntelligenceStats,
@@ -207,6 +208,7 @@ import type {
   GetCreativeImageAnalyticsParams,
   GetFunnelAnalyticsParams,
   GetLivePreviewSessionCount200,
+  GetWorkspacePortfolioGalleryRecommendedParams,
   GoneResponse,
   HealthStatus,
   HumanTask,
@@ -266,6 +268,15 @@ import type {
   PaymentVerifyInput,
   PaymentVerifyResult,
   PortfolioAnalytics,
+  PortfolioGalleryAnalytics,
+  PortfolioGalleryCompareInput,
+  PortfolioGalleryCompareResult,
+  PortfolioGalleryFavoriteInput,
+  PortfolioGalleryFavoritesList,
+  PortfolioGalleryIndustryShowcase,
+  PortfolioGalleryRecommendations,
+  PortfolioGallerySearchResult,
+  PortfolioGalleryShowcase,
   PortfolioReview,
   PortfolioReviewInput,
   PromoteCreativeAssetToLibraryBody,
@@ -288,6 +299,7 @@ import type {
   RegisterWorkerBody,
   RejectCpReviewBody,
   RejectHumanTaskBody,
+  RemoveWorkspacePortfolioGalleryFavorite200,
   RenameAssetLibraryItemBody,
   RenewLeaseBody,
   RepeatOrderDraft,
@@ -302,6 +314,7 @@ import type {
   ScheduleRunPage,
   SchedulerSettings,
   SchedulerStatus,
+  SearchPortfolioGalleryParams,
   ServiceShowcase,
   StartBrief200,
   StartLivePreview202,
@@ -14753,6 +14766,700 @@ export function useGetPortfolioAnalytics<TData = Awaited<ReturnType<typeof getPo
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetPortfolioAnalyticsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSearchPortfolioGalleryUrl = (params?: SearchPortfolioGalleryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/portfolio-gallery/search?${stringifiedParams}` : `/api/public/portfolio-gallery/search`
+}
+
+/**
+ * @summary Free-text search across published portfolios (public, no auth)
+ */
+export const searchPortfolioGallery = async (params?: SearchPortfolioGalleryParams, options?: RequestInit): Promise<PortfolioGallerySearchResult> => {
+
+  return customFetch<PortfolioGallerySearchResult>(getSearchPortfolioGalleryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getSearchPortfolioGalleryQueryKey = (params?: SearchPortfolioGalleryParams,) => {
+    return [
+    `/api/public/portfolio-gallery/search`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getSearchPortfolioGalleryQueryOptions = <TData = Awaited<ReturnType<typeof searchPortfolioGallery>>, TError = ErrorType<unknown>>(params?: SearchPortfolioGalleryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof searchPortfolioGallery>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSearchPortfolioGalleryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof searchPortfolioGallery>>> = ({ signal }) => searchPortfolioGallery(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof searchPortfolioGallery>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type SearchPortfolioGalleryQueryResult = NonNullable<Awaited<ReturnType<typeof searchPortfolioGallery>>>
+export type SearchPortfolioGalleryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Free-text search across published portfolios (public, no auth)
+ */
+
+export function useSearchPortfolioGallery<TData = Awaited<ReturnType<typeof searchPortfolioGallery>>, TError = ErrorType<unknown>>(
+ params?: SearchPortfolioGalleryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof searchPortfolioGallery>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getSearchPortfolioGalleryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPortfolioGalleryIndustriesUrl = () => {
+
+
+
+
+  return `/api/public/portfolio-gallery/industries`
+}
+
+/**
+ * @summary Industry showcase — published portfolios grouped by industry
+ */
+export const getPortfolioGalleryIndustries = async ( options?: RequestInit): Promise<PortfolioGalleryIndustryShowcase> => {
+
+  return customFetch<PortfolioGalleryIndustryShowcase>(getGetPortfolioGalleryIndustriesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPortfolioGalleryIndustriesQueryKey = () => {
+    return [
+    `/api/public/portfolio-gallery/industries`
+    ] as const;
+    }
+
+
+export const getGetPortfolioGalleryIndustriesQueryOptions = <TData = Awaited<ReturnType<typeof getPortfolioGalleryIndustries>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPortfolioGalleryIndustries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPortfolioGalleryIndustriesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPortfolioGalleryIndustries>>> = ({ signal }) => getPortfolioGalleryIndustries({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPortfolioGalleryIndustries>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPortfolioGalleryIndustriesQueryResult = NonNullable<Awaited<ReturnType<typeof getPortfolioGalleryIndustries>>>
+export type GetPortfolioGalleryIndustriesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Industry showcase — published portfolios grouped by industry
+ */
+
+export function useGetPortfolioGalleryIndustries<TData = Awaited<ReturnType<typeof getPortfolioGalleryIndustries>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPortfolioGalleryIndustries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPortfolioGalleryIndustriesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPortfolioGalleryShowcaseUrl = () => {
+
+
+
+
+  return `/api/public/portfolio-gallery/showcase`
+}
+
+/**
+ * @summary Public showcase bundle (featured + top industries) for the pre-purchase landing page
+ */
+export const getPortfolioGalleryShowcase = async ( options?: RequestInit): Promise<PortfolioGalleryShowcase> => {
+
+  return customFetch<PortfolioGalleryShowcase>(getGetPortfolioGalleryShowcaseUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPortfolioGalleryShowcaseQueryKey = () => {
+    return [
+    `/api/public/portfolio-gallery/showcase`
+    ] as const;
+    }
+
+
+export const getGetPortfolioGalleryShowcaseQueryOptions = <TData = Awaited<ReturnType<typeof getPortfolioGalleryShowcase>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPortfolioGalleryShowcase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPortfolioGalleryShowcaseQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPortfolioGalleryShowcase>>> = ({ signal }) => getPortfolioGalleryShowcase({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPortfolioGalleryShowcase>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPortfolioGalleryShowcaseQueryResult = NonNullable<Awaited<ReturnType<typeof getPortfolioGalleryShowcase>>>
+export type GetPortfolioGalleryShowcaseQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Public showcase bundle (featured + top industries) for the pre-purchase landing page
+ */
+
+export function useGetPortfolioGalleryShowcase<TData = Awaited<ReturnType<typeof getPortfolioGalleryShowcase>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPortfolioGalleryShowcase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPortfolioGalleryShowcaseQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getComparePortfolioGalleryUrl = () => {
+
+
+
+
+  return `/api/public/portfolio-gallery/compare`
+}
+
+/**
+ * @summary Compare 2-4 published portfolios side by side
+ */
+export const comparePortfolioGallery = async (portfolioGalleryCompareInput: PortfolioGalleryCompareInput, options?: RequestInit): Promise<PortfolioGalleryCompareResult> => {
+
+  return customFetch<PortfolioGalleryCompareResult>(getComparePortfolioGalleryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(portfolioGalleryCompareInput)
+  }
+);}
+
+
+
+
+export const getComparePortfolioGalleryMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof comparePortfolioGallery>>, TError,{data: BodyType<PortfolioGalleryCompareInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof comparePortfolioGallery>>, TError,{data: BodyType<PortfolioGalleryCompareInput>}, TContext> => {
+
+const mutationKey = ['comparePortfolioGallery'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof comparePortfolioGallery>>, {data: BodyType<PortfolioGalleryCompareInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  comparePortfolioGallery(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ComparePortfolioGalleryMutationResult = NonNullable<Awaited<ReturnType<typeof comparePortfolioGallery>>>
+    export type ComparePortfolioGalleryMutationBody = BodyType<PortfolioGalleryCompareInput>
+    export type ComparePortfolioGalleryMutationError = ErrorType<void>
+
+    /**
+ * @summary Compare 2-4 published portfolios side by side
+ */
+export const useComparePortfolioGallery = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof comparePortfolioGallery>>, TError,{data: BodyType<PortfolioGalleryCompareInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof comparePortfolioGallery>>,
+        TError,
+        {data: BodyType<PortfolioGalleryCompareInput>},
+        TContext
+      > => {
+      return useMutation(getComparePortfolioGalleryMutationOptions(options));
+    }
+
+export const getGetWorkspacePortfolioGalleryRecommendedUrl = (token: string,
+    params?: GetWorkspacePortfolioGalleryRecommendedParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/customer/workspace/${token}/portfolio-gallery/recommended?${stringifiedParams}` : `/api/public/customer/workspace/${token}/portfolio-gallery/recommended`
+}
+
+/**
+ * @summary Brand-DNA-aware portfolio recommendations for a customer workspace
+ */
+export const getWorkspacePortfolioGalleryRecommended = async (token: string,
+    params?: GetWorkspacePortfolioGalleryRecommendedParams, options?: RequestInit): Promise<PortfolioGalleryRecommendations> => {
+
+  return customFetch<PortfolioGalleryRecommendations>(getGetWorkspacePortfolioGalleryRecommendedUrl(token,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorkspacePortfolioGalleryRecommendedQueryKey = (token: string,
+    params?: GetWorkspacePortfolioGalleryRecommendedParams,) => {
+    return [
+    `/api/public/customer/workspace/${token}/portfolio-gallery/recommended`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetWorkspacePortfolioGalleryRecommendedQueryOptions = <TData = Awaited<ReturnType<typeof getWorkspacePortfolioGalleryRecommended>>, TError = ErrorType<void>>(token: string,
+    params?: GetWorkspacePortfolioGalleryRecommendedParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspacePortfolioGalleryRecommended>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkspacePortfolioGalleryRecommendedQueryKey(token,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkspacePortfolioGalleryRecommended>>> = ({ signal }) => getWorkspacePortfolioGalleryRecommended(token,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorkspacePortfolioGalleryRecommended>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorkspacePortfolioGalleryRecommendedQueryResult = NonNullable<Awaited<ReturnType<typeof getWorkspacePortfolioGalleryRecommended>>>
+export type GetWorkspacePortfolioGalleryRecommendedQueryError = ErrorType<void>
+
+
+/**
+ * @summary Brand-DNA-aware portfolio recommendations for a customer workspace
+ */
+
+export function useGetWorkspacePortfolioGalleryRecommended<TData = Awaited<ReturnType<typeof getWorkspacePortfolioGalleryRecommended>>, TError = ErrorType<void>>(
+ token: string,
+    params?: GetWorkspacePortfolioGalleryRecommendedParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspacePortfolioGalleryRecommended>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorkspacePortfolioGalleryRecommendedQueryOptions(token,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListWorkspacePortfolioGalleryFavoritesUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/portfolio-gallery/favorites`
+}
+
+/**
+ * @summary List a customer's favorited portfolios
+ */
+export const listWorkspacePortfolioGalleryFavorites = async (token: string, options?: RequestInit): Promise<PortfolioGalleryFavoritesList> => {
+
+  return customFetch<PortfolioGalleryFavoritesList>(getListWorkspacePortfolioGalleryFavoritesUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWorkspacePortfolioGalleryFavoritesQueryKey = (token: string,) => {
+    return [
+    `/api/public/customer/workspace/${token}/portfolio-gallery/favorites`
+    ] as const;
+    }
+
+
+export const getListWorkspacePortfolioGalleryFavoritesQueryOptions = <TData = Awaited<ReturnType<typeof listWorkspacePortfolioGalleryFavorites>>, TError = ErrorType<void>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWorkspacePortfolioGalleryFavorites>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWorkspacePortfolioGalleryFavoritesQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWorkspacePortfolioGalleryFavorites>>> = ({ signal }) => listWorkspacePortfolioGalleryFavorites(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWorkspacePortfolioGalleryFavorites>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWorkspacePortfolioGalleryFavoritesQueryResult = NonNullable<Awaited<ReturnType<typeof listWorkspacePortfolioGalleryFavorites>>>
+export type ListWorkspacePortfolioGalleryFavoritesQueryError = ErrorType<void>
+
+
+/**
+ * @summary List a customer's favorited portfolios
+ */
+
+export function useListWorkspacePortfolioGalleryFavorites<TData = Awaited<ReturnType<typeof listWorkspacePortfolioGalleryFavorites>>, TError = ErrorType<void>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWorkspacePortfolioGalleryFavorites>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWorkspacePortfolioGalleryFavoritesQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAddWorkspacePortfolioGalleryFavoriteUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/portfolio-gallery/favorites`
+}
+
+/**
+ * @summary Favorite a portfolio
+ */
+export const addWorkspacePortfolioGalleryFavorite = async (token: string,
+    portfolioGalleryFavoriteInput: PortfolioGalleryFavoriteInput, options?: RequestInit): Promise<AddWorkspacePortfolioGalleryFavorite200> => {
+
+  return customFetch<AddWorkspacePortfolioGalleryFavorite200>(getAddWorkspacePortfolioGalleryFavoriteUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(portfolioGalleryFavoriteInput)
+  }
+);}
+
+
+
+
+export const getAddWorkspacePortfolioGalleryFavoriteMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addWorkspacePortfolioGalleryFavorite>>, TError,{token: string;data: BodyType<PortfolioGalleryFavoriteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addWorkspacePortfolioGalleryFavorite>>, TError,{token: string;data: BodyType<PortfolioGalleryFavoriteInput>}, TContext> => {
+
+const mutationKey = ['addWorkspacePortfolioGalleryFavorite'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addWorkspacePortfolioGalleryFavorite>>, {token: string;data: BodyType<PortfolioGalleryFavoriteInput>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  addWorkspacePortfolioGalleryFavorite(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddWorkspacePortfolioGalleryFavoriteMutationResult = NonNullable<Awaited<ReturnType<typeof addWorkspacePortfolioGalleryFavorite>>>
+    export type AddWorkspacePortfolioGalleryFavoriteMutationBody = BodyType<PortfolioGalleryFavoriteInput>
+    export type AddWorkspacePortfolioGalleryFavoriteMutationError = ErrorType<void>
+
+    /**
+ * @summary Favorite a portfolio
+ */
+export const useAddWorkspacePortfolioGalleryFavorite = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addWorkspacePortfolioGalleryFavorite>>, TError,{token: string;data: BodyType<PortfolioGalleryFavoriteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addWorkspacePortfolioGalleryFavorite>>,
+        TError,
+        {token: string;data: BodyType<PortfolioGalleryFavoriteInput>},
+        TContext
+      > => {
+      return useMutation(getAddWorkspacePortfolioGalleryFavoriteMutationOptions(options));
+    }
+
+export const getRemoveWorkspacePortfolioGalleryFavoriteUrl = (token: string,
+    portfolioId: number,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/portfolio-gallery/favorites/${portfolioId}`
+}
+
+/**
+ * @summary Unfavorite a portfolio
+ */
+export const removeWorkspacePortfolioGalleryFavorite = async (token: string,
+    portfolioId: number, options?: RequestInit): Promise<RemoveWorkspacePortfolioGalleryFavorite200> => {
+
+  return customFetch<RemoveWorkspacePortfolioGalleryFavorite200>(getRemoveWorkspacePortfolioGalleryFavoriteUrl(token,portfolioId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getRemoveWorkspacePortfolioGalleryFavoriteMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeWorkspacePortfolioGalleryFavorite>>, TError,{token: string;portfolioId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeWorkspacePortfolioGalleryFavorite>>, TError,{token: string;portfolioId: number}, TContext> => {
+
+const mutationKey = ['removeWorkspacePortfolioGalleryFavorite'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeWorkspacePortfolioGalleryFavorite>>, {token: string;portfolioId: number}> = (props) => {
+          const {token,portfolioId} = props ?? {};
+
+          return  removeWorkspacePortfolioGalleryFavorite(token,portfolioId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveWorkspacePortfolioGalleryFavoriteMutationResult = NonNullable<Awaited<ReturnType<typeof removeWorkspacePortfolioGalleryFavorite>>>
+
+    export type RemoveWorkspacePortfolioGalleryFavoriteMutationError = ErrorType<void>
+
+    /**
+ * @summary Unfavorite a portfolio
+ */
+export const useRemoveWorkspacePortfolioGalleryFavorite = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeWorkspacePortfolioGalleryFavorite>>, TError,{token: string;portfolioId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeWorkspacePortfolioGalleryFavorite>>,
+        TError,
+        {token: string;portfolioId: number},
+        TContext
+      > => {
+      return useMutation(getRemoveWorkspacePortfolioGalleryFavoriteMutationOptions(options));
+    }
+
+export const getGetPortfolioGalleryAnalyticsUrl = () => {
+
+
+
+
+  return `/api/ai/portfolio-gallery/analytics`
+}
+
+/**
+ * @summary Admin analytics for the Portfolio Gallery module (search, favorites, compare usage)
+ */
+export const getPortfolioGalleryAnalytics = async ( options?: RequestInit): Promise<PortfolioGalleryAnalytics> => {
+
+  return customFetch<PortfolioGalleryAnalytics>(getGetPortfolioGalleryAnalyticsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPortfolioGalleryAnalyticsQueryKey = () => {
+    return [
+    `/api/ai/portfolio-gallery/analytics`
+    ] as const;
+    }
+
+
+export const getGetPortfolioGalleryAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getPortfolioGalleryAnalytics>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPortfolioGalleryAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPortfolioGalleryAnalyticsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPortfolioGalleryAnalytics>>> = ({ signal }) => getPortfolioGalleryAnalytics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPortfolioGalleryAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPortfolioGalleryAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getPortfolioGalleryAnalytics>>>
+export type GetPortfolioGalleryAnalyticsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin analytics for the Portfolio Gallery module (search, favorites, compare usage)
+ */
+
+export function useGetPortfolioGalleryAnalytics<TData = Awaited<ReturnType<typeof getPortfolioGalleryAnalytics>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPortfolioGalleryAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPortfolioGalleryAnalyticsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -5043,6 +5043,95 @@ export interface WorkspaceTemplatesDashboard {
   recommended: ScoredTemplate[];
 }
 
+export interface PortfolioGalleryCard {
+  id: number;
+  serviceId: number;
+  slug?: string | null;
+  title: string;
+  shortDescription?: string | null;
+  industry: string;
+  style: string;
+  coverImage?: string | null;
+  rating?: string | null;
+  views?: number;
+  featured?: boolean;
+  packageLabel?: string | null;
+  deliveryTime?: string | null;
+}
+
+export type PortfolioGallerySearchResultPagination = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+export interface PortfolioGallerySearchResult {
+  items: PortfolioGalleryCard[];
+  pagination: PortfolioGallerySearchResultPagination;
+}
+
+export interface PortfolioGalleryIndustryShowcaseItem {
+  industry: string;
+  totalPortfolios: number;
+  topPortfolio?: PortfolioGalleryCard | null;
+}
+
+export interface PortfolioGalleryIndustryShowcase {
+  items: PortfolioGalleryIndustryShowcaseItem[];
+}
+
+export interface PortfolioGalleryShowcase {
+  featured: PortfolioGalleryCard[];
+  industries: PortfolioGalleryIndustryShowcaseItem[];
+}
+
+export interface PortfolioGalleryCompareInput {
+  /**
+     * @minItems 2
+     * @maxItems 4
+     */
+  ids: number[];
+}
+
+export type PortfolioGalleryCompareItem = PortfolioGalleryCard & ({
+  businessSize?: string | null;
+  deliveryDays?: number | null;
+  deliverables?: string[];
+  tools?: string[];
+  completedProjects?: number;
+});
+
+export interface PortfolioGalleryCompareResult {
+  items: PortfolioGalleryCompareItem[];
+}
+
+export interface PortfolioGalleryRecommendations {
+  basedOnBrandDna: boolean;
+  items: PortfolioGalleryCard[];
+}
+
+export interface PortfolioGalleryFavoritesList {
+  items: PortfolioGalleryCard[];
+}
+
+export interface PortfolioGalleryFavoriteInput {
+  portfolioId: number;
+}
+
+export interface PortfolioGallerySearchTerm {
+  term: string;
+  count: number;
+}
+
+export interface PortfolioGalleryAnalytics {
+  totalSearches: number;
+  totalFavoriteEvents: number;
+  totalCompareEvents: number;
+  activeFavorites: number;
+  topSearchTerms: PortfolioGallerySearchTerm[];
+}
+
 export type AbTestTestType = typeof AbTestTestType[keyof typeof AbTestTestType];
 
 
@@ -5370,6 +5459,26 @@ export const ContinueLivePreviewBodyConcept = {
 
 export type ContinueLivePreviewBody = {
   concept: ContinueLivePreviewBodyConcept;
+};
+
+export type SearchPortfolioGalleryParams = {
+q?: string;
+industry?: string;
+style?: string;
+page?: number;
+pageSize?: number;
+};
+
+export type GetWorkspacePortfolioGalleryRecommendedParams = {
+limit?: number;
+};
+
+export type AddWorkspacePortfolioGalleryFavorite200 = {
+  ok: boolean;
+};
+
+export type RemoveWorkspacePortfolioGalleryFavorite200 = {
+  ok: boolean;
 };
 
 export type StartBrief200 = {
