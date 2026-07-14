@@ -28,7 +28,6 @@
  */
 
 import { Router } from "express";
-import { requireAdminApiKey } from "../middleware/adminAuth.js";
 import {
   listTemplates,
   getTemplate,
@@ -52,7 +51,7 @@ const router = Router();
 
 // ── Admin Routes ──────────────────────────────────────────────────────────────
 
-router.get("/api/ai/templates/stats", requireAdminApiKey, async (req, res) => {
+router.get("/api/ai/templates/stats", async (req, res) => {
   try {
     const stats = await getTemplateAnalyticsStats();
     res.json(stats);
@@ -61,7 +60,7 @@ router.get("/api/ai/templates/stats", requireAdminApiKey, async (req, res) => {
   }
 });
 
-router.get("/api/ai/templates/evolution", requireAdminApiKey, async (req, res) => {
+router.get("/api/ai/templates/evolution", async (req, res) => {
   try {
     const recs = await getTemplateEvolutionRecommendations();
     res.json(recs);
@@ -70,7 +69,7 @@ router.get("/api/ai/templates/evolution", requireAdminApiKey, async (req, res) =
   }
 });
 
-router.get("/api/ai/templates/industry-showcase", requireAdminApiKey, async (req, res) => {
+router.get("/api/ai/templates/industry-showcase", async (req, res) => {
   try {
     const showcase = await getIndustryShowcase();
     res.json({ items: showcase });
@@ -79,7 +78,7 @@ router.get("/api/ai/templates/industry-showcase", requireAdminApiKey, async (req
   }
 });
 
-router.get("/api/ai/templates", requireAdminApiKey, async (req, res) => {
+router.get("/api/ai/templates", async (req, res) => {
   try {
     const {
       category, industry, style, status, isPremium, featured,
@@ -103,7 +102,7 @@ router.get("/api/ai/templates", requireAdminApiKey, async (req, res) => {
   }
 });
 
-router.get("/api/ai/templates/:id", requireAdminApiKey, async (req, res) => {
+router.get("/api/ai/templates/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
@@ -115,7 +114,7 @@ router.get("/api/ai/templates/:id", requireAdminApiKey, async (req, res) => {
   }
 });
 
-router.post("/api/ai/templates", requireAdminApiKey, async (req, res) => {
+router.post("/api/ai/templates", async (req, res) => {
   try {
     const body = req.body as Record<string, unknown>;
     if (!body.templateCode || !body.name || !body.category || !body.style) {
@@ -128,7 +127,7 @@ router.post("/api/ai/templates", requireAdminApiKey, async (req, res) => {
   }
 });
 
-router.patch("/api/ai/templates/:id", requireAdminApiKey, async (req, res) => {
+router.patch("/api/ai/templates/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
@@ -140,7 +139,7 @@ router.patch("/api/ai/templates/:id", requireAdminApiKey, async (req, res) => {
   }
 });
 
-router.post("/api/ai/templates/:id/publish", requireAdminApiKey, async (req, res) => {
+router.post("/api/ai/templates/:id/publish", async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
@@ -151,7 +150,7 @@ router.post("/api/ai/templates/:id/publish", requireAdminApiKey, async (req, res
   }
 });
 
-router.post("/api/ai/templates/:id/archive", requireAdminApiKey, async (req, res) => {
+router.post("/api/ai/templates/:id/archive", async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
@@ -162,7 +161,7 @@ router.post("/api/ai/templates/:id/archive", requireAdminApiKey, async (req, res
   }
 });
 
-router.post("/api/ai/templates/:id/event", requireAdminApiKey, async (req, res) => {
+router.post("/api/ai/templates/:id/event", async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ error: "invalid id" });
