@@ -36,7 +36,7 @@ export class RepositoryTenantMismatchError extends Error {
   }
 }
 
-/** Reserved for WP-03+ soft-delete work. Not thrown by any WP-02 repository yet. */
+/** Thrown when a soft-delete is attempted on a row that is already soft-deleted. */
 export class RepositoryAlreadyDeletedError extends Error {
   constructor(
     public readonly resourceType: string,
