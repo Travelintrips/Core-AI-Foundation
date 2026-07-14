@@ -53,6 +53,7 @@ After a GitHub re-import, artifacts and workflows were re-registered automatical
 Note: artifact/workflow registration lives outside git, so it does not survive re-imports even though the code and secrets are unaffected. If a future re-import shows "no workflows configured" again, just ask to re-register — it does not need a fresh setup from scratch.
 Re-verified again the same day after another re-import wiped artifact/workflow registration (registration doesn't survive git-based re-imports even though `artifact.toml` files stay on disk). Ran post-merge setup to restore all 4 artifacts/workflows; all secrets were already present, all services came back up clean with no code changes needed.
 A second re-import wiped `node_modules` and artifact/workflow registration again. Fix: `pnpm install`, then `pnpm run build:generated` (orval codegen + libs typecheck) and `pnpm run build:api` (esbuild bundle) before restarting workflows — otherwise `vite: not found` / `Cannot find package 'esbuild'` errors on first boot. All 4 services re-verified running afterward.
+A third re-import (2026-07-14) again wiped artifact/workflow registration only; `runPostMergeSetup()` re-registered all 4 artifacts/workflows in one pass with no code changes. All secrets (including `ADMIN_API_KEY`/`VITE_ADMIN_API_KEY`) were already present. Verified: customer-portal renders landing page, ai-platform shows the expected staff login gate, api-server returns 401 (expected without an admin key) on an authenticated route.
 
 ## Key Technical Notes
 ## Database
