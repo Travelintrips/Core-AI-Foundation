@@ -81,10 +81,6 @@ async function resolveToken(token: string): Promise<ResolvedReview> {
   return { ok: true, review };
 }
 
-function guard(res: ResolvedReview, r: Parameters<typeof res.ok extends true ? never : never>[0]): review is never {
-  return !res.ok;
-}
-
 /** Serialize a CpPageComment for API responses. */
 function serializeComment(c: CpPageComment) {
   return {
@@ -867,10 +863,7 @@ router.get("/cp-review/admin/projects/:projectId/pending-revisions", async (req,
       eq(cpPageCommentsTable.projectId, projectId),
       eq(cpPageCommentsTable.status, "open"),
     ))
-    .orderBy(
-      desc(cpPageCommentsTable.priority === "urgent" ? cpPageCommentsTable.id : cpPageCommentsTable.createdAt),
-      cpPageCommentsTable.createdAt,
-    );
+    .orderBy(cpPageCommentsTable.createdAt);
 
   const bySection: Record<string, ReturnType<typeof serializeComment>[]> = {};
   const byPage:    Record<number, ReturnType<typeof serializeComment>[]> = {};

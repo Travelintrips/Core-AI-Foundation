@@ -30,6 +30,7 @@ import { publishSafe } from "../services/aiEventBusService.js";
 import { logAudit } from "../services/aiAuditService.js";
 import { createGateForQuotation } from "../services/commercialGateService.js";
 import { checkAndMaybeConvert } from "../services/serviceRequestConversionService.js";
+import { runCreativeBriefWorkflow } from "../services/creativeWorkflowRunner.js";
 
 const router = Router();
 
@@ -317,18 +318,35 @@ router.post("/public/customer/quotation/:token/approve", async (req, res): Promi
     payload: { projectId: review.projectId, total: saved.total, currency: saved.currency },
   });
 
-  // Commercial gate: ensure one exists for this quotation (idempotent).
-  // If a gate is already cleared, checkAndMaybeConvert will trigger conversion.
-  await createGateForQuotation({ quotationId: saved.id }).catch((err) => {
-    console.warn("[quotation] createGateForQuotation non-fatal error:", err);
-  });
+  // Look up the associated project to check whether this is a service-catalog request
+  // (has serviceRequestId) or a legacy Creative AI project (serviceRequestId is null).
+  const [project] = await db
+    .select({ id: creativeProjectsTable.id, serviceRequestId: creativeProjectsTable.serviceRequestId, status: creativeProjectsTable.status })
+    .from(creativeProjectsTable)
+    .where(eq(creativeProjectsTable.projectId, review.projectId))
+    .limit(1);
 
-  // Trigger conversion if both conditions are already met (gate was pre-verified/waived).
-  checkAndMaybeConvert(saved.id).catch((err) => {
-    console.warn("[quotation] checkAndMaybeConvert non-fatal error:", err);
-  });
+  const serviceRequestId = project?.serviceRequestId ?? null;
 
-  res.json({ success: true, status: "approved", message: "Quotation approved — awaiting commercial gate clearance" });
+  if (serviceRequestId != null) {
+    // ── New service-catalog flow: commercial gate gates the conversion ──────
+    await createGateForQuotation({ quotationId: saved.id, serviceRequestId }).catch((err) => {
+      console.warn("[quotation] createGateForQuotation non-fatal error:", err);
+    });
+    // Trigger conversion if gate is already cleared (pre-verified/waived by admin).
+    checkAndMaybeConvert(saved.id).catch((err) => {
+      console.warn("[quotation] checkAndMaybeConvert non-fatal error:", err);
+    });
+    res.json({ success: true, status: "approved", message: "Quotation approved — awaiting commercial gate clearance" });
+  } else {
+    // ── Legacy Creative AI flow: start AI workflow directly (no gate) ───────
+    if (project && project.status === "pending") {
+      runCreativeBriefWorkflow(project.id).catch((err) => {
+        console.error("[quotation] Workflow failed:", err);
+      });
+    }
+    res.json({ success: true, status: "approved", message: "Quotation approved — your project is now in production" });
+  }
 });
 
 // ── Public: reject quotation ──────────────────────────────────────────────────

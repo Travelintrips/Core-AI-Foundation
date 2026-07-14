@@ -1,0 +1,349 @@
+Lanjutkan V4.2C — Customer Review Experience dari checkpoint terakhir.
+
+JANGAN ulang eksplorasi codebase.
+JANGAN ulang DDL migration yang sudah berhasil.
+JANGAN buat review system kedua.
+
+STATUS TERAKHIR:
+
+- Existing review/workspace/approval systems sudah diaudit
+- pdf-lib sudah mulai dipasang untuk watermarking
+- DB schema baru sudah dibuat
+- DDL migration sudah berhasil
+- watermark service sudah mulai dibuat
+- version service sudah mulai dibuat
+- main cp-review route sudah mulai dibuat
+- hooks frontend sudah mulai dibuat
+- App.tsx routing sudah mulai diperbarui
+- OpenAPI additions sudah mulai ditulis
+- backend sempat build clean pada tahap awal
+- quota habis saat memeriksa export QcService, build lib/db, dan rebuild api-server
+
+==================================================
+TUGAS 1 — SELESAIKAN BUILD BREAKERS
+==================================================
+
+Mulai dari error terakhir.
+
+Periksa:
+
+- export/import QcService
+- lib/db dist
+- generated API types
+- route registration
+- duplicate schema/export
+- stale dist
+- hooks import
+- customFetch usage
+- App.tsx route registration
+- OpenAPI operationId collision
+
+Perbaiki hanya error nyata yang terkait V4.2C.
+
+Jangan menyentuh file tidak terkait.
+
+==================================================
+TUGAS 2 — FINALISASI BACKEND REVIEW
+==================================================
+
+Pastikan endpoint berikut benar-benar aktif:
+
+- get review document
+- get PDF preview
+- get watermark preview
+- list versions
+- get version detail
+- compare versions
+- list comments
+- create page comment
+- create section comment
+- edit own unresolved comment
+- resolve comment
+- reopen comment
+- reply to comment
+- approve version
+- request revision
+- reject version
+- get review timeline
+- get review stats
+
+Gunakan route aktual yang sudah dibuat.
+
+Pastikan semua route:
+
+- registered
+- validated
+- state-machine guarded
+- customer ownership checked
+- audit logged
+- token-safe
+- no internal metadata leak
+
+==================================================
+TUGAS 3 — WATERMARK SERVICE
+==================================================
+
+Pastikan watermark PDF benar-benar server-side menggunakan pdf-lib.
+
+Watermark preview:
+
+- PREVIEW
+- UNPAID
+- CONFIDENTIAL
+
+Aturan:
+
+- final PDF tidak diubah
+- preview PDF merupakan derived copy
+- watermark tidak hanya CSS overlay
+- preview signed URL
+- file lock tetap aktif
+- watermark preview tidak membuka original file
+
+Tambahkan test:
+
+- preview PDF memiliki watermark
+- final PDF tidak memiliki watermark
+- locked customer hanya dapat preview
+- unlocked customer dapat final signed URL
+
+==================================================
+TUGAS 4 — VERSION HISTORY
+==================================================
+
+Pastikan setiap revision membuat version baru.
+
+Field minimum:
+
+- versionNumber
+- parentVersionId
+- createdAt
+- createdBy
+- revisionReason
+- changedSections
+- commentsSnapshot
+- qcScore
+- status
+- approvedAt
+
+Compare mode minimum:
+
+- section added
+- section removed
+- section changed
+
+Tidak perlu word-level diff.
+
+==================================================
+TUGAS 5 — PAGE & SECTION COMMENTS
+==================================================
+
+Pastikan comment model mendukung:
+
+- pageNumber nullable
+- sectionKey nullable
+- x/y position optional
+- thread parent
+- author
+- status
+- resolvedAt
+- resolvedBy
+- editedAt
+
+Customer dapat:
+
+- create
+- edit own unresolved
+- reply
+- resolve
+- reopen
+
+Admin dapat:
+
+- reply
+- resolve
+- filter
+- regenerate section from comment context
+
+==================================================
+TUGAS 6 — REVIEW PAGE FRONTEND
+==================================================
+
+Finalisasi halaman review Company Profile.
+
+Fitur:
+
+- inline PDF viewer
+- thumbnail sidebar
+- page navigation
+- zoom
+- fit width
+- fullscreen
+- mobile responsive
+- comments drawer
+- page comment badge
+- section comment list
+- version selector
+- compare versions
+- approve
+- request revision
+- reject
+- timeline
+- review stats
+- payment/file-lock status
+- watermark badge
+
+Pastikan frontend menggunakan generated hooks jika codegen sudah tersedia.
+
+Jika custom hook masih dipertahankan:
+- jangan duplikasi endpoint
+- gunakan generated types
+- dokumentasikan alasannya
+
+==================================================
+TUGAS 7 — APPROVAL STATE MACHINE
+==================================================
+
+State minimum:
+
+- draft
+- qc
+- sent_for_review
+- revision_requested
+- approved
+- rejected
+- finalizing
+- completed
+
+Guards:
+
+- terminal state tidak boleh overwrite
+- approve hanya current version
+- revision request membuat new revision cycle
+- reject membutuhkan reason
+- approve membutuhkan confirmation checkbox
+- approved version menjadi immutable
+
+==================================================
+TUGAS 8 — OPENAPI & CODEGEN
+==================================================
+
+Selesaikan OpenAPI untuk seluruh cp-review route.
+
+Pastikan:
+
+- operationId unik
+- request schemas
+- response schemas
+- error schemas
+- auth/security
+- path/query params
+
+Lalu:
+
+- jalankan codegen resmi
+- jangan edit generated file manual
+- cek duplicate exports
+- rebuild api-zod
+- rebuild api-client-react
+- rebuild lib/db jika perlu
+
+==================================================
+TUGAS 9 — TEST WAJIB
+==================================================
+
+Backend tests:
+
+1. valid review token accepted
+2. invalid token rejected
+3. cross-project access denied
+4. page comment created
+5. section comment created
+6. reply created
+7. edit own unresolved comment works
+8. edit resolved comment blocked
+9. resolve/reopen works
+10. approve current version works
+11. approve stale version blocked
+12. revision request creates version
+13. reject requires reason
+14. compare versions returns section diff
+15. watermark preview generated
+16. final file remains unwatermarked
+17. locked customer cannot get final file
+18. internal metadata absent
+
+Frontend tests:
+
+19. PDF viewer renders
+20. page navigation works
+21. comments drawer works
+22. version selector works
+23. compare mode works
+24. approve confirmation works
+25. revision form works
+26. reject form works
+27. mobile layout works
+28. payment lock state shown
+
+Integration:
+
+29. OpenAPI valid
+30. codegen deterministic
+31. lib/db build clean
+32. api-server build clean
+33. customer-portal build clean
+34. pnpm run verify clean
+
+==================================================
+TUGAS 10 — SCREENSHOT VERIFICATION
+==================================================
+
+Ambil screenshot untuk:
+
+- review page desktop
+- review page mobile
+- comments drawer
+- version compare
+- watermark preview
+- approval modal
+- revision form
+
+Pastikan tidak ada blank state, broken PDF, atau overflow.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Berikan laporan:
+
+- files changed
+- DB tables/columns
+- active endpoints
+- watermark implementation
+- version model
+- comments model
+- approval state machine
+- frontend features
+- tests
+- screenshots
+- OpenAPI operation count
+- pnpm run verify status
+- known limitations
+
+JANGAN lanjut ke V4.2D sebelum:
+
+- backend build clean
+- frontend build clean
+- OpenAPI clean
+- codegen clean
+- required tests pass
+- review page verified visually
+
+Target akhir:
+
+Customer dapat mereview Company Profile secara profesional,
+memberi komentar per halaman dan section,
+melihat version history dan section-level diff,
+menerima watermark preview sebelum pelunasan,
+dan approve/revision/reject dengan state machine yang aman.

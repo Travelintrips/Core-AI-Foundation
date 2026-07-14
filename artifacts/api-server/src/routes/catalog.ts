@@ -1383,7 +1383,7 @@ router.get("/public/catalog/requests/:requestId/deliverable-manifest", async (re
   const [project] = await db
     .select({ projectId: creativeProjectsTable.projectId, status: creativeProjectsTable.status })
     .from(creativeProjectsTable)
-    .where(eq(creativeProjectsTable.id, request.createdProjectId))
+    .where(eq(creativeProjectsTable.projectId, request.createdProjectId ?? ""))
     .limit(1);
 
   if (!project) {

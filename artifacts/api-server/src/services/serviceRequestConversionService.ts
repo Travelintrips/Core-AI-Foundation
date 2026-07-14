@@ -14,7 +14,7 @@
  * second triggers the actual conversion.
  */
 
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
   db,
@@ -218,19 +218,31 @@ export async function convertServiceRequestToProject(
     console.warn(`[conversion] generateScheduleForProject non-fatal error for project ${project.id}:`, err);
   });
 
-  // All preconditions met — perform the conversion in a transaction
+  // All preconditions met — perform the conversion with an atomic CAS update.
+  // The WHERE clause guards against concurrent calls both succeeding (race safety).
 
-  await db.transaction(async (tx) => {
-    // Update service request: mark as converted, store the project id
-    await tx
-      .update(aiServiceRequestsTable)
-      .set({
-        status: "converted_to_project",
-        createdProjectId: projectId,
-        updatedAt: new Date(),
-      })
-      .where(eq(aiServiceRequestsTable.id, serviceRequestId));
-  });
+  const [converted] = await db
+    .update(aiServiceRequestsTable)
+    .set({
+      status: "converted_to_project",
+      createdProjectId: projectId,
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(aiServiceRequestsTable.id, serviceRequestId),
+      isNull(aiServiceRequestsTable.createdProjectId), // only convert once
+    ))
+    .returning({ id: aiServiceRequestsTable.id });
+
+  if (!converted) {
+    // Another concurrent call already completed conversion — return idempotent result.
+    const [current] = await db
+      .select({ createdProjectId: aiServiceRequestsTable.createdProjectId })
+      .from(aiServiceRequestsTable)
+      .where(eq(aiServiceRequestsTable.id, serviceRequestId))
+      .limit(1);
+    return { alreadyConverted: true, createdProjectId: current?.createdProjectId ?? null };
+  }
 
   // Audit events — outside the transaction so audit failures don't roll back
   await logAudit(
