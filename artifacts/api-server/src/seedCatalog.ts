@@ -193,7 +193,7 @@ function svc(
     serviceCode,
     serviceName,
     shortDescription,
-    fullDescription: `${shortDescription} Delivered by our AI department working through a structured workflow, with ${humanReview ? "human review before final delivery" : "AI-only execution for speed"}.`,
+    fullDescription: `${shortDescription} Dikerjakan oleh tim AI kami melalui alur kerja terstruktur, dengan ${humanReview ? "review manusia sebelum pengiriman akhir" : "eksekusi penuh AI untuk kecepatan"}.`,
     serviceType: pricingModel === "one_time" ? "project" : "ongoing",
     pricingModel,
     startingPrice,
@@ -203,10 +203,10 @@ function svc(
     subscriptionSupported: pricingModel !== "one_time",
     enterpriseSupported: true,
     department: serviceName,
-    workflowSummary: `Request → AI Orchestrator routes to the relevant department → workflow executes${humanReview ? " → human review" : ""} → delivery.`,
+    workflowSummary: `Permintaan → AI Orchestrator mengarahkan ke departemen terkait → alur kerja dijalankan${humanReview ? " → review manusia" : ""} → pengiriman.`,
     aiEmployeesInvolved,
     deliverables,
-    revisionPolicy: "2 rounds of revisions included; additional rounds billed at standard rate.",
+    revisionPolicy: "Termasuk 2 kali revisi; revisi tambahan dikenakan biaya sesuai tarif standar.",
     currency: "IDR",
   };
 }
@@ -400,7 +400,7 @@ export async function seedServiceCatalog() {
         packageName: "Standard",
         oneTimePrice: s.pricingModel === "one_time" ? String(oneTime) : undefined,
         monthlyPrice: s.pricingModel !== "one_time" ? String(oneTime) : undefined,
-        features: [s.shortDescription, "Standard turnaround", "1 revision round"],
+        features: [s.shortDescription, "Pengerjaan standar", "1 kali revisi"],
         limitsJson: imageBatchLimits,
       });
       await upsertPackage(service.id, "pro", {
@@ -408,12 +408,12 @@ export async function seedServiceCatalog() {
         oneTimePrice: s.pricingModel === "one_time" ? String(Math.round(oneTime * 1.8)) : undefined,
         monthlyPrice: s.pricingModel !== "one_time" ? String(Math.round(oneTime * 1.8)) : undefined,
         yearlyPrice: s.subscriptionSupported ? String(Math.round(oneTime * 1.8 * 10)) : undefined,
-        features: [s.shortDescription, "Priority turnaround", "2 revision rounds", "Human review included"],
+        features: [s.shortDescription, "Pengerjaan prioritas", "2 kali revisi", "Termasuk review manusia"],
         limitsJson: imageBatchLimits,
       });
       await upsertPackage(service.id, "enterprise", {
         packageName: "Enterprise",
-        features: ["Custom scope", "Dedicated department capacity", "SLA-backed delivery", "Priority support"],
+        features: ["Cakupan kustom", "Kapasitas departemen khusus", "Pengiriman bergaransi SLA", "Dukungan prioritas"],
         limitsJson: imageBatchLimits,
       });
       packageCount += 3;
