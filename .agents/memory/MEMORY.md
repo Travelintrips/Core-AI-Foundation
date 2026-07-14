@@ -49,3 +49,4 @@
 - [phase4a-brief-assistant](phase4a-brief-assistant.md) — Rule-based brief assistant: file structure, key invariants, BriefRecommendationPanel prop names, wiring pattern in brief.tsx
 - [brief-intelligence-engine](brief-intelligence-engine.md) — Field-mapping rule (chip fields merge, advisory categories are empty-only bullets in specialRequirements) + apply-mode contract
 - [ai-service-catalog-orphan-rows](ai-service-catalog-orphan-rows.md) — seedCatalog.ts SERVICES array is not the full set of live ai_services rows; DB can hold orphan codes it never touches
+- [phase-v41-execution-summary](phase-v41-execution-summary.md) — additive-wrapper pattern for derived customer-safe views over CanonicalEvents; type-only import breaks circularity; eventId/sourceEventId regex collision gotcha

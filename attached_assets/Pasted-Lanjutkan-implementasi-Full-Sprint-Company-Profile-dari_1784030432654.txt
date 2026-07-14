@@ -1,0 +1,631 @@
+Lanjutkan implementasi Full Sprint Company Profile dari state terakhir.
+
+JANGAN mengulang eksplorasi besar dari awal.
+JANGAN membuat arsitektur baru.
+Reuse seluruh sistem existing:
+
+- Brief Assistant
+- Brief Intelligence
+- Creative AI workflow
+- Document Engine
+- Presentation Engine
+- Brand Kit
+- Client Review
+- Payment Gate
+- Signed URL
+- Queue
+- Event Bus
+- SSE Runtime
+- Customer Workspace
+
+STATUS TERAKHIR:
+
+Audit Company Profile sudah selesai.
+
+Temuan:
+
+P0:
+- 19+ brief fields masih missing
+- conditional questions per industri belum ada
+- production guard untuk brief incomplete belum ada
+
+P1:
+- document sections masih kurang
+- package page limits belum enforced
+- QC scoring threshold 80 belum ada
+- deliverable manifest belum lengkap
+
+P2:
+- PDF viewer review belum ada
+- komentar per halaman belum ada
+- Brand Kit completeness warning dan upload saat brief belum ada
+
+P3:
+- watermark preview belum ada
+- ZIP download belum ada
+- version comparison belum ada
+- checklist service detail belum ada
+- company-profile-specific SSE events belum lengkap
+
+Implementasi full sprint sudah dimulai.
+Quota habis saat menyiapkan 3 parallel workstreams.
+
+==========================================================
+WORKSTREAM 1 — BRIEF & PRODUCTION GUARD
+==========================================================
+
+Lengkapi schema, API, mapper, UI, dan persistence untuk field:
+
+- legal_name
+- business_type
+- year_established
+- company_history
+- vision
+- mission
+- company_values
+- value_proposition
+- geographic_coverage
+- facilities
+- production_capacity
+- certifications
+- legal_documents
+- organization_structure
+- key_people
+- clients_partners
+- project_experience
+- quality_assurance
+- sustainability
+- page_target
+- uploaded_logo
+- uploaded_photos
+- reference_documents
+
+Jangan menghapus 9 field existing.
+
+Tambahkan conditional question groups:
+
+LOGISTICS:
+- service coverage
+- fleet
+- warehouse
+- customs clearance
+- certifications
+- operating regions
+
+TRADING / EXPORT-IMPORT:
+- commodities
+- source countries
+- destination countries
+- monthly capacity
+- incoterms
+- quality documents
+
+MANUFACTURING:
+- factory
+- machinery
+- capacity
+- QA
+- certifications
+
+PROFESSIONAL SERVICES:
+- expertise
+- methodology
+- team
+- case experience
+- industries served
+
+MEDICAL / HEALTHCARE:
+- services
+- facility
+- licenses
+- doctors/team
+- operating hours
+- safety/quality
+
+Brief Intelligence harus menghasilkan:
+
+- identityScore
+- storyScore
+- serviceScore
+- legalScore
+- visualScore
+- contactScore
+- scopeScore
+- overallScore
+- missingRequiredFields
+- recommendedQuestions
+- readinessStatus
+
+readinessStatus:
+
+- incomplete
+- needs_information
+- ready_for_generation
+
+Tambahkan backend production guard.
+
+Full workflow tidak boleh dimulai jika:
+
+- required fields belum lengkap
+- overall score di bawah threshold
+- readinessStatus bukan ready_for_generation
+
+Return error terstruktur:
+
+- code: BRIEF_INCOMPLETE
+- missingFields
+- currentScore
+- requiredScore
+- nextRecommendedQuestions
+
+Admin override hanya boleh dengan:
+
+- explicit reason
+- authorized admin
+- audit log
+
+==========================================================
+WORKSTREAM 2 — DOCUMENT, PACKAGE & QC
+==========================================================
+
+Lengkapi conditional section hingga mendukung:
+
+1. Cover
+2. Company Overview
+3. Company History
+4. Vision and Mission
+5. Company Values
+6. Value Proposition
+7. Products and Services
+8. How We Work
+9. Facilities and Capabilities
+10. Market and Coverage
+11. Organization Structure
+12. Legalities and Certifications
+13. Projects or Experience
+14. Clients and Partners
+15. Quality Assurance
+16. Sustainability or CSR
+17. Contact and CTA
+18. Closing
+
+Aturan:
+
+- section hanya dirender jika data valid
+- jangan membuat placeholder palsu
+- jangan mengarang data
+- jangan membuat chart dari data yang tidak ada
+- cover tidak dihitung sebagai fabricated content
+- jika section penting kosong, tandai sebelum generation
+
+Enforce package limits di backend:
+
+STARTER:
+- max 8 pages
+- 1 language
+- PDF
+- 2 revisions
+
+PROFESSIONAL:
+- max 16 pages
+- PDF + PPTX
+- 3 revisions
+- human review
+
+BUSINESS:
+- max 24 pages
+- bilingual
+- PDF + PPTX
+- infographics dari data nyata
+- 3 revisions
+- priority processing
+
+ENTERPRISE:
+- custom limit dari package config
+- multi-language
+- dedicated reviewer
+- custom SLA
+
+Jika content melebihi batas:
+
+- jangan overflow
+- jangan diam-diam menambah halaman
+- lakukan prioritization
+- tampilkan excluded/deferred sections
+- tawarkan package upgrade
+
+Tambahkan Company Profile QC service atau extend QC existing.
+
+QC dimensions:
+
+- factual consistency
+- spelling
+- language consistency
+- structural completeness
+- brand consistency
+- logo placement
+- image labeling
+- overflow
+- clipped text
+- blank pages
+- page numbering
+- duplicate sections
+- fabricated claims
+- PDF validity
+- PPTX validity
+- package compliance
+
+Output:
+
+- overallScore
+- dimensionScores
+- errors
+- warnings
+- fixes
+- pass
+- reviewedAt
+
+Minimum:
+
+- score >= 80
+- no critical error
+
+Dokumen tidak boleh dikirim ke customer jika gagal QC.
+
+Tambahkan deliverable manifest:
+
+- document type
+- file name
+- language
+- version
+- page count
+- slide count
+- generated date
+- QC score
+- approval status
+- payment lock status
+- signed download availability
+
+==========================================================
+WORKSTREAM 3 — REVIEW, BRAND KIT & CUSTOMER UX
+==========================================================
+
+Tambahkan PDF viewer pada review page:
+
+- inline viewer
+- page navigation
+- zoom
+- fit width
+- mobile support
+- fallback preview
+- loading/error state
+
+Tambahkan komentar per halaman:
+
+- documentId
+- versionId
+- pageNumber
+- comment
+- author
+- status
+- createdAt
+- resolvedAt
+
+Support:
+
+- add comment
+- edit own unresolved comment
+- resolve
+- reopen
+- filter unresolved
+- show comment badge per page
+
+Revision request harus mengumpulkan:
+
+- global comment
+- page comments
+- requested changes
+- selected version
+
+Brand Kit completeness:
+
+- logo
+- primary color
+- secondary color
+- typography
+- brand voice
+- visual style
+
+Jika belum lengkap:
+
+- tampilkan warning di brief
+- izinkan upload logo/photos/reference docs
+- tampilkan missing items
+- jangan diam-diam memakai fake logo
+- generated placeholder wajib diberi label illustrative
+
+Service detail Company Profile tambahkan:
+
+“Siapkan data berikut”
+
+Checklist:
+
+- company identity
+- history
+- vision/mission
+- products/services
+- legalities
+- certifications
+- project list
+- contact details
+- logo
+- company photos
+- references
+
+Package comparison tampilkan:
+
+- page limit
+- language
+- output formats
+- revisions
+- human review
+- estimated delivery
+- source/editable availability
+- payment policy
+
+==========================================================
+WATERMARK & FILE LOCK
+==========================================================
+
+Implementasikan watermark preview.
+
+Sebelum pelunasan:
+
+- preview PDF watermark
+- preview image watermark
+- PPTX final locked
+- ZIP locked
+- original file locked
+- no permanent public URL
+
+Setelah payment verified/unlocked:
+
+- final PDF no watermark
+- PPTX available
+- signed download
+- audit log
+
+Watermark harus dihasilkan server-side atau dari controlled preview renderer.
+
+Jangan hanya overlay CSS yang dapat dihilangkan customer.
+
+==========================================================
+VERSION HISTORY
+==========================================================
+
+Version history wajib:
+
+- version number
+- parent version
+- createdAt
+- revision reason
+- changed sections
+- customer comments snapshot
+- status
+- QC score
+- approvedAt
+
+Untuk sprint ini:
+
+- daftar version
+- buka version
+- lihat notes
+- lihat changed sections
+
+Side-by-side visual comparison boleh ditunda jika belum selesai,
+tetapi data model dan API harus siap.
+
+==========================================================
+ZIP PACKAGE
+==========================================================
+
+Setelah project completed dan payment unlocked:
+
+Generate ZIP background berisi:
+
+- final PDF
+- PPTX
+- DOCX jika package mendukung
+- preview thumbnails
+- supporting approved images
+- deliverable-manifest.json atau PDF
+- version information
+
+Gunakan Queue existing.
+
+ZIP generation failure tidak boleh membatalkan project completion.
+
+Download via signed URL.
+
+==========================================================
+LIVE TRACKING
+==========================================================
+
+Tambahkan event nyata:
+
+- company_profile.brief.validating
+- company_profile.brief.incomplete
+- company_profile.outline.creating
+- company_profile.content.generating
+- company_profile.section.generated
+- company_profile.pdf.rendering
+- company_profile.pdf.completed
+- company_profile.pptx.rendering
+- company_profile.pptx.completed
+- company_profile.qc.started
+- company_profile.qc.failed
+- company_profile.qc.passed
+- company_profile.review.ready
+- company_profile.revision.started
+- company_profile.final.ready
+
+Jangan membuat fake delay.
+
+==========================================================
+ANALYTICS
+==========================================================
+
+Track melalui Event Bus existing:
+
+- service_viewed
+- package_selected
+- brief_started
+- brief_completed
+- brief_blocked_incomplete
+- payment_verified
+- generation_started
+- pdf_generated
+- pptx_generated
+- qc_failed
+- qc_passed
+- review_opened
+- page_comment_created
+- revision_requested
+- approved
+- zip_generated
+- downloaded
+
+Jangan membuat analytics engine baru.
+
+==========================================================
+ADMIN
+==========================================================
+
+Admin harus bisa:
+
+- inspect seluruh brief
+- mark field missing
+- add note
+- request customer update
+- override readiness dengan alasan
+- edit document outline
+- regenerate one section
+- replace image
+- rerender PDF
+- rerender PPTX
+- rerun QC
+- send to review
+- approve final
+- generate ZIP
+- unlock setelah payment
+
+Mark missing data harus:
+
+- menyimpan field key
+- reason
+- admin
+- timestamp
+- resolved status
+- customer notification
+- audit log
+
+==========================================================
+OPENAPI & CODEGEN
+==========================================================
+
+Semua route baru/berubah wajib:
+
+- masuk OpenAPI
+- operationId unik
+- generated Zod
+- generated hooks
+- generated types
+- documented errors
+- security requirements
+
+Jangan edit generated file manual.
+
+==========================================================
+TEST WAJIB
+==========================================================
+
+1. Semua field baru tersimpan dan dimuat kembali.
+2. Conditional questions berubah berdasarkan industri.
+3. Missing required field memblokir generation.
+4. Admin override membutuhkan reason.
+5. AI tidak mengarang data kosong.
+6. Semua conditional sections bekerja.
+7. Starter tidak melebihi 8 halaman.
+8. Professional tidak melebihi 16 halaman.
+9. Business tidak melebihi 24 halaman.
+10. QC < 80 tidak bisa dikirim ke review.
+11. PDF valid dan tidak overflow.
+12. PPTX valid/editable.
+13. Brand Kit logo dan warna terpakai.
+14. Brand Kit incomplete warning tampil.
+15. Upload logo/photo/reference saat brief bekerja.
+16. PDF viewer bekerja.
+17. Komentar per halaman tersimpan.
+18. Revision membuat version baru.
+19. Watermark preview benar-benar melekat pada file preview.
+20. Final download terkunci sebelum pelunasan.
+21. Final download signed setelah unlock.
+22. Deliverable manifest akurat.
+23. ZIP background berhasil.
+24. ZIP failure tidak menggagalkan completion.
+25. SSE events berasal dari event nyata.
+26. Customer DTO tidak membocorkan internal metadata.
+27. OpenAPI clean.
+28. Codegen deterministic.
+29. pnpm run verify clean.
+30. Production build clean.
+
+==========================================================
+URUTAN EKSEKUSI
+==========================================================
+
+Kerjakan:
+
+1. P0 Brief & production guard
+2. P1 Document/package/QC
+3. P2 Review/Brand Kit/customer UX
+4. P3 Watermark/ZIP/version UI/analytics
+
+Jangan menyatakan full sprint selesai jika P0 atau P1 belum lolos test.
+
+==========================================================
+FINAL REPORT
+==========================================================
+
+Berikan laporan:
+
+- files changed
+- schemas/tables changed
+- fields added
+- industry question mapping
+- readiness scoring
+- production guard
+- sections supported
+- package enforcement
+- QC implementation
+- PDF/PPTX results
+- review viewer/comments
+- Brand Kit integration
+- watermark
+- version history
+- ZIP generation
+- analytics events
+- OpenAPI operations added
+- test results
+- pnpm run verify status
+- known limitations
+- readiness score
+
+Jangan lanjut ke layanan Finance, Legal, Marketing, Marketplace,
+atau modul baru dalam sesi ini.
+
+Target akhir:
+
+Company Profile menjadi layanan customer-facing yang benar-benar lengkap,
+faktual, package-aware, payment-gated, reviewable, versioned,
+dan menghasilkan PDF/PPTX profesional tanpa fabrikasi data.
