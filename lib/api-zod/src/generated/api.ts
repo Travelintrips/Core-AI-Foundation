@@ -9634,3 +9634,220 @@ export const GetCpReviewDashboardResponse = zod.object({
 })
 
 
+/**
+ * @summary Start a 7-stage production pipeline for a creative project
+ */
+export const startProductionPipelineBodyForceRestartDefault = false;
+
+export const StartProductionPipelineBody = zod.object({
+  "projectId": zod.string().describe('Creative project UUID or integer ID'),
+  "forceRestart": zod.boolean().default(startProductionPipelineBodyForceRestartDefault).describe('Override an already-running pipeline')
+})
+
+export const StartProductionPipelineResponse = zod.object({
+  "runId": zod.string(),
+  "message": zod.string(),
+  "pipeline": zod.object({
+  "id": zod.number(),
+  "runId": zod.string().describe('UUID string — client-facing run identifier'),
+  "projectId": zod.number(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'cancelled']),
+  "currentStage": zod.string().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "retryCount": zod.number(),
+  "executionSummary": zod.object({
+
+}).passthrough().nullish().describe('Aggregated stats — totalStages, completedStages, failedStages, totalLatencyMs, stageBreakdown'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+})
+
+
+/**
+ * @summary Get aggregate monitoring stats for all pipeline runs
+ */
+export const GetPipelineMonitoringStatsResponse = zod.object({
+  "totals": zod.object({
+  "totalRuns": zod.number(),
+  "runningRuns": zod.number(),
+  "completedRuns": zod.number(),
+  "failedRuns": zod.number(),
+  "cancelledRuns": zod.number(),
+  "pendingRuns": zod.number()
+}),
+  "stageStats": zod.array(zod.object({
+  "stageName": zod.string(),
+  "totalCount": zod.number(),
+  "completedCount": zod.number(),
+  "failedCount": zod.number(),
+  "skippedCount": zod.number(),
+  "avgLatencyMs": zod.number().nullish()
+})),
+  "recentRuns": zod.array(zod.object({
+  "id": zod.number(),
+  "runId": zod.string().describe('UUID string — client-facing run identifier'),
+  "projectId": zod.number(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'cancelled']),
+  "currentStage": zod.string().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "retryCount": zod.number(),
+  "executionSummary": zod.object({
+
+}).passthrough().nullish().describe('Aggregated stats — totalStages, completedStages, failedStages, totalLatencyMs, stageBreakdown'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "stageDefinitions": zod.array(zod.object({
+  "name": zod.string(),
+  "order": zod.number(),
+  "label": zod.string()
+}))
+})
+
+
+/**
+ * @summary Get pipeline run detail with all stages
+ */
+export const GetProductionPipelineParams = zod.object({
+  "runId": zod.coerce.string().describe('Pipeline run UUID')
+})
+
+export const GetProductionPipelineResponse = zod.object({
+  "id": zod.number(),
+  "runId": zod.string().describe('UUID string — client-facing run identifier'),
+  "projectId": zod.number(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'cancelled']),
+  "currentStage": zod.string().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "retryCount": zod.number(),
+  "executionSummary": zod.object({
+
+}).passthrough().nullish().describe('Aggregated stats — totalStages, completedStages, failedStages, totalLatencyMs, stageBreakdown'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "stages": zod.array(zod.object({
+  "id": zod.number(),
+  "runId": zod.number().describe('FK to ai_production_pipelines.id'),
+  "stageName": zod.enum(['creative_director', 'copywriter', 'designer', 'presentation', 'qa', 'renderer', 'customer_review']),
+  "stageOrder": zod.number(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'skipped', 'waiting_retry']),
+  "input": zod.object({
+
+}).passthrough().nullish(),
+  "output": zod.object({
+
+}).passthrough().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "latencyMs": zod.number().nullish(),
+  "retryCount": zod.number(),
+  "errorMessage": zod.string().nullish(),
+  "agentSlug": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "provider": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+}))
+
+
+/**
+ * @summary List all stages for a pipeline run
+ */
+export const ListProductionPipelineStagesParams = zod.object({
+  "runId": zod.coerce.string()
+})
+
+export const ListProductionPipelineStagesResponseItem = zod.object({
+  "id": zod.number(),
+  "runId": zod.number().describe('FK to ai_production_pipelines.id'),
+  "stageName": zod.enum(['creative_director', 'copywriter', 'designer', 'presentation', 'qa', 'renderer', 'customer_review']),
+  "stageOrder": zod.number(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'skipped', 'waiting_retry']),
+  "input": zod.object({
+
+}).passthrough().nullish(),
+  "output": zod.object({
+
+}).passthrough().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "latencyMs": zod.number().nullish(),
+  "retryCount": zod.number(),
+  "errorMessage": zod.string().nullish(),
+  "agentSlug": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "provider": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListProductionPipelineStagesResponse = zod.array(ListProductionPipelineStagesResponseItem)
+
+
+/**
+ * @summary Retry a failed pipeline stage (or resume from last failure)
+ */
+export const RetryPipelineStageParams = zod.object({
+  "runId": zod.coerce.string()
+})
+
+export const RetryPipelineStageBody = zod.object({
+  "stageName": zod.enum(['creative_director', 'copywriter', 'designer', 'presentation', 'qa', 'renderer', 'customer_review', 'null']).nullish().describe('Stage to retry from. Omit to retry from the first failed stage.')
+})
+
+export const RetryPipelineStageResponse = zod.object({
+  "runId": zod.string(),
+  "retried": zod.boolean(),
+  "stageName": zod.string().nullish(),
+  "message": zod.string().optional()
+})
+
+
+/**
+ * @summary Cancel an in-progress or pending pipeline run
+ */
+export const CancelProductionPipelineParams = zod.object({
+  "runId": zod.coerce.string()
+})
+
+export const CancelProductionPipelineResponse = zod.object({
+  "runId": zod.string(),
+  "status": zod.string(),
+  "message": zod.string()
+})
+
+
+/**
+ * @summary List all pipeline runs for a creative project
+ */
+export const ListProjectPipelineRunsParams = zod.object({
+  "projectId": zod.coerce.string().describe('Project UUID or integer ID')
+})
+
+export const ListProjectPipelineRunsResponseItem = zod.object({
+  "id": zod.number(),
+  "runId": zod.string().describe('UUID string — client-facing run identifier'),
+  "projectId": zod.number(),
+  "status": zod.enum(['pending', 'running', 'completed', 'failed', 'cancelled']),
+  "currentStage": zod.string().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "errorMessage": zod.string().nullish(),
+  "retryCount": zod.number(),
+  "executionSummary": zod.object({
+
+}).passthrough().nullish().describe('Aggregated stats — totalStages, completedStages, failedStages, totalLatencyMs, stageBreakdown'),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListProjectPipelineRunsResponse = zod.array(ListProjectPipelineRunsResponseItem)
+
+
