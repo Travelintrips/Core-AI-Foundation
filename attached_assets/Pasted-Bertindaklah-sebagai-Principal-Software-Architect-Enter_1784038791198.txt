@@ -1,0 +1,368 @@
+Bertindaklah sebagai Principal Software Architect, Enterprise Code Reviewer, dan Technical Auditor.
+
+INI BUKAN IMPLEMENTASI.
+
+INI BUKAN REFACTOR.
+
+INI BUKAN PERBAIKAN.
+
+JANGAN MENGUBAH SOURCE CODE.
+
+JANGAN MEMBUAT COMMIT.
+
+JANGAN MEMBUAT MIGRATION.
+
+JANGAN MEMBUAT TODO.
+
+======================================================
+TUJUAN
+======================================================
+
+Saya ingin memverifikasi hasil audit sebelumnya.
+
+Saya tidak ingin ada false positive maupun false negative.
+
+Semua kesimpulan harus dibuktikan dari source code aktual.
+
+Jangan mengulang audit lama.
+
+Fokus hanya pada VALIDASI temuan.
+
+======================================================
+VALIDASI TEMUAN SATU PER SATU
+======================================================
+
+Untuk setiap temuan berikut:
+
+1.
+Creative Consultant hanya bertindak sebagai aggregator
+(skornya 45/100)
+
+Buktikan:
+
+- workflow lengkap
+- service yang dipanggil
+- AI yang dipanggil
+- file
+- class
+- function
+- output yang dihasilkan
+
+Jawab:
+
+BENAR
+
+SALAH
+
+SEBAGIAN BENAR
+
+Jika salah,
+jelaskan mengapa.
+
+Jika sebagian benar,
+jelaskan bagian mana yang sudah ada.
+
+======================================================
+
+2.
+Presentation Engine / Pitch Deck belum ada sebagai deliverable.
+
+Cari seluruh project.
+
+Termasuk:
+
+presentation
+
+ppt
+
+pptx
+
+deck
+
+slides
+
+pitch
+
+presentation engine
+
+export presentation
+
+thumbnail
+
+preview
+
+ppt generator
+
+mapper
+
+worker
+
+registry
+
+Jika ditemukan:
+
+jelaskan
+
+- lokasi
+- status
+- apakah aktif
+- apakah dipakai workflow
+- apakah customer bisa mengakses
+
+Jawab:
+
+ADA DAN AKTIF
+
+ADA TAPI BELUM TERPAKAI
+
+TIDAK ADA
+
+======================================================
+
+3.
+Hanya ada 5 deliverable.
+
+Cari seluruh deliverable.
+
+Jangan hanya melihat registry.
+
+Cari seluruh:
+
+worker
+
+mapper
+
+generator
+
+renderer
+
+export
+
+pdf
+
+pptx
+
+zip
+
+presentation
+
+document
+
+Laporkan:
+
+Deliverable aktif
+
+Deliverable parsial
+
+Deliverable tidak digunakan
+
+======================================================
+
+4.
+aiCeoService overlap dengan creativeWorkflowRunner.
+
+Buktikan.
+
+Cari:
+
+siapa memanggil siapa
+
+berapa kali AI dipanggil
+
+apakah prompt sama
+
+apakah output sama
+
+apakah memang terjadi duplicate AI call
+
+Jika tidak,
+
+jelaskan.
+
+======================================================
+
+5.
+Soft Delete tidak ada.
+
+Cari:
+
+deleted_at
+
+deletedBy
+
+softDelete
+
+restore
+
+archive
+
+recover
+
+is_deleted
+
+status archived
+
+Jika ada,
+
+jelaskan.
+
+======================================================
+
+6.
+Multi Tenant lemah.
+
+Audit:
+
+tenant middleware
+
+tenant resolver
+
+tenant validator
+
+tenant context
+
+tenant filter
+
+RLS
+
+Supabase policy
+
+service isolation
+
+query isolation
+
+repository isolation
+
+Apakah benar hanya tenant_id saja?
+
+======================================================
+
+7.
+Quotation masih dua jalur.
+
+Cari:
+
+creative_project_quotations
+
+ai_quotations
+
+quotation service
+
+quotation workflow
+
+quotation repository
+
+Laporkan:
+
+aktif
+
+legacy
+
+deprecated
+
+unused
+
+======================================================
+
+8.
+Creative Consultant belum memiliki:
+
+Executive Summary
+
+Business Insight
+
+Gap Analysis
+
+Roadmap
+
+ROI Recommendation
+
+Priority Action
+
+Implementation Checklist
+
+Decision Support
+
+Cari apakah fitur-fitur tersebut:
+
+sudah ada
+
+parsial
+
+tidak ada
+
+======================================================
+
+9.
+AI Workflow
+
+Cari apakah ada workflow lain
+yang tidak ikut dihitung audit pertama.
+
+======================================================
+
+10.
+Feature Registry
+
+Buat daftar SEMUA fitur aktual
+yang benar-benar ada.
+
+Jangan berdasarkan dokumentasi.
+
+Harus berdasarkan source code.
+
+======================================================
+OUTPUT
+======================================================
+
+Untuk setiap temuan berikan:
+
+Status
+
+✅ BENAR
+
+⚠ SEBAGIAN BENAR
+
+❌ SALAH
+
+Confidence
+
+0-100%
+
+Bukti
+
+File
+
+Function
+
+Workflow
+
+Referensi code
+
+======================================================
+
+Di akhir laporan buat tabel:
+
+| Temuan Audit Lama | Status Validasi | Confidence | Catatan |
+
+======================================================
+
+Lalu buat bagian:
+
+FALSE POSITIVE
+
+Temuan yang ternyata salah.
+
+FALSE NEGATIVE
+
+Fitur yang ternyata ada tetapi tidak ikut terdeteksi audit pertama.
+
+======================================================
+
+JANGAN MEMBERIKAN SOLUSI.
+
+JANGAN MEMPERBAIKI KODE.
+
+JANGAN MEMBUAT IMPLEMENTASI.
+
+Hanya lakukan VALIDASI terhadap hasil audit sebelumnya berdasarkan source code aktual.
