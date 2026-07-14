@@ -48,6 +48,7 @@ import AffiliatesPage from "@/pages/affiliates";
 import HealthScoresPage from "@/pages/health-scores";
 import ReferralsPage from "@/pages/referrals";
 import ObservabilityPage from "@/pages/observability";
+import ProductionPipelinePage from "@/pages/production-pipeline";
 import DesignStudio from "@/pages/design-studio";
 import DesignStudioEditor from "@/pages/design-studio-editor";
 
@@ -92,6 +93,7 @@ function AdminRouter() {
         <Route path="/referrals" component={ReferralsPage} />
         <Route path="/health-scores" component={HealthScoresPage} />
         <Route path="/observability" component={ObservabilityPage} />
+        <Route path="/production-pipeline" component={ProductionPipelinePage} />
         <Route path="/creative-intelligence" component={CreativeIntelligence} />
         <Route path="/template-marketplace" component={TemplateMarketplace} />
         <Route path="/design-studio" component={DesignStudio} />

@@ -58,6 +58,7 @@ const NAV_SECTIONS = [
       { href: "/agents", label: "Agents", icon: Users },
       { href: "/orchestrator", label: "Orchestrator", icon: Play },
       { href: "/creative-ai", label: "Creative AI", icon: Sparkles },
+      { href: "/production-pipeline", label: "Production Pipeline", icon: GitMerge },
     ],
   },
   {
