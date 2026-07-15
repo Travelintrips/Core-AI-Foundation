@@ -59,6 +59,25 @@ export type BriefData = {
   deadline: string;
   priority: string;
   milestones: string;
+  // Fashion Design fields — namespaced `fd*`, only rendered for fashion_design service
+  fdFashionSegment: string;    // luxury | streetwear | modest_fashion | casual | sportswear | workwear | kidswear | bridal
+  fdCollectionType: string;    // ready_to_wear | capsule | seasonal | limited_edition | custom_order
+  fdTargetGender: string;      // women | men | unisex | kids
+  fdSeason: string;            // ss25 | fw25 | resort | holiday | all_season
+  fdPricePoint: string;        // mass_market | mid_range | premium | luxury
+  fdColorDirection: string;    // free text
+  fdFabricPreference: string;  // free text
+  fdNumberOfLooks: string;     // free text
+  // Interior Design fields — namespaced `int*`, only rendered for interior_design service
+  intSpaceType: string;        // residential | commercial | hospitality | retail | office | restaurant | cafe
+  intRoomTypes: string;        // free text, e.g. "living room, master bedroom"
+  intTotalArea: string;        // sqm
+  intDesignStyle: string;      // japandi | scandinavian | industrial | tropical_modern | mid_century | luxury_classic | minimalist | bohemian
+  intBudgetTier: string;       // basic | standard | premium | luxury
+  intMoodGoal: string;         // free text
+  intExistingElements: string; // free text
+  intMustHaveFeatures: string; // free text
+  intAvoidElements: string;    // free text
   // Company Profile sprint (P0) — extra fields, only rendered/required when
   // the service is Company Profile. Namespaced `cp*` so they never collide
   // with the generic fields above or with any other service's brief data.
@@ -99,6 +118,12 @@ const EMPTY_BRIEF: BriefData = {
   stylePreference: "", colorPalette: "", referenceLinks: "",
   outputFormats: "", outputLanguage: "id", specialRequirements: "",
   deadline: "", priority: "balanced", milestones: "",
+  fdFashionSegment: "", fdCollectionType: "", fdTargetGender: "",
+  fdSeason: "", fdPricePoint: "", fdColorDirection: "",
+  fdFabricPreference: "", fdNumberOfLooks: "",
+  intSpaceType: "", intRoomTypes: "", intTotalArea: "",
+  intDesignStyle: "", intBudgetTier: "", intMoodGoal: "",
+  intExistingElements: "", intMustHaveFeatures: "", intAvoidElements: "",
   cpLegalName: "", cpBusinessTypeDetail: "", cpYearEstablished: "",
   cpCompanyHistory: "", cpVision: "", cpMission: "", cpCompanyValues: "",
   cpValueProposition: "", cpProductsServices: "", cpGeographicCoverage: "",
@@ -262,15 +287,9 @@ export default function BriefPage() {
     () => getServiceConfig(serviceType),
     [serviceType],
   );
-  const isCompanyProfile = serviceType === "company_profile";
-
-  // CP — resolved industry group for conditional questions (mirrors backend logic)
-  const cpIndustryGroup = useMemo(
-    () => isCompanyProfile
-      ? resolveCpIndustryGroup(brief.cpBusinessTypeDetail || brief.companyIndustry)
-      : null,
-    [isCompanyProfile, brief.cpBusinessTypeDetail, brief.companyIndustry],
-  );
+  const isCompanyProfile  = serviceType === "company_profile";
+  const isFashionDesign   = serviceType === "fashion_design";
+  const isInteriorDesign  = serviceType === "interior_design";
 
   // ── Start brief ─────────────────────────────────────────────────────────────
   const startBriefFired = useRef(false);
@@ -286,6 +305,15 @@ export default function BriefPage() {
   const [currentStep, setCurrentStep]         = useState(1);
   const [errors, setErrors]                   = useState<FieldErrors>({});
   const [brief, setBrief]                     = useState<BriefData>(EMPTY_BRIEF);
+
+  // CP — resolved industry group for conditional questions (mirrors backend logic)
+  const cpIndustryGroup = useMemo(
+    () => isCompanyProfile
+      ? resolveCpIndustryGroup(brief.cpBusinessTypeDetail || brief.companyIndustry)
+      : null,
+    [isCompanyProfile, brief.cpBusinessTypeDetail, brief.companyIndustry],
+  );
+
   const [assistantOpen, setAssistantOpen]     = useState(false);
   const [isSaving, setIsSaving]               = useState(false);
   const [submitError, setSubmitError]         = useState<string | null>(null);
@@ -838,6 +866,103 @@ export default function BriefPage() {
                   </AnimatePresence>
                 </FieldItem>
 
+                {/* ── Fashion Design — Step 1 ────────────────────────────── */}
+                {isFashionDesign && (
+                  <>
+                    <FieldItem id="fdFashionSegment" label="Segmen fashion brand Anda" optional hint="Pilih segmen yang paling mendeskripsikan posisi brand Anda di industri fashion">
+                      <select id="brief-fdFashionSegment" className="input-field" value={brief.fdFashionSegment} onChange={(e) => handleChange("fdFashionSegment", e.target.value)}>
+                        <option value="">— Pilih segmen —</option>
+                        <option value="luxury">Luxury / High Fashion</option>
+                        <option value="premium">Premium Contemporary</option>
+                        <option value="modest_fashion">Modest Fashion / Muslimwear</option>
+                        <option value="streetwear">Streetwear / Urban</option>
+                        <option value="casual">Casual / Everyday</option>
+                        <option value="sportswear">Activewear / Sportswear</option>
+                        <option value="workwear">Workwear / Corporate</option>
+                        <option value="kidswear">Kidswear / Childrenswear</option>
+                        <option value="bridal">Bridal / Formalwear</option>
+                      </select>
+                    </FieldItem>
+                    <FieldItem id="fdCollectionType" label="Tipe koleksi" optional>
+                      <select id="brief-fdCollectionType" className="input-field" value={brief.fdCollectionType} onChange={(e) => handleChange("fdCollectionType", e.target.value)}>
+                        <option value="">— Pilih tipe koleksi —</option>
+                        <option value="ready_to_wear">Ready-to-Wear (RTW)</option>
+                        <option value="capsule">Capsule Collection</option>
+                        <option value="seasonal">Seasonal Collection (SS/FW)</option>
+                        <option value="limited_edition">Limited Edition</option>
+                        <option value="custom_order">Custom Order / Made-to-Order</option>
+                        <option value="collaboration">Collaboration / Collab Drop</option>
+                      </select>
+                    </FieldItem>
+                    <FieldItem id="fdTargetGender" label="Target gender koleksi" optional>
+                      <select id="brief-fdTargetGender" className="input-field" value={brief.fdTargetGender} onChange={(e) => handleChange("fdTargetGender", e.target.value)}>
+                        <option value="">— Pilih target —</option>
+                        <option value="women">Women</option>
+                        <option value="men">Men</option>
+                        <option value="unisex">Unisex / Gender-neutral</option>
+                        <option value="kids">Kids / Youth</option>
+                      </select>
+                    </FieldItem>
+                    <FieldItem id="fdSeason" label="Musim / periode koleksi" optional>
+                      <select id="brief-fdSeason" className="input-field" value={brief.fdSeason} onChange={(e) => handleChange("fdSeason", e.target.value)}>
+                        <option value="">— Pilih musim —</option>
+                        <option value="ss26">Spring/Summer 2026</option>
+                        <option value="fw26">Fall/Winter 2026</option>
+                        <option value="ss25">Spring/Summer 2025</option>
+                        <option value="fw25">Fall/Winter 2025</option>
+                        <option value="resort">Resort / Cruise</option>
+                        <option value="holiday">Holiday / Festive</option>
+                        <option value="ramadan">Ramadan / Eid Collection</option>
+                        <option value="all_season">All-season / Evergreen</option>
+                      </select>
+                    </FieldItem>
+                    <FieldItem id="fdPricePoint" label="Price point koleksi" optional hint="Membantu AI memahami bahasa, kualitas, dan positioning yang tepat">
+                      <select id="brief-fdPricePoint" className="input-field" value={brief.fdPricePoint} onChange={(e) => handleChange("fdPricePoint", e.target.value)}>
+                        <option value="">— Pilih price point —</option>
+                        <option value="mass_market">Mass Market (under Rp 250rb/item)</option>
+                        <option value="mid_range">Mid Range (Rp 250rb–1jt/item)</option>
+                        <option value="premium">Premium (Rp 1jt–5jt/item)</option>
+                        <option value="luxury">Luxury (above Rp 5jt/item)</option>
+                      </select>
+                    </FieldItem>
+                  </>
+                )}
+
+                {/* ── Interior Design — Step 1 ────────────────────────────── */}
+                {isInteriorDesign && (
+                  <>
+                    <FieldItem id="intSpaceType" label="Tipe ruang / proyek" optional hint="Jenis ruang yang akan didesain">
+                      <select id="brief-intSpaceType" className="input-field" value={brief.intSpaceType} onChange={(e) => handleChange("intSpaceType", e.target.value)}>
+                        <option value="">— Pilih tipe ruang —</option>
+                        <option value="residential">Residensial (rumah tinggal)</option>
+                        <option value="apartment">Apartemen / kondominium</option>
+                        <option value="office">Kantor / co-working space</option>
+                        <option value="retail">Retail / toko</option>
+                        <option value="restaurant">Restoran / food & beverage</option>
+                        <option value="cafe">Cafe / coffee shop</option>
+                        <option value="hospitality">Hospitality (hotel, villa, resort)</option>
+                        <option value="clinic">Klinik / wellness center</option>
+                        <option value="showroom">Showroom / galeri</option>
+                      </select>
+                    </FieldItem>
+                    <FieldItem id="intRoomTypes" label="Ruangan yang ingin didesain" optional hint="Pisahkan dengan koma jika lebih dari satu ruang">
+                      <input id="brief-intRoomTypes" className="input-field" value={brief.intRoomTypes} onChange={(e) => handleChange("intRoomTypes", e.target.value)} placeholder="Contoh: ruang tamu, master bedroom, dapur, kamar mandi utama" />
+                    </FieldItem>
+                    <FieldItem id="intTotalArea" label="Luas area total (m²)" optional hint="Perkiraan luas keseluruhan area yang didesain">
+                      <input id="brief-intTotalArea" className="input-field" type="text" value={brief.intTotalArea} onChange={(e) => handleChange("intTotalArea", e.target.value)} placeholder="Contoh: 120 m² atau per ruang: tamu 35m², kamar 25m²" />
+                    </FieldItem>
+                    <FieldItem id="intBudgetTier" label="Tier budget desain interior" optional hint="Membantu AI merekomendasikan material dan furnitur yang sesuai budget">
+                      <select id="brief-intBudgetTier" className="input-field" value={brief.intBudgetTier} onChange={(e) => handleChange("intBudgetTier", e.target.value)}>
+                        <option value="">— Pilih tier budget —</option>
+                        <option value="basic">Basic (under Rp 5jt/m²)</option>
+                        <option value="standard">Standard (Rp 5jt–15jt/m²)</option>
+                        <option value="premium">Premium (Rp 15jt–35jt/m²)</option>
+                        <option value="luxury">Luxury (above Rp 35jt/m²)</option>
+                      </select>
+                    </FieldItem>
+                  </>
+                )}
+
                 {/* ── Company Profile — Identity & Contact ──────────────── */}
                 {isCompanyProfile && (
                   <>
@@ -1289,6 +1414,108 @@ export default function BriefPage() {
                   </FieldItem>
                 )}
 
+
+                {/* ── Fashion Design — Step 4 ────────────────────────────── */}
+                {isFashionDesign && (
+                  <>
+                    <FieldItem id="fdColorDirection" label="Arah warna koleksi" optional hint="Palette warna yang Anda bayangkan untuk koleksi ini">
+                      <input
+                        id="brief-fdColorDirection"
+                        className="input-field"
+                        value={brief.fdColorDirection}
+                        onChange={(e) => handleChange("fdColorDirection", e.target.value)}
+                        placeholder="Contoh: earthy tones — terracotta, sage, off-white; atau all-black dengan aksen gold"
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="fdFabricPreference" label="Preferensi bahan / material" optional hint="Jenis kain atau material yang disukai atau dihindari">
+                      <input
+                        id="brief-fdFabricPreference"
+                        className="input-field"
+                        value={brief.fdFabricPreference}
+                        onChange={(e) => handleChange("fdFabricPreference", e.target.value)}
+                        placeholder="Contoh: suka linen, katun organik; hindari polyester murni; prefer bahan lokal"
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="fdNumberOfLooks" label="Jumlah look dalam koleksi" optional hint="Berapa look / outfit yang ingin ada dalam koleksi ini?">
+                      <input
+                        id="brief-fdNumberOfLooks"
+                        className="input-field"
+                        type="text"
+                        value={brief.fdNumberOfLooks}
+                        onChange={(e) => handleChange("fdNumberOfLooks", e.target.value)}
+                        placeholder="Contoh: 8 looks, atau 5–10 looks"
+                      />
+                    </FieldItem>
+                  </>
+                )}
+
+                {/* ── Interior Design — Step 4 ────────────────────────────── */}
+                {isInteriorDesign && (
+                  <>
+                    <FieldItem id="intDesignStyle" label="Gaya desain interior yang diinginkan" optional hint="Pilih satu gaya utama — bisa dikombinasikan di field referensi">
+                      <select
+                        id="brief-intDesignStyle"
+                        className="input-field"
+                        value={brief.intDesignStyle}
+                        onChange={(e) => handleChange("intDesignStyle", e.target.value)}
+                      >
+                        <option value="">— Pilih gaya desain —</option>
+                        <option value="japandi">Japandi (Japanese + Scandinavian)</option>
+                        <option value="scandinavian">Scandinavian / Nordic</option>
+                        <option value="tropical_modern">Tropical Modern / Bali Style</option>
+                        <option value="minimalist">Minimalist</option>
+                        <option value="industrial">Industrial / Loft</option>
+                        <option value="mid_century">Mid-Century Modern</option>
+                        <option value="luxury_classic">Luxury Classic / Neo-Classical</option>
+                        <option value="bohemian">Bohemian / Eclectic</option>
+                        <option value="contemporary">Contemporary / Modern</option>
+                        <option value="wabi_sabi">Wabi-Sabi / Organic</option>
+                      </select>
+                    </FieldItem>
+
+                    <FieldItem id="intMoodGoal" label="Suasana yang ingin diciptakan" optional hint="Bagaimana perasaan yang Anda inginkan saat berada di ruang ini?">
+                      <input
+                        id="brief-intMoodGoal"
+                        className="input-field"
+                        value={brief.intMoodGoal}
+                        onChange={(e) => handleChange("intMoodGoal", e.target.value)}
+                        placeholder="Contoh: tenang dan produktif, hangat dan mengundang, mewah namun tidak berlebihan"
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="intExistingElements" label="Elemen existing yang harus dipertahankan" optional hint="Furnitur, fitur arsitektur, atau material yang sudah ada">
+                      <textarea
+                        id="brief-intExistingElements"
+                        className="input-field min-h-[72px]"
+                        value={brief.intExistingElements}
+                        onChange={(e) => handleChange("intExistingElements", e.target.value)}
+                        placeholder="Contoh: sofa abu-abu 3-seater (mau dipertahankan), parket kayu asli di lantai, jendela besar menghadap taman"
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="intMustHaveFeatures" label="Fitur wajib ada" optional hint="Hal-hal yang harus ada dalam desain">
+                      <input
+                        id="brief-intMustHaveFeatures"
+                        className="input-field"
+                        value={brief.intMustHaveFeatures}
+                        onChange={(e) => handleChange("intMustHaveFeatures", e.target.value)}
+                        placeholder="Contoh: home office area, walk-in closet, bathtub freestanding, island dapur"
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="intAvoidElements" label="Elemen yang harus dihindari" optional hint="Gaya, warna, material, atau fitur yang tidak diinginkan">
+                      <input
+                        id="brief-intAvoidElements"
+                        className="input-field"
+                        value={brief.intAvoidElements}
+                        onChange={(e) => handleChange("intAvoidElements", e.target.value)}
+                        placeholder="Contoh: hindari warna mencolok, jangan ada karpet berbulu, tidak mau open plan"
+                      />
+                    </FieldItem>
+                  </>
+                )}
 
                 {/* ── Company Profile — Legalitas, Kepercayaan & Aset Visual ── */}
                 {isCompanyProfile && (

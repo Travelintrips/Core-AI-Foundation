@@ -13,6 +13,8 @@ export type ServiceType =
   | "social_media"
   | "copywriting"
   | "image_generation"
+  | "fashion_design"
+  | "interior_design"
   | "default";
 
 export interface BriefStep1Config {
@@ -205,6 +207,82 @@ const OVERRIDES: Partial<Record<ServiceType, Partial<BriefSectionConfig>>> = {
       showLanguage: false,
     },
   },
+  fashion_design: {
+    step1: {
+      ...DEFAULT.step1,
+      industryLabel: "Industri / kategori brand fashion Anda",
+      industryHint: "Pilih industri yang paling sesuai — misalnya Fashion, Beauty, atau Retail",
+      websiteLabel: "Website atau media sosial brand",
+      websiteHint: "Instagram, TikTok, atau website utama",
+      showSize: false,
+    },
+    step2: {
+      ...DEFAULT.step2,
+      goalLabel: "Tujuan koleksi ini",
+      goalDescription: "Pilih hingga 5 tujuan. Minimal satu wajib dipilih.",
+      showSuccessMetrics: true,
+      showExistingAssets: true,
+      existingAssetsLabel: "Koleksi atau aset visual yang sudah ada",
+    },
+    step3: {
+      ...DEFAULT.step3,
+      audienceLabel: "Target pelanggan utama koleksi ini",
+      audienceDescription: "Pilih hingga 4 segmen audiens.",
+      painPointsLabel: "Kebutuhan atau keinginan yang belum terpenuhi oleh brand lain",
+      channelsLabel: "Di mana target pelanggan Anda berbelanja?",
+    },
+    step4: {
+      ...DEFAULT.step4,
+      styleLabel: "Arah gaya visual koleksi",
+      referenceLabel: "Referensi visual atau brand fashion yang Anda admirasi",
+      referenceHint: "Link Pinterest board, Instagram brand, atau URL lookbook",
+      specialReqLabel: "Hal khusus yang perlu diperhatikan",
+      specialReqHint: "Contoh: warna pantangan, bahan yang harus dihindari, aturan brand",
+    },
+    step5: {
+      outputLabel: "Deliverables yang Anda butuhkan",
+      outputHint: "Contoh: lookbook PDF 10 look, press release, caption Instagram 15 post",
+      showLanguage: true,
+    },
+  },
+  interior_design: {
+    step1: {
+      ...DEFAULT.step1,
+      industryLabel: "Jenis proyek interior",
+      industryHint: "Pilih industri yang paling sesuai — misalnya Properti, Hotel, atau Retail",
+      websiteLabel: "Website atau referensi portofolio",
+      websiteHint: "Jika ada website atau Instagram yang ingin Anda referensikan",
+      showSize: false,
+    },
+    step2: {
+      ...DEFAULT.step2,
+      goalLabel: "Tujuan utama proyek desain interior ini",
+      goalDescription: "Pilih hingga 5 tujuan. Minimal satu wajib dipilih.",
+      showSuccessMetrics: true,
+      showExistingAssets: true,
+      existingAssetsLabel: "Elemen existing yang sudah ada (furnitur, arsitektur, dsb)",
+    },
+    step3: {
+      ...DEFAULT.step3,
+      audienceLabel: "Siapa yang akan menggunakan ruang ini?",
+      audienceDescription: "Pilih hingga 4 profil pengguna.",
+      painPointsLabel: "Masalah atau ketidaknyamanan pada ruang saat ini",
+      channelsLabel: "Di mana pengguna biasa menghabiskan waktu? (referensi lifestyle)",
+    },
+    step4: {
+      ...DEFAULT.step4,
+      styleLabel: "Arah gaya desain interior yang diinginkan",
+      referenceLabel: "Referensi desain atau interior yang Anda sukai",
+      referenceHint: "Link Pinterest, Houzz, Instagram, atau foto ruang yang Anda kagumi",
+      specialReqLabel: "Persyaratan atau pantangan khusus",
+      specialReqHint: "Contoh: harus ramah anak, bisa pet-friendly, budget khusus per area",
+    },
+    step5: {
+      outputLabel: "Deliverables yang Anda butuhkan",
+      outputHint: "Contoh: proposal desain PDF, mood board, spesifikasi material, narasi ruang",
+      showLanguage: true,
+    },
+  },
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -219,6 +297,8 @@ export function detectServiceType(serviceName?: string | null): ServiceType {
   if (n.includes("pitch deck") || n.includes("pitch")) return "pitch_deck";
   if (n.includes("social media") || n.includes("sosmed") || n.includes("konten media")) return "social_media";
   if (n.includes("copywriting") || n.includes("copywriter")) return "copywriting";
+  if (n.includes("fashion design") || n.includes("fashion brief")) return "fashion_design";
+  if (n.includes("interior design") || n.includes("desain interior")) return "interior_design";
   if (n.includes("image") || n.includes("gambar") || n.includes("ilustrasi")) return "image_generation";
   return "default";
 }
