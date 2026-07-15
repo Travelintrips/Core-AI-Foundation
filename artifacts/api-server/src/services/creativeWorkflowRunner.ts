@@ -36,14 +36,30 @@ import {
   parseJsonResponse,
   type CreativeBriefInput,
 } from "./creativeAiService.js";
+import {
+  buildFashionBrandStrategistPrompt,
+  buildFashionCreativeDirectorPrompt,
+  buildFashionCollectionWriterPrompt,
+  buildFashionTrendAnalystPrompt,
+  buildFashionQcPrompt,
+  type FashionDesignBriefInput,
+} from "./fashionDesignAiService.js";
+import {
+  buildInteriorConceptArchitectPrompt,
+  buildInteriorSpacePlannerPrompt,
+  buildInteriorMaterialSpecialistPrompt,
+  buildInteriorCopywriterPrompt,
+  buildInteriorQcPrompt,
+  type InteriorDesignBriefInput,
+} from "./interiorDesignAiService.js";
+import { resolveProjectDocumentType } from "./creativeProjectDocumentType.js";
+import { resolveProjectPresentationType } from "./creativeProjectPresentationType.js";
 import { resolveAgentContext, formatContextForPrompt, type StepMetadata } from "./memoryResolver.js";
 import { routeForAgent } from "./intelligentRouter.js";
 import { recordCost, getProjectCosts } from "./costService.js";
 import { readGuardrails } from "./guardrailService.js";
 import { getActiveModel } from "./aiModelService.js";
 import { createExecutionPlanForCreativeProject } from "./aiCeoService.js";
-import { resolveProjectDocumentType } from "./creativeProjectDocumentType.js";
-import { resolveProjectPresentationType } from "./creativeProjectPresentationType.js";
 import { enqueue } from "./queueManagerService.js";
 
 type StepOutput = Record<string, unknown>;
@@ -58,6 +74,22 @@ const PIPELINE: AgentStep[] = [
   { slug: "creative-director", label: "Creative Direction" },
   { slug: "copywriter",        label: "Copy Production" },
   { slug: "quality-control",   label: "Quality Control" },
+];
+
+const FASHION_PIPELINE: AgentStep[] = [
+  { slug: "fashion-brand-strategist",  label: "Fashion Brand Strategy" },
+  { slug: "fashion-creative-director", label: "Fashion Creative Direction" },
+  { slug: "fashion-collection-writer", label: "Collection Copy" },
+  { slug: "fashion-trend-analyst",     label: "Trend Analysis" },
+  { slug: "fashion-quality-control",   label: "Fashion Quality Control" },
+];
+
+const INTERIOR_PIPELINE: AgentStep[] = [
+  { slug: "interior-concept-architect",   label: "Design Concept" },
+  { slug: "interior-space-planner",       label: "Space Planning" },
+  { slug: "interior-material-specialist", label: "Material Specification" },
+  { slug: "interior-copywriter",          label: "Design Copy" },
+  { slug: "interior-quality-control",     label: "Interior Quality Control" },
 ];
 
 /** Build the user+system prompt for a step based on its position in the pipeline. */
@@ -156,6 +188,168 @@ async function checkProjectBudget(
   }
 }
 
+// ── Fashion pipeline runner ───────────────────────────────────────────────────
+
+async function runFashionDesignWorkflow(
+  project: { id: number; projectId: string; brandName: string; targetMarket: string; stylePreference: string | null; goal: string; notes: string | null },
+  briefJson: Record<string, string>,
+  guardrailCfg: { maxCostPerWorkflow: number },
+): Promise<{ stepOutputs: Record<string, StepOutput>; anyFailed: boolean }> {
+  const fashionBrief: FashionDesignBriefInput = {
+    brandName:        project.brandName,
+    fashionSegment:   briefJson["fdFashionSegment"] || "casual",
+    collectionType:   briefJson["fdCollectionType"] || "ready_to_wear",
+    targetGender:     briefJson["fdTargetGender"] || "unisex",
+    season:           briefJson["fdSeason"] || "all_season",
+    targetMarket:     project.targetMarket,
+    pricePoint:       briefJson["fdPricePoint"] || "mid_range",
+    styleInspiration: project.stylePreference || briefJson["stylePreference"] || "",
+    colorDirection:   briefJson["fdColorDirection"] || briefJson["colorPalette"] || "",
+    fabricPreference: briefJson["fdFabricPreference"] || "",
+    numberOfLooks:    briefJson["fdNumberOfLooks"] || "6",
+    goal:             project.goal,
+    notes:            project.notes,
+  };
+
+  const stepOutputs: Record<string, StepOutput> = {};
+  let anyFailed = false;
+
+  for (const step of FASHION_PIPELINE) {
+    const budgetCheck = await checkProjectBudget(project.projectId, guardrailCfg.maxCostPerWorkflow);
+    if (budgetCheck.exceeded) { anyFailed = true; break; }
+
+    const bs = stepOutputs["fashion-brand-strategist"] ?? {};
+    const cd = stepOutputs["fashion-creative-director"] ?? {};
+    const cw = stepOutputs["fashion-collection-writer"] ?? {};
+    const ta = stepOutputs["fashion-trend-analyst"] ?? {};
+
+    let prompts: { systemPrompt: string; userPrompt: string };
+    switch (step.slug) {
+      case "fashion-brand-strategist":    prompts = buildFashionBrandStrategistPrompt(fashionBrief); break;
+      case "fashion-creative-director":   prompts = buildFashionCreativeDirectorPrompt(fashionBrief, bs); break;
+      case "fashion-collection-writer":   prompts = buildFashionCollectionWriterPrompt(fashionBrief, bs, cd); break;
+      case "fashion-trend-analyst":       prompts = buildFashionTrendAnalystPrompt(fashionBrief, bs, cd, cw); break;
+      case "fashion-quality-control":     prompts = buildFashionQcPrompt(fashionBrief, bs, cd, cw, ta); break;
+      default: throw new Error(`Unknown fashion step: ${step.slug}`);
+    }
+
+    const [stepRecord] = await db.insert(creativeProjectStepsTable).values({
+      projectId: project.id,
+      agentId: null,
+      stepName: step.label,
+      input: { systemPrompt: prompts.systemPrompt, userPrompt: prompts.userPrompt } as unknown as Record<string, unknown>,
+      status: "running",
+    }).returning();
+
+    try {
+      const routing = await routeForAgent(step.slug, { prompt: step.label });
+      const selectedModel = routing?.selected;
+      if (!selectedModel) throw new Error(`No model available for ${step.slug}`);
+
+      const primaryInput: ExecutionInput = {
+        prompt:      prompts.userPrompt,
+        systemPrompt: prompts.systemPrompt,
+        model:       selectedModel.model,
+        provider:    selectedModel.provider,
+        maxTokens:   4096,
+        temperature: 0.7,
+      };
+      const execResult = await executeWithRetryAndTimeout(primaryInput, [], 2, 120_000);
+      const parsed = parseJsonResponse(execResult.output.content);
+      stepOutputs[step.slug] = parsed;
+      await db.update(creativeProjectStepsTable).set({ output: parsed, status: "completed" }).where(eq(creativeProjectStepsTable.id, stepRecord.id));
+    } catch (err) {
+      anyFailed = true;
+      stepOutputs[step.slug] = {};
+      await db.update(creativeProjectStepsTable).set({ status: "failed", errorMessage: String(err) }).where(eq(creativeProjectStepsTable.id, stepRecord.id));
+    }
+  }
+
+  return { stepOutputs, anyFailed };
+}
+
+// ── Interior pipeline runner ──────────────────────────────────────────────────
+
+async function runInteriorDesignWorkflow(
+  project: { id: number; projectId: string; brandName: string; targetMarket: string; stylePreference: string | null; goal: string; notes: string | null },
+  briefJson: Record<string, string>,
+  guardrailCfg: { maxCostPerWorkflow: number },
+): Promise<{ stepOutputs: Record<string, StepOutput>; anyFailed: boolean }> {
+  const interiorBrief: InteriorDesignBriefInput = {
+    projectName:      project.brandName,
+    spaceType:        briefJson["intSpaceType"] || "residential",
+    roomTypes:        briefJson["intRoomTypes"] || briefJson["outputFormats"] || "",
+    totalArea:        briefJson["intTotalArea"] || "",
+    designStyle:      briefJson["intDesignStyle"] || briefJson["stylePreference"] || "minimalist",
+    budgetTier:       briefJson["intBudgetTier"] || "standard",
+    targetUser:       project.targetMarket,
+    moodGoal:         briefJson["intMoodGoal"] || project.goal,
+    existingElements: briefJson["intExistingElements"] || "",
+    colorPreference:  briefJson["intColorPreference"] || briefJson["colorPalette"] || "",
+    mustHaveFeatures: briefJson["intMustHaveFeatures"] || "",
+    avoidElements:    briefJson["intAvoidElements"] || "",
+    notes:            project.notes,
+  };
+
+  const stepOutputs: Record<string, StepOutput> = {};
+  let anyFailed = false;
+
+  for (const step of INTERIOR_PIPELINE) {
+    const budgetCheck = await checkProjectBudget(project.projectId, guardrailCfg.maxCostPerWorkflow);
+    if (budgetCheck.exceeded) { anyFailed = true; break; }
+
+    const concept   = stepOutputs["interior-concept-architect"] ?? {};
+    const spacePlan = stepOutputs["interior-space-planner"] ?? {};
+    const materials = stepOutputs["interior-material-specialist"] ?? {};
+    const copy      = stepOutputs["interior-copywriter"] ?? {};
+
+    let prompts: { systemPrompt: string; userPrompt: string };
+    switch (step.slug) {
+      case "interior-concept-architect":   prompts = buildInteriorConceptArchitectPrompt(interiorBrief); break;
+      case "interior-space-planner":       prompts = buildInteriorSpacePlannerPrompt(interiorBrief, concept); break;
+      case "interior-material-specialist": prompts = buildInteriorMaterialSpecialistPrompt(interiorBrief, concept, spacePlan); break;
+      case "interior-copywriter":          prompts = buildInteriorCopywriterPrompt(interiorBrief, concept, spacePlan, materials); break;
+      case "interior-quality-control":     prompts = buildInteriorQcPrompt(interiorBrief, concept, spacePlan, materials, copy); break;
+      default: throw new Error(`Unknown interior step: ${step.slug}`);
+    }
+
+    const [stepRecord] = await db.insert(creativeProjectStepsTable).values({
+      projectId: project.id,
+      agentId: null,
+      stepName: step.label,
+      input: { systemPrompt: prompts.systemPrompt, userPrompt: prompts.userPrompt } as unknown as Record<string, unknown>,
+      status: "running",
+    }).returning();
+
+    try {
+      const routing = await routeForAgent(step.slug, { prompt: step.label });
+      const selectedModel = routing?.selected;
+      if (!selectedModel) throw new Error(`No model available for ${step.slug}`);
+
+      const primaryInput: ExecutionInput = {
+        prompt:      prompts.userPrompt,
+        systemPrompt: prompts.systemPrompt,
+        model:       selectedModel.model,
+        provider:    selectedModel.provider,
+        maxTokens:   4096,
+        temperature: 0.7,
+      };
+      const execResult = await executeWithRetryAndTimeout(primaryInput, [], 2, 120_000);
+      const parsed = parseJsonResponse(execResult.output.content);
+      stepOutputs[step.slug] = parsed;
+      await db.update(creativeProjectStepsTable).set({ output: parsed, status: "completed" }).where(eq(creativeProjectStepsTable.id, stepRecord.id));
+    } catch (err) {
+      anyFailed = true;
+      stepOutputs[step.slug] = {};
+      await db.update(creativeProjectStepsTable).set({ status: "failed", errorMessage: String(err) }).where(eq(creativeProjectStepsTable.id, stepRecord.id));
+    }
+  }
+
+  return { stepOutputs, anyFailed };
+}
+
+// ── Main workflow ─────────────────────────────────────────────────────────────
+
 // ── Main workflow ─────────────────────────────────────────────────────────────
 
 export async function runCreativeBriefWorkflow(projectDbId: number): Promise<void> {
@@ -166,6 +360,9 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
     .where(eq(creativeProjectsTable.id, projectDbId));
 
   if (!project) throw new Error(`Project ${projectDbId} not found`);
+
+  // Detect pipeline type from service catalog document type
+  const documentType = await resolveProjectDocumentType(project);
 
   const brief: CreativeBriefInput = {
     brandName: project.brandName,
@@ -193,6 +390,60 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
     `${project.goal} — ${project.brandName} (${project.businessType})`,
   ).catch(() => {});
 
+  // ── Specialist pipelines ───────────────────────────────────────────────────
+  if (documentType === "fashion_design") {
+    await db.update(creativeProjectsTable).set({ status: "running" }).where(eq(creativeProjectsTable.id, projectDbId));
+    createExecutionPlanForCreativeProject(project.projectId, `${project.goal} — ${project.brandName} Fashion Design`).catch(() => {});
+    const guardrails = await readGuardrails();
+    const { stepOutputs, anyFailed } = await runFashionDesignWorkflow(
+      { id: project.id, projectId: project.projectId, brandName: project.brandName, targetMarket: project.targetMarket, stylePreference: project.stylePreference, goal: project.goal, notes: project.notes, briefJson: project.briefJson as Record<string, unknown> | null },
+      { maxCostPerWorkflow: guardrails.maxCostPerWorkflow, maxRetries: 2, timeoutMs: 120000 },
+    );
+    const aggregatedResult = {
+      fashionBrandStrategy:    stepOutputs["fashion-brand-strategist"] ?? null,
+      fashionCreativeDirection: stepOutputs["fashion-creative-director"] ?? null,
+      fashionCollectionCopy:   stepOutputs["fashion-collection-writer"] ?? null,
+      fashionTrendAnalysis:    stepOutputs["fashion-trend-analyst"] ?? null,
+      fashionQcReview:         stepOutputs["fashion-quality-control"] ?? null,
+    };
+    const finalStatus = anyFailed ? "failed" : "generating_document";
+    await db.update(creativeProjectsTable).set({ status: finalStatus, result: aggregatedResult }).where(eq(creativeProjectsTable.id, projectDbId));
+    if (!anyFailed) {
+      const { runImageDesignerPipeline } = await import("./imageDesignerService.js");
+      runImageDesignerPipeline(projectDbId, project.projectId, 2).catch(() => {}).finally(() => {
+        enqueue({ jobType: "pdf_export", payloadJson: { projectId: projectDbId, documentType: "fashion_design" }, priority: 60 }).catch(() => {});
+      });
+    }
+    return;
+  }
+
+  if (documentType === "interior_design") {
+    await db.update(creativeProjectsTable).set({ status: "running" }).where(eq(creativeProjectsTable.id, projectDbId));
+    createExecutionPlanForCreativeProject(project.projectId, `${project.goal} — ${project.brandName} Interior Design`).catch(() => {});
+    const guardrails = await readGuardrails();
+    const { stepOutputs, anyFailed } = await runInteriorDesignWorkflow(
+      { id: project.id, projectId: project.projectId, brandName: project.brandName, targetMarket: project.targetMarket, stylePreference: project.stylePreference, goal: project.goal, notes: project.notes, briefJson: project.briefJson as Record<string, unknown> | null },
+      { maxCostPerWorkflow: guardrails.maxCostPerWorkflow, maxRetries: 2, timeoutMs: 120000 },
+    );
+    const aggregatedResult = {
+      interiorConceptArchitect:   stepOutputs["interior-concept-architect"] ?? null,
+      interiorSpacePlanner:       stepOutputs["interior-space-planner"] ?? null,
+      interiorMaterialSpecialist: stepOutputs["interior-material-specialist"] ?? null,
+      interiorCopywriter:         stepOutputs["interior-copywriter"] ?? null,
+      interiorQcReview:           stepOutputs["interior-quality-control"] ?? null,
+    };
+    const finalStatus = anyFailed ? "failed" : "generating_document";
+    await db.update(creativeProjectsTable).set({ status: finalStatus, result: aggregatedResult }).where(eq(creativeProjectsTable.id, projectDbId));
+    if (!anyFailed) {
+      const { runImageDesignerPipeline } = await import("./imageDesignerService.js");
+      runImageDesignerPipeline(projectDbId, project.projectId, 2).catch(() => {}).finally(() => {
+        enqueue({ jobType: "pdf_export", payloadJson: { projectId: projectDbId, documentType: "interior_design" }, priority: 60 }).catch(() => {});
+      });
+    }
+    return;
+  }
+
+  // ── Standard 4-agent pipeline ──────────────────────────────────────────────
   const stepOutputs: Record<string, StepOutput> = {};
   const completedStepNames: string[] = [];
   const previousMetadata: StepMetadata[] = [];
@@ -466,8 +717,10 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
   // are not truly "completed" until their PDF has rendered — hold them at
   // "generating_document" so the customer workspace never shows a finished
   // project with no deliverable yet.
-  const documentType = anyFailed ? null : await resolveProjectDocumentType(project);
-  const isDocumentProject = documentType !== null;
+  // documentType was resolved at the top of this function; reuse it here.
+  // If any step failed we treat it as no-document so the project goes to "failed".
+  const effectiveDocumentType = anyFailed ? null : documentType;
+  const isDocumentProject = effectiveDocumentType !== null;
   const presentationType = anyFailed || isDocumentProject ? null : await resolveProjectPresentationType(project);
   const isPresentationProject = presentationType !== null;
   const finalStatus = anyFailed
@@ -527,7 +780,7 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
       imagesDone.finally(() => {
         enqueue({
           jobType: "pdf_export",
-          payloadJson: { projectId: projectDbId, documentType },
+          payloadJson: { projectId: projectDbId, documentType: effectiveDocumentType },
           priority: 60,
         }).catch(async (err) => {
           console.error(`[pdf-export] Failed to enqueue pdf_export job for project ${project.projectId}:`, err);

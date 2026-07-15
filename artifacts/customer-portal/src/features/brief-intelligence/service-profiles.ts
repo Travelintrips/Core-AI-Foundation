@@ -45,6 +45,14 @@ export const SERVICE_PROFILES: Record<ServiceType, ServiceProfile> = {
     serviceType: "image_generation",
     priorityCategories: ["photographyDirection", "visualDirection", "style", "color", "contentDirection", "audience", "personality", "toneOfVoice", "deliverable"],
   },
+  fashion_design: {
+    serviceType: "fashion_design",
+    priorityCategories: ["style", "color", "visualDirection", "audience", "personality", "toneOfVoice", "deliverable", "contentDirection", "photographyDirection"],
+  },
+  interior_design: {
+    serviceType: "interior_design",
+    priorityCategories: ["visualDirection", "style", "color", "personality", "audience", "deliverable", "toneOfVoice", "photographyDirection", "contentDirection"],
+  },
   default: {
     serviceType: "default",
     priorityCategories: ALL_CATEGORIES,

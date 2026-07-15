@@ -130,6 +130,8 @@ Added a full Canva-like editor to the admin panel:
 
 Re-verified once more 2026-07-14 (later re-import): same wipe pattern, same fix, but this time two genuine code bugs surfaced (not present in earlier re-imports) and were fixed: (1) `templates.ts` imported a non-existent `requireAdminApiKey` export from `adminAuth.ts` — added it as an alias for `adminAuth`. (2) `ai-platform`'s `layout.tsx` referenced the `LayoutTemplate` lucide-react icon without importing it — added to the import list. All 4 services re-verified running via screenshot after the fixes.
 
+Re-verified again 2026-07-14 (latest): same wipe pattern (`node_modules` + registration gone; both known code fixes above were already present, no new bugs). Fix: `pnpm install` → `build:generated` → `build:api` → `runPostMergeSetup()` to re-register all 4 artifacts/workflows. All 4 services confirmed up via screenshot: customer-portal landing page renders, ai-platform shows staff login gate (401 on unauthenticated API call is expected), api-server and mockup-sandbox running clean.
+
 ## Key Technical Notes
 ## Database
 

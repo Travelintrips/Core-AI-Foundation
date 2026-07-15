@@ -1,0 +1,468 @@
+# POST-IMPLEMENTATION ENTERPRISE INTEGRATION & PRODUCTION AUDIT
+
+Bertindaklah sebagai **Principal Enterprise Software Auditor, Chief Software Architect, Principal Security Engineer, QA Lead, DevOps Architect, SaaS Platform Reviewer, dan Production Readiness Assessor**.
+
+## ATURAN WAJIB
+
+* JANGAN mengimplementasikan fitur baru.
+* JANGAN melakukan refactor.
+* JANGAN membuat migration.
+* JANGAN membuat commit.
+* JANGAN mengubah source code.
+* JANGAN memperbaiki bug.
+* JANGAN membuat TODO implementasi.
+
+Tugas Anda hanya **MELAKUKAN AUDIT MENYELURUH** terhadap hasil implementasi seluruh P0 setelah merge.
+
+Semua kesimpulan harus berdasarkan **source code aktual**, hasil build, hasil test, dan perilaku sistem yang benar-benar ada.
+
+---
+
+# TUJUAN
+
+Memastikan bahwa seluruh hasil implementasi:
+
+* WP-00 s/d WP-14
+* seluruh merge antar tim
+* seluruh perubahan repository
+* tenant isolation
+* audit log
+* soft delete
+* quotation canonical
+* worker
+* scheduler
+* SSE
+* export
+* AI workflow
+
+benar-benar telah terintegrasi dengan baik dan siap masuk Production.
+
+---
+
+# DOKUMEN YANG HARUS DIBACA
+
+Sebelum audit, baca seluruh dokumen berikut:
+
+* docs/audit/*
+* docs/roadmap/*
+* docs/blueprints/*
+* docs/specifications/*
+* docs/implementation/*
+
+Gunakan sebagai referensi.
+
+Namun source code aktual tetap menjadi sumber kebenaran.
+
+---
+
+# BAGIAN 1 — MERGE INTEGRATION AUDIT
+
+Audit hasil merge.
+
+Cari:
+
+* conflict yang terselesaikan tetapi salah
+* duplicate implementation
+* duplicate middleware
+* duplicate repository
+* duplicate context
+* duplicate tenant resolution
+* duplicate audit hook
+* duplicate quotation path
+* duplicate event pipeline
+
+Pastikan hanya ada SATU implementasi canonical.
+
+---
+
+# BAGIAN 2 — TENANT ISOLATION AUDIT
+
+Pastikan:
+
+* seluruh query tenant-owned menggunakan tenant scope
+* tidak ada query yang lolos tanpa tenant
+* worker membawa tenant
+* scheduler membawa tenant
+* export membawa tenant
+* SSE membawa tenant
+* AI workflow membawa tenant
+* repository selalu memakai RequestContext
+
+Lakukan audit seluruh call path.
+
+---
+
+# BAGIAN 3 — REQUEST CONTEXT AUDIT
+
+Pastikan hanya ada SATU RequestContext canonical.
+
+Cari:
+
+* context lain
+* helper lain
+* adapter yang tidak lagi dipakai
+* legacy context
+
+Pastikan tidak ada fragmentasi.
+
+---
+
+# BAGIAN 4 — REPOSITORY AUDIT
+
+Audit:
+
+* repository coverage
+* tenant enforcement
+* transaction support
+* platform scope
+* residual direct query
+
+Buat daftar:
+
+Repository yang sudah memakai foundation.
+
+Repository yang belum.
+
+Route yang masih query langsung.
+
+---
+
+# BAGIAN 5 — AUDIT LOG AUDIT
+
+Pastikan:
+
+* audit event konsisten
+* actor benar
+* tenant benar
+* immutable
+* append only
+* transaction-safe
+
+Cari operasi yang belum memiliki audit.
+
+---
+
+# BAGIAN 6 — SOFT DELETE AUDIT
+
+Audit:
+
+* entity
+* restore
+* archive
+* purge
+* retention
+
+Cari:
+
+* hard delete yang masih tersisa
+* entity yang belum support restore
+* child entity yang salah
+
+---
+
+# BAGIAN 7 — QUOTATION AUDIT
+
+Pastikan:
+
+* ai_quotations canonical
+* legacy read-compatible
+* tidak ada dual write
+* migration aman
+* customer flow tetap berjalan
+
+Audit seluruh state machine.
+
+---
+
+# BAGIAN 8 — WORKER & SCHEDULER AUDIT
+
+Audit:
+
+* tenant propagation
+* retry
+* rollback
+* transaction
+* observability
+
+---
+
+# BAGIAN 9 — SSE AUDIT
+
+Audit:
+
+* tenant isolation
+* reconnect
+* cursor
+* authorization
+* filtering
+* replay
+
+---
+
+# BAGIAN 10 — EXPORT AUDIT
+
+Audit:
+
+* PDF
+* PPTX
+* ZIP
+* Preview
+* Thumbnail
+
+Pastikan:
+
+* tenant-safe
+* signed URL aman
+* download authorization benar
+
+---
+
+# BAGIAN 11 — AI WORKFLOW AUDIT
+
+Audit:
+
+* AI orchestration
+* RequestContext
+* repository
+* audit
+* worker
+* quotation
+* deliverable
+
+Cari duplicate AI call.
+
+Cari context leak.
+
+Cari tenant leak.
+
+---
+
+# BAGIAN 12 — SECURITY AUDIT
+
+Audit:
+
+* authentication
+* authorization
+* tenant spoofing
+* privilege escalation
+* injection
+* replay
+* token misuse
+* export misuse
+* SSE misuse
+
+---
+
+# BAGIAN 13 — PERFORMANCE AUDIT
+
+Audit:
+
+* N+1
+* duplicate query
+* transaction
+* indexing
+* worker efficiency
+* AI efficiency
+* cache
+
+---
+
+# BAGIAN 14 — OBSERVABILITY AUDIT
+
+Audit:
+
+* metrics
+* logging
+* request id
+* correlation id
+* audit coverage
+* worker monitoring
+* SSE monitoring
+
+---
+
+# BAGIAN 15 — REGRESSION AUDIT
+
+Pastikan fitur lama tetap bekerja:
+
+* Company Profile
+* Brand Strategy
+* Brand Guideline
+* Pitch Deck
+* Presentation
+* Creative Consultant
+* Customer Portal
+* Admin Portal
+* Marketplace
+* AI Workflow
+* Export
+* Notification
+* Review
+* Approval
+
+---
+
+# BAGIAN 16 — BUILD AUDIT
+
+Jalankan:
+
+* full tests
+* integration tests
+* security tests
+* regression tests
+* typecheck
+* build
+
+Bedakan:
+
+Pre-existing failure
+
+vs
+
+Regression baru
+
+---
+
+# BAGIAN 17 — PRODUCTION READINESS
+
+Nilai:
+
+Security
+
+Reliability
+
+Maintainability
+
+Scalability
+
+Performance
+
+Observability
+
+Recovery
+
+Rollback
+
+Multi Tenant
+
+AI Readiness
+
+Customer Experience
+
+Admin Experience
+
+Documentation
+
+Deployment Readiness
+
+---
+
+# BAGIAN 18 — SCORE
+
+Berikan skor 0–100 untuk:
+
+Architecture
+
+Security
+
+Tenant Isolation
+
+Repository
+
+Audit
+
+Soft Delete
+
+Quotation
+
+Worker
+
+SSE
+
+Export
+
+AI
+
+Customer Portal
+
+Admin Portal
+
+Production Readiness
+
+Overall Platform
+
+---
+
+# BAGIAN 19 — FINAL FINDINGS
+
+Kelompokkan:
+
+Critical
+
+High
+
+Medium
+
+Low
+
+Cosmetic
+
+Bedakan:
+
+Bug
+
+Architecture Issue
+
+Technical Debt
+
+Enhancement
+
+---
+
+# BAGIAN 20 — RELEASE DECISION
+
+Berikan salah satu:
+
+READY FOR PRODUCTION
+
+READY WITH MINOR FIXES
+
+READY AFTER P1 FIXES
+
+NOT READY
+
+Berikan alasan teknis yang jelas.
+
+---
+
+# OUTPUT
+
+Buat laporan:
+
+docs/audit/post-implementation-enterprise-audit.md
+
+Laporan harus memuat:
+
+* Executive Summary
+* Integration Audit
+* Regression Audit
+* Production Readiness Audit
+* Security Audit
+* Architecture Audit
+* Final Score
+* Release Recommendation
+* Risk Register
+* Remaining Technical Debt
+
+Semua temuan harus menyertakan:
+
+* file
+* fungsi
+* modul
+* bukti teknis
+
+Jangan membuat asumsi.
+
+Jangan membuat perubahan kode.
+
+Fokus hanya pada audit akhir terhadap sistem yang telah selesai diimplementasikan.

@@ -4,8 +4,9 @@ import { getOrCreateReferral, listReferrals, convertReferral, getReferralStats }
 const router = Router();
 
 const getBaseUrl = (req: { headers: { host?: string }; protocol: string }) => {
-  const domain = process.env.REPLIT_DEV_DOMAIN;
-  return domain ? `https://${domain}` : `${req.protocol}://${req.headers.host}`;
+  if (process.env["PUBLIC_APP_URL"]) return process.env["PUBLIC_APP_URL"].replace(/\/$/, "");
+  if (process.env["REPLIT_DEV_DOMAIN"]) return `https://${process.env["REPLIT_DEV_DOMAIN"]}`;
+  return `${req.protocol}://${req.headers.host}`;
 };
 
 // GET /ai/referrals

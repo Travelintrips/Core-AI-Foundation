@@ -65,6 +65,25 @@ export type BriefData = {
   deadline: string;
   priority: string;
   milestones: string;
+  // Fashion Design fields — namespaced `fd*`, only rendered for fashion_design service
+  fdFashionSegment: string;    // luxury | streetwear | modest_fashion | casual | sportswear | workwear | kidswear | bridal
+  fdCollectionType: string;    // ready_to_wear | capsule | seasonal | limited_edition | custom_order
+  fdTargetGender: string;      // women | men | unisex | kids
+  fdSeason: string;            // ss25 | fw25 | resort | holiday | all_season
+  fdPricePoint: string;        // mass_market | mid_range | premium | luxury
+  fdColorDirection: string;    // free text
+  fdFabricPreference: string;  // free text
+  fdNumberOfLooks: string;     // free text
+  // Interior Design fields — namespaced `int*`, only rendered for interior_design service
+  intSpaceType: string;        // residential | commercial | hospitality | retail | office | restaurant | cafe
+  intRoomTypes: string;        // free text, e.g. "living room, master bedroom"
+  intTotalArea: string;        // sqm
+  intDesignStyle: string;      // japandi | scandinavian | industrial | tropical_modern | mid_century | luxury_classic | minimalist | bohemian
+  intBudgetTier: string;       // basic | standard | premium | luxury
+  intMoodGoal: string;         // free text
+  intExistingElements: string; // free text
+  intMustHaveFeatures: string; // free text
+  intAvoidElements: string;    // free text
   // Company Profile sprint (P0) — extra fields, only rendered/required when
   // the service is Company Profile. Namespaced `cp*` so they never collide
   // with the generic fields above or with any other service's brief data.
@@ -123,6 +142,12 @@ const EMPTY_BRIEF: BriefData = {
   stylePreference: "", colorPalette: "", referenceLinks: "",
   outputFormats: "", outputLanguage: "id", specialRequirements: "",
   deadline: "", priority: "balanced", milestones: "",
+  fdFashionSegment: "", fdCollectionType: "", fdTargetGender: "",
+  fdSeason: "", fdPricePoint: "", fdColorDirection: "",
+  fdFabricPreference: "", fdNumberOfLooks: "",
+  intSpaceType: "", intRoomTypes: "", intTotalArea: "",
+  intDesignStyle: "", intBudgetTier: "", intMoodGoal: "",
+  intExistingElements: "", intMustHaveFeatures: "", intAvoidElements: "",
   cpLegalName: "", cpBusinessTypeDetail: "", cpYearEstablished: "",
   cpCompanyHistory: "", cpVision: "", cpMission: "", cpCompanyValues: "",
   cpValueProposition: "", cpProductsServices: "", cpGeographicCoverage: "",
@@ -321,6 +346,7 @@ export default function BriefPage() {
       : null,
     [isCompanyProfile, brief.cpBusinessTypeDetail, brief.companyIndustry],
   );
+
   const [assistantOpen, setAssistantOpen]     = useState(false);
   const [isSaving, setIsSaving]               = useState(false);
   const [submitError, setSubmitError]         = useState<string | null>(null);

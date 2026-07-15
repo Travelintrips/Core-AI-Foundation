@@ -49,6 +49,7 @@ import { getGateForServiceQuotation, gateIsCleared } from "../services/commercia
 import { creativeAiAssetsTable } from "@workspace/db";
 import { scoreFromAssetMetadata } from "../services/companyProfileQcService.js";
 import { resolvePublicRequestTenantId } from "../security/tenantResolution.js";
+import { getPublicBaseUrl } from "../lib/publicBaseUrl.js";
 
 // Statuses that must only be reached once the commercial gate (if one exists
 // for this request's quotation) has been verified or waived. Without this
@@ -76,10 +77,7 @@ function hashToken(t: string): string { return createHash("sha256").update(t).di
 
 /** Build the base URL for constructing portal links */
 function buildBaseUrl(req: import("express").Request): string {
-  if (process.env["REPLIT_DEV_DOMAIN"]) return `https://${process.env["REPLIT_DEV_DOMAIN"]}`;
-  const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0] ?? req.protocol;
-  const host = (req.headers["x-forwarded-host"] as string | undefined) ?? req.get("host") ?? "localhost";
-  return `${proto}://${host}`;
+  return getPublicBaseUrl(req);
 }
 
 const router = Router();
@@ -532,18 +530,20 @@ router.patch("/ai/catalog/requests/:id/status", async (req, res): Promise<void> 
 
     if (status === "completed" || status === "converted_to_project") {
       const finalProjectId = createdProjectId ?? existing.createdProjectId;
-      if (!finalProjectId) {
-        res.status(409).json({ error: `Cannot move to "${status}" without a createdProjectId — production must actually exist first.` });
-        return;
-      }
-      const [project] = await db
-        .select({ status: creativeProjectsTable.status })
-        .from(creativeProjectsTable)
-        .where(eq(creativeProjectsTable.projectId, finalProjectId))
-        .limit(1);
-      if (!project || project.status !== "completed") {
-        res.status(409).json({ error: `Cannot move to "${status}": linked project ${finalProjectId} is not marked completed.` });
-        return;
+      // Only enforce the linked-project guard when a creative project actually
+      // exists on this request. Requests that went through the "Langsung ke
+      // Produksi" shortcut (approved → in_progress, skipping checkout) never
+      // get a createdProjectId and must be completable without one.
+      if (finalProjectId) {
+        const [project] = await db
+          .select({ status: creativeProjectsTable.status })
+          .from(creativeProjectsTable)
+          .where(eq(creativeProjectsTable.projectId, finalProjectId))
+          .limit(1);
+        if (!project || project.status !== "completed") {
+          res.status(409).json({ error: `Cannot move to "${status}": linked project ${finalProjectId} is not marked completed.` });
+          return;
+        }
       }
     }
   }

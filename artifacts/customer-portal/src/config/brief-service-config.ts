@@ -291,6 +291,8 @@ export function detectServiceType(serviceName?: string | null): ServiceType {
   if (n.includes("pitch deck") || n.includes("pitch")) return "pitch_deck";
   if (n.includes("social media") || n.includes("sosmed") || n.includes("konten media")) return "social_media";
   if (n.includes("copywriting") || n.includes("copywriter")) return "copywriting";
+  if (n.includes("fashion design") || n.includes("fashion brief")) return "fashion_design";
+  if (n.includes("interior design") || n.includes("desain interior")) return "interior_design";
   if (n.includes("image") || n.includes("gambar") || n.includes("ilustrasi")) return "image_generation";
   if (n.includes("fashion") || n.includes("koleksi") || n.includes("collection brief") || n.includes("fashion brand")) return "fashion_design";
   if (n.includes("interior") || n.includes("ruangan") || n.includes("spatial") || n.includes("mood board") && n.includes("room")) return "interior_design";
