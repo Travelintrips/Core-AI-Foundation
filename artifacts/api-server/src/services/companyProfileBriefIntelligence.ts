@@ -50,6 +50,7 @@ export const NEW_BRIEF_FIELDS = [
   "cpUploadedLogo",
   "cpUploadedPhotos",
   "cpReferenceDocuments",
+  "cpVideo",
   "cpContactEmail",
   "cpContactPhone",
   "cpContactAddress",

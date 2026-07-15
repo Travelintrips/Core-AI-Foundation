@@ -152,6 +152,11 @@ function buildEnrichedBrief(
     cpContactPhone:       safeStr(cpFields["cpContactPhone"]),
     cpContactAddress:     safeStr(cpFields["cpContactAddress"]),
     cpContactWebsite:     safeStr(cpFields["cpContactWebsite"]),
+    // P1.3: uploaded assets
+    cpUploadedLogo:       safeStr(cpFields["cpUploadedLogo"]),
+    cpUploadedPhotos:     safeStr(cpFields["cpUploadedPhotos"]),
+    cpReferenceDocuments: safeStr(cpFields["cpReferenceDocuments"]),
+    cpVideo:              safeStr(cpFields["cpVideo"]),
     // P1.2: Package enforcement
     packageLevel,
     packageName,

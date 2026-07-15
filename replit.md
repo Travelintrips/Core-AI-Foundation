@@ -47,7 +47,37 @@ All set via Replit userenv (`.replit`) and Secrets:
 
 Supabase PostgreSQL with a dedicated `ai_platform` schema. Dev and prod use separate Supabase projects. To seed:
 
+### Production Migration (Dev → Prod sync)
+
+Dev dan Prod adalah **dua database terpisah**. Setiap kali ada tabel/kolom baru di dev, jalankan script ini ke prod:
+
 ```bash
+# Preview SQL yang akan dijalankan (tanpa mengubah apapun):
+pnpm run migrate:prod:dry-run
+
+# Jalankan semua migration ke prod (butuh SUPABASE_PROD_DATABASE_URL di Replit Secrets):
+pnpm run migrate:prod
+
+# Setelah migration, isi data awal ke prod:
+NODE_ENV=production pnpm --filter @workspace/api-server run seed
+```
+
+Script ini (`scripts/src/migrate-prod.ts`) menjalankan **11 migration** secara berurutan:
+1. V4.2E — ai_brand_dna + ai_asset_intelligence
+2. V4.3 — ai_templates + ai_template_analytics
+3. V4.3 Gallery — ai_portfolio_favorites
+4. V4.4 — ai_production_pipelines + ai_pipeline_stages
+5. P2.5 Commercial Layer — sales_funnel_events, promotions, coupons, referrals, affiliates
+6. P7 Internal RBAC — internal_users + service category columns
+7. P1.1 Customer Workspace — ai_customer_documents + impersonation tokens
+8. WP04/WP05 Soft Delete — deleted_at/archived_at columns
+9. CP Brief Guard — brief_guard_override columns
+10. V4.5 Design Studio — ai_design_projects + ai_design_versions
+11. Seed AI Sales Manager — employee record upsert
+
+Semua statement menggunakan `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` — **aman dijalankan ulang kapanpun**.
+
+To seed:
 pnpm --filter @workspace/api-server run seed
 ```
 

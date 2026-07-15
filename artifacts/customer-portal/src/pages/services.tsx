@@ -1061,16 +1061,20 @@ export default function ServicesPage() {
               style={{ animationDelay: "240ms" }}
               className="flex items-center justify-center gap-2 mt-5 flex-wrap"
             >
-              <span className="text-xs text-[#8B9BC4]">{t('services.quickLabel')}</span>
-              {["Creative AI", "Finance AI", "Legal AI", "Marketing AI"].map((tag) => (
-                <button
-                  key={tag}
-                  onClick={() => handleSearchSelect(tag.replace(" AI", ""))}
-                  className="text-xs px-3 py-1 rounded-full border border-[#2E4270] text-[#8B9BC4] hover:border-[#7C6EFA]/50 hover:text-[#7C6EFA] transition-all duration-150"
-                >
-                  {tag}
-                </button>
-              ))}
+              {categories.length > 0 && (
+                <>
+                  <span className="text-xs text-[#8B9BC4]">{t('services.quickLabel')}</span>
+                  {categories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setCategoryId(cat.id)}
+                      className="text-xs px-3 py-1 rounded-full border border-[#2E4270] text-[#8B9BC4] hover:border-[#7C6EFA]/50 hover:text-[#7C6EFA] transition-all duration-150"
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </>
+              )}
             </motion.div>
           </div>
         </section>

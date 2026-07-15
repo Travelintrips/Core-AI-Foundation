@@ -66,3 +66,4 @@
 - [phase-v45-design-studio](phase-v45-design-studio.md) — V4.5 canvas editor; route prefix must be /ai/... not /api/ai/... ; canvas state as JSONB; pre-existing typecheck failures in presentation/zip services
 - [phase-v47-creative-marketplace](phase-v47-creative-marketplace.md) — V4.7 asset marketplace; Creative prefix on all schemas (collision with skills marketplace); resolveWorkspaceSession for token auth
 - [wp08-wp11-quotation](wp08-wp11-quotation.md) — Quotation repo write+audit, soft-delete cascade, restore role guard, legacy freeze (410), vi.hoisted() test pattern
+- [cp-real-file-upload](cp-real-file-upload.md) — logo/photo/doc/video uploads now real (object storage), fixed missing adminAuth public exception; PDF still doesn't embed uploaded logo/photos

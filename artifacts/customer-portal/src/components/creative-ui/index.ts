@@ -20,6 +20,8 @@ export type { ColorPreset } from "./ColorPicker";
 export { UploadDropzone } from "./UploadDropzone";
 export type { UploadedFile } from "./UploadDropzone";
 
+export { CpAssetUploader } from "./CpAssetUploader";
+
 export { ProgressStepper } from "./ProgressStepper";
 
 export { SectionCard } from "./SectionCard";

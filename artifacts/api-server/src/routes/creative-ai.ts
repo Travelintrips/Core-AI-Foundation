@@ -28,7 +28,6 @@ import {
 } from "@workspace/api-zod";
 import { logAudit } from "../services/aiAuditService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
-import { runCreativeBriefWorkflow } from "../services/creativeWorkflowRunner.js";
 import { runImageDesignerPipeline } from "../services/imageDesignerService.js";
 
 const router = Router();
