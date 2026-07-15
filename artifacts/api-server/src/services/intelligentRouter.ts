@@ -30,10 +30,12 @@ import { readGuardrails } from "./guardrailService.js";
 // ── Agent slug → capability skill mapping ─────────────────────────────────────
 
 const AGENT_SKILL_MAP: Record<string, string> = {
-  "brand-strategist":  "branding",
-  "creative-director": "creative_direction",
-  "copywriter":        "copywriting",
-  "quality-control":   "quality_control",
+  "brand-strategist":           "branding",
+  "creative-director":          "creative_direction",
+  "copywriter":                 "copywriting",
+  "quality-control":            "quality_control",
+  "fashion-design-specialist":  "fashion_design",
+  "interior-design-specialist": "interior_design",
 };
 
 // ── Scoring weights ───────────────────────────────────────────────────────────

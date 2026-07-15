@@ -13,6 +13,8 @@ export type ServiceType =
   | "social_media"
   | "copywriting"
   | "image_generation"
+  | "fashion_design"
+  | "interior_design"
   | "default";
 
 export interface BriefStep1Config {
@@ -205,6 +207,76 @@ const OVERRIDES: Partial<Record<ServiceType, Partial<BriefSectionConfig>>> = {
       showLanguage: false,
     },
   },
+  fashion_design: {
+    step1: {
+      ...DEFAULT.step1,
+      industryLabel: "Kategori fashion brand Anda",
+      industryHint: "Pilih industri yang paling sesuai dengan brand fashion Anda",
+      websiteLabel: "Website, online store, atau media sosial brand",
+      websiteHint: "Instagram, Shopee, Tokopedia, atau website resmi",
+    },
+    step2: {
+      ...DEFAULT.step2,
+      goalLabel: "Tujuan project fashion ini",
+      goalDescription: "Pilih hingga 5 tujuan utama. Minimal satu wajib dipilih.",
+      existingAssetsLabel: "Aset brand yang sudah Anda miliki (logo, lookbook, dsb.)",
+    },
+    step3: {
+      ...DEFAULT.step3,
+      audienceLabel: "Siapa target konsumen koleksi ini?",
+      audienceDescription: "Pilih hingga 4 segmen konsumen utama.",
+      painPointsLabel: "Apa yang sedang dicari oleh konsumen fashion Anda?",
+      channelsLabel: "Di mana konsumen Anda biasanya berbelanja atau mencari inspirasi?",
+    },
+    step4: {
+      ...DEFAULT.step4,
+      styleLabel: "Gaya visual / estetika koleksi yang diinginkan",
+      referenceLabel: "Referensi brand, desainer, atau lookbook",
+      referenceHint: "Contoh: brand seperti X, desainer Y, atau link Pinterest mood board Anda",
+      specialReqLabel: "Pantangan visual atau elemen wajib ada",
+      specialReqHint: "Contoh: no head-to-toe hitam, harus ada batik motif, wajib inklusif size",
+    },
+    step5: {
+      outputLabel: "Output yang dibutuhkan dari project ini",
+      outputHint: "Contoh: brief koleksi 10 halaman, 20 product description, 30 caption Instagram",
+      showLanguage: true,
+    },
+  },
+  interior_design: {
+    step1: {
+      ...DEFAULT.step1,
+      industryLabel: "Jenis project interior",
+      industryHint: "Pilih kategori project yang paling sesuai",
+      websiteLabel: "Website studio atau referensi proyek sebelumnya",
+      websiteHint: "Portfolio, Instagram studio, atau website resmi",
+    },
+    step2: {
+      ...DEFAULT.step2,
+      goalLabel: "Tujuan utama project desain interior ini",
+      goalDescription: "Pilih hingga 5 tujuan. Minimal satu wajib dipilih.",
+      existingAssetsLabel: "Data yang sudah tersedia (denah, foto kondisi saat ini, dsb.)",
+    },
+    step3: {
+      ...DEFAULT.step3,
+      audienceLabel: "Siapa pengguna utama ruangan ini?",
+      audienceDescription: "Pilih hingga 4 segmen pengguna.",
+      painPointsLabel: "Masalah atau kebutuhan utama dari ruangan saat ini",
+      channelsLabel: "Di mana klien Anda biasanya mencari inspirasi desain?",
+    },
+    step4: {
+      ...DEFAULT.step4,
+      styleLabel: "Gaya desain interior yang diinginkan",
+      referenceLabel: "Referensi desainer, proyek, atau gambar inspirasi",
+      referenceHint: "Link Pinterest board, Houzz, atau nama desainer yang Anda kagumi",
+      specialReqLabel: "Spesifikasi teknis atau pantangan desain",
+      specialReqHint: "Contoh: harus child-friendly, no dark wood, budget material max Rp X",
+    },
+    step5: {
+      outputLabel: "Output yang dibutuhkan",
+      outputHint: "Contoh: konsep desain 15 halaman + spesifikasi material + mood board 2 ruangan",
+      showLanguage: true,
+    },
+  },
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -220,6 +292,8 @@ export function detectServiceType(serviceName?: string | null): ServiceType {
   if (n.includes("social media") || n.includes("sosmed") || n.includes("konten media")) return "social_media";
   if (n.includes("copywriting") || n.includes("copywriter")) return "copywriting";
   if (n.includes("image") || n.includes("gambar") || n.includes("ilustrasi")) return "image_generation";
+  if (n.includes("fashion") || n.includes("koleksi") || n.includes("collection brief") || n.includes("fashion brand")) return "fashion_design";
+  if (n.includes("interior") || n.includes("ruangan") || n.includes("spatial") || n.includes("mood board") && n.includes("room")) return "interior_design";
   return "default";
 }
 
