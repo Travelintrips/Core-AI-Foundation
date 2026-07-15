@@ -139,7 +139,6 @@ router.use(referralsRouter);
 router.use(affiliatesRouter);
 router.use(customerHealthRouter);
 router.use(commercialAnalyticsRouter);
-router.use(storageRouter);
 router.use(observabilityRouter);
 router.use(designStudioRouter);
 router.use(creativeMarketplaceRouter);

@@ -6,7 +6,7 @@ import { AutosaveStatus, type AutosaveState } from "@/components/brief/autosave-
 import {
   SectionCard, FieldTitle, HelperText, SuggestionGroup,
   SelectionCard, ChoiceChip, ColorPicker, ProgressStepper, SummaryCard,
-  TagSelector,
+  TagSelector, CpAssetUploader,
 } from "@/components/creative-ui";
 import { MultiChoiceChip } from "@/components/creative-ui/ChoiceChip";
 import { DEFAULT_COLOR_PRESETS } from "@/components/creative-ui/ColorPicker";
@@ -86,6 +86,7 @@ export type BriefData = {
   cpUploadedLogo: string;
   cpUploadedPhotos: string;
   cpReferenceDocuments: string;
+  cpVideo: string;
   cpContactEmail: string;
   cpContactPhone: string;
   cpContactAddress: string;
@@ -106,7 +107,7 @@ const EMPTY_BRIEF: BriefData = {
   cpLegalDocuments: "", cpOrganizationStructure: "", cpKeyPeople: "",
   cpClientsPartners: "", cpProjectExperience: "", cpQualityAssurance: "",
   cpSustainability: "", cpPageTarget: "", cpUploadedLogo: "",
-  cpUploadedPhotos: "", cpReferenceDocuments: "", cpContactEmail: "",
+  cpUploadedPhotos: "", cpReferenceDocuments: "", cpVideo: "", cpContactEmail: "",
   cpContactPhone: "", cpContactAddress: "", cpContactWebsite: "",
 };
 
@@ -1312,22 +1313,48 @@ export default function BriefPage() {
                         placeholder="Contoh: Panel surya 500 kWp, program CSR beasiswa 50 siswa/tahun" />
                     </FieldItem>
 
-                    <FieldItem id="cpUploadedLogo" label="Link logo perusahaan" optional hint="URL logo resolusi tinggi (PNG/SVG) atau link Google Drive/Dropbox">
-                      <input id="brief-cpUploadedLogo" className="input-field" type="url"
-                        value={brief.cpUploadedLogo} onChange={(e) => handleChange("cpUploadedLogo", e.target.value)}
-                        placeholder="https://drive.google.com/file/d/xxxx atau https://cdn.perusahaan.com/logo.png" />
+                    <FieldItem id="cpUploadedLogo" label="Logo perusahaan" optional hint="Unggah logo resolusi tinggi (PNG, JPG, atau SVG)">
+                      <CpAssetUploader
+                        value={brief.cpUploadedLogo}
+                        onChange={(v) => handleChange("cpUploadedLogo", v)}
+                        accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                        multiple={false}
+                        maxSizeMB={5}
+                        label="Unggah logo perusahaan"
+                      />
                     </FieldItem>
 
-                    <FieldItem id="cpUploadedPhotos" label="Link foto gedung / produk / tim" optional hint="Link Google Drive folder atau beberapa URL foto (pisahkan dengan koma)">
-                      <textarea id="brief-cpUploadedPhotos" className="input-field min-h-[60px]"
-                        value={brief.cpUploadedPhotos} onChange={(e) => handleChange("cpUploadedPhotos", e.target.value)}
-                        placeholder="https://drive.google.com/drive/folders/xxxx" />
+                    <FieldItem id="cpUploadedPhotos" label="Foto gedung / produk / tim" optional hint="Unggah beberapa foto sekaligus">
+                      <CpAssetUploader
+                        value={brief.cpUploadedPhotos}
+                        onChange={(v) => handleChange("cpUploadedPhotos", v)}
+                        accept="image/*"
+                        multiple
+                        maxSizeMB={10}
+                        label="Unggah foto gedung, produk, atau tim"
+                      />
                     </FieldItem>
 
                     <FieldItem id="cpReferenceDocuments" label="Dokumen referensi (annual report, brosur lama, dll)" optional>
-                      <textarea id="brief-cpReferenceDocuments" className="input-field min-h-[60px]"
-                        value={brief.cpReferenceDocuments} onChange={(e) => handleChange("cpReferenceDocuments", e.target.value)}
-                        placeholder="https://drive.google.com/file/d/xxxx — annual report 2023, brosur produk" />
+                      <CpAssetUploader
+                        value={brief.cpReferenceDocuments}
+                        onChange={(v) => handleChange("cpReferenceDocuments", v)}
+                        accept="application/pdf,.doc,.docx"
+                        multiple
+                        maxSizeMB={20}
+                        label="Unggah dokumen referensi"
+                      />
+                    </FieldItem>
+
+                    <FieldItem id="cpVideo" label="Video profil perusahaan" optional hint="Unggah video company profile atau produk yang sudah ada (opsional, jika ada)">
+                      <CpAssetUploader
+                        value={brief.cpVideo}
+                        onChange={(v) => handleChange("cpVideo", v)}
+                        accept="video/mp4,video/quicktime,video/webm"
+                        multiple={false}
+                        maxSizeMB={200}
+                        label="Unggah video perusahaan"
+                      />
                     </FieldItem>
                   </>
                 )}
@@ -1728,6 +1755,7 @@ function ReviewStep({
             { label: "Logo",            value: brief.cpUploadedLogo },
             { label: "Foto",            value: brief.cpUploadedPhotos },
             { label: "Dok. Referensi",  value: brief.cpReferenceDocuments },
+            { label: "Video",           value: brief.cpVideo },
           ].filter((r) => r.value),
         },
         {
