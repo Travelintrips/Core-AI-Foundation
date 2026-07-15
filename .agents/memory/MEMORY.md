@@ -69,3 +69,4 @@
 - [cp-real-file-upload](cp-real-file-upload.md) — logo/photo/doc/video uploads now real (object storage), fixed missing adminAuth public exception; PDF still doesn't embed uploaded logo/photos
 - [design-template-blueprints](design-template-blueprints.md) — builtin templates served from code (no DB); add to BUILTIN_TEMPLATES array, no migration needed
 - [design-template-engine-phase1](design-template-engine-phase1.md) — Phase 1 foundation: 4 tables, 13 API endpoints, 46 tests, zod catalog dep, date formatter order rule, Phase 2 stub locations
+- [design-template-engine-phase2](design-template-engine-phase2.md) — Phase 2 renderer: 12 files in design-renderer/, single-render creates batch+item first, ZIP returns 501, 712 tests all pass

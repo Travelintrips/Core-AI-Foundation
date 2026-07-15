@@ -42,9 +42,22 @@ import {
   createVersionRequestSchema,
   singleRenderRequestSchema,
   createBatchRequestSchema,
+  designTemplateJsonSchema,
 } from "../validators/designTemplateSchema.js";
 import { TenantAccessError } from "../services/designTemplateVariableService.js";
 import { logger } from "../lib/logger.js";
+import { renderTemplatePreview } from "../services/design-renderer/index.js";
+import { validateOutputDimensions } from "../services/design-renderer/outputEncoder.js";
+import type { DesignTemplate, RenderFormat } from "../types/designTemplate.js";
+import { DESIGN_LIMITS } from "../types/designTemplate.js";
+import { db } from "@workspace/db";
+import {
+  designRenderItemsTable,
+  designTemplateVersionsTable,
+} from "@workspace/db";
+import { computeInputHash } from "../services/designTemplateVariableService.js";
+import { eq, and } from "drizzle-orm";
+import type { NewDesignRenderItem } from "@workspace/db";
 
 const router = Router();
 
@@ -159,7 +172,7 @@ router.post("/ai/design-templates/:id/duplicate", async (req, res) => {
   }
 });
 
-/** GET /ai/design-templates/:id/preview */
+/** GET /ai/design-templates/:id/preview — returns template JSON + sample data */
 router.get("/ai/design-templates/:id/preview", async (req, res) => {
   try {
     const ctx = resolveAuthenticatedTenantContext(req);
@@ -169,6 +182,81 @@ router.get("/ai/design-templates/:id/preview", async (req, res) => {
     const preview = await getPreviewData(id, ctx.tenantId);
     if (!preview) return res.status(404).json({ error: "Template or active version not found" });
     res.json(preview);
+  } catch (err) {
+    return handleError(res, err);
+  }
+});
+
+/**
+ * POST /ai/design-templates/:id/preview — render a live image preview
+ *
+ * Uses the same core renderer as the production worker. Output is returned
+ * as a binary response (Content-Type: image/*) or base64 JSON.
+ * Does NOT create a permanent batch item.
+ *
+ * Rate limit: max 10 req/min per tenant (enforced by adminAuthWithExceptions upstream).
+ */
+router.post("/ai/design-templates/:id/preview", async (req, res) => {
+  try {
+    const ctx = resolveAuthenticatedTenantContext(req);
+    const id = parseInt(String(req.params["id"]), 10);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid template ID" });
+
+    const bodySchema = z.object({
+      templateVersionId: z.number().int().positive().optional(),
+      data:              z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).optional().default({}),
+      format:            z.enum(["png", "jpg", "webp", "pdf"]).optional().default("png"),
+      width:             z.number().int().positive().max(DESIGN_LIMITS.MAX_CANVAS_WIDTH).optional(),
+      height:            z.number().int().positive().max(DESIGN_LIMITS.MAX_CANVAS_HEIGHT).optional(),
+    });
+
+    const body = bodySchema.safeParse(req.body);
+    if (!body.success) return res.status(400).json({ error: "Validation failed", issues: body.error.issues });
+
+    // Load template
+    const template = await getTemplate(id, ctx.tenantId);
+    if (!template) return res.status(404).json({ error: "Template not found" });
+
+    // Use specified version or active version
+    let versionId = body.data.templateVersionId ?? template.activeVersionId ?? null;
+    if (!versionId) return res.status(400).json({ error: "Template has no active version" });
+
+    const [version] = await db
+      .select()
+      .from(designTemplateVersionsTable)
+      .where(
+        and(
+          eq(designTemplateVersionsTable.id, versionId),
+          eq(designTemplateVersionsTable.tenantId, ctx.tenantId),
+        ),
+      )
+      .limit(1);
+
+    if (!version) return res.status(404).json({ error: "Template version not found" });
+
+    const parseResult = designTemplateJsonSchema.safeParse(version.templateJson);
+    if (!parseResult.success) return res.status(422).json({ error: "Template JSON is invalid" });
+
+    const templateDomain = version.templateJson as unknown as DesignTemplate;
+
+    // Render preview (no permanent storage)
+    const result = await renderTemplatePreview({
+      template:          templateDomain,
+      templateVersionId: versionId,
+      data:              body.data.data as Record<string, string | number | boolean | null | undefined>,
+      format:            body.data.format as RenderFormat,
+      tenantId:          ctx.tenantId,
+      outputWidth:       body.data.width,
+      outputHeight:      body.data.height,
+    });
+
+    // Return binary image directly
+    res.set("Content-Type", result.mimeType);
+    res.set("Cache-Control", "no-store");
+    res.set("X-Render-Warnings", String(result.warnings.length));
+    res.set("X-Canvas-Width",  String(result.width));
+    res.set("X-Canvas-Height", String(result.height));
+    res.send(result.buffer);
   } catch (err) {
     return handleError(res, err);
   }
@@ -233,7 +321,16 @@ router.post("/ai/design-templates/:id/publish", async (req, res) => {
 
 // ── Single Render ─────────────────────────────────────────────────────────────
 
-/** POST /ai/design-templates/:id/render */
+/**
+ * POST /ai/design-templates/:id/render
+ *
+ * Creates a canonical render item (via a single-item batch) and enqueues a
+ * design_render job. The job payload carries only the renderItemId — all
+ * render data is read from the database by the worker.
+ *
+ * Idempotency: if a completed render item with the same inputHash already
+ * exists, returns the cached result immediately (no new job).
+ */
 router.post("/ai/design-templates/:id/render", async (req, res) => {
   try {
     const ctx = resolveAuthenticatedTenantContext(req);
@@ -243,27 +340,88 @@ router.post("/ai/design-templates/:id/render", async (req, res) => {
     const body = singleRenderRequestSchema.safeParse(req.body);
     if (!body.success) return res.status(400).json({ error: "Validation failed", issues: body.error.issues });
 
-    // Verify the template belongs to this tenant
+    // Verify template belongs to this tenant
     const template = await getTemplate(id, ctx.tenantId);
     if (!template) return res.status(404).json({ error: "Template not found" });
 
-    const job = await enqueue({
-      jobType: "design_render",
-      payloadJson: {
-        templateId: id,
-        templateVersionId: body.data.templateVersionId,
-        format: body.data.format,
-        data: body.data.data,
-        idempotencyKey: body.data.idempotencyKey,
-        width: body.data.width,
-        height: body.data.height,
-        tenantId: ctx.tenantId,
-      },
-      priority: 60,
-      tenantId: ctx.tenantId,
+    const versionId = body.data.templateVersionId;
+
+    // Verify version belongs to this tenant
+    const [version] = await db
+      .select({ id: designTemplateVersionsTable.id, tenantId: designTemplateVersionsTable.tenantId })
+      .from(designTemplateVersionsTable)
+      .where(
+        and(
+          eq(designTemplateVersionsTable.id, versionId),
+          eq(designTemplateVersionsTable.tenantId, ctx.tenantId),
+        ),
+      )
+      .limit(1);
+    if (!version) return res.status(404).json({ error: "Template version not found" });
+
+    const data   = body.data.data as Record<string, string | number | boolean | null | undefined>;
+    const format = body.data.format as RenderFormat;
+    const inputHash = computeInputHash(versionId, data);
+
+    // Idempotency: check for an existing completed render with the same hash
+    const [existing] = await db
+      .select()
+      .from(designRenderItemsTable)
+      .where(
+        and(
+          eq(designRenderItemsTable.templateVersionId, versionId),
+          eq(designRenderItemsTable.tenantId, ctx.tenantId),
+          eq(designRenderItemsTable.inputHash, inputHash),
+          eq(designRenderItemsTable.status, "completed"),
+        ),
+      )
+      .limit(1);
+
+    if (existing?.outputUrl) {
+      return res.status(200).json({
+        renderItemId: existing.id,
+        status: "completed",
+        outputUrl: existing.outputUrl,
+        cached: true,
+      });
+    }
+
+    // Create a single-item batch to provide a canonical batchId for the render item
+    const batch = await createBatch({
+      tenantId:          ctx.tenantId,
+      templateId:        id,
+      templateVersionId: versionId,
+      name:              `single-render-${Date.now()}`,
+      format,
+      width:             body.data.width,
+      height:            body.data.height,
+      items:             [data],
+      requestedBy:       actorId(req),
     });
 
-    res.status(202).json({ jobId: job.id, status: "queued" });
+    // The render item was created by createBatch — retrieve it
+    const [renderItem] = await db
+      .select({ id: designRenderItemsTable.id })
+      .from(designRenderItemsTable)
+      .where(eq(designRenderItemsTable.batchId, batch.id))
+      .limit(1);
+
+    if (!renderItem) return res.status(500).json({ error: "Failed to create render item" });
+
+    // Enqueue dispatch job (carries only IDs — worker reads from DB)
+    const job = await enqueue({
+      jobType:     "design_render_batch_dispatch",
+      payloadJson: { batchId: batch.id, tenantId: ctx.tenantId },
+      priority:    60,
+      tenantId:    ctx.tenantId,
+    });
+
+    res.status(202).json({
+      jobId:        job.id,
+      batchId:      batch.id,
+      renderItemId: renderItem.id,
+      status:       "queued",
+    });
   } catch (err) {
     return handleError(res, err);
   }
@@ -381,7 +539,13 @@ router.get("/ai/design-render-batches/:id/items", async (req, res) => {
   }
 });
 
-/** POST /ai/design-render-batches/:id/export-zip */
+/**
+ * POST /ai/design-render-batches/:id/export-zip
+ *
+ * Phase 3 stub — ZIP export is deferred to Phase 3.
+ * Returns 501 with a clear message so the UI does not show a false success.
+ * Does NOT enqueue a job that would silently fail.
+ */
 router.post("/ai/design-render-batches/:id/export-zip", async (req, res) => {
   try {
     const ctx = resolveAuthenticatedTenantContext(req);
@@ -391,14 +555,11 @@ router.post("/ai/design-render-batches/:id/export-zip", async (req, res) => {
     const batch = await getBatch(id, ctx.tenantId);
     if (!batch) return res.status(404).json({ error: "Batch not found" });
 
-    const job = await enqueue({
-      jobType: "design_render_zip_export",
-      payloadJson: { batchId: id, tenantId: ctx.tenantId },
-      priority: 40,
-      tenantId: ctx.tenantId,
+    return res.status(501).json({
+      error:  "ZIP export not yet implemented",
+      status: "not_implemented",
+      detail: "Batch ZIP export is scheduled for Phase 3. Download individual render item URLs from GET /ai/design-render-batches/:id/items instead.",
     });
-
-    res.status(202).json({ jobId: job.id, status: "queued" });
   } catch (err) {
     return handleError(res, err);
   }
