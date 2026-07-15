@@ -17,7 +17,10 @@ import {
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 
-const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+// Use empty string so fetch("/api/...") goes directly through the Vite /api proxy.
+// Do NOT use import.meta.env.BASE_URL here — that prepends "/admin" which breaks
+// the proxy match and causes silent 404s returned as HTML (React Query parse-error).
+const API_BASE = "";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const key = import.meta.env.VITE_ADMIN_API_KEY;
