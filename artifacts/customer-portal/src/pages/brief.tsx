@@ -264,14 +264,6 @@ export default function BriefPage() {
   );
   const isCompanyProfile = serviceType === "company_profile";
 
-  // CP — resolved industry group for conditional questions (mirrors backend logic)
-  const cpIndustryGroup = useMemo(
-    () => isCompanyProfile
-      ? resolveCpIndustryGroup(brief.cpBusinessTypeDetail || brief.companyIndustry)
-      : null,
-    [isCompanyProfile, brief.cpBusinessTypeDetail, brief.companyIndustry],
-  );
-
   // ── Start brief ─────────────────────────────────────────────────────────────
   const startBriefFired = useRef(false);
   useEffect(() => {
@@ -286,6 +278,15 @@ export default function BriefPage() {
   const [currentStep, setCurrentStep]         = useState(1);
   const [errors, setErrors]                   = useState<FieldErrors>({});
   const [brief, setBrief]                     = useState<BriefData>(EMPTY_BRIEF);
+
+  // CP — resolved industry group for conditional questions (mirrors backend logic)
+  // Must be declared AFTER `brief` useState to avoid temporal dead zone error.
+  const cpIndustryGroup = useMemo(
+    () => isCompanyProfile
+      ? resolveCpIndustryGroup(brief.cpBusinessTypeDetail || brief.companyIndustry)
+      : null,
+    [isCompanyProfile, brief.cpBusinessTypeDetail, brief.companyIndustry],
+  );
   const [assistantOpen, setAssistantOpen]     = useState(false);
   const [isSaving, setIsSaving]               = useState(false);
   const [submitError, setSubmitError]         = useState<string | null>(null);
