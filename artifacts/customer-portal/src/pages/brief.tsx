@@ -291,7 +291,6 @@ export default function BriefPage() {
   const isCompanyProfile  = serviceType === "company_profile";
   const isFashionDesign   = serviceType === "fashion_design";
   const isInteriorDesign  = serviceType === "interior_design";
-  const isCompanyProfile = serviceType === "company_profile";
 
   // ── Start brief ─────────────────────────────────────────────────────────────
   const startBriefFired = useRef(false);
