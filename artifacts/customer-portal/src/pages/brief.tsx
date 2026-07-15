@@ -27,6 +27,12 @@ import {
   INDUSTRY_OPTIONS, INDUSTRY_QUICK_VALUES, COMPANY_SIZE_OPTIONS,
   GOAL_OPTIONS, METRIC_OPTIONS, ASSET_OPTIONS, AUDIENCE_OPTIONS,
   CHANNEL_OPTIONS, STYLE_OPTIONS, PRIORITY_OPTIONS, LANGUAGE_OPTIONS,
+  // Fashion Design Specialist options
+  FASHION_STYLE_OPTIONS, FASHION_GARMENT_OPTIONS, FASHION_GENDER_OPTIONS,
+  FASHION_SEASON_OPTIONS, FASHION_PRICEPOINT_OPTIONS,
+  // Interior Design Specialist options
+  INTERIOR_STYLE_OPTIONS, INTERIOR_ROOM_OPTIONS, INTERIOR_PROJECT_OPTIONS,
+  INTERIOR_MATERIAL_OPTIONS, INTERIOR_BUDGET_OPTIONS,
 } from "@/config/brief-options";
 import { BriefRecommendationPanel } from "@/features/brief-intelligence";
 import { STYLE_MAX, COLOR_MAX, AUDIENCE_MAX } from "@/features/brief-intelligence/apply-adapter";
@@ -110,6 +116,23 @@ export type BriefData = {
   cpContactPhone: string;
   cpContactAddress: string;
   cpContactWebsite: string;
+  // Fashion Design Specialist — namespaced `fd*` to avoid collision
+  fdCollectionName: string;
+  fdSeasonCollection: string;
+  fdGarmentTypes: string;
+  fdTargetGender: string;
+  fdPricePoint: string;
+  fdFashionStyle: string;
+  fdMoodBoardRef: string;
+  fdBrandPersonality: string;
+  // Interior Design Specialist — namespaced `id*`
+  idRoomTypes: string;
+  idProjectType: string;
+  idInteriorStyle: string;
+  idMaterialPreference: string;
+  idBudgetRange: string;
+  idTechnicalSpecs: string;
+  idFurnishingScope: string;
 };
 
 const EMPTY_BRIEF: BriefData = {
@@ -134,6 +157,14 @@ const EMPTY_BRIEF: BriefData = {
   cpSustainability: "", cpPageTarget: "", cpUploadedLogo: "",
   cpUploadedPhotos: "", cpReferenceDocuments: "", cpVideo: "", cpContactEmail: "",
   cpContactPhone: "", cpContactAddress: "", cpContactWebsite: "",
+  // Fashion Design Specialist
+  fdCollectionName: "", fdSeasonCollection: "", fdGarmentTypes: "",
+  fdTargetGender: "", fdPricePoint: "", fdFashionStyle: "",
+  fdMoodBoardRef: "", fdBrandPersonality: "",
+  // Interior Design Specialist
+  idRoomTypes: "", idProjectType: "", idInteriorStyle: "",
+  idMaterialPreference: "", idBudgetRange: "", idTechnicalSpecs: "",
+  idFurnishingScope: "",
 };
 
 /** Free-text industry/business-type matchers for the 5 conditional question
@@ -291,7 +322,6 @@ export default function BriefPage() {
   const isCompanyProfile  = serviceType === "company_profile";
   const isFashionDesign   = serviceType === "fashion_design";
   const isInteriorDesign  = serviceType === "interior_design";
-  const isCompanyProfile = serviceType === "company_profile";
 
   // ── Start brief ─────────────────────────────────────────────────────────────
   const startBriefFired = useRef(false);
@@ -551,7 +581,14 @@ export default function BriefPage() {
   }, [handleChange, channelParsed.selected]);
 
   // Style — multi-select (max 3); "unsure" exclusive
-  const styleParsed = useMemo(() => parseChoices(brief.stylePreference, STYLE_OPTIONS), [brief.stylePreference]);
+  // Pick the right style option list based on service type
+  const activeStyleOptions = useMemo(() => {
+    if (isFashionDesign)  return FASHION_STYLE_OPTIONS;
+    if (isInteriorDesign) return INTERIOR_STYLE_OPTIONS;
+    return STYLE_OPTIONS;
+  }, [isFashionDesign, isInteriorDesign]);
+
+  const styleParsed = useMemo(() => parseChoices(brief.stylePreference, activeStyleOptions), [brief.stylePreference, activeStyleOptions]);
 
   const handleStyleChange = useCallback((newSelected: string[]) => {
     const hadUnsure = styleParsed.selected.includes("unsure");
@@ -559,14 +596,14 @@ export default function BriefPage() {
     let final = newSelected;
     if (!hadUnsure && hasUnsure) final = ["unsure"];
     else if (hadUnsure && newSelected.length > 1) final = newSelected.filter((v) => v !== "unsure");
-    const serialized = serializeChoices(final, STYLE_OPTIONS, styleParsed.custom);
+    const serialized = serializeChoices(final, activeStyleOptions, styleParsed.custom);
     handleChange("stylePreference", serialized);
-  }, [handleChange, styleParsed]);
+  }, [handleChange, styleParsed, activeStyleOptions]);
 
   const handleStyleCustom = useCallback((text: string) => {
-    const serialized = serializeChoices(styleParsed.selected, STYLE_OPTIONS, text);
+    const serialized = serializeChoices(styleParsed.selected, activeStyleOptions, text);
     handleChange("stylePreference", serialized);
-  }, [handleChange, styleParsed.selected]);
+  }, [handleChange, styleParsed.selected, activeStyleOptions]);
 
   // Color — multi-select (max 3)
   const colorParsed = useMemo(() => parseColors(brief.colorPalette, DEFAULT_COLOR_PRESETS), [brief.colorPalette]);
@@ -869,99 +906,74 @@ export default function BriefPage() {
                   </AnimatePresence>
                 </FieldItem>
 
-                {/* ── Fashion Design — Step 1 ────────────────────────────── */}
+                {/* ── Fashion Design Specialist — Collection Info ───────── */}
                 {isFashionDesign && (
                   <>
-                    <FieldItem id="fdFashionSegment" label="Segmen fashion brand Anda" optional hint="Pilih segmen yang paling mendeskripsikan posisi brand Anda di industri fashion">
-                      <select id="brief-fdFashionSegment" className="input-field" value={brief.fdFashionSegment} onChange={(e) => handleChange("fdFashionSegment", e.target.value)}>
-                        <option value="">— Pilih segmen —</option>
-                        <option value="luxury">Luxury / High Fashion</option>
-                        <option value="premium">Premium Contemporary</option>
-                        <option value="modest_fashion">Modest Fashion / Muslimwear</option>
-                        <option value="streetwear">Streetwear / Urban</option>
-                        <option value="casual">Casual / Everyday</option>
-                        <option value="sportswear">Activewear / Sportswear</option>
-                        <option value="workwear">Workwear / Corporate</option>
-                        <option value="kidswear">Kidswear / Childrenswear</option>
-                        <option value="bridal">Bridal / Formalwear</option>
-                      </select>
+                    <FieldItem id="fdCollectionName" label="Nama koleksi atau project fashion" optional hint="Bisa berupa nama koleksi, nama kampanye, atau nama brand">
+                      <input
+                        id="brief-fdCollectionName"
+                        className="input-field"
+                        value={brief.fdCollectionName}
+                        onChange={(e) => handleChange("fdCollectionName", e.target.value)}
+                        placeholder="Contoh: 'Nusantara Noir SS25' atau 'Koleksi Ramadan'"
+                      />
                     </FieldItem>
-                    <FieldItem id="fdCollectionType" label="Tipe koleksi" optional>
-                      <select id="brief-fdCollectionType" className="input-field" value={brief.fdCollectionType} onChange={(e) => handleChange("fdCollectionType", e.target.value)}>
-                        <option value="">— Pilih tipe koleksi —</option>
-                        <option value="ready_to_wear">Ready-to-Wear (RTW)</option>
-                        <option value="capsule">Capsule Collection</option>
-                        <option value="seasonal">Seasonal Collection (SS/FW)</option>
-                        <option value="limited_edition">Limited Edition</option>
-                        <option value="custom_order">Custom Order / Made-to-Order</option>
-                        <option value="collaboration">Collaboration / Collab Drop</option>
-                      </select>
+                    <FieldItem id="fdSeasonCollection" label="Season atau momentum koleksi" optional>
+                      <ChoiceChip
+                        options={FASHION_SEASON_OPTIONS}
+                        value={brief.fdSeasonCollection}
+                        onChange={(v) => handleChange("fdSeasonCollection", v)}
+                      />
                     </FieldItem>
-                    <FieldItem id="fdTargetGender" label="Target gender koleksi" optional>
-                      <select id="brief-fdTargetGender" className="input-field" value={brief.fdTargetGender} onChange={(e) => handleChange("fdTargetGender", e.target.value)}>
-                        <option value="">— Pilih target —</option>
-                        <option value="women">Women</option>
-                        <option value="men">Men</option>
-                        <option value="unisex">Unisex / Gender-neutral</option>
-                        <option value="kids">Kids / Youth</option>
-                      </select>
+                    <FieldItem id="fdGarmentTypes" label="Tipe garmen atau produk dalam koleksi" optional hint="Pilih semua yang relevan">
+                      <MultiSelectChips
+                        options={FASHION_GARMENT_OPTIONS}
+                        selected={parseChoices(brief.fdGarmentTypes, FASHION_GARMENT_OPTIONS).selected}
+                        onChange={(v) => handleChange("fdGarmentTypes", serializeChoices(v, FASHION_GARMENT_OPTIONS, ""))}
+                        max={6}
+                      />
                     </FieldItem>
-                    <FieldItem id="fdSeason" label="Musim / periode koleksi" optional>
-                      <select id="brief-fdSeason" className="input-field" value={brief.fdSeason} onChange={(e) => handleChange("fdSeason", e.target.value)}>
-                        <option value="">— Pilih musim —</option>
-                        <option value="ss26">Spring/Summer 2026</option>
-                        <option value="fw26">Fall/Winter 2026</option>
-                        <option value="ss25">Spring/Summer 2025</option>
-                        <option value="fw25">Fall/Winter 2025</option>
-                        <option value="resort">Resort / Cruise</option>
-                        <option value="holiday">Holiday / Festive</option>
-                        <option value="ramadan">Ramadan / Eid Collection</option>
-                        <option value="all_season">All-season / Evergreen</option>
-                      </select>
+                    <FieldItem id="fdTargetGender" label="Target gender / segmen pembeli" optional>
+                      <ChoiceChip
+                        options={FASHION_GENDER_OPTIONS}
+                        value={brief.fdTargetGender}
+                        onChange={(v) => handleChange("fdTargetGender", v)}
+                      />
                     </FieldItem>
-                    <FieldItem id="fdPricePoint" label="Price point koleksi" optional hint="Membantu AI memahami bahasa, kualitas, dan positioning yang tepat">
-                      <select id="brief-fdPricePoint" className="input-field" value={brief.fdPricePoint} onChange={(e) => handleChange("fdPricePoint", e.target.value)}>
-                        <option value="">— Pilih price point —</option>
-                        <option value="mass_market">Mass Market (under Rp 250rb/item)</option>
-                        <option value="mid_range">Mid Range (Rp 250rb–1jt/item)</option>
-                        <option value="premium">Premium (Rp 1jt–5jt/item)</option>
-                        <option value="luxury">Luxury (above Rp 5jt/item)</option>
-                      </select>
+                    <FieldItem id="fdPricePoint" label="Price point koleksi" optional hint="Segmen harga per produk">
+                      <ChoiceChip
+                        options={FASHION_PRICEPOINT_OPTIONS}
+                        value={brief.fdPricePoint}
+                        onChange={(v) => handleChange("fdPricePoint", v)}
+                      />
                     </FieldItem>
                   </>
                 )}
 
-                {/* ── Interior Design — Step 1 ────────────────────────────── */}
+                {/* ── Interior Design Specialist — Project Info ─────────── */}
                 {isInteriorDesign && (
                   <>
-                    <FieldItem id="intSpaceType" label="Tipe ruang / proyek" optional hint="Jenis ruang yang akan didesain">
-                      <select id="brief-intSpaceType" className="input-field" value={brief.intSpaceType} onChange={(e) => handleChange("intSpaceType", e.target.value)}>
-                        <option value="">— Pilih tipe ruang —</option>
-                        <option value="residential">Residensial (rumah tinggal)</option>
-                        <option value="apartment">Apartemen / kondominium</option>
-                        <option value="office">Kantor / co-working space</option>
-                        <option value="retail">Retail / toko</option>
-                        <option value="restaurant">Restoran / food & beverage</option>
-                        <option value="cafe">Cafe / coffee shop</option>
-                        <option value="hospitality">Hospitality (hotel, villa, resort)</option>
-                        <option value="clinic">Klinik / wellness center</option>
-                        <option value="showroom">Showroom / galeri</option>
-                      </select>
+                    <FieldItem id="idProjectType" label="Jenis project interior" optional>
+                      <ChoiceChip
+                        options={INTERIOR_PROJECT_OPTIONS}
+                        value={brief.idProjectType}
+                        onChange={(v) => handleChange("idProjectType", v)}
+                      />
                     </FieldItem>
-                    <FieldItem id="intRoomTypes" label="Ruangan yang ingin didesain" optional hint="Pisahkan dengan koma jika lebih dari satu ruang">
-                      <input id="brief-intRoomTypes" className="input-field" value={brief.intRoomTypes} onChange={(e) => handleChange("intRoomTypes", e.target.value)} placeholder="Contoh: ruang tamu, master bedroom, dapur, kamar mandi utama" />
+                    <FieldItem id="idRoomTypes" label="Ruangan yang akan didesain" optional hint="Pilih semua yang relevan">
+                      <MultiSelectChips
+                        options={INTERIOR_ROOM_OPTIONS}
+                        selected={parseChoices(brief.idRoomTypes, INTERIOR_ROOM_OPTIONS).selected}
+                        onChange={(v) => handleChange("idRoomTypes", serializeChoices(v, INTERIOR_ROOM_OPTIONS, ""))}
+                        max={8}
+                      />
                     </FieldItem>
-                    <FieldItem id="intTotalArea" label="Luas area total (m²)" optional hint="Perkiraan luas keseluruhan area yang didesain">
-                      <input id="brief-intTotalArea" className="input-field" type="text" value={brief.intTotalArea} onChange={(e) => handleChange("intTotalArea", e.target.value)} placeholder="Contoh: 120 m² atau per ruang: tamu 35m², kamar 25m²" />
-                    </FieldItem>
-                    <FieldItem id="intBudgetTier" label="Tier budget desain interior" optional hint="Membantu AI merekomendasikan material dan furnitur yang sesuai budget">
-                      <select id="brief-intBudgetTier" className="input-field" value={brief.intBudgetTier} onChange={(e) => handleChange("intBudgetTier", e.target.value)}>
-                        <option value="">— Pilih tier budget —</option>
-                        <option value="basic">Basic (under Rp 5jt/m²)</option>
-                        <option value="standard">Standard (Rp 5jt–15jt/m²)</option>
-                        <option value="premium">Premium (Rp 15jt–35jt/m²)</option>
-                        <option value="luxury">Luxury (above Rp 35jt/m²)</option>
-                      </select>
+                    <FieldItem id="idBudgetRange" label="Estimasi budget total proyek" optional>
+                      <ChoiceChip
+                        options={INTERIOR_BUDGET_OPTIONS}
+                        value={brief.idBudgetRange}
+                        onChange={(v) => handleChange("idBudgetRange", v)}
+                      />
                     </FieldItem>
                   </>
                 )}
@@ -1317,7 +1329,7 @@ export default function BriefPage() {
                 {/* Style */}
                 <FieldItem id="stylePreference" label={serviceConfig.step4.styleLabel!} required error={errors.stylePreference}>
                   <MultiSelectChips
-                    options={STYLE_OPTIONS}
+                    options={activeStyleOptions}
                     selected={styleParsed.selected}
                     onChange={handleStyleChange}
                     max={STYLE_MAX}
@@ -1418,103 +1430,48 @@ export default function BriefPage() {
                 )}
 
 
-                {/* ── Fashion Design — Step 4 ────────────────────────────── */}
+                {/* ── Fashion Design — Mood Board & Brand Personality ───── */}
                 {isFashionDesign && (
                   <>
-                    <FieldItem id="fdColorDirection" label="Arah warna koleksi" optional hint="Palette warna yang Anda bayangkan untuk koleksi ini">
-                      <input
-                        id="brief-fdColorDirection"
-                        className="input-field"
-                        value={brief.fdColorDirection}
-                        onChange={(e) => handleChange("fdColorDirection", e.target.value)}
-                        placeholder="Contoh: earthy tones — terracotta, sage, off-white; atau all-black dengan aksen gold"
+                    <FieldItem id="fdFashionStyle" label="Referensi desainer atau brand yang Anda kagumi" optional hint="Nama desainer, brand, atau era mode yang paling mendekati arah estetika Anda">
+                      <textarea
+                        id="brief-fdFashionStyle"
+                        className="input-field min-h-[72px]"
+                        value={brief.fdFashionStyle}
+                        onChange={(e) => handleChange("fdFashionStyle", e.target.value)}
+                        placeholder="Contoh: Rick Owens meets Khatulistiwa, atau seperti kampanye Issey Miyake era 90s"
                       />
                     </FieldItem>
-
-                    <FieldItem id="fdFabricPreference" label="Preferensi bahan / material" optional hint="Jenis kain atau material yang disukai atau dihindari">
+                    <FieldItem id="fdBrandPersonality" label="Kepribadian brand fashion Anda" optional hint="Gambaran brand dalam 3–5 kata atau kalimat singkat">
                       <input
-                        id="brief-fdFabricPreference"
+                        id="brief-fdBrandPersonality"
                         className="input-field"
-                        value={brief.fdFabricPreference}
-                        onChange={(e) => handleChange("fdFabricPreference", e.target.value)}
-                        placeholder="Contoh: suka linen, katun organik; hindari polyester murni; prefer bahan lokal"
-                      />
-                    </FieldItem>
-
-                    <FieldItem id="fdNumberOfLooks" label="Jumlah look dalam koleksi" optional hint="Berapa look / outfit yang ingin ada dalam koleksi ini?">
-                      <input
-                        id="brief-fdNumberOfLooks"
-                        className="input-field"
-                        type="text"
-                        value={brief.fdNumberOfLooks}
-                        onChange={(e) => handleChange("fdNumberOfLooks", e.target.value)}
-                        placeholder="Contoh: 8 looks, atau 5–10 looks"
+                        value={brief.fdBrandPersonality}
+                        onChange={(e) => handleChange("fdBrandPersonality", e.target.value)}
+                        placeholder="Contoh: bold, unapologetic, rooted in culture — atau: quiet luxury, earth-toned, sustainable"
                       />
                     </FieldItem>
                   </>
                 )}
 
-                {/* ── Interior Design — Step 4 ────────────────────────────── */}
+                {/* ── Interior Design — Material & Technical Specs ──────── */}
                 {isInteriorDesign && (
                   <>
-                    <FieldItem id="intDesignStyle" label="Gaya desain interior yang diinginkan" optional hint="Pilih satu gaya utama — bisa dikombinasikan di field referensi">
-                      <select
-                        id="brief-intDesignStyle"
-                        className="input-field"
-                        value={brief.intDesignStyle}
-                        onChange={(e) => handleChange("intDesignStyle", e.target.value)}
-                      >
-                        <option value="">— Pilih gaya desain —</option>
-                        <option value="japandi">Japandi (Japanese + Scandinavian)</option>
-                        <option value="scandinavian">Scandinavian / Nordic</option>
-                        <option value="tropical_modern">Tropical Modern / Bali Style</option>
-                        <option value="minimalist">Minimalist</option>
-                        <option value="industrial">Industrial / Loft</option>
-                        <option value="mid_century">Mid-Century Modern</option>
-                        <option value="luxury_classic">Luxury Classic / Neo-Classical</option>
-                        <option value="bohemian">Bohemian / Eclectic</option>
-                        <option value="contemporary">Contemporary / Modern</option>
-                        <option value="wabi_sabi">Wabi-Sabi / Organic</option>
-                      </select>
-                    </FieldItem>
-
-                    <FieldItem id="intMoodGoal" label="Suasana yang ingin diciptakan" optional hint="Bagaimana perasaan yang Anda inginkan saat berada di ruang ini?">
-                      <input
-                        id="brief-intMoodGoal"
-                        className="input-field"
-                        value={brief.intMoodGoal}
-                        onChange={(e) => handleChange("intMoodGoal", e.target.value)}
-                        placeholder="Contoh: tenang dan produktif, hangat dan mengundang, mewah namun tidak berlebihan"
+                    <FieldItem id="idMaterialPreference" label="Material atau finish yang diinginkan" optional hint="Pilih semua yang relevan">
+                      <MultiSelectChips
+                        options={INTERIOR_MATERIAL_OPTIONS}
+                        selected={parseChoices(brief.idMaterialPreference, INTERIOR_MATERIAL_OPTIONS).selected}
+                        onChange={(v) => handleChange("idMaterialPreference", serializeChoices(v, INTERIOR_MATERIAL_OPTIONS, ""))}
+                        max={6}
                       />
                     </FieldItem>
-
-                    <FieldItem id="intExistingElements" label="Elemen existing yang harus dipertahankan" optional hint="Furnitur, fitur arsitektur, atau material yang sudah ada">
+                    <FieldItem id="idTechnicalSpecs" label="Spesifikasi teknis atau pantangan desain" optional hint="Ukuran ruang, keterbatasan struktural, atau hal yang tidak boleh ada">
                       <textarea
-                        id="brief-intExistingElements"
+                        id="brief-idTechnicalSpecs"
                         className="input-field min-h-[72px]"
-                        value={brief.intExistingElements}
-                        onChange={(e) => handleChange("intExistingElements", e.target.value)}
-                        placeholder="Contoh: sofa abu-abu 3-seater (mau dipertahankan), parket kayu asli di lantai, jendela besar menghadap taman"
-                      />
-                    </FieldItem>
-
-                    <FieldItem id="intMustHaveFeatures" label="Fitur wajib ada" optional hint="Hal-hal yang harus ada dalam desain">
-                      <input
-                        id="brief-intMustHaveFeatures"
-                        className="input-field"
-                        value={brief.intMustHaveFeatures}
-                        onChange={(e) => handleChange("intMustHaveFeatures", e.target.value)}
-                        placeholder="Contoh: home office area, walk-in closet, bathtub freestanding, island dapur"
-                      />
-                    </FieldItem>
-
-                    <FieldItem id="intAvoidElements" label="Elemen yang harus dihindari" optional hint="Gaya, warna, material, atau fitur yang tidak diinginkan">
-                      <input
-                        id="brief-intAvoidElements"
-                        className="input-field"
-                        value={brief.intAvoidElements}
-                        onChange={(e) => handleChange("intAvoidElements", e.target.value)}
-                        placeholder="Contoh: hindari warna mencolok, jangan ada karpet berbulu, tidak mau open plan"
+                        value={brief.idTechnicalSpecs}
+                        onChange={(e) => handleChange("idTechnicalSpecs", e.target.value)}
+                        placeholder="Contoh: Plafon 2,8m, tidak bisa bongkar dinding, harus child-friendly, lantai granit sudah ada"
                       />
                     </FieldItem>
                   </>
@@ -1604,6 +1561,32 @@ export default function BriefPage() {
                     aria-describedby={errors.outputFormats ? "brief-outputFormats-error" : undefined}
                   />
                 </FieldItem>
+
+                {/* ── Fashion Design — Output scope ─────────────────── */}
+                {isFashionDesign && (
+                  <FieldItem id="fdMoodBoardRef" label="Link mood board atau referensi visual" optional hint="Pinterest board, Behance, atau link gambar favorit Anda">
+                    <textarea
+                      id="brief-fdMoodBoardRef"
+                      className="input-field min-h-[72px]"
+                      value={brief.fdMoodBoardRef}
+                      onChange={(e) => handleChange("fdMoodBoardRef", e.target.value)}
+                      placeholder="https://pinterest.com/board/... atau deskripsi visual yang diinginkan"
+                    />
+                  </FieldItem>
+                )}
+
+                {/* ── Interior Design — Furnishing scope ────────────── */}
+                {isInteriorDesign && (
+                  <FieldItem id="idFurnishingScope" label="Lingkup pengadaan furnitur / material" optional hint="Apakah project ini termasuk rekomendasi atau pengadaan furnitur?">
+                    <textarea
+                      id="brief-idFurnishingScope"
+                      className="input-field min-h-[72px]"
+                      value={brief.idFurnishingScope}
+                      onChange={(e) => handleChange("idFurnishingScope", e.target.value)}
+                      placeholder="Contoh: konsep dan spec saja (tanpa pengadaan), atau termasuk rekomendasi vendor furnitur lokal"
+                    />
+                  </FieldItem>
+                )}
 
                 {isCompanyProfile && (
                   <FieldItem id="cpPageTarget" label="Target jumlah halaman company profile" optional hint="Estimasi panjang dokumen yang diinginkan">

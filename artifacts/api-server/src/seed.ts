@@ -538,6 +538,158 @@ async function seedImageDesignerAgents(openaiModelId: number, openaiProviderId: 
   }
 }
 
+// ─── Specialist Agents (Fashion & Interior) ───────────────────────────────────
+
+const FASHION_DESIGN_SPECIALIST_SYSTEM_PROMPT = `You are the Fashion Design Specialist AI — a seasoned creative consultant combining deep knowledge of fashion history, contemporary trends, and brand positioning.
+
+Your expertise spans:
+- Collection development: seasonal narratives, theme development, trend forecasting
+- Brand positioning: premium vs mass-market, aesthetic territory, brand DNA
+- Storytelling: editorial tone, campaign concept, lookbook narrative
+- Copywriting: product descriptions, collection notes, press releases, social captions
+- Market research: competitor analysis, target consumer persona, price-point strategy
+
+When writing fashion briefs, collection concepts, or brand narratives:
+1. Lead with a strong creative concept or theme (seasonal or timeless)
+2. Establish clear aesthetic territory using references from art, architecture, culture
+3. Define the emotional journey the consumer should experience
+4. Align every deliverable with brand DNA — tone, palette, silhouette language
+5. Use rich, precise language. Fashion demands nuance: not "modern" but "rigorously pared-back with an undercurrent of sensuality"
+
+For copywriting tasks: write copy that converts while feeling aspirational. Every word must earn its place.
+For strategy tasks: ground insights in real market dynamics, not generic observations.
+
+CRITICAL: Always respond in the same language as the client's brief. Default to Bahasa Indonesia unless the client writes in English.`;
+
+const INTERIOR_DESIGN_SPECIALIST_SYSTEM_PROMPT = `You are the Interior Design Specialist AI — an expert with mastery of spatial design, material science, and project-based design consulting.
+
+Your expertise spans:
+- Spatial concept development: room mood, flow, functional zoning
+- Style mastery: Scandinavian, Japandi, Industrial, Modern Luxury, Tropical, Bohemian, Mediterranean, Biophilic
+- Material & finish specification: marble, wood species, concrete, metal finishes, fabric textures, lighting types
+- Technical briefs: dimensional specs, furniture sizing, material finishing, lighting plans
+- Client proposals: scope-of-work documents, concept presentations, mood board narratives
+- Budget planning: product selection across budget tiers (entry, mid, premium, luxury)
+
+When developing interior concepts or client proposals:
+1. Start with the emotional atmosphere — how should the space feel, not just look?
+2. Define the material palette: primary surface, secondary accent, texture layering
+3. Address spatial flow: how people move through and use the space
+4. Reference design precedents: named designers, architectural movements, cultural influences
+5. Balance aspiration with practicality — great interior design works for real life
+
+For technical briefs: be precise about dimensions, materials, and specifications.
+For concept proposals: use evocative yet grounded language that helps clients visualize the result.
+
+CRITICAL: Always respond in the same language as the client's brief. Default to Bahasa Indonesia unless the client writes in English.`;
+
+async function seedSpecialistAgents(
+  claudeOpus48ModelId: number,
+  anthropicProviderId: number,
+  gemini25ProModelId: number,
+  googleProviderId: number,
+  fluxDevModelId: number,
+  replicateProviderId: number,
+) {
+  console.log("\n✨ Seeding Specialist Agents (Fashion & Interior)...");
+
+  const agents = [
+    {
+      slug: "fashion-design-specialist",
+      name: "Fashion Design Specialist",
+      role: "Fashion Creative Consultant",
+      description: "Specialist in fashion collection briefs, brand storytelling, editorial copywriting, and fashion brand strategy. Powered by Claude Opus 4.8 for nuanced creative language.",
+      modelId: claudeOpus48ModelId,
+      providerId: anthropicProviderId,
+      temperature: "0.85",
+      systemPrompt: FASHION_DESIGN_SPECIALIST_SYSTEM_PROMPT,
+      capabilities: [
+        { name: "Fashion Brief Writing", description: "Creates collection briefs, seasonal narratives, and brand stories", category: "creative", sortOrder: 0 },
+        { name: "Fashion Copywriting", description: "Produces product descriptions, captions, and press releases for fashion brands", category: "creative", sortOrder: 1 },
+        { name: "Fashion Brand Strategy", description: "Develops positioning, aesthetic territory, and target consumer profiles", category: "strategy", sortOrder: 2 },
+        { name: "Trend Research", description: "Analyses fashion trends, cultural references, and market positioning", category: "research", sortOrder: 3 },
+        { name: "Collection Concept", description: "Develops seasonal collection concepts with thematic direction", category: "creative", sortOrder: 4 },
+      ],
+    },
+    {
+      slug: "interior-design-specialist",
+      name: "Interior Design Specialist",
+      role: "Interior Design Consultant",
+      description: "Specialist in spatial concept development, material specification, client proposals, and interior brand identity. Powered by Gemini 2.5 Pro for deep spatial reasoning.",
+      modelId: gemini25ProModelId,
+      providerId: googleProviderId,
+      temperature: "0.75",
+      systemPrompt: INTERIOR_DESIGN_SPECIALIST_SYSTEM_PROMPT,
+      capabilities: [
+        { name: "Interior Concept Development", description: "Creates spatial concepts with mood, material palette, and atmosphere", category: "creative", sortOrder: 0 },
+        { name: "Material Specification", description: "Specifies materials, finishes, and furniture for design projects", category: "technical", sortOrder: 1 },
+        { name: "Client Proposal Writing", description: "Writes professional interior design proposals and scope-of-work documents", category: "creative", sortOrder: 2 },
+        { name: "Spatial Analysis", description: "Analyses room flow, zoning, lighting, and functional requirements", category: "research", sortOrder: 3 },
+        { name: "Style Direction", description: "Establishes interior design style direction across major design movements", category: "strategy", sortOrder: 4 },
+      ],
+    },
+  ];
+
+  for (const agentDef of agents) {
+    const [existing] = await db
+      .select()
+      .from(aiAgentsTable)
+      .where(eq(aiAgentsTable.slug, agentDef.slug));
+
+    let agentId: number;
+
+    if (existing) {
+      // Update model/provider in case user re-runs seed after initial creation
+      await db
+        .update(aiAgentsTable)
+        .set({
+          providerId: agentDef.providerId,
+          modelId: agentDef.modelId,
+          metadata: { systemPrompt: agentDef.systemPrompt },
+        })
+        .where(eq(aiAgentsTable.slug, agentDef.slug));
+      console.log(`  ↩ Agent already exists (updated): ${agentDef.name}`);
+      agentId = existing.id;
+    } else {
+      const [agent] = await db
+        .insert(aiAgentsTable)
+        .values({
+          name: agentDef.name,
+          slug: agentDef.slug,
+          role: agentDef.role,
+          description: agentDef.description,
+          providerId: agentDef.providerId,
+          modelId: agentDef.modelId,
+          priority: 15,
+          temperature: agentDef.temperature,
+          maxTokens: 4096,
+          status: "active",
+          allowedTools: [],
+          version: "1.0.0",
+          owner: "platform",
+          metadata: { systemPrompt: agentDef.systemPrompt },
+        })
+        .returning();
+      agentId = agent.id;
+      console.log(`  ✓ Seeded agent: ${agentDef.name}`);
+    }
+
+    const existingCaps = await db
+      .select()
+      .from(aiAgentCapabilitiesTable)
+      .where(eq(aiAgentCapabilitiesTable.agentId, agentId));
+
+    if (existingCaps.length === 0) {
+      for (const cap of agentDef.capabilities) {
+        await db.insert(aiAgentCapabilitiesTable).values({ ...cap, agentId });
+      }
+      console.log(`    ✓ Seeded ${agentDef.capabilities.length} capabilities`);
+    }
+  }
+
+  console.log("  ✅ Specialist agents seeded!");
+}
+
 async function seedCreativeBriefWorkflow() {
   console.log("\n🔄 Seeding Creative Brief Workflow...");
 
@@ -1060,6 +1212,34 @@ async function main() {
     providers.openai.id,
     providers.replicate.id,
     fluxSchnell?.id ?? gpt4o.id,
+  );
+
+  // Specialist Agents — Fashion & Interior
+  const [claudeOpus48] = await db
+    .select()
+    .from(aiModelsTable)
+    .where(and(eq(aiModelsTable.modelId, "claude-opus-4-8"), eq(aiModelsTable.providerId, providers.anthropic.id)));
+
+  const [gemini25Pro] = await db
+    .select()
+    .from(aiModelsTable)
+    .where(and(eq(aiModelsTable.modelId, "gemini-2.5-pro"), eq(aiModelsTable.providerId, providers.google.id)));
+
+  const [fluxDev] = await db
+    .select()
+    .from(aiModelsTable)
+    .where(and(eq(aiModelsTable.modelId, "black-forest-labs/flux-dev"), eq(aiModelsTable.providerId, providers.replicate.id)));
+
+  if (!claudeOpus48) console.warn("⚠️  Claude Opus 4.8 not found — fashion agent will use GPT-4o fallback");
+  if (!gemini25Pro) console.warn("⚠️  Gemini 2.5 Pro not found — interior agent will use GPT-4o fallback");
+
+  await seedSpecialistAgents(
+    claudeOpus48?.id ?? gpt4o.id,
+    claudeOpus48 ? providers.anthropic.id : providers.openai.id,
+    gemini25Pro?.id ?? gpt4o.id,
+    gemini25Pro ? providers.google.id : providers.openai.id,
+    fluxDev?.id ?? fluxSchnell?.id ?? gpt4o.id,
+    providers.replicate.id,
   );
 
   // Phase 4.9: AI Operating Core — Digital Workforce
