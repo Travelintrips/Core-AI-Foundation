@@ -766,6 +766,7 @@ function ClientReviewSection({ projectId }: { projectId: string }) {
   const [freshToken, setFreshToken] = useState<{ token: string; id: number } | null>(null);
   const [copied, setCopied] = useState(false);
   const [form, setForm] = useState({ clientName: "", clientEmail: "", clientPhone: "", expiresInDays: 7 });
+  const [resendingId, setResendingId] = useState<number | null>(null);
 
   const { data: reviews = [] } = useListClientReviews(projectId, {
     query: { queryKey: getListClientReviewsQueryKey(projectId) },
@@ -773,6 +774,34 @@ function ClientReviewSection({ projectId }: { projectId: string }) {
   const { data: comments = [] } = useListReviewComments(projectId, {
     query: { queryKey: getListReviewCommentsQueryKey(projectId) },
   });
+
+  const adminKey = import.meta.env.VITE_ADMIN_API_KEY as string | undefined;
+  const adminHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(adminKey ? { "x-admin-api-key": adminKey } : {}),
+  };
+  const apiBase = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+
+  // Auto-fill form with customer data from service request when form opens
+  const handleOpenCreate = async () => {
+    setShowCreate(true);
+    try {
+      const res = await fetch(`${apiBase}/api/creative-ai/projects/${projectId}/customer-info`, {
+        headers: adminHeaders,
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { name: string; email: string; phone: string };
+        setForm((f) => ({
+          ...f,
+          clientName: data.name || f.clientName,
+          clientEmail: data.email || f.clientEmail,
+          clientPhone: data.phone || f.clientPhone,
+        }));
+      }
+    } catch {
+      // silent — form stays empty, admin can fill manually
+    }
+  };
 
   const createLink = useCreateClientReviewLink({
     mutation: {
@@ -796,6 +825,37 @@ function ClientReviewSection({ projectId }: { projectId: string }) {
       onError: () => toast({ title: "Failed to revoke", variant: "destructive" }),
     },
   });
+
+  const handleResend = async (reviewId: number, clientEmail?: string | null) => {
+    setResendingId(reviewId);
+    try {
+      const res = await fetch(`${apiBase}/api/creative-ai/client-reviews/${reviewId}/resend`, {
+        method: "PATCH",
+        headers: adminHeaders,
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Failed to resend");
+      }
+      const data = (await res.json()) as { token?: string };
+      queryClient.invalidateQueries({ queryKey: getListClientReviewsQueryKey(projectId) });
+      if (data.token) setFreshToken({ token: data.token, id: reviewId });
+      toast({
+        title: "Revision selesai — link baru sudah aktif",
+        description: clientEmail
+          ? `Email notifikasi dikirim ke ${clientEmail}`
+          : "Salin link baru dan bagikan ke klien.",
+      });
+    } catch (err: unknown) {
+      toast({
+        title: "Gagal mengirim notifikasi",
+        description: err instanceof Error ? err.message : "Coba lagi",
+        variant: "destructive",
+      });
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   const publicBase =
     `${window.location.origin}${import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}/review/creative/`;
@@ -833,7 +893,7 @@ function ClientReviewSection({ projectId }: { projectId: string }) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setShowCreate((v) => !v)}
+          onClick={() => showCreate ? setShowCreate(false) : handleOpenCreate()}
           className="h-6 gap-1.5 text-[10px] font-mono text-muted-foreground hover:text-primary"
         >
           <Link2 className="size-3" />
@@ -969,6 +1029,22 @@ function ClientReviewSection({ projectId }: { projectId: string }) {
                   >
                     {review.status.replace(/_/g, " ")}
                   </Badge>
+                  {/* Revision Done button — only on revision_requested reviews */}
+                  {review.status === "revision_requested" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 gap-1 text-[10px] font-mono text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10 px-2"
+                      title={review.clientEmail ? `Kirim email notifikasi ke ${review.clientEmail}` : "Aktifkan link baru untuk klien"}
+                      onClick={() => handleResend(review.id, review.clientEmail)}
+                      disabled={resendingId === review.id}
+                    >
+                      {resendingId === review.id
+                        ? <Loader2 className="size-3 animate-spin" />
+                        : <Send className="size-3" />}
+                      Revision Done
+                    </Button>
+                  )}
                   {!["revoked", "approved", "rejected", "expired"].includes(review.status) && (
                     <Button
                       variant="ghost"
