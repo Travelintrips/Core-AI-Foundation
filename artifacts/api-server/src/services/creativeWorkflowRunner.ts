@@ -717,8 +717,8 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
   // are not truly "completed" until their PDF has rendered — hold them at
   // "generating_document" so the customer workspace never shows a finished
   // project with no deliverable yet.
-  const documentType = anyFailed ? null : await resolveProjectDocumentType(project);
-  const isDocumentProject = documentType !== null;
+  const finalDocumentType = anyFailed ? null : await resolveProjectDocumentType(project);
+  const isDocumentProject = finalDocumentType !== null;
   const presentationType = anyFailed || isDocumentProject ? null : await resolveProjectPresentationType(project);
   const isPresentationProject = presentationType !== null;
   const finalStatus = anyFailed
