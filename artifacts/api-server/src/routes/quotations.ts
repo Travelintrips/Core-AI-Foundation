@@ -30,7 +30,6 @@ import { publishSafe } from "../services/aiEventBusService.js";
 import { logAudit } from "../services/aiAuditService.js";
 import { createGateForQuotation } from "../services/commercialGateService.js";
 import { checkAndMaybeConvert } from "../services/serviceRequestConversionService.js";
-import { runCreativeBriefWorkflow } from "../services/creativeWorkflowRunner.js";
 
 const router = Router();
 
@@ -339,13 +338,15 @@ router.post("/public/customer/quotation/:token/approve", async (req, res): Promi
     });
     res.json({ success: true, status: "approved", message: "Quotation approved — awaiting commercial gate clearance" });
   } else {
-    // ── Legacy Creative AI flow: start AI workflow directly (no gate) ───────
-    if (project && project.status === "pending") {
-      runCreativeBriefWorkflow(project.id).catch((err) => {
-        console.error("[quotation] Workflow failed:", err);
-      });
-    }
-    res.json({ success: true, status: "approved", message: "Quotation approved — your project is now in production" });
+    // ── Legacy Creative AI flow (no service-catalog gate) ───────────────────
+    // Approving the quotation only confirms commercial terms. It must never
+    // start AI production directly — creative-ai.ts creates these projects in
+    // "waiting_payment" specifically so paymentScheduleService.verifyPayment()
+    // remains the single authoritative production gate (see its module
+    // docstring). A stale "pending" check used to live here and could have
+    // fired production with no payment check at all if project creation ever
+    // reverted to "pending"; removed rather than left as a landmine.
+    res.json({ success: true, status: "approved", message: "Quotation approved — awaiting payment before production starts" });
   }
 });
 

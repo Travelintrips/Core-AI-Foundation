@@ -5,8 +5,12 @@
  * convertServiceRequestToProject() is the single entry point. It:
  *   1. Verifies quotation.status === 'approved' AND gate is verified/waived.
  *   2. Short-circuits (idempotency) if the request already has a createdProjectId.
- *   3. In one DB transaction: updates the service request status + createdProjectId,
- *      then enqueues the creative workflow via runCreativeBriefWorkflow().
+ *   3. Updates the service request status + createdProjectId via an atomic CAS
+ *      update, and creates the linked creative_project in "waiting_payment".
+ *      It never enqueues AI production itself — that only happens later, from
+ *      paymentScheduleService.verifyPayment() once a real payment/deposit is
+ *      confirmed by an admin. Clearing the commercial gate here only means
+ *      the commercial terms were approved, not that money changed hands.
  *   4. Publishes lifecycle events via publishSafe().
  *
  * checkAndMaybeConvert() is a convenience function called from both the quotation
@@ -27,7 +31,6 @@ import {
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
-import { runCreativeBriefWorkflow } from "./creativeWorkflowRunner.js";
 import { generateScheduleForProject, type PaymentPolicy } from "./paymentScheduleService.js";
 import {
   getGateForQuotation,
@@ -181,7 +184,12 @@ export async function convertServiceRequestToProject(
           goal: brief.primaryGoal ?? "brand creative project",
           notes: request.notes ?? null,
           deadline: brief.deadline ?? null,
-          status: "pending",
+          // P0 payment gate: never start AI production straight off a cleared
+          // commercial gate — the gate only confirms commercial terms, not that
+          // money has actually been received. Production is enqueued later,
+          // exclusively from paymentScheduleService.verifyPayment() once an
+          // admin verifies a real installment.
+          status: "waiting_payment",
         })
         .returning();
       projectId = newProject.projectId;
@@ -283,24 +291,13 @@ export async function convertServiceRequestToProject(
     payload: { projectId, serviceRequestId, quotationId: quotationDbId },
   });
 
-  // Enqueue AI generation workflow (only if project is still pending)
-  if (project.status === "pending") {
-    runCreativeBriefWorkflow(project.id).catch(async (err) => {
-      console.error(`[conversion] Workflow failed for project ${projectId}:`, err);
-      await db
-        .update(creativeProjectsTable)
-        .set({ status: "failed" })
-        .where(eq(creativeProjectsTable.id, project.id));
-      await logAudit(
-        "conversion",
-        "workflow_error",
-        projectId,
-        "creative_project",
-        "failure",
-        { error: String(err) },
-      );
-    });
-  }
+  // P0 payment gate: conversion NEVER enqueues AI production directly, even
+  // for a brand-new project. Clearing the commercial gate only means the
+  // quotation/terms are approved — it says nothing about payment having been
+  // received. The project was created (or already exists) in "waiting_payment"
+  // and stays there until paymentScheduleService.verifyPayment() confirms a
+  // real installment and enqueues runCreativeBriefWorkflow() itself. Do not
+  // reintroduce a workflow trigger here.
 
   return { alreadyConverted: false, createdProjectId: projectId };
 }
