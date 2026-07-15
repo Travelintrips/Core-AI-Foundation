@@ -69,6 +69,7 @@ import templateEngineRouter from "./template-engine";
 import portfolioGalleryRouter from "./portfolio-gallery";
 import productionPipelineRouter from "./production-pipeline";
 import designStudioRouter from "./design-studio";
+import designTemplatesRouter from "./design-templates";
 import creativeMarketplaceRouter from "./creative-marketplace";
 
 const router: IRouter = Router();
@@ -141,6 +142,7 @@ router.use(customerHealthRouter);
 router.use(commercialAnalyticsRouter);
 router.use(observabilityRouter);
 router.use(designStudioRouter);
+router.use(designTemplatesRouter);
 router.use(creativeMarketplaceRouter);
 
 export default router;

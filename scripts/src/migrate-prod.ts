@@ -320,6 +320,110 @@ CREATE INDEX IF NOT EXISTS idx_ai_pipeline_stages_stage_name
     description: "Seed — AI Sales Manager employee record (idempotent upsert)",
     sql: () => readSql("seed-ai-sales-manager.sql"),
   },
+
+  // ── Design Template Engine — Phase 1 ──────────────────────────────────────
+  {
+    id: "design-template-engine-phase1",
+    description: "Phase 1 — design_templates, design_template_versions, design_render_batches, design_render_items",
+    sql: () => `
+SET search_path TO ai_platform, public;
+
+CREATE TABLE IF NOT EXISTS ai_platform.design_templates (
+  id                    BIGSERIAL PRIMARY KEY,
+  tenant_id             TEXT NOT NULL DEFAULT 'default',
+  name                  TEXT NOT NULL,
+  slug                  TEXT NOT NULL,
+  description           TEXT,
+  category              TEXT,
+  status                TEXT NOT NULL DEFAULT 'draft',
+  active_version_id     BIGINT,
+  thumbnail_url         TEXT,
+  thumbnail_storage_path TEXT,
+  created_by            TEXT NOT NULL DEFAULT 'system',
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at            TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS ai_platform.design_template_versions (
+  id                    BIGSERIAL PRIMARY KEY,
+  tenant_id             TEXT NOT NULL DEFAULT 'default',
+  template_id           BIGINT NOT NULL,
+  version_number        INTEGER NOT NULL,
+  schema_version        TEXT NOT NULL DEFAULT '1.0',
+  template_json         JSONB NOT NULL,
+  changelog             TEXT,
+  created_by            TEXT NOT NULL DEFAULT 'system',
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  published_at          TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS ai_platform.design_render_batches (
+  id                    BIGSERIAL PRIMARY KEY,
+  tenant_id             TEXT NOT NULL DEFAULT 'default',
+  template_id           BIGINT NOT NULL,
+  template_version_id   BIGINT NOT NULL,
+  name                  TEXT NOT NULL,
+  status                TEXT NOT NULL DEFAULT 'draft',
+  total_items           INTEGER NOT NULL DEFAULT 0,
+  queued_items          INTEGER NOT NULL DEFAULT 0,
+  processing_items      INTEGER NOT NULL DEFAULT 0,
+  completed_items       INTEGER NOT NULL DEFAULT 0,
+  failed_items          INTEGER NOT NULL DEFAULT 0,
+  requested_format      TEXT NOT NULL DEFAULT 'png',
+  requested_width       INTEGER,
+  requested_height      INTEGER,
+  requested_by          TEXT NOT NULL DEFAULT 'system',
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  started_at            TIMESTAMPTZ,
+  completed_at          TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS ai_platform.design_render_items (
+  id                    BIGSERIAL PRIMARY KEY,
+  tenant_id             TEXT NOT NULL DEFAULT 'default',
+  batch_id              BIGINT NOT NULL,
+  template_id           BIGINT NOT NULL,
+  template_version_id   BIGINT NOT NULL,
+  row_index             INTEGER NOT NULL,
+  input_data            JSONB NOT NULL,
+  input_hash            TEXT NOT NULL,
+  status                TEXT NOT NULL DEFAULT 'queued',
+  attempt_count         INTEGER NOT NULL DEFAULT 0,
+  output_storage_path   TEXT,
+  output_url            TEXT,
+  output_width          INTEGER,
+  output_height         INTEGER,
+  output_format         TEXT,
+  output_file_size_bytes INTEGER,
+  render_duration_ms    INTEGER,
+  error_code            TEXT,
+  error_message         TEXT,
+  render_warnings       JSONB,
+  queued_at             TIMESTAMPTZ,
+  started_at            TIMESTAMPTZ,
+  completed_at          TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT drni_batch_row_uniq UNIQUE (batch_id, row_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_design_templates_tenant_status
+  ON ai_platform.design_templates (tenant_id, status)
+  WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_design_template_versions_template_id
+  ON ai_platform.design_template_versions (template_id);
+
+CREATE INDEX IF NOT EXISTS idx_design_render_batches_tenant
+  ON ai_platform.design_render_batches (tenant_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_design_render_items_batch_status
+  ON ai_platform.design_render_items (batch_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_design_render_items_input_hash
+  ON ai_platform.design_render_items (input_hash);
+`,
+  },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

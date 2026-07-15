@@ -604,6 +604,21 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
       // Used for seed / testing
       return { message: "No-op job executed", jobId: job.id };
 
+    case "design_render": {
+      const { executeDesignRenderJob } = await import("./designRenderWorkerService.js");
+      return executeDesignRenderJob(job, workerId);
+    }
+
+    case "design_render_batch_dispatch": {
+      const { executeDesignRenderBatchDispatch } = await import("./designRenderWorkerService.js");
+      return executeDesignRenderBatchDispatch(job, workerId);
+    }
+
+    case "design_render_zip_export": {
+      const { executeDesignRenderZipExport } = await import("./designRenderWorkerService.js");
+      return executeDesignRenderZipExport(job, workerId);
+    }
+
     default:
       return { message: `Job type '${job.jobType}' dispatched`, jobId: job.id };
   }
