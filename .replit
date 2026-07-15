@@ -46,6 +46,8 @@ SUPABASE_STORAGE_BUCKET_DEV = "https://xssrfshdrtdfupgqwfdw.storage.supabase.co/
 SUPABASE_URL_DEV = "https://xssrfshdrtdfupgqwfdw.supabase.co"
 VITE_SUPABASE_URL_DEV = "https://xssrfshdrtdfupgqwfdw.supabase.co"
 SUPABASE_DEV_DATABASE_URL = "postgresql://postgres.xssrfshdrtdfupgqwfdw:nvVEWjiHruxen4cE@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres"
+INITIAL_INTERNAL_ADMIN_EMAIL = "abing2267@gmail.com"
+INITIAL_INTERNAL_ADMIN_PASSWORD = "admin12345"
 
 [userenv.production]
 SUPABASE_DATABASE_URL = "postgresql://postgres.nzdweipzckfszczzqtuw:AnTXXOl0t1ArQOEU@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres"
