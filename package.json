@@ -24,6 +24,9 @@
 
     "workspace-health": "pnpm --filter @workspace/scripts run workspace-health",
 
+    "migrate:prod": "pnpm --filter @workspace/scripts run migrate:prod",
+    "migrate:prod:dry-run": "pnpm --filter @workspace/scripts run migrate:prod:dry-run",
+
     "ci:verify": "pnpm run verify",
     "ci:build": "pnpm run build:workspace",
     "ci:test": "pnpm -r --if-present run test",

@@ -7,13 +7,17 @@
     "hello": "tsx ./src/hello.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "workspace-check": "tsx ./src/workspace-check.ts",
-    "workspace-health": "tsx ./src/workspace-check.ts --health"
+    "workspace-health": "tsx ./src/workspace-check.ts --health",
+    "migrate:prod": "tsx ./src/migrate-prod.ts",
+    "migrate:prod:dry-run": "tsx ./src/migrate-prod.ts -- --dry-run"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/pg": "^8.11.6",
     "tsx": "catalog:"
   },
   "dependencies": {
+    "pg": "^8.16.0",
     "yaml": "^2.9.0"
   }
 }
