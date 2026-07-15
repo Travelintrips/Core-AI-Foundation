@@ -49,6 +49,7 @@ import { getGateForServiceQuotation, gateIsCleared } from "../services/commercia
 import { creativeAiAssetsTable } from "@workspace/db";
 import { scoreFromAssetMetadata } from "../services/companyProfileQcService.js";
 import { resolvePublicRequestTenantId } from "../security/tenantResolution.js";
+import { getPublicBaseUrl } from "../lib/publicBaseUrl.js";
 
 // Statuses that must only be reached once the commercial gate (if one exists
 // for this request's quotation) has been verified or waived. Without this
@@ -76,10 +77,7 @@ function hashToken(t: string): string { return createHash("sha256").update(t).di
 
 /** Build the base URL for constructing portal links */
 function buildBaseUrl(req: import("express").Request): string {
-  if (process.env["REPLIT_DEV_DOMAIN"]) return `https://${process.env["REPLIT_DEV_DOMAIN"]}`;
-  const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0] ?? req.protocol;
-  const host = (req.headers["x-forwarded-host"] as string | undefined) ?? req.get("host") ?? "localhost";
-  return `${proto}://${host}`;
+  return getPublicBaseUrl(req);
 }
 
 const router = Router();

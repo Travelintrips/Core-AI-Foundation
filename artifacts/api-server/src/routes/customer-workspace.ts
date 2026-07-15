@@ -47,6 +47,7 @@ import {
 import { db, creativeProjectsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { resolveProjectImageBatchType } from "../services/creativeProjectImageBatchType.js";
+import { getPublicBaseUrl } from "../lib/publicBaseUrl.js";
 import { listBatchAssets, groupAssetsForGallery } from "../services/image-batch/imageBatchAssetService.js";
 
 const router = Router();
@@ -395,9 +396,7 @@ router.post("/public/customer/workspace/:token/affiliate/join", async (req, res)
   }
 
   const affiliateCode = crypto.randomBytes(4).toString("hex").toUpperCase();
-  const baseUrl = process.env.REPLIT_DEV_DOMAIN
-    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-    : "https://your-domain.com";
+  const baseUrl = getPublicBaseUrl(req);
 
   const [aff] = await db
     .insert(aiAffiliatesTable)
@@ -495,9 +494,7 @@ router.post("/public/customer/workspace/:token/referral/generate", async (req, r
   if (existing) { res.json(existing); return; }
 
   const referralCode = crypto.randomBytes(5).toString("hex").toUpperCase();
-  const baseUrl = process.env.REPLIT_DEV_DOMAIN
-    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-    : "https://your-domain.com";
+  const baseUrl = getPublicBaseUrl(req);
 
   const [ref] = await db
     .insert(aiReferralsTable)

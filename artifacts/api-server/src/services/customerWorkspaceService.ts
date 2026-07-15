@@ -38,6 +38,7 @@ import {
 } from "@workspace/db";
 import { hashToken } from "./clientReviewService.js";
 import { generateDownloadToken } from "./signedUrlService.js";
+import { getPublicBaseUrl } from "../lib/publicBaseUrl.js";
 import { buildProjectRuntimeSnapshot, type ProjectRuntimeSnapshot } from "./runtimeRosterService.js";
 import {
   getEventsWithSummariesForProject,
@@ -253,12 +254,7 @@ async function projectFromCreativeProject(
 }
 
 function buildBaseUrl(req: Request): string {
-  if (process.env["REPLIT_DEV_DOMAIN"]) {
-    return `https://${process.env["REPLIT_DEV_DOMAIN"]}`;
-  }
-  const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0] ?? req.protocol;
-  const host = (req.headers["x-forwarded-host"] as string | undefined) ?? req.get("host") ?? "localhost";
-  return `${proto}://${host}`;
+  return getPublicBaseUrl(req);
 }
 
 /** All normalized projects owned by a customer email (legacy + service-catalog flows). */
