@@ -595,7 +595,7 @@ export default function DesignStudioPage() {
                 {!templatesData || templatesData.items.length === 0 ? (
                   <p className="text-sm text-gray-400 py-4 text-center">Memuat template…</p>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-64 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[480px] overflow-y-auto pr-1">
                     {templatesData.items.map((tpl) => {
                       const isSelected = selectedTemplate?.templateCode === tpl.templateCode;
                       const aspectRatio = tpl.canvasWidth / tpl.canvasHeight;
