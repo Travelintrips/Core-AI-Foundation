@@ -87,67 +87,153 @@ const STATUS_BADGE: Record<string, string> = {
   archived: "bg-orange-100 text-orange-700",
 };
 
-// ── SVG mini-preview generator (dari canvas state metadata) ──────────────────
+// ── SVG mini-preview generator ────────────────────────────────────────────────
+// Setiap kode template punya preview SVG yang merepresentasikan visual aslinya.
 function TemplateSvgPreview({ code, w, h }: { code: string; w: number; h: number }) {
-  // Simple preview berdasarkan kode template — tanpa fetch detail
-  // Render SVG inline menggunakan warna tema per kategori kode
-  const isLogo  = code.startsWith("LOGO-");
-  const isSocial = code.startsWith("SOC-");
-  const isBanner = code.startsWith("BAN-");
+  const vb = `0 0 ${w} ${h}`;
+  const cx = w / 2;
 
-  if (isLogo) {
-    // Dark navy tech logo preview
-    const vb = `0 0 ${w} ${h}`;
-    const cx = w / 2, cy = h * 0.44;
-    const r1 = Math.min(w, h) * 0.38;
-    const r2 = r1 * 0.6;
-    const r3 = r2 * 0.55;
+  // ── LOGO-TECH-MODERN-001 ────────────────────────────────────────────────────
+  if (code === "LOGO-TECH-MODERN-001") {
+    const cy = h * 0.44;
+    const r1 = Math.min(w, h) * 0.38, r2 = r1 * 0.6, r3 = r2 * 0.55;
     return (
       <svg viewBox={vb} xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
         <rect width={w} height={h} fill="#0F172A" />
         <circle cx={cx} cy={cy} r={r1} fill="#6366F1" fillOpacity="0.15" />
         <circle cx={cx} cy={cy} r={r2} fill="#8B5CF6" fillOpacity="0.28" />
         <circle cx={cx} cy={cy} r={r3} fill="#4F46E5" />
-        <rect
-          x={cx - r3 * 0.55} y={cy - r3 * 0.55}
-          width={r3 * 1.1} height={r3 * 1.1}
-          rx={r3 * 0.12} fill="white" fillOpacity="0.9"
-          transform={`rotate(45 ${cx} ${cy})`}
-        />
-        <line x1={cx - r2 * 0.45} y1={h * 0.73} x2={cx + r2 * 0.45} y2={h * 0.73} stroke="#6366F1" strokeWidth={h * 0.003} strokeOpacity="0.5" />
-        <text x={cx} y={h * 0.81} textAnchor="middle" fill="white" fontSize={h * 0.065} fontWeight="800" fontFamily="Inter, sans-serif">NAMA PERUSAHAAN</text>
-        <text x={cx} y={h * 0.90} textAnchor="middle" fill="#94A3B8" fontSize={h * 0.028} fontFamily="Inter, sans-serif">Inovasi · Kualitas · Kepercayaan</text>
+        <rect x={cx - r3*0.55} y={cy - r3*0.55} width={r3*1.1} height={r3*1.1} rx={r3*0.12} fill="white" fillOpacity="0.9" transform={`rotate(45 ${cx} ${cy})`} />
+        <line x1={cx - r2*0.45} y1={h*0.73} x2={cx + r2*0.45} y2={h*0.73} stroke="#6366F1" strokeWidth={h*0.003} strokeOpacity="0.5" />
+        <text x={cx} y={h*0.81} textAnchor="middle" fill="white" fontSize={h*0.065} fontWeight="800" fontFamily="Inter,sans-serif">NAMA PERUSAHAAN</text>
+        <text x={cx} y={h*0.90} textAnchor="middle" fill="#94A3B8" fontSize={h*0.028} fontFamily="Inter,sans-serif">Inovasi · Kualitas · Kepercayaan</text>
       </svg>
     );
   }
 
-  if (isSocial) {
+  // ── IG-POST-ELEGANT-001 ─────────────────────────────────────────────────────
+  if (code === "IG-POST-ELEGANT-001") {
     return (
-      <svg viewBox={`0 0 ${w} ${h}`} xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-        <rect width={w} height={h} fill="#1E1B4B" />
-        <rect x={w*0.1} y={h*0.15} width={w*0.8} height={h*0.5} rx={w*0.04} fill="#4338CA" fillOpacity="0.6" />
-        <text x={w/2} y={h*0.75} textAnchor="middle" fill="white" fontSize={h*0.07} fontWeight="700" fontFamily="Inter, sans-serif">Judul Konten</text>
-        <text x={w/2} y={h*0.87} textAnchor="middle" fill="#A5B4FC" fontSize={h*0.04} fontFamily="Inter, sans-serif">@username</text>
+      <svg viewBox={vb} xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <rect width={w} height={h} fill="#0A0A0A" />
+        <rect x={w*0.06} y={h*0.06} width={w*0.88} height={h*0.002} fill="#C9A84C" />
+        <rect x={w*0.06} y={h*0.06} width={w*0.002} height={h*0.88} fill="#C9A84C" />
+        <rect x={w*0.938} y={h*0.06} width={w*0.002} height={h*0.88} fill="#C9A84C" />
+        <rect x={w*0.06} y={h*0.938} width={w*0.88} height={w*0.002} fill="#C9A84C" />
+        <line x1={w*0.31} y1={h*0.32} x2={w*0.69} y2={h*0.32} stroke="#C9A84C" strokeWidth={h*0.002} strokeOpacity="0.6" />
+        <text x={cx} y={h*0.46} textAnchor="middle" fill="#C9A84C" fontSize={h*0.08} fontFamily="Georgia,serif">TAGLINE ANDA</text>
+        <text x={cx} y={h*0.56} textAnchor="middle" fill="#C9A84C" fontSize={h*0.08} fontFamily="Georgia,serif">DI SINI</text>
+        <line x1={w*0.31} y1={h*0.60} x2={w*0.69} y2={h*0.60} stroke="#C9A84C" strokeWidth={h*0.002} strokeOpacity="0.6" />
+        <text x={cx} y={h*0.68} textAnchor="middle" fill="white" fontSize={h*0.035} fontFamily="Georgia,serif" fillOpacity="0.8">Kualitas Tanpa Kompromi</text>
+        <text x={cx} y={h*0.90} textAnchor="middle" fill="#C9A84C" fontSize={h*0.032} fontFamily="Inter,sans-serif" fontWeight="300">NAMA BRAND</text>
       </svg>
     );
   }
 
-  if (isBanner) {
+  // ── IG-POST-VIBRANT-001 ─────────────────────────────────────────────────────
+  if (code === "IG-POST-VIBRANT-001") {
     return (
-      <svg viewBox={`0 0 ${w} ${h}`} xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-        <rect width={w} height={h} fill="#064E3B" />
-        <rect x={0} y={0} width={w*0.55} height={h} fill="#065F46" />
-        <text x={w*0.28} y={h*0.55} textAnchor="middle" fill="white" fontSize={h*0.22} fontWeight="800" fontFamily="Inter, sans-serif">BRAND</text>
-        <text x={w*0.75} y={h*0.58} textAnchor="middle" fill="#6EE7B7" fontSize={h*0.14} fontFamily="Inter, sans-serif">Tagline</text>
+      <svg viewBox={vb} xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <rect width={w} height={h} fill="#FF6B35" />
+        <rect x={0} y={0} width={w} height={h*0.5} fill="#FF006E" fillOpacity="0.7" />
+        <rect x={0} y={h*0.5} width={w} height={h*0.5} fill="#8338EC" fillOpacity="0.7" />
+        <circle cx={0} cy={0} r={w*0.4} fill="white" fillOpacity="0.12" />
+        <rect x={w*0.3} y={h*0.13} width={w*0.4} height={h*0.065} rx={h*0.033} fill="white" />
+        <text x={cx} y={h*0.175} textAnchor="middle" fill="#FF006E" fontSize={h*0.04} fontWeight="700" fontFamily="Inter,sans-serif">✨ NEW ARRIVAL</text>
+        <text x={w*0.06} y={h*0.43} fill="white" fontSize={h*0.13} fontWeight="900" fontFamily="Inter,sans-serif">JUDUL</text>
+        <text x={w*0.06} y={h*0.56} fill="white" fontSize={h*0.13} fontWeight="900" fontFamily="Inter,sans-serif">BERANI</text>
+        <rect x={w*0.06} y={h*0.79} width={w*0.32} height={h*0.075} rx={h*0.038} fill="white" />
+        <text x={w*0.22} y={h*0.839} textAnchor="middle" fill="#FF006E" fontSize={h*0.038} fontWeight="700" fontFamily="Inter,sans-serif">Pelajari</text>
       </svg>
     );
   }
 
-  // Generic fallback
+  // ── IG-POST-MINIMAL-001 ─────────────────────────────────────────────────────
+  if (code === "IG-POST-MINIMAL-001") {
+    return (
+      <svg viewBox={vb} xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <rect width={w} height={h} fill="#FAFAFA" />
+        <rect x={w*0.06} y={h*0.06} width={w*0.1} height={h*0.008} rx={h*0.004} fill="#1A1A1A" />
+        <rect x={w*0.06} y={h*0.105} width={w*0.88} height={h*0.55} rx={h*0.01} fill="#E8E8E8" />
+        <text x={cx} y={h*0.405} textAnchor="middle" fill="#AAAAAA" fontSize={h*0.04} fontFamily="Inter,sans-serif">Gambar Produk</text>
+        <rect x={w*0.06} y={h*0.71} width={w*0.88} height={h*0.001} fill="#000000" fillOpacity="0.15" />
+        <text x={w*0.06} y={h*0.795} fill="#1A1A1A" fontSize={h*0.06} fontWeight="700" fontFamily="Inter,sans-serif">Nama Produk</text>
+        <text x={w*0.06} y={h*0.87} fill="#555555" fontSize={h*0.034} fontFamily="Inter,sans-serif" fillOpacity="0.7">Kategori Produk</text>
+        <text x={w*0.94} y={h*0.076} textAnchor="end" fill="#1A1A1A" fontSize={h*0.032} fontWeight="800" fontFamily="Inter,sans-serif">BRAND</text>
+      </svg>
+    );
+  }
+
+  // ── IG-POST-CORPORATE-001 ───────────────────────────────────────────────────
+  if (code === "IG-POST-CORPORATE-001") {
+    return (
+      <svg viewBox={vb} xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <rect width={w} height={h} fill="#0D1B3E" />
+        <rect x={0} y={0} width={w} height={h*0.01} fill="#1E90FF" />
+        <rect x={0} y={0} width={w*0.008} height={h} fill="#1E90FF" />
+        <rect x={w*0.5} y={-h*0.2} width={w*0.65} height={w*0.65} rx="0" fill="#1E90FF" fillOpacity="0.06" transform={`rotate(30 ${w*0.75} ${h*0.15})`} />
+        <rect x={w*0.06} y={h*0.075} width={w*0.18} height={h*0.065} rx={h*0.01} fill="#1E2D5A" />
+        <text x={w*0.15} y={h*0.12} textAnchor="middle" fill="#FFFFFF" fontSize={h*0.036} fontWeight="800" fontFamily="Inter,sans-serif">BRAND</text>
+        <rect x={w*0.06} y={h*0.27} width={w*0.07} height={h*0.009} rx={h*0.004} fill="#1E90FF" />
+        <text x={w*0.06} y={h*0.325} fill="#1E90FF" fontSize={h*0.028} fontWeight="600" fontFamily="Inter,sans-serif">SOLUSI BISNIS</text>
+        <text x={w*0.06} y={h*0.42} fill="white" fontSize={h*0.105} fontWeight="800" fontFamily="Inter,sans-serif">Tingkat</text>
+        <text x={w*0.06} y={h*0.535} fill="white" fontSize={h*0.105} fontWeight="800" fontFamily="Inter,sans-serif">kan</text>
+        <rect x={w*0.06} y={h*0.76} width={w*0.19} height={h*0.13} rx={h*0.015} fill="#1E2D5A" />
+        <text x={w*0.155} y={h*0.823} textAnchor="middle" fill="#1E90FF" fontSize={h*0.055} fontWeight="800" fontFamily="Inter,sans-serif">500+</text>
+        <text x={w*0.155} y={h*0.87} textAnchor="middle" fill="white" fontSize={h*0.028} fontFamily="Inter,sans-serif" fillOpacity="0.7">Klien</text>
+        <rect x={w*0.29} y={h*0.76} width={w*0.19} height={h*0.13} rx={h*0.015} fill="#1E2D5A" />
+        <text x={w*0.385} y={h*0.823} textAnchor="middle" fill="#1E90FF" fontSize={h*0.055} fontWeight="800" fontFamily="Inter,sans-serif">10T+</text>
+        <text x={w*0.385} y={h*0.87} textAnchor="middle" fill="white" fontSize={h*0.028} fontFamily="Inter,sans-serif" fillOpacity="0.7">Aset</text>
+      </svg>
+    );
+  }
+
+  // ── IG-POST-NATURE-001 ──────────────────────────────────────────────────────
+  if (code === "IG-POST-NATURE-001") {
+    return (
+      <svg viewBox={vb} xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <rect width={w} height={h} fill="#F5F0E8" />
+        <circle cx={0} cy={0} r={w*0.35} fill="#4A7C59" />
+        <circle cx={w} cy={h} r={w*0.32} fill="#6B9E78" />
+        <rect x={w*0.09} y={h*0.19} width={w*0.82} height={h*0.65} rx={h*0.025} fill="#FDFAF4" fillOpacity="0.96" />
+        <rect x={w*0.35} y={h*0.265} width={w*0.3} height={h*0.052} rx={h*0.026} fill="#4A7C59" />
+        <text x={cx} y={h*0.302} textAnchor="middle" fill="white" fontSize={h*0.028} fontWeight="700" fontFamily="Inter,sans-serif">100% ORGANIK</text>
+        <text x={cx} y={h*0.43} textAnchor="middle" fill="#2D4A35" fontSize={h*0.09} fontFamily="Georgia,serif">Nama</text>
+        <text x={cx} y={h*0.53} textAnchor="middle" fill="#2D4A35" fontSize={h*0.09} fontFamily="Georgia,serif">Produk</text>
+        <line x1={w*0.35} y1={h*0.565} x2={w*0.65} y2={h*0.565} stroke="#4A7C59" strokeWidth={h*0.001} strokeOpacity="0.5" />
+        <text x={cx} y={h*0.64} textAnchor="middle" fill="#5A6E61" fontSize={h*0.03} fontFamily="Georgia,serif" fillOpacity="0.8">Bahan alami pilihan terbaik</text>
+        <text x={cx} y={h*0.72} textAnchor="middle" fill="#4A7C59" fontSize={h*0.048} fontWeight="700" fontFamily="Inter,sans-serif">Rp 00.000</text>
+        <text x={cx} y={h*0.955} textAnchor="middle" fill="#4A7C59" fontSize={h*0.028} fontFamily="Inter,sans-serif" fillOpacity="0.8">@namabrand  ·  www.brand.com</text>
+      </svg>
+    );
+  }
+
+  // ── IG-POST-PROMO-001 ───────────────────────────────────────────────────────
+  if (code === "IG-POST-PROMO-001") {
+    return (
+      <svg viewBox={vb} xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <rect width={w} height={h} fill="#1A0A00" />
+        <rect x={0} y={0} width={w} height={h} fill="#CC0000" fillOpacity="0.8" />
+        <rect x={w*0.175} y={h*0.175} width={w*0.65} height={w*0.65} fill="#FFD700" fillOpacity="0.15" transform={`rotate(22.5 ${cx} ${h*0.5})`} />
+        <rect x={w*0.175} y={h*0.175} width={w*0.65} height={w*0.65} fill="#FFD700" fillOpacity="0.1" />
+        <rect x={0} y={0} width={w} height={h*0.13} fill="black" fillOpacity="0.85" />
+        <text x={cx} y={h*0.086} textAnchor="middle" fill="#FFD700" fontSize={h*0.05} fontWeight="800" fontFamily="Inter,sans-serif">NAMA TOKO</text>
+        <text x={cx} y={h*0.24} textAnchor="middle" fill="#FFD700" fontSize={h*0.14} fontWeight="900" fontFamily="Inter,sans-serif" transform={`rotate(-3 ${cx} ${h*0.21})`}>FLASH SALE</text>
+        <circle cx={cx} cy={h*0.52} r={w*0.21} fill="#FFD700" />
+        <text x={cx} y={h*0.545} textAnchor="middle" fill="#CC0000" fontSize={h*0.19} fontWeight="900" fontFamily="Inter,sans-serif">50%</text>
+        <text x={cx} y={h*0.625} textAnchor="middle" fill="#CC0000" fontSize={h*0.065} fontWeight="800" fontFamily="Inter,sans-serif">DISKON</text>
+        <rect x={0} y={h*0.8} width={w} height={h*0.2} fill="black" fillOpacity="0.9" />
+        <text x={cx} y={h*0.875} textAnchor="middle" fill="white" fontSize={h*0.045} fontWeight="700" fontFamily="Inter,sans-serif">Semua Produk Pilihan</text>
+        <text x={cx} y={h*0.94} textAnchor="middle" fill="#FFD700" fontSize={h*0.028} fontFamily="Inter,sans-serif" fillOpacity="0.8">Berlaku 1–7 Agustus 2025</text>
+      </svg>
+    );
+  }
+
+  // Generic fallback for unknown codes
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+    <svg viewBox={vb} xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
       <rect width={w} height={h} fill="#1E293B" />
-      <text x={w/2} y={h/2} textAnchor="middle" dominantBaseline="middle" fill="#64748B" fontSize={h*0.08} fontFamily="Inter, sans-serif">Preview</text>
+      <text x={cx} y={h/2} textAnchor="middle" dominantBaseline="middle" fill="#64748B" fontSize={h*0.08} fontFamily="Inter,sans-serif">Preview</text>
     </svg>
   );
 }
