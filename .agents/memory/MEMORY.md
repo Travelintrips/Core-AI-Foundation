@@ -67,3 +67,4 @@
 - [phase-v47-creative-marketplace](phase-v47-creative-marketplace.md) — V4.7 asset marketplace; Creative prefix on all schemas (collision with skills marketplace); resolveWorkspaceSession for token auth
 - [wp08-wp11-quotation](wp08-wp11-quotation.md) — Quotation repo write+audit, soft-delete cascade, restore role guard, legacy freeze (410), vi.hoisted() test pattern
 - [cp-real-file-upload](cp-real-file-upload.md) — logo/photo/doc/video uploads now real (object storage), fixed missing adminAuth public exception; PDF still doesn't embed uploaded logo/photos
+- [design-template-blueprints](design-template-blueprints.md) — builtin templates served from code (no DB); add to BUILTIN_TEMPLATES array, no migration needed

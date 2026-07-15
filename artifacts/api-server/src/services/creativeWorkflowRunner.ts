@@ -717,8 +717,8 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
   // are not truly "completed" until their PDF has rendered — hold them at
   // "generating_document" so the customer workspace never shows a finished
   // project with no deliverable yet.
-  const documentType = anyFailed ? null : await resolveProjectDocumentType(project);
-  const isDocumentProject = documentType !== null;
+  const finalDocumentType = anyFailed ? null : await resolveProjectDocumentType(project);
+  const isDocumentProject = finalDocumentType !== null;
   const presentationType = anyFailed || isDocumentProject ? null : await resolveProjectPresentationType(project);
   const isPresentationProject = presentationType !== null;
   const finalStatus = anyFailed
@@ -778,7 +778,7 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
       imagesDone.finally(() => {
         enqueue({
           jobType: "pdf_export",
-          payloadJson: { projectId: projectDbId, documentType },
+          payloadJson: { projectId: projectDbId, documentType: finalDocumentType },
           priority: 60,
         }).catch(async (err) => {
           console.error(`[pdf-export] Failed to enqueue pdf_export job for project ${project.projectId}:`, err);

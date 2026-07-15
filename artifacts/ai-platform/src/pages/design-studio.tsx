@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   Plus, Edit3, Archive, MoreVertical, Layout,
-  Clock, Layers, FileJson, Search,
+  Clock, Layers, FileJson, Search, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +54,20 @@ interface DesignProject {
 
 interface ProjectList { items: DesignProject[]; total: number; page: number; pageSize: number }
 
+interface BuiltinTemplateMeta {
+  templateCode: string;
+  name: string;
+  description: string;
+  category: string;
+  style: string;
+  industry: string | null;
+  tags: string[];
+  canvasWidth: number;
+  canvasHeight: number;
+}
+
+interface BuiltinTemplateList { items: BuiltinTemplateMeta[]; total: number }
+
 const PRESETS = [
   { label: "Presentation (1920×1080)", w: 1920, h: 1080 },
   { label: "Instagram Post (1080×1080)", w: 1080, h: 1080 },
@@ -70,6 +84,71 @@ const STATUS_BADGE: Record<string, string> = {
   archived: "bg-orange-100 text-orange-700",
 };
 
+// ── SVG mini-preview generator (dari canvas state metadata) ──────────────────
+function TemplateSvgPreview({ code, w, h }: { code: string; w: number; h: number }) {
+  // Simple preview berdasarkan kode template — tanpa fetch detail
+  // Render SVG inline menggunakan warna tema per kategori kode
+  const isLogo  = code.startsWith("LOGO-");
+  const isSocial = code.startsWith("SOC-");
+  const isBanner = code.startsWith("BAN-");
+
+  if (isLogo) {
+    // Dark navy tech logo preview
+    const vb = `0 0 ${w} ${h}`;
+    const cx = w / 2, cy = h * 0.44;
+    const r1 = Math.min(w, h) * 0.38;
+    const r2 = r1 * 0.6;
+    const r3 = r2 * 0.55;
+    return (
+      <svg viewBox={vb} xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <rect width={w} height={h} fill="#0F172A" />
+        <circle cx={cx} cy={cy} r={r1} fill="#6366F1" fillOpacity="0.15" />
+        <circle cx={cx} cy={cy} r={r2} fill="#8B5CF6" fillOpacity="0.28" />
+        <circle cx={cx} cy={cy} r={r3} fill="#4F46E5" />
+        <rect
+          x={cx - r3 * 0.55} y={cy - r3 * 0.55}
+          width={r3 * 1.1} height={r3 * 1.1}
+          rx={r3 * 0.12} fill="white" fillOpacity="0.9"
+          transform={`rotate(45 ${cx} ${cy})`}
+        />
+        <line x1={cx - r2 * 0.45} y1={h * 0.73} x2={cx + r2 * 0.45} y2={h * 0.73} stroke="#6366F1" strokeWidth={h * 0.003} strokeOpacity="0.5" />
+        <text x={cx} y={h * 0.81} textAnchor="middle" fill="white" fontSize={h * 0.065} fontWeight="800" fontFamily="Inter, sans-serif">NAMA PERUSAHAAN</text>
+        <text x={cx} y={h * 0.90} textAnchor="middle" fill="#94A3B8" fontSize={h * 0.028} fontFamily="Inter, sans-serif">Inovasi · Kualitas · Kepercayaan</text>
+      </svg>
+    );
+  }
+
+  if (isSocial) {
+    return (
+      <svg viewBox={`0 0 ${w} ${h}`} xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <rect width={w} height={h} fill="#1E1B4B" />
+        <rect x={w*0.1} y={h*0.15} width={w*0.8} height={h*0.5} rx={w*0.04} fill="#4338CA" fillOpacity="0.6" />
+        <text x={w/2} y={h*0.75} textAnchor="middle" fill="white" fontSize={h*0.07} fontWeight="700" fontFamily="Inter, sans-serif">Judul Konten</text>
+        <text x={w/2} y={h*0.87} textAnchor="middle" fill="#A5B4FC" fontSize={h*0.04} fontFamily="Inter, sans-serif">@username</text>
+      </svg>
+    );
+  }
+
+  if (isBanner) {
+    return (
+      <svg viewBox={`0 0 ${w} ${h}`} xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <rect width={w} height={h} fill="#064E3B" />
+        <rect x={0} y={0} width={w*0.55} height={h} fill="#065F46" />
+        <text x={w*0.28} y={h*0.55} textAnchor="middle" fill="white" fontSize={h*0.22} fontWeight="800" fontFamily="Inter, sans-serif">BRAND</text>
+        <text x={w*0.75} y={h*0.58} textAnchor="middle" fill="#6EE7B7" fontSize={h*0.14} fontFamily="Inter, sans-serif">Tagline</text>
+      </svg>
+    );
+  }
+
+  // Generic fallback
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+      <rect width={w} height={h} fill="#1E293B" />
+      <text x={w/2} y={h/2} textAnchor="middle" dominantBaseline="middle" fill="#64748B" fontSize={h*0.08} fontFamily="Inter, sans-serif">Preview</text>
+    </svg>
+  );
+}
+
 export default function DesignStudioPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -81,6 +160,8 @@ export default function DesignStudioPage() {
   const [preset, setPreset] = useState(0);
   const [customW, setCustomW] = useState(1920);
   const [customH, setCustomH] = useState(1080);
+  const [createMode, setCreateMode] = useState<"blank" | "template">("blank");
+  const [selectedTemplate, setSelectedTemplate] = useState<BuiltinTemplateMeta | null>(null);
 
   const { data, isLoading } = useQuery<ProjectList>({
     queryKey: ["design-projects", statusFilter],
@@ -88,20 +169,51 @@ export default function DesignStudioPage() {
       apiFetch(`/api/ai/design/projects?${statusFilter !== "all" ? `status=${statusFilter}&` : ""}pageSize=50`),
   });
 
+  const { data: templatesData } = useQuery<BuiltinTemplateList>({
+    queryKey: ["builtin-templates"],
+    queryFn: () => apiFetch("/api/ai/design/templates/builtin"),
+    staleTime: Infinity, // template statis, tidak berubah
+  });
+
   const createMutation = useMutation({
-    mutationFn: (payload: { name: string; description?: string; canvasWidth: number; canvasHeight: number }) =>
-      apiFetch<DesignProject>("/api/ai/design/projects", {
+    mutationFn: async (payload: {
+      name: string;
+      description?: string;
+      canvasWidth: number;
+      canvasHeight: number;
+      templateCode?: string;
+    }) => {
+      // Jika pakai template: ambil canvas state dulu, lalu kirim ke API
+      if (payload.templateCode) {
+        const tpl = await apiFetch<{ canvasState: unknown; canvasWidth: number; canvasHeight: number }>(
+          `/api/ai/design/templates/builtin/${payload.templateCode}`
+        );
+        return apiFetch<DesignProject>("/api/ai/design/projects", {
+          method: "POST",
+          body: JSON.stringify({
+            name: payload.name,
+            description: payload.description,
+            canvasWidth: tpl.canvasWidth,
+            canvasHeight: tpl.canvasHeight,
+            initialState: tpl.canvasState,
+          }),
+        });
+      }
+      return apiFetch<DesignProject>("/api/ai/design/projects", {
         method: "POST",
         body: JSON.stringify(payload),
-      }),
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["design-projects"] });
       setCreating(false);
       setNewName("");
       setNewDesc("");
-      toast({ title: "Project created!" });
+      setSelectedTemplate(null);
+      setCreateMode("blank");
+      toast({ title: "Project berhasil dibuat!" });
     },
-    onError: (e: Error) => toast({ title: "Failed to create", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Gagal membuat project", description: e.message, variant: "destructive" }),
   });
 
   const archiveMutation = useMutation({
@@ -109,16 +221,32 @@ export default function DesignStudioPage() {
       apiFetch(`/api/ai/design/projects/${id}/archive`, { method: "POST" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["design-projects"] });
-      toast({ title: "Project archived" });
+      toast({ title: "Project diarsipkan" });
     },
   });
 
   function handleCreate() {
     if (!newName.trim()) return;
-    const p = PRESETS[preset];
-    const w = preset === PRESETS.length - 1 ? customW : (p?.w ?? 1920);
-    const h = preset === PRESETS.length - 1 ? customH : (p?.h ?? 1080);
-    createMutation.mutate({ name: newName.trim(), description: newDesc || undefined, canvasWidth: w, canvasHeight: h });
+    if (createMode === "template" && selectedTemplate) {
+      createMutation.mutate({
+        name: newName.trim(),
+        description: newDesc || undefined,
+        canvasWidth: selectedTemplate.canvasWidth,
+        canvasHeight: selectedTemplate.canvasHeight,
+        templateCode: selectedTemplate.templateCode,
+      });
+    } else {
+      const p = PRESETS[preset];
+      const w = preset === PRESETS.length - 1 ? customW : (p?.w ?? 1920);
+      const h = preset === PRESETS.length - 1 ? customH : (p?.h ?? 1080);
+      createMutation.mutate({ name: newName.trim(), description: newDesc || undefined, canvasWidth: w, canvasHeight: h });
+    }
+  }
+
+  function handleOpenCreate() {
+    setCreateMode("blank");
+    setSelectedTemplate(null);
+    setCreating(true);
   }
 
   const filtered = (data?.items ?? []).filter((p) => {
@@ -136,10 +264,10 @@ export default function DesignStudioPage() {
             AI Design Studio
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Canva-like visual editor with AI generation, layers, and version history
+            Canva-like visual editor dengan AI generation, layers, dan version history
           </p>
         </div>
-        <Button onClick={() => setCreating(true)} className="gap-2">
+        <Button onClick={handleOpenCreate} className="gap-2">
           <Plus className="h-4 w-4" />
           New Project
         </Button>
@@ -152,7 +280,7 @@ export default function DesignStudioPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search projects..."
+            placeholder="Cari project..."
             className="pl-9 h-9"
           />
         </div>
@@ -177,8 +305,8 @@ export default function DesignStudioPage() {
       {data && (
         <div className="flex gap-4 mb-5 text-sm text-gray-500">
           <span>{data.total} total</span>
-          <span>{data.items.filter((p) => p.status === "active").length} active</span>
-          <span>{data.items.filter((p) => p.status === "draft").length} drafts</span>
+          <span>{data.items.filter((p) => p.status === "active").length} aktif</span>
+          <span>{data.items.filter((p) => p.status === "draft").length} draft</span>
         </div>
       )}
 
@@ -192,8 +320,8 @@ export default function DesignStudioPage() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
           <Layout className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No design projects yet.</p>
-          <p className="text-xs mt-1">Create one to get started with the visual editor.</p>
+          <p className="text-sm">Belum ada design project.</p>
+          <p className="text-xs mt-1">Buat project baru atau mulai dari template.</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -222,7 +350,7 @@ export default function DesignStudioPage() {
                   )}
                   {/* Hover overlay */}
                   <div className="absolute inset-0 bg-indigo-600/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <span className="text-white text-sm font-medium">Open Editor</span>
+                    <span className="text-white text-sm font-medium">Buka Editor</span>
                   </div>
                 </div>
               </Link>
@@ -245,14 +373,14 @@ export default function DesignStudioPage() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem asChild>
                         <Link href={`/design-studio/${project.id}`}>
-                          <Edit3 className="h-3.5 w-3.5 mr-2" /> Open Editor
+                          <Edit3 className="h-3.5 w-3.5 mr-2" /> Buka Editor
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-orange-600"
                         onClick={() => archiveMutation.mutate(project.id)}
                       >
-                        <Archive className="h-3.5 w-3.5 mr-2" /> Archive
+                        <Archive className="h-3.5 w-3.5 mr-2" /> Arsipkan
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -270,7 +398,7 @@ export default function DesignStudioPage() {
                   </span>
                   <span className="text-[10px] text-gray-400 ml-auto flex items-center gap-0.5">
                     <Clock className="h-2.5 w-2.5" />
-                    {new Date(project.updatedAt).toLocaleDateString()}
+                    {new Date(project.updatedAt).toLocaleDateString("id-ID")}
                   </span>
                 </div>
               </div>
@@ -279,69 +407,166 @@ export default function DesignStudioPage() {
         </div>
       )}
 
-      {/* Create Dialog */}
+      {/* ── Create Dialog ──────────────────────────────────────────────────────── */}
       <Dialog open={creating} onOpenChange={setCreating}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>New Design Project</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <Label>Project Name *</Label>
-              <Input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="e.g. Brand Campaign 2025"
-                className="mt-1"
-                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                autoFocus
-              />
-            </div>
-            <div>
-              <Label>Description</Label>
-              <Input
-                value={newDesc}
-                onChange={(e) => setNewDesc(e.target.value)}
-                placeholder="Optional description"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label>Canvas Size</Label>
-              <div className="grid grid-cols-2 gap-2 mt-1">
-                {PRESETS.map((p, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setPreset(i)}
-                    className={`text-xs px-3 py-2 rounded-lg border text-left transition-colors ${
-                      preset === i
-                        ? "border-indigo-400 bg-indigo-50 text-indigo-700"
-                        : "border-gray-200 hover:border-gray-300 text-gray-600"
-                    }`}
-                  >
-                    {p.label}
-                    {p.w > 0 && <span className="block text-[10px] text-gray-400">{p.w}×{p.h}px</span>}
-                  </button>
-                ))}
-              </div>
-              {preset === PRESETS.length - 1 && (
-                <div className="flex gap-2 mt-2">
-                  <div className="flex-1">
-                    <Label className="text-xs">Width (px)</Label>
-                    <Input type="number" value={customW} onChange={(e) => setCustomW(+e.target.value)} className="mt-1" />
-                  </div>
-                  <div className="flex-1">
-                    <Label className="text-xs">Height (px)</Label>
-                    <Input type="number" value={customH} onChange={(e) => setCustomH(+e.target.value)} className="mt-1" />
-                  </div>
-                </div>
-              )}
-            </div>
+
+          {/* Mode tabs */}
+          <div className="flex gap-1 p-1 bg-gray-100 rounded-lg w-fit mb-4">
+            <button
+              onClick={() => setCreateMode("blank")}
+              className={`px-4 py-1.5 text-sm rounded-md font-medium transition-colors ${
+                createMode === "blank"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Mulai Kosong
+            </button>
+            <button
+              onClick={() => setCreateMode("template")}
+              className={`px-4 py-1.5 text-sm rounded-md font-medium transition-colors flex items-center gap-1.5 ${
+                createMode === "template"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+              Dari Template
+            </button>
           </div>
+
+          <div className="space-y-4">
+            {/* Project name & desc — selalu tampil */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Nama Project *</Label>
+                <Input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="e.g. Logo Startup 2025"
+                  className="mt-1"
+                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <Label>Deskripsi</Label>
+                <Input
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  placeholder="Opsional"
+                  className="mt-1"
+                />
+              </div>
+            </div>
+
+            {/* BLANK mode: canvas size picker */}
+            {createMode === "blank" && (
+              <div>
+                <Label>Ukuran Canvas</Label>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  {PRESETS.map((p, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setPreset(i)}
+                      className={`text-xs px-3 py-2 rounded-lg border text-left transition-colors ${
+                        preset === i
+                          ? "border-indigo-400 bg-indigo-50 text-indigo-700"
+                          : "border-gray-200 hover:border-gray-300 text-gray-600"
+                      }`}
+                    >
+                      {p.label}
+                      {p.w > 0 && <span className="block text-[10px] text-gray-400">{p.w}×{p.h}px</span>}
+                    </button>
+                  ))}
+                </div>
+                {preset === PRESETS.length - 1 && (
+                  <div className="flex gap-2 mt-2">
+                    <div className="flex-1">
+                      <Label className="text-xs">Lebar (px)</Label>
+                      <Input type="number" value={customW} onChange={(e) => setCustomW(+e.target.value)} className="mt-1" />
+                    </div>
+                    <div className="flex-1">
+                      <Label className="text-xs">Tinggi (px)</Label>
+                      <Input type="number" value={customH} onChange={(e) => setCustomH(+e.target.value)} className="mt-1" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TEMPLATE mode: template picker grid */}
+            {createMode === "template" && (
+              <div>
+                <Label className="mb-2 block">Pilih Template</Label>
+                {!templatesData || templatesData.items.length === 0 ? (
+                  <p className="text-sm text-gray-400 py-4 text-center">Memuat template…</p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-64 overflow-y-auto pr-1">
+                    {templatesData.items.map((tpl) => {
+                      const isSelected = selectedTemplate?.templateCode === tpl.templateCode;
+                      const aspectRatio = tpl.canvasWidth / tpl.canvasHeight;
+                      return (
+                        <button
+                          key={tpl.templateCode}
+                          onClick={() => setSelectedTemplate(tpl)}
+                          className={`rounded-xl border-2 overflow-hidden text-left transition-all focus:outline-none ${
+                            isSelected
+                              ? "border-indigo-500 ring-2 ring-indigo-200"
+                              : "border-gray-200 hover:border-indigo-300"
+                          }`}
+                        >
+                          {/* SVG Preview */}
+                          <div
+                            className="w-full bg-gray-900"
+                            style={{ aspectRatio: String(aspectRatio) }}
+                          >
+                            <TemplateSvgPreview
+                              code={tpl.templateCode}
+                              w={tpl.canvasWidth}
+                              h={tpl.canvasHeight}
+                            />
+                          </div>
+                          <div className="p-2 bg-white">
+                            <p className="text-xs font-semibold text-gray-800 truncate">{tpl.name}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5 truncate">{tpl.category} · {tpl.style}</p>
+                            {tpl.industry && (
+                              <span className="inline-block mt-1 text-[9px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-medium">
+                                {tpl.industry}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {selectedTemplate && (
+                  <p className="text-xs text-indigo-600 mt-2 flex items-center gap-1">
+                    <Sparkles className="h-3 w-3" />
+                    Template dipilih: <strong>{selectedTemplate.name}</strong> ({selectedTemplate.canvasWidth}×{selectedTemplate.canvasHeight}px)
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setCreating(false)}>Cancel</Button>
-            <Button onClick={handleCreate} disabled={!newName.trim() || createMutation.isPending}>
-              {createMutation.isPending ? "Creating…" : "Create Project"}
+            <Button variant="ghost" onClick={() => setCreating(false)}>Batal</Button>
+            <Button
+              onClick={handleCreate}
+              disabled={
+                !newName.trim() ||
+                createMutation.isPending ||
+                (createMode === "template" && !selectedTemplate)
+              }
+            >
+              {createMutation.isPending ? "Membuat…" : "Buat Project"}
             </Button>
           </DialogFooter>
         </DialogContent>
