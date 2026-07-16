@@ -122,39 +122,220 @@ function applySafetyChecks(
   return { safe: true };
 }
 
+// ── AI output repair — fix common GPT mistakes before Zod validation ──────────
+
+const NAMED_COLORS: Record<string, string> = {
+  white: "#ffffff", black: "#000000", red: "#ff0000", blue: "#0000ff",
+  green: "#008000", yellow: "#ffff00", orange: "#ffa500", purple: "#800080",
+  pink: "#ffc0cb", gray: "#808080", grey: "#808080", silver: "#c0c0c0",
+  gold: "#ffd700", navy: "#000080", teal: "#008080", cyan: "#00ffff",
+  magenta: "#ff00ff", lime: "#00ff00", brown: "#a52a2a", beige: "#f5f5dc",
+  ivory: "#fffff0", cream: "#fffdd0", transparent: "#00000000", none: "#00000000",
+};
+
+function repairColor(val: unknown): unknown {
+  if (typeof val !== "string") return val;
+  const lower = val.trim().toLowerCase();
+  if (NAMED_COLORS[lower]) return NAMED_COLORS[lower];
+  // already valid hex or rgb — return as-is
+  return val;
+}
+
+function repairFontFamily(val: unknown): unknown {
+  if (typeof val !== "string") return val;
+  // Strip fallbacks: "Open Sans, sans-serif" → "Open Sans"
+  const primary = val.split(",")[0].trim();
+  // Strip quotes if wrapped
+  return primary.replace(/^['"]|['"]$/g, "");
+}
+
+function repairVariableKey(val: unknown): unknown {
+  if (typeof val !== "string") return val;
+  // Replace hyphens with underscores, strip other invalid chars
+  return val.replace(/-/g, "_").replace(/[^a-zA-Z0-9_]/g, "_").replace(/^([0-9])/, "_$1");
+}
+
+function repairElement(el: Record<string, unknown>): Record<string, unknown> {
+  const colorFields = ["color", "stroke", "fgColor", "bgColor"];
+  for (const f of colorFields) {
+    if (f in el) el[f] = repairColor(el[f]);
+  }
+  if ("fontFamily" in el) el["fontFamily"] = repairFontFamily(el["fontFamily"]);
+  // fontWeight: coerce string numbers to number
+  if (typeof el["fontWeight"] === "string" && /^\d+$/.test(el["fontWeight"] as string)) {
+    el["fontWeight"] = parseInt(el["fontWeight"] as string, 10);
+  }
+  // fill: repair if it's a string color
+  if (typeof el["fill"] === "string") el["fill"] = repairColor(el["fill"]);
+  // border color
+  if (el["border"] && typeof el["border"] === "object") {
+    const b = el["border"] as Record<string, unknown>;
+    if ("color" in b) b["color"] = repairColor(b["color"]);
+  }
+  // shadow color
+  if (el["shadow"] && typeof el["shadow"] === "object") {
+    const s = el["shadow"] as Record<string, unknown>;
+    if ("color" in s) s["color"] = repairColor(s["color"]);
+  }
+  // content: repair variable binding key
+  if (el["content"] && typeof el["content"] === "object") {
+    const c = el["content"] as Record<string, unknown>;
+    if (c["binding"] && typeof c["binding"] === "object") {
+      const b = c["binding"] as Record<string, unknown>;
+      if ("variableKey" in b) b["variableKey"] = repairVariableKey(b["variableKey"]);
+    }
+  }
+  // zIndex: must be a non-negative integer
+  if (typeof el["zIndex"] !== "number") el["zIndex"] = 0;
+  else el["zIndex"] = Math.max(0, Math.min(10000, Math.round(el["zIndex"] as number)));
+  // Recurse into group children
+  if (Array.isArray(el["children"])) {
+    el["children"] = (el["children"] as unknown[]).map((c) =>
+      c && typeof c === "object" ? repairElement(c as Record<string, unknown>) : c
+    );
+  }
+  return el;
+}
+
+function repairAiOutput(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const obj = raw as Record<string, unknown>;
+
+  // Canvas backgroundColor
+  if (obj["canvas"] && typeof obj["canvas"] === "object") {
+    const canvas = obj["canvas"] as Record<string, unknown>;
+    if ("backgroundColor" in canvas) canvas["backgroundColor"] = repairColor(canvas["backgroundColor"]);
+    // Ensure unit is "px"
+    canvas["unit"] = "px";
+  }
+
+  // Elements
+  if (Array.isArray(obj["elements"])) {
+    obj["elements"] = (obj["elements"] as unknown[]).map((el) =>
+      el && typeof el === "object" ? repairElement(el as Record<string, unknown>) : el
+    );
+  }
+
+  // Variables: repair keys
+  if (Array.isArray(obj["variables"])) {
+    obj["variables"] = (obj["variables"] as unknown[]).map((v) => {
+      if (!v || typeof v !== "object") return v;
+      const varObj = { ...(v as Record<string, unknown>) };
+      if ("key" in varObj) varObj["key"] = repairVariableKey(varObj["key"]);
+      return varObj;
+    });
+  }
+
+  // Metadata defaults
+  if (!obj["metadata"] || typeof obj["metadata"] !== "object") {
+    obj["metadata"] = {};
+  }
+  const meta = obj["metadata"] as Record<string, unknown>;
+  if (!meta["createdBy"]) meta["createdBy"] = "ai-assist";
+  if (!meta["createdAt"]) meta["createdAt"] = new Date().toISOString();
+  if (!meta["updatedAt"]) meta["updatedAt"] = new Date().toISOString();
+  if (typeof meta["version"] !== "number") meta["version"] = 1;
+
+  return obj;
+}
+
 // ── AI system prompt ──────────────────────────────────────────────────────────
 
 function buildSystemPrompt(canvasWidth: number, canvasHeight: number): string {
-  return `You are a design template generator. Generate a valid DesignTemplate JSON object based on the user's prompt.
+  return `You are a design template generator. Generate a valid DesignTemplate JSON object.
 
-CRITICAL RULES:
-1. Return ONLY valid JSON — no markdown fences, no code blocks, no comments, no explanations.
-2. Do NOT include any JavaScript expressions, eval(), or executable code anywhere.
-3. Do NOT include HTML or script tags in any text content.
-4. All element IDs must be safe alphanumeric identifiers (a-z, A-Z, 0-9, underscore, hyphen only). No duplicates.
-5. All image URLs must start with https:// — no http://, javascript:, data: URIs.
-6. Element coordinates must be within canvas bounds (0 to ${canvasWidth} width, 0 to ${canvasHeight} height).
-7. The schemaVersion must be exactly "${DESIGN_TEMPLATE_SCHEMA_VERSION}".
-8. Canvas unit must be "px".
-9. Elements max: ${DESIGN_LIMITS.MAX_ELEMENT_COUNT}. Variables max: ${DESIGN_LIMITS.MAX_VARIABLE_COUNT}.
+RETURN ONLY RAW JSON — no markdown fences, no \`\`\`json, no explanations, no comments.
 
-Required JSON structure:
+══ STRICT FIELD RULES (validation will REJECT violations) ══
+
+COLOR fields (backgroundColor, color, fill, stroke, fgColor, bgColor, border.color, shadow.color):
+  ✅ ONLY these formats: "#RGB", "#RRGGBB", "#RRGGBBAA", "rgb(r,g,b)", "rgba(r,g,b,a)"
+  ❌ NEVER: "white", "black", "blue", "transparent", "none", CSS named colors
+  Examples: "#ffffff" not "white", "#000000" not "black", "#0000ff" not "blue"
+
+FONT FAMILY (fontFamily):
+  ✅ Single font name only, letters/digits/spaces/underscores/hyphens: "Open Sans", "Roboto", "Arial"
+  ❌ NEVER include fallbacks or commas: "Open Sans, sans-serif" → INVALID
+  Safe choices: "Roboto", "Open Sans", "Montserrat", "Lato", "Playfair Display", "Arial", "Georgia"
+
+VARIABLE KEYS (variables[].key AND variableBinding.variableKey):
+  ✅ Letters, digits, underscores only. Must start with letter or underscore.
+  ❌ NEVER use hyphens in keys: "company_name" ✅ vs "company-name" ❌
+  ❌ NEVER use spaces: "company name" ❌
+
+FONT WEIGHT (fontWeight): number 100–900 OR string "bold" or "normal" only.
+  ✅ 400, 700, "bold", "normal"  ❌ "semibold", "600px", "medium"
+
+ELEMENT IDs: alphanumeric + underscore + hyphen, no spaces, no dots, no slashes. Must be unique.
+
+ICON NAMES (iconName): alphanumeric + underscore + hyphen only.
+
+══ REQUIRED JSON STRUCTURE ══
+
 {
   "schemaVersion": "${DESIGN_TEMPLATE_SCHEMA_VERSION}",
-  "id": "<string>",
-  "tenantId": "<string>",
-  "name": "<string>",
-  "description": "<string>",
-  "category": "<string>",
-  "canvas": { "width": ${canvasWidth}, "height": ${canvasHeight}, "unit": "px", "backgroundColor": "#ffffff" },
-  "elements": [...],
-  "variables": [...],
-  "metadata": { "createdBy": "ai-assist", "createdAt": "<ISO date>", "updatedAt": "<ISO date>", "version": 1 }
+  "id": "tpl-001",
+  "tenantId": "TENANT_PLACEHOLDER",
+  "name": "<descriptive name>",
+  "description": "<optional description>",
+  "category": "<category>",
+  "canvas": {
+    "width": ${canvasWidth},
+    "height": ${canvasHeight},
+    "unit": "px",
+    "backgroundColor": "#ffffff"
+  },
+  "elements": [
+    {
+      "id": "bg-rect",
+      "type": "shape",
+      "shape": "rectangle",
+      "x": 0, "y": 0,
+      "width": ${canvasWidth}, "height": ${canvasHeight},
+      "zIndex": 0,
+      "fill": "#1a1a2e"
+    },
+    {
+      "id": "title-text",
+      "type": "text",
+      "x": 60, "y": 80,
+      "width": ${Math.round(canvasWidth * 0.8)}, "height": 80,
+      "zIndex": 1,
+      "content": { "binding": { "variableKey": "company_name" } },
+      "fontSize": 48,
+      "fontFamily": "Montserrat",
+      "fontWeight": 700,
+      "color": "#ffffff",
+      "textAlign": "center"
+    }
+  ],
+  "variables": [
+    {
+      "key": "company_name",
+      "label": "Company Name",
+      "type": "text",
+      "required": true,
+      "defaultValue": "Your Company"
+    }
+  ],
+  "metadata": {
+    "createdBy": "ai-assist",
+    "createdAt": "${new Date().toISOString()}",
+    "updatedAt": "${new Date().toISOString()}",
+    "version": 1
+  }
 }
 
-Variable binding in elements uses: { "binding": { "variableKey": "key_name" } }
-Element types: text, image, shape, qrcode, line, icon, group.
-Each element requires: id, type, x, y, width, height, zIndex.`;
+══ ELEMENT TYPES ══
+- "text": content (string or binding), fontFamily, fontSize, fontWeight, color, textAlign, lineHeight
+- "shape": shape ("rectangle"|"circle"|"rounded-rectangle"), fill (color or gradient), border, shadow
+- "image": src (omit for placeholder — AI cannot supply real images), objectFit, borderRadius
+- "line": stroke (color), strokeWidth
+- "icon": iconName (alphanumeric_hyphen only), color
+- "group": children (array of elements)
+
+Canvas: ${canvasWidth}×${canvasHeight}px. Max ${DESIGN_LIMITS.MAX_ELEMENT_COUNT} elements, ${DESIGN_LIMITS.MAX_VARIABLE_COUNT} variables.
+All coordinates must be within canvas bounds. zIndex is a non-negative integer.`;
 }
 
 // ── Request schema ────────────────────────────────────────────────────────────
@@ -243,6 +424,9 @@ router.post("/ai/design-templates/ai-assist", async (req, res) => {
     if (parsed && typeof parsed === "object") {
       (parsed as Record<string, unknown>)["tenantId"] = ctx.tenantId;
     }
+
+    // ── Repair common AI mistakes before validation ────────────────────────────
+    parsed = repairAiOutput(parsed);
 
     // ── Zod validation ────────────────────────────────────────────────────────
     const zodResult = designTemplateJsonSchema.safeParse(parsed);
