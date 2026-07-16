@@ -1,0 +1,187 @@
+{
+  "team": "01",
+  "branch": "feature/01-creative-workflow",
+  "description": "Creative Workflow Engine v2 — Universal Execution Planning for Creative AI",
+
+  "ownedFolders": [
+    "artifacts/api-server/src/services/creative-workflow-v2/",
+    "artifacts/api-server/src/routes/creative-workflow-v2/",
+    "artifacts/api-server/src/types/creative-workflow-v2/",
+    "artifacts/api-server/src/services/creative-workflow-v2/__tests__/",
+    "integration/openapi/team-01.yaml",
+    "integration/migrations/team-01.sql",
+    "integration/manifests/team-01.json"
+  ],
+
+  "routesToMount": [
+    {
+      "importPath": "artifacts/api-server/src/routes/creative-workflow-v2/index.js",
+      "export": "creativeWorkflowV2Router",
+      "mountPoint": "/api/ai/creative-workflow/v2",
+      "middleware": ["adminAuthWithExceptions"],
+      "note": "Also call setDefinitionResolver(fn) to inject the DB-backed definition store after mounting."
+    }
+  ],
+
+  "pagesToRegister": [],
+
+  "sidebarItems": [
+    {
+      "section": "AI Workflows",
+      "label": "Workflow Engine v2",
+      "href": "/creative-workflow-v2",
+      "icon": "GitBranch",
+      "note": "Team 01 does not ship a frontend page. This sidebar entry is optional and should be wired by Team 24 if a UI is desired."
+    }
+  ],
+
+  "openapiFragment": "integration/openapi/team-01.yaml",
+
+  "migrationDrafts": [
+    "integration/migrations/team-01.sql"
+  ],
+
+  "seedDrafts": [],
+
+  "dependenciesRequested": [],
+
+  "eventsPublished": [
+    {
+      "eventType": "cwf.plan.started",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when an execution plan transitions from pending → running."
+    },
+    {
+      "eventType": "cwf.plan.paused",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when an execution plan is paused by an operator."
+    },
+    {
+      "eventType": "cwf.plan.resumed",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when a paused plan resumes."
+    },
+    {
+      "eventType": "cwf.plan.cancelled",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when a plan is cancelled (terminal)."
+    },
+    {
+      "eventType": "cwf.plan.completed",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when all nodes in a plan complete successfully."
+    },
+    {
+      "eventType": "cwf.plan.failed",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when one or more nodes fail beyond retry budget with no failover."
+    },
+    {
+      "eventType": "cwf.node.ready",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when a node's dependencies are met and it is eligible for dispatch."
+    },
+    {
+      "eventType": "cwf.node.running",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when a node's job is claimed by a worker."
+    },
+    {
+      "eventType": "cwf.node.completed",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when a node's job completes successfully."
+    },
+    {
+      "eventType": "cwf.node.failed",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when a node fails (after retries/failover exhausted)."
+    },
+    {
+      "eventType": "cwf.milestone.reached",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when a milestone's completion condition is satisfied."
+    }
+  ],
+
+  "eventsConsumed": [],
+
+  "workerJobTypesRequested": [],
+
+  "sharedTypesRequested": [],
+
+  "integrationOrder": [
+    "Run migration draft (cwf_workflow_definitions, cwf_execution_plans, cwf_plan_events)",
+    "Mount creativeWorkflowV2Router at /api/ai/creative-workflow/v2 in routes/index.ts",
+    "Call setDefinitionResolver(dbBackedFn) to swap in-memory store for DB",
+    "Wire EventBusPort adapter to real aiEventBusService.publishSafe/publish",
+    "Wire QueuePort adapter to real queueManagerService.enqueue/cancelJob",
+    "Wire WorkerPort adapter to real workerClusterService.getCapabilities",
+    "Wire DispatcherPort adapter to real jobDispatcherService.getStatus",
+    "Register OpenAPI fragment paths in root openapi.yaml"
+  ],
+
+  "knownRisks": [
+    {
+      "risk": "In-memory store",
+      "severity": "high",
+      "description": "WorkflowDefinitions and ExecutionPlans are stored in-memory (Map). All data is lost on server restart until Team 24 runs the migration and wires the DB adapter.",
+      "mitigation": "Run migration draft + call setDefinitionResolver() before production use."
+    },
+    {
+      "risk": "Port interfaces not wired",
+      "severity": "medium",
+      "description": "QueuePort, EventBusPort, DispatcherPort, and WorkerPort are interfaces only. The engine does not auto-dispatch jobs or publish events until Team 24 provides adapter implementations.",
+      "mitigation": "NullPort stubs are provided for testing. Wire adapters during integration."
+    },
+    {
+      "risk": "No authentication on node transition endpoints",
+      "severity": "medium",
+      "description": "Node-level PATCH endpoints (running/completed/skipped/ready) should be callable only by trusted workers, not arbitrary API clients. Currently protected by the same adminAuth as other endpoints.",
+      "mitigation": "Team 24 should add worker-token validation on node transition routes."
+    },
+    {
+      "risk": "Critical path ties (equal duration nodes)",
+      "severity": "low",
+      "description": "When multiple branches have equal estimated duration, all are marked critical (zero slack). This is correct CPM behaviour but may produce wider critical paths than expected.",
+      "mitigation": "Accepted behaviour. Operators should set distinct estimatedDurationMs values."
+    }
+  ],
+
+  "finalReport": {
+    "domain": "Creative Workflow Engine — universal execution planning for all Creative AI pipelines",
+    "localRoutes": [
+      "GET    /api/ai/creative-workflow/v2/definitions",
+      "POST   /api/ai/creative-workflow/v2/definitions",
+      "GET    /api/ai/creative-workflow/v2/definitions/:id",
+      "PATCH  /api/ai/creative-workflow/v2/definitions/:id",
+      "DELETE /api/ai/creative-workflow/v2/definitions/:id",
+      "POST   /api/ai/creative-workflow/v2/definitions/:id/validate",
+      "GET    /api/ai/creative-workflow/v2/plans",
+      "POST   /api/ai/creative-workflow/v2/plans",
+      "GET    /api/ai/creative-workflow/v2/plans/:id",
+      "GET    /api/ai/creative-workflow/v2/plans/:id/progress",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/start",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/pause",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/resume",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/cancel",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/nodes/:nodeId/running",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/nodes/:nodeId/completed",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/nodes/:nodeId/skipped",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/nodes/:nodeId/ready"
+    ],
+    "domainArchitecture": {
+      "types": "artifacts/api-server/src/types/creative-workflow-v2/ (workflow.ts, execution.ts, ports.ts)",
+      "services": {
+        "core": ["executionPlanBuilder.ts", "planControlService.ts", "retryPolicyService.ts", "progressCalculator.ts"],
+        "algorithms": ["cycleDetector.ts", "parallelGrouper.ts", "criticalPathCalculator.ts"],
+        "ports": ["ports/nullQueuePort.ts", "ports/nullDispatcherPort.ts", "ports/nullEventBusPort.ts", "ports/nullWorkerPort.ts"]
+      },
+      "routes": "artifacts/api-server/src/routes/creative-workflow-v2/ (definitions.ts, plans.ts, index.ts)"
+    },
+    "testCount": "40+ assertions across 10 required test cases in __tests__/workflowEngine.test.ts",
+    "externalBlockers": [
+      "Team 24 must run migration draft before data persists across restarts",
+      "Team 24 must wire port adapters before jobs are dispatched or events published"
+    ]
+  }
+}
