@@ -122,7 +122,8 @@ export async function listTemplates(
   ]);
 
   return {
-    templates: rows,
+    items: rows,
+    templates: rows, // backwards-compat alias
     total: countRow[0]?.count ?? 0,
     page,
     pageSize,

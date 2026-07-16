@@ -155,6 +155,16 @@ function repairVariableKey(val: unknown): unknown {
   return val.replace(/-/g, "_").replace(/[^a-zA-Z0-9_]/g, "_").replace(/^([0-9])/, "_$1");
 }
 
+function coerceToNumber(val: unknown): number | unknown {
+  if (typeof val === "number") return val;
+  if (typeof val === "string") {
+    // "10px" → 10, "1.5em" → 1.5, "50%" → 50
+    const n = parseFloat(val);
+    if (!isNaN(n)) return n;
+  }
+  return val;
+}
+
 function repairElement(el: Record<string, unknown>): Record<string, unknown> {
   const colorFields = ["color", "stroke", "fgColor", "bgColor"];
   for (const f of colorFields) {
@@ -164,6 +174,10 @@ function repairElement(el: Record<string, unknown>): Record<string, unknown> {
   // fontWeight: coerce string numbers to number
   if (typeof el["fontWeight"] === "string" && /^\d+$/.test(el["fontWeight"] as string)) {
     el["fontWeight"] = parseInt(el["fontWeight"] as string, 10);
+  }
+  // Numeric fields that AI commonly returns as strings ("10px", "50%", etc.)
+  for (const f of ["borderRadius", "fontSize", "lineHeight", "letterSpacing", "strokeWidth", "opacity", "rotation"]) {
+    if (f in el) el[f] = coerceToNumber(el[f]);
   }
   // fill: repair if it's a string color
   if (typeof el["fill"] === "string") el["fill"] = repairColor(el["fill"]);
@@ -461,25 +475,46 @@ router.post("/ai/design-templates/ai-assist", async (req, res) => {
       createdBy: actorId,
     });
 
+    const finalTemplateJson = {
+      ...templateJson,
+      id: String(draftTemplate.id),
+      tenantId: ctx.tenantId,
+    };
+
     const draftVersion = await createVersion({
       templateId: draftTemplate.id,
       tenantId: ctx.tenantId,
-      templateJson: {
-        ...templateJson,
-        id: String(draftTemplate.id),
-        tenantId: ctx.tenantId,
-      },
+      templateJson: finalTemplateJson,
       changelog: `AI-generated from prompt: ${prompt.slice(0, 100)}`,
       createdBy: actorId,
     });
 
+    // Build response shape that satisfies BOTH frontend pages:
+    //   - design-template-ai-assist.tsx  → draftVersionId, templateId, templateJson
+    //   - design-template-ai-create.tsx  → proposal{template,summary,...}, templateId, versionId, draftSaved, aiMeta
     return res.status(201).json({
+      // ── legacy shape (design-template-ai-assist.tsx) ──
       draftVersionId: draftVersion!.id,
       templateId: draftTemplate.id,
-      templateJson: {
-        ...templateJson,
-        id: String(draftTemplate.id),
-        tenantId: ctx.tenantId,
+      templateJson: finalTemplateJson,
+      // ── Phase-7 shape (design-template-ai-create.tsx) ──
+      versionId: draftVersion!.id,
+      draftSaved: true,
+      proposal: {
+        template: finalTemplateJson,
+        summary: `${finalTemplateJson.name} — ${(finalTemplateJson.elements as unknown[]).length} elements, ${(finalTemplateJson.variables as unknown[]).length} variables`,
+        assumptions: [
+          `Canvas size: ${finalTemplateJson.canvas.width}×${finalTemplateJson.canvas.height}px`,
+          `Category: ${finalTemplateJson.category ?? "general"}`,
+        ],
+        variables: (finalTemplateJson.variables as Array<{ key: string; label: string; type: string; required?: boolean }>),
+        warnings: [],
+      },
+      aiMeta: {
+        model: "gpt-4o",
+        inputTokens: usage?.prompt_tokens ?? 0,
+        outputTokens: usage?.completion_tokens ?? 0,
+        latencyMs,
       },
     });
   } catch (err) {
