@@ -1,16 +1,31 @@
 /**
  * Engineering Adapter (Team 4 → Orchestrator)
  *
- * STUB — Team 4 engineering pipeline does not exist yet.
- * Produces a minimal EngineeringPipelineOutput using a discovery + component
- * summary so the pipeline can run end-to-end.
+ * STATUS: STUB — masih dipakai karena Team 4 belum tersedia.
  *
- * WHEN TEAM 4 DELIVERS:
- *  1. Import Team 4's runEngineeringPipeline() function.
- *  2. Map its output to EngineeringPipelineOutput.
- *  3. Remove the stub below.
+ * AUDIT (2026-07-16): Branch feature/design-ai-engineering-team tidak ditemukan
+ * di repository (lokal maupun remote). Tidak ada folder agents/engineering/,
+ * tidak ada fungsi runEngineeringPipeline() di seluruh codebase.
+ * Git reflog, git fsck, dan git log --all tidak menemukan commit Team 4.
  *
- * CONTRACT MISMATCH: None currently — stub produces valid EngineeringPipelineOutput shape.
+ * CATATAN: Branch origin/feature/design-template-phase4-library yang ada di
+ * remote adalah untuk Design Template Engine (sistem berbeda: services/design-renderer,
+ * services/design-batch) — BUKAN Team 4 Multi-Agent AI Creative Studio.
+ *
+ * TETAP DIPAKAI KARENA: pipeline asli belum ada. Stub ini menghasilkan
+ * EngineeringPipelineOutput yang valid secara kontrak, termasuk finalValidation
+ * dengan passed=true agar QA gate dapat berjalan.
+ *
+ * PENTING — SAAT TEAM 4 SELESAI:
+ *  1. Buat branch feature/design-ai-engineering-team dan implementasikan pipeline.
+ *  2. Import runEngineeringPipeline() dari agents/engineering/index.js.
+ *  3. Map outputnya ke EngineeringPipelineOutput — pastikan finalValidation.passed
+ *     adalah boolean deterministic (bukan nilai yang bisa di-override AI).
+ *  4. Hapus fungsi runEngineeringPipelineStub() di bawah ini.
+ *  5. Update DesignTeamOutput dan ComponentTeamOutput di orchestrator.types.ts
+ *     jika kontrak berubah.
+ *
+ * CONTRACT MISMATCH: Tidak ada saat ini — stub mengembalikan shape yang valid.
  */
 
 import type { DiscoveryTeamOutput } from "../../types/discovery.types.js";
@@ -22,7 +37,7 @@ import type {
 import type { DesignTemplate } from "../../../../types/designTemplate.js";
 import { DESIGN_TEMPLATE_SCHEMA_VERSION } from "../../../../types/designTemplate.js";
 
-/** STUB: builds a minimal but structurally valid DesignTemplate + validation. */
+/** STUB: membangun DesignTemplate + validation yang valid secara kontrak. Hapus ketika Team 4 selesai. */
 export async function runEngineeringPipelineStub(
   discovery: DiscoveryTeamOutput,
   _design: DesignTeamOutput,
@@ -31,9 +46,8 @@ export async function runEngineeringPipelineStub(
   const canvas = discovery.requirementAnalysis.canvas;
   const now = new Date().toISOString();
 
-  // Build a minimal template with one text element per variable key
   const elements: DesignTemplate["elements"] = components.variableKeys
-    .slice(0, 10) // cap for safety
+    .slice(0, 10)
     .map((key, idx) => ({
       id: `el-${key}`,
       type: "text" as const,
@@ -64,7 +78,7 @@ export async function runEngineeringPipelineStub(
 
   const optimizedTemplate: DesignTemplate = {
     schemaVersion: DESIGN_TEMPLATE_SCHEMA_VERSION,
-    // Stub uses placeholder id/tenantId — orchestrator should overwrite with real DB values
+    // Placeholder — orchestrator harus mengisi dengan nilai DB yang nyata
     id: "stub-pending",
     tenantId: "stub-pending",
     name: discovery.creativeBrief.designGoal.slice(0, 60),
