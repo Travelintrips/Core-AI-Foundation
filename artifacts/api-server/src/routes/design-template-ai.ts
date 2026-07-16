@@ -12,6 +12,8 @@ import { Router } from "express";
 import { resolveAuthenticatedTenantContext } from "../security/tenantResolution.js";
 import { aiTemplateAssistRequestSchema } from "../validators/designTemplateAiSchema.js";
 import { generateTemplateFromPrompt } from "../services/design-ai/templateAiService.js";
+import { generateDesignTemplate } from "../services/design-ai/orchestrator/index.js";
+import { isMultiAgentDesignEnabled } from "../services/design-ai/types/orchestrator.types.js";
 import { createTemplate, createVersion } from "../services/designTemplateService.js";
 import { TenantAccessError } from "../services/designTemplateVariableService.js";
 import { logger } from "../lib/logger.js";
@@ -64,6 +66,40 @@ router.post("/ai/design-templates/ai-assist", async (req, res) => {
       });
     }
 
+    // ── Feature flag: multi-agent pipeline ──────────────────────────────────
+    // DESIGN_AI_MULTI_AGENT_ENABLED=true routes to the 15-agent orchestrator.
+    // Default (false) uses the legacy single-agent templateAiService.
+    if (isMultiAgentDesignEnabled(ctx.tenantId)) {
+      const orchestratorResult = await generateDesignTemplate({
+        tenantId: ctx.tenantId,
+        actorId:  actor,
+        prompt:   body.data.prompt,
+        canvasPreset: body.data.sizePreset,
+        language:     body.data.language,
+      });
+
+      if (orchestratorResult.status === "failed") {
+        return res.status(500).json({
+          error: "Design generation failed",
+          details: orchestratorResult.errors.map(e => e.message).join("; "),
+          pipelineRunId: orchestratorResult.pipelineRunId,
+        });
+      }
+
+      // Return a compatible envelope so the frontend works without changes
+      return res.status(200).json({
+        pipelineRunId:  orchestratorResult.pipelineRunId,
+        status:         orchestratorResult.status,
+        revisionCount:  orchestratorResult.revisionCount,
+        template:       orchestratorResult.template,
+        metrics:        orchestratorResult.metrics,
+        stages:         orchestratorResult.stages,
+        errors:         orchestratorResult.errors,
+        multiAgent:     true,
+      });
+    }
+
+    // ── Legacy single-agent path ──────────────────────────────────────────────
     // Generate + validate with AI
     const result = await generateTemplateFromPrompt(body.data, ctx.tenantId, actor);
     const { proposal } = result;
