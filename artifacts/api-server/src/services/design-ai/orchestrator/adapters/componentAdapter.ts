@@ -1,22 +1,29 @@
 /**
  * Component Adapter (Team 3 → Orchestrator)
  *
- * STUB — Team 3 pipeline does not exist yet.
- * This adapter produces a structurally valid ComponentTeamOutput so the
- * pipeline can run end-to-end.
+ * STATUS: STUB — masih dipakai karena Team 3 belum tersedia.
  *
- * WHEN TEAM 3 DELIVERS:
- *  1. Import Team 3's runComponentPipeline() function.
- *  2. Map its output to ComponentTeamOutput.
- *  3. Remove the stub below.
+ * AUDIT (2026-07-16): Branch feature/design-ai-component-team tidak ditemukan
+ * di repository (lokal maupun remote). Tidak ada folder agents/components/,
+ * tidak ada fungsi runComponentPipeline() di seluruh codebase.
+ * Git reflog, git fsck, dan git log --all tidak menemukan commit Team 3.
  *
- * CONTRACT MISMATCH: None currently — stub returns valid shape.
+ * TETAP DIPAKAI KARENA: pipeline asli belum ada. Stub ini memungkinkan
+ * orchestrator berjalan end-to-end dengan output yang valid secara kontrak.
+ *
+ * KETIKA TEAM 3 SELESAI:
+ *  1. Buat branch feature/design-ai-component-team dan implementasikan agent.
+ *  2. Import runComponentPipeline() dari agents/components/index.js.
+ *  3. Map outputnya ke ComponentTeamOutput.
+ *  4. Hapus fungsi runComponentPipelineStub() di bawah ini.
+ *
+ * CONTRACT MISMATCH: Tidak ada saat ini — stub mengembalikan shape yang valid.
  */
 
 import type { DiscoveryTeamOutput } from "../../types/discovery.types.js";
 import type { DesignTeamOutput, ComponentTeamOutput } from "../../types/orchestrator.types.js";
 
-/** STUB: returns a minimal placeholder ComponentTeamOutput. */
+/** STUB: mengembalikan ComponentTeamOutput minimal yang valid. Hapus ketika Team 3 selesai. */
 export async function runComponentPipelineStub(
   discovery: DiscoveryTeamOutput,
   _design: DesignTeamOutput,

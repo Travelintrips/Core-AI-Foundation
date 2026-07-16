@@ -1,24 +1,30 @@
 /**
  * Design Adapter (Team 2 → Orchestrator)
  *
- * STUB — Team 2 pipeline does not exist yet.
- * This adapter runs a minimal stub that produces a structurally valid
- * DesignTeamOutput from the discovery output so the rest of the pipeline
- * can run end-to-end.
+ * STATUS: STUB — masih dipakai karena Team 2 belum tersedia.
  *
- * WHEN TEAM 2 DELIVERS:
- *  1. Import Team 2's runDesignPipeline() function.
- *  2. Call it and map its output to DesignTeamOutput.
- *  3. Remove the stub below.
- *  4. Add a test for the mapping.
+ * AUDIT (2026-07-16): Branch feature/design-ai-design-team tidak ditemukan
+ * di repository (lokal maupun remote). Tidak ada folder agents/design/,
+ * tidak ada fungsi runDesignPipeline() di seluruh codebase.
+ * Git reflog, git fsck, dan git log --all tidak menemukan commit Team 2.
  *
- * CONTRACT MISMATCH: None currently — stub returns valid DesignTeamOutput shape.
+ * TETAP DIPAKAI KARENA: pipeline asli belum ada. Stub ini memungkinkan
+ * orchestrator berjalan end-to-end dengan output yang valid secara kontrak.
+ *
+ * KETIKA TEAM 2 SELESAI:
+ *  1. Buat branch feature/design-ai-design-team dan implementasikan agent.
+ *  2. Import runDesignPipeline() dari agents/design/index.js.
+ *  3. Panggil fungsi tersebut dan map outputnya ke DesignTeamOutput.
+ *  4. Hapus fungsi runDesignPipelineStub() di bawah ini.
+ *  5. Tambahkan test untuk mapping.
+ *
+ * CONTRACT MISMATCH: Tidak ada saat ini — stub mengembalikan shape DesignTeamOutput yang valid.
  */
 
 import type { DiscoveryTeamOutput } from "../../types/discovery.types.js";
 import type { DesignTeamOutput } from "../../types/orchestrator.types.js";
 
-/** STUB: returns a minimal placeholder DesignTeamOutput. */
+/** STUB: mengembalikan DesignTeamOutput minimal yang valid. Hapus ketika Team 2 selesai. */
 export async function runDesignPipelineStub(
   discovery: DiscoveryTeamOutput,
 ): Promise<DesignTeamOutput> {
