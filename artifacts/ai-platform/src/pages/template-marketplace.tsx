@@ -17,7 +17,10 @@ import { Textarea } from "@/components/ui/textarea";
 
 // ── Admin API ─────────────────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+// API calls must go to /api/... directly — do NOT use BASE_URL here.
+// BASE_URL is /admin/ for this artifact, which would route requests to the
+// Vite dev server instead of the API server when prepended.
+const API_BASE = "";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const key = import.meta.env.VITE_ADMIN_API_KEY;
@@ -238,6 +241,7 @@ export default function TemplateMarketplacePage() {
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createCategory, setCreateCategory] = useState("Company Profile");
+  const [createStyle, setCreateStyle] = useState("Modern");
   const [createDesc, setCreateDesc] = useState("");
 
   // ── Queries ───────────────────────────────────────────────────────────────────
@@ -295,15 +299,25 @@ export default function TemplateMarketplacePage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: () => apiFetch("/api/ai/templates", {
-      method: "POST",
-      body: JSON.stringify({ name: createName.trim(), category: createCategory, description: createDesc.trim() || undefined }),
-    }),
+    mutationFn: () => {
+      // Auto-generate templateCode from name: "Company Profile CSR" → "COMPANY-PROFILE-CSR"
+      const templateCode = createName.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "");
+      return apiFetch("/api/ai/templates", {
+        method: "POST",
+        body: JSON.stringify({
+          templateCode,
+          name: createName.trim(),
+          category: createCategory,
+          style: createStyle,
+          description: createDesc.trim() || undefined,
+        }),
+      });
+    },
     onSuccess: () => {
       toast({ title: "Template created", description: `"${createName.trim()}" berhasil dibuat sebagai draft.` });
       qc.invalidateQueries({ queryKey: ["admin-templates"] });
       setShowCreate(false);
-      setCreateName(""); setCreateCategory("Company Profile"); setCreateDesc("");
+      setCreateName(""); setCreateCategory("Company Profile"); setCreateStyle("Modern"); setCreateDesc("");
     },
     onError: (e: Error) => toast({ title: "Gagal membuat template", description: e.message, variant: "destructive" }),
   });
@@ -641,6 +655,19 @@ export default function TemplateMarketplacePage() {
               >
                 {CATEGORIES.filter((c) => c !== "All").map((c) => (
                   <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-style">Style</Label>
+              <select
+                id="tpl-style"
+                className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background"
+                value={createStyle}
+                onChange={(e) => setCreateStyle(e.target.value)}
+              >
+                {["Modern", "Minimalist", "Bold", "Elegant", "Classic", "Playful", "Corporate"].map((s) => (
+                  <option key={s} value={s}>{s}</option>
                 ))}
               </select>
             </div>
