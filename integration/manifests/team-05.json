@@ -1,0 +1,85 @@
+{
+  "team": "05",
+  "branch": "feature/05-brand-intelligence",
+  "ownedFolders": [
+    "artifacts/api-server/src/services/brand-intelligence-v2/",
+    "artifacts/api-server/src/routes/brand-intelligence-v2/",
+    "artifacts/ai-platform/src/pages/brand-intelligence-v2/",
+    "artifacts/customer-portal/src/pages/brand-intelligence-v2/",
+    "integration/openapi/team-05.yaml",
+    "integration/migrations/team-05.sql",
+    "integration/manifests/team-05.json"
+  ],
+  "routesToMount": [
+    {
+      "routerFile": "artifacts/api-server/src/routes/brand-intelligence-v2/index.ts",
+      "mountPoint": "router.use(brandIntelligenceV2Router)",
+      "note": "Import as: import brandIntelligenceV2Router from './brand-intelligence-v2/index.js'; — mount in routes/index.ts after existing brand-intelligence router"
+    }
+  ],
+  "pagesToRegister": [
+    {
+      "component": "BrandIntelligenceV2Page",
+      "file": "artifacts/ai-platform/src/pages/brand-intelligence-v2/BrandIntelligenceV2Page.tsx",
+      "route": "/brand-intelligence-v2",
+      "app": "ai-platform",
+      "note": "Add to admin App.tsx router after existing brand-intelligence route"
+    },
+    {
+      "component": "BrandIntelligenceV2Page",
+      "file": "artifacts/customer-portal/src/pages/brand-intelligence-v2/BrandIntelligenceV2Page.tsx",
+      "route": "/workspace/:token/brand-intelligence-v2",
+      "app": "customer-portal",
+      "note": "Add to customer portal App.tsx workspace routes section"
+    }
+  ],
+  "sidebarItems": [
+    {
+      "app": "ai-platform",
+      "section": "Brand",
+      "label": "Brand Intelligence 2.0",
+      "icon": "Brain",
+      "route": "/brand-intelligence-v2",
+      "note": "Place after existing 'Brand Intelligence' sidebar item"
+    }
+  ],
+  "openapiFragment": "integration/openapi/team-05.yaml",
+  "migrationDrafts": [
+    "integration/migrations/team-05.sql"
+  ],
+  "seedDrafts": [],
+  "dependenciesRequested": [],
+  "eventsPublished": [
+    {
+      "event": "brand_intelligence_v2_analyzed",
+      "description": "Fired after a successful V2 analysis or refresh",
+      "payload": { "clientId": "string", "overallConfidence": "number", "analysisVersion": "string" }
+    }
+  ],
+  "eventsConsumed": [],
+  "workerJobTypesRequested": [],
+  "sharedTypesRequested": [],
+  "integrationOrder": [
+    "Run migration: integration/migrations/team-05.sql",
+    "Mount router in routes/index.ts",
+    "Register pages in App.tsx (both ai-platform and customer-portal)",
+    "Add sidebar item in ai-platform navigation"
+  ],
+  "knownRisks": [
+    {
+      "risk": "Table dependency: ai_brand_intelligence_v2 reads ai_brand_dna via clientId — if Brand DNA v1 row does not exist for a clientId, V2 will still produce a low-confidence profile (graceful degradation).",
+      "severity": "low",
+      "mitigation": "Run V1 analysis (POST /ai/brand-intelligence/analyze) before requesting V2 for best results."
+    },
+    {
+      "risk": "Local drizzle table definition: aiBrandIntelligenceV2Table is defined inline in brandIntelligenceV2Service.ts (not in @workspace/db barrel). This is intentional — the team must not modify the locked barrel file. Migration must be applied before the service can write to the table.",
+      "severity": "medium",
+      "mitigation": "Apply integration/migrations/team-05.sql before deploying the api-server. Team 24 must coordinate migration order."
+    },
+    {
+      "risk": "Confidence scores for interior and fashion dimensions are lower on average (0.15–0.65) because they are inferred from general personality tags rather than domain-specific brand data. This is expected and surfaced via DimensionConfidence.gaps.",
+      "severity": "low",
+      "mitigation": "Future enhancement: add domain-specific brand kit slots for interior and fashion to raise confidence."
+    }
+  ]
+}

@@ -1,0 +1,469 @@
+openapi: "3.1.0"
+info:
+  title: Brand Intelligence 2.0 (Team 05 Fragment)
+  version: "2.0.0"
+  description: |
+    OpenAPI fragment for Team 05 — Brand Intelligence 2.0.
+    Mount under /api. Team 24 merges this into the root openapi.yaml.
+
+# ── Shared components ─────────────────────────────────────────────────────────
+components:
+  schemas:
+    DimensionConfidenceEntry:
+      type: object
+      required: [score, evidence, gaps]
+      properties:
+        score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Confidence score for this dimension (0–1)
+        evidence:
+          type: array
+          items: { type: string }
+          description: Input fields that drove this inference
+        gaps:
+          type: array
+          items: { type: string }
+          description: Missing input fields that would improve confidence
+
+    DimensionConfidence:
+      type: object
+      required: [visualLanguage, toneWriting, colorPsychology, typography, photography, illustration, interior, fashion, creativeMemory, overall]
+      properties:
+        visualLanguage: { $ref: "#/components/schemas/DimensionConfidenceEntry" }
+        toneWriting: { $ref: "#/components/schemas/DimensionConfidenceEntry" }
+        colorPsychology: { $ref: "#/components/schemas/DimensionConfidenceEntry" }
+        typography: { $ref: "#/components/schemas/DimensionConfidenceEntry" }
+        photography: { $ref: "#/components/schemas/DimensionConfidenceEntry" }
+        illustration: { $ref: "#/components/schemas/DimensionConfidenceEntry" }
+        interior: { $ref: "#/components/schemas/DimensionConfidenceEntry" }
+        fashion: { $ref: "#/components/schemas/DimensionConfidenceEntry" }
+        creativeMemory: { $ref: "#/components/schemas/DimensionConfidenceEntry" }
+        overall:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Weighted overall confidence (dimension weights sum to 1.0)
+
+    RecommendationExplanation:
+      type: object
+      required: [id, dimension, recommendation, evidence, confidence, priority, expectedImpact, missingData]
+      properties:
+        id: { type: string, example: "rec-001" }
+        dimension: { type: string, example: "Color Psychology" }
+        recommendation: { type: string }
+        evidence: { type: array, items: { type: string } }
+        confidence: { type: number, format: float, minimum: 0, maximum: 1 }
+        priority:
+          type: string
+          enum: [critical, high, medium, low]
+        expectedImpact: { type: string }
+        missingData: { type: array, items: { type: string } }
+
+    VisualLanguageProfile:
+      type: object
+      properties:
+        gridSystem:
+          type: string
+          enum: [12-column, 8pt-grid, fluid, asymmetric, unknown]
+        motionPrinciple:
+          type: string
+          enum: [minimal, purposeful, expressive, none, unknown]
+        contrastStyle:
+          type: string
+          enum: [high-contrast, soft, monochromatic, mixed, unknown]
+        borderStyle:
+          type: string
+          enum: [sharp, rounded, pill, borderless, mixed, unknown]
+        shadowStyle:
+          type: string
+          enum: [flat, soft-shadow, dramatic, layered, unknown]
+
+    ToneWritingStyleProfile:
+      type: object
+      properties:
+        formalityLevel: { type: integer, minimum: 1, maximum: 5 }
+        formalityLabel: { type: string }
+        vocabularyComplexity:
+          type: string
+          enum: [simple, accessible, professional, technical, academic]
+        sentenceStructure:
+          type: string
+          enum: [short-punchy, balanced, flowing, complex]
+        ctaStyle:
+          type: string
+          enum: [directive, inviting, urgent, inspirational]
+        emotionalRegister:
+          type: string
+          enum: [warm, neutral, authoritative, playful]
+        proofTone:
+          type: string
+          enum: [data-driven, testimonial, narrative, aspirational]
+        avoidWords:
+          type: array
+          items: { type: string }
+
+    ColorPsychologyEntry:
+      type: object
+      properties:
+        color: { type: string, example: "#003366" }
+        colorMask: { type: string, example: "#00****" }
+        role: { type: string, enum: [primary, secondary, accent, neutral] }
+        emotions: { type: array, items: { type: string } }
+        associations: { type: array, items: { type: string } }
+        recommendedUsage: { type: string }
+        confidence: { type: number, format: float }
+
+    TypographyProfile:
+      type: object
+      properties:
+        scaleRatioLabel: { type: string }
+        scaleRatio: { type: number, format: float }
+        weightUsage:
+          type: object
+          properties:
+            primary: { type: string }
+            secondary: { type: string }
+            accent: { type: string }
+        lineHeightStyle: { type: string, enum: [tight, normal, loose] }
+        letterSpacingStyle: { type: string, enum: [tight, normal, wide] }
+        fontPairingRationale: { type: string }
+        accessibilityScore: { type: integer, minimum: 0, maximum: 100 }
+
+    PhotographyStyleDetailed:
+      type: object
+      properties:
+        shotTypes: { type: array, items: { type: string } }
+        lightingMood: { type: string, enum: [studio, natural, dramatic, soft-box, mixed] }
+        colorGrading: { type: string, enum: [warm, cool, desaturated, vivid, natural] }
+        subjectFocus: { type: string, enum: [product, people, environment, abstract, mixed] }
+        depthOfField: { type: string, enum: [shallow, deep, medium] }
+        humanPresence: { type: string, enum: [none, minimal, featured, central] }
+
+    IllustrationStyleDetailed:
+      type: object
+      properties:
+        complexity: { type: string, enum: [minimal, moderate, detailed, intricate] }
+        strokeWeight: { type: string, enum: [hairline, thin, medium, bold] }
+        colorUsage: { type: string, enum: [monochrome, duotone, limited-palette, full-color] }
+        culturalReferences: { type: array, items: { type: string } }
+        dimensionality: { type: string, enum: [flat, isometric, 3d, mixed] }
+        textureUsage: { type: string, enum: [none, subtle, prominent] }
+
+    MaterialStyleInterior:
+      type: object
+      properties:
+        materials: { type: array, items: { type: string } }
+        styleFamily: { type: string }
+        lightingApproach: { type: string, enum: [warm-ambient, cool-focused, layered, natural-forward] }
+        spacePhilosophy: { type: string, enum: [maximalist, minimalist, functional, expressive] }
+        texturePreference: { type: string, enum: [smooth, textured, mixed, raw] }
+        colorPalette: { type: array, items: { type: string } }
+
+    MotifStyleFashion:
+      type: object
+      properties:
+        patterns: { type: array, items: { type: string } }
+        silhouette: { type: string, enum: [structured, relaxed, fitted, oversized, draped] }
+        textiles: { type: array, items: { type: string } }
+        culturalReferences: { type: array, items: { type: string } }
+        colorway: { type: string, enum: [monochromatic, complementary, analogous, neutral, bold] }
+        occasions: { type: array, items: { type: string } }
+
+    CreativeMemoryStored:
+      type: object
+      properties:
+        keyInsights:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              insight: { type: string }
+              source: { type: string, enum: [project_history, brand_kit, memory, user_input, inferred] }
+              confidence: { type: number, format: float }
+              addedAt: { type: string, format: date-time }
+        crossProjectLearnings: { type: array, items: { type: string } }
+        preferencePatterns:
+          type: array
+          items:
+            type: object
+            properties:
+              pattern: { type: string }
+              frequency: { type: integer }
+              confidence: { type: number, format: float }
+        avoidPatterns: { type: array, items: { type: string } }
+
+    BrandIntelligenceV2:
+      type: object
+      required: [clientId, visualLanguage, toneWritingStyle, colorPsychologyDetailed, typographyProfile, photographyStyleDetailed, illustrationStyleDetailed, materialStyleInterior, motifStyleFashion, creativeMemory, dimensionConfidence, recommendationExplanations, analysisVersion, analyzedAt]
+      properties:
+        clientId: { type: string }
+        visualLanguage: { $ref: "#/components/schemas/VisualLanguageProfile" }
+        toneWritingStyle: { $ref: "#/components/schemas/ToneWritingStyleProfile" }
+        colorPsychologyDetailed:
+          type: array
+          items: { $ref: "#/components/schemas/ColorPsychologyEntry" }
+        typographyProfile: { $ref: "#/components/schemas/TypographyProfile" }
+        photographyStyleDetailed: { $ref: "#/components/schemas/PhotographyStyleDetailed" }
+        illustrationStyleDetailed: { $ref: "#/components/schemas/IllustrationStyleDetailed" }
+        materialStyleInterior: { $ref: "#/components/schemas/MaterialStyleInterior" }
+        motifStyleFashion: { $ref: "#/components/schemas/MotifStyleFashion" }
+        creativeMemory: { $ref: "#/components/schemas/CreativeMemoryStored" }
+        dimensionConfidence: { $ref: "#/components/schemas/DimensionConfidence" }
+        recommendationExplanations:
+          type: array
+          items: { $ref: "#/components/schemas/RecommendationExplanation" }
+        sourceBrandDnaVersion: { type: string }
+        sourceAnalyzedAt: { type: string, format: date-time, nullable: true }
+        analysisVersion: { type: string, example: "v2" }
+        analyzedAt: { type: string, format: date-time }
+
+    BrandIntelligenceV2Stats:
+      type: object
+      required: [totalProfiles, averageConfidence, highConfidenceProfiles]
+      properties:
+        totalProfiles: { type: integer }
+        averageConfidence: { type: number, format: float }
+        highConfidenceProfiles: { type: integer }
+
+  securitySchemes:
+    AdminApiKey:
+      type: apiKey
+      in: header
+      name: X-Admin-Api-Key
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+paths:
+  /ai/brand-intelligence-v2/stats:
+    get:
+      operationId: getBrandIntelligenceV2Stats
+      summary: Admin — Get Brand Intelligence V2 stats
+      tags: [Brand Intelligence V2]
+      security:
+        - AdminApiKey: []
+      responses:
+        "200":
+          description: Stats summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BrandIntelligenceV2Stats" }
+        "401": { description: Unauthorized }
+
+  /ai/brand-intelligence-v2/analyze:
+    post:
+      operationId: analyzeBrandIntelligenceV2
+      summary: Admin — Trigger V2 analysis for a clientId
+      tags: [Brand Intelligence V2]
+      security:
+        - AdminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientId]
+              properties:
+                clientId: { type: string }
+      responses:
+        "200":
+          description: Full V2 profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BrandIntelligenceV2" }
+        "400": { description: clientId required }
+        "401": { description: Unauthorized }
+
+  /ai/brand-intelligence-v2/{clientId}:
+    get:
+      operationId: getBrandIntelligenceV2ById
+      summary: Admin — Get V2 profile by clientId
+      tags: [Brand Intelligence V2]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Full V2 profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BrandIntelligenceV2" }
+        "401": { description: Unauthorized }
+        "404": { description: Profile not found }
+
+  /ai/brand-intelligence-v2/{clientId}/refresh:
+    post:
+      operationId: refreshBrandIntelligenceV2
+      summary: Admin — Force re-analysis for a clientId
+      tags: [Brand Intelligence V2]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Refreshed V2 profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BrandIntelligenceV2" }
+        "401": { description: Unauthorized }
+
+  /ai/brand-intelligence-v2/{clientId}/confidence:
+    get:
+      operationId: getBrandIntelligenceV2Confidence
+      summary: Admin — Get dimension confidence breakdown (lightweight)
+      tags: [Brand Intelligence V2]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Confidence breakdown
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clientId: { type: string }
+                  dimensionConfidence: { $ref: "#/components/schemas/DimensionConfidence" }
+                  analyzedAt: { type: string, format: date-time }
+        "401": { description: Unauthorized }
+        "404": { description: Profile not found }
+
+  /ai/brand-intelligence-v2/{clientId}/recommendations:
+    get:
+      operationId: getBrandIntelligenceV2Recommendations
+      summary: Admin — Get recommendation explanations with evidence
+      tags: [Brand Intelligence V2]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Recommendation list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/RecommendationExplanation" }
+                  total: { type: integer }
+                  criticalCount: { type: integer }
+        "401": { description: Unauthorized }
+        "404": { description: Profile not found }
+
+  /ai/brand-intelligence-v2/{clientId}/creative-memory:
+    get:
+      operationId: getBrandIntelligenceV2CreativeMemory
+      summary: Admin — Get stored creative memory (full, with avoidPatterns)
+      tags: [Brand Intelligence V2]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - in: path
+          name: clientId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Creative memory
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clientId: { type: string }
+                  creativeMemory: { $ref: "#/components/schemas/CreativeMemoryStored" }
+                  confidence: { $ref: "#/components/schemas/DimensionConfidenceEntry" }
+        "401": { description: Unauthorized }
+        "404": { description: Profile not found }
+
+  /public/customer/workspace/{token}/brand-intelligence-v2:
+    get:
+      operationId: getPublicBrandIntelligenceV2
+      summary: Public (token-auth) — Get redacted V2 profile
+      tags: [Brand Intelligence V2 — Public]
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Redacted public V2 profile (no exact hex, no avoidWords/avoidPatterns)
+          content:
+            application/json:
+              schema:
+                type: object
+                description: BrandIntelligenceV2Public shape
+        "401": { description: Invalid or expired workspace token }
+        "404": { description: Not found }
+
+  /public/customer/workspace/{token}/brand-intelligence-v2/refresh:
+    post:
+      operationId: refreshPublicBrandIntelligenceV2
+      summary: Public (token-auth) — Trigger re-analysis and return redacted profile
+      tags: [Brand Intelligence V2 — Public]
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Refreshed redacted V2 profile
+          content:
+            application/json:
+              schema:
+                type: object
+        "401": { description: Invalid or expired workspace token }
+
+  /public/customer/workspace/{token}/brand-intelligence-v2/confidence:
+    get:
+      operationId: getPublicBrandIntelligenceV2Confidence
+      summary: Public (token-auth) — Overall + per-dimension scores only
+      tags: [Brand Intelligence V2 — Public]
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Confidence scores (score only, no evidence)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  overall: { type: number, format: float }
+                  dimensions:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        score: { type: number, format: float }
+                  analyzedAt: { type: string, format: date-time }
+        "401": { description: Invalid or expired workspace token }
+        "404": { description: No profile yet }
