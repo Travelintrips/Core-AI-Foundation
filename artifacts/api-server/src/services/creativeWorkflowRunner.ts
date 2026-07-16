@@ -719,10 +719,6 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
   // project with no deliverable yet.
   const finalDocumentType = anyFailed ? null : await resolveProjectDocumentType(project);
   const isDocumentProject = finalDocumentType !== null;
-  // documentType was resolved at the top of this function; reuse it here.
-  // If any step failed we treat it as no-document so the project goes to "failed".
-  const effectiveDocumentType = anyFailed ? null : documentType;
-  const isDocumentProject = effectiveDocumentType !== null;
   const presentationType = anyFailed || isDocumentProject ? null : await resolveProjectPresentationType(project);
   const isPresentationProject = presentationType !== null;
   const finalStatus = anyFailed
@@ -782,7 +778,7 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
       imagesDone.finally(() => {
         enqueue({
           jobType: "pdf_export",
-          payloadJson: { projectId: projectDbId, documentType: effectiveDocumentType },
+          payloadJson: { projectId: projectDbId, documentType: finalDocumentType },
           priority: 60,
         }).catch(async (err) => {
           console.error(`[pdf-export] Failed to enqueue pdf_export job for project ${project.projectId}:`, err);
