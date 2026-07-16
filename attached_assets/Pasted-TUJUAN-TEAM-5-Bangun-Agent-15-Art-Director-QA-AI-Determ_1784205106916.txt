@@ -1,0 +1,994 @@
+TUJUAN TEAM 5
+
+Bangun:
+
+Agent 15 — Art Director QA AI.
+Deterministic QA gate.
+Revision Router.
+Loop protection.
+Final multi-agent orchestrator.
+Pipeline progress tracking.
+Token dan cost aggregation.
+Feature flag.
+Integrasi API secara backward-compatible.
+Integration test Team 1–5.
+Final publish readiness decision.
+
+Team 5 tidak boleh:
+
+membuat ulang Validator Team 4;
+membuat ulang Optimizer Team 4;
+mengubah node schema;
+membuat schema template baru;
+mengubah zIndex menjadi layer array;
+langsung memperbaiki elemen template di QA agent;
+menghapus pipeline AI lama;
+mengganti endpoint production tanpa feature flag;
+merge langsung ke main.
+LANGKAH 1 — AUDIT INTEGRASI
+
+Sebelum implementasi, audit dan laporkan:
+
+Lokasi pipeline Team 1.
+Fungsi entry point Team 1.
+Output contract Team 1.
+Lokasi pipeline Team 2.
+Fungsi entry point Team 2.
+Output contract Team 2.
+Lokasi pipeline Team 3.
+Fungsi entry point Team 3.
+Output contract Team 3.
+Fungsi runEngineeringPipeline() Team 4.
+Existing AI template generation endpoint.
+Existing generation service.
+Existing OpenAI/model provider abstraction.
+Existing token usage tracking.
+Existing AI cost tracking.
+Existing async job atau queue mechanism.
+Existing frontend polling atau SSE mechanism.
+Existing feature flag mechanism.
+Existing request context dan tenant context.
+Existing authorization untuk design template generation.
+
+Jangan menulis implementasi utama sebelum canonical integration points ditemukan.
+
+Jangan membuat mekanisme baru bila repository sudah memilikinya.
+
+AGENT 15 — ART DIRECTOR QA AI
+
+Buat:
+
+artifacts/api-server/src/services/design-ai/
+  agents/qa/
+    artDirectorQaAgent.ts
+    index.ts
+
+  prompts/qa/
+    art-director-qa.prompt.ts
+
+  schemas/qa/
+    art-director-report.schema.ts
+
+  types/
+    qa.types.ts
+Input
+interface ArtDirectorQaInput {
+  userPrompt: string;
+  discovery: DiscoveryTeamOutput;
+  design: DesignTeamOutput;
+  components: ComponentTeamOutput;
+  engineering: EngineeringPipelineOutput;
+}
+
+Gunakan engineering.optimizedTemplate sebagai template yang dinilai.
+
+Gunakan engineering.finalValidation sebagai hasil validation resmi.
+
+Output
+interface ArtDirectorQaReport {
+  overallScore: number;
+
+  scores: {
+    premiumAppearance: number;
+    visualBalance: number;
+    modernity: number;
+    hierarchy: number;
+    readability: number;
+    ctaVisibility: number;
+    brandConsistency: number;
+    typographyQuality: number;
+    colorHarmony: number;
+    spacingConsistency: number;
+    contentCompleteness: number;
+  };
+
+  readyToPublish: boolean;
+
+  blockingIssues: Array<{
+    code: string;
+    category:
+      | "layout"
+      | "composition"
+      | "typography"
+      | "color"
+      | "decoration"
+      | "component"
+      | "binding"
+      | "engineering"
+      | "validation";
+
+    severity: "blocking" | "major" | "minor";
+
+    message: string;
+
+    affectedNodeIds: string[];
+
+    recommendedAgent:
+      | "layout-architect"
+      | "composition-designer"
+      | "typography-designer"
+      | "color-designer"
+      | "decoration-designer"
+      | "component-builder"
+      | "variable-designer"
+      | "asset-planner"
+      | "json-architect"
+      | "optimizer";
+  }>;
+
+  warnings: string[];
+
+  recommendations: string[];
+
+  metadata: AgentExecutionMetadata;
+}
+
+Setiap score harus berada pada rentang:
+
+0–100
+
+Validasi output menggunakan Zod.
+
+QA RULES
+
+Agent QA harus menilai:
+
+Premium appearance
+Visual balance
+Modernity
+Hierarchy
+Readability
+CTA visibility
+Brand consistency
+Typography quality
+Color harmony
+Spacing consistency
+Content completeness
+Publish readiness
+
+Agent QA tidak boleh:
+
+mengubah optimizedTemplate;
+menggeser node;
+mengganti font;
+mengganti warna;
+menghapus komponen;
+menambah komponen;
+mengubah variable binding;
+membuat template baru;
+mengarang asset URL;
+mengubah hasil validation Team 4.
+
+Agent QA hanya menghasilkan report dan rekomendasi routing.
+
+DETERMINISTIC QA GATE
+
+Buat file:
+
+artifacts/api-server/src/services/design-ai/orchestrator/qaGate.ts
+
+Jangan bergantung sepenuhnya kepada keputusan AI.
+
+Final publish decision harus dihitung oleh deterministic gate.
+
+Gunakan default rule:
+
+const publishReady =
+  qaReport.overallScore >= 90 &&
+  qaReport.readyToPublish === true &&
+  engineering.finalValidation.passed === true &&
+  engineering.finalValidation.errors.length === 0 &&
+  qaReport.blockingIssues.length === 0;
+
+Tambahkan aturan:
+
+Jika finalValidation.passed = false
+→ tidak boleh publish.
+
+Jika finalValidation.errors.length > 0
+→ tidak boleh publish.
+
+Jika QA menghasilkan readyToPublish=true tetapi score <90
+→ tidak boleh publish.
+
+Jika overallScore >=90 tetapi ada blockingIssues
+→ tidak boleh publish.
+
+Jika ada element out-of-bounds blocking
+→ tidak boleh publish.
+
+Jika ada missing variable binding
+→ tidak boleh publish.
+
+Jika CTA tertutup
+→ tidak boleh publish.
+
+AI tidak boleh override deterministic gate.
+
+REVISION ROUTER
+
+Buat:
+
+artifacts/api-server/src/services/design-ai/orchestrator/
+  revisionRouter.ts
+  revisionRules.ts
+
+Revision routing harus deterministic berdasarkan issue code dan category.
+
+Gunakan mapping:
+
+LAYOUT_OVERFLOW
+SECTION_OUT_OF_BOUNDS
+SECTION_HIERARCHY
+CONTENT_DENSITY
+→ layout-architect
+
+VISUAL_IMBALANCE
+FOCAL_POINT_WEAK
+EYE_FLOW_BROKEN
+DENSITY_IMBALANCE
+→ composition-designer
+
+INVALID_FONT
+TEXT_TOO_SMALL
+LINE_HEIGHT
+TYPOGRAPHY_HIERARCHY
+TEXT_OVERFLOW
+→ typography-designer
+
+LOW_CONTRAST
+INVALID_COLOR
+COLOR_HARMONY
+PALETTE_INCONSISTENT
+→ color-designer
+
+DECORATION_OVERLOAD
+ORNAMENT_DISTRACTING
+BACKGROUND_TOO_BUSY
+→ decoration-designer
+
+MISSING_COMPONENT
+CTA_MISSING
+CONTENT_INCOMPLETE
+→ component-builder
+
+INVALID_VARIABLE
+DUPLICATE_VARIABLE
+UNUSED_REQUIRED_VARIABLE
+→ variable-designer
+
+MISSING_ASSET
+INVALID_ASSET_BINDING
+ASSET_RATIO
+→ asset-planner
+
+INVALID_NODE
+INVALID_BINDING
+ASSEMBLY_ERROR
+UNSUPPORTED_PROPERTY
+→ json-architect
+
+Z_INDEX
+MINOR_OVERLAP
+ALIGNMENT
+SPACING
+MARGIN
+PADDING
+→ optimizer
+
+Buat type:
+
+type RevisionTarget =
+  | "layout-architect"
+  | "composition-designer"
+  | "typography-designer"
+  | "color-designer"
+  | "decoration-designer"
+  | "component-builder"
+  | "variable-designer"
+  | "asset-planner"
+  | "json-architect"
+  | "optimizer";
+
+Output router:
+
+interface RevisionDecision {
+  required: boolean;
+  targetAgent?: RevisionTarget;
+  issueCodes: string[];
+  reason: string;
+  affectedNodeIds: string[];
+  priority: "blocking" | "major" | "minor";
+}
+
+Jika beberapa issue ada sekaligus, pilih berdasarkan urutan:
+
+1. Validation blocking
+2. Missing component atau binding
+3. Layout
+4. Composition
+5. Typography
+6. Color
+7. Decoration
+8. Minor optimizer issue
+
+Jangan hanya mempercayai recommendedAgent dari AI.
+
+Gunakan deterministic rule sebagai source of truth.
+
+REVISION LOOP
+
+Buat:
+
+artifacts/api-server/src/services/design-ai/orchestrator/revisionLoop.ts
+
+Maksimal:
+
+const MAX_REVISION_CYCLES = 2;
+
+Flow:
+
+QA gagal
+→ Revision Router
+→ Jalankan kembali agent yang relevan
+→ Jalankan ulang agent downstream yang terpengaruh
+→ Jalankan Engineering Pipeline kembali
+→ Jalankan QA kembali
+
+Contoh dependency rerun:
+
+Jika Layout Architect direvisi:
+Layout
+→ Composition
+→ Typography
+→ Color
+→ Decoration
+→ Components
+→ Engineering
+→ QA
+
+Jika Typography Designer direvisi:
+Typography
+→ Component mapping bila diperlukan
+→ Engineering
+→ QA
+
+Jika Color Designer direvisi:
+Color
+→ Decoration
+→ Engineering
+→ QA
+
+Jika Component Builder direvisi:
+Component Builder
+→ Variable Designer
+→ Asset Planner
+→ Engineering
+→ QA
+
+Jika JSON Architect direvisi:
+Engineering Pipeline
+→ QA
+
+Jika Optimizer direvisi:
+Optimizer
+→ Validator
+→ QA
+
+Jangan menjalankan seluruh pipeline dari awal jika tidak diperlukan.
+
+Namun utamakan correctness dibanding optimasi premature.
+
+Setelah dua revisi gagal:
+
+status = "needs_human_review";
+
+Sertakan seluruh report.
+
+Jangan membuat infinite loop.
+
+FINAL ORCHESTRATOR
+
+Buat:
+
+artifacts/api-server/src/services/design-ai/orchestrator/
+  designAiOrchestrator.ts
+  pipelineState.ts
+  pipelineMetrics.ts
+  index.ts
+
+Entry point utama:
+
+async function generateDesignTemplate(
+  input: GenerateDesignTemplateInput
+): Promise<DesignGenerationResult>
+
+Input minimal:
+
+interface GenerateDesignTemplateInput {
+  tenantId: string;
+  actorId: string;
+  prompt: string;
+  requestId?: string;
+  brandProfileId?: string;
+  canvasPreset?: string;
+  language?: string;
+  modelOverrides?: Partial<Record<AgentName, string>>;
+}
+
+Jangan percaya tenantId atau actorId dari raw request body jika repository sudah menggunakan authenticated request context.
+
+Gunakan canonical RequestContext atau tenant context yang sudah ada.
+
+Pipeline:
+
+User Prompt
+→ Team 1 Discovery Pipeline
+→ Team 2 Design Pipeline
+→ Team 3 Component Pipeline
+→ Team 4 Engineering Pipeline
+→ Team 5 Art Director QA
+→ Deterministic QA Gate
+→ Revision Router bila gagal
+→ Maksimal 2 revision cycles
+→ Final JSON atau Human Review
+
+Output:
+
+interface DesignGenerationResult {
+  status:
+    | "ready"
+    | "needs_revision"
+    | "needs_human_review"
+    | "failed";
+
+  pipelineRunId: string;
+
+  revisionCount: number;
+
+  template?: DesignTemplate;
+
+  discovery?: DiscoveryTeamOutput;
+
+  design?: DesignTeamOutput;
+
+  components?: ComponentTeamOutput;
+
+  engineering?: EngineeringPipelineOutput;
+
+  qa?: ArtDirectorQaReport;
+
+  revisionHistory: Array<{
+    cycle: number;
+    targetAgent: RevisionTarget;
+    issueCodes: string[];
+    startedAt: string;
+    completedAt: string;
+    outcome: "resolved" | "unresolved" | "failed";
+  }>;
+
+  stages: PipelineStageState[];
+
+  errors: Array<{
+    stage: string;
+    agent?: string;
+    code: string;
+    message: string;
+    retryable: boolean;
+  }>;
+
+  metrics: PipelineMetrics;
+}
+PIPELINE STATE
+
+Gunakan status:
+
+type PipelineStageStatus =
+  | "pending"
+  | "running"
+  | "retrying"
+  | "success"
+  | "failed"
+  | "skipped"
+  | "needs_revision";
+
+Stage minimal:
+
+discovery.creative-director
+discovery.requirement-analyst
+discovery.brand-strategist
+
+design.layout-architect
+design.composition-designer
+design.typography-designer
+design.color-designer
+design.decoration-designer
+
+components.component-builder
+components.variable-designer
+components.asset-planner
+
+engineering.json-architect
+engineering.validator.initial
+engineering.optimizer
+engineering.validator.final
+
+qa.art-director
+qa.publish-gate
+qa.revision-router
+
+Frontend-friendly labels:
+
+Analyzing design goals
+Extracting requirements
+Defining brand direction
+Building layout
+Balancing composition
+Selecting typography
+Creating color system
+Adding visual details
+Planning components
+Preparing editable variables
+Planning image placeholders
+Generating canvas template
+Validating design
+Optimizing layout
+Performing final art direction review
+Ready to edit
+
+Gunakan existing progress system bila tersedia.
+
+Jangan membuat mekanisme progress kedua jika sudah ada SSE, polling, atau job events.
+
+METRICS, TOKEN, DAN COST TRACKING
+
+Buat aggregator yang menggabungkan metadata AgentOutput dari semua agent.
+
+interface PipelineMetrics {
+  totalLatencyMs: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalTokens: number;
+  estimatedCost: number;
+  totalRetries: number;
+
+  agents: Array<{
+    agentId: string;
+    agentName: string;
+    model?: string;
+    latencyMs: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    estimatedCost: number;
+    retryCount: number;
+    status: "success" | "failed" | "skipped";
+  }>;
+}
+
+Ketentuan:
+
+Gunakan tracking service existing bila tersedia.
+Jangan menghitung biaya dengan hard-code tersebar.
+Gunakan centralized model pricing registry.
+Jika harga model tidak diketahui, simpan estimatedCost sebagai 0 atau null sesuai convention repository dan berikan warning.
+Jangan mengarang harga.
+Jangan membuat duplicate billing event.
+Satu pipeline run harus memiliki satu pipelineRunId.
+Setiap agent execution harus dapat dikaitkan ke pipeline run dan order/request bila tersedia.
+FEATURE FLAG
+
+Cari sistem feature flag existing.
+
+Tambahkan flag:
+
+DESIGN_AI_MULTI_AGENT_ENABLED
+
+Behavior:
+
+false
+→ existing legacy template AI pipeline.
+
+true
+→ new 15-agent pipeline.
+
+Default production harus tetap aman.
+
+Jangan mengubah default menjadi true tanpa instruksi eksplisit.
+
+Tambahkan optional tenant-level rollout bila feature flag system mendukungnya.
+
+Prioritas evaluasi:
+
+tenant override
+→ environment flag
+→ default false
+
+Jangan menghapus legacy pipeline.
+
+API INTEGRATION
+
+Audit endpoint existing:
+
+POST /ai/design-templates
+GET /ai/design-templates
+
+Jangan membuat endpoint duplikat bila endpoint existing sudah menjadi canonical.
+
+Prefer integrasi ke service existing dengan feature flag.
+
+Contoh internal routing:
+
+if (isMultiAgentDesignEnabled(context)) {
+  return generateDesignTemplate(input);
+}
+
+return legacyTemplateAiService.generate(input);
+
+Jika asynchronous generation sudah digunakan, integrasikan ke queue/job existing.
+
+Jangan memaksa synchronous HTTP request jika 15 agent berpotensi melebihi timeout.
+
+Jika existing job architecture tersedia, gunakan:
+
+POST generate
+→ return run/job ID
+
+GET run status
+→ stage progress
+
+GET final result
+→ template
+
+Jangan membuat queue baru bila repository sudah memiliki worker/job system.
+
+FAILURE HANDLING
+
+Kategori error:
+
+provider_timeout
+provider_rate_limit
+invalid_ai_json
+schema_validation_failed
+pipeline_contract_failed
+engineering_validation_failed
+qa_rejected
+revision_exhausted
+unauthorized
+tenant_scope_missing
+unexpected_error
+
+Behavior:
+
+Provider timeout/rate-limit
+→ retry sesuai agent policy.
+
+Invalid JSON
+→ retry maksimal 3 kali.
+
+Engineering validation failed
+→ revision routing.
+
+QA rejected
+→ revision routing.
+
+Revision exhausted
+→ needs_human_review.
+
+Authorization/tenant scope error
+→ fail immediately, no retry.
+
+Unexpected error
+→ failed with sanitized message.
+
+Jangan mengekspos prompt internal, API key, stack trace, atau provider secrets ke frontend.
+
+TESTING
+
+Buat unit dan integration tests minimal untuk:
+
+Art Director QA
+Valid QA output.
+Score di luar 0–100 ditolak.
+Invalid JSON retry.
+Provider timeout retry.
+Missing field ditolak.
+QA tidak memodifikasi template input.
+QA Gate
+Score 95 dan validation passed → ready.
+Score 89 → tidak ready.
+Score 95 tetapi validation failed → tidak ready.
+Score 95 tetapi blocking issue ada → tidak ready.
+QA says ready tetapi error validation ada → tidak ready.
+CTA covered → tidak ready.
+Revision Router
+Layout issue menuju Layout Architect.
+Font issue menuju Typography Designer.
+Contrast issue menuju Color Designer.
+Binding issue menuju JSON Architect atau Variable Designer sesuai kode.
+Missing asset menuju Asset Planner.
+Minor z-index issue menuju Optimizer.
+Multiple issue memilih blocking priority.
+Unknown issue masuk human review atau safe fallback.
+Revision Loop
+Satu revision cycle berhasil.
+Dua cycle gagal → needs_human_review.
+Tidak ada infinite loop.
+Hanya downstream agents relevan yang dijalankan ulang.
+Revision history tercatat.
+Orchestrator
+Full pipeline success.
+Team 1 failure.
+Team 2 failure.
+Team 3 failure.
+Engineering validation failure.
+QA rejection.
+Human review after revision exhaustion.
+Metrics teragregasi.
+Retry teragregasi.
+Pipeline stages tercatat.
+Final template berasal dari optimizedTemplate.
+Final template menggunakan canonical DesignTemplate.
+Tenant context dipertahankan.
+Actor context dipertahankan.
+Feature Flag
+Flag false memakai legacy pipeline.
+Flag true memakai multi-agent pipeline.
+Legacy response contract tetap kompatibel.
+Tidak ada duplicate template save.
+Tidak ada duplicate cost record.
+Editor Compatibility
+Final template lolos canonical schema.
+Final template dapat diload editor.
+Semua node type valid.
+Semua font valid.
+Semua binding valid.
+Semua element berada dalam canvas atau hanya memiliki warning nonblocking yang diizinkan.
+
+Gunakan mock AI provider.
+
+Jangan menggunakan live OpenAI API dalam test.
+
+INTEGRATION RULES
+File Ownership
+
+Team 5 boleh membuat atau mengubah:
+
+services/design-ai/agents/qa/**
+services/design-ai/prompts/qa/**
+services/design-ai/schemas/qa/**
+services/design-ai/orchestrator/**
+services/design-ai/types/qa.types.ts
+services/design-ai/types/orchestrator.types.ts
+tests/qa/**
+tests/integration/**
+
+Team 5 boleh mengubah secara minimal:
+
+routes/design-templates.ts
+templateAiService.ts
+job/worker registry terkait
+feature flag configuration
+progress event types
+
+Hanya bila diperlukan untuk integrasi.
+
+Team 5 tidak boleh mengubah implementasi internal:
+
+agents/discovery/**
+agents/design/**
+agents/components/**
+agents/engineering/**
+validators/**
+optimizers/**
+src/types/designTemplate.ts
+
+Jika contract mismatch ditemukan:
+
+Buat adapter di Team 5.
+Jangan langsung rewrite file team lain.
+Laporkan mismatch.
+Catat rekomendasi perbaikan.
+Hanya ubah source team lain jika adapter tidak mungkin dan alasannya kuat.
+REQUIRED INTEGRATION ADAPTERS
+
+Jika tipe Team 1–3 berbeda nama tetapi maknanya sama, buat adapter:
+
+services/design-ai/orchestrator/adapters/
+  discoveryAdapter.ts
+  designAdapter.ts
+  componentAdapter.ts
+
+Adapter harus:
+
+pure function;
+deterministic;
+tidak memanggil AI;
+tidak membuang data penting;
+memiliki test;
+mendokumentasikan mapping;
+tidak mengubah canonical Team 4 contract.
+DEFINITION OF DONE
+
+Team 5 selesai jika:
+
+Art Director QA agent berjalan.
+QA output tervalidasi.
+Deterministic publish gate berjalan.
+Revision Router bekerja berdasarkan issue code.
+Maksimal dua revision cycles diterapkan.
+Tidak ada infinite loop.
+Final orchestrator menghubungkan Team 1–5.
+runEngineeringPipeline() digunakan, bukan diduplikasi.
+Final template adalah canonical DesignTemplate.
+ValidationReport Team 4 digunakan langsung.
+Pipeline lama tetap tersedia.
+Feature flag tersedia.
+Token dan biaya seluruh agent teragregasi.
+Progress pipeline tersedia.
+Authorization dan tenant scope aman.
+Final JSON dapat dibuka Canvas Editor.
+Unit test dan integration test lulus.
+Tidak ada error typecheck baru.
+Tidak ada migration destruktif.
+Tidak ada duplicate endpoint.
+Tidak ada duplicate template save.
+Tidak ada duplicate cost record.
+LAPORAN AKHIR WAJIB
+
+Setelah selesai, berikan laporan dengan format:
+
+1. Branch dan Commit
+branch:
+commit:
+base branch:
+2. Audit Integration Points
+
+Tabel:
+
+Area | Existing Location | Decision
+3. File Dibuat
+
+Daftar seluruh file baru.
+
+4. File Diubah
+
+Daftar seluruh file existing yang diubah dan alasan.
+
+5. Contract yang Digunakan
+
+Konfirmasi:
+
+Canonical DesignTemplate:
+Canonical ValidationReport:
+Engineering Pipeline Entry Point:
+Legacy Pipeline Entry Point:
+Feature Flag:
+6. QA Gate Rules
+
+Tampilkan final publish condition.
+
+7. Revision Rules
+
+Tampilkan issue code ke target agent.
+
+8. Revision Loop
+
+Tampilkan:
+
+max cycles:
+rerun behavior:
+human review behavior:
+9. Feature Flag Behavior
+
+Tampilkan behavior flag true dan false.
+
+10. API dan Job Integration
+
+Tampilkan endpoint, job type, worker, dan progress mechanism.
+
+11. Tests
+
+Tampilkan:
+
+total:
+passed:
+failed:
+
+Sertakan test penting yang dijalankan.
+
+12. Typecheck
+
+Tampilkan:
+
+baseline errors:
+final errors:
+new errors:
+13. Pipeline Trace Example
+
+Contoh:
+
+creative-director        success
+requirement-analyst      success
+brand-strategist         success
+layout-architect         success
+composition-designer     success
+typography-designer      success
+color-designer           success
+decoration-designer      success
+component-builder        success
+variable-designer        success
+asset-planner            success
+json-architect           success
+validator-initial        success
+optimizer                success
+validator-final          success
+art-director-qa          success
+publish-gate             ready
+14. Metrics Example
+
+Tampilkan contoh token, cost, latency, dan retry per agent.
+
+15. QA Report Example
+
+Tampilkan JSON ringkas.
+
+16. Final Result Example
+
+Tampilkan:
+
+{
+  "status": "ready",
+  "pipelineRunId": "...",
+  "revisionCount": 0,
+  "template": {},
+  "metrics": {}
+}
+17. Risks
+
+Laporkan risiko:
+
+contract mismatch;
+endpoint compatibility;
+timeout;
+provider rate limit;
+cost;
+revision loop;
+frontend progress;
+editor compatibility;
+tenant isolation.
+18. Merge Recommendation
+
+Jangan merge ke main.
+
+Berikan salah satu keputusan:
+
+READY_FOR_INTEGRATION_BRANCH
+NEEDS_FIX_BEFORE_INTEGRATION
+BLOCKED_BY_CONTRACT_MISMATCH
+
+Jika ready, rekomendasikan merge ke:
+
+integration/design-ai-multi-agent
+
+bukan ke main.
