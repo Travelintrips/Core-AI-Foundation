@@ -1,0 +1,72 @@
+{
+  "team": "17",
+  "domain": "Interior Design Planning",
+  "branch": "feature/17-interior-design",
+  "version": "1.0.0",
+  "ownership": {
+    "api": "artifacts/api-server/src/domains/interior-design/",
+    "customerPortal": "artifacts/customer-portal/src/pages/interior-design/",
+    "adminPlatform": "artifacts/ai-platform/src/pages/interior-design/",
+    "openapi": "integration/openapi/team-17.yaml",
+    "migration": "integration/migrations/team-17.sql",
+    "dbSchema": "lib/db/src/schema/interior-design.ts"
+  },
+  "roomTypes": [
+    "living_room", "bedroom", "kitchen", "office",
+    "cafe", "restaurant", "hotel", "lobby", "booth"
+  ],
+  "statusFlow": [
+    "draft",
+    "brief_submitted",
+    "analyzing",
+    "outputs_ready",
+    "revision_requested",
+    "completed"
+  ],
+  "outputs": [
+    "moodboard",
+    "space_plan",
+    "furniture_placement",
+    "circulation_analysis",
+    "material_recommendations",
+    "lighting_recommendations",
+    "visual_concept",
+    "vendor_categories",
+    "validation_results",
+    "safety_disclaimers"
+  ],
+  "constraints": {
+    "noRab": true,
+    "noConstructionDrawings": true,
+    "noPriceCalculation": true
+  },
+  "tables": [
+    "ai_platform.id_projects",
+    "ai_platform.id_briefs",
+    "ai_platform.id_outputs"
+  ],
+  "apiRoutes": {
+    "public": [
+      "POST /api/public/interior-design/projects",
+      "POST /api/public/interior-design/projects/:id/brief",
+      "GET  /api/public/interior-design/projects/:id/outputs"
+    ],
+    "admin": [
+      "GET    /api/ai/interior-design/projects",
+      "GET    /api/ai/interior-design/projects/:id",
+      "PATCH  /api/ai/interior-design/projects/:id",
+      "POST   /api/ai/interior-design/projects/:id/generate",
+      "GET    /api/ai/interior-design/projects/:id/outputs"
+    ]
+  },
+  "tests": {
+    "validationSuite": "artifacts/api-server/src/domains/interior-design/__tests__/validation.test.ts",
+    "coverage": [
+      "dimension validation (impossible sizes, room-type minimums)",
+      "impossible furniture placement",
+      "clearance checks (overlap, minimum gap)",
+      "circulation validation (occupancy ratio, pathway widths, kitchen aisle, restaurant table gaps)",
+      "safety disclaimers (completeness per room type, no-pricing guarantee)"
+    ]
+  }
+}
