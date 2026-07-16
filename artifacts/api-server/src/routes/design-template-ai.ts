@@ -110,7 +110,16 @@ router.post("/ai/design-templates/ai-assist", async (req, res) => {
     });
 
     logger.info(
-      { templateId: template.id, versionId: version.id, model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens },
+      {
+        templateId: template.id,
+        versionId: version.id,
+        model: result.model,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        visualQaScore: result.visualQa.visualQaScore,
+        autoFixedBounds: result.visualQa.autoFixedBounds,
+        autoFixedColors: result.visualQa.autoFixedColors,
+      },
       "[design-template-ai] Template generated and saved as draft",
     );
 
@@ -124,6 +133,12 @@ router.post("/ai/design-templates/ai-assist", async (req, res) => {
         model:        result.model,
         inputTokens:  result.inputTokens,
         outputTokens: result.outputTokens,
+      },
+      visualQa: {
+        score:           result.visualQa.visualQaScore,
+        autoFixedBounds: result.visualQa.autoFixedBounds,
+        autoFixedColors: result.visualQa.autoFixedColors,
+        warnings:        result.visualQa.warnings,
       },
     });
   } catch (err) {

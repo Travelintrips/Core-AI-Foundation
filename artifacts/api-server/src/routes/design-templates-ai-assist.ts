@@ -92,12 +92,16 @@ function applySafetyChecks(
     }
   }
 
-  // 5. Normalize out-of-bounds coordinates to canvas bounds
+  // 5. Clamp element bounding boxes fully within the canvas.
+  //    Previous logic only clamped the top-left corner (x/y), leaving the
+  //    right and bottom edges able to extend beyond the canvas boundary.
+  //    Now we clamp the top-left corner first, then shrink width/height so
+  //    that x + width ≤ canvasW and y + height ≤ canvasH.
   for (const el of allElements) {
-    if (el.x < 0) el.x = 0;
-    if (el.y < 0) el.y = 0;
-    if (el.x > template.canvas.width) el.x = template.canvas.width;
-    if (el.y > template.canvas.height) el.y = template.canvas.height;
+    el.x = Math.max(0, Math.min(el.x, template.canvas.width - 1));
+    el.y = Math.max(0, Math.min(el.y, template.canvas.height - 1));
+    el.width  = Math.max(1, Math.min(el.width,  template.canvas.width  - el.x));
+    el.height = Math.max(1, Math.min(el.height, template.canvas.height - el.y));
   }
 
   return { safe: true };

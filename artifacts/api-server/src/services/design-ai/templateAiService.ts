@@ -30,6 +30,7 @@ import {
 } from "../../validators/designTemplateAiSchema.js";
 import { DESIGN_LIMITS } from "../../types/designTemplate.js";
 import { logger } from "../../lib/logger.js";
+import { runVisualQa, type VisualQaReport } from "./visualQaService.js";
 
 // ── Size presets ───────────────────────────────────────────────────────────────
 
@@ -94,15 +95,14 @@ function sanitizeProposal(raw: AiTemplateProposal, canvasW: number, canvasH: num
       if (seenIds.has(id)) id = `${id}-${idx}`;
       seenIds.add(id);
 
-      // Clamp coordinates to canvas
-      return {
-        ...el,
-        id,
-        x: Math.max(-canvasW, Math.min(el.x ?? 0, canvasW)),
-        y: Math.max(-canvasH, Math.min(el.y ?? 0, canvasH)),
-        width: Math.max(1, Math.min(el.width ?? 100, canvasW)),
-        height: Math.max(1, Math.min(el.height ?? 100, canvasH)),
-      };
+      // Clamp top-left corner so it starts within the canvas
+      const x = Math.max(0, Math.min(el.x ?? 0, canvasW - 1));
+      const y = Math.max(0, Math.min(el.y ?? 0, canvasH - 1));
+      // Clamp size so the right/bottom edge does not cross the canvas boundary
+      const width  = Math.max(1, Math.min(el.width  ?? 100, canvasW - x));
+      const height = Math.max(1, Math.min(el.height ?? 100, canvasH - y));
+
+      return { ...el, id, x, y, width, height };
     });
 
   // Collect declared variable keys
@@ -137,6 +137,8 @@ export interface AiTemplateAssistResult {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  /** Visual QA report — bounds + contrast results, auto-fix counts, score 0-100. */
+  visualQa: VisualQaReport;
 }
 
 const MAX_REPAIR_ATTEMPTS = 2;
@@ -205,8 +207,21 @@ export async function generateTemplateFromPrompt(
         continue;
       }
 
-      // Sanitize and normalize
+      // Sanitize and normalize (bounds clamping — right+bottom edges enforced)
       const sanitized = sanitizeProposal(validated.data, canvasW, canvasH);
+
+      // Visual QA: contrast + residual bounds check, auto-fix, score
+      const { proposal: qaProposal, qa } = runVisualQa(sanitized, canvasW, canvasH);
+      logger.info(
+        {
+          visualQaScore: qa.visualQaScore,
+          autoFixedBounds: qa.autoFixedBounds,
+          autoFixedColors: qa.autoFixedColors,
+          contrastIssues: qa.contrastIssues.length,
+          boundsIssues: qa.boundsIssues.length,
+        },
+        "[template-ai] Visual QA completed",
+      );
 
       // Record cost
       try {
@@ -223,7 +238,7 @@ export async function generateTemplateFromPrompt(
         logger.warn({ costErr }, "[template-ai] Cost recording failed (non-fatal)");
       }
 
-      return { proposal: sanitized, provider: "openai", model, inputTokens, outputTokens };
+      return { proposal: qaProposal, provider: "openai", model, inputTokens, outputTokens, visualQa: qa };
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
       logger.warn({ attempt, err }, "[template-ai] AI call failed");
