@@ -26,6 +26,25 @@ import type { DesignTemplate, DesignElement } from "../types/designTemplate.js";
 
 const router = Router();
 
+// ── Size presets (static, no auth required) ───────────────────────────────────
+
+/** GET /ai/design-templates/ai-assist/presets */
+router.get("/ai/design-templates/ai-assist/presets", (_req, res) => {
+  res.json({
+    presets: [
+      { id: "instagram-square",    label: "Instagram Square (1080×1080)",    width: 1080, height: 1080 },
+      { id: "instagram-portrait",  label: "Instagram Portrait (1080×1350)",  width: 1080, height: 1350 },
+      { id: "instagram-landscape", label: "Instagram Landscape (1080×566)",  width: 1080, height: 566  },
+      { id: "facebook-post",       label: "Facebook Post (1200×630)",        width: 1200, height: 630  },
+      { id: "twitter-post",        label: "Twitter/X Post (1200×675)",       width: 1200, height: 675  },
+      { id: "a4",                  label: "A4 Document (2480×3508)",         width: 2480, height: 3508 },
+      { id: "business-card",       label: "Business Card (1050×600)",        width: 1050, height: 600  },
+      { id: "logo",                label: "Logo (800×800)",                  width: 800,  height: 800  },
+      { id: "custom",              label: "Custom Size",                     width: null, height: null },
+    ],
+  });
+});
+
 // ── OpenAI client ─────────────────────────────────────────────────────────────
 
 function getOpenAIClient(): OpenAI {
