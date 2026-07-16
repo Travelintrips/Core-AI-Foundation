@@ -1,0 +1,36 @@
+{
+  "team": "12",
+  "branch": "feature/12-layout-composer",
+  "domain": "Constraint-Based AI Layout Composer",
+  "ownedFolders": [
+    "artifacts/api-server/src/services/layout-composer/",
+    "artifacts/api-server/src/routes/layout-composer/",
+    "artifacts/api-server/src/types/layout-composer/"
+  ],
+  "routesToMount": [
+    {
+      "importPath": "./routes/layout-composer/index.js",
+      "mountPrefix": "/",
+      "note": "Router internally uses /ai/layout-composer/* paths. No additional prefix needed."
+    }
+  ],
+  "pagesToRegister": [],
+  "sidebarItems": [],
+  "openapiFragment": "integration/openapi/team-12.yaml",
+  "migrationDrafts": [
+    "integration/migrations/team-12.sql"
+  ],
+  "seedDrafts": [],
+  "dependenciesRequested": [],
+  "eventsPublished": [],
+  "eventsConsumed": [],
+  "workerJobTypesRequested": [],
+  "sharedTypesRequested": [],
+  "integrationOrder": [],
+  "knownRisks": [
+    "Routes are pure in-memory compute (no DB) — no migration required to enable the API.",
+    "Optional persistence table ai_layout_plans is additive-only (see migration draft) and can be added independently.",
+    "No shared event bus usage — fully self-contained.",
+    "Response payload can be large for complex layouts with many operations and responsive variants; consumers should paginate or filter fields as needed."
+  ]
+}
