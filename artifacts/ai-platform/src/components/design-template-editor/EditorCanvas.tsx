@@ -240,7 +240,8 @@ export function EditorCanvas({ scene, selectedIds, zoom, onSelect, onUpdate, rea
       ref={containerRef}
       style={{ width: scene.canvas.width * zoom, height: scene.canvas.height * zoom,
         background: scene.canvas.backgroundColor, position: "relative",
-        flexShrink: 0, boxShadow: "0 4px 32px rgba(0,0,0,0.18)" }}
+        flexShrink: 0, boxShadow: "0 4px 32px rgba(0,0,0,0.18)",
+        overflow: "hidden" }}
       onClick={(e) => { if (e.target === e.currentTarget) onSelect(null, false); }}
     >
       {sorted.map((el) => {

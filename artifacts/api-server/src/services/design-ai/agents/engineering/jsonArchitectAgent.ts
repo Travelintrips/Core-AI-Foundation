@@ -79,6 +79,27 @@ function computeElementPosition(
   return fallback;
 }
 
+// ── Color helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Compute relative luminance (0=black, 1=white) for a hex color.
+ * Returns 0.5 for any unparseable value (neutral).
+ */
+function relativeLuminance(hex: string): number {
+  const clean = hex.replace(/^#/, "");
+  if (clean.length !== 6) return 0.5;
+  const r = parseInt(clean.slice(0, 2), 16) / 255;
+  const g = parseInt(clean.slice(2, 4), 16) / 255;
+  const b = parseInt(clean.slice(4, 6), 16) / 255;
+  const linearize = (c: number) => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
+}
+
+/** Return "#ffffff" or "#1a1a1a" whichever contrasts better against the given background. */
+function autoContrastText(bgHex: string, altDark = "#1a1a1a"): string {
+  return relativeLuminance(bgHex) > 0.35 ? altDark : "#ffffff";
+}
+
 // ── Deterministic assembly ────────────────────────────────────────────────────
 
 function assembleTemplate(
@@ -217,6 +238,45 @@ function assembleTemplate(
       }
     });
 
+  // ── Post-process: fix text colors for contrast ─────────────────────────────
+  //
+  // Problem: ALL text gets colorPalette.text (e.g. #ffffff for dark themes).
+  // But image placeholder elements render as a white rectangle — white text
+  // on white image = invisible. Fix by computing proper contrast color based
+  // on what each text element is visually sitting on:
+  //   1. Text overlapping an image element → use autoContrast (dark on white image)
+  //   2. Text NOT overlapping any image → use colorPalette.text (correct for bg)
+
+  // Build image Y-ranges for overlap detection
+  const imageRanges = elements
+    .filter((e) => e.type === "image")
+    .map((e) => ({ y: e.y, bottom: e.y + e.height }));
+
+  // The effective background behind non-image text is the canvas background
+  const bgLum = relativeLuminance(design.colorPalette.background);
+  const bgTextColor = bgLum > 0.35
+    ? autoContrastText(design.colorPalette.background, design.colorPalette.primary ?? "#1a1a1a")
+    : design.colorPalette.text; // dark bg → white text (already correct)
+
+  const finalElements = elements.map((el) => {
+    if (el.type !== "text") return el;
+    const textEl = el as { y: number; height: number; color?: string; [k: string]: unknown };
+    const elBottom = textEl.y + textEl.height;
+
+    // Check overlap with any image placeholder
+    const onImage = imageRanges.some(
+      (r) => textEl.y < r.bottom && elBottom > r.y,
+    );
+
+    if (onImage) {
+      // Image placeholder renders as white — use dark contrasting color
+      return { ...el, color: autoContrastText("#ffffff", design.colorPalette.primary ?? "#1a1a1a") };
+    }
+
+    // Not on image — ensure the text color actually contrasts with the background
+    return { ...el, color: bgTextColor };
+  });
+
   return {
     schemaVersion: DESIGN_TEMPLATE_SCHEMA_VERSION,
     id: templateId,
@@ -230,7 +290,7 @@ function assembleTemplate(
       unit: "px",
       backgroundColor: design.colorPalette.background,
     },
-    elements,
+    elements: finalElements,
     variables,
     metadata: {
       createdBy: actorId,
