@@ -749,36 +749,68 @@ export default function TemplateMarketplacePage() {
                 </div>
               </div>
 
-              {/* Details grid */}
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                {/* Color theme */}
-                {viewTemplate.colorTheme && (
-                  <div className="space-y-1.5">
-                    <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">Color Theme</p>
-                    <div className="flex gap-2 flex-wrap">
-                      {Object.entries(viewTemplate.colorTheme).map(([k, v]) => (
-                        <div key={k} className="flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full border border-border inline-block" style={{ background: v }} />
-                          <span className="text-xs text-muted-foreground capitalize">{k}</span>
+              {/* ── Color Theme Editor ───────────────────────────────────────── */}
+              {viewTemplate.colorTheme && (
+                <div className="rounded-xl border bg-card p-4 space-y-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Color Theme — klik untuk ubah warna</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(Object.entries(viewTemplate.colorTheme) as [string, string][]).map(([key, val]) => (
+                      <label key={key} className="flex items-center gap-2 cursor-pointer group">
+                        <span className="relative w-8 h-8 rounded-lg border-2 border-border overflow-hidden flex-shrink-0 group-hover:border-primary transition-colors">
+                          <span className="absolute inset-0" style={{ background: val }} />
+                          <input
+                            type="color"
+                            value={val}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            onChange={(e) => {
+                              const updated = { ...viewTemplate.colorTheme!, [key]: e.target.value };
+                              patchMutation.mutate({ id: viewTemplate.id, data: { colorTheme: updated } });
+                            }}
+                          />
+                        </span>
+                        <div>
+                          <p className="text-xs font-medium capitalize">{key}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono">{val}</p>
                         </div>
-                      ))}
-                    </div>
+                      </label>
+                    ))}
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Packages */}
-                {viewTemplate.supportedPackages && viewTemplate.supportedPackages.length > 0 && (
-                  <div className="space-y-1.5">
-                    <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">Supported Packages</p>
-                    <div className="flex flex-wrap gap-1">
-                      {viewTemplate.supportedPackages.map((p) => (
-                        <Badge key={p} variant="outline" className="capitalize text-xs">{p}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              {/* ── Supported Packages Editor ─────────────────────────────────── */}
+              <div className="rounded-xl border bg-card p-4 space-y-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Supported Packages — klik untuk aktifkan/nonaktifkan</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {["starter", "standard", "professional", "enterprise"].map((pkg) => {
+                    const active = (viewTemplate.supportedPackages ?? []).includes(pkg);
+                    return (
+                      <button
+                        key={pkg}
+                        disabled={patchMutation.isPending}
+                        onClick={() => {
+                          const current = viewTemplate.supportedPackages ?? [];
+                          const updated = active
+                            ? current.filter((p) => p !== pkg)
+                            : [...current, pkg];
+                          patchMutation.mutate({ id: viewTemplate.id, data: { supportedPackages: updated } });
+                        }}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium capitalize transition-colors ${
+                          active
+                            ? "bg-violet-600 border-violet-500 text-white"
+                            : "bg-muted border-border text-muted-foreground hover:border-primary"
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${active ? "bg-white" : "bg-muted-foreground"}`} />
+                        {pkg}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
-                {/* Template code & version */}
+              {/* Template code & version */}
+              <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="space-y-1">
                   <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">Template Code</p>
                   <code className="text-xs bg-muted px-2 py-1 rounded">{viewTemplate.templateCode}</code>
