@@ -1,0 +1,262 @@
+openapi: 3.1.0
+info:
+  title: Universal Rendering Engine — Team 14
+  version: 1.0.0
+  description: |
+    Adapter-based renderer for SVG, PNG, PDF, thumbnails, watermarked previews,
+    print-ready output, ZIP packages, and editable composition JSON.
+
+    All endpoints require admin authentication (X-Admin-Api-Key header).
+    Synchronous renders return the full result immediately.
+    Async renders enqueue a background job and return a jobId.
+
+servers:
+  - url: /api
+
+tags:
+  - name: universal-renderer
+    description: Universal Rendering Engine (Team 14)
+
+paths:
+  /ai/universal-renderer/formats:
+    get:
+      summary: List supported output formats
+      operationId: listUniversalRenderFormats
+      tags: [universal-renderer]
+      security:
+        - AdminApiKey: []
+      responses:
+        '200':
+          description: Supported output formats
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [formats]
+                properties:
+                  formats:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OutputFormat'
+
+  /ai/universal-renderer/health:
+    get:
+      summary: Renderer health probe
+      operationId: universalRendererHealth
+      tags: [universal-renderer]
+      security:
+        - AdminApiKey: []
+      responses:
+        '200':
+          description: Renderer is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, renderer]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                  renderer:
+                    type: string
+
+  /ai/universal-renderer/render:
+    post:
+      summary: Synchronous multi-format render
+      operationId: universalRender
+      tags: [universal-renderer]
+      security:
+        - AdminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UniversalRenderRequest'
+      responses:
+        '200':
+          description: Render complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UniversalRenderResult'
+        '400':
+          description: Invalid request (bad format, missing SVG content, canvas too large)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderError'
+        '500':
+          description: Render failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderError'
+
+  /ai/universal-renderer/render/async:
+    post:
+      summary: Enqueue asynchronous render job
+      operationId: universalRenderAsync
+      tags: [universal-renderer]
+      security:
+        - AdminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UniversalRenderRequest'
+      responses:
+        '202':
+          description: Job enqueued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobId, jobCode]
+                properties:
+                  jobId:
+                    type: integer
+                  jobCode:
+                    type: string
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderError'
+        '500':
+          description: Enqueue failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderError'
+
+components:
+  securitySchemes:
+    AdminApiKey:
+      type: apiKey
+      in: header
+      name: X-Admin-Api-Key
+
+  schemas:
+    OutputFormat:
+      type: string
+      enum:
+        - svg
+        - png
+        - jpg
+        - webp
+        - pdf
+        - pdf-print
+        - thumbnail
+        - watermarked
+        - zip
+        - composition
+
+    RenderSource:
+      type: object
+      required: [kind, svgContent, canvasWidth, canvasHeight]
+      properties:
+        kind:
+          type: string
+          enum: [svg]
+        svgContent:
+          type: string
+          description: Raw SVG markup. Script tags and on* event handlers are rejected.
+          maxLength: 5242880
+        canvasWidth:
+          type: integer
+          minimum: 1
+          maximum: 16384
+        canvasHeight:
+          type: integer
+          minimum: 1
+          maximum: 16384
+
+    UniversalRenderRequest:
+      type: object
+      required: [source, formats]
+      properties:
+        source:
+          $ref: '#/components/schemas/RenderSource'
+        formats:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutputFormat'
+          minItems: 1
+          description: |
+            Output formats to produce. Use "zip" to bundle all produced files.
+            Use "watermarked" for a fail-closed watermarked preview PDF.
+            Use "pdf-print" for a 300 DPI print-ready PDF.
+        previewMode:
+          type: boolean
+          default: false
+          description: When true, PDF and SVG outputs are watermarked.
+        storagePrefix:
+          type: string
+          description: Storage path prefix for uploaded artifacts. Auto-generated if omitted.
+        packageName:
+          type: string
+          description: ZIP package name (folder name inside the archive).
+        title:
+          type: string
+          description: Document title for PDF metadata.
+        creator:
+          type: string
+          description: Creator string for PDF metadata.
+
+    RenderArtifact:
+      type: object
+      required: [format, storagePath, publicUrl, fileSizeBytes, checksum, mimeType]
+      properties:
+        format:
+          $ref: '#/components/schemas/OutputFormat'
+        storagePath:
+          type: string
+        publicUrl:
+          type: string
+        fileSizeBytes:
+          type: integer
+        checksum:
+          type: string
+          description: SHA-256 hex digest of the output file.
+        mimeType:
+          type: string
+        width:
+          type: integer
+          description: Output width in pixels (raster outputs only).
+        height:
+          type: integer
+          description: Output height in pixels (raster outputs only).
+        pageCount:
+          type: integer
+          description: PDF page count (PDF outputs only).
+
+    UniversalRenderResult:
+      type: object
+      required: [requestId, artifacts, warnings, durationMs]
+      properties:
+        requestId:
+          type: string
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/RenderArtifact'
+        warnings:
+          type: array
+          items:
+            type: string
+        durationMs:
+          type: integer
+
+    RenderError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+          description: Machine-readable error code (e.g. SVG_CONTENT_MISSING, WATERMARK_FAILED).

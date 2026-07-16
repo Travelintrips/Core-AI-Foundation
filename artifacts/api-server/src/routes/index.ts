@@ -73,6 +73,7 @@ import designStudioRouter from "./design-studio";
 import designTemplatesRouter from "./design-templates";
 import designTemplatesAiAssistRouter from "./design-templates-ai-assist";
 import creativeMarketplaceRouter from "./creative-marketplace";
+import universalRendererRouter from "./universal-renderer/index.js";
 
 const router: IRouter = Router();
 
@@ -148,5 +149,6 @@ router.use(designStudioRouter);
 router.use(designTemplatesRouter);
 router.use(designTemplatesAiAssistRouter);
 router.use(creativeMarketplaceRouter);
+router.use(universalRendererRouter);
 
 export default router;
