@@ -1,0 +1,46 @@
+{
+  "team": "11",
+  "branch": "feature/11-template-matching",
+  "domain": "Universal Template/Blueprint Matching",
+  "ownedFolders": [
+    "artifacts/api-server/src/services/universal-template-matching/",
+    "artifacts/api-server/src/routes/universal-template-matching/",
+    "integration/openapi/team-11.yaml",
+    "integration/manifests/team-11.json",
+    "integration/migrations/team-11.sql",
+    "artifacts/api-server/src/tests/universal-template-matching.test.ts"
+  ],
+  "routesToMount": [
+    {
+      "importPath": "../routes/universal-template-matching/index.js",
+      "importName": "universalTemplateMatchingRouter",
+      "mountPath": "/ai/template-matching",
+      "note": "Mount under the global /api prefix already applied in app.ts"
+    }
+  ],
+  "pagesToRegister": [],
+  "sidebarItems": [],
+  "openapiFragment": "integration/openapi/team-11.yaml",
+  "migrationDrafts": [
+    "integration/migrations/team-11.sql"
+  ],
+  "seedDrafts": [],
+  "dependenciesRequested": [],
+  "eventsPublished": [],
+  "eventsConsumed": [],
+  "workerJobTypesRequested": [],
+  "sharedTypesRequested": [
+    "BrandDnaView from creativeBrandIntelligenceService — callers may pass brandDna fields from this shape"
+  ],
+  "integrationOrder": [
+    "Routes must be mounted AFTER adminAuthWithExceptions middleware is applied in app.ts (already global — no change needed)",
+    "No dependency on other teams' features",
+    "No migration required for MVP — uses existing ai_templates table via port abstraction"
+  ],
+  "knownRisks": [
+    "ai_templates table must be seeded (pnpm seed) for matching to return results — empty table returns topRecommendation: null",
+    "categoryToServiceTypes mapper in adapters.ts is a best-effort heuristic — extend when new categories are added",
+    "StaticComponentPort / StaticPatternPort / StaticTokenLibraryPort are stubs — replace with DB-backed versions when dedicated tables exist",
+    "Confidence will be low when callers omit brand DNA or industry — expected behaviour, not a bug"
+  ]
+}

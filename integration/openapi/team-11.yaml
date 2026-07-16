@@ -1,0 +1,389 @@
+openapi: "3.0.3"
+info:
+  title: "Team 11 — Universal Template Matching"
+  version: "1.0.0"
+  description: |
+    OpenAPI fragment for the Universal Template/Blueprint Matching domain (Team 11).
+    Mount at /api/ai/template-matching.
+    DO NOT merge into root openapi.yaml manually — Team 24 handles wiring.
+
+paths:
+  /ai/template-matching/match:
+    post:
+      operationId: universalTemplateMatch
+      summary: Run universal template/blueprint matching
+      description: |
+        Scores all published blueprints against the provided input signals and returns
+        ranked recommendations with score breakdowns, confidence, and explanations.
+        At least one signal (serviceType, domain, category, industry, brief, brandDna, audience, output, or style) must be provided.
+        Deterministic: same inputs always produce the same ranking.
+        No AI calls — purely rule-based scoring engine.
+      tags:
+        - TemplateMatching
+      security:
+        - AdminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TemplateMatchInput"
+            examples:
+              fullInput:
+                summary: Full match with all signals
+                value:
+                  serviceType: "CP"
+                  domain: "creative"
+                  category: "Company Profile"
+                  brief: "Professional corporate profile for logistics company in Indonesia"
+                  industry: "logistics"
+                  audience: ["B2B", "enterprise"]
+                  output: ["pdf"]
+                  package: "professional"
+                  style: ["modern", "minimalist"]
+                  constraints: ["print-ready"]
+                  limit: 5
+                  brandDna:
+                    personalities: ["professional", "innovative"]
+                    voice: "formal"
+                    writingStyle: "concise"
+                    primaryColorHex: "#1a2b3c"
+                    typographyStyle: "sans-serif"
+              minimalInput:
+                summary: Minimal match with just service type
+                value:
+                  serviceType: "PITCH"
+                  limit: 3
+      responses:
+        "200":
+          description: Matching result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateMatchResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /ai/template-matching/score/{blueprintId}:
+    post:
+      operationId: universalTemplateSingle
+      summary: Score a single blueprint against input
+      description: |
+        Evaluates one specific blueprint (by ID) against the provided input.
+        Returns the same MatchResult structure but for only that blueprint.
+        Useful for "why this blueprint?" explanations.
+      tags:
+        - TemplateMatching
+      security:
+        - AdminApiKey: []
+      parameters:
+        - name: blueprintId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9]+$"
+          description: Numeric blueprint ID (from ai_templates.id)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TemplateMatchInput"
+      responses:
+        "200":
+          description: Single-blueprint scoring result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateMatchResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /ai/template-matching/health:
+    get:
+      operationId: templateMatchingHealth
+      summary: Liveness check for the template matching domain
+      tags:
+        - TemplateMatching
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                  domain:
+                    type: string
+                  team:
+                    type: string
+
+components:
+  securitySchemes:
+    AdminApiKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+
+  schemas:
+    BriefBrandDna:
+      type: object
+      description: Brand DNA snapshot from the client's profile
+      properties:
+        personalities:
+          type: array
+          items:
+            type: string
+          description: "e.g. [\"professional\", \"innovative\"]"
+        voice:
+          type: string
+          description: "e.g. \"formal\""
+        writingStyle:
+          type: string
+          description: "e.g. \"concise\""
+        primaryColorHex:
+          type: string
+          pattern: "^#[0-9a-fA-F]{6}$"
+          description: "e.g. \"#1a2b3c\""
+        headingFont:
+          type: string
+        bodyFont:
+          type: string
+        typographyStyle:
+          type: string
+          enum: [serif, sans-serif, display, monospace]
+        colorPsychology:
+          type: array
+          items:
+            type: string
+
+    TemplateMatchInput:
+      type: object
+      description: |
+        Input to the universal matching engine.
+        At least one signal must be provided.
+      properties:
+        serviceType:
+          type: string
+          description: "Service code. e.g. \"CP\", \"PITCH\", \"BRANDING\""
+        domain:
+          type: string
+          description: "Domain tag. e.g. \"creative\", \"marketing\", \"legal\""
+        category:
+          type: string
+          description: "Explicit category. e.g. \"Company Profile\", \"Pitch Deck\""
+        brief:
+          type: string
+          description: Free-text project brief. Tokenised for keyword scoring.
+          maxLength: 4000
+        brandDna:
+          $ref: "#/components/schemas/BriefBrandDna"
+        industry:
+          type: string
+          description: "Industry. e.g. \"logistics\", \"technology\""
+        audience:
+          type: array
+          items:
+            type: string
+          description: "Target audience. e.g. [\"B2B\", \"enterprise\"]"
+        output:
+          type: array
+          items:
+            type: string
+          description: "Required output formats. e.g. [\"pdf\", \"pptx\"]"
+        package:
+          type: string
+          enum: [starter, standard, professional, enterprise]
+          description: Package tier
+        style:
+          type: array
+          items:
+            type: string
+          description: "Style preferences. e.g. [\"modern\", \"minimalist\"]"
+        constraints:
+          type: array
+          items:
+            type: string
+          description: "Hard requirements. e.g. [\"bilingual\", \"print-ready\"]. Blueprints that explicitly cannot satisfy these are rejected."
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 5
+          description: Max recommendations to return
+
+    ScoreDimension:
+      type: object
+      required: [dimension, awarded, maximum, matched, explanation]
+      properties:
+        dimension:
+          type: string
+          description: Dimension name (e.g. "Service Type", "Industry")
+        awarded:
+          type: integer
+          minimum: 0
+          description: Points awarded for this dimension
+        maximum:
+          type: integer
+          minimum: 0
+          description: Maximum possible points for this dimension
+        matched:
+          type: boolean
+          description: Whether this dimension contributed to the score
+        explanation:
+          type: string
+          description: Human-readable reason for the score
+
+    ScoreBreakdown:
+      type: object
+      required: [dimensions, totalScore, maxPossibleScore]
+      properties:
+        dimensions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreDimension"
+        totalScore:
+          type: integer
+          minimum: 0
+        maxPossibleScore:
+          type: integer
+          minimum: 1
+
+    MatchRecommendation:
+      type: object
+      required: [blueprintId, blueprintName, category, score, confidence, reasons, breakdown, styles, outputFormats, featured]
+      properties:
+        blueprintId:
+          type: string
+        blueprintName:
+          type: string
+        category:
+          type: string
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Normalised score 0–100
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Confidence in this recommendation (reflects input richness)
+        reasons:
+          type: array
+          items:
+            type: string
+          description: Top reasons this blueprint was recommended
+        breakdown:
+          $ref: "#/components/schemas/ScoreBreakdown"
+        styles:
+          type: array
+          items:
+            type: string
+        outputFormats:
+          type: array
+          items:
+            type: string
+        featured:
+          type: boolean
+
+    RejectedBlueprint:
+      type: object
+      required: [blueprintId, blueprintName, rejectionReason, rawScoreBeforeRejection]
+      properties:
+        blueprintId:
+          type: string
+        blueprintName:
+          type: string
+        rejectionReason:
+          type: string
+          description: Human-readable constraint violation reason
+        rawScoreBeforeRejection:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Score the blueprint would have received without the constraint
+
+    TemplateMatchResult:
+      type: object
+      required: [topRecommendation, alternatives, rejected, confidence, explanation, candidatesEvaluated, signalsUsed, signalsMissing]
+      properties:
+        topRecommendation:
+          oneOf:
+            - $ref: "#/components/schemas/MatchRecommendation"
+            - type: "null"
+          description: Highest-scoring blueprint. null if no compatible blueprint found.
+        alternatives:
+          type: array
+          items:
+            $ref: "#/components/schemas/MatchRecommendation"
+          description: Ranked alternatives (excluding top recommendation)
+        rejected:
+          type: array
+          items:
+            $ref: "#/components/schemas/RejectedBlueprint"
+          description: Blueprints hard-rejected due to constraint violations
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Overall confidence in the result set
+        explanation:
+          type: string
+          description: Human-readable summary of the match result
+        candidatesEvaluated:
+          type: integer
+          minimum: 0
+          description: Number of blueprint candidates scored
+        signalsUsed:
+          type: array
+          items:
+            type: string
+          description: Input signals that were present and used
+        signalsMissing:
+          type: array
+          items:
+            type: string
+          description: Signals not provided — supplying them would increase confidence
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: string
+    NotFound:
+      description: Blueprint not found or not published
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: string
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: string
