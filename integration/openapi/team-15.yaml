@@ -1,0 +1,570 @@
+openapi: 3.1.0
+info:
+  title: Graphic Design Domain API — Team 15
+  version: 1.0.0
+  description: |
+    Graphic Design domain endpoints for brief scoring, print specification
+    validation, QC, package policy, and deliverable manifests.
+    Services: logo, business-card, letterhead, flyer, poster, banner,
+    brochure, social-media, certificate, stationery.
+
+    Port interfaces to Team 7–14 are invoked through the shared job engine.
+    No renderer, template engine, or asset library is implemented here.
+
+servers:
+  - url: /api
+    description: API server base path
+
+tags:
+  - name: gd-services
+    description: Service catalogue and blueprints
+  - name: gd-brief
+    description: Brief scoring and validation
+  - name: gd-print-spec
+    description: Print dimension specification and validation
+  - name: gd-packages
+    description: Package tier policies
+  - name: gd-manifest
+    description: Deliverable manifest building
+  - name: gd-qc
+    description: Quality control scoring
+  - name: gd-components
+    description: Required component checklists
+
+paths:
+
+  # ── Service catalogue ────────────────────────────────────────────────────────
+
+  /ai/graphic-design/services:
+    get:
+      operationId: listGdServices
+      tags: [gd-services]
+      summary: List all Graphic Design services
+      responses:
+        '200':
+          description: Service list with blueprints and print specs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [services]
+                properties:
+                  services:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GdServiceDetail'
+
+  /ai/graphic-design/services/{serviceCode}:
+    get:
+      operationId: getGdService
+      tags: [gd-services]
+      summary: Get detail for a single Graphic Design service
+      parameters:
+        - $ref: '#/components/parameters/ServiceCodeParam'
+      responses:
+        '200':
+          description: Service detail with components and package policies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GdServiceDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ── Brief ─────────────────────────────────────────────────────────────────────
+
+  /ai/graphic-design/brief/score:
+    post:
+      operationId: scoreGdBrief
+      tags: [gd-brief]
+      summary: Score a Graphic Design brief for completeness
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GdBriefScoreRequest'
+      responses:
+        '200':
+          description: Brief readiness score and field analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GdBriefReadinessResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /ai/graphic-design/brief/validate:
+    post:
+      operationId: validateGdBrief
+      tags: [gd-brief]
+      summary: Validate whether brief is production-ready
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GdBriefScoreRequest'
+      responses:
+        '200':
+          description: Validation result with ready flag
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GdBriefValidationResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ── Print specification ───────────────────────────────────────────────────────
+
+  /ai/graphic-design/print-spec/{serviceCode}:
+    get:
+      operationId: getGdPrintSpec
+      tags: [gd-print-spec]
+      summary: Get standard print specification for a service
+      parameters:
+        - $ref: '#/components/parameters/ServiceCodeParam'
+      responses:
+        '200':
+          description: Print specification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrintSpec'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /ai/graphic-design/print-spec/{serviceCode}/validate:
+    post:
+      operationId: validateGdPrintDimensions
+      tags: [gd-print-spec]
+      summary: Validate custom print dimension overrides
+      parameters:
+        - $ref: '#/components/parameters/ServiceCodeParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrintDimensionOverrideRequest'
+      responses:
+        '200':
+          description: Validation passed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrintDimensionValidationResult'
+        '422':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrintDimensionValidationResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ── Package policy ────────────────────────────────────────────────────────────
+
+  /ai/graphic-design/packages:
+    get:
+      operationId: listGdPackages
+      tags: [gd-packages]
+      summary: List all package tier policies
+      responses:
+        '200':
+          description: Package policies keyed by tier
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  packages:
+                    type: object
+                    additionalProperties:
+                      $ref: '#/components/schemas/GdPackagePolicy'
+
+  /ai/graphic-design/packages/{tier}/{serviceCode}:
+    get:
+      operationId: getGdPackagePolicy
+      tags: [gd-packages]
+      summary: Get effective policy for a tier × service combination
+      parameters:
+        - name: tier
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/GdPackageTier'
+        - $ref: '#/components/parameters/ServiceCodeParam'
+      responses:
+        '200':
+          description: Effective package policy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policy:
+                    $ref: '#/components/schemas/GdPackagePolicy'
+                  exampleSlaDueDate:
+                    type: string
+                    format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ── Deliverable manifest ──────────────────────────────────────────────────────
+
+  /ai/graphic-design/manifest/{serviceCode}/{tier}:
+    get:
+      operationId: getGdExpectedFiles
+      tags: [gd-manifest]
+      summary: List expected file names for a service at a given tier
+      parameters:
+        - $ref: '#/components/parameters/ServiceCodeParam'
+        - name: tier
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/GdPackageTier'
+      responses:
+        '200':
+          description: Expected deliverable file names
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [serviceCode, tier, expectedFiles, count]
+                properties:
+                  serviceCode:
+                    $ref: '#/components/schemas/GraphicDesignServiceCode'
+                  tier:
+                    $ref: '#/components/schemas/GdPackageTier'
+                  expectedFiles:
+                    type: array
+                    items:
+                      type: string
+                  count:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /ai/graphic-design/manifest/build:
+    post:
+      operationId: buildGdManifest
+      tags: [gd-manifest]
+      summary: Build a deliverable manifest from produced files (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GdManifestBuildRequest'
+      responses:
+        '200':
+          description: Built deliverable manifest
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GdDeliverableManifest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ── QC ────────────────────────────────────────────────────────────────────────
+
+  /ai/graphic-design/qc/score:
+    post:
+      operationId: scoreGdQc
+      tags: [gd-qc]
+      summary: Score a generation report for QC
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GdQcScoreRequest'
+      responses:
+        '200':
+          description: QC score and dimension breakdown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GdQcResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ── Components ────────────────────────────────────────────────────────────────
+
+  /ai/graphic-design/components/{serviceCode}:
+    get:
+      operationId: getGdComponents
+      tags: [gd-components]
+      summary: Get required component checklist for a service
+      parameters:
+        - $ref: '#/components/parameters/ServiceCodeParam'
+      responses:
+        '200':
+          description: Component checklist
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [serviceCode, components]
+                properties:
+                  serviceCode:
+                    $ref: '#/components/schemas/GraphicDesignServiceCode'
+                  components:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GdRequiredComponent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+components:
+  parameters:
+    ServiceCodeParam:
+      name: serviceCode
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/GraphicDesignServiceCode'
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              details:
+                {}
+
+  schemas:
+
+    GraphicDesignServiceCode:
+      type: string
+      enum:
+        - logo
+        - business-card
+        - letterhead
+        - flyer
+        - poster
+        - banner
+        - brochure
+        - social-media
+        - certificate
+        - stationery
+
+    GdPackageTier:
+      type: string
+      enum: [starter, professional, business, enterprise]
+
+    PrintSpec:
+      type: object
+      required: [widthMm, heightMm, bleedMm, safeAreaMm, resolutionDpi, colorMode, digitalOnly]
+      properties:
+        widthMm:       { type: number }
+        heightMm:      { type: number }
+        bleedMm:       { type: number }
+        safeAreaMm:    { type: number }
+        resolutionDpi: { type: integer }
+        colorMode:     { type: string, enum: [cmyk, rgb] }
+        digitalOnly:   { type: boolean }
+
+    GdBlueprint:
+      type: object
+      required: [serviceCode, engineTeam, jobType, promptTemplate]
+      properties:
+        serviceCode:    { $ref: '#/components/schemas/GraphicDesignServiceCode' }
+        engineTeam:     { type: integer, enum: [9, 10, 11] }
+        jobType:        { type: string }
+        promptTemplate: { type: string }
+
+    GdRequiredComponent:
+      type: object
+      required: [name, required, source, description]
+      properties:
+        name:        { type: string }
+        required:    { type: boolean }
+        source:      { type: string, enum: [brief, brand-dna, asset-library, generated] }
+        description: { type: string }
+
+    GdPackagePolicy:
+      type: object
+      required: [tier, label, revisionsIncluded, sourceFilesIncluded, printReadyDownload,
+                 maxImageGenerationAttempts, slaDays, humanQcRequired, brandDnaEnabled,
+                 assetLibraryEnabled, dispatchPriority]
+      properties:
+        tier:                        { $ref: '#/components/schemas/GdPackageTier' }
+        label:                       { type: string }
+        revisionsIncluded:           { type: integer }
+        sourceFilesIncluded:         { type: boolean }
+        printReadyDownload:          { type: boolean }
+        maxImageGenerationAttempts:  { type: integer }
+        slaDays:                     { type: integer }
+        humanQcRequired:             { type: boolean }
+        brandDnaEnabled:             { type: boolean }
+        assetLibraryEnabled:         { type: boolean }
+        dispatchPriority:            { type: integer, enum: [1, 2, 3, 4] }
+
+    GdServiceDetail:
+      type: object
+      required: [code, blueprint, printSpec]
+      properties:
+        code:       { $ref: '#/components/schemas/GraphicDesignServiceCode' }
+        blueprint:  { $ref: '#/components/schemas/GdBlueprint' }
+        printSpec:  { $ref: '#/components/schemas/PrintSpec' }
+        components:
+          type: array
+          items: { $ref: '#/components/schemas/GdRequiredComponent' }
+        policies:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/GdPackagePolicy' }
+
+    GdBriefScoreRequest:
+      type: object
+      required: [serviceCode, briefJson]
+      properties:
+        serviceCode: { $ref: '#/components/schemas/GraphicDesignServiceCode' }
+        briefJson:
+          type: object
+          additionalProperties: true
+
+    GdBriefReadinessResult:
+      type: object
+      required: [overallScore, readinessStatus, requiredScore, optionalScore,
+                 missingRequired, missingOptional, warnings, serviceCode]
+      properties:
+        overallScore:     { type: integer, minimum: 0, maximum: 100 }
+        readinessStatus:  { type: string, enum: [ready, needs_work, incomplete] }
+        requiredScore:    { type: integer, minimum: 0, maximum: 100 }
+        optionalScore:    { type: integer, minimum: 0, maximum: 100 }
+        missingRequired:  { type: array, items: { type: string } }
+        missingOptional:  { type: array, items: { type: string } }
+        warnings:         { type: array, items: { type: string } }
+        serviceCode:      { $ref: '#/components/schemas/GraphicDesignServiceCode' }
+
+    GdBriefValidationResult:
+      type: object
+      required: [ready, score, threshold, missingRequired, missingOptional, warnings]
+      properties:
+        ready:           { type: boolean }
+        score:           { type: integer }
+        threshold:       { type: integer }
+        missingRequired: { type: array, items: { type: string } }
+        missingOptional: { type: array, items: { type: string } }
+        warnings:        { type: array, items: { type: string } }
+
+    PrintDimensionOverrideRequest:
+      type: object
+      properties:
+        widthMm:  { type: number }
+        heightMm: { type: number }
+        bleedMm:  { type: number }
+
+    PrintDimensionValidationResult:
+      type: object
+      required: [valid, errors, spec]
+      properties:
+        valid:  { type: boolean }
+        errors: { type: array, items: { type: string } }
+        spec:   { $ref: '#/components/schemas/PrintSpec' }
+
+    GdQcScoreRequest:
+      type: object
+      required: [generationReport, serviceCode, packageTier]
+      properties:
+        generationReport:
+          type: object
+          additionalProperties: true
+        serviceCode:  { $ref: '#/components/schemas/GraphicDesignServiceCode' }
+        packageTier:  { $ref: '#/components/schemas/GdPackageTier' }
+
+    GdQcDimensions:
+      type: object
+      required: [briefCompleteness, printSpecValid, textFitting, bleedSafeArea, deliverableCount]
+      properties:
+        briefCompleteness: { type: integer }
+        printSpecValid:    { type: integer }
+        textFitting:       { type: integer }
+        bleedSafeArea:     { type: integer }
+        deliverableCount:  { type: integer }
+
+    GdQcResult:
+      type: object
+      required: [qcScore, passed, dimensions, warnings, serviceCode, packageTier, threshold]
+      properties:
+        qcScore:     { type: integer, minimum: 0, maximum: 100 }
+        passed:      { type: boolean }
+        threshold:   { type: integer }
+        dimensions:  { $ref: '#/components/schemas/GdQcDimensions' }
+        warnings:    { type: array, items: { type: string } }
+        serviceCode: { $ref: '#/components/schemas/GraphicDesignServiceCode' }
+        packageTier: { $ref: '#/components/schemas/GdPackageTier' }
+
+    GdDeliverableEntry:
+      type: object
+      required: [fileName, purpose, mimeType]
+      properties:
+        fileName:       { type: string }
+        purpose:        { type: string, enum: [primary, variant, source, export, thumbnail, manifest, qc] }
+        mimeType:       { type: string }
+        storagePath:    { type: string }
+        fileSizeBytes:  { type: integer }
+        checksumSha256: { type: string }
+        widthPx:        { type: integer }
+        heightPx:       { type: integer }
+
+    GdDeliverableManifest:
+      type: object
+      required: [version, gdRequestId, serviceCode, packageTier, exportedAt, tenantId, deliverables, qcSummary]
+      properties:
+        version:      { type: string, enum: ['1.0'] }
+        gdRequestId:  { type: integer }
+        serviceCode:  { $ref: '#/components/schemas/GraphicDesignServiceCode' }
+        packageTier:  { $ref: '#/components/schemas/GdPackageTier' }
+        exportedAt:   { type: string, format: date-time }
+        tenantId:     { type: string }
+        deliverables:
+          type: array
+          items: { $ref: '#/components/schemas/GdDeliverableEntry' }
+        printSpec:
+          oneOf:
+            - $ref: '#/components/schemas/PrintSpec'
+            - type: 'null'
+        qcSummary:
+          type: object
+          required: [score, passed, warnings]
+          properties:
+            score:    { type: integer }
+            passed:   { type: boolean }
+            warnings: { type: array, items: { type: string } }
+
+    GdManifestBuildRequest:
+      type: object
+      required: [gdRequestId, serviceCode, packageTier, tenantId, producedFiles, qcSummary]
+      properties:
+        gdRequestId:   { type: integer }
+        serviceCode:   { $ref: '#/components/schemas/GraphicDesignServiceCode' }
+        packageTier:   { $ref: '#/components/schemas/GdPackageTier' }
+        tenantId:      { type: string }
+        producedFiles:
+          type: array
+          items:
+            type: object
+            required: [fileName]
+            properties:
+              fileName:       { type: string }
+              storagePath:    { type: string }
+              fileSizeBytes:  { type: integer }
+              checksumSha256: { type: string }
+              widthPx:        { type: integer }
+              heightPx:       { type: integer }
+        qcSummary:
+          type: object
+          required: [score, passed, warnings]
+          properties:
+            score:    { type: integer }
+            passed:   { type: boolean }
+            warnings: { type: array, items: { type: string } }

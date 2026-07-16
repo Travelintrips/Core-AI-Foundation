@@ -1,0 +1,205 @@
+{
+  "team": 15,
+  "domain": "graphic-design",
+  "version": "1.0.0",
+  "services": [
+    {
+      "code": "logo",
+      "label": "Logo Concept",
+      "colorMode": "rgb",
+      "digitalOnly": true,
+      "deliverables": [
+        { "fileName": "logo-primary.svg",        "purpose": "primary",   "mimeType": "image/svg+xml" },
+        { "fileName": "logo-primary.png",        "purpose": "export",    "mimeType": "image/png",  "widthPx": 1024, "heightPx": 1024 },
+        { "fileName": "logo-horizontal.png",     "purpose": "variant",   "mimeType": "image/png",  "widthPx": 2048, "heightPx": 512  },
+        { "fileName": "logo-icon.png",           "purpose": "variant",   "mimeType": "image/png",  "widthPx": 512,  "heightPx": 512  },
+        { "fileName": "logo-white.png",          "purpose": "variant",   "mimeType": "image/png",  "widthPx": 1024, "heightPx": 1024 },
+        { "fileName": "logo-black.png",          "purpose": "variant",   "mimeType": "image/png",  "widthPx": 1024, "heightPx": 1024 },
+        { "fileName": "brand-colors.json",       "purpose": "source",    "mimeType": "application/json" },
+        { "fileName": "usage-guidelines.pdf",    "purpose": "export",    "mimeType": "application/pdf" },
+        { "fileName": "manifest.json",           "purpose": "manifest",  "mimeType": "application/json" },
+        { "fileName": "qc-report.json",          "purpose": "qc",        "mimeType": "application/json" }
+      ]
+    },
+    {
+      "code": "business-card",
+      "label": "Business Card",
+      "colorMode": "cmyk",
+      "digitalOnly": false,
+      "printWidthMm": 88.9,
+      "printHeightMm": 50.8,
+      "bleedMm": 3.175,
+      "safeAreaMm": 3.175,
+      "resolutionDpi": 300,
+      "deliverables": [
+        { "fileName": "business-card-front.pdf", "purpose": "primary",   "mimeType": "application/pdf" },
+        { "fileName": "business-card-back.pdf",  "purpose": "variant",   "mimeType": "application/pdf" },
+        { "fileName": "business-card-preview.png","purpose": "thumbnail","mimeType": "image/png" },
+        { "fileName": "business-card.ai",        "purpose": "source",    "mimeType": "application/postscript" },
+        { "fileName": "manifest.json",           "purpose": "manifest",  "mimeType": "application/json" },
+        { "fileName": "qc-report.json",          "purpose": "qc",        "mimeType": "application/json" }
+      ]
+    },
+    {
+      "code": "letterhead",
+      "label": "Letterhead",
+      "colorMode": "cmyk",
+      "digitalOnly": false,
+      "printWidthMm": 210,
+      "printHeightMm": 297,
+      "bleedMm": 3,
+      "safeAreaMm": 10,
+      "resolutionDpi": 300,
+      "deliverables": [
+        { "fileName": "letterhead.pdf",          "purpose": "primary",   "mimeType": "application/pdf" },
+        { "fileName": "letterhead.docx",         "purpose": "export",    "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+        { "fileName": "letterhead-preview.png",  "purpose": "thumbnail", "mimeType": "image/png" },
+        { "fileName": "letterhead.ai",           "purpose": "source",    "mimeType": "application/postscript" },
+        { "fileName": "manifest.json",           "purpose": "manifest",  "mimeType": "application/json" },
+        { "fileName": "qc-report.json",          "purpose": "qc",        "mimeType": "application/json" }
+      ]
+    },
+    {
+      "code": "flyer",
+      "label": "Flyer",
+      "colorMode": "cmyk",
+      "digitalOnly": false,
+      "printWidthMm": 210,
+      "printHeightMm": 297,
+      "bleedMm": 3,
+      "safeAreaMm": 5,
+      "resolutionDpi": 300,
+      "deliverables": [
+        { "fileName": "flyer-front.pdf",         "purpose": "primary",   "mimeType": "application/pdf" },
+        { "fileName": "flyer-back.pdf",          "purpose": "variant",   "mimeType": "application/pdf" },
+        { "fileName": "flyer-preview.png",       "purpose": "thumbnail", "mimeType": "image/png" },
+        { "fileName": "flyer.ai",                "purpose": "source",    "mimeType": "application/postscript" },
+        { "fileName": "manifest.json",           "purpose": "manifest",  "mimeType": "application/json" },
+        { "fileName": "qc-report.json",          "purpose": "qc",        "mimeType": "application/json" }
+      ]
+    },
+    {
+      "code": "poster",
+      "label": "Poster",
+      "colorMode": "cmyk",
+      "digitalOnly": false,
+      "printWidthMm": 420,
+      "printHeightMm": 594,
+      "bleedMm": 5,
+      "safeAreaMm": 10,
+      "resolutionDpi": 300,
+      "deliverables": [
+        { "fileName": "poster.pdf",              "purpose": "primary",   "mimeType": "application/pdf" },
+        { "fileName": "poster-preview.png",      "purpose": "thumbnail", "mimeType": "image/png" },
+        { "fileName": "poster-digital.jpg",      "purpose": "export",    "mimeType": "image/jpeg" },
+        { "fileName": "poster.ai",               "purpose": "source",    "mimeType": "application/postscript" },
+        { "fileName": "manifest.json",           "purpose": "manifest",  "mimeType": "application/json" },
+        { "fileName": "qc-report.json",          "purpose": "qc",        "mimeType": "application/json" }
+      ]
+    },
+    {
+      "code": "banner",
+      "label": "Banner",
+      "colorMode": "cmyk",
+      "digitalOnly": false,
+      "printWidthMm": 850,
+      "printHeightMm": 2000,
+      "bleedMm": 10,
+      "safeAreaMm": 50,
+      "resolutionDpi": 150,
+      "deliverables": [
+        { "fileName": "banner-rollup.pdf",       "purpose": "primary",   "mimeType": "application/pdf" },
+        { "fileName": "banner-horizontal.pdf",   "purpose": "variant",   "mimeType": "application/pdf" },
+        { "fileName": "banner-preview.png",      "purpose": "thumbnail", "mimeType": "image/png" },
+        { "fileName": "banner.ai",               "purpose": "source",    "mimeType": "application/postscript" },
+        { "fileName": "manifest.json",           "purpose": "manifest",  "mimeType": "application/json" },
+        { "fileName": "qc-report.json",          "purpose": "qc",        "mimeType": "application/json" }
+      ]
+    },
+    {
+      "code": "brochure",
+      "label": "Brochure",
+      "colorMode": "cmyk",
+      "digitalOnly": false,
+      "printWidthMm": 210,
+      "printHeightMm": 297,
+      "bleedMm": 3,
+      "safeAreaMm": 5,
+      "resolutionDpi": 300,
+      "deliverables": [
+        { "fileName": "brochure.pdf",            "purpose": "primary",   "mimeType": "application/pdf" },
+        { "fileName": "brochure-preview.png",    "purpose": "thumbnail", "mimeType": "image/png" },
+        { "fileName": "brochure-digital.pdf",    "purpose": "export",    "mimeType": "application/pdf" },
+        { "fileName": "brochure.ai",             "purpose": "source",    "mimeType": "application/postscript" },
+        { "fileName": "manifest.json",           "purpose": "manifest",  "mimeType": "application/json" },
+        { "fileName": "qc-report.json",          "purpose": "qc",        "mimeType": "application/json" }
+      ]
+    },
+    {
+      "code": "social-media",
+      "label": "Social Media Kit",
+      "colorMode": "rgb",
+      "digitalOnly": true,
+      "deliverables": [
+        { "fileName": "instagram-post.png",      "purpose": "primary",   "mimeType": "image/png",  "widthPx": 1080, "heightPx": 1080 },
+        { "fileName": "instagram-story.png",     "purpose": "variant",   "mimeType": "image/png",  "widthPx": 1080, "heightPx": 1920 },
+        { "fileName": "facebook-cover.png",      "purpose": "variant",   "mimeType": "image/png",  "widthPx": 851,  "heightPx": 315  },
+        { "fileName": "facebook-post.png",       "purpose": "variant",   "mimeType": "image/png",  "widthPx": 1200, "heightPx": 630  },
+        { "fileName": "linkedin-banner.png",     "purpose": "variant",   "mimeType": "image/png",  "widthPx": 1584, "heightPx": 396  },
+        { "fileName": "twitter-header.png",      "purpose": "variant",   "mimeType": "image/png",  "widthPx": 1500, "heightPx": 500  },
+        { "fileName": "manifest.json",           "purpose": "manifest",  "mimeType": "application/json" },
+        { "fileName": "qc-report.json",          "purpose": "qc",        "mimeType": "application/json" }
+      ]
+    },
+    {
+      "code": "certificate",
+      "label": "Certificate",
+      "colorMode": "cmyk",
+      "digitalOnly": false,
+      "printWidthMm": 297,
+      "printHeightMm": 210,
+      "bleedMm": 3,
+      "safeAreaMm": 10,
+      "resolutionDpi": 300,
+      "deliverables": [
+        { "fileName": "certificate.pdf",         "purpose": "primary",   "mimeType": "application/pdf" },
+        { "fileName": "certificate-preview.png", "purpose": "thumbnail", "mimeType": "image/png" },
+        { "fileName": "certificate-blank.pdf",   "purpose": "export",    "mimeType": "application/pdf" },
+        { "fileName": "certificate.ai",          "purpose": "source",    "mimeType": "application/postscript" },
+        { "fileName": "manifest.json",           "purpose": "manifest",  "mimeType": "application/json" },
+        { "fileName": "qc-report.json",          "purpose": "qc",        "mimeType": "application/json" }
+      ]
+    },
+    {
+      "code": "stationery",
+      "label": "Stationery Set",
+      "colorMode": "cmyk",
+      "digitalOnly": false,
+      "printWidthMm": 210,
+      "printHeightMm": 297,
+      "bleedMm": 3,
+      "safeAreaMm": 10,
+      "resolutionDpi": 300,
+      "deliverables": [
+        { "fileName": "letterhead.pdf",          "purpose": "primary",   "mimeType": "application/pdf" },
+        { "fileName": "business-card-front.pdf", "purpose": "variant",   "mimeType": "application/pdf" },
+        { "fileName": "envelope-dl.pdf",         "purpose": "variant",   "mimeType": "application/pdf" },
+        { "fileName": "with-compliments.pdf",    "purpose": "variant",   "mimeType": "application/pdf" },
+        { "fileName": "stationery-preview.png",  "purpose": "thumbnail", "mimeType": "image/png" },
+        { "fileName": "stationery.ai",           "purpose": "source",    "mimeType": "application/postscript" },
+        { "fileName": "manifest.json",           "purpose": "manifest",  "mimeType": "application/json" },
+        { "fileName": "qc-report.json",          "purpose": "qc",        "mimeType": "application/json" }
+      ]
+    }
+  ],
+  "portInterfaces": {
+    "team7":  { "role": "brand-dna",          "contract": "BrandDnaContext" },
+    "team8":  { "role": "asset-intelligence", "contract": "AssetIntelligenceResult" },
+    "team9":  { "role": "image-generation",   "contract": "ImageGenerationJob" },
+    "team10": { "role": "template-engine",    "contract": "TemplateRenderRequest" },
+    "team11": { "role": "pdf-export",         "contract": "PdfExportJob" },
+    "team12": { "role": "zip-delivery",       "contract": "ZipManifest" },
+    "team13": { "role": "qc-orchestration",   "contract": "QcRunResult" },
+    "team14": { "role": "job-dispatch",       "contract": "JobDispatchRequest" }
+  }
+}
