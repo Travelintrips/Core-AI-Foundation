@@ -110,6 +110,7 @@ const NAV_SECTIONS = [
       { href: "/creative-intelligence", label: "Creative Intelligence", icon: Brain },
       { href: "/template-marketplace", label: "Template Marketplace", icon: LayoutTemplate },
       { href: "/template-engine", label: "Template Engine", icon: Layers },
+      { href: "/design-templates", label: "Design Templates", icon: LayoutTemplate },
     ],
   },
   {
