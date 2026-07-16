@@ -148,3 +148,42 @@ Re-verified again 2026-07-14 (latest): same wipe pattern (`node_modules` + regis
 - Use `pnpm` — never npm or yarn
 - Do not use `drizzle-kit push` for new tables (proposes dropping schema); write DDL by hand instead
 - Import from `@workspace/api-zod` in api-server routes — never import `zod/v4` directly
+
+## Global Parallel Development Rules (Multi-Team)
+
+These rules apply to all feature work on this project. They govern how individual teams contribute without breaking shared infrastructure.
+
+### Branch & Ownership
+- Work on a feature branch only — never directly on `main`, never merge to `main`
+- Never touch files owned by other teams
+
+### Shared File Lock — NEVER modify these:
+- `App.tsx` (root), layout/sidebar/navigation, route registry (`routes/index.ts`)
+- Root `openapi.yaml`, Orval config, root `package.json`, `pnpm-lock.yaml`
+- Barrel exports: `schema/index.ts`, api-client index, api-zod index, generated files
+- Shared services: `jobWorkerService.ts`, `creativeWorkflowRunner.ts`, worker/workflow/migration/seed registries
+- Shared infrastructure: Event Bus registry, status enums, Queue/Dispatcher/Payment/Review/Commercial core
+
+  → If a feature needs changes to these files: **create an Integration Request + Integration Manifest** instead. Team 24 handles all global wiring.
+
+### Forbidden Commands (do not run globally):
+- `pnpm run build:generated`, `clean:generated`, `rebuild:all`
+- `drizzle-kit push`, any migration to shared/production DB
+- Global formatter/autofix, root dependency changes, global codegen
+
+  ✅ Allowed: test/typecheck/build/lint for your own domain only
+
+### Database
+- Write migration drafts to `integration/migrations/<team-code>.sql` only — do NOT run them
+- Drafts must be additive (no DROP, TRUNCATE, destructive rename, or changes to other teams' tables)
+- Use `CREATE INDEX IF NOT EXISTS`
+
+### OpenAPI
+- Write fragments to `integration/openapi/<team-code>.yaml` — do NOT modify root `openapi.yaml`
+- Fragments must include: paths, schemas, unique operationIds, validation, security, documented errors
+
+### Integration Manifest
+- Every team must produce `integration/manifests/<team-code>.json` with: team, branch, ownedFolders, routesToMount, pagesToRegister, sidebarItems, openapiFragment, migrationDrafts, seedDrafts, dependenciesRequested, eventsPublished, eventsConsumed, workerJobTypesRequested, sharedTypesRequested, integrationOrder, knownRisks
+
+### Final Report (per team, before handoff)
+Branch, commit hash, files changed, domain architecture, local routes, DB draft, OpenAPI fragment, tests, build/typecheck result, screenshots (if UI), integration manifest, known limitations, external blockers.
