@@ -1,0 +1,172 @@
+GLOBAL PARALLEL DEVELOPMENT RULES — WAJIB
+
+Anda bekerja pada branch feature milik tim sendiri.
+
+DILARANG bekerja langsung pada main.
+DILARANG merge ke main.
+DILARANG mengubah file milik tim lain.
+
+==================================================
+SHARED FILE LOCK
+==================================================
+
+DILARANG mengubah:
+
+- seluruh App.tsx utama
+- layout/sidebar/navigation utama
+- routes/index.ts atau router registry utama
+- root openapi.yaml
+- Orval configuration
+- root package.json
+- pnpm-lock.yaml
+- schema/index.ts atau barrel export bersama
+- api-client index/barrel
+- api-zod index/barrel
+- generated files
+- jobWorkerService.ts
+- creativeWorkflowRunner.ts
+- worker registry
+- workflow registry
+- migration registry
+- seed master
+- shared Event Bus registry
+- shared status enum
+- Queue core
+- Dispatcher core
+- Payment core
+- Review core
+- Commercial core
+
+Jika fitur membutuhkan perubahan pada file tersebut:
+
+JANGAN mengubahnya.
+
+Buat Integration Request dan Integration Manifest.
+
+==================================================
+DILARANG MENJALANKAN
+==================================================
+
+- pnpm run build:generated
+- pnpm run clean:generated
+- pnpm run rebuild:all
+- drizzle-kit push
+- migration ke shared database
+- migration ke production
+- formatter seluruh repository
+- autofix seluruh monorepo
+- perubahan root dependency
+- global codegen
+
+Tim hanya boleh menjalankan:
+
+- test domain sendiri
+- typecheck package/domain sendiri
+- build package/domain sendiri
+- lint file yang disentuh
+- unit test dan integration test lokal
+
+==================================================
+DATABASE
+==================================================
+
+Buat migration draft saja:
+
+integration/migrations/<team-code>.sql
+
+Migration harus:
+
+- additive
+- tidak DROP
+- tidak TRUNCATE
+- tidak rename destructive
+- tidak mengubah tabel domain lain
+- memakai CREATE INDEX IF NOT EXISTS
+- belum dijalankan
+
+==================================================
+OPENAPI
+==================================================
+
+Jangan mengubah root openapi.yaml.
+
+Buat fragment:
+
+integration/openapi/<team-code>.yaml
+
+Fragment harus mempunyai:
+
+- paths
+- schemas
+- operationId unik
+- validation
+- security
+- documented errors
+
+==================================================
+GLOBAL WIRING
+==================================================
+
+Jangan mendaftarkan sendiri:
+
+- router ke route registry
+- page ke App.tsx
+- item ke sidebar
+- worker case ke worker registry
+- event ke registry global
+- schema ke barrel export
+- dependency ke root package
+- migration ke DB
+
+Team 24 akan melakukan semua integrasi tersebut.
+
+==================================================
+INTEGRATION MANIFEST
+==================================================
+
+Wajib membuat:
+
+integration/manifests/<team-code>.json
+
+Minimal berisi:
+
+{
+  "team": "",
+  "branch": "",
+  "ownedFolders": [],
+  "routesToMount": [],
+  "pagesToRegister": [],
+  "sidebarItems": [],
+  "openapiFragment": "",
+  "migrationDrafts": [],
+  "seedDrafts": [],
+  "dependenciesRequested": [],
+  "eventsPublished": [],
+  "eventsConsumed": [],
+  "workerJobTypesRequested": [],
+  "sharedTypesRequested": [],
+  "integrationOrder": [],
+  "knownRisks": []
+}
+
+==================================================
+FINAL REPORT
+==================================================
+
+Berikan:
+
+- branch
+- commit hash
+- files changed
+- domain architecture
+- routes lokal
+- database draft
+- OpenAPI fragment
+- tests
+- build/typecheck domain
+- screenshots jika ada UI
+- integration manifest
+- known limitations
+- external blockers
+
+Jangan merge ke main.
