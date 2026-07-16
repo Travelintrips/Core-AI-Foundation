@@ -9,6 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 // ── Admin API ─────────────────────────────────────────────────────────────────
 
@@ -229,6 +234,12 @@ export default function TemplateMarketplacePage() {
   const [searchQ, setSearchQ] = useState("");
   const [sortBy, setSortBy] = useState<"popular" | "newest" | "conversions" | "selections">("popular");
 
+  // ── Create Template Dialog ────────────────────────────────────────────────────
+  const [showCreate, setShowCreate] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createCategory, setCreateCategory] = useState("Company Profile");
+  const [createDesc, setCreateDesc] = useState("");
+
   // ── Queries ───────────────────────────────────────────────────────────────────
 
   const galleryQuery = useQuery<TemplateList>({
@@ -283,6 +294,20 @@ export default function TemplateMarketplacePage() {
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 
+  const createMutation = useMutation({
+    mutationFn: () => apiFetch("/api/ai/templates", {
+      method: "POST",
+      body: JSON.stringify({ name: createName.trim(), category: createCategory, description: createDesc.trim() || undefined }),
+    }),
+    onSuccess: () => {
+      toast({ title: "Template created", description: `"${createName.trim()}" berhasil dibuat sebagai draft.` });
+      qc.invalidateQueries({ queryKey: ["admin-templates"] });
+      setShowCreate(false);
+      setCreateName(""); setCreateCategory("Company Profile"); setCreateDesc("");
+    },
+    onError: (e: Error) => toast({ title: "Gagal membuat template", description: e.message, variant: "destructive" }),
+  });
+
   const templates = galleryQuery.data?.items ?? [];
   const total = galleryQuery.data?.total ?? 0;
   const stats = analyticsQuery.data;
@@ -302,7 +327,7 @@ export default function TemplateMarketplacePage() {
             Master Template Library · AI Matching · Analytics · Smart Evolution
           </p>
         </div>
-        <Button size="sm">
+        <Button size="sm" onClick={() => setShowCreate(true)}>
           <Plus className="w-4 h-4 mr-1.5" />Add Template
         </Button>
       </div>
@@ -586,6 +611,64 @@ export default function TemplateMarketplacePage() {
           </div>
         </div>
       )}
+
+      {/* ── Create Template Dialog ─────────────────────────────────────────── */}
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5 text-violet-400" />
+              Buat Template Baru
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-name">Nama Template <span className="text-rose-500">*</span></Label>
+              <Input
+                id="tpl-name"
+                placeholder="misal: Company Profile Modern 2025"
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-category">Kategori</Label>
+              <select
+                id="tpl-category"
+                className="w-full border border-border rounded-md px-3 py-2 text-sm bg-background"
+                value={createCategory}
+                onChange={(e) => setCreateCategory(e.target.value)}
+              >
+                {CATEGORIES.filter((c) => c !== "All").map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-desc">Deskripsi <span className="text-muted-foreground text-xs">(opsional)</span></Label>
+              <Textarea
+                id="tpl-desc"
+                placeholder="Deskripsikan kegunaan template ini…"
+                rows={3}
+                value={createDesc}
+                onChange={(e) => setCreateDesc(e.target.value)}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">Template akan disimpan sebagai <strong>draft</strong>. Publish setelah selesai diedit.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreate(false)} disabled={createMutation.isPending}>
+              Batal
+            </Button>
+            <Button
+              onClick={() => createMutation.mutate()}
+              disabled={!createName.trim() || createMutation.isPending}
+            >
+              {createMutation.isPending ? "Menyimpan…" : "Buat Template"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
