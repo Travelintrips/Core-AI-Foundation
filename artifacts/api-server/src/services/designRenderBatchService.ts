@@ -6,7 +6,7 @@
  * syncBatchProgress() is kept as an alias for backward compatibility.
  */
 
-import { eq, and, desc, sql, inArray, count } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   designRenderBatchesTable,
@@ -29,6 +29,26 @@ import {
   BatchLifecycleError,
 } from "./design-batch/batchLifecycle.js";
 import { batchConfig } from "./design-batch/config.js";
+
+// ── Tenant Fairness Helpers ───────────────────────────────────────────────────
+
+/**
+ * Count non-terminal batches for a tenant.
+ * Terminal statuses: completed, partially_failed, failed, cancelled.
+ * Used to enforce maxActiveBatchesPerTenant before allowing a batch to start.
+ */
+export async function countActiveBatchesForTenant(tenantId: string): Promise<number> {
+  const [row] = await db
+    .select({ cnt: sql<number>`count(*)::int` })
+    .from(designRenderBatchesTable)
+    .where(
+      and(
+        eq(designRenderBatchesTable.tenantId, tenantId),
+        sql`${designRenderBatchesTable.status} NOT IN ('completed','partially_failed','failed','cancelled')`,
+      ),
+    );
+  return row?.cnt ?? 0;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -254,6 +274,30 @@ export async function startBatch(batchId: number, tenantId: string, startedBy: s
 
   assertBatchTransition(batch.status, "queued");
 
+  // ── Tenant active-batch cap ──────────────────────────────────────────────
+  // Count BEFORE transitioning. The batch being started is currently in
+  // a non-terminal state (draft), so it is already counted; subtract 1
+  // to represent the slots used by *other* active batches.
+  const activeBatches = await countActiveBatchesForTenant(tenantId);
+  const maxActive = batchConfig.maxActiveBatchesPerTenant; // default 5
+  // activeBatches includes the current draft batch itself, so the cap is
+  // "fewer than maxActive other active batches already exist."
+  // Effective check: if activeBatches (including this one in draft) would
+  // exceed the limit once it moves to queued, reject it.
+  // Since draft is non-terminal it is already counted — reject if
+  // (activeBatches - 1) >= maxActive (i.e., there are already maxActive
+  // others in non-terminal state).
+  const otherActiveBatches = Math.max(0, activeBatches - 1); // exclude self (draft)
+  if (otherActiveBatches >= maxActive) {
+    throw Object.assign(
+      new Error(
+        `Tenant '${tenantId}' already has ${otherActiveBatches} active batch(es) ` +
+          `(limit: ${maxActive}). Complete or cancel existing batches before starting new ones.`,
+      ),
+      { code: "BATCH_LIMIT_EXCEEDED", tenantId, activeBatches: otherActiveBatches, limit: maxActive },
+    );
+  }
+
   await db
     .update(designRenderBatchesTable)
     .set({ status: "queued", startedAt: new Date() })
@@ -454,20 +498,17 @@ export async function reconcileDesignRenderBatch(
   let newStatus: string = batch.status;
   const isCancelling = batch.status === "cancelling" || batch.status === "cancelled";
 
-  if (isBatchTerminal(batch.status) && batch.status !== "cancelling") {
-    // Terminal: don't change unless reconciliation reveals a drift
-    // Allow fixing partially_failed ↔ failed drift
-    if (batch.status !== "cancelling") {
-      if (queued === 0 && processing === 0) {
-        if (isCancelling || cancelled > 0) {
-          newStatus = "cancelled";
-        } else if (failed === 0) {
-          newStatus = "completed";
-        } else if (completed === 0) {
-          newStatus = "failed";
-        } else {
-          newStatus = "partially_failed";
-        }
+  if (isBatchTerminal(batch.status)) {
+    // Terminal: allow fixing partially_failed ↔ failed drift if items changed.
+    if (queued === 0 && processing === 0) {
+      if (isCancelling || cancelled > 0) {
+        newStatus = "cancelled";
+      } else if (failed === 0) {
+        newStatus = "completed";
+      } else if (completed === 0) {
+        newStatus = "failed";
+      } else {
+        newStatus = "partially_failed";
       }
     }
   } else if (queued > 0 || processing > 0) {

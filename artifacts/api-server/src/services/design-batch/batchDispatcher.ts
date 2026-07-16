@@ -20,7 +20,7 @@
  *   and use atomic claim to avoid double-processing.
  */
 
-import { eq, and, sql, inArray, count } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   designRenderBatchesTable,
@@ -66,22 +66,6 @@ async function countActiveItemsForTenant(tenantId: string): Promise<number> {
       and(
         eq(designRenderItemsTable.tenantId, tenantId),
         inArray(designRenderItemsTable.status, ["queued", "processing"]),
-      ),
-    );
-  return row?.cnt ?? 0;
-}
-
-/**
- * Count active (non-terminal) batches for a tenant.
- */
-async function countActiveBatchesForTenant(tenantId: string): Promise<number> {
-  const [row] = await db
-    .select({ cnt: sql<number>`count(*)::int` })
-    .from(designRenderBatchesTable)
-    .where(
-      and(
-        eq(designRenderBatchesTable.tenantId, tenantId),
-        sql`status NOT IN ('completed','partially_failed','failed','cancelled')`,
       ),
     );
   return row?.cnt ?? 0;
