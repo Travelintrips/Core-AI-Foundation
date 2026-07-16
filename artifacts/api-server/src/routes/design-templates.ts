@@ -209,7 +209,13 @@ router.post("/ai/design-templates/:id/versions", async (req, res) => {
     const body = createVersionRequestSchema.safeParse(req.body);
     if (!body.success) return res.status(400).json({ error: "Validation failed", issues: body.error.issues });
 
-    const version = await createVersion(id, ctx.tenantId, body.data, actorId(req));
+    const version = await createVersion({
+      templateId: id,
+      tenantId:   ctx.tenantId,
+      templateJson: body.data.templateJson as unknown as DesignTemplate,
+      changelog:  body.data.changelog,
+      createdBy:  actorId(req),
+    });
     res.status(201).json(version);
   } catch (err) {
     return handleError(res, err);
@@ -263,21 +269,24 @@ router.post("/ai/design-templates/:id/preview", async (req, res) => {
     if (!previewData) return res.status(404).json({ error: "Template or version not found" });
 
     const format = (body.data.format ?? "png") as RenderFormat;
-    validateOutputDimensions(body.data.data?.width, body.data.data?.height);
+    const outputWidth  = typeof body.data.data?.["width"]  === "number" ? (body.data.data["width"]  as number) : undefined;
+    const outputHeight = typeof body.data.data?.["height"] === "number" ? (body.data.data["height"] as number) : undefined;
 
+    const t0Preview = Date.now();
     const result = await renderTemplatePreview({
       template:          previewData.template as unknown as DesignTemplate,
-      templateVersionId: previewData.versionId,
+      templateVersionId: previewData.version.id,
       data:              body.data.data ?? {},
       format,
       tenantId:          ctx.tenantId,
-      outputWidth:       body.data.data?.width,
-      outputHeight:      body.data.data?.height,
+      outputWidth,
+      outputHeight,
     });
+    const previewDurationMs = Date.now() - t0Preview;
 
     res.set("Content-Type", result.mimeType);
     res.set("Content-Length", String(result.buffer.length));
-    res.set("X-Render-Duration-Ms", String(result.renderDurationMs));
+    res.set("X-Render-Duration-Ms", String(previewDurationMs));
     if (result.warnings.length > 0) {
       res.set("X-Render-Warnings", JSON.stringify(result.warnings.map((w) => w.code)));
     }
@@ -302,7 +311,7 @@ router.post("/ai/design-templates/:id/render", async (req, res) => {
 
     const format = (body.data.format ?? "png") as RenderFormat;
     const data = body.data.data ?? {};
-    const versionId = previewData.versionId;
+    const versionId = previewData.version.id;
 
     // Idempotency check
     const inputHash = computeInputHash(versionId, data);
@@ -334,8 +343,8 @@ router.post("/ai/design-templates/:id/render", async (req, res) => {
       templateVersionId: versionId,
       name:              `single-render-${Date.now()}`,
       format,
-      width:             body.data.data?.width,
-      height:            body.data.data?.height,
+      width:             typeof body.data.data?.["width"]  === "number" ? (body.data.data["width"]  as number) : undefined,
+      height:            typeof body.data.data?.["height"] === "number" ? (body.data.data["height"] as number) : undefined,
       items:             [data],
       requestedBy:       actorId(req),
     });

@@ -112,7 +112,7 @@ export async function encodeSvg(
     };
   }
 
-  if (format === "jpg" || format === "jpeg") {
+  if (format === "jpg") {
     try {
       const svgBuffer = Buffer.from(svgString, "utf8");
       const { finalWidth, finalHeight } = validateOutputDimensions(canvasWidth, canvasHeight, opts?.outputWidth, opts?.outputHeight);
@@ -189,7 +189,6 @@ export function mimeForFormat(format: RenderFormat): string {
   switch (format) {
     case "png":  return "image/png";
     case "jpg":  return "image/jpeg";
-    case "jpeg": return "image/jpeg";
     case "webp": return "image/webp";
     case "pdf":  return "application/pdf";
   }
@@ -197,6 +196,5 @@ export function mimeForFormat(format: RenderFormat): string {
 
 /** Derive the file extension for a given render format. */
 export function extForFormat(format: RenderFormat): string {
-  if (format === "jpeg") return "jpg";
   return format;
 }

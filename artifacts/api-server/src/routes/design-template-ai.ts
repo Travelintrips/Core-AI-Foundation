@@ -102,14 +102,11 @@ router.post("/ai/design-templates/ai-assist", async (req, res) => {
 
     // Create version (draft)
     const version = await createVersion({
-      tenantId:         ctx.tenantId,
-      templateId:       template.id,
-      templateJson:     templateJson as any,
-      canvasWidth:      proposal.template.canvas.width,
-      canvasHeight:     proposal.template.canvas.height,
-      variables:        proposal.variables,
-      changeNote:       `AI generated from prompt: "${body.data.prompt.slice(0, 100)}"`,
-      createdBy:        actor,
+      tenantId:     ctx.tenantId,
+      templateId:   template.id,
+      templateJson: templateJson as any,
+      changelog:    `AI generated from prompt: "${body.data.prompt.slice(0, 100)}"`,
+      createdBy:    actor,
     });
 
     logger.info(
