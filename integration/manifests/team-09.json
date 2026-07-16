@@ -1,0 +1,63 @@
+{
+  "team": "09",
+  "branch": "feature/09-pattern-library",
+  "ownedFolders": [
+    "artifacts/api-server/src/services/design-patterns/",
+    "artifacts/api-server/src/routes/design-patterns/",
+    "artifacts/ai-platform/src/pages/design-patterns/"
+  ],
+  "routesToMount": [
+    {
+      "mountPath": "/design-patterns",
+      "routerFile": "artifacts/api-server/src/routes/design-patterns/index.ts",
+      "description": "Pattern Library REST API — GET endpoints public, POST/PATCH/DELETE require adminAuth",
+      "note": "Import as: import designPatternsRouter from './design-patterns/index.js'; app.use('/design-patterns', designPatternsRouter);"
+    }
+  ],
+  "pagesToRegister": [
+    {
+      "routePath": "/design-patterns",
+      "componentFile": "artifacts/ai-platform/src/pages/design-patterns/index.tsx",
+      "componentName": "DesignPatternsPage",
+      "description": "Pattern Library admin UI — grid search, create/edit/archive, variants, compat"
+    }
+  ],
+  "sidebarItems": [
+    {
+      "label": "Pattern Library",
+      "path": "/design-patterns",
+      "icon": "Grid3X3",
+      "group": "Design",
+      "description": "Pattern, motif, texture & decorative asset registry"
+    }
+  ],
+  "openapiFragment": "integration/openapi/team-09.yaml",
+  "migrationDrafts": [
+    {
+      "file": "integration/migrations/team-09.sql",
+      "tables": [
+        "ai_platform.design_patterns",
+        "ai_platform.design_pattern_variants",
+        "ai_platform.design_pattern_compat"
+      ],
+      "status": "DRAFT — not run",
+      "notes": "All additive. IF NOT EXISTS on all CREATE statements. No DROP, no TRUNCATE. Safe to rerun."
+    }
+  ],
+  "seedDrafts": [],
+  "dependenciesRequested": [],
+  "eventsPublished": [],
+  "eventsConsumed": [],
+  "workerJobTypesRequested": [],
+  "sharedTypesRequested": [],
+  "integrationOrder": [
+    "1. Run migration: integration/migrations/team-09.sql",
+    "2. Mount router at /design-patterns in artifacts/api-server/src/routes/index.ts",
+    "3. Register page + sidebar item in artifacts/ai-platform/src/App.tsx"
+  ],
+  "knownRisks": [
+    "Routes use raw pool queries — Drizzle schema tables are not registered in lib/db. Team 24 should add Drizzle schema definitions if needed for cross-domain joins.",
+    "Full-text search relies on GIN index (idx_design_patterns_fts) created in migration — search will be slow until migration is run.",
+    "Licensing guard is a heuristic trademark blocklist — review and extend the BLOCKED_TERMS list for additional brands."
+  ]
+}
