@@ -334,6 +334,302 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
     },
   },
 
+  // ── IG-STORY-MODERN-001 ──────────────────────────────────────────────────
+  {
+    templateCode: "IG-STORY-MODERN-001",
+    name: "Modern Story Gradient",
+    description: "Instagram Story vertikal dengan gradasi ungu-biru. Cocok untuk pengumuman, event, dan konten brand premium.",
+    category: "Instagram Story",
+    style: "Modern",
+    industry: null,
+    tags: ["instagram", "story", "vertical", "gradient", "modern", "announcement"],
+    canvasWidth: 1080,
+    canvasHeight: 1920,
+    canvasState: {
+      width: 1080,
+      height: 1920,
+      background: "#0F0A2E",
+      elements: [
+        // Gradient top circle
+        { id: "grad-circle-1", name: "Gradient Circle 1", type: "rect", x: -200, y: -200, width: 900, height: 900, rotation: 0, opacity: 0.6, zIndex: 1, locked: true, visible: true, fill: "#7C3AED", borderRadius: 450 },
+        // Bottom gradient circle
+        { id: "grad-circle-2", name: "Gradient Circle 2", type: "rect", x: 300, y: 1200, width: 1000, height: 1000, rotation: 0, opacity: 0.4, zIndex: 1, locked: true, visible: true, fill: "#2563EB", borderRadius: 500 },
+        // Center glow
+        { id: "center-glow", name: "Center Glow", type: "rect", x: 140, y: 600, width: 800, height: 800, rotation: 0, opacity: 0.15, zIndex: 2, locked: true, visible: true, fill: "#A78BFA", borderRadius: 400 },
+        // Top label pill
+        { id: "top-pill", name: "Label Atas", type: "rect", x: 340, y: 200, width: 400, height: 56, rotation: 0, opacity: 1, zIndex: 3, locked: false, visible: true, fill: "rgba(124,58,237,0.6)", borderRadius: 28 },
+        { id: "top-pill-text", name: "Text Label Atas", type: "text", x: 340, y: 214, width: 400, height: 28, rotation: 0, opacity: 1, zIndex: 4, locked: false, visible: true, text: "✨ SPECIAL ANNOUNCEMENT", fontSize: 16, fontFamily: "Inter", fontWeight: "700", textAlign: "center", color: "#E9D5FF" },
+        // Thin horizontal rule
+        { id: "rule-top", name: "Rule Atas", type: "line", x: 200, y: 330, width: 680, height: 1, rotation: 0, opacity: 0.3, zIndex: 4, locked: true, visible: true, fill: "#A78BFA", stroke: "#A78BFA", strokeWidth: 1 },
+        // Main headline — EDITABLE
+        { id: "headline", name: "Headline Utama", type: "text", x: 60, y: 380, width: 960, height: 400, rotation: 0, opacity: 1, zIndex: 5, locked: false, visible: true, text: "JUDUL\nBESAR\nSTORY", fontSize: 130, fontFamily: "Inter", fontWeight: "900", textAlign: "center", color: "#FFFFFF" },
+        // Sub headline — EDITABLE
+        { id: "sub-headline", name: "Sub Headline", type: "text", x: 80, y: 830, width: 920, height: 80, rotation: 0, opacity: 0.85, zIndex: 6, locked: false, visible: true, text: "Deskripsi singkat yang menjelaskan konteks story ini kepada audiens.", fontSize: 30, fontFamily: "Inter", fontWeight: "400", textAlign: "center", color: "#C4B5FD" },
+        // Divider with diamond
+        { id: "divider-line", name: "Divider", type: "line", x: 200, y: 960, width: 680, height: 1, rotation: 0, opacity: 0.3, zIndex: 7, locked: true, visible: true, fill: "#A78BFA", stroke: "#A78BFA", strokeWidth: 1 },
+        { id: "diamond", name: "Diamond", type: "rect", x: 524, y: 952, width: 16, height: 16, rotation: 45, opacity: 0.8, zIndex: 8, locked: true, visible: true, fill: "#A78BFA" },
+        // Image/content placeholder
+        { id: "content-card", name: "Content Card", type: "rect", x: 80, y: 1010, width: 920, height: 600, rotation: 0, opacity: 0.15, zIndex: 9, locked: false, visible: true, fill: "#FFFFFF", borderRadius: 24 },
+        { id: "content-label", name: "Label Konten", type: "text", x: 80, y: 1260, width: 920, height: 100, rotation: 0, opacity: 0.35, zIndex: 10, locked: true, visible: true, text: "Visual / Gambar Produk", fontSize: 32, fontFamily: "Inter", fontWeight: "300", textAlign: "center", color: "#FFFFFF" },
+        // Brand name bottom — EDITABLE
+        { id: "brand-name", name: "Nama Brand", type: "text", x: 80, y: 1680, width: 920, height: 60, rotation: 0, opacity: 1, zIndex: 11, locked: false, visible: true, text: "NAMA BRAND", fontSize: 36, fontFamily: "Inter", fontWeight: "800", textAlign: "center", color: "#FFFFFF" },
+        // Swipe up CTA
+        { id: "swipe-cta", name: "Swipe Up CTA", type: "text", x: 80, y: 1760, width: 920, height: 50, rotation: 0, opacity: 0.7, zIndex: 12, locked: false, visible: true, text: "👆 Swipe Up untuk Info Lebih Lanjut", fontSize: 24, fontFamily: "Inter", fontWeight: "500", textAlign: "center", color: "#C4B5FD" },
+        // Bottom handle dots
+        { id: "dot1", name: "Dot 1", type: "rect", x: 480, y: 1840, width: 12, height: 12, rotation: 0, opacity: 0.6, zIndex: 13, locked: true, visible: true, fill: "#FFFFFF", borderRadius: 6 },
+        { id: "dot2", name: "Dot 2", type: "rect", x: 502, y: 1840, width: 12, height: 12, rotation: 0, opacity: 0.3, zIndex: 13, locked: true, visible: true, fill: "#FFFFFF", borderRadius: 6 },
+        { id: "dot3", name: "Dot 3", type: "rect", x: 524, y: 1840, width: 12, height: 12, rotation: 0, opacity: 0.3, zIndex: 13, locked: true, visible: true, fill: "#FFFFFF", borderRadius: 6 },
+        { id: "dot4", name: "Dot 4", type: "rect", x: 546, y: 1840, width: 12, height: 12, rotation: 0, opacity: 0.3, zIndex: 13, locked: true, visible: true, fill: "#FFFFFF", borderRadius: 6 },
+        { id: "dot5", name: "Dot 5", type: "rect", x: 568, y: 1840, width: 12, height: 12, rotation: 0, opacity: 0.3, zIndex: 13, locked: true, visible: true, fill: "#FFFFFF", borderRadius: 6 },
+      ],
+    },
+  },
+
+  // ── IG-STORY-PROMO-001 ────────────────────────────────────────────────────
+  {
+    templateCode: "IG-STORY-PROMO-001",
+    name: "Promo Story Merah",
+    description: "Instagram Story promosi dengan desain bold merah-hitam. Cocok untuk flash sale, diskon, dan event spesial.",
+    category: "Instagram Story",
+    style: "Bold",
+    industry: null,
+    tags: ["instagram", "story", "promo", "sale", "bold", "red", "discount"],
+    canvasWidth: 1080,
+    canvasHeight: 1920,
+    canvasState: {
+      width: 1080,
+      height: 1920,
+      background: "#0A0A0A",
+      elements: [
+        // Top red strip
+        { id: "red-strip", name: "Strip Merah Atas", type: "rect", x: 0, y: 0, width: 1080, height: 12, rotation: 0, opacity: 1, zIndex: 1, locked: true, visible: true, fill: "#DC2626" },
+        // Large circle decoration left
+        { id: "circle-left", name: "Circle Kiri", type: "rect", x: -300, y: 400, width: 800, height: 800, rotation: 0, opacity: 0.08, zIndex: 2, locked: true, visible: true, fill: "#DC2626", borderRadius: 400 },
+        // Pre-headline badge
+        { id: "badge", name: "Badge Atas", type: "rect", x: 60, y: 120, width: 300, height: 56, rotation: 0, opacity: 1, zIndex: 3, locked: false, visible: true, fill: "#DC2626", borderRadius: 8 },
+        { id: "badge-text", name: "Text Badge", type: "text", x: 60, y: 135, width: 300, height: 26, rotation: 0, opacity: 1, zIndex: 4, locked: false, visible: true, text: "🔥 FLASH SALE", fontSize: 20, fontFamily: "Inter", fontWeight: "800", textAlign: "center", color: "#FFFFFF" },
+        // Brand name right — EDITABLE
+        { id: "brand-top", name: "Brand Atas Kanan", type: "text", x: 700, y: 132, width: 320, height: 40, rotation: 0, opacity: 0.6, zIndex: 4, locked: false, visible: true, text: "@namabrand", fontSize: 22, fontFamily: "Inter", fontWeight: "600", textAlign: "right", color: "#FFFFFF" },
+        // Discount circle
+        { id: "disc-circle", name: "Lingkaran Diskon", type: "rect", x: 140, y: 280, width: 800, height: 800, rotation: 0, opacity: 1, zIndex: 5, locked: false, visible: true, fill: "#DC2626", borderRadius: 400 },
+        // Discount value — EDITABLE
+        { id: "disc-pct", name: "Persen Diskon", type: "text", x: 140, y: 380, width: 800, height: 500, rotation: 0, opacity: 1, zIndex: 6, locked: false, visible: true, text: "70%", fontSize: 320, fontFamily: "Inter", fontWeight: "900", textAlign: "center", color: "#FFFFFF" },
+        { id: "disc-label", name: "Label Diskon", type: "text", x: 140, y: 850, width: 800, height: 80, rotation: 0, opacity: 1, zIndex: 7, locked: false, visible: true, text: "DISKON", fontSize: 64, fontFamily: "Inter", fontWeight: "800", textAlign: "center", color: "#FFFFFF" },
+        // Product details card — EDITABLE
+        { id: "detail-card", name: "Card Detail", type: "rect", x: 60, y: 1160, width: 960, height: 340, rotation: 0, opacity: 1, zIndex: 8, locked: false, visible: true, fill: "#1A1A1A", borderRadius: 20 },
+        { id: "product-headline", name: "Nama Produk / Promo", type: "text", x: 80, y: 1200, width: 920, height: 80, rotation: 0, opacity: 1, zIndex: 9, locked: false, visible: true, text: "Nama Produk / Promo", fontSize: 44, fontFamily: "Inter", fontWeight: "800", textAlign: "center", color: "#FFFFFF" },
+        { id: "promo-detail", name: "Detail Promo", type: "text", x: 80, y: 1300, width: 920, height: 60, rotation: 0, opacity: 0.7, zIndex: 10, locked: false, visible: true, text: "Berlaku s/d 31 Desember 2025  ·  Min. Pembelian Rp 100.000", fontSize: 22, fontFamily: "Inter", fontWeight: "400", textAlign: "center", color: "#FCA5A5" },
+        { id: "promo-code", name: "Kode Promo", type: "text", x: 80, y: 1380, width: 920, height: 80, rotation: 0, opacity: 1, zIndex: 11, locked: false, visible: true, text: "Kode: FLASH70", fontSize: 36, fontFamily: "Inter", fontWeight: "900", textAlign: "center", color: "#DC2626" },
+        // CTA button
+        { id: "cta-btn", name: "Tombol CTA", type: "rect", x: 200, y: 1580, width: 680, height: 90, rotation: 0, opacity: 1, zIndex: 12, locked: false, visible: true, fill: "#DC2626", borderRadius: 45 },
+        { id: "cta-text", name: "Text CTA", type: "text", x: 200, y: 1604, width: 680, height: 42, rotation: 0, opacity: 1, zIndex: 13, locked: false, visible: true, text: "BELANJA SEKARANG →", fontSize: 28, fontFamily: "Inter", fontWeight: "800", textAlign: "center", color: "#FFFFFF" },
+        // Bottom strip
+        { id: "bottom-strip", name: "Strip Bawah", type: "rect", x: 0, y: 1908, width: 1080, height: 12, rotation: 0, opacity: 1, zIndex: 14, locked: true, visible: true, fill: "#DC2626" },
+      ],
+    },
+  },
+
+  // ── BANNER-WEB-MODERN-001 ─────────────────────────────────────────────────
+  {
+    templateCode: "BANNER-WEB-MODERN-001",
+    name: "Modern Web Banner",
+    description: "Banner web/Facebook horizontal dengan desain modern. Cocok untuk iklan digital, header website, dan promo online.",
+    category: "Banner",
+    style: "Modern",
+    industry: null,
+    tags: ["banner", "web", "facebook", "horizontal", "modern", "ads", "digital"],
+    canvasWidth: 1200,
+    canvasHeight: 630,
+    canvasState: {
+      width: 1200,
+      height: 630,
+      background: "#0D1117",
+      elements: [
+        // Background gradient rect left
+        { id: "bg-grad-left", name: "BG Gradient Kiri", type: "rect", x: 0, y: 0, width: 700, height: 630, rotation: 0, opacity: 1, zIndex: 1, locked: true, visible: true, fill: "#0D1B3E" },
+        // Diagonal separator
+        { id: "diagonal", name: "Separator Diagonal", type: "rect", x: 580, y: 0, width: 200, height: 630, rotation: 0, opacity: 1, zIndex: 2, locked: true, visible: true, fill: "#0F2A5E" },
+        // Right side accent
+        { id: "right-bg", name: "BG Kanan", type: "rect", x: 700, y: 0, width: 500, height: 630, rotation: 0, opacity: 1, zIndex: 1, locked: true, visible: true, fill: "#112244" },
+        // Top accent bar
+        { id: "top-bar", name: "Bar Atas", type: "rect", x: 0, y: 0, width: 1200, height: 6, rotation: 0, opacity: 1, zIndex: 3, locked: true, visible: true, fill: "#3B82F6" },
+        // Blue accent circle
+        { id: "circle-accent", name: "Circle Aksen", type: "rect", x: 620, y: -100, width: 500, height: 500, rotation: 0, opacity: 0.12, zIndex: 3, locked: true, visible: true, fill: "#3B82F6", borderRadius: 250 },
+        // Brand logo area — EDITABLE
+        { id: "logo-area", name: "Area Logo", type: "rect", x: 60, y: 50, width: 180, height: 70, rotation: 0, opacity: 0.15, zIndex: 4, locked: false, visible: true, fill: "#FFFFFF", borderRadius: 10 },
+        { id: "logo-text", name: "Logo / Brand", type: "text", x: 60, y: 67, width: 180, height: 36, rotation: 0, opacity: 1, zIndex: 5, locked: false, visible: true, text: "BRAND", fontSize: 28, fontFamily: "Inter", fontWeight: "900", textAlign: "center", color: "#FFFFFF" },
+        // Tag line — EDITABLE
+        { id: "tagline", name: "Tagline", type: "text", x: 60, y: 160, width: 600, height: 40, rotation: 0, opacity: 0.7, zIndex: 6, locked: false, visible: true, text: "SOLUSI TERBAIK UNTUK BISNIS ANDA", fontSize: 18, fontFamily: "Inter", fontWeight: "600", textAlign: "left", color: "#3B82F6" },
+        // Main headline — EDITABLE
+        { id: "headline", name: "Headline Utama", type: "text", x: 60, y: 210, width: 640, height: 200, rotation: 0, opacity: 1, zIndex: 7, locked: false, visible: true, text: "Tingkatkan\nPenjualan Anda\n3× Lebih Cepat", fontSize: 62, fontFamily: "Inter", fontWeight: "900", textAlign: "left", color: "#FFFFFF" },
+        // CTA button — EDITABLE
+        { id: "cta-btn", name: "Tombol CTA", type: "rect", x: 60, y: 460, width: 260, height: 70, rotation: 0, opacity: 1, zIndex: 8, locked: false, visible: true, fill: "#3B82F6", borderRadius: 35 },
+        { id: "cta-text", name: "Text CTA", type: "text", x: 60, y: 479, width: 260, height: 32, rotation: 0, opacity: 1, zIndex: 9, locked: false, visible: true, text: "Mulai Gratis →", fontSize: 20, fontFamily: "Inter", fontWeight: "700", textAlign: "center", color: "#FFFFFF" },
+        // Right side visual placeholder
+        { id: "right-visual", name: "Visual Kanan", type: "rect", x: 760, y: 80, width: 380, height: 380, rotation: 0, opacity: 0.2, zIndex: 6, locked: false, visible: true, fill: "#FFFFFF", borderRadius: 20 },
+        { id: "right-label", name: "Label Visual", type: "text", x: 760, y: 240, width: 380, height: 80, rotation: 0, opacity: 0.3, zIndex: 7, locked: true, visible: true, text: "Gambar / Visual\nProduk", fontSize: 24, fontFamily: "Inter", fontWeight: "300", textAlign: "center", color: "#FFFFFF" },
+        // Bottom right website — EDITABLE
+        { id: "website", name: "Website", type: "text", x: 760, y: 560, width: 380, height: 40, rotation: 0, opacity: 0.5, zIndex: 8, locked: false, visible: true, text: "www.brand.com", fontSize: 18, fontFamily: "Inter", fontWeight: "400", textAlign: "right", color: "#94A3B8" },
+        // Stats strip
+        { id: "stat1-box", name: "Stat 1", type: "rect", x: 60, y: 545, width: 160, height: 60, rotation: 0, opacity: 0.12, zIndex: 9, locked: false, visible: true, fill: "#FFFFFF", borderRadius: 10 },
+        { id: "stat1-num", name: "Angka 1", type: "text", x: 60, y: 548, width: 160, height: 30, rotation: 0, opacity: 1, zIndex: 10, locked: false, visible: true, text: "10.000+", fontSize: 20, fontFamily: "Inter", fontWeight: "800", textAlign: "center", color: "#3B82F6" },
+        { id: "stat1-lab", name: "Label 1", type: "text", x: 60, y: 578, width: 160, height: 20, rotation: 0, opacity: 0.6, zIndex: 10, locked: false, visible: true, text: "Pengguna Aktif", fontSize: 12, fontFamily: "Inter", fontWeight: "400", textAlign: "center", color: "#FFFFFF" },
+        { id: "stat2-box", name: "Stat 2", type: "rect", x: 240, y: 545, width: 160, height: 60, rotation: 0, opacity: 0.12, zIndex: 9, locked: false, visible: true, fill: "#FFFFFF", borderRadius: 10 },
+        { id: "stat2-num", name: "Angka 2", type: "text", x: 240, y: 548, width: 160, height: 30, rotation: 0, opacity: 1, zIndex: 10, locked: false, visible: true, text: "98%", fontSize: 20, fontFamily: "Inter", fontWeight: "800", textAlign: "center", color: "#3B82F6" },
+        { id: "stat2-lab", name: "Label 2", type: "text", x: 240, y: 578, width: 160, height: 20, rotation: 0, opacity: 0.6, zIndex: 10, locked: false, visible: true, text: "Kepuasan Klien", fontSize: 12, fontFamily: "Inter", fontWeight: "400", textAlign: "center", color: "#FFFFFF" },
+      ],
+    },
+  },
+
+  // ── BANNER-WEB-MINIMAL-001 ────────────────────────────────────────────────
+  {
+    templateCode: "BANNER-WEB-MINIMAL-001",
+    name: "Clean Banner Putih",
+    description: "Banner horizontal minimalis dengan latar putih. Cocok untuk brand premium, skincare, dan lifestyle.",
+    category: "Banner",
+    style: "Minimalist",
+    industry: null,
+    tags: ["banner", "minimal", "white", "clean", "premium", "lifestyle"],
+    canvasWidth: 1200,
+    canvasHeight: 630,
+    canvasState: {
+      width: 1200,
+      height: 630,
+      background: "#FAFAFA",
+      elements: [
+        // Left color block
+        { id: "left-block", name: "Blok Kiri", type: "rect", x: 0, y: 0, width: 80, height: 630, rotation: 0, opacity: 1, zIndex: 1, locked: true, visible: true, fill: "#1A1A1A" },
+        // Right image area
+        { id: "right-img", name: "Area Gambar Kanan", type: "rect", x: 640, y: 0, width: 560, height: 630, rotation: 0, opacity: 1, zIndex: 1, locked: false, visible: true, fill: "#E5E7EB" },
+        { id: "right-label", name: "Label Gambar", type: "text", x: 640, y: 265, width: 560, height: 100, rotation: 0, opacity: 0.35, zIndex: 2, locked: true, visible: true, text: "Gambar Produk / Visual", fontSize: 24, fontFamily: "Inter", fontWeight: "300", textAlign: "center", color: "#555555" },
+        // Content left area
+        { id: "brand", name: "Nama Brand", type: "text", x: 120, y: 100, width: 480, height: 60, rotation: 0, opacity: 1, zIndex: 3, locked: false, visible: true, text: "BRAND NAME", fontSize: 32, fontFamily: "Inter", fontWeight: "900", textAlign: "left", color: "#1A1A1A" },
+        // Thin accent bar
+        { id: "accent-bar", name: "Bar Aksen", type: "rect", x: 120, y: 172, width: 60, height: 4, rotation: 0, opacity: 1, zIndex: 4, locked: true, visible: true, fill: "#1A1A1A", borderRadius: 2 },
+        // Headline — EDITABLE
+        { id: "headline", name: "Headline", type: "text", x: 120, y: 200, width: 480, height: 200, rotation: 0, opacity: 1, zIndex: 5, locked: false, visible: true, text: "Keindahan\nAlami untuk\nHidup Anda", fontSize: 58, fontFamily: "Georgia", fontWeight: "400", textAlign: "left", color: "#1A1A1A" },
+        // Subtext — EDITABLE
+        { id: "subtext", name: "Deskripsi", type: "text", x: 120, y: 420, width: 460, height: 80, rotation: 0, opacity: 0.6, zIndex: 6, locked: false, visible: true, text: "Produk premium dari bahan alami pilihan, diformulasikan untuk kulit Anda.", fontSize: 20, fontFamily: "Georgia", fontWeight: "400", textAlign: "left", color: "#555555" },
+        // CTA — EDITABLE
+        { id: "cta-btn", name: "Tombol CTA", type: "rect", x: 120, y: 520, width: 200, height: 64, rotation: 0, opacity: 1, zIndex: 7, locked: false, visible: true, fill: "#1A1A1A", borderRadius: 0 },
+        { id: "cta-text", name: "Text CTA", type: "text", x: 120, y: 538, width: 200, height: 28, rotation: 0, opacity: 1, zIndex: 8, locked: false, visible: true, text: "Lihat Produk", fontSize: 16, fontFamily: "Inter", fontWeight: "700", textAlign: "center", color: "#FFFFFF" },
+        // Small website text
+        { id: "website", name: "Website", type: "text", x: 340, y: 536, width: 260, height: 32, rotation: 0, opacity: 0.4, zIndex: 8, locked: false, visible: true, text: "www.brand.com", fontSize: 14, fontFamily: "Inter", fontWeight: "400", textAlign: "left", color: "#1A1A1A" },
+      ],
+    },
+  },
+
+  // ── LINKEDIN-POST-CORP-001 ────────────────────────────────────────────────
+  {
+    templateCode: "LINKEDIN-POST-CORP-001",
+    name: "LinkedIn Professional",
+    description: "Post LinkedIn profesional bernuansa navy dan emas. Ideal untuk insight bisnis, pencapaian perusahaan, dan konten thought leadership.",
+    category: "LinkedIn Post",
+    style: "Professional",
+    industry: null,
+    tags: ["linkedin", "professional", "corporate", "navy", "gold", "business", "b2b"],
+    canvasWidth: 1200,
+    canvasHeight: 1200,
+    canvasState: {
+      width: 1200,
+      height: 1200,
+      background: "#0A1628",
+      elements: [
+        // Gold top border
+        { id: "gold-top", name: "Border Emas Atas", type: "rect", x: 0, y: 0, width: 1200, height: 8, rotation: 0, opacity: 1, zIndex: 1, locked: true, visible: true, fill: "#C9A84C" },
+        // Subtle background grid
+        { id: "grid-h1", name: "Grid H1", type: "line", x: 0, y: 300, width: 1200, height: 1, rotation: 0, opacity: 0.05, zIndex: 2, locked: true, visible: true, fill: "#FFFFFF", stroke: "#FFFFFF", strokeWidth: 1 },
+        { id: "grid-h2", name: "Grid H2", type: "line", x: 0, y: 600, width: 1200, height: 1, rotation: 0, opacity: 0.05, zIndex: 2, locked: true, visible: true, fill: "#FFFFFF", stroke: "#FFFFFF", strokeWidth: 1 },
+        { id: "grid-h3", name: "Grid H3", type: "line", x: 0, y: 900, width: 1200, height: 1, rotation: 0, opacity: 0.05, zIndex: 2, locked: true, visible: true, fill: "#FFFFFF", stroke: "#FFFFFF", strokeWidth: 1 },
+        { id: "grid-v1", name: "Grid V1", type: "line", x: 400, y: 0, width: 1, height: 1200, rotation: 0, opacity: 0.05, zIndex: 2, locked: true, visible: true, fill: "#FFFFFF", stroke: "#FFFFFF", strokeWidth: 1 },
+        { id: "grid-v2", name: "Grid V2", type: "line", x: 800, y: 0, width: 1, height: 1200, rotation: 0, opacity: 0.05, zIndex: 2, locked: true, visible: true, fill: "#FFFFFF", stroke: "#FFFFFF", strokeWidth: 1 },
+        // Large geometric accent
+        { id: "geo-accent", name: "Geometric Aksen", type: "rect", x: 700, y: -200, width: 800, height: 800, rotation: 30, opacity: 0.06, zIndex: 3, locked: true, visible: true, fill: "#C9A84C" },
+        // Company logo/name area — EDITABLE
+        { id: "logo-bg", name: "Logo BG", type: "rect", x: 80, y: 80, width: 220, height: 80, rotation: 0, opacity: 0.15, zIndex: 4, locked: false, visible: true, fill: "#C9A84C", borderRadius: 12 },
+        { id: "logo-text", name: "Logo / Brand", type: "text", x: 80, y: 96, width: 220, height: 48, rotation: 0, opacity: 1, zIndex: 5, locked: false, visible: true, text: "BRAND", fontSize: 32, fontFamily: "Inter", fontWeight: "900", textAlign: "center", color: "#C9A84C" },
+        // LinkedIn badge
+        { id: "li-badge", name: "Badge LinkedIn", type: "rect", x: 1060, y: 88, width: 80, height: 56, rotation: 0, opacity: 0.9, zIndex: 4, locked: true, visible: true, fill: "#0A66C2", borderRadius: 8 },
+        { id: "li-text", name: "LI Text", type: "text", x: 1060, y: 102, width: 80, height: 28, rotation: 0, opacity: 1, zIndex: 5, locked: true, visible: true, text: "in", fontSize: 32, fontFamily: "Inter", fontWeight: "900", textAlign: "center", color: "#FFFFFF" },
+        // Eyebrow label — EDITABLE
+        { id: "eyebrow", name: "Label Kategori", type: "text", x: 80, y: 230, width: 800, height: 50, rotation: 0, opacity: 0.7, zIndex: 6, locked: false, visible: true, text: "INSIGHT BISNIS  ·  KUARTAL 4 2025", fontSize: 20, fontFamily: "Inter", fontWeight: "700", textAlign: "left", color: "#C9A84C" },
+        // Gold accent bar
+        { id: "gold-bar", name: "Bar Emas", type: "rect", x: 80, y: 292, width: 80, height: 6, rotation: 0, opacity: 1, zIndex: 7, locked: true, visible: true, fill: "#C9A84C", borderRadius: 3 },
+        // Main headline — EDITABLE
+        { id: "headline", name: "Headline Utama", type: "text", x: 80, y: 320, width: 1040, height: 260, rotation: 0, opacity: 1, zIndex: 8, locked: false, visible: true, text: "5 Strategi yang\nMembawa Bisnis Kami\nTumbuh 200% dalam 1 Tahun", fontSize: 70, fontFamily: "Inter", fontWeight: "800", textAlign: "left", color: "#FFFFFF" },
+        // Content divider
+        { id: "content-divider", name: "Divider Konten", type: "line", x: 80, y: 630, width: 1040, height: 1, rotation: 0, opacity: 0.2, zIndex: 9, locked: true, visible: true, fill: "#C9A84C", stroke: "#C9A84C", strokeWidth: 1 },
+        // Key point 1 — EDITABLE
+        { id: "kp1-dot", name: "Dot KP1", type: "rect", x: 80, y: 658, width: 16, height: 16, rotation: 0, opacity: 1, zIndex: 10, locked: true, visible: true, fill: "#C9A84C", borderRadius: 8 },
+        { id: "kp1", name: "Key Point 1", type: "text", x: 116, y: 650, width: 1004, height: 50, rotation: 0, opacity: 0.9, zIndex: 10, locked: false, visible: true, text: "01  ·  Fokus pada customer retention, bukan hanya akuisisi", fontSize: 24, fontFamily: "Inter", fontWeight: "500", textAlign: "left", color: "#E2E8F0" },
+        // Key point 2 — EDITABLE
+        { id: "kp2-dot", name: "Dot KP2", type: "rect", x: 80, y: 718, width: 16, height: 16, rotation: 0, opacity: 1, zIndex: 10, locked: true, visible: true, fill: "#C9A84C", borderRadius: 8 },
+        { id: "kp2", name: "Key Point 2", type: "text", x: 116, y: 710, width: 1004, height: 50, rotation: 0, opacity: 0.9, zIndex: 10, locked: false, visible: true, text: "02  ·  Investasi di automation dan digital tools", fontSize: 24, fontFamily: "Inter", fontWeight: "500", textAlign: "left", color: "#E2E8F0" },
+        // Key point 3 — EDITABLE
+        { id: "kp3-dot", name: "Dot KP3", type: "rect", x: 80, y: 778, width: 16, height: 16, rotation: 0, opacity: 1, zIndex: 10, locked: true, visible: true, fill: "#C9A84C", borderRadius: 8 },
+        { id: "kp3", name: "Key Point 3", type: "text", x: 116, y: 770, width: 1004, height: 50, rotation: 0, opacity: 0.9, zIndex: 10, locked: false, visible: true, text: "03  ·  Bangun ekosistem partner strategis", fontSize: 24, fontFamily: "Inter", fontWeight: "500", textAlign: "left", color: "#E2E8F0" },
+        // Key point 4 — EDITABLE
+        { id: "kp4-dot", name: "Dot KP4", type: "rect", x: 80, y: 838, width: 16, height: 16, rotation: 0, opacity: 1, zIndex: 10, locked: true, visible: true, fill: "#C9A84C", borderRadius: 8 },
+        { id: "kp4", name: "Key Point 4", type: "text", x: 116, y: 830, width: 1004, height: 50, rotation: 0, opacity: 0.9, zIndex: 10, locked: false, visible: true, text: "04  ·  Data-driven decision making di setiap level", fontSize: 24, fontFamily: "Inter", fontWeight: "500", textAlign: "left", color: "#E2E8F0" },
+        // Key point 5 — EDITABLE
+        { id: "kp5-dot", name: "Dot KP5", type: "rect", x: 80, y: 898, width: 16, height: 16, rotation: 0, opacity: 1, zIndex: 10, locked: true, visible: true, fill: "#C9A84C", borderRadius: 8 },
+        { id: "kp5", name: "Key Point 5", type: "text", x: 116, y: 890, width: 1004, height: 50, rotation: 0, opacity: 0.9, zIndex: 10, locked: false, visible: true, text: "05  ·  Culture of continuous learning & innovation", fontSize: 24, fontFamily: "Inter", fontWeight: "500", textAlign: "left", color: "#E2E8F0" },
+        // Bottom separator
+        { id: "bottom-sep", name: "Separator Bawah", type: "line", x: 80, y: 980, width: 1040, height: 1, rotation: 0, opacity: 0.2, zIndex: 11, locked: true, visible: true, fill: "#FFFFFF", stroke: "#FFFFFF", strokeWidth: 1 },
+        // Author / CTA — EDITABLE
+        { id: "author", name: "Nama Penulis / CTA", type: "text", x: 80, y: 1010, width: 700, height: 60, rotation: 0, opacity: 1, zIndex: 12, locked: false, visible: true, text: "Oleh: Nama Anda  ·  CEO & Founder", fontSize: 28, fontFamily: "Inter", fontWeight: "600", textAlign: "left", color: "#FFFFFF" },
+        { id: "cta", name: "CTA Engagement", type: "text", x: 80, y: 1070, width: 700, height: 50, rotation: 0, opacity: 0.6, zIndex: 12, locked: false, visible: true, text: "💬 Bagikan strategi bisnis Anda di komentar!", fontSize: 22, fontFamily: "Inter", fontWeight: "400", textAlign: "left", color: "#94A3B8" },
+        // Hashtags — EDITABLE
+        { id: "hashtags", name: "Hashtags", type: "text", x: 80, y: 1130, width: 1040, height: 40, rotation: 0, opacity: 0.5, zIndex: 12, locked: false, visible: true, text: "#BisnisIndonesia #Entrepreneur #Leadership #Growth #Startup", fontSize: 18, fontFamily: "Inter", fontWeight: "400", textAlign: "left", color: "#3B82F6" },
+        // Bottom gold border
+        { id: "gold-bottom", name: "Border Emas Bawah", type: "rect", x: 0, y: 1192, width: 1200, height: 8, rotation: 0, opacity: 1, zIndex: 13, locked: true, visible: true, fill: "#C9A84C" },
+      ],
+    },
+  },
+
+  // ── LINKEDIN-POST-MINIMAL-001 ─────────────────────────────────────────────
+  {
+    templateCode: "LINKEDIN-POST-MINIMAL-001",
+    name: "LinkedIn Minimalist",
+    description: "Post LinkedIn bersih dengan desain minimalis hitam-putih. Cocok untuk tips, quote, dan konten edukasi.",
+    category: "LinkedIn Post",
+    style: "Minimalist",
+    industry: null,
+    tags: ["linkedin", "minimal", "clean", "quote", "tips", "education", "b2b"],
+    canvasWidth: 1200,
+    canvasHeight: 1200,
+    canvasState: {
+      width: 1200,
+      height: 1200,
+      background: "#FFFFFF",
+      elements: [
+        // Left thick black bar
+        { id: "left-bar", name: "Bar Kiri", type: "rect", x: 0, y: 0, width: 16, height: 1200, rotation: 0, opacity: 1, zIndex: 1, locked: true, visible: true, fill: "#1A1A1A" },
+        // Bottom thick bar
+        { id: "bottom-bar", name: "Bar Bawah", type: "rect", x: 0, y: 1184, width: 1200, height: 16, rotation: 0, opacity: 1, zIndex: 1, locked: true, visible: true, fill: "#1A1A1A" },
+        // Large quote mark
+        { id: "quote-mark", name: "Tanda Kutip", type: "text", x: 60, y: 60, width: 200, height: 200, rotation: 0, opacity: 0.08, zIndex: 2, locked: true, visible: true, text: '"', fontSize: 300, fontFamily: "Georgia", fontWeight: "400", textAlign: "left", color: "#1A1A1A" },
+        // Category badge — EDITABLE
+        { id: "category", name: "Kategori", type: "text", x: 80, y: 180, width: 400, height: 40, rotation: 0, opacity: 0.5, zIndex: 3, locked: false, visible: true, text: "TIPS & INSIGHT  ·  2025", fontSize: 18, fontFamily: "Inter", fontWeight: "700", textAlign: "left", color: "#1A1A1A" },
+        // Thin separator
+        { id: "sep", name: "Separator", type: "rect", x: 80, y: 234, width: 80, height: 4, rotation: 0, opacity: 1, zIndex: 4, locked: true, visible: true, fill: "#1A1A1A", borderRadius: 2 },
+        // Main content/headline — EDITABLE
+        { id: "headline", name: "Headline / Quote Utama", type: "text", x: 80, y: 270, width: 1040, height: 400, rotation: 0, opacity: 1, zIndex: 5, locked: false, visible: true, text: "Bisnis yang baik\nbukan hanya soal profit,\ntapi soal dampak\nyang kita berikan.", fontSize: 72, fontFamily: "Georgia", fontWeight: "400", textAlign: "left", color: "#1A1A1A" },
+        // Sub content — EDITABLE
+        { id: "subcontent", name: "Sub Konten / Deskripsi", type: "text", x: 80, y: 710, width: 1040, height: 160, rotation: 0, opacity: 0.6, zIndex: 6, locked: false, visible: true, text: "Setiap keputusan bisnis harus mempertimbangkan nilai jangka panjang — bukan hanya angka di laporan keuangan, tapi dampak nyata terhadap karyawan, pelanggan, dan komunitas.", fontSize: 26, fontFamily: "Georgia", fontWeight: "400", textAlign: "left", color: "#555555" },
+        // Divider
+        { id: "content-div", name: "Divider Konten", type: "line", x: 80, y: 920, width: 1040, height: 1, rotation: 0, opacity: 0.15, zIndex: 7, locked: true, visible: true, fill: "#1A1A1A", stroke: "#1A1A1A", strokeWidth: 1 },
+        // Profile / author — EDITABLE
+        { id: "author-circle", name: "Avatar Placeholder", type: "rect", x: 80, y: 960, width: 80, height: 80, rotation: 0, opacity: 0.1, zIndex: 8, locked: false, visible: true, fill: "#1A1A1A", borderRadius: 40 },
+        { id: "author-init", name: "Initial Avatar", type: "text", x: 80, y: 983, width: 80, height: 34, rotation: 0, opacity: 0.4, zIndex: 9, locked: true, visible: true, text: "NA", fontSize: 22, fontFamily: "Inter", fontWeight: "800", textAlign: "center", color: "#1A1A1A" },
+        { id: "author-name", name: "Nama Penulis", type: "text", x: 180, y: 968, width: 700, height: 40, rotation: 0, opacity: 1, zIndex: 9, locked: false, visible: true, text: "Nama Anda", fontSize: 28, fontFamily: "Inter", fontWeight: "700", textAlign: "left", color: "#1A1A1A" },
+        { id: "author-title", name: "Jabatan / Perusahaan", type: "text", x: 180, y: 1010, width: 700, height: 36, rotation: 0, opacity: 0.5, zIndex: 9, locked: false, visible: true, text: "CEO · PT Nama Perusahaan Anda", fontSize: 22, fontFamily: "Inter", fontWeight: "400", textAlign: "left", color: "#555555" },
+        // Hashtags — EDITABLE
+        { id: "hashtags", name: "Hashtags", type: "text", x: 80, y: 1100, width: 1040, height: 50, rotation: 0, opacity: 0.45, zIndex: 10, locked: false, visible: true, text: "#Leadership #Bisnis #Entrepreneur #MindsetBisnis #Indonesia", fontSize: 20, fontFamily: "Inter", fontWeight: "400", textAlign: "left", color: "#1A1A1A" },
+      ],
+    },
+  },
+
   // ── LOGO-TECH-MODERN-001 ──────────────────────────────────────────────────
   {
     templateCode: "LOGO-TECH-MODERN-001",
