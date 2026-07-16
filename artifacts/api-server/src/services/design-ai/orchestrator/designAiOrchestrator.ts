@@ -19,9 +19,9 @@ import crypto from "crypto";
 import { runDiscoveryPipeline, DiscoveryPipelineError } from "../agents/discovery/index.js";
 import { runArtDirectorQaAgent } from "../agents/qa/artDirectorQaAgent.js";
 import { adaptDiscoveryOutput } from "./adapters/discoveryAdapter.js";
-import { runDesignPipelineStub } from "./adapters/designAdapter.js";
-import { runComponentPipelineStub } from "./adapters/componentAdapter.js";
-import { runEngineeringPipelineStub } from "./adapters/engineeringAdapter.js";
+import { runDesignAdapter } from "./adapters/designAdapter.js";
+import { runComponentAdapter } from "./adapters/componentAdapter.js";
+import { runEngineeringAdapter, type EngineeringAdapterOptions } from "./adapters/engineeringAdapter.js";
 import { runQaGate } from "./qaGate.js";
 import { routeRevision } from "./revisionRouter.js";
 import { runRevisionLoop, MAX_REVISION_CYCLES } from "./revisionLoop.js";
@@ -111,7 +111,7 @@ export async function generateDesignTemplate(
       stages = markStageRunning(stages, stage);
     }
 
-    design = await runDesignPipelineStub(discovery);
+    design = await runDesignAdapter(discovery);
 
     for (const stage of ["layout-architect","composition-designer","typography-designer","color-designer","decoration-designer"] as const) {
       stages = markStageComplete(stages, stage, "success");
@@ -130,7 +130,7 @@ export async function generateDesignTemplate(
       stages = markStageRunning(stages, stage);
     }
 
-    components = await runComponentPipelineStub(discovery, design);
+    components = await runComponentAdapter(discovery, design);
 
     for (const stage of ["component-builder","variable-designer","asset-planner"] as const) {
       stages = markStageComplete(stages, stage, "success");
@@ -149,7 +149,8 @@ export async function generateDesignTemplate(
       stages = markStageRunning(stages, stage);
     }
 
-    engineering = await runEngineeringPipelineStub(discovery, design, components);
+    const engOpts: EngineeringAdapterOptions = { tenantId: input.tenantId, actorId: input.actorId };
+    engineering = await runEngineeringAdapter(discovery, design, components, engOpts);
 
     for (const stage of ["json-architect","validator-initial","optimizer","validator-final"] as const) {
       stages = markStageComplete(stages, stage, "success");
@@ -197,8 +198,8 @@ export async function generateDesignTemplate(
       stages = markStageRunning(stages, "revision-router");
       stages = markStageComplete(stages, "revision-router", "success");
 
-      // Stub: re-run engineering + return same input (real teams would rerun agents here)
-      const updatedEngineering = await runEngineeringPipelineStub(discovery, design, components);
+      // Re-run engineering pipeline for revision cycle
+      const updatedEngineering = await runEngineeringAdapter(discovery, design, components, { tenantId: input.tenantId, actorId: input.actorId });
       stages = markStageRunning(stages, "art-director-qa");
 
       return { ...baseQaInput, engineering: updatedEngineering };

@@ -50,8 +50,10 @@ export function proposalToEngineeringInput(proposal: AiTemplateProposal): Engine
 
   // ── Design (Team 2 analog) ────────────────────────────────────────────────
   // Extract color palette from the existing template elements
-  const bgShape = t.elements.find((el: RawElement) => el.type === "shape" && el.zIndex === 0) as any;
-  const firstText = t.elements.find((el: RawElement) => el.type === "text") as any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const elements = t.elements as any[];
+  const bgShape  = elements.find(el => el.type === "shape" && (el as any).zIndex === 0) as any;
+  const firstText = elements.find(el => el.type === "text") as any;
 
   const design: DesignTeamOutput = {
     templateName: t.name,
@@ -77,26 +79,27 @@ export function proposalToEngineeringInput(proposal: AiTemplateProposal): Engine
   };
 
   // ── Components (Team 3 analog) ────────────────────────────────────────────
-  const componentPlan: ComponentTeamOutput["componentPlan"] = t.elements.map((el: RawElement) => {
-    const name = (el as any).name ?? el.type;
+  const componentPlan: ComponentTeamOutput["componentPlan"] = elements.map((el) => {
+    // elements is cast to any[] above; el is any
+    const name = el.name ?? el.type;
     const purpose = inferPurpose(name, el.type);
     let variableKey: string | undefined;
 
     // Extract variable key from binding
     if (el.type === "text" || el.type === "qrcode") {
-      const c = (el as any).content;
+      const c = el.content;
       if (c && typeof c === "object" && "binding" in c) variableKey = c.binding?.variableKey;
     }
     if (el.type === "image") {
-      const s = (el as any).src;
+      const s = el.src;
       if (s && typeof s === "object" && "binding" in s) variableKey = s.binding?.variableKey;
     }
 
     return {
-      id: el.id,
+      id:            el.id,
       componentType: el.type as DesignElement["type"],
       purpose,
-      suggestedContent: el.type === "text" && typeof (el as any).content === "string" ? (el as any).content : undefined,
+      suggestedContent: el.type === "text" && typeof el.content === "string" ? el.content : undefined,
       variableKey,
       suggestedPosition: { x: el.x, y: el.y },
       suggestedSize:     { width: el.width, height: el.height },
