@@ -149,3 +149,26 @@ Re-verified again 2026-07-14 (latest): same wipe pattern (`node_modules` + regis
 - Use `pnpm` — never npm or yarn
 - Do not use `drizzle-kit push` for new tables (proposes dropping schema); write DDL by hand instead
 - Import from `@workspace/api-zod` in api-server routes — never import `zod/v4` directly
+
+## Global Parallel Development Rules (Standing — apply to all work)
+
+This project uses a **multi-team parallel development model**. All work must follow these rules:
+
+### Branch discipline
+- Work only on the team's own feature branch. NEVER work directly on main. NEVER merge to main.
+
+### Shared File Lock — NEVER edit
+`App.tsx`, layout/sidebar/navigation, root router registry, root `openapi.yaml`, Orval config, root `package.json`, `pnpm-lock.yaml`, shared barrel exports (`schema/index.ts`, api-client index, api-zod index), generated files, `jobWorkerService.ts`, `creativeWorkflowRunner.ts`, worker/workflow/migration/seed registries, Event Bus registry, shared status enums, Queue/Dispatcher/Payment/Review/Commercial cores.
+
+→ If a feature needs a change to any locked file: **do NOT change it** — create an Integration Request + Integration Manifest instead.
+
+### Forbidden commands
+`pnpm run build:generated`, `pnpm run clean:generated`, `pnpm run rebuild:all`, `drizzle-kit push`, any DB migration (shared or production), whole-repo formatter/autofix, global codegen, root dependency changes.
+
+### Required deliverables per feature branch
+- `integration/manifests/<team-code>.json` — integration manifest
+- `integration/migrations/<team-code>.sql` — migration draft (additive only, not executed)
+- `integration/openapi/<team-code>.yaml` — OpenAPI fragment (do not touch root openapi.yaml)
+
+### Global wiring
+Team 24 handles: router registration, App.tsx page registration, sidebar items, worker registry, global event registry, barrel exports, DB migration execution.
