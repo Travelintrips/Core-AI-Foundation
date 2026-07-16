@@ -109,6 +109,8 @@ function AdminRouter() {
         <Route path="/design-studio" component={DesignStudio} />
         <Route path="/design-studio/:id" component={DesignStudioEditor} />
         <Route path="/design-templates/ai-create" component={DesignTemplateAiCreate} />
+        <Route path="/design-templates/:id/versions/:versionId/edit" component={DesignTemplateEditor} />
+        <Route path="/design-templates/:id/edit" component={DesignTemplateEditor} />
         <Route path="/design-templates/:id/editor" component={DesignTemplateEditor} />
         <Route path="/design-templates/:id" component={DesignTemplateDetail} />
         <Route path="/design-templates" component={DesignTemplates} />

@@ -185,7 +185,10 @@ router.post("/ai/design-templates/:id/duplicate", async (req, res) => {
 
 // ── Template Versions ─────────────────────────────────────────────────────────
 
-/** GET /ai/design-templates/:id/versions */
+/** GET /ai/design-templates/:id/versions
+ *  Returns { versions: TemplateVersion[] } — always wrapped so both frontend
+ *  pages can destructure .versions without null-checks on the raw array.
+ */
 router.get("/ai/design-templates/:id/versions", async (req, res) => {
   try {
     const ctx = resolveAuthenticatedTenantContext(req);
@@ -193,7 +196,7 @@ router.get("/ai/design-templates/:id/versions", async (req, res) => {
     if (isNaN(id)) return res.status(400).json({ error: "Invalid template ID" });
 
     const versions = await listVersions(id, ctx.tenantId);
-    res.json(versions);
+    res.json({ versions: versions ?? [] });
   } catch (err) {
     return handleError(res, err);
   }
@@ -254,6 +257,54 @@ router.post("/ai/design-templates/:id/versions/:versionId/publish", async (req, 
 });
 
 // ── Single Render ─────────────────────────────────────────────────────────────
+
+/** GET /ai/design-templates/:id/versions/:versionId/preview
+ *  Returns a PNG preview image of the specified version with empty/default variable data.
+ *  Used by the frontend thumbnail in the version history list.
+ */
+router.get("/ai/design-templates/:id/versions/:versionId/preview", async (req, res) => {
+  try {
+    const ctx = resolveAuthenticatedTenantContext(req);
+    const id = parseInt(String(req.params["id"]), 10);
+    const versionId = parseInt(String(req.params["versionId"]), 10);
+    if (isNaN(id) || isNaN(versionId)) return res.status(400).json({ error: "Invalid ID" });
+
+    const version = await getVersion(versionId, ctx.tenantId);
+    if (!version || version.templateId !== id) {
+      return res.status(404).json({ error: "Version not found" });
+    }
+
+    const template = version.templateJson as unknown as DesignTemplate;
+
+    // Build default variable data so variables don't show as empty
+    const defaultData: Record<string, string | number | boolean | null> = {};
+    if (Array.isArray((template as any).variables)) {
+      for (const v of (template as any).variables) {
+        if (v.defaultValue !== undefined) defaultData[v.key] = v.defaultValue;
+        else if (v.type === "text") defaultData[v.key] = v.label ?? v.key;
+        else if (v.type === "number" || v.type === "currency") defaultData[v.key] = 0;
+        else if (v.type === "boolean") defaultData[v.key] = false;
+      }
+    }
+
+    const result = await renderTemplatePreview({
+      template,
+      templateVersionId: versionId,
+      data: defaultData,
+      format: "png",
+      tenantId: ctx.tenantId,
+      outputWidth:  Math.min((template.canvas?.width  as number) ?? 400, 400),
+      outputHeight: Math.min((template.canvas?.height as number) ?? 300, 300),
+    });
+
+    res.set("Content-Type", result.mimeType);
+    res.set("Content-Length", String(result.buffer.length));
+    res.set("Cache-Control", "public, max-age=300");
+    res.send(result.buffer);
+  } catch (err) {
+    return handleError(res, err);
+  }
+});
 
 /** POST /ai/design-templates/:id/preview */
 router.post("/ai/design-templates/:id/preview", async (req, res) => {

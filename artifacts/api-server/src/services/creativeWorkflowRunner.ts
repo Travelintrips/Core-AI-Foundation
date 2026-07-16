@@ -721,6 +721,8 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
   // If any step failed we treat it as no-document so the project goes to "failed".
   const effectiveDocumentType = anyFailed ? null : documentType;
   const isDocumentProject = effectiveDocumentType !== null;
+  const finalDocumentType = anyFailed ? null : await resolveProjectDocumentType(project);
+  const isDocumentProject = finalDocumentType !== null;
   const presentationType = anyFailed || isDocumentProject ? null : await resolveProjectPresentationType(project);
   const isPresentationProject = presentationType !== null;
   const finalStatus = anyFailed

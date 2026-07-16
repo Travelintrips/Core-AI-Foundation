@@ -427,7 +427,7 @@ export default function DesignTemplateAiCreatePage() {
               <ProposalCard
                 result={result}
                 onRegenerate={handleRegenerate}
-                onOpenEditor={() => navigate(`/template-engine`)}
+                onOpenEditor={() => navigate(`/design-templates/${result!.templateId}/editor`)}
               />
             </div>
           )}

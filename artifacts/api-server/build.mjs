@@ -110,7 +110,6 @@ async function buildAll() {
       "puppeteer-core",
       "electron",
       "qrcode",
-      "zod",
     ],
     sourcemap: "linked",
     plugins: [

@@ -8,7 +8,7 @@ import { useLocation } from "wouter";
 import {
   Plus, Search, Archive, Copy, CheckCircle, Clock,
   Layers, MoreVertical, ImageOff, FileStack, ChevronLeft,
-  AlertTriangle,
+  AlertTriangle, Sparkles, PenLine, Loader2, ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -218,6 +218,7 @@ const STYLES = ["Modern", "Minimal", "Bold", "Elegant", "Playful", "Corporate"];
 function CreateTemplateDialog({ open, onOpenChange, onCreated }: CreateTemplateDialogProps) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [, navigate] = useLocation();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState(CATEGORIES[0]!);
@@ -228,7 +229,7 @@ function CreateTemplateDialog({ open, onOpenChange, onCreated }: CreateTemplateD
       apiFetch<DesignTemplate>("/api/ai/design-templates", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: (t) => {
       qc.invalidateQueries({ queryKey: ["design-templates"] });
-      toast({ title: "Template created", description: `"${t.name}" was created successfully.` });
+      toast({ title: "Template created", description: `"${t.name}" created — sekarang buat version pertamanya.` });
       onCreated(t);
       setName(""); setDescription(""); setCategory(CATEGORIES[0]!); setStyle("");
     },
@@ -240,13 +241,43 @@ function CreateTemplateDialog({ open, onOpenChange, onCreated }: CreateTemplateD
     createMut.mutate({ name: name.trim(), description: description || undefined, category, style: style || undefined });
   }
 
+  function handleAiGenerate() {
+    onOpenChange(false);
+    navigate("/design-templates/ai-create");
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md" data-testid="create-template-dialog">
         <DialogHeader>
           <DialogTitle>New Design Template</DialogTitle>
+          <DialogDescription className="text-xs text-zinc-500">
+            Buat template baru secara manual, atau biarkan AI yang mendesain dari prompt.
+          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+
+        {/* AI path — prominent option */}
+        <button
+          type="button"
+          onClick={handleAiGenerate}
+          className="w-full flex items-start gap-3 rounded-xl border border-indigo-500/40 bg-indigo-500/5 hover:bg-indigo-500/10 transition-colors p-3 text-left"
+        >
+          <div className="mt-0.5 shrink-0 w-8 h-8 rounded-lg bg-indigo-600/20 flex items-center justify-center">
+            <Sparkles className="w-4 h-4 text-indigo-400" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-white">Generate with AI ✨</p>
+            <p className="text-xs text-zinc-400 mt-0.5">Deskripsikan template yang kamu inginkan — AI akan membuat desain lengkap dengan elemen dan variabel.</p>
+          </div>
+        </button>
+
+        <div className="flex items-center gap-2 my-1">
+          <div className="flex-1 h-px bg-zinc-800" />
+          <span className="text-[10px] text-zinc-600 uppercase tracking-wider">atau manual</span>
+          <div className="flex-1 h-px bg-zinc-800" />
+        </div>
+
+        <div className="space-y-3">
           <div>
             <Label className="text-xs text-zinc-400">Template Name *</Label>
             <Input
@@ -304,7 +335,7 @@ function CreateTemplateDialog({ open, onOpenChange, onCreated }: CreateTemplateD
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={!name.trim() || createMut.isPending} data-testid="button-create-template">
-            {createMut.isPending ? "Creating…" : "Create Template"}
+            {createMut.isPending ? "Creating…" : "Create Shell"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -648,9 +679,8 @@ export function DesignTemplateDetailPage({ id }: { id: number }) {
 
   const publishMut = useMutation({
     mutationFn: (versionId: number) =>
-      apiFetch(`/api/ai/design-templates/${id}/publish`, {
+      apiFetch(`/api/ai/design-templates/${id}/versions/${versionId}/publish`, {
         method: "POST",
-        body: JSON.stringify({ versionId }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["design-template", id] });
@@ -660,6 +690,33 @@ export function DesignTemplateDetailPage({ id }: { id: number }) {
       toast({ title: "Version published", description: "The version is now live." });
     },
     onError: (e: Error) => toast({ title: "Publish failed", description: e.message, variant: "destructive" }),
+  });
+
+  const addBlankMut = useMutation({
+    mutationFn: (tpl: DesignTemplate) => {
+      const now = new Date().toISOString();
+      const templateJson = {
+        schemaVersion: "1.0",
+        id:            String(id),
+        tenantId:      "default",
+        name:          tpl.name,
+        description:   tpl.description ?? "",
+        category:      tpl.category ?? "Other",
+        canvas:        { width: 1080, height: 1080, backgroundColor: "#ffffff", unit: "px" },
+        elements:      [],
+        variables:     [],
+        metadata: { createdBy: "admin", createdAt: now, updatedAt: now, version: 1 },
+      };
+      return apiFetch(`/api/ai/design-templates/${id}/versions`, {
+        method: "POST",
+        body: JSON.stringify({ templateJson, changelog: "Blank canvas — start designing in the editor" }),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["design-template-versions", id] });
+      toast({ title: "Blank version created", description: "Open it in the editor to start designing." });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 
   const duplicateMut = useMutation({
@@ -800,12 +857,38 @@ export function DesignTemplateDetailPage({ id }: { id: number }) {
 
         {!versionsQ.isLoading && versions.length === 0 && (
           <div
-            className="flex flex-col items-center py-12 text-center border border-zinc-800 rounded-lg"
+            className="flex flex-col items-center py-10 text-center border border-zinc-800 rounded-lg bg-zinc-900/40"
             data-testid="no-versions"
           >
-            <Layers className="w-10 h-10 text-zinc-700 mb-2" />
-            <p className="text-sm text-zinc-500">No versions yet</p>
-            <p className="text-xs text-zinc-600 mt-1">Create a version to start publishing</p>
+            <Layers className="w-10 h-10 text-zinc-700 mb-3" />
+            <p className="text-sm font-medium text-zinc-400">Belum ada versi</p>
+            <p className="text-xs text-zinc-600 mt-1 mb-5">
+              Template ini belum punya konten. Pilih cara membuat versi pertamanya:
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                size="sm"
+                className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
+                onClick={() => navigate("/design-templates/ai-create")}
+                data-testid="button-generate-ai"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Generate with AI
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                disabled={addBlankMut.isPending || !template}
+                onClick={() => template && addBlankMut.mutate(template)}
+                data-testid="button-blank-version"
+              >
+                {addBlankMut.isPending
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <PenLine className="w-3.5 h-3.5" />}
+                Start with Blank Canvas
+              </Button>
+            </div>
           </div>
         )}
 
@@ -859,7 +942,9 @@ interface VersionRowProps {
 }
 
 function VersionRow({ version, templateId, isActive, onPublish }: VersionRowProps) {
+  const [, navigate] = useLocation();
   const isPublished = version.status === "published";
+  const editorPath = `/design-templates/${templateId}/versions/${version.id}/edit`;
 
   return (
     <div
@@ -870,7 +955,7 @@ function VersionRow({ version, templateId, isActive, onPublish }: VersionRowProp
       }`}
       data-testid={`version-row-${version.id}`}
     >
-      {/* Preview — only on detail page, not list */}
+      {/* Preview thumbnail */}
       <div className="w-28 shrink-0 hidden sm:block">
         <VersionPreview templateId={templateId} versionId={version.id} />
       </div>
@@ -914,7 +999,19 @@ function VersionRow({ version, templateId, isActive, onPublish }: VersionRowProp
       </div>
 
       {/* Actions */}
-      <div className="shrink-0">
+      <div className="shrink-0 flex flex-col gap-2 items-end">
+        {/* Open in Editor — always visible; read-only banner shown inside editor for published */}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate(editorPath)}
+          className="h-7 text-xs gap-1 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+          data-testid={`button-open-editor-${version.id}`}
+        >
+          <ExternalLink className="w-3 h-3" />
+          {isPublished ? "View" : "Edit"}
+        </Button>
+
         {isPublished ? (
           <Badge
             className="text-[10px] border border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
