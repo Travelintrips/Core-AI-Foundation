@@ -1,0 +1,365 @@
+PROMPT TEAM 3 — PHASE 4: TEMPLATE LIBRARY, VERSIONING UI, PREVIEW EXPERIENCE
+
+Anda adalah Team 3 — Template Library UI Team.
+
+Branch:
+
+feature/design-template-phase4-library
+
+Mulai dari commit Phase 2 yang sama. Jangan merge ke main.
+
+Tujuan
+
+Bangun antarmuka admin untuk:
+
+melihat template,
+mencari dan memfilter,
+membuat template draft dasar,
+duplicate,
+archive,
+publish,
+melihat version history,
+preview dengan sample data,
+memilih template untuk memulai batch,
+melihat metadata template.
+
+Jangan membangun visual drag-and-drop editor. Itu milik Team 4.
+
+Scope
+
+Anda bertanggung jawab atas:
+
+route frontend Template Library,
+template cards/table,
+search/filter,
+category filter,
+status filter,
+pagination,
+template details,
+version list,
+publish confirmation,
+archive confirmation,
+duplicate action,
+preview modal/page,
+sample-data form berdasarkan variables,
+API client hooks,
+loading/error/empty states,
+basic accessibility,
+tests UI.
+
+Anda tidak bertanggung jawab atas:
+
+canvas editor,
+Fabric/Konva,
+CSV/XLSX upload,
+bulk mapping,
+ZIP implementation,
+batch queue internals,
+AI generation,
+renderer changes.
+Kepemilikan File
+
+Cari admin frontend canonical, kemungkinan artifacts/bizportal.
+
+Boleh membuat:
+
+artifacts/bizportal/src/pages/design-templates/
+artifacts/bizportal/src/components/design-template-library/
+artifacts/bizportal/src/hooks/design-templates/
+artifacts/bizportal/src/services/design-template-api.ts
+artifacts/bizportal/src/types/design-template-ui.ts
+
+Boleh mengubah minimal:
+
+frontend route registry
+sidebar/navigation config
+shared API client index
+
+Jangan mengubah:
+
+backend renderer
+backend queue/recovery
+design ZIP service
+visual editor directory
+dataset mapping directory
+AI template service
+
+Jika route registry atau sidebar juga disentuh Team 4/5, tambahkan perubahan paling kecil dan dokumentasikan agar Team 6 mudah merge.
+
+Audit
+
+Audit:
+
+admin frontend yang benar,
+routing,
+auth,
+tenant context,
+query/data-fetch library,
+design system,
+table/card patterns,
+toast,
+modal/dialog,
+pagination,
+existing AI design pages,
+existing asset thumbnails,
+API base path.
+
+Gunakan komponen existing. Jangan membuat design system kedua.
+
+Routes
+
+Tambahkan:
+
+/design-templates
+/design-templates/:id
+/design-templates/:id/versions
+
+Boleh menyediakan tombol menuju editor:
+
+/design-templates/:id/editor
+
+Namun halaman editor dibuat Team 4. Jika belum tersedia, tampilkan tombol dengan feature state yang tidak merusak.
+
+Template Library
+
+Tampilkan:
+
+thumbnail,
+name,
+category,
+dimensions,
+draft/published/archived badge,
+active version,
+updated time,
+created by jika tersedia,
+duplicate,
+preview,
+open detail,
+archive/restore sesuai API,
+create batch.
+
+Sediakan:
+
+grid/list mode bila mudah,
+search,
+category filter,
+status filter,
+sort,
+pagination.
+
+Jangan memuat semua template tanpa pagination.
+
+Create Template
+
+Template Library boleh membuat draft kosong melalui form metadata:
+
+name,
+category,
+description,
+canvas width,
+canvas height,
+background color.
+
+Tidak perlu canvas manipulation.
+
+Setelah create, arahkan ke detail atau editor route.
+
+Gunakan schema/API existing.
+
+Detail Page
+
+Tampilkan:
+
+metadata,
+canvas dimensions,
+status,
+active version,
+variable list,
+thumbnail/preview,
+version history ringkas,
+audit-relevant timestamps,
+action buttons.
+
+Jangan menampilkan raw JSON sebagai pengalaman utama. Boleh ada developer/debug view yang collapsed jika memang dibutuhkan admin.
+
+Version History
+
+Tampilkan:
+
+version number,
+created time,
+created by,
+changelog,
+published state,
+active state,
+preview version,
+compare metadata sederhana.
+
+Jangan membuat version diff editor kompleks.
+
+Published version immutable. UI tidak boleh menawarkan edit in-place terhadap version published.
+
+Publish
+
+Saat publish:
+
+tampilkan confirmation,
+jelaskan version menjadi immutable,
+gunakan endpoint existing,
+refresh active version,
+tampilkan error server dengan jelas.
+
+Jangan optimistic update untuk operasi publish bila dapat menyesatkan.
+
+Duplicate
+
+Duplicate harus:
+
+meminta nama baru atau menggunakan suffix,
+membuat template baru tenant-scoped,
+tidak mengubah template sumber,
+mengarahkan user ke template baru.
+Archive
+
+Gunakan soft archive, bukan delete permanen, mengikuti API existing.
+
+Jika backend hanya menyediakan soft-delete endpoint, tampilkan wording yang benar.
+
+Preview
+
+Gunakan:
+
+POST /api/ai/design-templates/:id/preview
+
+Preview UI harus membangun form berdasarkan template variables:
+
+text,
+number,
+currency,
+image/asset reference,
+color,
+URL,
+date,
+boolean.
+
+Jangan mengirim data besar melalui query string.
+
+Tampilkan:
+
+loading,
+actual rendered preview,
+renderer warnings jika API menyediakan,
+error per field,
+reset sample data,
+native dimensions,
+scale-to-fit.
+
+Preview menggunakan backend renderer, bukan implementasi CSS palsu.
+
+Jangan membuat preview renderer frontend terpisah.
+
+Thumbnail
+
+Jika template memiliki thumbnail, gunakan canonical asset.
+
+Jika tidak, gunakan preview placeholder.
+
+Jangan melakukan preview render otomatis untuk setiap card saat list dibuka karena dapat membebani backend.
+
+Gunakan thumbnail existing atau explicit user action.
+
+Start Batch
+
+Sediakan action:
+
+Create Batch
+
+Karena CSV mapping UI dibuat Team 5, action dapat:
+
+membuka basic batch modal untuk input manual sederhana, atau
+mengarah ke future route /design-render-batches/new?templateId=....
+
+Jangan membuat dataset mapping penuh.
+
+Definisikan kontrak route dengan Team 5:
+
+/design-render-batches/new?templateId={id}&versionId={id}
+API Client
+
+Buat API wrapper typed.
+
+Jangan menaruh fetch logic tersebar di setiap component.
+
+Tangani:
+
+401/403,
+404,
+validation errors,
+server errors,
+cancellation/unmount.
+
+Gunakan query cache existing.
+
+Accessibility
+
+Pastikan:
+
+keyboard navigation,
+dialog focus,
+button labels,
+alt text,
+contrast mengikuti design system,
+empty state dapat dipahami,
+loading tidak hanya mengandalkan animasi.
+Tests
+
+Tambahkan:
+
+list rendering,
+search/filter,
+pagination,
+empty state,
+error state,
+template detail,
+publish confirmation,
+duplicate,
+archive,
+version list,
+preview form generated from variables,
+preview binary response,
+preview validation error,
+no render storm on list load,
+cross-tenant backend error displayed safely.
+Acceptance Criteria
+Template Library dapat digunakan.
+List paginated.
+Search/filter bekerja.
+Detail bekerja.
+Version history tampil.
+Publish aman.
+Duplicate bekerja.
+Archive bekerja.
+Preview memakai backend renderer.
+Sample variables dapat diisi.
+Tidak ada frontend renderer palsu.
+Tidak menyentuh editor core.
+Tidak menyentuh batch queue.
+test lulus.
+build lulus.
+tidak ada regression.
+Handoff
+
+Jangan merge.
+
+Berikan:
+
+commit SHA,
+daftar route,
+file shared,
+screenshot halaman utama,
+screenshot detail,
+screenshot preview,
+test/build result,
+API assumptions,
+route contract untuk Team 4 dan Team 5,
+known limitations.

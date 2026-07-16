@@ -116,6 +116,7 @@ const NAV_SECTIONS = [
     label: "Creative",
     items: [
       { href: "/design-studio", label: "Design Studio", icon: LayoutTemplate },
+      { href: "/design-templates", label: "Template Library", icon: Layers },
       { href: "/creative-marketplace", label: "Creative Marketplace", icon: Store },
     ],
   },
