@@ -1,0 +1,75 @@
+{
+  "team": "team-b",
+  "branch": "feature/team-b/wp04-wp05",
+  "ownedFolders": [
+    "artifacts/api-server/src/repositories/softDelete.ts",
+    "artifacts/api-server/src/repositories/retentionPolicy.ts",
+    "artifacts/api-server/src/repositories/serviceRequestRepository.ts",
+    "artifacts/api-server/src/repositories/creativeProjectRepository.ts",
+    "artifacts/api-server/src/repositories/__tests__/softDelete.test.ts",
+    "artifacts/api-server/src/repositories/__tests__/serviceRequestRepository.test.ts",
+    "docs/implementation/wp04-wp05-soft-delete-report.md",
+    "integration/manifests/team-b.json",
+    "integration/migrations/team-b.sql",
+    "integration/openapi/team-b.yaml"
+  ],
+  "modifiedSharedFiles": [
+    {
+      "file": "artifacts/api-server/src/repositories/packageInstallationRepository.ts",
+      "reason": "WP-04: added softDeleteById, restoreById, archiveById, unarchiveById, purgeExpiredInstallations; updated findInstallation/listInstalled to apply soft-delete filter by default",
+      "riskLevel": "low",
+      "notes": "All changes additive. Existing function signatures unchanged. Default behaviour change: list/find now excludes deleted rows — callers who need deleted rows must pass ctx.includeDeleted=true."
+    },
+    {
+      "file": "artifacts/api-server/src/repositories/errors.ts",
+      "reason": "Activated RepositoryAlreadyDeletedError (was 'Reserved for WP-03+' comment)",
+      "riskLevel": "low",
+      "notes": "Comment-only change plus the error class was already defined — no runtime behaviour change."
+    },
+    {
+      "file": "lib/db/src/schema/ai-installed-packages.ts",
+      "reason": "Added deletedAt, archivedAt columns to Drizzle table definition",
+      "riskLevel": "low",
+      "notes": "Additive schema change. Both columns are nullable with no default — existing rows read as NULL (active) without any migration applied."
+    },
+    {
+      "file": "lib/db/src/schema/ai-service-catalog.ts",
+      "reason": "Added deletedAt, archivedAt to aiServiceRequestsTable only",
+      "riskLevel": "low",
+      "notes": "Additive. Only aiServiceRequestsTable touched — aiServicesTable/aiServiceCategoriesTable untouched."
+    },
+    {
+      "file": "lib/db/src/schema/creative-projects.ts",
+      "reason": "Added deletedAt, archivedAt columns to creativeProjectsTable",
+      "riskLevel": "low",
+      "notes": "Additive. creativeProjectRepository is foundation-only (no tenantId column on table)."
+    }
+  ],
+  "routesToMount": [],
+  "pagesToRegister": [],
+  "sidebarItems": [],
+  "openapiFragment": "integration/openapi/team-b.yaml",
+  "migrationDrafts": [
+    "integration/migrations/team-b.sql"
+  ],
+  "seedDrafts": [],
+  "dependenciesRequested": [],
+  "eventsPublished": [],
+  "eventsConsumed": [],
+  "workerJobTypesRequested": [],
+  "sharedTypesRequested": [
+    "RepositoryContext (repositories/types.ts) — ctx.includeDeleted flag is now active",
+    "RepositoryAlreadyDeletedError (repositories/errors.ts) — now thrown by softDeleteById"
+  ],
+  "integrationOrder": [
+    "Run integration/migrations/team-b.sql against dev database BEFORE deploying",
+    "Run integration/migrations/team-b.sql against prod database BEFORE production deploy",
+    "No route registration needed — WP-04/05 is a data-access layer only"
+  ],
+  "knownRisks": [
+    "findInstallation and listInstalled in packageInstallationRepository now exclude deleted rows by default. Any caller that previously expected to see all rows without a filter will silently return fewer results. Callers should be audited if they need to see soft-deleted rows.",
+    "creativeProjectRepository is foundation-only: no tenantId column on creative_projects table means no tenant isolation in that repo. Full tenant-scoped soft-delete requires a future migration to add the tenant_id column.",
+    "WP-04/05 work was initially committed directly to main (violation of parallel dev rules) before this branch was created. The branch contains the canonical isolated version of the work."
+  ],
+  "externalBlockers": []
+}

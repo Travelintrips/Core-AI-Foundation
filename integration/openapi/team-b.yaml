@@ -1,0 +1,79 @@
+openapi: "3.1.0"
+info:
+  title: "Team B — WP-04/WP-05 OpenAPI Fragment"
+  version: "1.0.0"
+  description: |
+    WP-04 (Soft Delete) dan WP-05 (Archive/Restore/Retention/Purge) adalah
+    perubahan data-access layer saja. Tidak ada route baru yang ditambahkan
+    pada fase ini — semua operasi dilakukan melalui repository internal,
+    bukan endpoint HTTP publik.
+
+    Jika ke depan diperlukan admin endpoint untuk purge/restore, fragment ini
+    akan diupdate dengan paths dan schemas yang sesuai.
+
+paths: {}
+
+components:
+  schemas:
+    SoftDeleteResult:
+      type: object
+      description: "Hasil operasi soft-delete atau restore pada sebuah resource"
+      properties:
+        id:
+          type: integer
+          description: "Primary key resource"
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Timestamp soft-delete; null berarti resource aktif"
+        archivedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Timestamp archive; null berarti resource tidak diarsipkan"
+      required:
+        - id
+
+    PurgeResult:
+      type: object
+      description: "Hasil eksekusi retention purge (platform-scoped)"
+      properties:
+        resourceType:
+          type: string
+          example: "marketplace_installation"
+        windowDays:
+          type: integer
+          description: "Retention window dalam hari"
+          example: 90
+        cutoffDate:
+          type: string
+          format: date-time
+          description: "Tanggal batas — baris dengan deleted_at sebelum tanggal ini dihapus"
+        purgedCount:
+          type: integer
+          description: "Jumlah baris yang dihapus secara permanen"
+        executedAt:
+          type: string
+          format: date-time
+      required:
+        - resourceType
+        - windowDays
+        - cutoffDate
+        - purgedCount
+        - executedAt
+
+    RetentionPolicy:
+      type: object
+      description: "Kebijakan retensi per domain resource"
+      properties:
+        resourceType:
+          type: string
+        windowDays:
+          type: integer
+        description:
+          type: string
+      required:
+        - resourceType
+        - windowDays
+        - description
