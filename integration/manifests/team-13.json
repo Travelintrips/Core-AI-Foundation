@@ -1,0 +1,111 @@
+{
+  "team": "13",
+  "name": "Dynamic Design Composition Engine",
+  "domain": "Dynamic Design Composition",
+  "version": "1.0.0",
+  "branch": "feature/13-dynamic-composer",
+  "ownership": {
+    "services": [
+      "artifacts/api-server/src/services/dynamic-design-composer/"
+    ],
+    "routes": [
+      "artifacts/api-server/src/routes/dynamic-design-composer/"
+    ],
+    "openapi": "integration/openapi/team-13.yaml",
+    "manifest": "integration/manifests/team-13.json"
+  },
+  "endpoints": [
+    {
+      "method": "POST",
+      "path": "/api/ai/composer/compose",
+      "operationId": "composeDesign",
+      "description": "Compose a full DesignCompositionSpec from design elements and Brand DNA",
+      "auth": "adminApiKey"
+    },
+    {
+      "method": "POST",
+      "path": "/api/ai/composer/validate",
+      "operationId": "validateCompositionRequest",
+      "description": "Validate inputs and preview fallbacks without composing",
+      "auth": "adminApiKey"
+    },
+    {
+      "method": "POST",
+      "path": "/api/ai/composer/compatibility",
+      "operationId": "checkDesignCompatibility",
+      "description": "Check cross-element compatibility (material, pattern, palette, decoration)",
+      "auth": "adminApiKey"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ai/composer/health",
+      "operationId": "composerHealth",
+      "description": "Service health probe",
+      "auth": "none"
+    }
+  ],
+  "outputType": "DesignCompositionSpec",
+  "capabilities": {
+    "deterministic": true,
+    "imageGeneration": false,
+    "fileRendering": false,
+    "brandDnaIntegration": true,
+    "explainability": true,
+    "fallbackHandling": true,
+    "compatibilityChecking": true,
+    "wcagContrast": true
+  },
+  "inputs": [
+    "BlueprintInput",
+    "LayoutPlanInput",
+    "ComponentInput[]",
+    "PatternInput",
+    "PaletteInput",
+    "TypographyInput",
+    "DecorationInput",
+    "MaterialInput",
+    "MotifInput",
+    "BrandDnaInput (optional)"
+  ],
+  "explainabilityFields": [
+    "layout.why",
+    "layout.alternativesRejected",
+    "palette.why",
+    "palette.alternativesRejected",
+    "typography.why",
+    "pattern.why",
+    "pattern.alternativesRejected",
+    "components[].why",
+    "components[].alternativesRejected",
+    "decoration.why",
+    "material.why",
+    "motif.why",
+    "compositionRationale"
+  ],
+  "testCoverage": {
+    "testFiles": [
+      "artifacts/api-server/src/services/dynamic-design-composer/__tests__/composerEngine.test.ts",
+      "artifacts/api-server/src/services/dynamic-design-composer/__tests__/compatibilityChecker.test.ts",
+      "artifacts/api-server/src/services/dynamic-design-composer/__tests__/fallbackHandler.test.ts",
+      "artifacts/api-server/src/services/dynamic-design-composer/__tests__/brandConsistencyChecker.test.ts",
+      "artifacts/api-server/src/services/dynamic-design-composer/__tests__/explainabilityEngine.test.ts"
+    ],
+    "scenarios": [
+      "deterministic composition (same input → same compositionId)",
+      "no-asset fallback (all inputs missing → defaults applied)",
+      "brand-DNA-derived fallbacks (colors, typography, layout from brand DNA)",
+      "compatibility conflicts (neumorphic + geometric, full-bleed + accordion)",
+      "WCAG contrast checking (low-contrast palette flagged)",
+      "brand consistency alignment (color, typography, layout, personality)",
+      "style consistency scoring",
+      "component zone and variant resolution",
+      "derived token generation",
+      "explainability report completeness"
+    ]
+  },
+  "dependencies": {
+    "internal": [],
+    "external": ["zod", "node:crypto"]
+  },
+  "registeredAt": "2026-07-16T00:00:00Z"
+}
