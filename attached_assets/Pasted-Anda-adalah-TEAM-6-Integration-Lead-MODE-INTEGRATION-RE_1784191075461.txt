@@ -1,0 +1,361 @@
+Anda adalah TEAM 6 — Integration Lead.
+
+MODE:
+INTEGRATION REPAIR.
+
+TARGET:
+Mengintegrasikan feature/design-template-phase4-library ke main dengan aman.
+
+PENTING:
+
+JANGAN merge langsung ke main.
+JANGAN gunakan git checkout --ours . atau --theirs . secara global.
+JANGAN memilih salah satu branch secara membabi buta.
+JANGAN menghapus fitur main yang sudah lolos audit.
+JANGAN menjalankan production migration.
+JANGAN push ke main sebelum seluruh verification clean.
+
+==================================================
+STATUS AUDIT
+==================================================
+
+Branch yang sudah selesai:
+
+- feature/design-template-phase3a-batch → FULLY_MERGED
+- integration/design-template-phase3-4 → identik dengan main
+- replit-agent → stale, tidak ada konten substantif baru
+
+Branch yang belum selesai:
+
+- feature/design-template-phase4-library
+
+Status:
+
+- 2 commit belum masuk main
+- 27 files changed
+- +6,381 / -24 lines
+- branch 17 commit di belakang main
+- risiko merge: HIGH
+
+Shared files berisiko:
+
+- artifacts/ai-platform/src/App.tsx
+- artifacts/ai-platform/src/components/layout.tsx
+- artifacts/ai-platform/package.json
+- artifacts/ai-platform/vitest.config.ts
+- artifacts/api-server/src/routes/index.ts
+- artifacts/api-server/src/routes/design-templates.ts
+- artifacts/api-server/src/services/jobWorkerService.ts
+- lib/db/src/schema/index.ts
+- pnpm-lock.yaml
+
+==================================================
+TUJUAN
+==================================================
+
+Membawa fitur Phase 4 Template Library ke baseline main terbaru tanpa:
+
+- kehilangan fitur Phase 2/3 yang sudah ada
+- membuat duplicate route
+- membuat duplicate service
+- membuat duplicate schema
+- merusak worker registry
+- merusak OpenAPI
+- merusak build
+- menghapus ZIP stub/flow yang sudah ada tanpa review
+- membuat lockfile tidak konsisten
+
+==================================================
+STRATEGI WAJIB
+==================================================
+
+Gunakan branch integrasi baru:
+
+integration/design-template-phase4-repair
+
+Buat dari main terbaru.
+
+Jangan melakukan rebase destructive pada branch feature asli.
+
+Langkah:
+
+1. git fetch origin
+2. git switch main
+3. git pull --ff-only origin main
+4. git switch -c integration/design-template-phase4-repair
+5. cherry-pick commit Phase 4 satu per satu:
+   - 5108668
+   - 4135427
+
+Jika konflik muncul:
+- berhenti pada setiap commit
+- resolve per file
+- test
+- lanjut commit berikutnya
+
+Jangan cherry-pick kedua commit sekaligus.
+
+==================================================
+FILE RESOLUTION POLICY
+==================================================
+
+1. App.tsx
+
+Pertahankan seluruh route main.
+
+Tambahkan hanya route Phase 4 yang belum ada.
+
+Pastikan:
+
+- tidak ada duplicate import
+- tidak ada duplicate route
+- tidak ada route lama yang terhapus
+- route path konsisten
+
+2. layout.tsx
+
+Pertahankan seluruh sidebar main.
+
+Tambahkan menu Template Library satu kali.
+
+Jangan menghapus menu existing.
+
+3. routes/index.ts
+
+Pertahankan seluruh router main.
+
+Audit rename:
+
+- design-template-ai.ts
+- design-templates-ai-assist.ts
+
+Tentukan satu canonical router.
+
+Jangan mount dua router yang melakukan fungsi sama.
+
+Pastikan tidak ada duplicate /api prefix.
+
+4. design-templates.ts
+
+Ini file paling kritis.
+
+Bandingkan:
+
+- versi main
+- versi Phase 4
+
+Gabungkan fitur:
+
+MAIN:
+- preview endpoint
+- single-render batch flow
+- ZIP 501 stub atau flow existing
+- Phase 2 behavior
+
+PHASE 4:
+- template library CRUD
+- ZIP service implementation
+- AI-assist route
+- template versioning
+- publish/archive
+- library-specific endpoints
+
+Aturan:
+
+- satu router export
+- satu handler per method/path
+- jangan duplicate import
+- jangan duplicate schema
+- jangan kehilangan endpoint Phase 2
+- jangan mempertahankan ZIP stub jika Phase 4 punya implementasi penuh yang valid
+- jika ZIP implementation Phase 4 belum stabil, pertahankan stub dan dokumentasikan deferred integration
+
+5. jobWorkerService.ts
+
+Jangan rewrite switch worker.
+
+Tambahkan hanya job type Phase 4 yang benar-benar baru.
+
+Pastikan:
+
+- existing cases tetap ada
+- no duplicate case
+- default behavior tetap
+- retry behavior tidak berubah
+- worker registry tidak bocor
+
+6. schema/index.ts
+
+Tambahkan export baru satu kali.
+
+Jangan re-order seluruh file.
+
+Jangan duplicate export.
+
+7. package.json
+
+Gabungkan dependency Phase 4 yang benar-benar dibutuhkan.
+
+Jangan menghapus dependency existing.
+
+Jangan upgrade dependency unrelated.
+
+8. pnpm-lock.yaml
+
+Jangan resolve manual panjang.
+
+Setelah package.json selesai:
+
+- pilih lockfile dari main sebagai baseline
+- jalankan pnpm install --lockfile-only
+- verifikasi deterministik
+
+9. vitest.config.ts
+
+Gabungkan include/exclude/alias yang dibutuhkan kedua sisi.
+
+Jangan menghapus config existing.
+
+==================================================
+DUPLICATION AUDIT
+==================================================
+
+Cari setelah resolusi:
+
+- duplicate route
+- duplicate operationId
+- duplicate component
+- duplicate schema
+- duplicate table
+- duplicate worker case
+- duplicate nav item
+- duplicate page
+- duplicate service
+- duplicate export
+
+Gunakan grep/search langsung.
+
+==================================================
+OPENAPI
+==================================================
+
+Audit apakah Phase 4 membawa OpenAPI fragment atau endpoint baru.
+
+Tambahkan hanya endpoint yang benar-benar aktif.
+
+Pastikan:
+
+- operationId unik
+- schema refs valid
+- request/response sesuai route
+- security requirement benar
+- error shape konsisten
+
+Jalankan codegen hanya setelah seluruh route final.
+
+==================================================
+DATABASE
+==================================================
+
+Audit migration Phase 4.
+
+Pastikan:
+
+- additive
+- no DROP
+- no TRUNCATE
+- no destructive rename
+- CREATE INDEX IF NOT EXISTS
+- table/column tidak duplicate
+- FK type cocok
+
+Jangan jalankan production migration.
+
+Development migration hanya setelah preflight clean.
+
+==================================================
+VERIFICATION PER COMMIT
+==================================================
+
+Setelah cherry-pick 5108668 selesai:
+
+- git status
+- git diff --check
+- typecheck package terkait
+- unit tests terkait
+- inspect duplicate routes
+- commit resolution
+
+Baru lanjut cherry-pick 4135427.
+
+Setelah commit kedua:
+
+- repeat verification
+
+==================================================
+FINAL VERIFICATION
+==================================================
+
+Jalankan:
+
+- pnpm install
+- pnpm run build:generated
+- pnpm run verify
+- pnpm run ci:test
+- api-server typecheck
+- ai-platform typecheck
+- api-server build
+- ai-platform build
+- regression test Phase 2
+- regression test Phase 3
+- Template Library smoke test
+- ZIP flow smoke test
+- route registration smoke test
+- screenshot admin Template Library
+- screenshot detail/editor page
+
+==================================================
+MERGE GATE
+==================================================
+
+Jangan merge ke main jika masih ada:
+
+- unresolved conflict
+- duplicate route
+- duplicate export
+- typecheck error baru
+- failing test
+- invalid OpenAPI
+- stale generated files
+- broken ZIP flow
+- broken preview flow
+- broken worker case
+- UI route 404
+
+==================================================
+FINAL REPORT
+==================================================
+
+Berikan laporan:
+
+- integration branch
+- commits cherry-picked
+- conflicts found
+- resolution per file
+- canonical router chosen
+- ZIP behavior final
+- worker changes
+- schema exports
+- dependencies added
+- OpenAPI operations added
+- migration status
+- test totals
+- build results
+- screenshots
+- remaining limitations
+- recommendation:
+  - SAFE_TO_MERGE
+  - NOT_SAFE_TO_MERGE
+
+STOP setelah laporan.
+Jangan merge ke main tanpa approval eksplisit.

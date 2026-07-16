@@ -17,6 +17,10 @@ import {
   exportDesign,
   aiRegenerateElement,
 } from "../services/designStudioService.js";
+import {
+  listBuiltinTemplates,
+  getBuiltinTemplate,
+} from "../data/design-templates.js";
 
 const router = Router();
 
@@ -180,6 +184,26 @@ router.post("/ai/design/projects/:id/export", async (req, res) => {
     const msg = err instanceof Error ? err.message : "Unknown error";
     res.status(500).json({ error: msg });
   }
+});
+
+// ── Built-in Templates ────────────────────────────────────────────────────────
+
+/** GET /api/ai/design/templates/builtin — daftar template bawaan (no DB) */
+router.get("/ai/design/templates/builtin", (req, res) => {
+  const category = typeof req.query["category"] === "string" ? req.query["category"] : undefined;
+  const industry = typeof req.query["industry"] === "string" ? req.query["industry"] : undefined;
+  const style    = typeof req.query["style"]    === "string" ? req.query["style"]    : undefined;
+  const templates = listBuiltinTemplates({ category, industry, style });
+  // Strip canvasState from list view to keep payload small
+  const items = templates.map(({ canvasState: _cs, ...meta }) => meta);
+  res.json({ items, total: items.length });
+});
+
+/** GET /api/ai/design/templates/builtin/:code — detail + canvas state lengkap */
+router.get("/ai/design/templates/builtin/:code", (req, res) => {
+  const tpl = getBuiltinTemplate(req.params["code"] ?? "");
+  if (!tpl) { res.status(404).json({ error: "Template not found" }); return; }
+  res.json(tpl);
 });
 
 // ── AI Regenerate ─────────────────────────────────────────────────────────────

@@ -1,0 +1,1071 @@
+Lanjutkan implementasi **Internal Design Template Engine — Phase 2: Core Renderer** berdasarkan hasil Phase 1 yang sudah selesai.
+
+Jangan mengulang, mengganti, atau membuat ulang komponen Phase 1.
+
+## Kondisi Phase 1 yang Sudah Tersedia
+
+Komponen berikut sudah ada dan wajib digunakan kembali:
+
+* `design_templates`
+* `design_template_versions`
+* `design_render_batches`
+* `design_render_items`
+* `designTemplateService.ts`
+* `designRenderBatchService.ts`
+* `designTemplateVariableService.ts`
+* `designRenderWorkerService.ts`
+* `designTemplateSchema.ts`
+* job type `design_render`
+* job type `design_render_batch_dispatch`
+* job type `design_render_zip_export`
+* `uploadToSupabase`
+* `resolveAuthenticatedTenantContext()`
+* `logAudit()`
+* job infrastructure existing melalui `enqueue()` dan `jobWorkerService.ts`
+
+Phase 1 sudah memiliki 46 test lulus dan build berhasil.
+
+Jangan membuat renderer, storage abstraction, tenant context, queue, asset service, atau variable resolver kedua.
+
+# Tujuan Phase 2
+
+Implementasikan renderer produksi yang dapat mengubah:
+
+```text
+Immutable Template Version JSON
+        +
+Render Item Input Data
+        ↓
+Variable Resolution
+        ↓
+Element Layout
+        ↓
+SVG Intermediate Representation
+        ↓
+Sharp
+        ↓
+PNG / JPG / WebP
+        ↓
+Supabase Storage
+        ↓
+design_render_items.output
+```
+
+Tambahkan dukungan PDF dengan cara yang deterministic dan tidak menggunakan browser baru untuk setiap render.
+
+AI generative image tidak boleh dipanggil dalam proses render.
+
+# 1. Audit Singkat Sebelum Coding
+
+Sebelum menulis kode, periksa kembali:
+
+* bentuk final domain types di `types/designTemplate.ts`,
+* bentuk JSON yang disimpan dalam `design_template_versions.template_json`,
+* status lifecycle `design_render_items`,
+* bentuk payload job `design_render`,
+* pola update job success/failure di worker existing,
+* pola upload file di `lib/supabaseStorage.ts`,
+* tabel asset/media existing yang dapat digunakan untuk mencatat output,
+* pola signed URL versus public URL,
+* storage bucket existing,
+* request context yang tersedia di worker,
+* bagaimana tenant ID dibawa dari job payload,
+* logging dan structured error patterns,
+* package manager dan lockfile yang digunakan repository.
+
+Laporkan audit singkat, lalu langsung lanjut implementasi tanpa menunggu persetujuan.
+
+Jangan mengubah kontrak Phase 1 kecuali ada bug nyata. Jika kontrak perlu diubah, lakukan perubahan minimum dan tambahkan regression test.
+
+# 2. Dependensi
+
+Tambahkan dependensi hanya jika belum tersedia:
+
+```text
+sharp
+qrcode
+pdf-lib
+```
+
+Sebelum install, cari terlebih dahulu apakah repository sudah memiliki:
+
+* Sharp,
+* QR generator,
+* PDFKit,
+* pdf-lib,
+* SVG-to-PDF utility,
+* image downloader/cache utility,
+* SSRF protection utility.
+
+Gunakan dependency existing jika kapabilitasnya sudah cukup.
+
+Jangan memasang beberapa library yang memiliki fungsi sama tanpa kebutuhan.
+
+Pastikan perubahan lockfile ikut tercatat.
+
+# 3. Struktur Core Renderer
+
+Pisahkan renderer menjadi komponen yang jelas.
+
+Struktur yang disarankan, sesuaikan dengan pola repository:
+
+```text
+services/design-renderer/
+  index.ts
+  types.ts
+  errors.ts
+  templateRenderer.ts
+  svgBuilder.ts
+  elementRenderer.ts
+  textLayout.ts
+  imageResolver.ts
+  assetCache.ts
+  fontRegistry.ts
+  outputEncoder.ts
+  pdfRenderer.ts
+  renderWarnings.ts
+```
+
+Tidak wajib mengikuti nama persis apabila repository mempunyai konvensi berbeda.
+
+Jangan menaruh seluruh renderer dalam satu file besar.
+
+# 4. Pipeline Render
+
+Implementasikan pipeline berikut:
+
+```text
+1. Ambil design_render_item
+2. Verifikasi tenant_id
+3. Ambil immutable template version
+4. Validasi ulang template JSON
+5. Validasi input data
+6. Resolve variables dan formatter
+7. Evaluate conditional visibility
+8. Resolve seluruh asset yang diperlukan
+9. Bangun SVG deterministic
+10. Render melalui Sharp
+11. Encode sesuai output format
+12. Upload hasil
+13. Update design_render_item
+14. Sinkronkan progress batch
+15. Catat warning dan metrik render
+```
+
+Setiap tahap harus menghasilkan structured error apabila gagal.
+
+# 5. Status Render Item
+
+Gunakan status lifecycle existing. Jika belum lengkap, gunakan status minimal berikut tanpa merusak Phase 1:
+
+```text
+queued
+processing
+completed
+failed
+cancelled
+```
+
+Ketika worker mulai:
+
+* pastikan item masih dapat diproses,
+* set status `processing`,
+* increment attempt secara atomik,
+* simpan `started_at`.
+
+Ketika berhasil:
+
+* set status `completed`,
+* simpan output asset atau URL,
+* simpan width, height, format, file size jika kolom tersedia,
+* simpan `completed_at`,
+* hapus error lama.
+
+Ketika gagal:
+
+* set status sesuai mekanisme retry existing,
+* simpan error code yang stabil,
+* simpan pesan error yang sudah disanitasi,
+* jangan menyimpan stack trace sensitif pada field yang terlihat user.
+
+Satu item gagal tidak boleh menggagalkan seluruh batch.
+
+# 6. Idempotency dan Race Protection
+
+Sebelum merender, cek apakah item yang sama sudah memiliki output valid.
+
+Gunakan kombinasi:
+
+* template version ID,
+* normalized input hash,
+* format,
+* requested dimensions,
+* renderer version.
+
+Jika output valid sudah ada:
+
+* jangan render ulang,
+* gunakan kembali hasil existing,
+* update job sebagai sukses secara idempotent.
+
+Cegah dua worker memproses item yang sama secara bersamaan menggunakan pola atomic claim atau transaction yang sudah dipakai repository.
+
+Jangan hanya mengandalkan pengecekan status biasa tanpa race protection.
+
+Tambahkan `rendererVersion`, misalnya:
+
+```text
+design-svg-renderer-v1
+```
+
+ke dalam hash atau metadata supaya perubahan renderer dapat membedakan cache lama dan baru.
+
+# 7. SVG Intermediate Renderer
+
+Gunakan SVG sebagai intermediate format utama.
+
+SVG root harus:
+
+* memiliki width dan height eksplisit,
+* memiliki `viewBox`,
+* menggunakan koordinat canvas template,
+* tidak mengandung script,
+* tidak mengandung event handler,
+* tidak mengandung arbitrary `foreignObject`,
+* tidak memuat external entity,
+* tidak mengambil resource remote langsung.
+
+Contoh:
+
+```xml
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1080"
+  height="1350"
+  viewBox="0 0 1080 1350"
+>
+  ...
+</svg>
+```
+
+Escape seluruh text content sebelum dimasukkan ke XML.
+
+Semua remote image harus di-resolve terlebih dahulu dan dimasukkan sebagai buffer/data URI yang sudah divalidasi atau referensi internal yang aman.
+
+# 8. Element Renderer
+
+Implementasikan element type minimal berikut.
+
+## 8.1 Shape
+
+Dukung:
+
+* rectangle,
+* rounded rectangle,
+* circle,
+* ellipse jika domain type mengizinkan,
+* fill,
+* border,
+* opacity,
+* rotation,
+* drop shadow sederhana,
+* linear gradient jika schema Phase 1 sudah mendukung.
+
+Pastikan rotation terjadi terhadap pusat elemen, bukan origin canvas.
+
+## 8.2 Text
+
+Dukung:
+
+* static text,
+* variable-bound text,
+* font family,
+* font size,
+* minimum font size,
+* font weight,
+* italic,
+* underline,
+* color,
+* opacity,
+* alignment,
+* vertical alignment jika schema mendukung,
+* line height,
+* letter spacing,
+* uppercase/lowercase/title-case formatter,
+* maximum lines,
+* wrap,
+* auto-shrink,
+* truncate,
+* ellipsis,
+* rotation.
+
+Gunakan escape XML yang benar.
+
+## 8.3 Image
+
+Dukung:
+
+* internal asset,
+* storage URL yang diizinkan,
+* remote URL jika policy mengizinkan,
+* placeholder/fallback asset,
+* `cover`,
+* `contain`,
+* `fill`,
+* border radius,
+* clipping/mask rectangle,
+* opacity,
+* rotation.
+
+Jangan meregangkan gambar ketika mode `cover` atau `contain`.
+
+## 8.4 QR Code
+
+Gunakan `qrcode` untuk menghasilkan QR sebagai SVG atau PNG buffer.
+
+Dukung:
+
+* URL,
+* plain text,
+* variable binding,
+* foreground color,
+* background color,
+* margin,
+* error correction level yang aman.
+
+Validasi panjang data sebelum menghasilkan QR.
+
+## 8.5 Line
+
+Dukung:
+
+* x1/y1/x2/y2 atau width/rotation sesuai schema,
+* stroke color,
+* stroke width,
+* opacity,
+* dash pattern jika tersedia.
+
+## 8.6 Group
+
+Apabila GroupElement sudah ada dalam domain type:
+
+* dukung nested transform secara terbatas,
+* batasi nesting depth,
+* jangan mengizinkan recursive cycle.
+
+Jika dukungan group terlalu berisiko pada Phase 2, implementasikan flattening yang deterministic dan dokumentasikan batasannya.
+
+# 9. Text Overflow Engine
+
+Implementasikan urutan overflow berikut:
+
+```text
+1. Normalize text
+2. Wrap berdasarkan lebar text box
+3. Hitung jumlah baris
+4. Jika terlalu besar, kurangi font size bertahap
+5. Berhenti pada minimumFontSize
+6. Jika masih overflow, truncate
+7. Tambahkan ellipsis jika diizinkan
+8. Catat warning
+```
+
+Jangan hanya memperkirakan jumlah karakter berdasarkan `text.length`.
+
+Gunakan pengukuran teks yang tersedia dari Sharp/Pango atau utility yang stabil.
+
+Jika pengukuran exact sulit dilakukan dalam environment:
+
+* buat estimator yang teruji,
+* gunakan font metrics,
+* tambahkan safety margin,
+* benchmark dengan font yang didaftarkan.
+
+Preview dan final render wajib menggunakan text-layout logic yang sama.
+
+Tambahkan warning seperti:
+
+```text
+TEXT_AUTO_SHRINK_APPLIED
+TEXT_TRUNCATED
+UNSUPPORTED_FONT_FALLBACK
+MAX_LINES_EXCEEDED
+```
+
+# 10. Font Registry
+
+Jangan menggunakan font random dari internet saat render.
+
+Buat registry font yang mengizinkan font platform yang legal dan tersedia.
+
+Minimal sediakan fallback:
+
+```text
+Arial
+Helvetica
+sans-serif
+```
+
+Jika repository memiliki font assets sendiri, gunakan melalui registry existing.
+
+Periksa apakah Sharp/libvips dapat mengakses font pada environment Replit.
+
+Jika font yang diminta tidak tersedia:
+
+1. gunakan fallback milik template,
+2. gunakan fallback platform,
+3. catat warning,
+4. jangan menggagalkan render kecuali template secara eksplisit mensyaratkan font tersebut.
+
+Jangan mengekspos file font melalui API publik.
+
+# 11. Image Resolver dan SSRF Protection
+
+Image resolver wajib menangani:
+
+* internal asset ID,
+* Supabase Storage asset,
+* URL yang diizinkan,
+* data URI hanya jika berasal dari proses internal,
+* fallback image,
+* timeout,
+* maximum byte size,
+* MIME validation,
+* image dimension validation,
+* corrupted image.
+
+Untuk remote URL:
+
+* hanya izinkan `https`,
+* tolak `file:`,
+* tolak `ftp:`,
+* tolak localhost,
+* tolak `127.0.0.0/8`,
+* tolak private IPv4 ranges,
+* tolak link-local,
+* tolak metadata endpoints,
+* tolak private/reserved IPv6,
+* resolve DNS sebelum fetch,
+* validasi redirect target pada setiap redirect,
+* batasi jumlah redirect,
+* batasi response size,
+* gunakan timeout,
+* validasi content type berdasarkan actual file signature bila memungkinkan.
+
+Jangan mengandalkan hostname string check saja.
+
+Gunakan utility SSRF existing bila ada.
+
+# 12. Asset Cache
+
+Untuk satu batch, gambar atau logo yang sama tidak boleh di-download berkali-kali tanpa kebutuhan.
+
+Implementasikan cache:
+
+* key berdasarkan normalized asset reference,
+* cache in-memory dengan batas,
+* optional temporary disk cache,
+* TTL,
+* maximum total bytes,
+* cleanup,
+* cache hanya data tervalidasi.
+
+Jangan menyimpan temporary file tanpa cleanup.
+
+Jangan menggunakan path dari user sebagai nama file langsung.
+
+# 13. Output Format
+
+Dukung:
+
+```text
+png
+jpg / jpeg
+webp
+pdf
+```
+
+## PNG
+
+* preserve transparency,
+* valid dimensions,
+* output valid.
+
+## JPG
+
+* flatten transparency dengan background yang ditentukan,
+* gunakan kualitas default aman,
+* validasi rentang kualitas.
+
+## WebP
+
+* gunakan kualitas default aman,
+* dukung transparency.
+
+## PDF
+
+Jangan membuat PDF yang hanya berisi buffer rusak atau ekstensi palsu.
+
+Gunakan salah satu strategi:
+
+### Pilihan A
+
+Render canvas ke PNG, lalu embed ke satu halaman PDF dengan `pdf-lib`.
+
+### Pilihan B
+
+Gunakan SVG-to-PDF hanya jika library existing stabil.
+
+Untuk Phase 2, pilihan A lebih aman dan konsisten.
+
+Ukuran halaman PDF harus mengikuti rasio dan ukuran template.
+
+Catat dalam metadata bahwa PDF menggunakan rasterized canvas jika memang demikian.
+
+# 14. Output Dimension Rules
+
+Batasi ukuran melalui `DESIGN_LIMITS` Phase 1.
+
+Validasi:
+
+* minimum width,
+* minimum height,
+* maximum width,
+* maximum height,
+* maximum total pixels,
+* aspect ratio jika output override diberikan.
+
+Jika user meminta resize output:
+
+* default: render template pada native canvas,
+* resize akhir menggunakan Sharp,
+* jangan mengubah layout coordinate system kecuali memang dirancang demikian.
+
+Jangan mengizinkan output yang dapat menyebabkan memory exhaustion.
+
+# 15. Upload ke Storage
+
+Gunakan `uploadToSupabase` atau abstraction existing.
+
+Gunakan path deterministic dan tenant-scoped, misalnya:
+
+```text
+design-renders/{tenantId}/{batchId}/{renderItemId}/{inputHash}.{format}
+```
+
+Sesuaikan dengan pola storage existing.
+
+Jangan menggunakan nama file mentah dari user.
+
+Simpan metadata:
+
+* tenant ID,
+* template ID,
+* version ID,
+* batch ID,
+* render item ID,
+* input hash,
+* renderer version,
+* format,
+* dimensions,
+* MIME type.
+
+Tentukan apakah output menggunakan:
+
+* private path + signed URL, atau
+* public URL,
+
+berdasarkan pola keamanan platform yang sudah ada.
+
+Jangan otomatis membuat seluruh output publik.
+
+Jika platform memiliki tabel asset/media canonical, buat record melalui service existing dan simpan asset ID pada render item.
+
+# 16. Implementasi executeDesignRenderJob()
+
+Ganti stub `executeDesignRenderJob()` dengan implementasi produksi.
+
+Payload job minimal harus membawa identifier, bukan seluruh template dan gambar besar:
+
+```ts
+{
+  tenantId: string;
+  renderItemId: string;
+  batchId?: string;
+  requestId?: string;
+}
+```
+
+Worker harus membaca data canonical dari database.
+
+Jangan menjadikan job payload sebagai source of truth.
+
+Flow:
+
+```text
+claim render item
+    ↓
+load immutable template version
+    ↓
+validate tenant and status
+    ↓
+render
+    ↓
+upload
+    ↓
+complete item
+    ↓
+sync batch counters
+```
+
+Gunakan transaction executor jika repository sudah memiliki contract tersebut.
+
+Pastikan worker tidak jatuh ke plain DB client ketika sedang berada dalam transaction.
+
+# 17. Batch Progress Synchronization
+
+Setelah setiap item:
+
+* update status item,
+* sinkronkan batch counter,
+* tentukan status batch yang sebenarnya.
+
+Aturan:
+
+```text
+semua selesai tanpa gagal → completed
+selesai dengan sebagian gagal → partially_failed
+semua terminal dan semuanya gagal → failed
+masih ada queued/processing → processing
+batch dibatalkan → cancelled sesuai lifecycle existing
+```
+
+Gunakan query aggregate canonical atau counter update yang race-safe.
+
+Jangan menghasilkan progress di atas 100%.
+
+Jangan mengandalkan counter yang bisa drift tanpa reconciliation.
+
+Tambahkan fungsi reconciliation apabila counter batch tidak cocok dengan item aktual.
+
+# 18. Cancellation
+
+Sebelum tahap mahal:
+
+* cek apakah batch atau item sudah dibatalkan.
+
+Periksa setidaknya:
+
+* sebelum resolve asset besar,
+* sebelum Sharp render,
+* sebelum upload.
+
+Jika cancellation terjadi saat Sharp sedang memproses, worker dapat menyelesaikan operasi aktif tetapi tidak boleh menyimpan hasil sebagai completed jika lifecycle menyatakan cancelled.
+
+Dokumentasikan bahwa cancellation bersifat cooperative.
+
+# 19. Structured Errors
+
+Buat error code stabil minimal:
+
+```text
+TEMPLATE_NOT_FOUND
+TEMPLATE_VERSION_NOT_FOUND
+TEMPLATE_SCHEMA_INVALID
+RENDER_ITEM_NOT_FOUND
+RENDER_ITEM_ALREADY_CLAIMED
+TENANT_MISMATCH
+VARIABLE_VALIDATION_FAILED
+ASSET_NOT_FOUND
+ASSET_FETCH_FAILED
+ASSET_FETCH_TIMEOUT
+ASSET_TOO_LARGE
+ASSET_TYPE_INVALID
+ASSET_CORRUPTED
+SSRF_BLOCKED
+FONT_UNAVAILABLE
+TEXT_LAYOUT_FAILED
+QR_DATA_INVALID
+CANVAS_LIMIT_EXCEEDED
+SVG_BUILD_FAILED
+SHARP_RENDER_FAILED
+PDF_RENDER_FAILED
+STORAGE_UPLOAD_FAILED
+RENDER_CANCELLED
+UNKNOWN_RENDER_ERROR
+```
+
+Pisahkan:
+
+* retryable error,
+* non-retryable error.
+
+Contoh retryable:
+
+* temporary storage failure,
+* remote asset timeout tertentu,
+* transient database failure.
+
+Contoh non-retryable:
+
+* template invalid,
+* unsupported format,
+* invalid QR,
+* canvas melampaui batas.
+
+Integrasikan dengan retry policy existing.
+
+# 20. Render Warnings
+
+Warning tidak boleh membuat render gagal.
+
+Simpan jika schema menyediakan metadata, atau catat pada structured log:
+
+```text
+VARIABLE_FALLBACK_USED
+OPTIONAL_VARIABLE_MISSING
+IMAGE_FALLBACK_USED
+IMAGE_CROPPED
+TEXT_AUTO_SHRINK_APPLIED
+TEXT_TRUNCATED
+FONT_FALLBACK_USED
+ELEMENT_OUTSIDE_CANVAS
+ELEMENT_SKIPPED
+```
+
+Jangan memasukkan data sensitif ke log.
+
+# 21. Preview Endpoint
+
+Audit endpoint preview Phase 1.
+
+Karena preview biasanya membutuhkan sample data dan format, pastikan tersedia endpoint yang menerima request body.
+
+Jika Phase 1 saat ini hanya menyediakan:
+
+```text
+GET /api/ai/design-templates/:id/preview
+```
+
+jangan mengirim data sensitif atau JSON besar melalui query string.
+
+Tambahkan atau ubah secara backward-compatible menjadi:
+
+```text
+POST /api/ai/design-templates/:id/preview
+```
+
+Request:
+
+```json
+{
+  "templateVersionId": "optional-version-id",
+  "data": {},
+  "format": "png",
+  "width": 1080,
+  "height": 1350
+}
+```
+
+Preview harus menggunakan core renderer yang sama dengan worker final.
+
+Perbedaan yang diizinkan hanya:
+
+* lokasi output sementara,
+* masa berlaku singkat,
+* tidak membuat batch item permanen jika memang bukan pola existing.
+
+Tambahkan rate limit dan size limit.
+
+Jangan membuat renderer preview terpisah.
+
+# 22. Single Render Endpoint
+
+Implementasikan endpoint existing:
+
+```text
+POST /api/ai/design-templates/:id/render
+```
+
+Endpoint harus:
+
+1. memvalidasi tenant,
+2. memilih immutable template version,
+3. membuat render item atau single-render record canonical,
+4. membuat idempotency hash,
+5. enqueue `design_render`,
+6. mengembalikan job/render item ID dan status.
+
+Jangan melakukan render berat secara sinkron dalam HTTP request.
+
+Jika endpoint Phase 1 sekarang hanya stub, pertahankan response contract sejauh mungkin.
+
+# 23. ZIP Export
+
+Job `design_render_zip_export` boleh tetap belum lengkap jika Phase 2 scope terlalu besar, tetapi jangan mengklaim selesai.
+
+Namun perbaiki perilaku stub:
+
+* endpoint tidak boleh memberi kesan ekspor berhasil,
+* status harus jelas `not_implemented` atau feature unavailable,
+* jangan enqueue job yang pasti gagal tanpa pesan jelas.
+
+ZIP export final dapat dipindahkan ke Phase 3 apabila roadmap awal memang menempatkannya di queue/batch phase.
+
+Laporkan keputusan ini secara eksplisit.
+
+# 24. Tests
+
+Tambahkan test tanpa menghapus 46 test Phase 1.
+
+## Unit Tests
+
+Minimal:
+
+* SVG XML escaping,
+* shape rendering,
+* rotation transform,
+* conditional visibility,
+* text wrapping,
+* text auto-shrink,
+* text truncation,
+* image fit cover,
+* image fit contain,
+* QR generation,
+* invalid QR data,
+* renderer cache key,
+* output format validation,
+* unsupported font fallback,
+* maximum canvas limits,
+* path sanitization,
+* SSRF blocked addresses,
+* redirect SSRF validation.
+
+## Renderer Integration Tests
+
+Render template fixture menjadi:
+
+* PNG,
+* JPG,
+* WebP,
+* PDF.
+
+Verifikasi:
+
+* file signature,
+* MIME,
+* width,
+* height,
+* non-zero file size,
+* PDF dapat dibaca,
+* same input menghasilkan deterministic output atau equivalent pixel output.
+
+Fixture minimal:
+
+1. background + text,
+2. long text,
+3. variable image,
+4. missing image fallback,
+5. shape + rotation,
+6. QR,
+7. Unicode Indonesia,
+8. Unicode Mandarin atau non-Latin,
+9. transparent PNG,
+10. multiple z-index layers.
+
+## Worker Tests
+
+* claim item,
+* successful render,
+* output upload,
+* item status completed,
+* batch counters sync,
+* storage failure causes retryable failure,
+* invalid template causes non-retryable failure,
+* duplicate worker execution tidak menghasilkan output ganda,
+* cancelled batch tidak disimpan sebagai completed,
+* tenant mismatch ditolak.
+
+## API Tests
+
+* preview POST valid,
+* preview cross-tenant denied,
+* unsupported format rejected,
+* oversized canvas rejected,
+* single render creates queued item,
+* single render idempotency,
+* render endpoint tidak memproses Sharp secara sinkron.
+
+Mock hanya external boundary.
+
+Jangan mock fungsi inti SVG builder dalam renderer integration test.
+
+# 25. Golden Fixtures
+
+Simpan fixture template JSON kecil.
+
+Jangan memasukkan puluhan file output besar ke repository.
+
+Untuk output test:
+
+* generate ke temp directory,
+* verifikasi metadata,
+* cleanup setelah test.
+
+Jika menggunakan snapshot SVG, snapshot harus stabil dan mudah ditinjau.
+
+# 26. Benchmark
+
+Setelah implementasi, lakukan benchmark lokal untuk template sederhana:
+
+* 10 render concurrency 1,
+* 10 render concurrency 2,
+* 100 render concurrency 1,
+* 100 render concurrency 2,
+* 100 render concurrency 4 jika resource environment aman.
+
+Ukur:
+
+* total duration,
+* average render duration,
+* p50 jika mudah,
+* p95 jika mudah,
+* peak RSS memory jika dapat diukur,
+* output size rata-rata,
+* error count.
+
+Gunakan asset lokal atau internal agar benchmark tidak mengukur internet latency.
+
+Jangan menyatakan kemampuan ribuan render sebelum benchmark.
+
+# 27. Environment Configuration
+
+Tambahkan konfigurasi dengan default aman:
+
+```env
+DESIGN_RENDER_CONCURRENCY=2
+DESIGN_RENDER_MAX_ATTEMPTS=3
+DESIGN_RENDER_TIMEOUT_MS=60000
+DESIGN_RENDER_MAX_REMOTE_ASSET_BYTES=10485760
+DESIGN_RENDER_ASSET_FETCH_TIMEOUT_MS=15000
+DESIGN_RENDER_CACHE_MAX_BYTES=104857600
+DESIGN_RENDER_CACHE_TTL_MS=300000
+DESIGN_RENDER_JPEG_QUALITY=88
+DESIGN_RENDER_WEBP_QUALITY=88
+DESIGN_RENDERER_VERSION=design-svg-renderer-v1
+```
+
+Gunakan config parser existing.
+
+Jangan membaca `process.env` tersebar di banyak file jika repository memiliki centralized config.
+
+# 28. Batasan Phase 2
+
+Phase 2 tidak perlu membangun:
+
+* visual drag-and-drop editor,
+* CSV mapping UI,
+* template marketplace,
+* AI template generator,
+* ZIP download lengkap jika roadmap menetapkannya di Phase 3,
+* animation,
+* video,
+* arbitrary HTML/CSS rendering,
+* arbitrary user SVG,
+* arbitrary JavaScript.
+
+Fokus pada renderer yang aman, deterministic, dan dapat di-reuse oleh preview, single render, dan batch worker.
+
+# 29. Larangan
+
+Jangan:
+
+* menggunakan image-generation AI untuk setiap render,
+* membuat browser Chromium baru untuk setiap item,
+* menggunakan `eval`,
+* menerima arbitrary JavaScript,
+* menerima arbitrary raw SVG dari user tanpa sanitasi,
+* memuat remote image langsung dari SVG,
+* menyimpan gambar base64 besar di PostgreSQL,
+* menyimpan seluruh binary output dalam job payload,
+* membuat output publik tanpa mengikuti policy storage existing,
+* mempercayai tenant ID dari frontend tanpa verifikasi canonical,
+* menandai batch completed jika masih ada item queued atau processing,
+* menelan error dan memberi status completed,
+* mengubah published template version,
+* membuat asset service baru jika sudah ada,
+* membuat duplicate variable resolver,
+* menghapus regression test Phase 1.
+
+# 30. Acceptance Criteria Phase 2
+
+Phase 2 dianggap selesai hanya apabila:
+
+1. `executeDesignRenderJob()` tidak lagi stub.
+2. Template version immutable dapat dirender.
+3. Variable resolver Phase 1 digunakan.
+4. SVG builder mendukung text, image, shape, QR, dan line.
+5. Text overflow memiliki wrap, shrink, dan truncate.
+6. Image memiliki cover, contain, fallback, dan clipping.
+7. SSRF protection tersedia.
+8. PNG valid dihasilkan.
+9. JPG valid dihasilkan.
+10. WebP valid dihasilkan.
+11. PDF valid dihasilkan.
+12. Output diunggah ke storage existing.
+13. Render item menyimpan output canonical.
+14. Batch progress tersinkronisasi.
+15. Worker bersifat idempotent.
+16. Concurrent claim terlindungi.
+17. Cross-tenant access ditolak.
+18. Cancellation diperiksa.
+19. Retryable dan non-retryable error dibedakan.
+20. Preview menggunakan renderer yang sama.
+21. Single render endpoint menggunakan queue.
+22. Test Phase 1 tetap lulus.
+23. Test baru lulus.
+24. Build sukses.
+25. Tidak ada error typecheck baru.
+26. Benchmark dilaporkan apa adanya.
+27. Tidak ada regresi terhadap AI generation, Document Engine, Presentation Engine, atau canvas editor V4.5.
+
+# 31. Laporan Akhir
+
+Setelah selesai, berikan laporan:
+
+```text
+Phase 2 — Core Renderer: Selesai / Belum Selesai
+
+Audit Findings
+Renderer Architecture
+Dependency Changes
+Files Added
+Files Modified
+Database Changes
+Job Changes
+API Changes
+Storage Integration
+Supported Elements
+Supported Formats
+Security Controls
+Idempotency Strategy
+Concurrency Strategy
+Tests Added
+Test Results
+Typecheck Result
+Build Result
+Benchmark
+Known Limitations
+Phase 3 Readiness
+```
+
+Cantumkan secara jujur:
+
+* apakah PDF vector atau rasterized,
+* apakah font measurement exact atau estimator,
+* apakah ZIP export masih stub,
+* apakah remote URL didukung,
+* nilai concurrency yang diuji,
+* error pre-existing versus error baru.
+
+Mulai implementasi Phase 2 sekarang.

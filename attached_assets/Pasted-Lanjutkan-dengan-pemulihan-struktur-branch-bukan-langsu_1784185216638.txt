@@ -1,0 +1,311 @@
+Lanjutkan dengan **pemulihan struktur branch**, bukan langsung integrasi.
+
+Kondisi saat ini:
+
+```text
+main:
+2a4dc6c  Phase 2 baseline
+352d4d6  Phase 3B ZIP export, salah diimplementasikan langsung ke main
+```
+
+Branch Team 1–5 belum tersedia.
+
+Remote fetch GitHub gagal karena authentication belum dikonfigurasi.
+
+## Keputusan
+
+1. Baseline resmi Phase 2 tetap:
+
+```text
+2a4dc6c
+```
+
+2. Commit:
+
+```text
+352d4d6
+```
+
+diperlakukan sebagai submission Team 2 yang salah lokasi.
+
+3. Jangan menjadikan `352d4d6` sebagai baseline untuk Team 1, Team 3, Team 4, atau Team 5.
+
+4. Jangan lanjut merge atau push ke `main`.
+
+5. Jangan menghapus commit `352d4d6` sebelum branch penyelamat dibuat dan commit sudah dipastikan aman.
+
+# BAGIAN 1 — AMANKAN KONDISI SAAT INI
+
+Pastikan working tree bersih.
+
+File prompt yang untracked bukan kode. Jangan commit file tersebut kecuali memang diminta.
+
+Buat tag atau branch safety sebelum melakukan perubahan:
+
+```bash
+git branch safety/main-with-phase3b-352d4d6 352d4d6
+```
+
+Verifikasi:
+
+```bash
+git show --stat 352d4d6
+git branch --contains 352d4d6
+```
+
+Jangan melakukan reset sebelum branch safety berhasil dibuat.
+
+# BAGIAN 2 — BUAT BRANCH TEAM 2 DARI BASELINE PHASE 2
+
+Buat branch Team 2 dari baseline resmi:
+
+```bash
+git switch -c feature/design-template-phase3b-zip 2a4dc6c
+```
+
+Cherry-pick submission Team 2:
+
+```bash
+git cherry-pick 352d4d6
+```
+
+Jika cherry-pick conflict:
+
+1. baca perubahan secara semantik,
+2. jangan memilih accept-all,
+3. selesaikan hanya conflict yang terkait Phase 3B,
+4. jalankan test Team 2,
+5. lanjutkan cherry-pick.
+
+Setelah berhasil:
+
+```bash
+git log --oneline --decorate -5
+git diff 2a4dc6c..HEAD --stat
+```
+
+Branch Team 2 sekarang harus berisi perubahan ZIP export saja.
+
+Catat commit SHA baru hasil cherry-pick. SHA kemungkinan berbeda dari `352d4d6`.
+
+# BAGIAN 3 — KEMBALIKAN MAIN KE BASELINE YANG BENAR
+
+Lakukan hanya setelah:
+
+* safety branch tersedia,
+* branch Team 2 tersedia,
+* hasil cherry-pick terverifikasi.
+
+Karena `main` lokal belum boleh memuat Phase 3B sebelum review, kembalikan `main` ke baseline Phase 2:
+
+```bash
+git switch main
+git reset --hard 2a4dc6c
+```
+
+Jangan push force ke remote saat authentication belum tersedia.
+
+Verifikasi:
+
+```bash
+git status
+git log --oneline -5
+```
+
+Main lokal harus kembali ke:
+
+```text
+2a4dc6c
+```
+
+Branch safety dan branch Team 2 tetap menyimpan perubahan.
+
+# BAGIAN 4 — JANGAN MENGONFIGURASI TOKEN SECARA SEMBARANGAN
+
+Jangan meminta atau menulis token GitHub langsung di:
+
+* source code,
+* command history yang dicetak ke laporan,
+* `.env` committed,
+* file repository,
+* chat output.
+
+Token harus ditambahkan oleh pemilik repository melalui Replit Secrets atau integrasi GitHub resmi.
+
+Nama secret mengikuti konfigurasi environment existing, misalnya:
+
+```text
+GITHUB_TOKEN
+```
+
+atau gunakan GitHub App/credential helper yang sudah didukung Replit.
+
+Jangan mengarang nilai token.
+
+Setelah credential tersedia, verifikasi tanpa menampilkan token:
+
+```bash
+git ls-remote origin
+git fetch --all --prune
+```
+
+Laporkan hanya sukses/gagal.
+
+# BAGIAN 5 — CARI APAKAH BRANCH TIM TERDAPAT DI WORKTREE ATAU REF LAIN
+
+Sebelum menyimpulkan pekerjaan hilang, periksa:
+
+```bash
+git branch -a
+git show-ref
+git reflog --all --date=iso
+git worktree list
+git fsck --full --no-reflogs --unreachable
+```
+
+Cari commit yang mungkin memiliki pesan terkait:
+
+```text
+phase3a
+batch
+phase4
+template library
+phase5
+editor
+phase6
+bulk
+phase7
+AI template
+```
+
+Jangan otomatis menggunakan dangling commit.
+
+Jika menemukan kandidat:
+
+1. inspect `git show --stat`,
+2. bandingkan terhadap baseline `2a4dc6c`,
+3. pastikan scope cocok,
+4. buat branch recovery,
+5. laporkan sebelum review.
+
+# BAGIAN 6 — BRANCH YANG WAJIB TERSEDIA
+
+Struktur akhir yang dibutuhkan:
+
+```text
+feature/design-template-phase3a-batch
+feature/design-template-phase3b-zip
+feature/design-template-phase4-library
+feature/design-template-phase5-editor
+feature/design-template-phase6-7-bulk-ai
+```
+
+Team 2 dapat dipulihkan dari commit `352d4d6`.
+
+Team 1, Team 3, Team 4, dan Team 5 harus:
+
+* ditemukan melalui ref/reflog/worktree, atau
+* dikerjakan pada branch masing-masing dari baseline `2a4dc6c`.
+
+Jangan meminta tim memulai dari `main` yang memuat perubahan Team 2.
+
+# BAGIAN 7 — REVIEW TEAM 2 SETELAH BRANCH DIPULIHKAN
+
+Setelah branch Team 2 dibuat, Team 6 boleh mereview Team 2 langsung pada:
+
+```text
+feature/design-template-phase3b-zip
+```
+
+Review harus mencakup:
+
+* export record canonical,
+* async ZIP worker,
+* manifest,
+* failures.csv,
+* ZIP Slip protection,
+* formula injection protection,
+* bounded memory,
+* temp file cleanup,
+* fingerprint idempotency,
+* signed URL authorization,
+* tenant isolation,
+* tests,
+* build,
+* typecheck comparison.
+
+Jangan memberi status APPROVED hanya karena commit sebelumnya berada di main.
+
+# BAGIAN 8 — STATUS MAIN
+
+Sampai seluruh tim lolos:
+
+```text
+main = 2a4dc6c
+```
+
+Jangan:
+
+* push `352d4d6` ke remote main,
+* membuat integration branch dari main yang tercampur,
+* menjadikan Phase 3B sebagai baseline,
+* melanjutkan review Team 3–5 dari kode Team 2.
+
+# BAGIAN 9 — LAPORAN PEMULIHAN
+
+Berikan laporan:
+
+```text
+BRANCH RECOVERY REPORT
+
+Phase 2 Baseline:
+Safety Branch:
+Safety Commit:
+Main Before Recovery:
+Main After Recovery:
+
+Team 2 Recovery:
+Original Commit:
+Recovered Branch:
+Recovered Commit:
+Cherry-pick Result:
+Tests:
+Build:
+Typecheck:
+
+Remote Authentication:
+Credential Available:
+git ls-remote:
+git fetch:
+
+Additional Refs Checked:
+Reflog Findings:
+Worktree Findings:
+Dangling Commit Findings:
+
+Team 1 Branch:
+Team 2 Branch:
+Team 3 Branch:
+Team 4 Branch:
+Team 5 Branch:
+
+Ready to Resume Independent Review:
+YES / NO
+Blocking Issues:
+```
+
+# BAGIAN 10 — URUTAN SESUDAH PEMULIHAN
+
+Setelah struktur branch benar:
+
+1. re-review Team 1 pada branch-nya,
+2. review Team 2 yang dipulihkan,
+3. review Team 3,
+4. review Team 4,
+5. review Team 5,
+6. buat integration branch,
+7. integrasikan branch approved secara berurutan,
+8. full regression,
+9. baru putuskan merge ke main.
+
+Mulai dengan membuat safety branch dan memulihkan branch Team 2. Jangan melakukan pekerjaan fitur baru.

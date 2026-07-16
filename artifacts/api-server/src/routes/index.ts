@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import metricsRouter from "./metrics";
 import agentsRouter from "./agents";
 import registryRouter from "./registry";
 import orchestratorRouter from "./orchestrator";
@@ -69,6 +70,8 @@ import templateEngineRouter from "./template-engine";
 import portfolioGalleryRouter from "./portfolio-gallery";
 import productionPipelineRouter from "./production-pipeline";
 import designStudioRouter from "./design-studio";
+import designTemplatesRouter from "./design-templates";
+import designTemplatesAiAssistRouter from "./design-templates-ai-assist";
 import creativeMarketplaceRouter from "./creative-marketplace";
 
 const router: IRouter = Router();
@@ -140,7 +143,10 @@ router.use(affiliatesRouter);
 router.use(customerHealthRouter);
 router.use(commercialAnalyticsRouter);
 router.use(observabilityRouter);
+router.use(metricsRouter);
 router.use(designStudioRouter);
+router.use(designTemplatesRouter);
+router.use(designTemplatesAiAssistRouter);
 router.use(creativeMarketplaceRouter);
 
 export default router;

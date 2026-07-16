@@ -93,11 +93,37 @@ const PIPELINE_STEPS = [
 ];
 
 const STEP_NAME_MAP: Record<string, string> = {
-  "brand-strategist":  "Brand Strategy",
-  "creative-director": "Creative Direction",
-  "copywriter":        "Copy Production",
-  "quality-control":   "Quality Control",
+  "brand-strategist":           "Brand Strategy",
+  "creative-director":          "Creative Direction",
+  "copywriter":                 "Copy Production",
+  "quality-control":            "Quality Control",
+  "fashion-design-specialist":  "Fashion Specialist",
+  "interior-design-specialist": "Interior Specialist",
 };
+
+/** Specialist agents — displayed separately from the main pipeline */
+const SPECIALIST_AGENTS = [
+  {
+    slug:  "fashion-design-specialist",
+    label: "Fashion Design Specialist",
+    model: "Claude Opus 4.8",
+    provider: "Anthropic",
+    color: "from-rose-500/10 to-pink-500/10 border-rose-500/20",
+    iconColor: "text-rose-400",
+    description: "Koleksi fashion, brand storytelling, editorial copywriting, dan fashion brand strategy.",
+    capabilities: ["Collection Brief", "Fashion Copywriting", "Brand Strategy", "Trend Research"],
+  },
+  {
+    slug:  "interior-design-specialist",
+    label: "Interior Design Specialist",
+    model: "Gemini 2.5 Pro",
+    provider: "Google",
+    color: "from-teal-500/10 to-emerald-500/10 border-teal-500/20",
+    iconColor: "text-teal-400",
+    description: "Konsep spasial, spesifikasi material, proposal klien, dan interior brand identity.",
+    capabilities: ["Spatial Concept", "Material Spec", "Client Proposal", "Style Direction"],
+  },
+];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -1808,6 +1834,28 @@ export default function CreativeAI() {
             )}
           </div>
         </ScrollArea>
+
+        {/* ── Specialist Agents Info ───────────────────────────────── */}
+        <div className="border-t border-border/40 p-3 space-y-2">
+          <p className="text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider px-1">Specialist Agents</p>
+          {SPECIALIST_AGENTS.map((agent) => (
+            <div
+              key={agent.slug}
+              className={cn("rounded-md border bg-gradient-to-br p-2.5 space-y-1.5", agent.color)}
+            >
+              <div className="flex items-center justify-between gap-1">
+                <span className={cn("text-[11px] font-mono font-semibold truncate", agent.iconColor)}>{agent.label}</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground/80 leading-relaxed">{agent.description}</p>
+              <div className="flex flex-wrap gap-1">
+                {agent.capabilities.slice(0, 2).map((cap) => (
+                  <span key={cap} className="text-[9px] font-mono bg-background/40 border border-border/40 rounded px-1 py-0.5 text-muted-foreground">{cap}</span>
+                ))}
+                <span className="text-[9px] font-mono text-muted-foreground/60">via {agent.model}</span>
+              </div>
+            </div>
+          ))}
+        </div>
       </aside>
 
       {/* ── Right panel: form or detail ──────────────────────────────── */}

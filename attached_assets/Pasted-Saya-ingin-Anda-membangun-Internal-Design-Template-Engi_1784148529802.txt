@@ -1,0 +1,1097 @@
+Saya ingin Anda membangun **Internal Design Template Engine** untuk platform AI Creative yang sudah ada.
+
+Tujuan utama sistem ini:
+
+1. AI hanya membuat desain/template sekali.
+2. Template disimpan dalam format JSON yang reusable.
+3. Untuk menghasilkan 100–10.000 desain, sistem hanya mengganti data dinamis seperti teks, gambar, logo, harga, warna, dan QR code.
+4. Sistem tidak boleh memanggil image-generation AI untuk setiap hasil.
+5. Rendering dilakukan oleh worker internal menggunakan template yang sama.
+6. Hasil akhir dapat diekspor menjadi PNG, JPG, WebP, dan PDF.
+7. Proses harus mendukung batch rendering, queue, retry, idempotency, progress tracking, dan tenant isolation.
+
+Gunakan stack yang sudah ada dalam repository. Jangan membuat aplikasi terpisah jika tidak diperlukan.
+
+Stack utama:
+
+* Backend: Node.js, TypeScript, Express
+* Database: PostgreSQL/Supabase
+* ORM: Drizzle ORM
+* Frontend: React, Vite, Tailwind, Shadcn UI
+* Storage: gunakan storage abstraction yang sudah ada
+* Queue: gunakan job/worker infrastructure yang sudah ada
+* Renderer: pilih implementasi yang paling stabil antara SVG + Sharp atau HTML/CSS + Playwright
+* Editor visual: gunakan Fabric.js atau Konva.js hanya jika repository belum memiliki canvas editor
+
+Jangan langsung menulis kode sebelum melakukan audit terhadap:
+
+* struktur monorepo,
+* sistem job worker yang sudah ada,
+* storage service,
+* tenant/request context,
+* authentication dan authorization,
+* asset management,
+* design/document/presentation engine yang sudah ada,
+* pola database dan migration,
+* logging dan error handling,
+* frontend routing dan design system.
+
+Jangan membuat duplikasi terhadap service, context, renderer, queue, storage, atau repository pattern yang sudah tersedia.
+
+## A. Konsep Arsitektur
+
+Bangun alur berikut:
+
+```text
+User / AI Designer
+        ↓
+Template Editor / Template Generator
+        ↓
+Design Template JSON
+        ↓
+Template Version
+        ↓
+Dataset / Product Data
+        ↓
+Variable Binding
+        ↓
+Batch Render Queue
+        ↓
+Render Worker
+        ↓
+PNG / JPG / WebP / PDF
+        ↓
+Object Storage
+        ↓
+Render Result Gallery
+```
+
+AI hanya boleh digunakan untuk:
+
+* membuat konsep template baru,
+* menghasilkan copy,
+* memilih layout,
+* menyarankan warna,
+* menghasilkan gambar produk/background jika memang dibutuhkan,
+* mengubah template secara struktural.
+
+AI tidak boleh digunakan untuk merender ulang setiap variasi template.
+
+## B. Template Schema
+
+Buat schema template yang typed, versioned, dan dapat divalidasi.
+
+Contoh struktur:
+
+```ts
+type DesignTemplate = {
+  schemaVersion: string;
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  category?: string;
+  canvas: {
+    width: number;
+    height: number;
+    unit: "px";
+    backgroundColor?: string;
+    backgroundImage?: AssetReference;
+  };
+  elements: DesignElement[];
+  variables: TemplateVariable[];
+  metadata: {
+    createdBy: string;
+    createdAt: string;
+    updatedAt: string;
+    version: number;
+  };
+};
+```
+
+Jenis elemen minimal:
+
+```ts
+type DesignElement =
+  | TextElement
+  | ImageElement
+  | ShapeElement
+  | GroupElement
+  | QrCodeElement
+  | LineElement
+  | IconElement;
+```
+
+Properti umum setiap elemen:
+
+```ts
+{
+  id: string;
+  type: string;
+  name?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
+  opacity?: number;
+  visible?: boolean;
+  locked?: boolean;
+  zIndex: number;
+}
+```
+
+Text element harus mendukung:
+
+* static text,
+* variable text,
+* font family,
+* font size,
+* font weight,
+* italic,
+* text color,
+* text alignment,
+* line height,
+* letter spacing,
+* underline,
+* text transform,
+* maximum lines,
+* overflow handling,
+* auto-shrink,
+* ellipsis,
+* text box constraints.
+
+Image element harus mendukung:
+
+* static image,
+* variable image,
+* object-fit: cover, contain, fill,
+* crop,
+* mask/frame,
+* border radius,
+* opacity,
+* placeholder image,
+* fallback jika URL gagal.
+
+Shape element harus mendukung:
+
+* rectangle,
+* circle,
+* rounded rectangle,
+* polygon jika sederhana,
+* fill color,
+* border,
+* gradient jika renderer mendukung,
+* shadow.
+
+QR code element harus mendukung variable URL atau text.
+
+## C. Template Variable System
+
+Buat variable registry.
+
+Jenis variable minimal:
+
+```ts
+type TemplateVariableType =
+  | "text"
+  | "number"
+  | "currency"
+  | "image"
+  | "color"
+  | "url"
+  | "date"
+  | "boolean";
+```
+
+Contoh:
+
+```json
+{
+  "key": "product_name",
+  "label": "Product Name",
+  "type": "text",
+  "required": true,
+  "defaultValue": "Product Name",
+  "validation": {
+    "maxLength": 80
+  }
+}
+```
+
+Contoh binding di element:
+
+```json
+{
+  "type": "text",
+  "value": "{{product_name}}"
+}
+```
+
+atau gunakan binding object yang lebih aman:
+
+```json
+{
+  "type": "text",
+  "binding": {
+    "variableKey": "product_name",
+    "fallback": "Product Name"
+  }
+}
+```
+
+Lebih utamakan binding object daripada string replacement mentah untuk mencegah injection dan kesalahan parsing.
+
+Tambahkan formatter:
+
+* currency,
+* number,
+* percentage,
+* date,
+* uppercase,
+* lowercase,
+* title case,
+* truncate.
+
+Tambahkan conditional visibility sederhana:
+
+```json
+{
+  "visibleWhen": {
+    "variable": "show_price",
+    "operator": "equals",
+    "value": true
+  }
+}
+```
+
+Jangan membuat expression engine yang mengeksekusi JavaScript dari user.
+
+## D. Database
+
+Audit schema yang ada terlebih dahulu. Jika belum tersedia, buat tabel berikut dengan nama yang mengikuti konvensi repository.
+
+### design_templates
+
+Kolom minimal:
+
+* id
+* tenant_id
+* name
+* slug
+* description
+* category
+* status: draft, published, archived
+* active_version_id
+* thumbnail_asset_id
+* created_by
+* created_at
+* updated_at
+* deleted_at
+
+### design_template_versions
+
+* id
+* tenant_id
+* template_id
+* version_number
+* schema_version
+* template_json JSONB
+* changelog
+* created_by
+* created_at
+* published_at
+
+Template version yang sudah dipakai dalam render tidak boleh diubah secara in-place.
+
+Setiap perubahan membuat version baru.
+
+### design_render_batches
+
+* id
+* tenant_id
+* template_id
+* template_version_id
+* name
+* status: draft, queued, processing, completed, partially_failed, failed, cancelled
+* total_items
+* queued_items
+* processing_items
+* completed_items
+* failed_items
+* requested_format
+* requested_width
+* requested_height
+* requested_by
+* created_at
+* started_at
+* completed_at
+
+### design_render_items
+
+* id
+* tenant_id
+* batch_id
+* template_id
+* template_version_id
+* row_index
+* input_data JSONB
+* input_hash
+* status
+* attempt_count
+* output_asset_id
+* output_url jika pola repository memang menyimpan URL
+* width
+* height
+* format
+* error_code
+* error_message
+* queued_at
+* started_at
+* completed_at
+* created_at
+
+Tambahkan unique constraint untuk mencegah render duplikat, misalnya berdasarkan:
+
+* tenant_id,
+* batch_id,
+* row_index,
+
+atau idempotency key yang eksplisit.
+
+### design_assets
+
+Gunakan tabel asset yang sudah ada jika tersedia.
+
+Jangan membuat tabel asset baru jika platform sudah memiliki media library atau object storage asset table.
+
+## E. Renderer
+
+Pilih salah satu strategi utama setelah audit.
+
+### Pilihan utama yang disarankan: SVG + Sharp
+
+Gunakan SVG sebagai intermediate render format karena:
+
+* lebih ringan daripada membuka browser untuk setiap item,
+* mudah mengatur teks, gambar, shape, dan clipping,
+* Sharp dapat menghasilkan PNG, JPG, dan WebP,
+* cocok untuk batch rendering skala besar.
+
+Alur:
+
+```text
+Template JSON
+   ↓
+Resolve Variables
+   ↓
+Build SVG
+   ↓
+Sharp Render
+   ↓
+PNG/JPG/WebP
+```
+
+Untuk PDF, gunakan:
+
+* PDFKit,
+* SVG-to-PDF,
+* atau library yang sudah ada dalam repository.
+
+Gunakan Playwright/Chromium hanya jika fitur HTML/CSS yang dibutuhkan tidak dapat dicapai dengan SVG.
+
+Jangan membuka satu browser baru untuk setiap render.
+
+Jika Playwright diperlukan:
+
+* gunakan browser pool,
+* reuse browser context secara aman,
+* batasi concurrency,
+* tutup page setelah render,
+* tambahkan timeout,
+* cegah request eksternal sembarangan.
+
+Renderer harus deterministic.
+
+Input template dan data yang sama harus menghasilkan output visual yang sama sejauh font dan asset tidak berubah.
+
+## F. Font Handling
+
+Buat font registry.
+
+Hanya izinkan font yang sudah terdaftar dan memiliki lisensi penggunaan.
+
+Simpan metadata:
+
+* font family,
+* font weight,
+* file reference internal,
+* supported styles.
+
+Renderer tidak boleh mengambil font acak dari URL eksternal pada saat render.
+
+Jika font tidak tersedia:
+
+1. gunakan fallback font yang ditentukan template,
+2. jika tidak ada, gunakan fallback platform,
+3. catat warning dalam render metadata.
+
+Jangan membagikan atau mengekspos file font secara publik tanpa izin lisensi.
+
+## G. Asset Handling
+
+Semua gambar input harus melalui asset service.
+
+Dukung:
+
+* upload file,
+* image URL import jika diizinkan,
+* internal storage asset,
+* image validation,
+* MIME validation,
+* size limit,
+* timeout,
+* corrupted file detection,
+* image dimension extraction.
+
+Sebelum render:
+
+* download atau resolve asset,
+* cache asset secara lokal sementara,
+* batasi domain remote jika URL eksternal diizinkan,
+* cegah SSRF,
+* hapus temporary file setelah selesai.
+
+Tambahkan fallback placeholder jika gambar produk tidak tersedia.
+
+## H. Batch Rendering
+
+User harus dapat:
+
+1. memilih template,
+2. mengunggah CSV/XLSX atau memasukkan data dari database,
+3. memetakan kolom dataset ke template variables,
+4. melihat preview beberapa baris,
+5. memulai batch render,
+6. melihat progress,
+7. retry item gagal,
+8. mengunduh hasil individual atau ZIP.
+
+Contoh data:
+
+```json
+[
+  {
+    "product_name": "Coconut Charcoal Briquette",
+    "price": "USD 1,200 / MT",
+    "product_image": "asset-id-1",
+    "country": "Indonesia"
+  },
+  {
+    "product_name": "Palm Acid Oil",
+    "price": "USD 750 / MT",
+    "product_image": "asset-id-2",
+    "country": "Indonesia"
+  }
+]
+```
+
+Jangan memasukkan seluruh dataset besar ke satu job.
+
+Gunakan:
+
+```text
+1 Batch
+  ├── Render Item 1
+  ├── Render Item 2
+  ├── Render Item 3
+  └── Render Item N
+```
+
+Batch hanya menjadi parent/aggregator.
+
+Setiap render item harus dapat di-retry sendiri.
+
+## I. Queue dan Worker
+
+Integrasikan dengan worker/job system yang sudah tersedia.
+
+Tambahkan job type seperti:
+
+```text
+design_render
+design_render_batch_dispatch
+design_render_zip_export
+```
+
+Worker harus:
+
+* mengambil template version yang immutable,
+* memvalidasi input data,
+* resolve variables,
+* resolve assets,
+* render,
+* upload ke storage,
+* menyimpan output,
+* memperbarui progress batch,
+* menangani retry,
+* mencatat error terstruktur.
+
+Tambahkan configurable concurrency:
+
+```env
+DESIGN_RENDER_CONCURRENCY=4
+DESIGN_RENDER_MAX_ATTEMPTS=3
+DESIGN_RENDER_TIMEOUT_MS=60000
+DESIGN_RENDER_MAX_BATCH_SIZE=10000
+```
+
+Nilai default harus aman untuk resource Replit.
+
+Jangan menjalankan 1.000 render secara paralel.
+
+Gunakan bounded concurrency.
+
+## J. API
+
+Buat REST API mengikuti pola repository.
+
+Endpoint minimal:
+
+```text
+POST   /api/design-templates
+GET    /api/design-templates
+GET    /api/design-templates/:id
+PATCH  /api/design-templates/:id
+POST   /api/design-templates/:id/versions
+POST   /api/design-templates/:id/publish
+POST   /api/design-templates/:id/duplicate
+POST   /api/design-templates/:id/preview
+```
+
+Batch API:
+
+```text
+POST   /api/design-render-batches
+GET    /api/design-render-batches
+GET    /api/design-render-batches/:id
+POST   /api/design-render-batches/:id/start
+POST   /api/design-render-batches/:id/cancel
+POST   /api/design-render-batches/:id/retry-failed
+GET    /api/design-render-batches/:id/items
+POST   /api/design-render-batches/:id/export-zip
+```
+
+Tambahkan single render endpoint:
+
+```text
+POST /api/design-templates/:id/render
+```
+
+Contoh request:
+
+```json
+{
+  "templateVersionId": "version-id",
+  "format": "png",
+  "data": {
+    "product_name": "Coconut Charcoal Briquette",
+    "price": "USD 1,200 / MT",
+    "product_image": "asset-id"
+  },
+  "idempotencyKey": "order-123-product-card"
+}
+```
+
+Semua endpoint harus:
+
+* tenant-scoped,
+* memiliki authorization,
+* divalidasi dengan schema validator yang sudah digunakan repository,
+* memiliki request limits,
+* tidak menerima arbitrary executable code.
+
+## K. Frontend Template Library
+
+Buat halaman:
+
+```text
+/design-templates
+/design-templates/new
+/design-templates/:id/editor
+/design-templates/:id/versions
+/design-render-batches
+/design-render-batches/:id
+```
+
+Template Library harus menampilkan:
+
+* thumbnail,
+* nama,
+* kategori,
+* ukuran,
+* status,
+* versi aktif,
+* waktu terakhir diubah,
+* tombol edit,
+* duplicate,
+* preview,
+* create batch,
+* archive.
+
+## L. Template Editor MVP
+
+Buat editor MVP yang stabil, bukan langsung mencoba meniru seluruh Canva.
+
+Fitur MVP:
+
+* memilih ukuran canvas,
+* background color,
+* upload background image,
+* menambah text,
+* menambah image placeholder,
+* menambah rectangle/circle,
+* menambah QR code,
+* drag,
+* resize,
+* rotate,
+* duplicate,
+* delete,
+* lock,
+* layer ordering,
+* alignment guide dasar,
+* variable binding,
+* preview dengan sample data,
+* save draft,
+* publish version.
+
+Sidebar editor:
+
+```text
+Templates
+Elements
+Text
+Uploads
+Variables
+Layers
+Canvas
+```
+
+Panel kanan:
+
+```text
+Position
+Size
+Rotation
+Opacity
+Typography
+Fill
+Border
+Shadow
+Binding
+Visibility
+```
+
+Jangan membuat editor terlalu kompleks pada fase pertama.
+
+## M. Dataset Mapping UI
+
+Saat user mengunggah CSV atau XLSX:
+
+1. parse file,
+2. tampilkan header,
+3. tampilkan 5–10 preview rows,
+4. tampilkan daftar template variables,
+5. user memetakan dataset column ke variable,
+6. validasi required fields,
+7. tampilkan jumlah baris valid dan invalid,
+8. izinkan user memperbaiki mapping,
+9. baru buat batch.
+
+Contoh:
+
+```text
+Template Variable       Dataset Column
+product_name       →    Nama Produk
+price              →    Harga Jual
+product_image      →    URL Gambar
+country            →    Negara Asal
+```
+
+## N. AI Integration
+
+Buat AI Template Assistant sebagai lapisan opsional.
+
+Contoh user prompt:
+
+```text
+Buat template Instagram produk ekspor ukuran 1080x1350.
+Gunakan area untuk logo, foto produk, nama produk, spesifikasi singkat,
+negara asal, dan tombol kontak.
+```
+
+AI harus menghasilkan:
+
+* template plan,
+* layout JSON,
+* variable list,
+* copy placeholder,
+* color suggestion.
+
+AI output harus:
+
+1. divalidasi terhadap DesignTemplate schema,
+2. disanitasi,
+3. tidak langsung dipercaya,
+4. dapat diedit user,
+5. disimpan sebagai draft.
+
+Jangan meminta AI menghasilkan final image untuk setiap produk.
+
+Untuk batch 1.000 item, AI cukup dipanggil sekali untuk template dan, jika perlu, sekali untuk menghasilkan copy dataset. Render 1.000 item dilakukan renderer biasa.
+
+## O. Template Packs
+
+Siapkan struktur template pack agar sistem dapat memiliki banyak kategori:
+
+* Product Promotion
+* Marketplace Listing
+* Instagram Post
+* Instagram Story
+* LinkedIn Post
+* Facebook Post
+* Product Catalog
+* Export Commodity
+* Real Estate
+* Food Menu
+* Event Poster
+* Quote Card
+* Certificate
+* Thumbnail
+
+Buat minimal 3 seed templates sederhana untuk testing:
+
+1. Product Promotion 1080×1350
+2. Marketplace Product Card 1080×1080
+3. Instagram Story 1080×1920
+
+Template seed harus menggunakan placeholder asset yang aman dan tidak melanggar lisensi.
+
+## P. Overflow Protection
+
+Renderer wajib menangani:
+
+* teks terlalu panjang,
+* image missing,
+* image aspect ratio berbeda,
+* variable kosong,
+* unsupported font,
+* invalid color,
+* output dimension terlalu besar,
+* corrupted asset,
+* QR terlalu panjang,
+* element keluar dari canvas.
+
+Implementasikan overflow policy:
+
+```text
+Text:
+1. wrap
+2. reduce font size sampai minimum
+3. truncate/ellipsis jika masih tidak muat
+4. simpan warning
+
+Image:
+1. cover/contain sesuai template
+2. clip dalam frame
+3. gunakan fallback jika gagal
+```
+
+Preview dan final render harus menggunakan logic layout yang sama agar hasil tidak berbeda.
+
+## Q. Security
+
+Wajib:
+
+* tenant isolation,
+* role-based authorization,
+* validate template JSON,
+* maximum canvas size,
+* maximum element count,
+* maximum image size,
+* maximum batch size,
+* SSRF protection,
+* sanitize SVG,
+* no arbitrary HTML injection,
+* no JavaScript execution dari template,
+* no user-controlled file path,
+* no shell command interpolation,
+* signed/private output URLs jika asset bersifat private.
+
+SVG hasil render tidak boleh mengizinkan:
+
+* script,
+* foreignObject yang tidak dikontrol,
+* external entity,
+* remote resource tanpa validation.
+
+## R. Observability dan Cost Tracking
+
+Catat metrik berikut:
+
+* template_id,
+* version_id,
+* batch_id,
+* render_item_id,
+* render duration,
+* queue wait duration,
+* upload duration,
+* output file size,
+* retry count,
+* error category,
+* worker name,
+* estimated infrastructure cost jika sistem cost tracking sudah ada.
+
+Tampilkan statistik batch:
+
+```text
+Total: 1,000
+Queued: 20
+Processing: 4
+Completed: 960
+Failed: 16
+Progress: 96%
+```
+
+Jangan membuat progress palsu.
+
+Progress harus berasal dari database/job state nyata.
+
+## S. Tests
+
+Tambahkan automated tests.
+
+Minimal:
+
+### Unit tests
+
+* template schema validation,
+* variable binding,
+* formatter,
+* conditional visibility,
+* text overflow,
+* image fallback,
+* idempotency hash,
+* tenant guard.
+
+### Renderer tests
+
+* deterministic rendering,
+* correct dimensions,
+* PNG/JPG/WebP valid,
+* missing variable fallback,
+* long text,
+* missing image,
+* unicode text,
+* QR code.
+
+### API tests
+
+* unauthorized access,
+* cross-tenant access blocked,
+* create/update/publish template,
+* immutable published version,
+* single render,
+* batch creation,
+* retry failed item,
+* cancel batch.
+
+### Integration tests
+
+* render → upload → asset record,
+* batch progress aggregation,
+* worker retry,
+* duplicate idempotency request.
+
+Simpan golden image tests secara terbatas agar repository tidak membengkak.
+
+Gunakan pixel/dimension/hash check yang toleran terhadap perbedaan environment jika diperlukan.
+
+## T. Performance Target
+
+Target awal yang realistis:
+
+* satu render sederhana tidak membuka proses browser baru,
+* batch 100 desain dapat berjalan dengan bounded concurrency,
+* tidak terjadi memory leak,
+* worker tetap responsif,
+* satu item gagal tidak menggagalkan seluruh batch,
+* output tersimpan secara incremental,
+* batch dapat dilanjutkan setelah worker restart.
+
+Jangan mengklaim angka performa tanpa benchmark.
+
+Lakukan benchmark sederhana untuk:
+
+* 10 render,
+* 100 render,
+* concurrency 1,
+* concurrency 2,
+* concurrency 4.
+
+Laporkan:
+
+* total duration,
+* average render duration,
+* peak memory jika dapat diukur,
+* error count.
+
+## U. Fase Implementasi
+
+Kerjakan dalam fase berikut agar aman.
+
+### Phase 1 — Foundation
+
+* audit repository,
+* domain types,
+* JSON schema,
+* database schema,
+* migration,
+* repository/service layer,
+* tenant guard,
+* template versioning,
+* tests.
+
+### Phase 2 — Core Renderer
+
+* variable resolver,
+* SVG generator,
+* text layout,
+* image resolver,
+* shape renderer,
+* QR renderer,
+* Sharp output,
+* storage upload,
+* renderer tests.
+
+### Phase 3 — Queue and Batch
+
+* job types,
+* render worker,
+* batch dispatcher,
+* progress aggregator,
+* retry,
+* cancellation,
+* idempotency,
+* ZIP export.
+
+### Phase 4 — Template Library and Preview
+
+* template list,
+* create/edit metadata,
+* preview,
+* versions,
+* publish,
+* duplicate,
+* archive.
+
+### Phase 5 — Visual Editor MVP
+
+* canvas editor,
+* element manipulation,
+* variable binding,
+* layers,
+* sample data preview,
+* save and publish.
+
+### Phase 6 — Dataset Mapping and Bulk Create
+
+* CSV/XLSX upload,
+* mapping UI,
+* validation,
+* batch creation,
+* progress dashboard,
+* result gallery,
+* ZIP download.
+
+### Phase 7 — AI Template Assistant
+
+* prompt to layout plan,
+* AI-generated template JSON,
+* schema validation,
+* draft preview,
+* user approval,
+* no per-item AI rendering.
+
+Jangan melanjutkan ke fase berikutnya apabila fase sebelumnya belum lulus test dan review.
+
+## V. Acceptance Criteria
+
+Implementasi dianggap selesai jika:
+
+1. Admin dapat membuat satu template.
+2. Template memiliki variables.
+3. Template dapat dipublish sebagai immutable version.
+4. User dapat membuat preview menggunakan sample data.
+5. User dapat mengunggah dataset minimal 100 baris.
+6. Kolom dataset dapat dipetakan ke variables.
+7. Sistem membuat batch render.
+8. Worker menghasilkan output tanpa memanggil image-generation AI per item.
+9. Hasil tersimpan di object storage.
+10. User dapat melihat progress nyata.
+11. Item gagal dapat di-retry.
+12. User dapat mengunduh hasil.
+13. Cross-tenant access ditolak.
+14. Render bersifat idempotent.
+15. Test suite dan build lulus.
+16. Tidak ada regresi pada fitur lama.
+17. Tidak ada duplikasi engine atau service yang sudah ada.
+
+## W. Larangan
+
+Jangan:
+
+* merender setiap gambar menggunakan generative AI,
+* membuat browser baru untuk setiap item jika tidak diperlukan,
+* memasukkan 10.000 item dalam satu job payload,
+* menyimpan base64 gambar besar di database,
+* mengubah published template version,
+* menjalankan user-provided JavaScript,
+* menggunakan eval,
+* mengizinkan arbitrary HTML/SVG script,
+* mengabaikan tenant isolation,
+* membuat mock success untuk render,
+* menyembunyikan item gagal,
+* mengubah modul lama tanpa kebutuhan,
+* membuat tabel atau service duplikat.
+
+## X. Output Laporan
+
+Setelah setiap fase, laporkan:
+
+1. audit findings,
+2. file baru,
+3. file yang diubah,
+4. migration,
+5. API endpoint,
+6. worker/job type,
+7. test yang ditambahkan,
+8. hasil test,
+9. hasil typecheck,
+10. hasil build,
+11. benchmark,
+12. risiko atau limitation,
+13. pekerjaan fase berikutnya.
+
+Mulai dari Phase 1.
+
+Sebelum menulis kode, tampilkan terlebih dahulu:
+
+* hasil audit arsitektur saat ini,
+* komponen existing yang akan digunakan kembali,
+* file yang direncanakan untuk dibuat atau diubah,
+* keputusan renderer yang dipilih,
+* alasan memilih SVG + Sharp atau Playwright,
+* risiko konflik dengan engine yang sudah ada.
+
+Setelah audit selesai, lanjutkan implementasi Phase 1 tanpa menunggu persetujuan tambahan, selama tidak ditemukan kebutuhan perubahan arsitektur besar yang berisiko merusak fitur existing.

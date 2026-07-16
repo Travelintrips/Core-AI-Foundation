@@ -192,22 +192,35 @@ export default function RequestResultsPage() {
               </div>
             )}
 
-            {/* Empty state — no notes or links yet and files unlocked */}
+            {/* Results ready in workspace — filesUnlocked but no manual links/notes.
+                AI-generated results live in the workspace dashboard, not here. */}
             {(data as any).filesUnlocked && !data.completionNotes && (!data.completionLinks || data.completionLinks.length === 0) && (
-              <div className="bg-card border border-card-border rounded-2xl p-10 mb-6 shadow-sm text-center">
-                <PackageOpen className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-                <p className="text-muted-foreground">
-                  Tim kami sedang mempersiapkan hasil proyek Anda. Anda akan
-                  dihubungi melalui email atau WhatsApp secepatnya.
-                </p>
+              <div className="bg-card border border-card-border rounded-2xl p-8 mb-6 shadow-sm">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <PackageOpen className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="font-semibold text-foreground mb-1">
+                      Hasil Proyek Siap di Dashboard Anda
+                    </h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed mb-5">
+                      Proyek Anda telah selesai dikerjakan oleh tim AI kami. Buka dashboard untuk
+                      melihat hasil lengkap — brand strategy, creative direction, copy, visual
+                      assets, dan semua deliverable proyek Anda.
+                    </p>
+                    <DashboardAccessButton email={data.customerEmail} />
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* Dashboard access — makes the "cek dashboard Anda" copy above an
-                actual link instead of a dead reference. */}
-            <div className="flex justify-center mb-6">
-              <DashboardAccessButton email={data.customerEmail} />
-            </div>
+            {/* Dashboard access — shown below manual links/notes when they exist */}
+            {(data.completionNotes || (data.completionLinks && data.completionLinks.length > 0)) && (
+              <div className="flex justify-center mb-6">
+                <DashboardAccessButton email={data.customerEmail} />
+              </div>
+            )}
 
             {/* Contact footer */}
             <div className="mt-10 text-center text-sm text-muted-foreground">
