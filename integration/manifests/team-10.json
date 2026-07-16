@@ -1,0 +1,100 @@
+{
+  "team": "10",
+  "branch": "feature/10-typography-palette",
+  "domain": "Typography Pairing & Color Palette Engine",
+  "ownedFolders": [
+    "artifacts/api-server/src/services/design-tokens/",
+    "artifacts/api-server/src/routes/design-tokens/",
+    "artifacts/ai-platform/src/pages/design-tokens/",
+    "integration/openapi/team-10.yaml",
+    "integration/migrations/team-10.sql",
+    "integration/manifests/team-10.json"
+  ],
+  "routesToMount": [
+    {
+      "method": "use",
+      "path": "/api/ai/design-tokens",
+      "routerFile": "artifacts/api-server/src/routes/design-tokens/index.ts",
+      "exportName": "designTokensRouter",
+      "middleware": ["adminAuth"],
+      "note": "Import and mount: app.use('/api/ai/design-tokens', adminAuth, designTokensRouter). The router is also exported as default."
+    }
+  ],
+  "pagesToRegister": [
+    {
+      "path": "/design-tokens",
+      "component": "DesignTokensPage",
+      "importFrom": "./pages/design-tokens/index.tsx",
+      "note": "Hub page — index overview with contrast checker widget"
+    },
+    {
+      "path": "/design-tokens/font-pairs",
+      "component": "FontPairsPage",
+      "importFrom": "./pages/design-tokens/font-pairs.tsx",
+      "note": "Font pair CRUD management page"
+    },
+    {
+      "path": "/design-tokens/color-palettes",
+      "component": "ColorPalettesPage",
+      "importFrom": "./pages/design-tokens/color-palettes.tsx",
+      "note": "Color palette CRUD with WCAG + print-safe checker"
+    }
+  ],
+  "sidebarItems": [
+    {
+      "label": "Typography & Colour",
+      "icon": "Type",
+      "href": "/design-tokens",
+      "section": "Design",
+      "children": [
+        { "label": "Font Pairs", "href": "/design-tokens/font-pairs" },
+        { "label": "Color Palettes", "href": "/design-tokens/color-palettes" }
+      ]
+    }
+  ],
+  "openapiFragment": "integration/openapi/team-10.yaml",
+  "migrationDrafts": [
+    "integration/migrations/team-10.sql"
+  ],
+  "seedDrafts": [],
+  "dependenciesRequested": [],
+  "eventsPublished": [],
+  "eventsConsumed": [],
+  "workerJobTypesRequested": [],
+  "sharedTypesRequested": [
+    {
+      "type": "BrandDnaView",
+      "source": "artifacts/api-server/src/services/creativeBrandIntelligenceService.ts",
+      "usedIn": "artifacts/api-server/src/services/design-tokens/brandDnaCompatibilityService.ts",
+      "note": "Team 10 defines a local BrandDnaInput interface that mirrors BrandDnaView. Full integration would consume the shared type directly. No changes requested to shared file — local type is sufficient."
+    }
+  ],
+  "integrationOrder": [
+    "1. Run migration: integration/migrations/team-10.sql",
+    "2. Mount router: artifacts/api-server/src/routes/design-tokens/index.ts → /api/ai/design-tokens",
+    "3. Register pages: /design-tokens, /design-tokens/font-pairs, /design-tokens/color-palettes",
+    "4. Add sidebar item under 'Design' section"
+  ],
+  "knownRisks": [
+    {
+      "risk": "slugify dependency",
+      "detail": "fontPairService.ts and colorPaletteService.ts use 'slugify'. If not already in api-server dependencies, add: pnpm --filter @workspace/api-server add slugify",
+      "severity": "low"
+    },
+    {
+      "risk": "DB tables not yet created",
+      "detail": "All four dt_* tables must exist before any route is hit. Run integration/migrations/team-10.sql against the target database first.",
+      "severity": "high"
+    },
+    {
+      "risk": "Brand DNA service interface",
+      "detail": "brandDnaCompatibilityService.ts reads from the font pair and palette registries only — it does NOT query aiBrandDnaTable directly. The caller passes BrandDnaInput. This avoids any dependency on the shared Brand DNA service.",
+      "severity": "none"
+    },
+    {
+      "risk": "No font files stored",
+      "detail": "As required, only font identifiers (name strings), weights, and Google Fonts URLs are stored. No binary font assets.",
+      "severity": "none"
+    }
+  ]
+}
