@@ -1,0 +1,131 @@
+Bertindaklah sebagai Senior AI Product Engineer, UI/UX Designer, Prompt Engineer, dan Frontend Developer.
+
+Saya ingin Anda melakukan audit teknis secara menyeluruh terhadap fitur AI Template Assistant yang saya gunakan.
+
+Tujuan audit adalah menemukan penyebab mengapa AI hanya menghasilkan template berupa placeholder text dan layer kosong, bukan desain lengkap.
+
+Lakukan analisis dengan urutan berikut.
+
+## 1. Platform & Engine
+- Identifikasi nama platform.
+- Identifikasi AI Engine atau model yang kemungkinan digunakan.
+- Jelaskan kemampuan AI tersebut.
+- Jelaskan keterbatasannya.
+- Apakah AI memang dirancang untuk membuat template editable atau desain final.
+
+## 2. Prompt Parsing
+Analisis prompt yang saya gunakan.
+
+Jelaskan:
+- Apakah prompt sudah dipahami AI.
+- Bagian mana yang diabaikan.
+- Kata-kata yang ambigu.
+- Kata yang terlalu umum.
+- Kata yang sebaiknya ditambahkan.
+- Kata yang sebaiknya dihindari.
+- Berikan skor prompt dari 1–10.
+
+## 3. Output Template
+Analisis hasil template yang dihasilkan.
+
+Jelaskan:
+- Mengapa hanya muncul placeholder.
+- Apakah ini merupakan wireframe.
+- Apakah AI gagal menghasilkan asset.
+- Apakah terjadi bug.
+- Apakah memang perilaku normal dari platform tersebut.
+
+## 4. Layer Structure
+Audit seluruh layer.
+
+Periksa apakah:
+- Layer text sudah benar.
+- Layer image dibuat atau tidak.
+- Layer shape dibuat atau tidak.
+- Layer icon dibuat atau tidak.
+- Layer gradient dibuat atau tidak.
+- Layer decoration dibuat atau tidak.
+- Layer background dibuat atau tidak.
+
+Jelaskan penyebab jika layer tersebut tidak ada.
+
+## 5. Asset Generation
+Analisis apakah AI memiliki kemampuan menghasilkan:
+- foto
+- ilustrasi
+- icon
+- SVG
+- vector
+- gradient
+- decorative object
+- shape
+- background
+
+Atau hanya menghasilkan layout template.
+
+## 6. Workflow
+Analisis workflow AI.
+
+Jelaskan apakah:
+- AI membuat wireframe dahulu.
+- AI membutuhkan langkah kedua untuk generate asset.
+- Ada proses yang saya lewatkan.
+- Ada pengaturan yang belum saya aktifkan.
+
+## 7. Advanced Options
+Jika terdapat menu Advanced Options, jelaskan:
+- fungsi masing-masing opsi
+- pengaruh terhadap hasil template
+- konfigurasi terbaik
+
+## 8. Root Cause Analysis
+Berikan daftar semua kemungkinan penyebab, misalnya:
+- prompt kurang spesifik
+- AI limitation
+- bug
+- server issue
+- feature restriction
+- license limitation
+- asset generation disabled
+- unsupported model
+- invalid prompt
+- parsing error
+
+Urutkan berdasarkan probabilitas (%).
+
+## 9. Best Practice
+Berikan workflow terbaik agar AI menghasilkan template restoran modern dan mewah yang siap pakai.
+
+Jelaskan langkah demi langkah.
+
+## 10. Prompt Improvement
+Buatkan prompt baru yang paling optimal berdasarkan hasil audit.
+
+Prompt harus:
+- menghasilkan desain lengkap
+- bukan wireframe
+- bukan placeholder
+- lengkap dengan gambar
+- icon
+- shape
+- gradient
+- background
+- editable layer
+- siap dipublikasikan
+
+## 11. Kesimpulan
+Berikan:
+- Ringkasan audit
+- Nilai kualitas AI
+- Nilai kualitas prompt
+- Nilai kualitas output
+- Apakah platform ini layak digunakan untuk produksi profesional.
+
+Saya akan memberikan:
+- URL platform
+- Screenshot halaman AI Template Assistant
+- Screenshot hasil template
+- Prompt yang saya gunakan
+- Screenshot menu Advanced Options (jika ada)
+
+Lakukan audit sedalam mungkin dan jangan berasumsi. Jika ada informasi yang kurang, jelaskan apa yang perlu diverifikasi dan mengapa.
