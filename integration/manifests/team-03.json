@@ -1,0 +1,126 @@
+{
+  "team": "03",
+  "branch": "feature/03-commercial-automation",
+  "ownedFolders": [
+    "artifacts/api-server/src/services/creative-commercial/",
+    "artifacts/api-server/src/routes/creative-commercial/",
+    "artifacts/ai-platform/src/pages/creative-commercial/",
+    "artifacts/ai-platform/src/components/creative-commercial/",
+    "integration/openapi/team-03.yaml",
+    "integration/migrations/team-03.sql",
+    "integration/manifests/team-03.json"
+  ],
+  "routesToMount": [
+    {
+      "importPath": "./routes/creative-commercial/index.js",
+      "mountPrefix": "/ai/creative-commercial",
+      "comment": "Import as creativeCommercialRouter and add: router.use(creativeCommercialRouter) after the last router.use() in routes/index.ts"
+    }
+  ],
+  "pagesToRegister": [
+    {
+      "importPath": "./pages/creative-commercial/CommercialAutomationPage",
+      "route": "/commercial-automation",
+      "pageTitle": "Commercial Automation",
+      "comment": "Add a lazy-loaded route in App.tsx: <Route path='/commercial-automation' element={<CommercialAutomationPage />} />"
+    }
+  ],
+  "sidebarItems": [
+    {
+      "label": "Commercial Automation",
+      "icon": "TrendingUp",
+      "route": "/commercial-automation",
+      "section": "Analytics",
+      "comment": "Add to the Analytics/Commercial section of the sidebar after existing commercial items"
+    }
+  ],
+  "openapiFragment": "integration/openapi/team-03.yaml",
+  "migrationDrafts": [
+    "integration/migrations/team-03.sql"
+  ],
+  "seedDrafts": [],
+  "dependenciesRequested": [],
+  "eventsPublished": [
+    {
+      "eventType": "commercial.approval.granted",
+      "sourceModule": "creative-commercial",
+      "schema": {
+        "approvalId": "integer",
+        "actionType": "string (ApprovalActionType)",
+        "actionPayload": "object",
+        "customerProfileId": "integer",
+        "approvedBy": "string"
+      },
+      "comment": "Published when a pending financial approval is granted. Downstream handlers execute the actual financial action (e.g. issue coupon, apply bundle price)."
+    }
+  ],
+  "eventsConsumed": [
+    {
+      "eventType": "payment.verified",
+      "comment": "Trigger point for repeat-order recommendation cooldown reset"
+    },
+    {
+      "eventType": "service_request.converted",
+      "comment": "Trigger for recording attribution touchpoints on conversion"
+    },
+    {
+      "eventType": "checkout.started",
+      "comment": "Trigger for abandoned checkout detection window"
+    },
+    {
+      "eventType": "portfolio.viewed",
+      "comment": "Trigger for upsell/cross-sell context"
+    }
+  ],
+  "workerJobTypesRequested": [],
+  "sharedTypesRequested": [
+    {
+      "type": "AiCoupon",
+      "from": "@workspace/db",
+      "reason": "Read coupon data for recommendation matching"
+    },
+    {
+      "type": "AiPromotion",
+      "from": "@workspace/db",
+      "reason": "Read promotion data for bundle recommendations"
+    },
+    {
+      "type": "AiAffiliate",
+      "from": "@workspace/db",
+      "reason": "Read affiliate data for attribution"
+    },
+    {
+      "type": "SalesFunnelEvent",
+      "from": "@workspace/db",
+      "reason": "Read funnel events for projection and attribution"
+    }
+  ],
+  "integrationOrder": [
+    "Run integration/migrations/team-03.sql BEFORE mounting routes",
+    "Mount /ai/creative-commercial router in routes/index.ts",
+    "Register /commercial-automation page in App.tsx",
+    "Add sidebar item in Analytics section"
+  ],
+  "knownRisks": [
+    {
+      "risk": "cc_recommendation_log grows unbounded",
+      "mitigation": "Add a periodic cleanup job (delete rows where cooldown_until < now() - 30 days). Team 24 or Team 6 (scheduler) can add this as a cron rule."
+    },
+    {
+      "risk": "Funnel event type strings are not validated at insert time",
+      "mitigation": "cc_funnel_snapshots CASE expression will simply ignore unknown event types — silently returns zero for unknown stages. Not a correctness risk, just visibility."
+    },
+    {
+      "risk": "Attribution touchpoints are inferred from UTM params, which can be spoofed",
+      "mitigation": "Attribution is a READ MODEL only — no financial decisions are made solely based on it. It is advisory for marketing analysis."
+    },
+    {
+      "risk": "Bundle price is a recommendation, not enforced in the payment system",
+      "mitigation": "bundle.requiresApproval=true for >20% discount. Approval triggers commercial.approval.granted event; downstream payment/quotation system applies the actual discount."
+    },
+    {
+      "risk": "COOLDOWN_HOURS values are hardcoded in types.ts",
+      "mitigation": "Move to ai_settings table for operator configurability in a follow-up. Not required for MVP."
+    }
+  ]
+}
