@@ -5,6 +5,12 @@ import * as scheduler from "./services/aiSchedulerService.js";
 import * as sseManager from "./services/sseManager.js";
 import { ensureObservabilityTables } from "./services/observabilityService.js";
 import { ensureStorageBucket } from "./lib/supabaseStorage.js";
+import { resumeIncompleteDesignRenderBatches } from "./services/design-recovery/startupResume.js";
+
+// ── Startup recovery idempotency guard ────────────────────────────────────────
+// Prevents the recovery from running twice if the API server and job worker
+// share the same process (e.g. in development single-process mode).
+let _designBatchRecoveryStarted = false;
 
 const rawPort = process.env["PORT"];
 
@@ -50,6 +56,25 @@ app.listen(port, (err) => {
     jobDispatcher.start().catch((startErr) =>
       logger.error({ err: startErr }, "[dispatcher] Failed to auto-start"),
     );
+
+    // ── Design batch startup recovery (Phase 3A) ────────────────────────────
+    // Re-enqueues interrupted design render batches left in non-terminal states
+    // after a process crash. Runs only when the dispatcher is active (recovery
+    // re-enqueues jobs, so a running dispatcher is required). The idempotency
+    // guard prevents a double-run if the API server and job worker share the
+    // same Node.js process.
+    if (!_designBatchRecoveryStarted) {
+      _designBatchRecoveryStarted = true;
+      resumeIncompleteDesignRenderBatches()
+        .then((result) => {
+          if (result.batchesResumed > 0 || result.batchesCancelled > 0 || result.staleRecovery.scannedCount > 0) {
+            logger.info(result, "[design-batch-recovery] Startup recovery complete");
+          }
+        })
+        .catch((err) =>
+          logger.warn({ err }, "[design-batch-recovery] Startup recovery failed (non-blocking)"),
+        );
+    }
   } else {
     logger.info("[dispatcher] Auto-start disabled (set AI_DISPATCHER_ENABLED=true to enable in production)");
   }

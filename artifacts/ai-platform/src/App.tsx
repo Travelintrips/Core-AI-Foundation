@@ -57,6 +57,10 @@ import DesignRenderBatches from "@/pages/design-render-batches";
 import DesignRenderBatchesNew from "@/pages/design-render-batches-new";
 import DesignRenderBatchDetail from "@/pages/design-render-batch-detail";
 import DesignTemplateAiCreate from "@/pages/design-template-ai-create";
+import DesignTemplateEditor from "@/pages/design-template-editor";
+import DesignTemplatesPage from "@/pages/design-templates";
+import DesignTemplates from "@/pages/design-templates";
+import DesignTemplateDetail from "@/pages/design-template-detail";
 
 const queryClient = new QueryClient();
 
@@ -105,6 +109,10 @@ function AdminRouter() {
         <Route path="/template-engine" component={TemplateEngine} />
         <Route path="/design-studio" component={DesignStudio} />
         <Route path="/design-studio/:id" component={DesignStudioEditor} />
+        <Route path="/design-templates" component={DesignTemplatesPage} />
+        <Route path="/design-templates/:id/editor" component={DesignTemplateEditor} />
+        <Route path="/design-templates" component={DesignTemplates} />
+        <Route path="/design-templates/:id" component={DesignTemplateDetail} />
         <Route path="/creative-marketplace" component={CreativeMarketplace} />
         <Route path="/design-render-batches/new" component={DesignRenderBatchesNew} />
         <Route path="/design-render-batches/:id" component={DesignRenderBatchDetail} />

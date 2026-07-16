@@ -10,7 +10,7 @@ import {
 import { appSchema } from "./_pg-schema.js";
 
 /**
- * Design Template Engine — Phase 1 Foundation
+ * Design Template Engine — Phase 1 Foundation + Phase 3A Batch Orchestration
  *
  * Four tables:
  *   design_templates         — master record + status
@@ -76,19 +76,32 @@ export type NewDesignTemplateVersion = typeof designTemplateVersionsTable.$infer
 
 // ── design_render_batches ────────────────────────────────────────────────────
 
+/**
+ * Phase 3A status values:
+ *   draft → queued → dispatching → processing → completed
+ *                                             → partially_failed
+ *                                             → failed
+ *   queued|dispatching|processing → cancelling → cancelled
+ *   partially_failed|failed       → queued (via retry)
+ */
 export const designRenderBatchesTable = appSchema.table("design_render_batches", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
   tenantId: text("tenant_id").notNull().default("default"),
   templateId: bigint("template_id", { mode: "number" }).notNull(),
   templateVersionId: bigint("template_version_id", { mode: "number" }).notNull(),
   name: text("name").notNull(),
-  /** draft | queued | processing | completed | partially_failed | failed | cancelled */
+  /**
+   * draft | queued | dispatching | processing | completed |
+   * partially_failed | failed | cancelling | cancelled
+   */
   status: text("status").notNull().default("draft"),
   totalItems: integer("total_items").notNull().default(0),
   queuedItems: integer("queued_items").notNull().default(0),
   processingItems: integer("processing_items").notNull().default(0),
   completedItems: integer("completed_items").notNull().default(0),
   failedItems: integer("failed_items").notNull().default(0),
+  /** Phase 3A: items that were cancelled mid-flight */
+  cancelledItems: integer("cancelled_items").notNull().default(0),
   /** png | jpg | webp | pdf */
   requestedFormat: text("requested_format").notNull().default("png"),
   requestedWidth: integer("requested_width"),
@@ -124,8 +137,38 @@ export const designRenderItemsTable = appSchema.table(
     /** queued | processing | completed | failed | cancelled */
     status: text("status").notNull().default("queued"),
     attemptCount: integer("attempt_count").notNull().default(0),
+
+    // ── Phase 3A: Dispatch marker ──────────────────────────────────────────
+    /**
+     * pending    — created but dispatcher hasn't touched it yet
+     * dispatching — dispatcher is in the process of enqueueing this item
+     * dispatched  — design_render job enqueued successfully
+     *
+     * If the process crashes between enqueue success and marker update,
+     * the item stays "dispatching" and the next dispatcher run will
+     * re-enqueue (safe because executeDesignRenderJob is idempotent).
+     */
+    dispatchStatus: text("dispatch_status").notNull().default("pending"),
+    /** How many times the dispatcher has attempted to enqueue this item */
+    dispatchAttemptCount: integer("dispatch_attempt_count").notNull().default(0),
+    /** Timestamp of the most recent successful dispatch */
+    lastDispatchedAt: timestamp("last_dispatched_at", { withTimezone: true }),
+    /** The ai_jobs.job_code of the enqueued design_render job */
+    queueJobId: text("queue_job_id"),
+    /** Item-level retry delay (for render-level backoff) */
+    nextRetryAt: timestamp("next_retry_at", { withTimezone: true }),
+    /** Which worker currently holds the processing lease */
+    workerId: text("worker_id"),
+    /** When the processing lease expires — stale if NOW() > lease_expires_at */
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    /** Last heartbeat from the render worker (extended on safe checkpoints) */
+    heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }),
+
+    // ── Output fields ──────────────────────────────────────────────────────
     outputStoragePath: text("output_storage_path"),
     outputUrl: text("output_url"),
+    /** output_asset_id — storage object key (alias of outputStoragePath for Team 2 contract) */
+    outputAssetId: text("output_asset_id"),
     outputWidth: integer("output_width"),
     outputHeight: integer("output_height"),
     outputFormat: text("output_format"),

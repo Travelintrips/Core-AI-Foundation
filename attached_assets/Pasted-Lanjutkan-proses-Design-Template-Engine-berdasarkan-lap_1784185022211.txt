@@ -1,0 +1,230 @@
+Lanjutkan proses Design Template Engine berdasarkan laporan Team 6 berikut:
+
+* Team 1: `APPROVED WITH NOTES`
+* Team 2–5: branch belum tersedia
+* Integration branch belum dibuat
+* Final status: `NOT READY TO MERGE TO MAIN`
+
+Jangan merge atau push apa pun ke `main`.
+
+## A. Tindak Lanjut Team 1
+
+Checkout:
+
+```text
+feature/design-template-phase3a-batch
+```
+
+Lakukan hanya perbaikan berikut:
+
+### 1. Wiring startup recovery
+
+Hubungkan:
+
+```ts
+resumeIncompleteDesignRenderBatches()
+```
+
+ke lifecycle startup server atau worker yang canonical.
+
+Syarat:
+
+* gunakan startup hook existing,
+* jangan membuat entry point kedua,
+* jangan memblokir server startup terlalu lama,
+* jalankan recovery secara bounded dan paginated,
+* tangani error dengan structured logging,
+* error recovery tidak boleh membuat server crash kecuali pola existing memang fail-fast,
+* cegah fungsi dijalankan dua kali jika API server dan worker hidup dalam process yang sama,
+* jangan menjalankan recovery pada process yang tidak menangani design jobs jika arsitektur memisahkan API dan worker.
+
+Tambahkan guard atau registration idempotency bila diperlukan.
+
+### 2. Enforce active batch limit per tenant
+
+`countActiveBatchesForTenant()` sudah tersedia tetapi belum digunakan.
+
+Terapkan pada titik canonical ketika batch baru dibuat atau dimulai.
+
+Syarat:
+
+* gunakan konfigurasi existing,
+* hitung status aktif secara konsisten,
+* tenant isolation wajib,
+* jangan menghitung batch terminal,
+* jangan membuat race sederhana antara count dan create jika transaction/lock existing dapat digunakan,
+* kembalikan structured validation/conflict error,
+* tambahkan test.
+
+### 3. Cleanup cosmetic
+
+Hapus redundant guard di `reconcileDesignRenderBatch()` hanya jika aman dan tidak mengubah behavior.
+
+### Verifikasi Team 1
+
+Jalankan:
+
+* targeted startup recovery tests,
+* active batch limit tests,
+* duplicate startup registration test,
+* server startup smoke test,
+* full Team 1 tests,
+* backend build,
+* typecheck comparison terhadap baseline.
+
+Commit dan push perbaikan ke branch Team 1.
+
+Berikan:
+
+```text
+TEAM 1 REWORK REPORT
+
+Previous Commit:
+New Commit:
+Files Changed:
+Startup Recovery Wiring:
+Duplicate Registration Protection:
+Active Batch Limit Enforcement:
+Tests Added:
+Tests Passed:
+Build:
+Typecheck:
+Remaining Notes:
+```
+
+Setelah itu Team 6 harus melakukan re-review delta Team 1.
+
+## B. Team 2–5 Harus Menyelesaikan dan Push Branch
+
+Branch wajib:
+
+```text
+feature/design-template-phase3b-zip
+feature/design-template-phase4-library
+feature/design-template-phase5-editor
+feature/design-template-phase6-7-bulk-ai
+```
+
+Setiap tim harus:
+
+1. memastikan branch berasal dari baseline Phase 2 yang sama,
+2. menyelesaikan scope sesuai prompt masing-masing,
+3. menjalankan tests dan build,
+4. commit seluruh perubahan,
+5. push branch ke remote,
+6. memberikan commit SHA,
+7. memberikan handoff report,
+8. tidak merge ke `main`,
+9. tidak merge branch tim lain ke branch mereka.
+
+Format handoff minimum:
+
+```text
+TEAM X HANDOFF REPORT
+
+Branch:
+Commit SHA:
+Baseline Commit:
+Scope Completed:
+Files Added:
+Files Modified:
+Migrations:
+Dependencies:
+Routes:
+Tests Added:
+Tests Passed:
+Typecheck:
+Build:
+Benchmark:
+Security Controls:
+Shared Files Touched:
+Known Limitations:
+Ready for Independent Review: YES/NO
+```
+
+## C. Team 6 Melanjutkan Review
+
+Setelah branch tersedia, Team 6 harus:
+
+1. fetch remote,
+2. verifikasi commit SHA,
+3. review Team 1 delta,
+4. review Team 2,
+5. review Team 3,
+6. review Team 4,
+7. review Team 5,
+8. membuat laporan terpisah untuk setiap tim,
+9. memberi status:
+
+   * `APPROVED`
+   * `APPROVED WITH NOTES`
+   * `REJECTED`
+
+Branch `REJECTED` tidak boleh masuk integration branch.
+
+## D. Aturan Integration Branch
+
+Jangan buat integration branch sebelum minimal:
+
+* Team 1 approved setelah delta review,
+* Team 2 available dan approved,
+* Team 3 available dan approved,
+* Team 4 available dan approved,
+* Team 5 available dan approved.
+
+Setelah semua approved, buat:
+
+```text
+integration/design-template-phase3-7
+```
+
+Integrasikan berurutan:
+
+```text
+Team 1
+Team 2
+Team 3
+Team 4
+Team 5
+```
+
+Setelah setiap merge:
+
+* selesaikan conflict secara semantik,
+* jalankan targeted tests,
+* catat conflict,
+* commit integration step.
+
+## E. Larangan
+
+Jangan:
+
+* merge Team 1 langsung ke main,
+* membuat integration branch hanya berisi Team 1 lalu push ke main,
+* menganggap branch lokal yang belum dipush sebagai submission,
+* mengarang hasil Team 2–5,
+* menurunkan test gate,
+* mengabaikan startup recovery,
+* mengabaikan active batch limit,
+* memperbaiki branch Team 2–5 diam-diam di integration branch sebelum review,
+* push ke main sebelum final report berstatus `READY TO MERGE TO MAIN`.
+
+## F. Status Saat Ini
+
+Pertahankan status:
+
+```text
+NOT READY TO MERGE TO MAIN
+```
+
+hingga seluruh Team 2–5 tersedia, diperiksa, dan lulus.
+
+Laporkan progres berikutnya dalam urutan:
+
+1. Team 1 delta re-review,
+2. Team 2 review,
+3. Team 3 review,
+4. Team 4 review,
+5. Team 5 review,
+6. integration report,
+7. final merge decision.
