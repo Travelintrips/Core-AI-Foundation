@@ -679,9 +679,8 @@ export function DesignTemplateDetailPage({ id }: { id: number }) {
 
   const publishMut = useMutation({
     mutationFn: (versionId: number) =>
-      apiFetch(`/api/ai/design-templates/${id}/publish`, {
+      apiFetch(`/api/ai/design-templates/${id}/versions/${versionId}/publish`, {
         method: "POST",
-        body: JSON.stringify({ versionId }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["design-template", id] });
