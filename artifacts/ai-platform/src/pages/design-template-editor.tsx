@@ -371,9 +371,9 @@ export default function DesignTemplateEditor() {
             </Button>
           </Link>
           <div className="flex-1 min-w-0">
-            <h1 className="text-sm font-semibold truncate">{template?.name ?? "Design Template Editor"}</h1>
+            <h1 className="text-lg font-bold text-slate-900 truncate">{template?.name ?? "Design Template Editor"}</h1>
             {version && (
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-slate-500">
                 Version {version.versionNumber}
                 {version.publishedAt && ` · Published ${new Date(version.publishedAt).toLocaleDateString()}`}
               </p>
