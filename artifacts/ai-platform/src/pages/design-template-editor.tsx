@@ -102,11 +102,12 @@ function makeEmptyScene(templateId: string, tenantId: string, name: string): Sce
 // ── Main Editor Component ─────────────────────────────────────────────────────
 
 export default function DesignTemplateEditor() {
-  // Two route patterns
+  // Three route patterns — /edit (manual), /editor (AI-assist shortcut), /versions/:id/edit
   const [matchV, paramsV] = useRoute("/design-templates/:id/versions/:versionId/edit");
   const [matchE, paramsE] = useRoute("/design-templates/:id/edit");
+  const [matchEd, paramsEd] = useRoute("/design-templates/:id/editor");
 
-  const templateId = matchV ? paramsV?.id : paramsE?.id;
+  const templateId = matchV ? paramsV?.id : matchE ? paramsE?.id : paramsEd?.id;
   const versionIdParam = matchV ? paramsV?.versionId : undefined;
 
   const [, navigate] = useLocation();

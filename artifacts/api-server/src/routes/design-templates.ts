@@ -185,7 +185,10 @@ router.post("/ai/design-templates/:id/duplicate", async (req, res) => {
 
 // ── Template Versions ─────────────────────────────────────────────────────────
 
-/** GET /ai/design-templates/:id/versions */
+/** GET /ai/design-templates/:id/versions
+ *  Returns { versions: TemplateVersion[] } — always wrapped so both frontend
+ *  pages can destructure .versions without null-checks on the raw array.
+ */
 router.get("/ai/design-templates/:id/versions", async (req, res) => {
   try {
     const ctx = resolveAuthenticatedTenantContext(req);
@@ -193,7 +196,7 @@ router.get("/ai/design-templates/:id/versions", async (req, res) => {
     if (isNaN(id)) return res.status(400).json({ error: "Invalid template ID" });
 
     const versions = await listVersions(id, ctx.tenantId);
-    res.json(versions);
+    res.json({ versions: versions ?? [] });
   } catch (err) {
     return handleError(res, err);
   }

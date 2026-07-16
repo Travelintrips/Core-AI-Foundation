@@ -703,7 +703,7 @@ export function DesignTemplateDetailPage({ id }: { id: number }) {
         name:          tpl.name,
         description:   tpl.description ?? "",
         category:      tpl.category ?? "Other",
-        canvas:        { width: 1080, height: 1080, background: "#ffffff" },
+        canvas:        { width: 1080, height: 1080, backgroundColor: "#ffffff", unit: "px" },
         elements:      [],
         variables:     [],
         metadata: { createdBy: "admin", createdAt: now, updatedAt: now, version: 1 },
