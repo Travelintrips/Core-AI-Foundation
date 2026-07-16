@@ -31,6 +31,69 @@ import {
 import { DESIGN_LIMITS } from "../../types/designTemplate.js";
 import { logger } from "../../lib/logger.js";
 
+// ── Contrast helpers ───────────────────────────────────────────────────────────
+
+function relativeLuminance(hex: string): number {
+  const clean = hex.replace(/^#/, "");
+  if (clean.length !== 6) return 0.5;
+  const r = parseInt(clean.slice(0, 2), 16) / 255;
+  const g = parseInt(clean.slice(2, 4), 16) / 255;
+  const b = parseInt(clean.slice(4, 6), 16) / 255;
+  const lin = (c: number) => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+function autoContrastText(bgHex: string, darkFallback = "#1a1a1a"): string {
+  return relativeLuminance(bgHex) > 0.35 ? darkFallback : "#ffffff";
+}
+
+/**
+ * Post-process AI-generated elements:
+ * - If a text element's color is the same lightness as the canvas background,
+ *   replace it with an auto-contrasted color so it stays readable.
+ * - Text sitting over an image placeholder (which renders white) gets dark text.
+ */
+function fixTextContrast(proposal: AiTemplateProposal): AiTemplateProposal {
+  const canvasBg = proposal.template.canvas.backgroundColor ?? "#ffffff";
+  const bgLum = relativeLuminance(canvasBg);
+
+  // A "safe" text color for the canvas background
+  const safeBgText = bgLum > 0.35 ? "#111827" : "#ffffff";
+
+  const imageRanges = proposal.template.elements
+    .filter((e: any) => e.type === "image")
+    .map((e: any) => ({ y: e.y as number, bottom: (e.y as number) + (e.height as number) }));
+
+  const fixed = proposal.template.elements.map((el: any) => {
+    if (el.type !== "text") return el;
+
+    const elColor: string = el.color ?? safeBgText;
+    const elLum = relativeLuminance(elColor);
+    const elBottom = (el.y as number) + (el.height as number);
+
+    // Text overlapping an image placeholder → force dark (image shows as white)
+    const onImage = imageRanges.some(
+      (r: { y: number; bottom: number }) => (el.y as number) < r.bottom && elBottom > r.y,
+    );
+    if (onImage) {
+      return { ...el, color: autoContrastText("#ffffff") };
+    }
+
+    // Text color almost same luminance as canvas bg → swap to contrasting
+    const contrastRatio = Math.abs(elLum - bgLum);
+    if (contrastRatio < 0.15) {
+      return { ...el, color: safeBgText };
+    }
+
+    return el;
+  });
+
+  return {
+    ...proposal,
+    template: { ...proposal.template, elements: fixed },
+  };
+}
+
 // ── Size presets ───────────────────────────────────────────────────────────────
 
 const SIZE_PRESETS: Record<string, { width: number; height: number }> = {
@@ -60,6 +123,13 @@ RULES (non-negotiable):
 12. Text content must not contain HTML tags or script patterns.
 13. Only use binding references to variables you declared in the variables array.
 
+IMPORTANT CONTRAST RULE:
+Text color MUST contrast with the surface it sits on.
+- If backgroundColor is light (e.g. #ffffff, #f5f5f5), use DARK text (e.g. #111827, #1a1a1a).
+- If backgroundColor is dark (e.g. #1E40AF, #000000), use LIGHT text (e.g. #ffffff, #f9fafb).
+- Never place white (#ffffff) text on a white or near-white canvas background.
+- For text overlapping an image placeholder, always use dark text (#111827) since the placeholder renders white.
+
 OUTPUT FORMAT:
 {
   "summary": "Brief description of the template",
@@ -71,10 +141,10 @@ OUTPUT FORMAT:
     "name": "Template Name",
     "description": "Template description",
     "category": "Category",
-    "canvas": { "width": 1080, "height": 1080, "unit": "px", "backgroundColor": "#FFFFFF" },
+    "canvas": { "width": 1080, "height": 1080, "unit": "px", "backgroundColor": "#1E3A8A" },
     "elements": [
-      { "id": "bg", "type": "shape", "x": 0, "y": 0, "width": 1080, "height": 1080, "zIndex": 0, "shape": "rectangle", "fill": "#1E40AF" },
-      { "id": "title", "type": "text", "x": 60, "y": 200, "width": 960, "height": 120, "zIndex": 1, "content": { "binding": { "variableKey": "product_name" } }, "fontSize": 64, "color": "#FFFFFF", "textAlign": "center" }
+      { "id": "bg", "type": "shape", "x": 0, "y": 0, "width": 1080, "height": 1080, "zIndex": 0, "shape": "rectangle", "fill": "#1E3A8A" },
+      { "id": "title", "type": "text", "x": 60, "y": 200, "width": 960, "height": 120, "zIndex": 1, "content": { "binding": { "variableKey": "product_name" } }, "fontSize": 64, "color": "#FFFFFF", "textAlign": "center", "fontWeight": "bold" }
     ],
     "variables": []
   },
@@ -208,6 +278,9 @@ export async function generateTemplateFromPrompt(
       // Sanitize and normalize
       const sanitized = sanitizeProposal(validated.data, canvasW, canvasH);
 
+      // Fix text contrast (white text on white canvas etc.)
+      const contrastFixed = fixTextContrast(sanitized);
+
       // Record cost
       try {
         await recordCost({
@@ -223,7 +296,7 @@ export async function generateTemplateFromPrompt(
         logger.warn({ costErr }, "[template-ai] Cost recording failed (non-fatal)");
       }
 
-      return { proposal: sanitized, provider: "openai", model, inputTokens, outputTokens };
+      return { proposal: contrastFixed, provider: "openai", model, inputTokens, outputTokens };
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
       logger.warn({ attempt, err }, "[template-ai] AI call failed");
