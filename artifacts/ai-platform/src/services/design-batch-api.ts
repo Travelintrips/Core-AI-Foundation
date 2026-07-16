@@ -165,7 +165,7 @@ export const templateApi = {
   get: (id: number) => apiFetch<DesignTemplate>(`/api/ai/design-templates/${id}`),
 
   listVersions: (templateId: number) =>
-    apiFetch<{ items: DesignTemplateVersion[] }>(`/api/ai/design-templates/${templateId}/versions`),
+    apiFetch<{ versions: DesignTemplateVersion[] }>(`/api/ai/design-templates/${templateId}/versions`),
 
   getVersion: (templateId: number, versionId: number) =>
     apiFetch<DesignTemplateVersion>(`/api/ai/design-templates/${templateId}/versions/${versionId}`),

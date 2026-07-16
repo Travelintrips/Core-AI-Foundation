@@ -479,9 +479,9 @@ export default function DesignRenderBatchesNewPage() {
     enabled: !!selectedTemplateId,
   });
 
-  const selectedVersion = versions?.items.find((v) => v.id === selectedVersionId)
-    ?? versions?.items.find((v) => v.status === "published")
-    ?? versions?.items[0];
+  const selectedVersion = versions?.versions.find((v) => v.id === selectedVersionId)
+    ?? versions?.versions.find((v) => v.status === "published")
+    ?? versions?.versions[0];
 
   const variables: TemplateVariableMeta[] = selectedVersion?.variables ?? [];
 
@@ -576,13 +576,13 @@ export default function DesignRenderBatchesNewPage() {
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
-            {versions?.items && (
+            {versions?.versions && (
               <select
                 value={selectedVersionId ?? ""}
                 onChange={(e) => setSelectedVersionId(e.target.value ? parseInt(e.target.value, 10) : null)}
                 className="bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-200 px-3 py-2"
               >
-                {versions.items.map((v) => (
+                {versions.versions.map((v) => (
                   <option key={v.id} value={v.id}>
                     v{v.versionNumber} — {v.status} ({v.canvasWidth}×{v.canvasHeight}px)
                   </option>
