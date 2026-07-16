@@ -239,6 +239,7 @@ export default function TemplateMarketplacePage() {
 
   // ── Create Template Dialog ────────────────────────────────────────────────────
   const [showCreate, setShowCreate] = useState(false);
+  const [viewTemplate, setViewTemplate] = useState<TemplateItem | null>(null);
   const [createName, setCreateName] = useState("");
   const [createCategory, setCreateCategory] = useState("Company Profile");
   const [createStyle, setCreateStyle] = useState("Modern");
@@ -412,7 +413,7 @@ export default function TemplateMarketplacePage() {
                 template={t}
                 onPublish={() => publishMutation.mutate(t.id)}
                 onArchive={() => archiveMutation.mutate(t.id)}
-                onView={() => window.open(`/api/public/templates/${t.id}`, "_blank")}
+                onView={() => setViewTemplate(t)}
               />
             ))}
           </div>
@@ -625,6 +626,128 @@ export default function TemplateMarketplacePage() {
           </div>
         </div>
       )}
+
+      {/* ── View Template Modal ───────────────────────────────────────────── */}
+      <Dialog open={!!viewTemplate} onOpenChange={(open) => { if (!open) setViewTemplate(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          {viewTemplate && (
+            <>
+              <DialogHeader>
+                <div className="flex items-start gap-3">
+                  {/* Color swatch */}
+                  <div
+                    className="w-12 h-12 rounded-xl flex-shrink-0 flex items-center justify-center"
+                    style={{ background: viewTemplate.colorTheme?.primary ?? "#6366F1" }}
+                  >
+                    <LayoutTemplate className="w-6 h-6 text-white/80" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <DialogTitle className="text-lg leading-tight">{viewTemplate.name}</DialogTitle>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      {viewTemplate.category} · {viewTemplate.style}
+                      {viewTemplate.industry ? ` · ${viewTemplate.industry}` : ""}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      <StatusBadge status={viewTemplate.status} />
+                      {viewTemplate.featured && (
+                        <Badge className="bg-amber-500/90 text-white border-0 text-xs">
+                          <Star className="w-3 h-3 mr-0.5" />Featured
+                        </Badge>
+                      )}
+                      <PremiumBadge isPremium={viewTemplate.isPremium} />
+                    </div>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              {/* Thumbnail */}
+              {viewTemplate.previewImages?.thumbnail && (
+                <div className="rounded-xl overflow-hidden border border-border">
+                  <img
+                    src={viewTemplate.previewImages.thumbnail}
+                    alt={viewTemplate.name}
+                    className="w-full h-48 object-cover"
+                  />
+                </div>
+              )}
+
+              {/* Description */}
+              {viewTemplate.description && (
+                <p className="text-sm text-muted-foreground leading-relaxed">{viewTemplate.description}</p>
+              )}
+
+              {/* Metrics */}
+              <div className="grid grid-cols-4 gap-3">
+                {[
+                  { label: "Views", value: viewTemplate.views, color: "#3B82F6" },
+                  { label: "Selected", value: viewTemplate.selections, color: "#8B5CF6" },
+                  { label: "Previews", value: viewTemplate.previewsGenerated, color: "#F59E0B" },
+                  { label: "Conversions", value: viewTemplate.conversions, color: "#10B981" },
+                ].map((m) => (
+                  <div key={m.label} className="rounded-xl border bg-card p-3 text-center">
+                    <p className="text-xl font-bold" style={{ color: m.color }}>{m.value}</p>
+                    <p className="text-xs text-muted-foreground">{m.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Details grid */}
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                {/* Color theme */}
+                {viewTemplate.colorTheme && (
+                  <div className="space-y-1.5">
+                    <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">Color Theme</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {Object.entries(viewTemplate.colorTheme).map(([k, v]) => (
+                        <div key={k} className="flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded-full border border-border inline-block" style={{ background: v }} />
+                          <span className="text-xs text-muted-foreground capitalize">{k}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Packages */}
+                {viewTemplate.supportedPackages && viewTemplate.supportedPackages.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">Supported Packages</p>
+                    <div className="flex flex-wrap gap-1">
+                      {viewTemplate.supportedPackages.map((p) => (
+                        <Badge key={p} variant="outline" className="capitalize text-xs">{p}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Template code & version */}
+                <div className="space-y-1">
+                  <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">Template Code</p>
+                  <code className="text-xs bg-muted px-2 py-1 rounded">{viewTemplate.templateCode}</code>
+                </div>
+                <div className="space-y-1">
+                  <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">Version</p>
+                  <p className="text-xs">{viewTemplate.version}</p>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setViewTemplate(null)}>Tutup</Button>
+                {viewTemplate.status !== "published" && (
+                  <Button onClick={() => { publishMutation.mutate(viewTemplate.id); setViewTemplate(null); }}>
+                    <CheckCircle2 className="w-4 h-4 mr-1.5" />Publish
+                  </Button>
+                )}
+                {viewTemplate.status !== "archived" && (
+                  <Button variant="destructive" onClick={() => { archiveMutation.mutate(viewTemplate.id); setViewTemplate(null); }}>
+                    <Archive className="w-4 h-4 mr-1.5" />Archive
+                  </Button>
+                )}
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Create Template Dialog ─────────────────────────────────────────── */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
