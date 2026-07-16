@@ -1,0 +1,337 @@
+Lakukan audit dan perbaiki UI/UX Design Template Editor.
+
+MASALAH SAAT INI
+
+Banyak tulisan hampir tidak terlihat karena warna font terlalu terang (putih/light gray) di atas background putih.
+
+Contohnya:
+
+- Judul template di kiri atas hampir hilang.
+- Version text hampir tidak terbaca.
+- Toolbar (Add, Undo, Redo, Zoom) sangat pucat.
+- Panel Layers terlalu pudar.
+- Panel Properties terlalu pudar.
+- Placeholder text hampir tidak terlihat.
+- Semua typography terlihat seperti opacity terlalu rendah.
+
+Target:
+
+UI harus terlihat seperti Canva, Figma, atau Adobe Express:
+- Bersih
+- Kontras tinggi
+- Mudah dibaca
+- Modern
+- Konsisten
+
+====================================================
+
+LAKUKAN AUDIT
+
+Cari apakah ada:
+
+- opacity-40
+- opacity-50
+- opacity-60
+- text-white
+- text-gray-200
+- text-gray-300
+- text-slate-300
+- text-muted
+- text-muted-foreground
+- disabled style yang tidak tepat
+- CSS global yang mengurangi opacity parent
+- pointer-events / disabled state yang membuat seluruh toolbar menjadi pudar
+
+====================================================
+
+PERBAIKI TYPOGRAPHY
+
+Gunakan standar berikut:
+
+Page Title
+
+font-size:
+24px
+
+font-weight:
+700
+
+color:
+
+text-slate-900
+
+Subtitle
+
+font-size:
+14px
+
+color:
+
+text-slate-500
+
+Toolbar
+
+text-slate-700
+
+Hover
+
+text-slate-900
+
+Zoom
+
+text-slate-800
+
+Panel Title
+
+LAYERS
+
+PROPERTIES
+
+font-weight:
+700
+
+text-slate-900
+
+Item Layer
+
+text-slate-800
+
+Secondary Text
+
+text-slate-500
+
+Placeholder
+
+text-slate-400
+
+Jangan gunakan:
+
+text-white
+
+untuk background putih.
+
+====================================================
+
+BUTTON
+
+Primary
+
+Save Draft
+
+background:
+
+violet-600
+
+hover
+
+violet-700
+
+text putih
+
+Secondary
+
+Preview
+
+background putih
+
+border gray-300
+
+text-slate-700
+
+Hover
+
+bg-slate-50
+
+Toolbar Buttons
+
+hover:
+
+bg-slate-100
+
+rounded-lg
+
+transition 150ms
+
+====================================================
+
+ICON
+
+Semua icon:
+
+text-slate-700
+
+Hover
+
+text-slate-900
+
+Disabled
+
+opacity 40%
+
+cursor not allowed
+
+====================================================
+
+LAYERS PANEL
+
+Background:
+
+white
+
+Border:
+
+gray-200
+
+Layer hover:
+
+bg-slate-50
+
+Layer selected
+
+bg-violet-50
+
+border-left
+
+4px
+
+violet-600
+
+====================================================
+
+PROPERTIES PANEL
+
+Background putih
+
+Border kiri
+
+gray-200
+
+Jika belum ada object dipilih tampilkan:
+
+Icon besar
+
+"Select an element to edit its properties"
+
+warna
+
+text-slate-400
+
+====================================================
+
+EDITOR CANVAS
+
+Background
+
+gray-100
+
+Canvas
+
+Putih
+
+Shadow
+
+shadow-lg
+
+====================================================
+
+JANGAN ADA
+
+opacity parent
+
+yang membuat seluruh halaman menjadi pudar.
+
+Jika parent menggunakan
+
+opacity:
+
+hapus.
+
+Gunakan opacity hanya pada komponen disabled.
+
+====================================================
+
+CHECK CSS
+
+Audit:
+
+globals.css
+
+theme.css
+
+tailwind.css
+
+editor.css
+
+design-template-editor.css
+
+Cari:
+
+opacity
+
+filter
+
+mix-blend
+
+brightness
+
+contrast
+
+color inherit
+
+text color override
+
+====================================================
+
+ACCESSIBILITY
+
+Pastikan seluruh text minimal memiliki contrast ratio WCAG AA.
+
+====================================================
+
+RESPONSIVE
+
+Desktop
+
+Laptop
+
+Tablet
+
+====================================================
+
+HASIL AKHIR
+
+UI harus menyerupai Canva/Figma:
+
+✓ Typography jelas
+
+✓ Toolbar jelas
+
+✓ Judul terbaca
+
+✓ Layer panel jelas
+
+✓ Properties jelas
+
+✓ Tidak ada tulisan putih di background putih
+
+✓ Tidak ada opacity parent
+
+✓ Modern
+
+✓ Bersih
+
+====================================================
+
+SEBELUM SELESAI
+
+Lakukan:
+
+- typecheck
+- build
+- screenshot desktop
+- screenshot laptop
+- screenshot dark/light jika tersedia
+
+Jangan mengubah business logic.
+
+Fokus hanya pada UI, typography, warna, spacing, dan accessibility.
