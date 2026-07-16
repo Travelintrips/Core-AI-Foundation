@@ -33,6 +33,7 @@ import {
   Lightbulb,
   LayoutTemplate,
   Layers,
+  FileStack,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -117,7 +118,7 @@ const NAV_SECTIONS = [
     label: "Creative",
     items: [
       { href: "/design-studio", label: "Design Studio", icon: LayoutTemplate },
-      { href: "/design-templates", label: "Template Library", icon: Layers },
+      { href: "/design-templates", label: "Template Library", icon: FileStack },
       { href: "/creative-marketplace", label: "Creative Marketplace", icon: Store },
       { href: "/design-render-batches", label: "Bulk Render", icon: Layers },
       { href: "/design-templates/ai-create", label: "AI Template Assistant", icon: Sparkles },

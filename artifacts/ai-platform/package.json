@@ -76,12 +76,14 @@
     "vite": "catalog:",
     "vitest": "^4.1.10",
     "wouter": "^3.3.5",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@types/uuid": "^11.0.0"
   },
   "dependencies": {
-    "papaparse": "^5.5.4",
-    "xlsx": "^0.18.5"
     "konva": "^10.3.0",
-    "react-konva": "^19.2.5"
+    "papaparse": "^5.5.4",
+    "react-konva": "^19.2.5",
+    "uuid": "^14.0.1",
+    "xlsx": "^0.18.5"
   }
 }

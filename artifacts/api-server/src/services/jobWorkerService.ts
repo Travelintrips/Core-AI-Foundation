@@ -615,8 +615,15 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
     }
 
     case "design_render_zip_export": {
-      const { executeDesignRenderZipExport } = await import("./designRenderWorkerService.js");
-      return executeDesignRenderZipExport(job, workerId);
+      const { executeZipExportJob } = await import("./designZipExportService.js");
+      const zipPayload = job.payloadJson as { exportId?: number; tenantId?: string; batchId?: number } | null;
+      const zipExportId = zipPayload?.exportId;
+      const zipTenantId = zipPayload?.tenantId;
+      const zipBatchId = zipPayload?.batchId;
+      if (!zipExportId || !zipTenantId || !zipBatchId) {
+        throw new Error("design_render_zip_export: payload missing exportId, tenantId, or batchId");
+      }
+      return executeZipExportJob(zipExportId, zipTenantId, zipBatchId);
     }
 
     default:
