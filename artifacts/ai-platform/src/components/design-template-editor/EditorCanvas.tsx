@@ -65,12 +65,12 @@ function ElementDisplay({
   /** Map of variableKey → defaultValue for preview rendering */
   variableDefaults?: Map<string, string>;
 }) {
+  // NOTE: position/size/rotation/zIndex are handled by the wrapper div in EditorCanvas.
+  // ElementDisplay only adds opacity, visibility, and type-specific styles.
   const style: React.CSSProperties = {
-    position: "absolute", left: el.x * zoom, top: el.y * zoom,
-    width: el.width * zoom, height: el.height * zoom,
-    transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
-    transformOrigin: "center center",
-    opacity: el.opacity, zIndex: el.zIndex,
+    position: "absolute", left: 0, top: 0,
+    width: "100%", height: "100%",
+    opacity: el.opacity,
     pointerEvents: "none", userSelect: "none",
     display: el.visible ? undefined : "none",
   };

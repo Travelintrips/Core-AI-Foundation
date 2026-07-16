@@ -64,17 +64,38 @@ function BoolRow({ label, value, onChange }: { label: string; value: boolean; on
   );
 }
 
+/** Compact labeled number input for use inside tight grids (short label prefix). */
+function CompactNum({ label, value, onChange, min, max, step = 1 }: {
+  label: string; value: number; onChange: (v: number) => void;
+  min?: number; max?: number; step?: number;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-xs text-gray-400 shrink-0 w-4 text-center">{label}</span>
+      <Input
+        type="number"
+        value={Math.round(value * 100) / 100}
+        min={min} max={max} step={step}
+        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+        className="h-7 text-xs flex-1 min-w-0"
+      />
+    </div>
+  );
+}
+
 function PositionSizePanel({ el, onUpdate }: { el: SceneElement; onUpdate: (id: string, c: Partial<SceneElement>) => void }) {
   const u = (c: Partial<SceneElement>) => onUpdate(el.id, c);
   return (
     <div className="space-y-2">
+      {/* X / Y on one row */}
       <div className="grid grid-cols-2 gap-2">
-        <NumInput label="X" value={el.x} onChange={(v) => u({ x: v })} step={1} />
-        <NumInput label="Y" value={el.y} onChange={(v) => u({ y: v })} step={1} />
+        <CompactNum label="X" value={el.x} onChange={(v) => u({ x: v })} step={1} />
+        <CompactNum label="Y" value={el.y} onChange={(v) => u({ y: v })} step={1} />
       </div>
+      {/* W / H on one row */}
       <div className="grid grid-cols-2 gap-2">
-        <NumInput label="W" value={el.width} onChange={(v) => u({ width: Math.max(1, v) })} step={1} min={1} />
-        <NumInput label="H" value={el.height} onChange={(v) => u({ height: Math.max(1, v) })} step={1} min={1} />
+        <CompactNum label="W" value={el.width} onChange={(v) => u({ width: Math.max(1, v) })} step={1} min={1} />
+        <CompactNum label="H" value={el.height} onChange={(v) => u({ height: Math.max(1, v) })} step={1} min={1} />
       </div>
       <NumInput label="Rotation" value={el.rotation} onChange={(v) => u({ rotation: v })} step={1} min={-360} max={360} unit="°" />
       <div className="flex items-center gap-2">
