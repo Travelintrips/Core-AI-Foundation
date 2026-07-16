@@ -53,6 +53,10 @@ import ProductionPipelinePage from "@/pages/production-pipeline";
 import DesignStudio from "@/pages/design-studio";
 import DesignStudioEditor from "@/pages/design-studio-editor";
 import CreativeMarketplace from "@/pages/creative-marketplace";
+import DesignRenderBatches from "@/pages/design-render-batches";
+import DesignRenderBatchesNew from "@/pages/design-render-batches-new";
+import DesignRenderBatchDetail from "@/pages/design-render-batch-detail";
+import DesignTemplateAiCreate from "@/pages/design-template-ai-create";
 
 const queryClient = new QueryClient();
 
@@ -102,6 +106,10 @@ function AdminRouter() {
         <Route path="/design-studio" component={DesignStudio} />
         <Route path="/design-studio/:id" component={DesignStudioEditor} />
         <Route path="/creative-marketplace" component={CreativeMarketplace} />
+        <Route path="/design-render-batches/new" component={DesignRenderBatchesNew} />
+        <Route path="/design-render-batches/:id" component={DesignRenderBatchDetail} />
+        <Route path="/design-render-batches" component={DesignRenderBatches} />
+        <Route path="/design-templates/ai-create" component={DesignTemplateAiCreate} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
