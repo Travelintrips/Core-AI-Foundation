@@ -8,7 +8,7 @@ import { useLocation } from "wouter";
 import {
   Plus, Search, Archive, Copy, CheckCircle, Clock,
   Layers, MoreVertical, ImageOff, FileStack, ChevronLeft,
-  AlertTriangle, Sparkles, PenLine, Loader2,
+  AlertTriangle, Sparkles, PenLine, Loader2, ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
