@@ -55,6 +55,8 @@ import DesignStudioEditor from "@/pages/design-studio-editor";
 import CreativeMarketplace from "@/pages/creative-marketplace";
 import DesignTemplateEditor from "@/pages/design-template-editor";
 import DesignTemplatesPage from "@/pages/design-templates";
+import DesignTemplates from "@/pages/design-templates";
+import DesignTemplateDetail from "@/pages/design-template-detail";
 
 const queryClient = new QueryClient();
 
@@ -105,6 +107,8 @@ function AdminRouter() {
         <Route path="/design-studio/:id" component={DesignStudioEditor} />
         <Route path="/design-templates" component={DesignTemplatesPage} />
         <Route path="/design-templates/:id/editor" component={DesignTemplateEditor} />
+        <Route path="/design-templates" component={DesignTemplates} />
+        <Route path="/design-templates/:id" component={DesignTemplateDetail} />
         <Route path="/creative-marketplace" component={CreativeMarketplace} />
         <Route component={NotFound} />
       </Switch>

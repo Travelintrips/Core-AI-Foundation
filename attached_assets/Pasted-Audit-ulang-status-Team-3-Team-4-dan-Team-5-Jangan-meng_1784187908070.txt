@@ -1,0 +1,102 @@
+Audit ulang status Team 3, Team 4, dan Team 5. Jangan mengerjakan ulang fitur dan jangan merge apa pun ke main.
+
+Saya menduga pekerjaan Team 3–5 mungkin sudah selesai dalam sesi lain, tetapi branch atau handoff report belum ditemukan.
+
+Cari seluruh bukti pekerjaan melalui:
+
+```bash
+git fetch origin --prune
+git branch -a
+git worktree list
+git reflog --all --date=iso
+git log --all --oneline --decorate --graph --since="14 days ago"
+git fsck --full --no-reflogs --unreachable
+```
+
+Cari commit dan file terkait kata kunci:
+
+```text
+design template library
+template library
+visual editor
+design editor
+bulk create
+dataset mapping
+CSV
+XLSX
+AI template assistant
+phase4
+phase5
+phase6
+phase7
+```
+
+Gunakan juga:
+
+```bash
+git log --all --oneline --grep="template library"
+git log --all --oneline --grep="visual editor"
+git log --all --oneline --grep="bulk create"
+git log --all --oneline --grep="AI template"
+git log --all --oneline --grep="phase4"
+git log --all --oneline --grep="phase5"
+git log --all --oneline --grep="phase6"
+git log --all --oneline --grep="phase7"
+```
+
+Periksa filesystem untuk file yang mungkin sudah dibuat tetapi belum masuk branch:
+
+```bash
+find artifacts -type f | grep -Ei \
+"design-template|design-editor|bulk-create|dataset-import|render-batch|template-ai"
+```
+
+Untuk setiap hasil Team 3–5 yang ditemukan, laporkan:
+
+```text
+TEAM X RECOVERY FINDING
+
+Expected Scope:
+Branch Found:
+Commit Found:
+Worktree Found:
+Uncommitted Files Found:
+Files:
+Tests:
+Build:
+Can Be Recovered:
+Recommended Branch:
+```
+
+Jika commit ditemukan tetapi tidak memiliki branch, buat recovery branch dari commit tersebut:
+
+```text
+feature/design-template-phase4-library
+feature/design-template-phase5-editor
+feature/design-template-phase6-7-bulk-ai
+```
+
+Jangan membuat branch kosong.
+
+Jika file hanya ditemukan sebagai uncommitted work:
+
+1. identifikasi worktree pemiliknya,
+2. jangan pindahkan ke main,
+3. buat branch recovery dari baseline yang benar,
+4. commit hanya scope tim terkait,
+5. jalankan test dan build,
+6. laporkan commit SHA.
+
+Jika tidak ada bukti sama sekali, laporkan dengan jujur bahwa Team 3–5 memang belum selesai.
+
+Status yang harus dilaporkan:
+
+```text
+Team 1: APPROVED WITH NOTES
+Team 2: APPROVED WITH NOTES
+Team 3: FOUND / NOT FOUND
+Team 4: FOUND / NOT FOUND
+Team 5: FOUND / NOT FOUND
+```
+
+Jangan merge ke main dalam audit ini.
