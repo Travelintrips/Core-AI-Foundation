@@ -1,3 +1,4 @@
+- [team2-design-agents](team2-design-agents.md) — Team 2 Design Agents 4-8 built in services/design-ai/; dep-injection pattern (deps.executeAI), zod schemas, font registry validation, WCAG contrast checks, 1007 tests passing
 - [import-fix-concatenated-files](import-fix-concatenated-files.md) — GitHub import merged old+new versions of 5 files end-to-end; fix by keeping v2 and removing v1
 - [react-icons-v5-provider-icons](react-icons-v5-provider-icons.md) — SiOpenai/SiAnthropic/SiGoogle don't exist in react-icons v5.4.0; use Cpu+color or SiReplicate/SiMistralai
 - [ai-platform-workflow-env-vars](ai-platform-workflow-env-vars.md) — Both workflows require PORT and BASE_PATH injected; hardcoded ports cause EADDRINUSE on restart
