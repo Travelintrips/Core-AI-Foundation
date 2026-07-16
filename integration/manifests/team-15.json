@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "team": 15,
+  "domain": "graphic-design",
+  "version": "1.0.0",
+  "description": "Team 15 — Graphic Design Domain integration manifest",
+  "ownership": {
+    "apiDomain":     "artifacts/api-server/src/domains/graphic-design/",
+    "customerPortal": "artifacts/customer-portal/src/pages/graphic-design/",
+    "adminPanel":    "artifacts/ai-platform/src/pages/graphic-design/",
+    "openapi":       "integration/openapi/team-15.yaml",
+    "migration":     "integration/migrations/team-15.sql",
+    "manifest":      "integration/manifests/team-15.json"
+  },
+  "services": [
+    { "code": "GD-LOGO",       "name": "Logo Concept",      "basePriceIdr": 2500000 },
+    { "code": "GD-BCARD",      "name": "Business Card",     "basePriceIdr":  500000 },
+    { "code": "GD-LTRHEAD",    "name": "Letterhead",        "basePriceIdr":  750000 },
+    { "code": "GD-FLYER",      "name": "Flyer",             "basePriceIdr":  500000 },
+    { "code": "GD-POSTER",     "name": "Poster",            "basePriceIdr":  750000 },
+    { "code": "GD-BANNER",     "name": "Banner",            "basePriceIdr": 1000000 },
+    { "code": "GD-BROCHURE",   "name": "Brochure",          "basePriceIdr": 1500000 },
+    { "code": "GD-SOCIAL",     "name": "Social Media Kit",  "basePriceIdr": 1500000 },
+    { "code": "GD-CERT",       "name": "Certificate",       "basePriceIdr":  500000 },
+    { "code": "GD-STATIONERY", "name": "Stationery Suite",  "basePriceIdr": 3000000 }
+  ],
+  "packageTiers": {
+    "basic":    { "conceptVariants": 1, "revisionRounds": 2,  "deliveryDays": 7, "priceMultiplier": 0.6 },
+    "standard": { "conceptVariants": 3, "revisionRounds": 5,  "deliveryDays": 5, "priceMultiplier": 1.0 },
+    "premium":  { "conceptVariants": 5, "revisionRounds": -1, "deliveryDays": 3, "priceMultiplier": 2.0 }
+  },
+  "portInterfaces": {
+    "designRenderer": {
+      "team":        "7-8",
+      "description": "Renders canvas spec to file deliverables (PDF, PNG, SVG, etc.)",
+      "portFile":    "artifacts/api-server/src/domains/graphic-design/ports.ts",
+      "interface":   "DesignRendererPort",
+      "realService": "artifacts/api-server/src/services/designStudioService.ts"
+    },
+    "templateMatcher": {
+      "team":        "9-10",
+      "description": "Matches brief to best design template using embedding similarity",
+      "portFile":    "artifacts/api-server/src/domains/graphic-design/ports.ts",
+      "interface":   "TemplateMatcherPort",
+      "realService": "artifacts/api-server/src/services/design-ai/templateAiService.ts"
+    },
+    "assetLibrary": {
+      "team":        "11-12",
+      "description": "Fetches icons, stock photos, and brand assets",
+      "portFile":    "artifacts/api-server/src/domains/graphic-design/ports.ts",
+      "interface":   "AssetLibraryPort",
+      "realService": "artifacts/api-server/src/services/assetLibraryService.ts"
+    },
+    "workflowEngine": {
+      "team":        "13-14",
+      "description": "Dispatches and tracks generation jobs",
+      "portFile":    "artifacts/api-server/src/domains/graphic-design/ports.ts",
+      "interface":   "WorkflowEnginePort",
+      "realService": "artifacts/api-server/src/routes/jobs.ts"
+    }
+  },
+  "qcPolicy": {
+    "passThreshold":        70,
+    "checks": [
+      { "name": "componentPresence",    "weight": 25, "description": "All required design components present" },
+      { "name": "textFitting",          "weight": 20, "description": "Text within safe-area boundaries" },
+      { "name": "printDimensions",      "weight": 15, "description": "Canvas dimensions match blueprint spec (±0.5%)" },
+      { "name": "bleedCompliance",      "weight": 10, "description": "Background extends to bleed edge" },
+      { "name": "resolutionCompliance", "weight": 10, "description": "DPI meets minimum (300 print, 72 digital)" },
+      { "name": "colorModeCompliance",  "weight":  5, "description": "CMYK for print, RGB/sRGB for digital" },
+      { "name": "contrastCompliance",   "weight": 10, "description": "Text contrast ≥ WCAG 2.1 AA" },
+      { "name": "fileFormatCompliance", "weight":  5, "description": "All expected file formats present" }
+    ]
+  },
+  "printSpecs": {
+    "bleedMmDefault":    3,
+    "bleedMmLargeFormat": 10,
+    "safeAreaMmDefault": 5,
+    "minDpiPrint":       300,
+    "minDpiDigital":     72,
+    "dimensionTolerancePrint":   0.5,
+    "dimensionToleranceDigital": 1.0
+  },
+  "routes": [
+    "POST   /api/ai/graphic-design/briefs",
+    "GET    /api/ai/graphic-design/briefs",
+    "GET    /api/ai/graphic-design/briefs/:id",
+    "PATCH  /api/ai/graphic-design/briefs/:id/status",
+    "POST   /api/ai/graphic-design/briefs/:id/approve",
+    "POST   /api/ai/graphic-design/briefs/:id/qc",
+    "GET    /api/ai/graphic-design/briefs/:id/qc",
+    "GET    /api/ai/graphic-design/briefs/:id/manifest",
+    "GET    /api/ai/graphic-design/blueprints",
+    "GET    /api/ai/graphic-design/blueprints/:serviceCode",
+    "GET    /api/ai/graphic-design/packages",
+    "GET    /api/ai/graphic-design/packages/:serviceCode",
+    "GET    /api/ai/graphic-design/services"
+  ],
+  "dbTables": [
+    "ai_platform.gd_briefs",
+    "ai_platform.gd_qc_runs"
+  ],
+  "catalogCategory":  "graphic-design",
+  "catalogServiceCodes": [
+    "GD-LOGO","GD-BCARD","GD-LTRHEAD","GD-FLYER","GD-POSTER",
+    "GD-BANNER","GD-BROCHURE","GD-SOCIAL","GD-CERT","GD-STATIONERY"
+  ],
+  "tests": {
+    "testDir": "artifacts/api-server/src/domains/graphic-design/tests/",
+    "files": [
+      "schema.test.ts",
+      "qc.test.ts",
+      "blueprints.test.ts",
+      "manifest.test.ts",
+      "service.test.ts"
+    ]
+  }
+}

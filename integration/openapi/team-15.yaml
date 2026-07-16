@@ -1,0 +1,486 @@
+openapi: "3.0.3"
+info:
+  title: "Team 15 — Graphic Design Domain"
+  version: "1.0.0"
+  description: |
+    Graphic Design domain API: 10 services (logo, business card, letterhead,
+    flyer, poster, banner, brochure, social media, certificate, stationery).
+
+    All routes are mounted under /api/ai/graphic-design.
+    All routes require admin authentication (X-Admin-Key header).
+
+servers:
+  - url: /api
+    description: API Server
+
+security:
+  - AdminKey: []
+
+components:
+  securitySchemes:
+    AdminKey:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+
+  schemas:
+    # ── Enums ──────────────────────────────────────────────────────────────────
+    GdServiceCode:
+      type: string
+      enum:
+        - GD-LOGO
+        - GD-BCARD
+        - GD-LTRHEAD
+        - GD-FLYER
+        - GD-POSTER
+        - GD-BANNER
+        - GD-BROCHURE
+        - GD-SOCIAL
+        - GD-CERT
+        - GD-STATIONERY
+      description: Graphic Design service identifier
+
+    PackageTier:
+      type: string
+      enum: [basic, standard, premium]
+
+    OutputFormat:
+      type: string
+      enum: [digital, print, both]
+
+    UrgencyLevel:
+      type: string
+      enum: [standard, rush, express]
+
+    GdStatus:
+      type: string
+      enum:
+        - draft
+        - pending_review
+        - approved
+        - in_production
+        - qc_check
+        - qc_failed
+        - revision_requested
+        - completed
+        - cancelled
+
+    StylePreference:
+      type: string
+      enum: [modern, classic, minimalist, bold, elegant, playful, corporate, vintage, futuristic]
+
+    # ── Shared base brief ──────────────────────────────────────────────────────
+    GraphicDesignBriefBase:
+      type: object
+      required:
+        - serviceCode
+        - clientName
+        - brandName
+        - industry
+        - targetAudience
+        - stylePreference
+        - colorPalette
+      properties:
+        serviceCode:      { $ref: "#/components/schemas/GdServiceCode" }
+        clientName:       { type: string, minLength: 1, maxLength: 200 }
+        brandName:        { type: string, minLength: 1, maxLength: 200 }
+        industry:         { type: string, minLength: 1, maxLength: 100 }
+        targetAudience:   { type: string, minLength: 1, maxLength: 500 }
+        stylePreference:  { $ref: "#/components/schemas/StylePreference" }
+        colorPalette:     { type: array, items: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }, minItems: 1, maxItems: 5 }
+        primaryFont:      { type: string, maxLength: 100, nullable: true }
+        secondaryFont:    { type: string, maxLength: 100, nullable: true }
+        notes:            { type: string, maxLength: 2000, nullable: true }
+        urgencyLevel:     { $ref: "#/components/schemas/UrgencyLevel", default: standard }
+        language:         { type: string, maxLength: 10, default: "id" }
+        packageTier:      { $ref: "#/components/schemas/PackageTier", default: standard }
+        outputFormat:     { $ref: "#/components/schemas/OutputFormat", default: both }
+        printQuantity:    { type: integer, minimum: 0, maximum: 100000, default: 0 }
+        referenceUrls:    { type: array, items: { type: string, format: uri }, maxItems: 5 }
+
+    # ── Create brief result ────────────────────────────────────────────────────
+    CreateBriefResult:
+      type: object
+      required: [briefId, status, manifestId, requiredFiles, estimatedDays]
+      properties:
+        briefId:       { type: string, format: uuid }
+        status:        { $ref: "#/components/schemas/GdStatus" }
+        manifestId:    { type: string }
+        requiredFiles: { type: integer }
+        estimatedDays: { type: integer }
+
+    # ── Brief summary ──────────────────────────────────────────────────────────
+    BriefSummary:
+      type: object
+      required: [id, serviceCode, status, packageTier, brandName, clientName, createdAt, updatedAt, jobCount]
+      properties:
+        id:          { type: string, format: uuid }
+        serviceCode: { $ref: "#/components/schemas/GdServiceCode" }
+        status:      { $ref: "#/components/schemas/GdStatus" }
+        packageTier: { $ref: "#/components/schemas/PackageTier" }
+        brandName:   { type: string }
+        clientName:  { type: string }
+        createdAt:   { type: string, format: date-time }
+        updatedAt:   { type: string, format: date-time }
+        jobCount:    { type: integer }
+
+    ListBriefsResult:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:    { type: array, items: { $ref: "#/components/schemas/BriefSummary" } }
+        total:    { type: integer }
+        page:     { type: integer }
+        pageSize: { type: integer }
+
+    # ── Status update ──────────────────────────────────────────────────────────
+    StatusUpdateBody:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/GdStatus" }
+        note:   { type: string, maxLength: 500, nullable: true }
+
+    # ── Approve + dispatch result ──────────────────────────────────────────────
+    ApproveResult:
+      type: object
+      required: [jobIds, conceptCount]
+      properties:
+        jobIds:       { type: array, items: { type: string } }
+        conceptCount: { type: integer }
+
+    # ── QC result ─────────────────────────────────────────────────────────────
+    QcCheckResult:
+      type: object
+      required: [checkName, score, weight, passed, warnings, failures]
+      properties:
+        checkName: { type: string }
+        score:     { type: number, minimum: 0, maximum: 100 }
+        weight:    { type: number }
+        passed:    { type: boolean }
+        warnings:  { type: array, items: { type: string } }
+        failures:  { type: array, items: { type: string } }
+
+    GraphicDesignQcResult:
+      type: object
+      required: [qcScore, passed, checks, warnings, failures]
+      properties:
+        qcScore:  { type: number, minimum: 0, maximum: 100 }
+        passed:   { type: boolean }
+        checks:   { type: array, items: { $ref: "#/components/schemas/QcCheckResult" } }
+        warnings: { type: array, items: { type: string } }
+        failures: { type: array, items: { type: string } }
+
+    QcRunResult:
+      allOf:
+        - $ref: "#/components/schemas/GraphicDesignQcResult"
+        - type: object
+          required: [briefId, newStatus]
+          properties:
+            briefId:   { type: string }
+            newStatus: { $ref: "#/components/schemas/GdStatus" }
+
+    # ── Deliverable manifest ───────────────────────────────────────────────────
+    DeliverableFile:
+      type: object
+      required: [fileKey, label, format, variant, required]
+      properties:
+        fileKey:     { type: string }
+        label:       { type: string }
+        format:      { type: string }
+        variant:     { type: string }
+        required:    { type: boolean }
+        description: { type: string, nullable: true }
+
+    DeliverableManifest:
+      type: object
+      required: [serviceCode, packageTier, outputFormat, files, requiredCount, createdAt]
+      properties:
+        serviceCode:   { $ref: "#/components/schemas/GdServiceCode" }
+        packageTier:   { $ref: "#/components/schemas/PackageTier" }
+        outputFormat:  { $ref: "#/components/schemas/OutputFormat" }
+        files:         { type: array, items: { $ref: "#/components/schemas/DeliverableFile" } }
+        requiredCount: { type: integer }
+        createdAt:     { type: string, format: date-time }
+
+    # ── Package policy ─────────────────────────────────────────────────────────
+    PackagePolicy:
+      type: object
+      required: [tier, label, conceptVariants, revisionRounds, includesSourceFiles, includesAllFormats, rushEligible, humanReviewIncluded, deliveryDays, priceMultiplier, description]
+      properties:
+        tier:                { $ref: "#/components/schemas/PackageTier" }
+        label:               { type: string }
+        conceptVariants:     { type: integer }
+        revisionRounds:      { type: integer, description: "-1 = unlimited" }
+        includesSourceFiles: { type: boolean }
+        includesAllFormats:  { type: boolean }
+        rushEligible:        { type: boolean }
+        humanReviewIncluded: { type: boolean }
+        deliveryDays:        { type: integer }
+        rushDeliveryDays:    { type: integer, nullable: true }
+        priceMultiplier:     { type: number }
+        description:         { type: string }
+        price:               { type: integer, description: "Effective price in IDR" }
+
+    # ── Error ──────────────────────────────────────────────────────────────────
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+paths:
+  # ── Briefs ────────────────────────────────────────────────────────────────────
+
+  /ai/graphic-design/briefs:
+    post:
+      operationId: createGraphicDesignBrief
+      summary: Create a new graphic design brief
+      tags: [graphic-design]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GraphicDesignBriefBase" }
+      responses:
+        "201":
+          description: Brief created, status = pending_review
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreateBriefResult" }
+        "400": { description: Validation error, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+    get:
+      operationId: listGraphicDesignBriefs
+      summary: List graphic design briefs
+      tags: [graphic-design]
+      parameters:
+        - in: query
+          name: serviceCode
+          schema: { $ref: "#/components/schemas/GdServiceCode" }
+        - in: query
+          name: status
+          schema: { $ref: "#/components/schemas/GdStatus" }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: pageSize
+          schema: { type: integer, default: 20, maximum: 100 }
+      responses:
+        "200":
+          description: Paginated list of briefs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListBriefsResult" }
+
+  /ai/graphic-design/briefs/{id}:
+    get:
+      operationId: getGraphicDesignBrief
+      summary: Get a graphic design brief by ID
+      tags: [graphic-design]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Brief record
+          content:
+            application/json:
+              schema:
+                type: object
+        "404": { description: Not found, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /ai/graphic-design/briefs/{id}/status:
+    patch:
+      operationId: updateGraphicDesignBriefStatus
+      summary: Update brief status
+      tags: [graphic-design]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StatusUpdateBody" }
+      responses:
+        "200":
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  briefId:    { type: string }
+                  prevStatus: { $ref: "#/components/schemas/GdStatus" }
+                  nextStatus: { $ref: "#/components/schemas/GdStatus" }
+                  updatedAt:  { type: string, format: date-time }
+        "409": { description: Terminal status — cannot advance, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /ai/graphic-design/briefs/{id}/approve:
+    post:
+      operationId: approveGraphicDesignBrief
+      summary: Approve brief and dispatch generation jobs to workflow engine
+      tags: [graphic-design]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Jobs dispatched
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApproveResult" }
+        "409": { description: Brief not in approvable status, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /ai/graphic-design/briefs/{id}/qc:
+    post:
+      operationId: runGraphicDesignQc
+      summary: Run QC check against a rendered deliverable (called by Team 7-8 renderer)
+      tags: [graphic-design]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: RenderedDeliverable — produced by Team 7-8 renderer
+      responses:
+        "200":
+          description: QC result with updated brief status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QcRunResult" }
+
+    get:
+      operationId: getGraphicDesignQcResult
+      summary: Get the last QC result for a brief
+      tags: [graphic-design]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Last QC result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GraphicDesignQcResult" }
+        "404": { description: No QC result yet }
+
+  /ai/graphic-design/briefs/{id}/manifest:
+    get:
+      operationId: getGraphicDesignManifest
+      summary: Get deliverable manifest for a brief
+      tags: [graphic-design]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Deliverable manifest
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeliverableManifest" }
+
+  # ── Blueprints ────────────────────────────────────────────────────────────────
+
+  /ai/graphic-design/blueprints:
+    get:
+      operationId: listGraphicDesignBlueprints
+      summary: List all service blueprints (print dimensions, bleed, DPI specs)
+      tags: [graphic-design]
+      responses:
+        "200":
+          description: Map of service codes to blueprints
+          content:
+            application/json:
+              schema: { type: object }
+
+  /ai/graphic-design/blueprints/{serviceCode}:
+    get:
+      operationId: getGraphicDesignBlueprint
+      summary: Get blueprint for a specific service
+      tags: [graphic-design]
+      parameters:
+        - in: path
+          name: serviceCode
+          required: true
+          schema: { $ref: "#/components/schemas/GdServiceCode" }
+      responses:
+        "200":
+          description: Service blueprint
+          content:
+            application/json:
+              schema: { type: object }
+        "404": { description: Unknown service code }
+
+  # ── Packages ──────────────────────────────────────────────────────────────────
+
+  /ai/graphic-design/packages:
+    get:
+      operationId: listGraphicDesignPackages
+      summary: List package policies for all services
+      tags: [graphic-design]
+      responses:
+        "200":
+          description: Package policies keyed by service code
+          content:
+            application/json:
+              schema: { type: object }
+
+  /ai/graphic-design/packages/{serviceCode}:
+    get:
+      operationId: getGraphicDesignPackages
+      summary: Get package policies for a specific service
+      tags: [graphic-design]
+      parameters:
+        - in: path
+          name: serviceCode
+          required: true
+          schema: { $ref: "#/components/schemas/GdServiceCode" }
+      responses:
+        "200":
+          description: basic / standard / premium policies
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  basic:    { $ref: "#/components/schemas/PackagePolicy" }
+                  standard: { $ref: "#/components/schemas/PackagePolicy" }
+                  premium:  { $ref: "#/components/schemas/PackagePolicy" }
+        "404": { description: Unknown service code }
+
+  # ── Service catalog ───────────────────────────────────────────────────────────
+
+  /ai/graphic-design/services:
+    get:
+      operationId: listGraphicDesignServices
+      summary: Graphic Design service catalog summary with pricing
+      tags: [graphic-design]
+      responses:
+        "200":
+          description: All 10 services with tier pricing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  services: { type: array, items: { type: object } }
+                  total:    { type: integer }
