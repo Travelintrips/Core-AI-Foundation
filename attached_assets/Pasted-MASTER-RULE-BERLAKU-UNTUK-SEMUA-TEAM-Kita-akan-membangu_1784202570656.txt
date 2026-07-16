@@ -1,0 +1,147 @@
+MASTER RULE — BERLAKU UNTUK SEMUA TEAM
+
+
+
+Kita akan membangun arsitektur AI Creative Studio Multi-Agent yang terdiri dari 15 agent spesialis.
+
+
+
+Setiap team harus bekerja di branch terpisah dan tidak boleh mengubah file milik team lain tanpa kebutuhan integrasi yang benar-benar wajib.
+
+
+
+Branch
+
+
+
+Gunakan branch berikut:
+
+
+
+Team 1: feature/design-ai-discovery-team
+
+Team 2: feature/design-ai-design-team
+
+Team 3: feature/design-ai-component-team
+
+Team 4: feature/design-ai-engineering-team
+
+Team 5: feature/design-ai-qa-team
+
+
+
+Jangan merge langsung ke main.
+
+
+
+Setelah selesai:
+
+
+
+Commit seluruh perubahan.
+
+Jalankan test dan typecheck.
+
+Buat laporan file yang diubah.
+
+Laporkan kontrak input/output.
+
+Laporkan risiko konflik.
+
+Jangan melakukan merge tanpa persetujuan eksplisit.
+
+Aturan Arsitektur
+
+
+
+Semua agent wajib:
+
+
+
+berada di file terpisah;
+
+memiliki single responsibility;
+
+menerima input JSON terstruktur;
+
+mengembalikan output JSON terstruktur;
+
+tidak mengembalikan teks bebas sebagai kontrak utama;
+
+memiliki schema validation;
+
+mendukung dependency injection untuk AI model;
+
+tidak hard-code provider AI;
+
+tidak langsung memanggil OpenAI dari domain logic;
+
+memiliki unit test;
+
+mencatat latency, token usage, model, retry, warning, dan error;
+
+tidak mengubah output agent sebelumnya secara mutasi;
+
+menghasilkan object baru pada setiap tahap.
+
+
+
+Gunakan kontrak umum berikut bila belum tersedia:
+
+
+
+export type AgentStatus = "success" | "failed" | "skipped";
+
+
+
+export interface AgentExecutionMetadata {
+
+  agentId: string;
+
+  agentName: string;
+
+  agentVersion: string;
+
+  model?: string;
+
+  startedAt: string;
+
+  completedAt: string;
+
+  latencyMs: number;
+
+  inputTokens?: number;
+
+  outputTokens?: number;
+
+  totalTokens?: number;
+
+  estimatedCost?: number;
+
+  retryCount: number;
+
+}
+
+
+
+export interface AgentOutput<T> {
+
+  status: AgentStatus;
+
+  data: T | null;
+
+  warnings: string[];
+
+  errors: string[];
+
+  metadata: AgentExecutionMetadata;
+
+}
+
+
+
+Gunakan zod atau schema validator yang sudah menjadi standar di repository.
+
+
+
+Jangan membuat database migration kecuali memang diminta dalam prompt team.
