@@ -299,6 +299,17 @@ export default function TemplateMarketplacePage() {
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 
+  const patchMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) =>
+      apiFetch(`/api/ai/templates/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: (updated: TemplateItem) => {
+      toast({ title: "Template diperbarui" });
+      qc.invalidateQueries({ queryKey: ["admin-templates"] });
+      setViewTemplate(updated); // refresh modal dengan data terbaru
+    },
+    onError: (e: Error) => toast({ title: "Gagal update", description: e.message, variant: "destructive" }),
+  });
+
   const createMutation = useMutation({
     mutationFn: () => {
       // Auto-generate templateCode from name: "Company Profile CSR" → "COMPANY-PROFILE-CSR"
@@ -689,6 +700,53 @@ export default function TemplateMarketplacePage() {
                     <p className="text-xs text-muted-foreground">{m.label}</p>
                   </div>
                 ))}
+              </div>
+
+              {/* ── Toggle controls ──────────────────────────────────────────── */}
+              <div className="rounded-xl border bg-card p-4 space-y-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pengaturan Template</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Harga: {viewTemplate.isPremium ? "Premium" : "Free"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {viewTemplate.isPremium
+                        ? "Hanya tersedia untuk paket professional & enterprise"
+                        : "Tersedia gratis untuk semua paket"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => patchMutation.mutate({ id: viewTemplate.id, data: { isPremium: !viewTemplate.isPremium } })}
+                    disabled={patchMutation.isPending}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                      viewTemplate.isPremium ? "bg-amber-500" : "bg-muted"
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      viewTemplate.isPremium ? "translate-x-6" : "translate-x-1"
+                    }`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Featured {viewTemplate.featured ? "✓" : ""}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {viewTemplate.featured
+                        ? "Diprioritaskan dalam rekomendasi AI"
+                        : "Tidak diprioritaskan dalam rekomendasi AI"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => patchMutation.mutate({ id: viewTemplate.id, data: { featured: !viewTemplate.featured } })}
+                    disabled={patchMutation.isPending}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                      viewTemplate.featured ? "bg-violet-500" : "bg-muted"
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      viewTemplate.featured ? "translate-x-6" : "translate-x-1"
+                    }`} />
+                  </button>
+                </div>
               </div>
 
               {/* Details grid */}
