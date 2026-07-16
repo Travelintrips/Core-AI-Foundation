@@ -1,10 +1,15 @@
 /**
- * Design Template Engine — Render Worker Service (Phase 2)
+ * Design Template Engine — Render Worker Service (Phase 3A)
  *
  * Three job types handled here:
  *   design_render              — single item SVG→PNG/JPG/WebP/PDF pipeline
- *   design_render_batch_dispatch — fan-out: enqueues individual design_render jobs
- *   design_render_zip_export   — Phase 3 stub (clearly marked, not falsely completing)
+ *   design_render_batch_dispatch — fan-out via production batchDispatcher
+ *   design_render_zip_export   — Phase 3 stub (clearly marked)
+ *
+ * Phase 3A additions:
+ *   - Processing lease set at claim time (lease_expires_at, worker_id, heartbeat_at)
+ *   - Cooperative cancellation checks use "cancelling" status as well as "cancelled"
+ *   - executeDesignRenderBatchDispatch now delegates to batchDispatcher
  */
 
 import { eq, and, sql } from "drizzle-orm";
@@ -14,7 +19,7 @@ import {
   designRenderBatchesTable,
   designTemplateVersionsTable,
 } from "@workspace/db";
-import { syncBatchProgress } from "./designRenderBatchService.js";
+import { reconcileDesignRenderBatch } from "./designRenderBatchService.js";
 import { logAudit } from "./aiAuditService.js";
 import { logger } from "../lib/logger.js";
 import type { AiJob } from "@workspace/db";
@@ -27,6 +32,7 @@ import {
 } from "./design-renderer/index.js";
 import { AssetCache } from "./design-renderer/assetCache.js";
 import { renderConfig } from "./design-renderer/config.js";
+import { batchConfig } from "./design-batch/config.js";
 import type { DesignTemplate, RenderFormat } from "../types/designTemplate.js";
 import { designTemplateJsonSchema } from "../validators/designTemplateSchema.js";
 
@@ -39,32 +45,38 @@ import { designTemplateJsonSchema } from "../validators/designTemplateSchema.js"
  *   { tenantId: string; renderItemId: number; batchId?: number }
  *
  * Flow:
- *   atomic claim item → load template version → render → upload → complete item → sync batch
+ *   atomic claim item + set lease → load template version → render → upload → complete item → reconcile batch
  */
 export async function executeDesignRenderJob(
   job: AiJob,
-  _workerId: number,
+  workerId: number,
 ): Promise<Record<string, unknown>> {
   const payload = job.payloadJson as {
     tenantId: string;
     renderItemId: number;
     batchId?: number;
-    rowIndex?: number;
   };
 
   const { tenantId, renderItemId, batchId } = payload;
+  const workerIdStr = String(workerId);
 
   if (!renderItemId) {
     throw new RenderError("RENDER_ITEM_NOT_FOUND", "Job payload missing renderItemId");
   }
 
-  // ── 1. Atomic claim: increment attempt_count WHERE still claimable ──────────
+  const leaseExpiresAt = new Date(Date.now() + batchConfig.processingLeaseMs);
+
+  // ── 1. Atomic claim: increment attempt_count + set lease WHERE still claimable ──
   const claimed = await db
     .update(designRenderItemsTable)
     .set({
-      status:       "processing",
-      attemptCount: sql`attempt_count + 1`,
-      startedAt:    new Date(),
+      status:           "processing",
+      attemptCount:     sql`attempt_count + 1`,
+      startedAt:        new Date(),
+      workerId:         workerIdStr,
+      leaseExpiresAt,
+      heartbeatAt:      new Date(),
+      dispatchStatus:   "dispatched",
     })
     .where(
       and(
@@ -107,14 +119,14 @@ export async function executeDesignRenderJob(
     .limit(1);
 
   if (!versions[0]) {
-    await failItem(item.id, tenantId, batchId, "TEMPLATE_VERSION_NOT_FOUND", "Template version not found", false);
+    await failItem(item.id, tenantId, batchId, "TEMPLATE_VERSION_NOT_FOUND", "Template version not found", false, workerIdStr);
     throw new RenderError("TEMPLATE_VERSION_NOT_FOUND", `Template version ${item.templateVersionId} not found`);
   }
 
   const templateJson = versions[0].templateJson;
   const parseResult = designTemplateJsonSchema.safeParse(templateJson);
   if (!parseResult.success) {
-    await failItem(item.id, tenantId, batchId, "TEMPLATE_SCHEMA_INVALID", "Template JSON schema invalid", false);
+    await failItem(item.id, tenantId, batchId, "TEMPLATE_SCHEMA_INVALID", "Template JSON schema invalid", false, workerIdStr);
     throw new RenderError("TEMPLATE_SCHEMA_INVALID", `Template JSON failed schema validation`);
   }
 
@@ -142,14 +154,15 @@ export async function executeDesignRenderJob(
 
     if (batches[0]) {
       // ── Cancellation check 1: before heavy work ──────────────────────────
-      if (batches[0].status === "cancelled") {
+      if (batches[0].status === "cancelled" || batches[0].status === "cancelling") {
         await db
           .update(designRenderItemsTable)
-          .set({ status: "cancelled", completedAt: new Date() })
+          .set({ status: "cancelled", completedAt: new Date(), leaseExpiresAt: null, workerId: null })
           .where(eq(designRenderItemsTable.id, item.id));
+        if (batchId) await reconcileDesignRenderBatch(tenantId, batchId).catch(() => undefined);
         throw new RenderError("RENDER_CANCELLED", `Batch ${batchId} has been cancelled`);
       }
-      format      = (batches[0].requestedFormat ?? "png") as RenderFormat;
+      format       = (batches[0].requestedFormat ?? "png") as RenderFormat;
       outputWidth  = batches[0].requestedWidth  ?? undefined;
       outputHeight = batches[0].requestedHeight ?? undefined;
     }
@@ -158,7 +171,7 @@ export async function executeDesignRenderJob(
   // ── 5. Idempotency check: if output already exists, reuse ─────────────────
   if (item.outputUrl && item.outputStoragePath) {
     logger.info({ jobId: job.id, renderItemId }, "[design-render] Reusing existing output");
-    await completeItem(item.id, tenantId, batchId, {
+    await completeItem(item.id, tenantId, batchId, workerIdStr, {
       outputUrl:         item.outputUrl,
       outputStoragePath: item.outputStoragePath,
       outputWidth:       item.outputWidth ?? 0,
@@ -172,19 +185,18 @@ export async function executeDesignRenderJob(
   }
 
   // ── 6. Cancellation check 2: before Sharp render ─────────────────────────
-  // (Re-check to catch cancellation that arrived while we were loading)
   if (batchId) {
     const batchCheck = await db
       .select({ status: designRenderBatchesTable.status })
       .from(designRenderBatchesTable)
       .where(eq(designRenderBatchesTable.id, batchId))
       .limit(1);
-    if (batchCheck[0]?.status === "cancelled") {
+    if (batchCheck[0]?.status === "cancelled" || batchCheck[0]?.status === "cancelling") {
       await db
         .update(designRenderItemsTable)
-        .set({ status: "cancelled", completedAt: new Date() })
+        .set({ status: "cancelled", completedAt: new Date(), leaseExpiresAt: null, workerId: null })
         .where(eq(designRenderItemsTable.id, item.id));
-      await syncBatchProgress(batchId);
+      if (batchId) await reconcileDesignRenderBatch(tenantId, batchId).catch(() => undefined);
       throw new RenderError("RENDER_CANCELLED", "Batch cancelled before render");
     }
   }
@@ -213,7 +225,7 @@ export async function executeDesignRenderJob(
 
     logger.warn({ jobId: job.id, renderItemId, code, retry }, `[design-render] Render failed: ${message}`);
 
-    await failItem(item.id, tenantId, batchId, code, message, retry);
+    await failItem(item.id, tenantId, batchId, code, message, retry, workerIdStr);
 
     await logAudit({
       module:       "design-template-engine",
@@ -228,26 +240,24 @@ export async function executeDesignRenderJob(
   }
 
   // ── 8. Cancellation check 3: before saving result ────────────────────────
-  // (cooperative — Sharp may have already completed, but we won't mark it completed)
   if (batchId) {
     const batchCheck = await db
       .select({ status: designRenderBatchesTable.status })
       .from(designRenderBatchesTable)
       .where(eq(designRenderBatchesTable.id, batchId))
       .limit(1);
-    if (batchCheck[0]?.status === "cancelled") {
+    if (batchCheck[0]?.status === "cancelled" || batchCheck[0]?.status === "cancelling") {
       await db
         .update(designRenderItemsTable)
-        .set({ status: "cancelled", completedAt: new Date() })
+        .set({ status: "cancelled", completedAt: new Date(), leaseExpiresAt: null, workerId: null })
         .where(eq(designRenderItemsTable.id, item.id));
-      await syncBatchProgress(batchId);
-      // Output was already uploaded — that's acceptable for cooperative cancellation
+      if (batchId) await reconcileDesignRenderBatch(tenantId, batchId).catch(() => undefined);
       throw new RenderError("RENDER_CANCELLED", "Batch cancelled after render; result discarded");
     }
   }
 
   // ── 9. Mark item completed ────────────────────────────────────────────────
-  await completeItem(item.id, tenantId, batchId, {
+  await completeItem(item.id, tenantId, batchId, workerIdStr, {
     outputUrl:         pipelineResult.outputUrl,
     outputStoragePath: pipelineResult.outputStoragePath,
     outputWidth:       pipelineResult.width,
@@ -288,8 +298,9 @@ export async function executeDesignRenderJob(
 
 async function completeItem(
   itemId: number,
-  _tenantId: string,
+  tenantId: string,
   batchId: number | undefined,
+  workerId: string,
   result: {
     outputUrl: string;
     outputStoragePath: string;
@@ -307,6 +318,7 @@ async function completeItem(
       status:               "completed",
       outputUrl:            result.outputUrl,
       outputStoragePath:    result.outputStoragePath,
+      outputAssetId:        result.outputStoragePath,
       outputWidth:          result.outputWidth,
       outputHeight:         result.outputHeight,
       outputFormat:         result.outputFormat,
@@ -316,21 +328,25 @@ async function completeItem(
       errorCode:            null,
       errorMessage:         null,
       completedAt:          new Date(),
+      leaseExpiresAt:       null,
+      workerId:             null,
+      heartbeatAt:          null,
     })
     .where(eq(designRenderItemsTable.id, itemId));
 
   if (batchId) {
-    await syncBatchProgress(batchId);
+    await reconcileDesignRenderBatch(tenantId, batchId).catch(() => undefined);
   }
 }
 
 async function failItem(
   itemId: number,
-  _tenantId: string,
+  tenantId: string,
   batchId: number | undefined,
   errorCode: string,
   errorMessage: string,
   retryable: boolean,
+  workerId: string,
 ): Promise<void> {
   // If non-retryable, mark as permanently failed; if retryable, keep as processing
   // so jobWorkerService retry logic can re-schedule it.
@@ -339,121 +355,63 @@ async function failItem(
   await db
     .update(designRenderItemsTable)
     .set({
-      status:       newStatus,
+      status:        newStatus,
       errorCode,
-      errorMessage: errorMessage.slice(0, 1000),
-      completedAt:  retryable ? undefined : new Date(),
+      errorMessage:  errorMessage.slice(0, 1000),
+      completedAt:   retryable ? undefined : new Date(),
+      // Release lease on terminal failure
+      ...(retryable ? {} : { leaseExpiresAt: null, workerId: null, heartbeatAt: null }),
     })
     .where(eq(designRenderItemsTable.id, itemId));
 
   if (batchId && !retryable) {
-    await syncBatchProgress(batchId);
+    await reconcileDesignRenderBatch(tenantId, batchId).catch(() => undefined);
   }
 }
 
 // ── design_render_batch_dispatch ──────────────────────────────────────────────
 
 /**
- * Fan-out job: reads all queued items from a batch and enqueues individual
- * design_render jobs. This is the correct pattern from the spec:
- *   1 Batch → N individual render items (each retriable independently).
+ * Fan-out job: delegates to the production batchDispatcher.
  *
- * Phase 1: Functional — dispatches individual render jobs for each queued item.
+ * Phase 3A: full production implementation with chunked dispatch,
+ * tenant fairness, idempotency, and resumability.
  */
 export async function executeDesignRenderBatchDispatch(
   job: AiJob,
-  _workerId: number,
+  workerId: number,
 ): Promise<Record<string, unknown>> {
-  const { batchId, tenantId, retryOnly } = job.payloadJson as {
+  const { batchId, tenantId } = job.payloadJson as {
     batchId: number;
     tenantId: string;
-    retryOnly?: boolean;
   };
 
-  logger.info({ jobId: job.id, batchId }, "[design-render-batch] Dispatching render items");
+  logger.info({ jobId: job.id, batchId }, "[design-render-batch] Starting production dispatch");
 
-  // Update batch status to processing
-  await db
-    .update(designRenderBatchesTable)
-    .set({ status: "processing" })
-    .where(eq(designRenderBatchesTable.id, batchId));
-
-  // Fetch queued items (or failed items if retryOnly)
-  const statusFilter = retryOnly ? "failed" : "queued";
-  const items = await db
-    .select({ id: designRenderItemsTable.id, rowIndex: designRenderItemsTable.rowIndex })
-    .from(designRenderItemsTable)
-    .where(
-      and(
-        eq(designRenderItemsTable.batchId, batchId),
-        eq(designRenderItemsTable.tenantId, tenantId),
-        eq(designRenderItemsTable.status, statusFilter),
-      ),
-    )
-    .orderBy(designRenderItemsTable.rowIndex);
-
-  if (items.length === 0) {
-    logger.info({ jobId: job.id, batchId }, "[design-render-batch] No items to dispatch");
-    await syncBatchProgress(batchId);
-    return { batchId, dispatchedCount: 0 };
-  }
-
-  const { enqueue } = await import("./queueManagerService.js");
-
-  let dispatched = 0;
-  for (const item of items) {
-    // Mark item as processing before enqueue (Phase 1 pattern preserved)
-    await db
-      .update(designRenderItemsTable)
-      .set({ status: "processing", startedAt: new Date() })
-      .where(eq(designRenderItemsTable.id, item.id));
-
-    await enqueue({
-      jobType:       "design_render",
-      payloadJson:   { batchId, renderItemId: item.id, rowIndex: item.rowIndex, tenantId },
-      priority:      50,
-      maxRetry:      parseInt(process.env["DESIGN_RENDER_MAX_ATTEMPTS"] ?? "3", 10),
-      retryStrategy: "exponential",
-      tenantId,
-    });
-
-    dispatched++;
-  }
-
-  await logAudit({
-    module:       "design-template-engine",
-    action:       "batch_dispatched",
-    resourceType: "design_render_batch",
-    resourceId:   String(batchId),
-    status:       "success",
-    details:      { batchId, dispatchedCount: dispatched, tenantId },
+  const { dispatchBatch } = await import("./design-batch/batchDispatcher.js");
+  const result = await dispatchBatch({
+    batchId,
+    tenantId,
+    requestId: String(job.id),
   });
 
-  return { batchId, dispatchedCount: dispatched };
+  return result as unknown as Record<string, unknown>;
 }
 
 // ── design_render_zip_export ──────────────────────────────────────────────────
 
 /**
- * Phase 3 stub: ZIP export is deferred to Phase 3.
- * Explicitly surfaces "not_implemented" status — does NOT enqueue a job that
- * will silently fail, and does NOT return a misleading success response.
- *
- * The HTTP endpoint has already been updated to return 501 with a clear message
- * so the UI knows this feature is not yet available.
+ * Phase 3 stub: ZIP export is deferred to Phase 3B (Team 2).
+ * Explicitly surfaces "not_implemented" status — does NOT silently fail.
  */
 export async function executeDesignRenderZipExport(
   job: AiJob,
   _workerId: number,
 ): Promise<Record<string, unknown>> {
   const { batchId } = job.payloadJson as { batchId: number };
-
-  logger.info({ jobId: job.id, batchId }, "[design-render-zip] ZIP export deferred to Phase 3");
-
-  // Return a structured result so jobWorkerService can mark the job as failed cleanly
-  // (not completed — the caller should see this as a non-retryable failure)
+  logger.info({ jobId: job.id, batchId }, "[design-render-zip] ZIP export deferred to Team 2");
   throw Object.assign(
-    new Error("ZIP export not yet implemented — scheduled for Phase 3"),
+    new Error("ZIP export not yet implemented — scheduled for Phase 3B (Team 2)"),
     { retryable: false, code: "ZIP_NOT_IMPLEMENTED" },
   );
 }
