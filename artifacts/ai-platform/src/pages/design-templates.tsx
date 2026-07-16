@@ -942,7 +942,9 @@ interface VersionRowProps {
 }
 
 function VersionRow({ version, templateId, isActive, onPublish }: VersionRowProps) {
+  const [, navigate] = useLocation();
   const isPublished = version.status === "published";
+  const editorPath = `/design-templates/${templateId}/versions/${version.id}/edit`;
 
   return (
     <div
@@ -953,7 +955,7 @@ function VersionRow({ version, templateId, isActive, onPublish }: VersionRowProp
       }`}
       data-testid={`version-row-${version.id}`}
     >
-      {/* Preview — only on detail page, not list */}
+      {/* Preview thumbnail */}
       <div className="w-28 shrink-0 hidden sm:block">
         <VersionPreview templateId={templateId} versionId={version.id} />
       </div>
@@ -997,7 +999,19 @@ function VersionRow({ version, templateId, isActive, onPublish }: VersionRowProp
       </div>
 
       {/* Actions */}
-      <div className="shrink-0">
+      <div className="shrink-0 flex flex-col gap-2 items-end">
+        {/* Open in Editor — always visible; read-only banner shown inside editor for published */}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate(editorPath)}
+          className="h-7 text-xs gap-1 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+          data-testid={`button-open-editor-${version.id}`}
+        >
+          <ExternalLink className="w-3 h-3" />
+          {isPublished ? "View" : "Edit"}
+        </Button>
+
         {isPublished ? (
           <Badge
             className="text-[10px] border border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
