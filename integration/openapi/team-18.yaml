@@ -1,0 +1,615 @@
+openapi: 3.1.0
+info:
+  title: "Team 18 — Fashion & Apparel Design API"
+  version: "1.0.0"
+  description: |
+    Fashion and Apparel Design domain for Creative AI Studio.
+
+    Supports: t-shirt, jersey, hoodie, uniform, jacket, dress, batik-inspired apparel, merchandise.
+
+    Blueprint panels: front, back, sleeves, collar, pocket, logo-area, sponsor, name, number, garment-panels.
+
+    Outputs: flat-design, front/back preview, colorways, motif variants, placement spec, editable composition JSON.
+
+    **Safety rules:**
+    - Final production garment patterns require size specification and technical review.
+    - Designs referencing trademarked brands/jerseys are blocked automatically.
+    - Panel constraints, numbering (0–99), and motif repeat are validated on blueprint save.
+
+servers:
+  - url: /api
+    description: API Server (via app.ts mount)
+
+tags:
+  - name: fashion-design-public
+    description: Public endpoints — no auth required
+  - name: fashion-design-orders
+    description: Order management (admin API key required)
+  - name: fashion-design-blueprints
+    description: Blueprint specification (admin API key required)
+  - name: fashion-design-generation
+    description: Output generation (admin API key required)
+
+paths:
+  /ai/fashion-design/services:
+    get:
+      operationId: getFashionDesignServices
+      tags: [fashion-design-public]
+      summary: List available apparel service types
+      description: Returns all supported garment types with blueprint panels, output types, and panel size constraints.
+      responses:
+        "200":
+          description: Service catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  services:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FashionServiceMeta"
+
+  /ai/fashion-design/orders:
+    get:
+      operationId: listFashionDesignOrders
+      tags: [fashion-design-orders]
+      summary: List all fashion design orders
+      security:
+        - AdminApiKey: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, blueprint_ready, generating, review, approved, delivered, trademark_flagged, cancelled]
+        - name: serviceType
+          in: query
+          schema:
+            type: string
+            enum: [t-shirt, jersey, hoodie, uniform, jacket, dress, batik-inspired, merchandise]
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated order list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderList"
+
+    post:
+      operationId: createFashionDesignOrder
+      tags: [fashion-design-orders]
+      summary: Create a new fashion design order
+      security:
+        - AdminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FashionDesignOrder"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /ai/fashion-design/orders/{id}:
+    get:
+      operationId: getFashionDesignOrder
+      tags: [fashion-design-orders]
+      summary: Get order details including blueprint
+      security:
+        - AdminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: Order with blueprint
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/FashionDesignOrder"
+                  - type: object
+                    properties:
+                      blueprint:
+                        nullable: true
+                        $ref: "#/components/schemas/FashionDesignBlueprint"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deleteFashionDesignOrder
+      tags: [fashion-design-orders]
+      summary: Delete a draft or cancelled order
+      security:
+        - AdminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/fashion-design/orders/{id}/status:
+    patch:
+      operationId: updateFashionDesignOrderStatus
+      tags: [fashion-design-orders]
+      summary: Update order status
+      security:
+        - AdminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [draft, blueprint_ready, generating, review, approved, delivered, trademark_flagged, cancelled]
+                adminNotes:
+                  type: string
+                  maxLength: 2000
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FashionDesignOrder"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/fashion-design/orders/{id}/colorways:
+    patch:
+      operationId: updateFashionDesignColorways
+      tags: [fashion-design-orders]
+      summary: Update colorways and motif configuration
+      security:
+        - AdminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [colorways]
+              properties:
+                colorways:
+                  type: array
+                  items:
+                    type: string
+                    pattern: "^#[0-9A-Fa-f]{3,8}$"
+                  maxItems: 20
+                motifConfig:
+                  $ref: "#/components/schemas/MotifConfig"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FashionDesignOrder"
+
+  /ai/fashion-design/orders/{id}/blueprint:
+    get:
+      operationId: getFashionDesignBlueprint
+      tags: [fashion-design-blueprints]
+      summary: Get blueprint for an order
+      security:
+        - AdminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: Order with blueprint
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order:
+                    $ref: "#/components/schemas/FashionDesignOrder"
+                  blueprint:
+                    nullable: true
+                    $ref: "#/components/schemas/FashionDesignBlueprint"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      operationId: saveFashionDesignBlueprint
+      tags: [fashion-design-blueprints]
+      summary: Save or update blueprint specification
+      description: |
+        Validates:
+        - Panel size constraints (each panel has min/max width/height in pixels)
+        - Jersey number must be numeric, 0–99
+        - Motif repeat scale must be 0–10
+        - Trademark safety on name/sponsor fields
+
+        Returns `violations` (panel constraint errors) and `numberingError` if validation fails.
+        If all valid, order status advances to `blueprint_ready`.
+      security:
+        - AdminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveBlueprintRequest"
+      responses:
+        "200":
+          description: Blueprint saved with validation results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  blueprint:
+                    $ref: "#/components/schemas/FashionDesignBlueprint"
+                  violations:
+                    type: array
+                    items: { type: string }
+                    description: Panel constraint violations (non-fatal)
+                  numberingError:
+                    type: string
+                    nullable: true
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/fashion-design/orders/{id}/trademark-check:
+    post:
+      operationId: runFashionDesignTrademarkCheck
+      tags: [fashion-design-orders]
+      summary: Run trademark safety check
+      description: |
+        Checks order name, description, blueprint name/sponsor fields against a blocklist of
+        known trademarked brands, sports teams, and apparel marks.
+        Flags the order and updates `trademarkSafe` and `trademarkNotes`.
+      security:
+        - AdminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: Trademark check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order:
+                    $ref: "#/components/schemas/FashionDesignOrder"
+                  result:
+                    $ref: "#/components/schemas/TrademarkCheckResult"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/fashion-design/orders/{id}/generate:
+    post:
+      operationId: generateFashionDesignOutputs
+      tags: [fashion-design-generation]
+      summary: Generate design outputs
+      description: |
+        Produces: composition JSON, placement spec, colorways summary, motif variant config.
+        Flat-design and front/back preview images require an AI image generation pipeline
+        (connection to Replicate/DALL-E) and are returned as `null` with a status note.
+
+        **Requirements before calling:**
+        - Order must be in `blueprint_ready` status
+        - `trademarkSafe` must be `true`
+        - A saved blueprint must exist for the order
+
+        **Important:** Generated outputs are NOT production-ready patterns.
+        Final manufacturing requires size specification and technical review.
+      security:
+        - AdminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: Generation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerationResult"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/fashion-design/orders/{id}/outputs:
+    get:
+      operationId: getFashionDesignOutputs
+      tags: [fashion-design-generation]
+      summary: Get generated outputs for an order
+      security:
+        - AdminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: Output data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orderId: { type: integer }
+                  status: { type: string }
+                  outputs: { type: object }
+                  compositionJson: { type: object, nullable: true }
+                  trademarkSafe: { type: boolean }
+                  trademarkNotes: { type: string, nullable: true }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    AdminApiKey:
+      type: apiKey
+      in: header
+      name: x-admin-api-key
+
+  parameters:
+    OrderId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer }
+
+  responses:
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+              details: { type: array, items: { type: object } }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+
+  schemas:
+    FashionServiceType:
+      type: string
+      enum: [t-shirt, jersey, hoodie, uniform, jacket, dress, batik-inspired, merchandise]
+
+    FashionOrderStatus:
+      type: string
+      enum: [draft, blueprint_ready, generating, review, approved, delivered, trademark_flagged, cancelled]
+
+    BlueprintPanel:
+      type: string
+      enum: [front, back, sleeves, collar, pocket, logo-area, sponsor, name, number, garment-panels]
+
+    MotifConfig:
+      type: object
+      properties:
+        name: { type: string }
+        repeatPattern: { type: string, enum: [tile, mirror, half-drop, brick] }
+        scale: { type: number, minimum: 0, maximum: 10 }
+        angle: { type: number, minimum: 0, maximum: 360 }
+
+    PanelConfig:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        content: { type: string }
+        position:
+          type: object
+          properties:
+            x: { type: number }
+            y: { type: number }
+        size:
+          type: object
+          properties:
+            w: { type: number }
+            h: { type: number }
+        color: { type: string }
+
+    FashionDesignOrder:
+      type: object
+      properties:
+        id: { type: integer }
+        customerName: { type: string }
+        customerEmail: { type: string }
+        orderName: { type: string }
+        description: { type: string, nullable: true }
+        serviceType:
+          $ref: "#/components/schemas/FashionServiceType"
+        quantity: { type: integer }
+        status:
+          $ref: "#/components/schemas/FashionOrderStatus"
+        trademarkSafe: { type: boolean }
+        trademarkNotes: { type: string, nullable: true }
+        colorways:
+          type: array
+          items: { type: string }
+        motifConfig:
+          nullable: true
+          $ref: "#/components/schemas/MotifConfig"
+        compositionJson: { type: object, nullable: true }
+        outputs: { type: object }
+        adminNotes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    FashionDesignBlueprint:
+      type: object
+      properties:
+        id: { type: integer }
+        orderId: { type: integer }
+        panels:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/PanelConfig"
+        placementSpec: { type: object, nullable: true }
+        panelConstraints: { type: object, nullable: true }
+        logoPlacement: { type: object, nullable: true }
+        numberValue: { type: string, nullable: true }
+        nameValue: { type: string, nullable: true }
+        numberFont: { type: string, nullable: true }
+        numberColor: { type: string, nullable: true }
+        sponsors:
+          type: array
+          items: { type: object }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    FashionServiceMeta:
+      type: object
+      properties:
+        type:
+          $ref: "#/components/schemas/FashionServiceType"
+        blueprintPanels:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlueprintPanel"
+        outputTypes:
+          type: array
+          items: { type: string }
+        panelConstraints:
+          type: object
+          description: Min/max width and height per panel in pixels
+        notes:
+          type: string
+          nullable: true
+
+    CreateOrderRequest:
+      type: object
+      required: [customerName, customerEmail, orderName, serviceType]
+      properties:
+        customerName: { type: string, maxLength: 200 }
+        customerEmail: { type: string, format: email }
+        orderName: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        serviceType:
+          $ref: "#/components/schemas/FashionServiceType"
+        quantity: { type: integer, minimum: 1, maximum: 10000, default: 1 }
+        colorways:
+          type: array
+          items: { type: string, pattern: "^#[0-9A-Fa-f]{3,8}$" }
+          maxItems: 20
+        motifConfig:
+          $ref: "#/components/schemas/MotifConfig"
+
+    SaveBlueprintRequest:
+      type: object
+      properties:
+        panels:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/PanelConfig"
+        placementSpec: { type: object }
+        panelConstraints: { type: object }
+        logoPlacement: { type: object }
+        numberValue:
+          type: string
+          maxLength: 3
+          description: Jersey number, must be 0–99
+        nameValue:
+          type: string
+          maxLength: 50
+          description: Jersey/garment name (e.g. player surname)
+        numberFont: { type: string }
+        numberColor:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{3,8}$"
+        sponsors:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              logoUrl: { type: string, format: uri }
+              panel: { $ref: "#/components/schemas/BlueprintPanel" }
+              position: { type: object }
+
+    OrderList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FashionDesignOrder"
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    TrademarkCheckResult:
+      type: object
+      properties:
+        safe: { type: boolean }
+        flags:
+          type: array
+          items: { type: string }
+          description: List of trademark violation descriptions
+        checkedFields:
+          type: array
+          items: { type: string }
+
+    GenerationResult:
+      type: object
+      properties:
+        outputs:
+          type: object
+          properties:
+            flat-design:
+              nullable: true
+              description: "null — requires AI image generation pipeline"
+            front-back-preview:
+              nullable: true
+              description: "null — requires rendering service"
+            colorways:
+              type: array
+              items: { type: string }
+            motif-variants:
+              type: object
+              nullable: true
+            placement-spec:
+              type: object
+            composition-json:
+              type: object
+              description: Editable composition for re-import into design tools
+        warnings:
+          type: array
+          items: { type: string }
+          description: Non-blocking warnings about generation limitations

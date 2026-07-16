@@ -110,6 +110,8 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
   // Design ZIP export download — signed-token-protected; token is the sole credential.
   // Only the download sub-path is public; admin CRUD routes on the same mount remain protected.
   { method: "GET", pattern: /^\/ai\/design-zip-exports\/\d+\/download$/ },
+  // Fashion design service catalog — public metadata endpoint (no customer data exposed).
+  { method: "GET", pattern: /^\/ai\/fashion-design\/services$/ },
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {

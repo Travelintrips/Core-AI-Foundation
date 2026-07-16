@@ -1,0 +1,122 @@
+{
+  "team": 18,
+  "name": "Fashion & Apparel Design",
+  "branch": "feature/18-fashion-design",
+  "domain": "fashion-design",
+  "description": "AI-assisted fashion and apparel design platform. Supports structured blueprint building, panel validation, trademark safety, colorway management, and composition output generation for t-shirt, jersey, hoodie, uniform, jacket, dress, batik-inspired apparel, and merchandise.",
+
+  "ownership": {
+    "apiRoutes": "artifacts/api-server/src/routes/fashion-design.ts",
+    "apiService": "artifacts/api-server/src/services/fashionDesignService.ts",
+    "dbSchema": "lib/db/src/schema/fashion-design.ts",
+    "customerPortal": "artifacts/customer-portal/src/pages/fashion-design/",
+    "adminPanel": "artifacts/ai-platform/src/pages/fashion-design/",
+    "openapi": "integration/openapi/team-18.yaml",
+    "migration": "integration/migrations/team-18.sql",
+    "manifest": "integration/manifests/team-18.json"
+  },
+
+  "database": {
+    "schema": "ai_platform",
+    "tables": [
+      {
+        "name": "fashion_design_orders",
+        "description": "Apparel design orders from submission to delivery",
+        "statusFlow": ["draft", "blueprint_ready", "generating", "review", "approved", "delivered", "trademark_flagged", "cancelled"]
+      },
+      {
+        "name": "fashion_design_blueprints",
+        "description": "Panel-by-panel blueprint specifications, one per order",
+        "panels": ["front", "back", "sleeves", "collar", "pocket", "logo-area", "sponsor", "name", "number", "garment-panels"]
+      }
+    ]
+  },
+
+  "services": [
+    "t-shirt",
+    "jersey",
+    "hoodie",
+    "uniform",
+    "jacket",
+    "dress",
+    "batik-inspired",
+    "merchandise"
+  ],
+
+  "blueprintPanels": [
+    "front",
+    "back",
+    "sleeves",
+    "collar",
+    "pocket",
+    "logo-area",
+    "sponsor",
+    "name",
+    "number",
+    "garment-panels"
+  ],
+
+  "outputs": [
+    "flat-design",
+    "front-back-preview",
+    "colorways",
+    "motif-variants",
+    "placement-spec",
+    "composition-json"
+  ],
+
+  "safetyRules": [
+    "No final production garment patterns without size specification and technical review",
+    "No copying or referencing well-known brand jerseys or motifs (trademark blocklist enforced)",
+    "Panel constraints validated on blueprint save (min/max width/height per panel)",
+    "Jersey numbering validated: must be numeric, 0–99",
+    "Logo placement validated against panel bounds",
+    "Motif repeat scale must be between 0 and 10",
+    "Trademark-flagged orders cannot be approved or delivered"
+  ],
+
+  "apiRoutes": [
+    { "method": "GET",    "path": "/api/ai/fashion-design/services",                      "auth": "public",  "description": "List available service types" },
+    { "method": "GET",    "path": "/api/ai/fashion-design/orders",                        "auth": "admin",   "description": "List all orders" },
+    { "method": "POST",   "path": "/api/ai/fashion-design/orders",                        "auth": "admin",   "description": "Create order" },
+    { "method": "GET",    "path": "/api/ai/fashion-design/orders/:id",                    "auth": "admin",   "description": "Get order + blueprint" },
+    { "method": "PATCH",  "path": "/api/ai/fashion-design/orders/:id/status",             "auth": "admin",   "description": "Update status" },
+    { "method": "PATCH",  "path": "/api/ai/fashion-design/orders/:id/colorways",          "auth": "admin",   "description": "Update colorways + motif" },
+    { "method": "DELETE", "path": "/api/ai/fashion-design/orders/:id",                    "auth": "admin",   "description": "Delete draft/cancelled order" },
+    { "method": "GET",    "path": "/api/ai/fashion-design/orders/:id/blueprint",          "auth": "admin",   "description": "Get blueprint" },
+    { "method": "PUT",    "path": "/api/ai/fashion-design/orders/:id/blueprint",          "auth": "admin",   "description": "Save/update blueprint" },
+    { "method": "POST",   "path": "/api/ai/fashion-design/orders/:id/trademark-check",    "auth": "admin",   "description": "Run trademark check" },
+    { "method": "POST",   "path": "/api/ai/fashion-design/orders/:id/generate",           "auth": "admin",   "description": "Generate outputs" },
+    { "method": "GET",    "path": "/api/ai/fashion-design/orders/:id/outputs",            "auth": "admin",   "description": "Get generated outputs" }
+  ],
+
+  "frontendRoutes": {
+    "customerPortal": "/fashion-design",
+    "adminPanel": "/fashion-design"
+  },
+
+  "integrationNotes": [
+    "DB tables must be created by running integration/migrations/team-18.sql against the Supabase database",
+    "Route is registered in artifacts/api-server/src/routes/index.ts as fashionDesignRouter",
+    "DB schema exported from lib/db/src/schema/index.ts",
+    "Public route GET /api/ai/fashion-design/services must be added to adminAuthWithExceptions in app.ts",
+    "Image generation outputs (flat-design, front-back-preview) require integration with AI pipeline (Replicate/DALL-E) — currently return null with status note",
+    "Batik motif generation should respect traditional Javanese/Indonesian pattern integrity"
+  ],
+
+  "testTargets": [
+    "validatePanelConstraints: panel size min/max enforcement",
+    "validateNumbering: 0–99 range, numeric check",
+    "validateMotifRepeat: scale 0–10",
+    "checkTrademark: brand blocklist coverage",
+    "createOrder: trademark auto-check on creation",
+    "saveBlueprint: panel violation accumulation",
+    "updateOrderStatus: cannot approve trademark-flagged orders",
+    "updateOrderStatus: cannot generate without blueprint",
+    "deleteOrder: approved/delivered orders blocked",
+    "generateOutputs: requires blueprint_ready status and trademarkSafe=true"
+  ],
+
+  "version": "1.0.0",
+  "createdAt": "2026-07-16"
+}
