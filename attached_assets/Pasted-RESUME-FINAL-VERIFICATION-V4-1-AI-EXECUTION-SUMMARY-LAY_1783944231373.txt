@@ -1,0 +1,300 @@
+RESUME FINAL VERIFICATION — V4.1 AI EXECUTION SUMMARY LAYER
+
+Pekerjaan sebelumnya berhenti karena daily quota limit pada tahap akhir manual verification.
+
+JANGAN mengulang implementasi.
+JANGAN membuat service, endpoint, atau summary model baru.
+JANGAN mengubah arsitektur yang sudah lulus test.
+
+==================================================
+STATUS TERAKHIR YANG SUDAH DIKONFIRMASI
+==================================================
+
+- 111 backend tests pass.
+- 15 frontend tests pass.
+- Customer portal production build succeeds.
+- Missing SSE summary tests sudah ditambahkan.
+- Accessibility gaps sudah diperbaiki.
+- V4.1 implicit-any errors sudah diperbaiki.
+- Portal live dan landing page dapat dibuka.
+- Live projects sudah ditemukan.
+- Agent sedang mencari workspace token aman untuk menguji events endpoint saat quota habis.
+
+Fase ini tinggal menyelesaikan manual verification dan laporan final.
+
+==================================================
+LANGKAH 1 — INSPECT CURRENT STATE
+==================================================
+
+Jalankan:
+
+- git status
+- git diff
+- relevant test commands
+- relevant build commands
+
+Pastikan tree dan implementasi V4.1 tetap konsisten.
+
+Jangan refactor jika tidak ada bug.
+
+==================================================
+LANGKAH 2 — SAFE TEST TOKEN
+==================================================
+
+Gunakan hanya salah satu metode aman berikut:
+
+1. existing dev/test workspace token;
+2. admin impersonation endpoint existing;
+3. test fixture;
+4. temporary dev-only token generation melalui flow existing.
+
+Jangan:
+
+- membaca atau mengekspos plaintext token user produksi;
+- mengubah hash token customer produksi;
+- memasukkan token ke log;
+- menampilkan token di laporan;
+- menggunakan akun customer nyata tanpa kebutuhan.
+
+Jika impersonation endpoint tersedia, gunakan itu.
+
+Jika tidak ada token aman, gunakan integration fixture yang mengeksekusi route dengan mocked session.
+
+==================================================
+LANGKAH 3 — VERIFY REST EVENTS ENDPOINT
+==================================================
+
+Panggil endpoint project events menggunakan project dan token test yang valid:
+
+GET /api/public/customer/workspace/:token/projects/:projectNumber/events
+
+Verifikasi:
+
+- status 200;
+- ownership benar;
+- canonical event tersedia;
+- execution summary tersedia;
+- shape konsisten;
+- title customer-friendly;
+- summary customer-safe;
+- whyItMatters;
+- nextStep;
+- customerAction hanya jika valid;
+- tidak ada banned fields.
+
+Jangan mencetak token dalam output.
+
+Tampilkan contoh response yang sudah disanitasi.
+
+==================================================
+LANGKAH 4 — VERIFY PROJECT DETAIL
+==================================================
+
+Panggil project detail endpoint.
+
+Pastikan:
+
+- events + summaries tersedia sesuai desain final;
+- runtime current task dapat memakai summary;
+- filesUnlocked memengaruhi artifact CTA;
+- no breaking change pada field lama.
+
+==================================================
+LANGKAH 5 — VERIFY SSE LIVE
+==================================================
+
+Hubungkan ke SSE endpoint dengan token test:
+
+GET /api/public/customer/workspace/:token/projects/:projectNumber/events/stream
+
+Verifikasi:
+
+1. snapshot event dikirim;
+2. snapshot membawa summary;
+3. runtime.event membawa summary;
+4. cursor tetap benar;
+5. reconnect tidak menduplikasi summary;
+6. heartbeat berjalan;
+7. no sensitive data;
+8. stream.complete bekerja untuk completed project bila tersedia.
+
+Jika sulit memicu event live tanpa mengubah data customer, gunakan seeded dev project atau integration fixture.
+
+Jangan memodifikasi data produksi.
+
+==================================================
+LANGKAH 6 — MANUAL UI VERIFICATION
+==================================================
+
+Buka workspace project yang aman.
+
+Verifikasi pada desktop 1440px dan mobile 390px:
+
+A. Running project
+- current task summary terlihat;
+- worker role terlihat;
+- what happened jelas;
+- no fake progress;
+- next step berasal dari workflow;
+- connection indicator Live.
+
+B. Completed step
+- title dan summary tampil;
+- why-it-matters expandable;
+- next step benar.
+
+C. Artifact generated
+- CTA hanya tampil jika filesUnlocked;
+- locked artifact tidak bisa dibuka;
+- under-review state jujur.
+
+D. Review state
+- review requested/approved/revision summary aman;
+- tidak ada metadata internal reviewer.
+
+E. Failed or blocked
+- pesan aman;
+- no raw error;
+- customer action hanya jika nyata.
+
+F. No-runtime
+- honest fallback;
+- no fabricated summary;
+- no fake live worker.
+
+Ambil screenshot:
+
+- desktop live runtime
+- mobile live runtime
+- no-runtime fallback
+- artifact/review state bila tersedia
+
+==================================================
+LANGKAH 7 — ACCESSIBILITY FINAL CHECK
+==================================================
+
+Verifikasi langsung:
+
+- expand/collapse keyboard;
+- aria-expanded;
+- aria-controls;
+- focus-visible;
+- aria-live;
+- readable timestamps;
+- button labels;
+- 44px mobile targets;
+- no overflow.
+
+==================================================
+LANGKAH 8 — SECURITY FINAL CHECK
+==================================================
+
+Audit serialized payload REST dan SSE secara recursive.
+
+Banned terms/fields:
+
+- prompt
+- systemPrompt
+- hiddenPrompt
+- reasoning
+- chainOfThought
+- rawOutput
+- rawResponse
+- errorMessage internal
+- stackTrace
+- apiKey
+- secret
+- token
+- cost
+- margin
+- credentials
+
+Pastikan token URL tidak muncul di logs atau screenshot.
+
+==================================================
+LANGKAH 9 — FINAL COMMANDS
+==================================================
+
+Jalankan kembali:
+
+- backend tests;
+- frontend tests;
+- backend typecheck;
+- frontend typecheck;
+- API server production build;
+- customer portal production build.
+
+Catat hasil aktual.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+V4.1 dapat dinyatakan selesai hanya jika:
+
+- REST summary terverifikasi;
+- SSE summary terverifikasi;
+- live workspace UI terverifikasi;
+- no-runtime fallback terverifikasi;
+- artifact permission terverifikasi;
+- no sensitive leakage;
+- all tests pass;
+- both typechecks pass;
+- both builds pass.
+
+==================================================
+OUTPUT FINAL WAJIB
+==================================================
+
+# V4.1 AI Execution Summary Layer — Final Report
+
+## Resume Verification
+
+## REST Verification
+
+## Project Detail Verification
+
+## SSE Verification
+
+## Live UI Verification
+
+## Running Project
+
+## Completed Step
+
+## Artifact State
+
+## Review State
+
+## Failed/Blocked State
+
+## No-Runtime State
+
+## Accessibility Verification
+
+## Security Verification
+
+## Tests
+- backend
+- frontend
+
+## Typecheck
+- backend
+- frontend
+
+## Builds
+- API server
+- customer portal
+
+## Screenshots
+
+## Sanitized Response Example
+
+## Files Changed
+
+## Remaining Non-Blocking Gaps
+
+## Final Recommendation for V4.2
+
+Jangan mengerjakan V4.2.
+Jangan mengklaim selesai jika live/manual verification belum berhasil.

@@ -28,6 +28,9 @@ import {
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 import { publishSafe } from "./aiEventBusService.js";
+import { createCanonicalQuotation as repoCreate } from "../repositories/quotationRepository.js";
+import { adaptLegacyTenantContext } from "../security/requestContext.js";
+import { makeRepositoryContext } from "../repositories/types.js";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -81,6 +84,30 @@ export async function createQuotation(opts: {
     ? new Date(Date.now() + opts.validDays * 86_400_000)
     : null;
 
+  // WP-10 migration: route through the repository when a tenantId is available
+  // so writes get automatic audit emission. Fall back to direct insert only for
+  // the (temporary, pre-WP-01-middleware) case where tenantId is missing.
+  if (opts.tenantId) {
+    const rc = adaptLegacyTenantContext({
+      tenantId: opts.tenantId,
+      actorType: "system",
+      requestId: `svc-create-${code}`,
+      source: "api",
+    });
+    const repoCtx = makeRepositoryContext(rc);
+    // repository handles audit emission — no manual logAudit call needed
+    return repoCreate(repoCtx, {
+      quotationCode: code,
+      serviceRequestId: opts.serviceRequestId,
+      customerName: opts.customerName,
+      customerEmail: opts.customerEmail,
+      currency: opts.currency,
+      validUntil,
+      tenantId: opts.tenantId,
+    });
+  }
+
+  // Legacy path: direct insert (pre-WP-01 call sites without a tenantId)
   const [q] = await db
     .insert(aiQuotationsTable)
     .values({
@@ -89,7 +116,7 @@ export async function createQuotation(opts: {
       customerName: opts.customerName,
       customerEmail: opts.customerEmail,
       currency: opts.currency ?? "IDR",
-      tenantId: opts.tenantId ?? null,
+      tenantId: null,
       validUntil,
       status: "draft",
     })

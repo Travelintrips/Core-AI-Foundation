@@ -7,7 +7,7 @@ import type { BriefData } from "@/pages/brief";
 import type { ServiceType } from "@/config/brief-service-config";
 import { buildBriefIntelligenceContext } from "../context-adapter";
 import { computeBriefRecommendations } from "../engine";
-import { applyRecommendations } from "../apply-adapter";
+import { applyRecommendations, isFreeTextCategoryFilled } from "../apply-adapter";
 import { APPLIABLE_CATEGORIES } from "../types";
 import type { ApplySkip, BriefRecommendation, RecommendationCategory } from "../types";
 import { RecommendationCategory as RecommendationCategoryBlock } from "./RecommendationCategory";
@@ -62,9 +62,22 @@ export const BriefRecommendationPanel = memo(function BriefRecommendationPanel({
 
   const result = useMemo(() => computeBriefRecommendations(context), [context]);
 
+  // Free-text categories (Kepribadian Brand, Tone of Voice, Arahan Fotografi/
+  // Visual/Konten, Format Output) always no-op when their target field is
+  // already filled in — see isFreeTextCategoryFilled. Hide those items
+  // entirely rather than showing a "Gunakan" button that silently does
+  // nothing when clicked.
+  const visibleCategories = useMemo(
+    () => result.categories
+      .map((cat) => (
+        isFreeTextCategoryFilled(brief, cat.category) ? { ...cat, items: [] } : cat
+      ))
+      .filter((cat) => cat.items.length > 0),
+    [result, brief.outputFormats, brief.specialRequirements],
+  );
+
   if (!result.hasEnoughContext) return null;
-  const hasAnyItems = result.categories.some((c) => c.items.length > 0);
-  if (!hasAnyItems) return null;
+  if (visibleCategories.length === 0) return null;
 
   const runApply = (
     mode: "apply-single" | "apply-category" | "apply-all-empty-only",
@@ -91,7 +104,7 @@ export const BriefRecommendationPanel = memo(function BriefRecommendationPanel({
     });
   };
 
-  const allItems = result.categories.flatMap((c) => c.items);
+  const allItems = visibleCategories.flatMap((c) => c.items);
 
   return (
     <SectionCard
@@ -134,7 +147,7 @@ export const BriefRecommendationPanel = memo(function BriefRecommendationPanel({
                   <BriefIntelligenceDebugPanel result={result} />
                 )}
 
-                {result.categories.map((cat) => (
+                {visibleCategories.map((cat) => (
                   <RecommendationCategoryBlock
                     key={cat.category}
                     category={cat.category}

@@ -265,7 +265,10 @@ export async function verifyPayment(
   const paymentReadyForProduction =
     schedule.paymentType === "deposit" || schedule.paymentType === "full_payment" || fullyPaid;
 
-  if (paymentReadyForProduction && project.status === "waiting_payment_verification" || project.status === "waiting_payment") {
+  if (
+    paymentReadyForProduction &&
+    (project.status === "waiting_payment_verification" || project.status === "waiting_payment")
+  ) {
     // Re-fetch to get the just-updated row for an accurate status check.
     const [freshProject] = await db
       .select()
@@ -376,6 +379,25 @@ export async function rejectPayment(
     .returning();
 
   if (!schedule) return null;
+
+  // Un-stick the project: a customer who submitted proof moved the project to
+  // "waiting_payment_verification" — if that proof is rejected, revert to
+  // "waiting_payment" so the customer sees an actionable state and can submit
+  // a new reference/proof instead of appearing to wait forever. Only revert
+  // when the project is still in that specific waiting state — never touch a
+  // project that has since progressed (e.g. another installment already
+  // verified it further along, or production/terminal states).
+  const [project] = await db
+    .select({ id: creativeProjectsTable.id, status: creativeProjectsTable.status })
+    .from(creativeProjectsTable)
+    .where(eq(creativeProjectsTable.id, schedule.projectId))
+    .limit(1);
+  if (project && project.status === "waiting_payment_verification") {
+    await db
+      .update(creativeProjectsTable)
+      .set({ status: "waiting_payment", updatedAt: new Date() })
+      .where(eq(creativeProjectsTable.id, project.id));
+  }
 
   await logAudit(
     "payments",

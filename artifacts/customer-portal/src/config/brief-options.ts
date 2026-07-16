@@ -249,3 +249,134 @@ export const LANGUAGE_OPTIONS = [
   { value: "en",    label: "English" },
   { value: "id_en", label: "Bilingual — Indonesia & English" },
 ];
+
+// ─── Fashion Design Specialist Options ────────────────────────────────────────
+
+export const FASHION_STYLE_OPTIONS = [
+  { value: "editorial",      label: "Editorial",        description: "Artistik, magazine-worthy, high-concept" },
+  { value: "ready_to_wear",  label: "Ready-to-Wear",    description: "Wearable, commercial, dan accessible" },
+  { value: "haute_couture",  label: "Haute Couture",    description: "Ultra-premium, bespoke, dan eksklusif" },
+  { value: "streetwear",     label: "Streetwear",       description: "Urban, cultural, dan youth-driven" },
+  { value: "athleisure",     label: "Athleisure",       description: "Performance meets lifestyle aesthetic" },
+  { value: "sustainable",    label: "Sustainable",      description: "Conscious, ethical, dan eco-forward" },
+  { value: "vintage_retro",  label: "Vintage / Retro",  description: "Nostalgik, era-inspired, dan curated" },
+  { value: "minimalist",     label: "Minimalist",       description: "Clean lines, monochrome, dan quiet luxury" },
+  { value: "maximalist",     label: "Maximalist",       description: "Layered, textured, dan statement-making" },
+  { value: "avant_garde",    label: "Avant-Garde",      description: "Experimental, boundary-pushing, dan conceptual" },
+  { value: "resort",         label: "Resort / Tropical", description: "Relaxed luxury untuk lifestyle tropis" },
+  { value: "modest_fashion", label: "Modest Fashion",   description: "Modest, refined, dan culturally aware" },
+  { value: "other",          label: "Lainnya",          description: "" },
+];
+
+export const FASHION_GARMENT_OPTIONS = [
+  { value: "outerwear",   label: "Outerwear" },
+  { value: "dress",       label: "Dress / Rok" },
+  { value: "tops",        label: "Tops / Blouse" },
+  { value: "pants",       label: "Celana / Trousers" },
+  { value: "suit",        label: "Suit / Blazer" },
+  { value: "activewear",  label: "Activewear" },
+  { value: "accessories", label: "Aksesori" },
+  { value: "footwear",    label: "Alas Kaki" },
+  { value: "bags",        label: "Tas" },
+  { value: "swimwear",    label: "Swimwear / Beachwear" },
+  { value: "ethnic",      label: "Pakaian Tradisional / Etnik" },
+  { value: "modest",      label: "Busana Muslim / Modest" },
+  { value: "kids",        label: "Pakaian Anak" },
+  { value: "other",       label: "Lainnya" },
+];
+
+export const FASHION_GENDER_OPTIONS = [
+  { value: "womenswear", label: "Womenswear" },
+  { value: "menswear",   label: "Menswear" },
+  { value: "unisex",     label: "Unisex / Gender-Neutral" },
+  { value: "kidswear",   label: "Kidswear" },
+  { value: "all",        label: "All Genders" },
+];
+
+export const FASHION_SEASON_OPTIONS = [
+  { value: "ss",       label: "Spring/Summer (SS)" },
+  { value: "fw",       label: "Fall/Winter (FW)" },
+  { value: "resort",   label: "Resort / Cruise" },
+  { value: "pre_fall", label: "Pre-Fall / Transitional" },
+  { value: "capsule",  label: "Capsule Collection" },
+  { value: "evergreen",label: "Evergreen / Tidak Musiman" },
+];
+
+export const FASHION_PRICEPOINT_OPTIONS = [
+  { value: "mass",        label: "Mass Market",    description: "< Rp 200rb per item" },
+  { value: "mid_range",   label: "Mid-Range",      description: "Rp 200rb – 1jt per item" },
+  { value: "premium",     label: "Premium",        description: "Rp 1jt – 5jt per item" },
+  { value: "luxury",      label: "Luxury",         description: "> Rp 5jt per item" },
+  { value: "ultra_luxury",label: "Ultra-Luxury",   description: "Bespoke / Custom order" },
+];
+
+// ─── Interior Design Specialist Options ──────────────────────────────────────
+
+export const INTERIOR_STYLE_OPTIONS = [
+  { value: "scandinavian",    label: "Scandinavian",     description: "Bersih, fungsional, warm neutral tones" },
+  { value: "japandi",         label: "Japandi",          description: "Japanese-Scandinavian: zen, natural, minimal" },
+  { value: "modern_luxury",   label: "Modern Luxury",    description: "Kontemporer mewah, material premium" },
+  { value: "industrial",      label: "Industrial",       description: "Raw concrete, exposed brick, metal accents" },
+  { value: "bohemian",        label: "Bohemian",         description: "Eclectic, textured, layered dan artsy" },
+  { value: "tropical",        label: "Tropical Modern",  description: "Natural materials, plants, breezy atmosphere" },
+  { value: "mediterranean",   label: "Mediterranean",    description: "Warm terracotta, arches, earthy palette" },
+  { value: "classic",         label: "Classic / Formal", description: "Timeless elegance, symmetrical, ornamented" },
+  { value: "minimalist",      label: "Minimalist",       description: "Ruang bernapas, palette monochrome, clean forms" },
+  { value: "biophilic",       label: "Biophilic",        description: "Alam masuk ke dalam: kayu, tanaman, natural light" },
+  { value: "art_deco",        label: "Art Deco",         description: "Geometrik, glamour, gold & jewel tones" },
+  { value: "coastal",         label: "Coastal / Nautical",description: "Breezy, blue-white palette, light textures" },
+  { value: "other",           label: "Lainnya",          description: "" },
+];
+
+export const INTERIOR_ROOM_OPTIONS = [
+  { value: "living_room",   label: "Ruang Tamu / Living Room" },
+  { value: "bedroom",       label: "Kamar Tidur" },
+  { value: "kitchen",       label: "Dapur / Kitchen" },
+  { value: "dining_room",   label: "Ruang Makan" },
+  { value: "bathroom",      label: "Kamar Mandi" },
+  { value: "home_office",   label: "Ruang Kerja / Home Office" },
+  { value: "kids_room",     label: "Kamar Anak" },
+  { value: "outdoor",       label: "Area Outdoor / Taman" },
+  { value: "full_unit",     label: "Satu Unit Penuh" },
+  { value: "commercial",    label: "Ruang Komersial" },
+  { value: "office_space",  label: "Kantor" },
+  { value: "retail_store",  label: "Toko / Retail" },
+  { value: "restaurant",    label: "Restoran / Cafe" },
+  { value: "hotel_lobby",   label: "Lobby / Hospitality" },
+  { value: "other",         label: "Lainnya" },
+];
+
+export const INTERIOR_PROJECT_OPTIONS = [
+  { value: "residential",   label: "Residential (Hunian Pribadi)" },
+  { value: "apartment",     label: "Apartemen" },
+  { value: "villa",         label: "Villa / Guest House" },
+  { value: "commercial",    label: "Komersial" },
+  { value: "office",        label: "Kantor" },
+  { value: "hospitality",   label: "Hotel / Hospitality" },
+  { value: "retail",        label: "Retail Store" },
+  { value: "fnb",           label: "Restoran / Cafe" },
+  { value: "other",         label: "Lainnya" },
+];
+
+export const INTERIOR_MATERIAL_OPTIONS = [
+  { value: "marble",      label: "Marmer / Stone" },
+  { value: "wood",        label: "Kayu / Timber" },
+  { value: "concrete",    label: "Beton Ekspos" },
+  { value: "metal",       label: "Metal / Stainless" },
+  { value: "rattan",      label: "Rotan / Bambu" },
+  { value: "fabric",      label: "Fabric / Upholstery" },
+  { value: "leather",     label: "Kulit / Leather" },
+  { value: "glass",       label: "Kaca / Glass" },
+  { value: "ceramic",     label: "Keramik / Terrakota" },
+  { value: "wallpaper",   label: "Wallpaper / Wall Treatment" },
+  { value: "plants",      label: "Tanaman / Greenery" },
+  { value: "other",       label: "Lainnya" },
+];
+
+export const INTERIOR_BUDGET_OPTIONS = [
+  { value: "entry",     label: "Entry",   description: "< Rp 50jt" },
+  { value: "mid",       label: "Mid",     description: "Rp 50jt – 200jt" },
+  { value: "premium",   label: "Premium", description: "Rp 200jt – 500jt" },
+  { value: "luxury",    label: "Luxury",  description: "> Rp 500jt" },
+  { value: "unsure",    label: "Belum ditentukan", description: "Tim kami akan bantu estimasi" },
+];

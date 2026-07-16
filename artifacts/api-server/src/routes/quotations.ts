@@ -30,7 +30,6 @@ import { publishSafe } from "../services/aiEventBusService.js";
 import { logAudit } from "../services/aiAuditService.js";
 import { createGateForQuotation } from "../services/commercialGateService.js";
 import { checkAndMaybeConvert } from "../services/serviceRequestConversionService.js";
-import { runCreativeBriefWorkflow } from "../services/creativeWorkflowRunner.js";
 
 const router = Router();
 
@@ -111,7 +110,16 @@ router.get("/creative-ai/projects/:projectId/quotation", async (req, res): Promi
   res.json(serializeQuotation(quotation));
 });
 
-// ── Admin: create/update draft quotation ─────────────────────────────────────
+// ── Admin: update existing draft quotation (WP-11: creation path frozen) ─────
+//
+// WP-11 legacy freeze: new rows can NO LONGER be created in
+// creative_project_quotations via this route. This table is frozen for writes
+// as of this work package — all new quotations must originate from the
+// service-catalog flow (POST /api/ai/catalog/services/:id/request).
+//
+// Existing pre-freeze draft rows on the table can still be edited so that
+// projects created before the freeze are not left stranded mid-workflow.
+// This handler now returns 410 Gone if no existing row exists for the project.
 
 router.put("/creative-ai/projects/:projectId/quotation", async (req, res): Promise<void> => {
   const { projectId } = req.params as { projectId: string };
@@ -122,6 +130,27 @@ router.put("/creative-ai/projects/:projectId/quotation", async (req, res): Promi
     .where(eq(creativeProjectsTable.projectId, projectId));
   if (!project) {
     res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(creativeProjectQuotationsTable)
+    .where(eq(creativeProjectQuotationsTable.projectId, projectId));
+
+  // WP-11 freeze gate: block creation of new legacy quotation rows.
+  if (!existing) {
+    res.status(410).json({
+      error:
+        "Legacy quotation creation is frozen. Use the service-catalog flow " +
+        "(POST /api/ai/catalog/services/:id/request) to create new quotations.",
+      code: "LEGACY_QUOTATION_FROZEN",
+    });
+    return;
+  }
+
+  if (existing.status !== "draft") {
+    res.status(409).json({ error: `Quotation is already ${existing.status}; cannot edit.` });
     return;
   }
 
@@ -145,48 +174,18 @@ router.put("/creative-ai/projects/:projectId/quotation", async (req, res): Promi
 
   const { subtotal, taxAmount, total } = computeTotals(lineItems, discount, taxPercent);
 
-  const [existing] = await db
-    .select()
-    .from(creativeProjectQuotationsTable)
-    .where(eq(creativeProjectQuotationsTable.projectId, projectId));
+  const [saved] = await db
+    .update(creativeProjectQuotationsTable)
+    .set({ lineItems, discount, taxPercent, currency, notes, validUntil, subtotal, taxAmount, total })
+    .where(eq(creativeProjectQuotationsTable.id, existing.id))
+    .returning();
 
-  if (existing && existing.status !== "draft") {
-    res.status(409).json({ error: `Quotation is already ${existing.status}; cannot edit. Create a new one instead.` });
-    return;
-  }
-
-  let saved: typeof creativeProjectQuotationsTable.$inferSelect;
-  if (existing) {
-    [saved] = await db
-      .update(creativeProjectQuotationsTable)
-      .set({ lineItems, discount, taxPercent, currency, notes, validUntil, subtotal, taxAmount, total })
-      .where(eq(creativeProjectQuotationsTable.id, existing.id))
-      .returning();
-  } else {
-    [saved] = await db
-      .insert(creativeProjectQuotationsTable)
-      .values({
-        projectId,
-        lineItems,
-        discount,
-        taxPercent,
-        currency,
-        notes,
-        validUntil,
-        subtotal,
-        taxAmount,
-        total,
-        status: "draft",
-      })
-      .returning();
-  }
-
-  await logAudit("quotation", existing ? "quotation_updated" : "quotation_created", projectId, "quotation", "success", {
+  await logAudit("quotation", "quotation_updated", projectId, "quotation", "success", {
     total: saved.total,
     currency: saved.currency,
   });
 
-  res.status(existing ? 200 : 201).json(serializeQuotation(saved));
+  res.json(serializeQuotation(saved));
 });
 
 // ── Admin: send quotation to client ──────────────────────────────────────────
@@ -339,13 +338,15 @@ router.post("/public/customer/quotation/:token/approve", async (req, res): Promi
     });
     res.json({ success: true, status: "approved", message: "Quotation approved — awaiting commercial gate clearance" });
   } else {
-    // ── Legacy Creative AI flow: start AI workflow directly (no gate) ───────
-    if (project && project.status === "pending") {
-      runCreativeBriefWorkflow(project.id).catch((err) => {
-        console.error("[quotation] Workflow failed:", err);
-      });
-    }
-    res.json({ success: true, status: "approved", message: "Quotation approved — your project is now in production" });
+    // ── Legacy Creative AI flow (no service-catalog gate) ───────────────────
+    // Approving the quotation only confirms commercial terms. It must never
+    // start AI production directly — creative-ai.ts creates these projects in
+    // "waiting_payment" specifically so paymentScheduleService.verifyPayment()
+    // remains the single authoritative production gate (see its module
+    // docstring). A stale "pending" check used to live here and could have
+    // fired production with no payment check at all if project creation ever
+    // reverted to "pending"; removed rather than left as a landmine.
+    res.json({ success: true, status: "approved", message: "Quotation approved — awaiting payment before production starts" });
   }
 });
 

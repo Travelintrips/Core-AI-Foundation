@@ -23,6 +23,8 @@ import type {
   AbTest,
   AbTestList,
   AcceptHumanTaskBody,
+  ActivateCreativeMarketplaceAssetBody,
+  AddWorkspaceMarketplaceFavoriteBody,
   AddWorkspacePortfolioGalleryFavorite200,
   AdminAnalyzeAssetByIdBody,
   AdminAssetLibraryStats200,
@@ -159,6 +161,8 @@ import type {
   CreateAffiliateInput,
   CreateAssetLibraryInput,
   CreateCouponInput,
+  CreateCreativeCreativeMarketplaceAssetInput,
+  CreateCreativeCreativeMarketplaceCreatorInput,
   CreateDesignProjectInput,
   CreateHumanTaskBody,
   CreateJobBody,
@@ -170,7 +174,18 @@ import type {
   CreativeAiAsset,
   CreativeAiImageAnalytics,
   CreativeBriefInput,
+  CreativeCreativeMarketplaceAssetList,
+  CreativeCreativeMarketplaceCreatorDetail,
+  CreativeCreativeMarketplaceCreatorList,
+  CreativeCreativeMarketplaceDownloadResult,
   CreativeDirectorRecommendation,
+  CreativeMarketplaceAnalytics,
+  CreativeMarketplaceAsset,
+  CreativeMarketplaceCategoriesResult,
+  CreativeMarketplaceCreator,
+  CreativeMarketplaceFavoritesResult,
+  CreativeMarketplaceRateInput,
+  CreativeMarketplaceSearchResult,
   CreativeMemoryView,
   CreativeProject,
   CreativeProjectDetail,
@@ -191,6 +206,7 @@ import type {
   DispatcherSettings,
   DispatcherStatus,
   DocumentAccessTokenResult,
+  DownloadCreativeMarketplaceAssetBody,
   DuplicateReport,
   EndImpersonationInput,
   ErrorResponse,
@@ -198,6 +214,7 @@ import type {
   EventTimelineResponse,
   ExportDesignInput,
   ExportDesignResult,
+  FeatureCreativeMarketplaceAssetBody,
   FeedbackEntry,
   FeedbackInput,
   ForbiddenResponse,
@@ -220,9 +237,13 @@ import type {
   GetCpReviewCommentsParams,
   GetCpReviewTimeline200,
   GetCreativeImageAnalyticsParams,
+  GetCreativeMarketplaceAssetRatings200,
   GetFunnelAnalyticsParams,
   GetLivePreviewSessionCount200,
   GetPublicTemplateRecommendationsParams,
+  GetWorkspaceCreativeMarketplaceAssetsParams,
+  GetWorkspaceCreativeMarketplaceDownloads200,
+  GetWorkspaceCreativeMarketplaceDownloadsParams,
   GetWorkspacePortfolioGalleryRecommendedParams,
   GetWorkspaceTemplateRecommendationsParams,
   GetWorkspaceTemplatesParams,
@@ -246,8 +267,16 @@ import type {
   ListAssetLibraryParams,
   ListAuditLogsParams,
   ListCommercialGatesParams,
+  ListCreativeMarketplaceAssetsAdminParams,
+  ListCreativeMarketplaceAssetsPublicParams,
+  ListCreativeMarketplaceCreatorsAdminParams,
+  ListCreativeMarketplaceCreatorsPublicParams,
+  ListCreativeMarketplaceDownloadsAdmin200,
+  ListCreativeMarketplaceDownloadsAdminParams,
   ListDesignProjectsParams,
   ListEventsParams,
+  ListFeaturedCreativeMarketplaceAssets200,
+  ListFeaturedCreativeMarketplaceAssetsParams,
   ListHumanTasksParams,
   ListJobsParams,
   ListMemoryEntriesParams,
@@ -278,6 +307,7 @@ import type {
   MemoryEntryInput,
   NotFoundResponse,
   OkResponse,
+  OkResult,
   OrchestratorExecuteInput,
   OrchestratorResult,
   OrchestratorSession,
@@ -347,6 +377,7 @@ import type {
   ScheduleRunPage,
   SchedulerSettings,
   SchedulerStatus,
+  SearchMarketplaceParams,
   SearchPortfolioGalleryParams,
   ServiceShowcase,
   StartBrief200,
@@ -366,6 +397,8 @@ import type {
   TrackClickInput,
   TrackConversionInput,
   TrackFunnelEventInput,
+  UpdateCreativeCreativeMarketplaceAssetInput,
+  UpdateCreativeCreativeMarketplaceCreatorInput,
   UpdateDesignProjectInput,
   UpdateScheduleBody,
   UpdateSubscriptionBody,
@@ -28605,4 +28638,2097 @@ export const useAiRegenerateElement = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getAiRegenerateElementMutationOptions(options));
     }
+
+export const getListCreativeMarketplaceAssetsAdminUrl = (params?: ListCreativeMarketplaceAssetsAdminParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/ai/creative-marketplace/assets?${stringifiedParams}` : `/api/ai/creative-marketplace/assets`
+}
+
+/**
+ * @summary Admin — list / filter marketplace assets
+ */
+export const listCreativeMarketplaceAssetsAdmin = async (params?: ListCreativeMarketplaceAssetsAdminParams, options?: RequestInit): Promise<CreativeCreativeMarketplaceAssetList> => {
+
+  return customFetch<CreativeCreativeMarketplaceAssetList>(getListCreativeMarketplaceAssetsAdminUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCreativeMarketplaceAssetsAdminQueryKey = (params?: ListCreativeMarketplaceAssetsAdminParams,) => {
+    return [
+    `/api/ai/creative-marketplace/assets`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCreativeMarketplaceAssetsAdminQueryOptions = <TData = Awaited<ReturnType<typeof listCreativeMarketplaceAssetsAdmin>>, TError = ErrorType<unknown>>(params?: ListCreativeMarketplaceAssetsAdminParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCreativeMarketplaceAssetsAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCreativeMarketplaceAssetsAdminQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCreativeMarketplaceAssetsAdmin>>> = ({ signal }) => listCreativeMarketplaceAssetsAdmin(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCreativeMarketplaceAssetsAdmin>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCreativeMarketplaceAssetsAdminQueryResult = NonNullable<Awaited<ReturnType<typeof listCreativeMarketplaceAssetsAdmin>>>
+export type ListCreativeMarketplaceAssetsAdminQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — list / filter marketplace assets
+ */
+
+export function useListCreativeMarketplaceAssetsAdmin<TData = Awaited<ReturnType<typeof listCreativeMarketplaceAssetsAdmin>>, TError = ErrorType<unknown>>(
+ params?: ListCreativeMarketplaceAssetsAdminParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCreativeMarketplaceAssetsAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCreativeMarketplaceAssetsAdminQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateCreativeMarketplaceAssetUrl = () => {
+
+
+
+
+  return `/api/ai/creative-marketplace/assets`
+}
+
+/**
+ * @summary Admin — create marketplace asset
+ */
+export const createCreativeMarketplaceAsset = async (createCreativeCreativeMarketplaceAssetInput: CreateCreativeCreativeMarketplaceAssetInput, options?: RequestInit): Promise<CreativeMarketplaceAsset> => {
+
+  return customFetch<CreativeMarketplaceAsset>(getCreateCreativeMarketplaceAssetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createCreativeCreativeMarketplaceAssetInput)
+  }
+);}
+
+
+
+
+export const getCreateCreativeMarketplaceAssetMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCreativeMarketplaceAsset>>, TError,{data: BodyType<CreateCreativeCreativeMarketplaceAssetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCreativeMarketplaceAsset>>, TError,{data: BodyType<CreateCreativeCreativeMarketplaceAssetInput>}, TContext> => {
+
+const mutationKey = ['createCreativeMarketplaceAsset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCreativeMarketplaceAsset>>, {data: BodyType<CreateCreativeCreativeMarketplaceAssetInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createCreativeMarketplaceAsset(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCreativeMarketplaceAssetMutationResult = NonNullable<Awaited<ReturnType<typeof createCreativeMarketplaceAsset>>>
+    export type CreateCreativeMarketplaceAssetMutationBody = BodyType<CreateCreativeCreativeMarketplaceAssetInput>
+    export type CreateCreativeMarketplaceAssetMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Admin — create marketplace asset
+ */
+export const useCreateCreativeMarketplaceAsset = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCreativeMarketplaceAsset>>, TError,{data: BodyType<CreateCreativeCreativeMarketplaceAssetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createCreativeMarketplaceAsset>>,
+        TError,
+        {data: BodyType<CreateCreativeCreativeMarketplaceAssetInput>},
+        TContext
+      > => {
+      return useMutation(getCreateCreativeMarketplaceAssetMutationOptions(options));
+    }
+
+export const getGetCreativeMarketplaceAssetAdminUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/creative-marketplace/assets/${id}`
+}
+
+/**
+ * @summary Admin — get asset by id
+ */
+export const getCreativeMarketplaceAssetAdmin = async (id: number, options?: RequestInit): Promise<CreativeMarketplaceAsset> => {
+
+  return customFetch<CreativeMarketplaceAsset>(getGetCreativeMarketplaceAssetAdminUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCreativeMarketplaceAssetAdminQueryKey = (id: number,) => {
+    return [
+    `/api/ai/creative-marketplace/assets/${id}`
+    ] as const;
+    }
+
+
+export const getGetCreativeMarketplaceAssetAdminQueryOptions = <TData = Awaited<ReturnType<typeof getCreativeMarketplaceAssetAdmin>>, TError = ErrorType<NotFoundResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceAssetAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCreativeMarketplaceAssetAdminQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCreativeMarketplaceAssetAdmin>>> = ({ signal }) => getCreativeMarketplaceAssetAdmin(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceAssetAdmin>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCreativeMarketplaceAssetAdminQueryResult = NonNullable<Awaited<ReturnType<typeof getCreativeMarketplaceAssetAdmin>>>
+export type GetCreativeMarketplaceAssetAdminQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Admin — get asset by id
+ */
+
+export function useGetCreativeMarketplaceAssetAdmin<TData = Awaited<ReturnType<typeof getCreativeMarketplaceAssetAdmin>>, TError = ErrorType<NotFoundResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceAssetAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCreativeMarketplaceAssetAdminQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateCreativeMarketplaceAssetUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/creative-marketplace/assets/${id}`
+}
+
+/**
+ * @summary Admin — update asset
+ */
+export const updateCreativeMarketplaceAsset = async (id: number,
+    updateCreativeCreativeMarketplaceAssetInput: UpdateCreativeCreativeMarketplaceAssetInput, options?: RequestInit): Promise<CreativeMarketplaceAsset> => {
+
+  return customFetch<CreativeMarketplaceAsset>(getUpdateCreativeMarketplaceAssetUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateCreativeCreativeMarketplaceAssetInput)
+  }
+);}
+
+
+
+
+export const getUpdateCreativeMarketplaceAssetMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCreativeMarketplaceAsset>>, TError,{id: number;data: BodyType<UpdateCreativeCreativeMarketplaceAssetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCreativeMarketplaceAsset>>, TError,{id: number;data: BodyType<UpdateCreativeCreativeMarketplaceAssetInput>}, TContext> => {
+
+const mutationKey = ['updateCreativeMarketplaceAsset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCreativeMarketplaceAsset>>, {id: number;data: BodyType<UpdateCreativeCreativeMarketplaceAssetInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateCreativeMarketplaceAsset(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCreativeMarketplaceAssetMutationResult = NonNullable<Awaited<ReturnType<typeof updateCreativeMarketplaceAsset>>>
+    export type UpdateCreativeMarketplaceAssetMutationBody = BodyType<UpdateCreativeCreativeMarketplaceAssetInput>
+    export type UpdateCreativeMarketplaceAssetMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Admin — update asset
+ */
+export const useUpdateCreativeMarketplaceAsset = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCreativeMarketplaceAsset>>, TError,{id: number;data: BodyType<UpdateCreativeCreativeMarketplaceAssetInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCreativeMarketplaceAsset>>,
+        TError,
+        {id: number;data: BodyType<UpdateCreativeCreativeMarketplaceAssetInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateCreativeMarketplaceAssetMutationOptions(options));
+    }
+
+export const getFeatureCreativeMarketplaceAssetUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/creative-marketplace/assets/${id}/feature`
+}
+
+/**
+ * @summary Admin — toggle featured status
+ */
+export const featureCreativeMarketplaceAsset = async (id: number,
+    featureCreativeMarketplaceAssetBody: FeatureCreativeMarketplaceAssetBody, options?: RequestInit): Promise<CreativeMarketplaceAsset> => {
+
+  return customFetch<CreativeMarketplaceAsset>(getFeatureCreativeMarketplaceAssetUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(featureCreativeMarketplaceAssetBody)
+  }
+);}
+
+
+
+
+export const getFeatureCreativeMarketplaceAssetMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof featureCreativeMarketplaceAsset>>, TError,{id: number;data: BodyType<FeatureCreativeMarketplaceAssetBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof featureCreativeMarketplaceAsset>>, TError,{id: number;data: BodyType<FeatureCreativeMarketplaceAssetBody>}, TContext> => {
+
+const mutationKey = ['featureCreativeMarketplaceAsset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof featureCreativeMarketplaceAsset>>, {id: number;data: BodyType<FeatureCreativeMarketplaceAssetBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  featureCreativeMarketplaceAsset(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FeatureCreativeMarketplaceAssetMutationResult = NonNullable<Awaited<ReturnType<typeof featureCreativeMarketplaceAsset>>>
+    export type FeatureCreativeMarketplaceAssetMutationBody = BodyType<FeatureCreativeMarketplaceAssetBody>
+    export type FeatureCreativeMarketplaceAssetMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Admin — toggle featured status
+ */
+export const useFeatureCreativeMarketplaceAsset = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof featureCreativeMarketplaceAsset>>, TError,{id: number;data: BodyType<FeatureCreativeMarketplaceAssetBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof featureCreativeMarketplaceAsset>>,
+        TError,
+        {id: number;data: BodyType<FeatureCreativeMarketplaceAssetBody>},
+        TContext
+      > => {
+      return useMutation(getFeatureCreativeMarketplaceAssetMutationOptions(options));
+    }
+
+export const getActivateCreativeMarketplaceAssetUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/creative-marketplace/assets/${id}/activate`
+}
+
+/**
+ * @summary Admin — toggle active/inactive
+ */
+export const activateCreativeMarketplaceAsset = async (id: number,
+    activateCreativeMarketplaceAssetBody: ActivateCreativeMarketplaceAssetBody, options?: RequestInit): Promise<CreativeMarketplaceAsset> => {
+
+  return customFetch<CreativeMarketplaceAsset>(getActivateCreativeMarketplaceAssetUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(activateCreativeMarketplaceAssetBody)
+  }
+);}
+
+
+
+
+export const getActivateCreativeMarketplaceAssetMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateCreativeMarketplaceAsset>>, TError,{id: number;data: BodyType<ActivateCreativeMarketplaceAssetBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof activateCreativeMarketplaceAsset>>, TError,{id: number;data: BodyType<ActivateCreativeMarketplaceAssetBody>}, TContext> => {
+
+const mutationKey = ['activateCreativeMarketplaceAsset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof activateCreativeMarketplaceAsset>>, {id: number;data: BodyType<ActivateCreativeMarketplaceAssetBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  activateCreativeMarketplaceAsset(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ActivateCreativeMarketplaceAssetMutationResult = NonNullable<Awaited<ReturnType<typeof activateCreativeMarketplaceAsset>>>
+    export type ActivateCreativeMarketplaceAssetMutationBody = BodyType<ActivateCreativeMarketplaceAssetBody>
+    export type ActivateCreativeMarketplaceAssetMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Admin — toggle active/inactive
+ */
+export const useActivateCreativeMarketplaceAsset = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateCreativeMarketplaceAsset>>, TError,{id: number;data: BodyType<ActivateCreativeMarketplaceAssetBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof activateCreativeMarketplaceAsset>>,
+        TError,
+        {id: number;data: BodyType<ActivateCreativeMarketplaceAssetBody>},
+        TContext
+      > => {
+      return useMutation(getActivateCreativeMarketplaceAssetMutationOptions(options));
+    }
+
+export const getListCreativeMarketplaceCreatorsAdminUrl = (params?: ListCreativeMarketplaceCreatorsAdminParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/ai/creative-marketplace/creators?${stringifiedParams}` : `/api/ai/creative-marketplace/creators`
+}
+
+/**
+ * @summary Admin — list creators
+ */
+export const listCreativeMarketplaceCreatorsAdmin = async (params?: ListCreativeMarketplaceCreatorsAdminParams, options?: RequestInit): Promise<CreativeCreativeMarketplaceCreatorList> => {
+
+  return customFetch<CreativeCreativeMarketplaceCreatorList>(getListCreativeMarketplaceCreatorsAdminUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCreativeMarketplaceCreatorsAdminQueryKey = (params?: ListCreativeMarketplaceCreatorsAdminParams,) => {
+    return [
+    `/api/ai/creative-marketplace/creators`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCreativeMarketplaceCreatorsAdminQueryOptions = <TData = Awaited<ReturnType<typeof listCreativeMarketplaceCreatorsAdmin>>, TError = ErrorType<unknown>>(params?: ListCreativeMarketplaceCreatorsAdminParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCreativeMarketplaceCreatorsAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCreativeMarketplaceCreatorsAdminQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCreativeMarketplaceCreatorsAdmin>>> = ({ signal }) => listCreativeMarketplaceCreatorsAdmin(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCreativeMarketplaceCreatorsAdmin>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCreativeMarketplaceCreatorsAdminQueryResult = NonNullable<Awaited<ReturnType<typeof listCreativeMarketplaceCreatorsAdmin>>>
+export type ListCreativeMarketplaceCreatorsAdminQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — list creators
+ */
+
+export function useListCreativeMarketplaceCreatorsAdmin<TData = Awaited<ReturnType<typeof listCreativeMarketplaceCreatorsAdmin>>, TError = ErrorType<unknown>>(
+ params?: ListCreativeMarketplaceCreatorsAdminParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCreativeMarketplaceCreatorsAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCreativeMarketplaceCreatorsAdminQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateCreativeMarketplaceCreatorUrl = () => {
+
+
+
+
+  return `/api/ai/creative-marketplace/creators`
+}
+
+/**
+ * @summary Admin — create creator
+ */
+export const createCreativeMarketplaceCreator = async (createCreativeCreativeMarketplaceCreatorInput: CreateCreativeCreativeMarketplaceCreatorInput, options?: RequestInit): Promise<CreativeMarketplaceCreator> => {
+
+  return customFetch<CreativeMarketplaceCreator>(getCreateCreativeMarketplaceCreatorUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createCreativeCreativeMarketplaceCreatorInput)
+  }
+);}
+
+
+
+
+export const getCreateCreativeMarketplaceCreatorMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCreativeMarketplaceCreator>>, TError,{data: BodyType<CreateCreativeCreativeMarketplaceCreatorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCreativeMarketplaceCreator>>, TError,{data: BodyType<CreateCreativeCreativeMarketplaceCreatorInput>}, TContext> => {
+
+const mutationKey = ['createCreativeMarketplaceCreator'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCreativeMarketplaceCreator>>, {data: BodyType<CreateCreativeCreativeMarketplaceCreatorInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createCreativeMarketplaceCreator(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCreativeMarketplaceCreatorMutationResult = NonNullable<Awaited<ReturnType<typeof createCreativeMarketplaceCreator>>>
+    export type CreateCreativeMarketplaceCreatorMutationBody = BodyType<CreateCreativeCreativeMarketplaceCreatorInput>
+    export type CreateCreativeMarketplaceCreatorMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Admin — create creator
+ */
+export const useCreateCreativeMarketplaceCreator = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCreativeMarketplaceCreator>>, TError,{data: BodyType<CreateCreativeCreativeMarketplaceCreatorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createCreativeMarketplaceCreator>>,
+        TError,
+        {data: BodyType<CreateCreativeCreativeMarketplaceCreatorInput>},
+        TContext
+      > => {
+      return useMutation(getCreateCreativeMarketplaceCreatorMutationOptions(options));
+    }
+
+export const getGetCreativeMarketplaceCreatorAdminUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/creative-marketplace/creators/${id}`
+}
+
+/**
+ * @summary Admin — get creator with assets
+ */
+export const getCreativeMarketplaceCreatorAdmin = async (id: number, options?: RequestInit): Promise<CreativeCreativeMarketplaceCreatorDetail> => {
+
+  return customFetch<CreativeCreativeMarketplaceCreatorDetail>(getGetCreativeMarketplaceCreatorAdminUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCreativeMarketplaceCreatorAdminQueryKey = (id: number,) => {
+    return [
+    `/api/ai/creative-marketplace/creators/${id}`
+    ] as const;
+    }
+
+
+export const getGetCreativeMarketplaceCreatorAdminQueryOptions = <TData = Awaited<ReturnType<typeof getCreativeMarketplaceCreatorAdmin>>, TError = ErrorType<NotFoundResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceCreatorAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCreativeMarketplaceCreatorAdminQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCreativeMarketplaceCreatorAdmin>>> = ({ signal }) => getCreativeMarketplaceCreatorAdmin(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceCreatorAdmin>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCreativeMarketplaceCreatorAdminQueryResult = NonNullable<Awaited<ReturnType<typeof getCreativeMarketplaceCreatorAdmin>>>
+export type GetCreativeMarketplaceCreatorAdminQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Admin — get creator with assets
+ */
+
+export function useGetCreativeMarketplaceCreatorAdmin<TData = Awaited<ReturnType<typeof getCreativeMarketplaceCreatorAdmin>>, TError = ErrorType<NotFoundResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceCreatorAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCreativeMarketplaceCreatorAdminQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateCreativeMarketplaceCreatorUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/creative-marketplace/creators/${id}`
+}
+
+/**
+ * @summary Admin — update creator
+ */
+export const updateCreativeMarketplaceCreator = async (id: number,
+    updateCreativeCreativeMarketplaceCreatorInput: UpdateCreativeCreativeMarketplaceCreatorInput, options?: RequestInit): Promise<CreativeMarketplaceCreator> => {
+
+  return customFetch<CreativeMarketplaceCreator>(getUpdateCreativeMarketplaceCreatorUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateCreativeCreativeMarketplaceCreatorInput)
+  }
+);}
+
+
+
+
+export const getUpdateCreativeMarketplaceCreatorMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCreativeMarketplaceCreator>>, TError,{id: number;data: BodyType<UpdateCreativeCreativeMarketplaceCreatorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCreativeMarketplaceCreator>>, TError,{id: number;data: BodyType<UpdateCreativeCreativeMarketplaceCreatorInput>}, TContext> => {
+
+const mutationKey = ['updateCreativeMarketplaceCreator'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCreativeMarketplaceCreator>>, {id: number;data: BodyType<UpdateCreativeCreativeMarketplaceCreatorInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateCreativeMarketplaceCreator(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCreativeMarketplaceCreatorMutationResult = NonNullable<Awaited<ReturnType<typeof updateCreativeMarketplaceCreator>>>
+    export type UpdateCreativeMarketplaceCreatorMutationBody = BodyType<UpdateCreativeCreativeMarketplaceCreatorInput>
+    export type UpdateCreativeMarketplaceCreatorMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Admin — update creator
+ */
+export const useUpdateCreativeMarketplaceCreator = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCreativeMarketplaceCreator>>, TError,{id: number;data: BodyType<UpdateCreativeCreativeMarketplaceCreatorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCreativeMarketplaceCreator>>,
+        TError,
+        {id: number;data: BodyType<UpdateCreativeCreativeMarketplaceCreatorInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateCreativeMarketplaceCreatorMutationOptions(options));
+    }
+
+export const getGetCreativeMarketplaceAnalyticsUrl = () => {
+
+
+
+
+  return `/api/ai/creative-marketplace/analytics`
+}
+
+/**
+ * @summary Admin — marketplace analytics dashboard
+ */
+export const getCreativeMarketplaceAnalytics = async ( options?: RequestInit): Promise<CreativeMarketplaceAnalytics> => {
+
+  return customFetch<CreativeMarketplaceAnalytics>(getGetCreativeMarketplaceAnalyticsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCreativeMarketplaceAnalyticsQueryKey = () => {
+    return [
+    `/api/ai/creative-marketplace/analytics`
+    ] as const;
+    }
+
+
+export const getGetCreativeMarketplaceAnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getCreativeMarketplaceAnalytics>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCreativeMarketplaceAnalyticsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCreativeMarketplaceAnalytics>>> = ({ signal }) => getCreativeMarketplaceAnalytics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceAnalytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCreativeMarketplaceAnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getCreativeMarketplaceAnalytics>>>
+export type GetCreativeMarketplaceAnalyticsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — marketplace analytics dashboard
+ */
+
+export function useGetCreativeMarketplaceAnalytics<TData = Awaited<ReturnType<typeof getCreativeMarketplaceAnalytics>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceAnalytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCreativeMarketplaceAnalyticsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListCreativeMarketplaceDownloadsAdminUrl = (params?: ListCreativeMarketplaceDownloadsAdminParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/ai/creative-marketplace/downloads?${stringifiedParams}` : `/api/ai/creative-marketplace/downloads`
+}
+
+/**
+ * @summary Admin — download event log
+ */
+export const listCreativeMarketplaceDownloadsAdmin = async (params?: ListCreativeMarketplaceDownloadsAdminParams, options?: RequestInit): Promise<ListCreativeMarketplaceDownloadsAdmin200> => {
+
+  return customFetch<ListCreativeMarketplaceDownloadsAdmin200>(getListCreativeMarketplaceDownloadsAdminUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCreativeMarketplaceDownloadsAdminQueryKey = (params?: ListCreativeMarketplaceDownloadsAdminParams,) => {
+    return [
+    `/api/ai/creative-marketplace/downloads`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCreativeMarketplaceDownloadsAdminQueryOptions = <TData = Awaited<ReturnType<typeof listCreativeMarketplaceDownloadsAdmin>>, TError = ErrorType<unknown>>(params?: ListCreativeMarketplaceDownloadsAdminParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCreativeMarketplaceDownloadsAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCreativeMarketplaceDownloadsAdminQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCreativeMarketplaceDownloadsAdmin>>> = ({ signal }) => listCreativeMarketplaceDownloadsAdmin(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCreativeMarketplaceDownloadsAdmin>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCreativeMarketplaceDownloadsAdminQueryResult = NonNullable<Awaited<ReturnType<typeof listCreativeMarketplaceDownloadsAdmin>>>
+export type ListCreativeMarketplaceDownloadsAdminQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Admin — download event log
+ */
+
+export function useListCreativeMarketplaceDownloadsAdmin<TData = Awaited<ReturnType<typeof listCreativeMarketplaceDownloadsAdmin>>, TError = ErrorType<unknown>>(
+ params?: ListCreativeMarketplaceDownloadsAdminParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCreativeMarketplaceDownloadsAdmin>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCreativeMarketplaceDownloadsAdminQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListFeaturedCreativeMarketplaceAssetsUrl = (params?: ListFeaturedCreativeMarketplaceAssetsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/creative-marketplace/assets/featured?${stringifiedParams}` : `/api/public/creative-marketplace/assets/featured`
+}
+
+/**
+ * @summary Public — featured assets
+ */
+export const listFeaturedCreativeMarketplaceAssets = async (params?: ListFeaturedCreativeMarketplaceAssetsParams, options?: RequestInit): Promise<ListFeaturedCreativeMarketplaceAssets200> => {
+
+  return customFetch<ListFeaturedCreativeMarketplaceAssets200>(getListFeaturedCreativeMarketplaceAssetsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListFeaturedCreativeMarketplaceAssetsQueryKey = (params?: ListFeaturedCreativeMarketplaceAssetsParams,) => {
+    return [
+    `/api/public/creative-marketplace/assets/featured`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListFeaturedCreativeMarketplaceAssetsQueryOptions = <TData = Awaited<ReturnType<typeof listFeaturedCreativeMarketplaceAssets>>, TError = ErrorType<unknown>>(params?: ListFeaturedCreativeMarketplaceAssetsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFeaturedCreativeMarketplaceAssets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListFeaturedCreativeMarketplaceAssetsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFeaturedCreativeMarketplaceAssets>>> = ({ signal }) => listFeaturedCreativeMarketplaceAssets(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listFeaturedCreativeMarketplaceAssets>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListFeaturedCreativeMarketplaceAssetsQueryResult = NonNullable<Awaited<ReturnType<typeof listFeaturedCreativeMarketplaceAssets>>>
+export type ListFeaturedCreativeMarketplaceAssetsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Public — featured assets
+ */
+
+export function useListFeaturedCreativeMarketplaceAssets<TData = Awaited<ReturnType<typeof listFeaturedCreativeMarketplaceAssets>>, TError = ErrorType<unknown>>(
+ params?: ListFeaturedCreativeMarketplaceAssetsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listFeaturedCreativeMarketplaceAssets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListFeaturedCreativeMarketplaceAssetsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListMarketplaceCategoriesUrl = () => {
+
+
+
+
+  return `/api/public/creative-marketplace/assets/categories`
+}
+
+/**
+ * @summary Public — list asset types and categories
+ */
+export const listMarketplaceCategories = async ( options?: RequestInit): Promise<CreativeMarketplaceCategoriesResult> => {
+
+  return customFetch<CreativeMarketplaceCategoriesResult>(getListMarketplaceCategoriesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMarketplaceCategoriesQueryKey = () => {
+    return [
+    `/api/public/creative-marketplace/assets/categories`
+    ] as const;
+    }
+
+
+export const getListMarketplaceCategoriesQueryOptions = <TData = Awaited<ReturnType<typeof listMarketplaceCategories>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMarketplaceCategories>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMarketplaceCategoriesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMarketplaceCategories>>> = ({ signal }) => listMarketplaceCategories({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMarketplaceCategories>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMarketplaceCategoriesQueryResult = NonNullable<Awaited<ReturnType<typeof listMarketplaceCategories>>>
+export type ListMarketplaceCategoriesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Public — list asset types and categories
+ */
+
+export function useListMarketplaceCategories<TData = Awaited<ReturnType<typeof listMarketplaceCategories>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMarketplaceCategories>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMarketplaceCategoriesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSearchMarketplaceUrl = (params: SearchMarketplaceParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/creative-marketplace/assets/search?${stringifiedParams}` : `/api/public/creative-marketplace/assets/search`
+}
+
+/**
+ * @summary Public — search templates and assets
+ */
+export const searchMarketplace = async (params: SearchMarketplaceParams, options?: RequestInit): Promise<CreativeMarketplaceSearchResult> => {
+
+  return customFetch<CreativeMarketplaceSearchResult>(getSearchMarketplaceUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getSearchMarketplaceQueryKey = (params?: SearchMarketplaceParams,) => {
+    return [
+    `/api/public/creative-marketplace/assets/search`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getSearchMarketplaceQueryOptions = <TData = Awaited<ReturnType<typeof searchMarketplace>>, TError = ErrorType<unknown>>(params: SearchMarketplaceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof searchMarketplace>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSearchMarketplaceQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof searchMarketplace>>> = ({ signal }) => searchMarketplace(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof searchMarketplace>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type SearchMarketplaceQueryResult = NonNullable<Awaited<ReturnType<typeof searchMarketplace>>>
+export type SearchMarketplaceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Public — search templates and assets
+ */
+
+export function useSearchMarketplace<TData = Awaited<ReturnType<typeof searchMarketplace>>, TError = ErrorType<unknown>>(
+ params: SearchMarketplaceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof searchMarketplace>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getSearchMarketplaceQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListCreativeMarketplaceAssetsPublicUrl = (params?: ListCreativeMarketplaceAssetsPublicParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/creative-marketplace/assets?${stringifiedParams}` : `/api/public/creative-marketplace/assets`
+}
+
+/**
+ * @summary Public — browse assets
+ */
+export const listCreativeMarketplaceAssetsPublic = async (params?: ListCreativeMarketplaceAssetsPublicParams, options?: RequestInit): Promise<CreativeCreativeMarketplaceAssetList> => {
+
+  return customFetch<CreativeCreativeMarketplaceAssetList>(getListCreativeMarketplaceAssetsPublicUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCreativeMarketplaceAssetsPublicQueryKey = (params?: ListCreativeMarketplaceAssetsPublicParams,) => {
+    return [
+    `/api/public/creative-marketplace/assets`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCreativeMarketplaceAssetsPublicQueryOptions = <TData = Awaited<ReturnType<typeof listCreativeMarketplaceAssetsPublic>>, TError = ErrorType<unknown>>(params?: ListCreativeMarketplaceAssetsPublicParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCreativeMarketplaceAssetsPublic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCreativeMarketplaceAssetsPublicQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCreativeMarketplaceAssetsPublic>>> = ({ signal }) => listCreativeMarketplaceAssetsPublic(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCreativeMarketplaceAssetsPublic>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCreativeMarketplaceAssetsPublicQueryResult = NonNullable<Awaited<ReturnType<typeof listCreativeMarketplaceAssetsPublic>>>
+export type ListCreativeMarketplaceAssetsPublicQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Public — browse assets
+ */
+
+export function useListCreativeMarketplaceAssetsPublic<TData = Awaited<ReturnType<typeof listCreativeMarketplaceAssetsPublic>>, TError = ErrorType<unknown>>(
+ params?: ListCreativeMarketplaceAssetsPublicParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCreativeMarketplaceAssetsPublic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCreativeMarketplaceAssetsPublicQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCreativeMarketplaceAssetPublicUrl = (id: number,) => {
+
+
+
+
+  return `/api/public/creative-marketplace/assets/${id}`
+}
+
+/**
+ * @summary Public — get asset detail (records view)
+ */
+export const getCreativeMarketplaceAssetPublic = async (id: number, options?: RequestInit): Promise<CreativeMarketplaceAsset> => {
+
+  return customFetch<CreativeMarketplaceAsset>(getGetCreativeMarketplaceAssetPublicUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCreativeMarketplaceAssetPublicQueryKey = (id: number,) => {
+    return [
+    `/api/public/creative-marketplace/assets/${id}`
+    ] as const;
+    }
+
+
+export const getGetCreativeMarketplaceAssetPublicQueryOptions = <TData = Awaited<ReturnType<typeof getCreativeMarketplaceAssetPublic>>, TError = ErrorType<NotFoundResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceAssetPublic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCreativeMarketplaceAssetPublicQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCreativeMarketplaceAssetPublic>>> = ({ signal }) => getCreativeMarketplaceAssetPublic(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceAssetPublic>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCreativeMarketplaceAssetPublicQueryResult = NonNullable<Awaited<ReturnType<typeof getCreativeMarketplaceAssetPublic>>>
+export type GetCreativeMarketplaceAssetPublicQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Public — get asset detail (records view)
+ */
+
+export function useGetCreativeMarketplaceAssetPublic<TData = Awaited<ReturnType<typeof getCreativeMarketplaceAssetPublic>>, TError = ErrorType<NotFoundResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceAssetPublic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCreativeMarketplaceAssetPublicQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDownloadCreativeMarketplaceAssetUrl = (id: number,) => {
+
+
+
+
+  return `/api/public/creative-marketplace/assets/${id}/download`
+}
+
+/**
+ * @summary Public — download asset (tracks event)
+ */
+export const downloadCreativeMarketplaceAsset = async (id: number,
+    downloadCreativeMarketplaceAssetBody?: DownloadCreativeMarketplaceAssetBody, options?: RequestInit): Promise<CreativeCreativeMarketplaceDownloadResult> => {
+
+  return customFetch<CreativeCreativeMarketplaceDownloadResult>(getDownloadCreativeMarketplaceAssetUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(downloadCreativeMarketplaceAssetBody)
+  }
+);}
+
+
+
+
+export const getDownloadCreativeMarketplaceAssetMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof downloadCreativeMarketplaceAsset>>, TError,{id: number;data?: BodyType<DownloadCreativeMarketplaceAssetBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof downloadCreativeMarketplaceAsset>>, TError,{id: number;data?: BodyType<DownloadCreativeMarketplaceAssetBody>}, TContext> => {
+
+const mutationKey = ['downloadCreativeMarketplaceAsset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof downloadCreativeMarketplaceAsset>>, {id: number;data?: BodyType<DownloadCreativeMarketplaceAssetBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  downloadCreativeMarketplaceAsset(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DownloadCreativeMarketplaceAssetMutationResult = NonNullable<Awaited<ReturnType<typeof downloadCreativeMarketplaceAsset>>>
+    export type DownloadCreativeMarketplaceAssetMutationBody = BodyType<DownloadCreativeMarketplaceAssetBody> | undefined
+    export type DownloadCreativeMarketplaceAssetMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Public — download asset (tracks event)
+ */
+export const useDownloadCreativeMarketplaceAsset = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof downloadCreativeMarketplaceAsset>>, TError,{id: number;data?: BodyType<DownloadCreativeMarketplaceAssetBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof downloadCreativeMarketplaceAsset>>,
+        TError,
+        {id: number;data?: BodyType<DownloadCreativeMarketplaceAssetBody>},
+        TContext
+      > => {
+      return useMutation(getDownloadCreativeMarketplaceAssetMutationOptions(options));
+    }
+
+export const getRateCreativeMarketplaceAssetUrl = (id: number,) => {
+
+
+
+
+  return `/api/public/creative-marketplace/assets/${id}/rate`
+}
+
+/**
+ * @summary Public — rate an asset
+ */
+export const rateCreativeMarketplaceAsset = async (id: number,
+    creativeMarketplaceRateInput: CreativeMarketplaceRateInput, options?: RequestInit): Promise<OkResult> => {
+
+  return customFetch<OkResult>(getRateCreativeMarketplaceAssetUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(creativeMarketplaceRateInput)
+  }
+);}
+
+
+
+
+export const getRateCreativeMarketplaceAssetMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rateCreativeMarketplaceAsset>>, TError,{id: number;data: BodyType<CreativeMarketplaceRateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rateCreativeMarketplaceAsset>>, TError,{id: number;data: BodyType<CreativeMarketplaceRateInput>}, TContext> => {
+
+const mutationKey = ['rateCreativeMarketplaceAsset'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rateCreativeMarketplaceAsset>>, {id: number;data: BodyType<CreativeMarketplaceRateInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  rateCreativeMarketplaceAsset(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RateCreativeMarketplaceAssetMutationResult = NonNullable<Awaited<ReturnType<typeof rateCreativeMarketplaceAsset>>>
+    export type RateCreativeMarketplaceAssetMutationBody = BodyType<CreativeMarketplaceRateInput>
+    export type RateCreativeMarketplaceAssetMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Public — rate an asset
+ */
+export const useRateCreativeMarketplaceAsset = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rateCreativeMarketplaceAsset>>, TError,{id: number;data: BodyType<CreativeMarketplaceRateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rateCreativeMarketplaceAsset>>,
+        TError,
+        {id: number;data: BodyType<CreativeMarketplaceRateInput>},
+        TContext
+      > => {
+      return useMutation(getRateCreativeMarketplaceAssetMutationOptions(options));
+    }
+
+export const getGetCreativeMarketplaceAssetRatingsUrl = (id: number,) => {
+
+
+
+
+  return `/api/public/creative-marketplace/assets/${id}/ratings`
+}
+
+/**
+ * @summary Public — get ratings for an asset
+ */
+export const getCreativeMarketplaceAssetRatings = async (id: number, options?: RequestInit): Promise<GetCreativeMarketplaceAssetRatings200> => {
+
+  return customFetch<GetCreativeMarketplaceAssetRatings200>(getGetCreativeMarketplaceAssetRatingsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCreativeMarketplaceAssetRatingsQueryKey = (id: number,) => {
+    return [
+    `/api/public/creative-marketplace/assets/${id}/ratings`
+    ] as const;
+    }
+
+
+export const getGetCreativeMarketplaceAssetRatingsQueryOptions = <TData = Awaited<ReturnType<typeof getCreativeMarketplaceAssetRatings>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceAssetRatings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCreativeMarketplaceAssetRatingsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCreativeMarketplaceAssetRatings>>> = ({ signal }) => getCreativeMarketplaceAssetRatings(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceAssetRatings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCreativeMarketplaceAssetRatingsQueryResult = NonNullable<Awaited<ReturnType<typeof getCreativeMarketplaceAssetRatings>>>
+export type GetCreativeMarketplaceAssetRatingsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Public — get ratings for an asset
+ */
+
+export function useGetCreativeMarketplaceAssetRatings<TData = Awaited<ReturnType<typeof getCreativeMarketplaceAssetRatings>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceAssetRatings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCreativeMarketplaceAssetRatingsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListCreativeMarketplaceCreatorsPublicUrl = (params?: ListCreativeMarketplaceCreatorsPublicParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/creative-marketplace/creators?${stringifiedParams}` : `/api/public/creative-marketplace/creators`
+}
+
+/**
+ * @summary Public — list creators
+ */
+export const listCreativeMarketplaceCreatorsPublic = async (params?: ListCreativeMarketplaceCreatorsPublicParams, options?: RequestInit): Promise<CreativeCreativeMarketplaceCreatorList> => {
+
+  return customFetch<CreativeCreativeMarketplaceCreatorList>(getListCreativeMarketplaceCreatorsPublicUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCreativeMarketplaceCreatorsPublicQueryKey = (params?: ListCreativeMarketplaceCreatorsPublicParams,) => {
+    return [
+    `/api/public/creative-marketplace/creators`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCreativeMarketplaceCreatorsPublicQueryOptions = <TData = Awaited<ReturnType<typeof listCreativeMarketplaceCreatorsPublic>>, TError = ErrorType<unknown>>(params?: ListCreativeMarketplaceCreatorsPublicParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCreativeMarketplaceCreatorsPublic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCreativeMarketplaceCreatorsPublicQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCreativeMarketplaceCreatorsPublic>>> = ({ signal }) => listCreativeMarketplaceCreatorsPublic(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCreativeMarketplaceCreatorsPublic>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCreativeMarketplaceCreatorsPublicQueryResult = NonNullable<Awaited<ReturnType<typeof listCreativeMarketplaceCreatorsPublic>>>
+export type ListCreativeMarketplaceCreatorsPublicQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Public — list creators
+ */
+
+export function useListCreativeMarketplaceCreatorsPublic<TData = Awaited<ReturnType<typeof listCreativeMarketplaceCreatorsPublic>>, TError = ErrorType<unknown>>(
+ params?: ListCreativeMarketplaceCreatorsPublicParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCreativeMarketplaceCreatorsPublic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCreativeMarketplaceCreatorsPublicQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCreativeMarketplaceCreatorPublicUrl = (id: number,) => {
+
+
+
+
+  return `/api/public/creative-marketplace/creators/${id}`
+}
+
+/**
+ * @summary Public — creator profile with assets
+ */
+export const getCreativeMarketplaceCreatorPublic = async (id: number, options?: RequestInit): Promise<CreativeCreativeMarketplaceCreatorDetail> => {
+
+  return customFetch<CreativeCreativeMarketplaceCreatorDetail>(getGetCreativeMarketplaceCreatorPublicUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCreativeMarketplaceCreatorPublicQueryKey = (id: number,) => {
+    return [
+    `/api/public/creative-marketplace/creators/${id}`
+    ] as const;
+    }
+
+
+export const getGetCreativeMarketplaceCreatorPublicQueryOptions = <TData = Awaited<ReturnType<typeof getCreativeMarketplaceCreatorPublic>>, TError = ErrorType<NotFoundResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceCreatorPublic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCreativeMarketplaceCreatorPublicQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCreativeMarketplaceCreatorPublic>>> = ({ signal }) => getCreativeMarketplaceCreatorPublic(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceCreatorPublic>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCreativeMarketplaceCreatorPublicQueryResult = NonNullable<Awaited<ReturnType<typeof getCreativeMarketplaceCreatorPublic>>>
+export type GetCreativeMarketplaceCreatorPublicQueryError = ErrorType<NotFoundResponse>
+
+
+/**
+ * @summary Public — creator profile with assets
+ */
+
+export function useGetCreativeMarketplaceCreatorPublic<TData = Awaited<ReturnType<typeof getCreativeMarketplaceCreatorPublic>>, TError = ErrorType<NotFoundResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCreativeMarketplaceCreatorPublic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCreativeMarketplaceCreatorPublicQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetWorkspaceMarketplaceFavoritesUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/creative-marketplace/favorites`
+}
+
+/**
+ * @summary Workspace — get favorites
+ */
+export const getWorkspaceMarketplaceFavorites = async (token: string, options?: RequestInit): Promise<CreativeMarketplaceFavoritesResult> => {
+
+  return customFetch<CreativeMarketplaceFavoritesResult>(getGetWorkspaceMarketplaceFavoritesUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorkspaceMarketplaceFavoritesQueryKey = (token: string,) => {
+    return [
+    `/api/public/customer/workspace/${token}/creative-marketplace/favorites`
+    ] as const;
+    }
+
+
+export const getGetWorkspaceMarketplaceFavoritesQueryOptions = <TData = Awaited<ReturnType<typeof getWorkspaceMarketplaceFavorites>>, TError = ErrorType<unknown>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceMarketplaceFavorites>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkspaceMarketplaceFavoritesQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkspaceMarketplaceFavorites>>> = ({ signal }) => getWorkspaceMarketplaceFavorites(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceMarketplaceFavorites>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorkspaceMarketplaceFavoritesQueryResult = NonNullable<Awaited<ReturnType<typeof getWorkspaceMarketplaceFavorites>>>
+export type GetWorkspaceMarketplaceFavoritesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Workspace — get favorites
+ */
+
+export function useGetWorkspaceMarketplaceFavorites<TData = Awaited<ReturnType<typeof getWorkspaceMarketplaceFavorites>>, TError = ErrorType<unknown>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceMarketplaceFavorites>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorkspaceMarketplaceFavoritesQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAddWorkspaceMarketplaceFavoriteUrl = (token: string,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/creative-marketplace/favorites`
+}
+
+/**
+ * @summary Workspace — add favorite
+ */
+export const addWorkspaceMarketplaceFavorite = async (token: string,
+    addWorkspaceMarketplaceFavoriteBody: AddWorkspaceMarketplaceFavoriteBody, options?: RequestInit): Promise<OkResult> => {
+
+  return customFetch<OkResult>(getAddWorkspaceMarketplaceFavoriteUrl(token),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(addWorkspaceMarketplaceFavoriteBody)
+  }
+);}
+
+
+
+
+export const getAddWorkspaceMarketplaceFavoriteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addWorkspaceMarketplaceFavorite>>, TError,{token: string;data: BodyType<AddWorkspaceMarketplaceFavoriteBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addWorkspaceMarketplaceFavorite>>, TError,{token: string;data: BodyType<AddWorkspaceMarketplaceFavoriteBody>}, TContext> => {
+
+const mutationKey = ['addWorkspaceMarketplaceFavorite'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addWorkspaceMarketplaceFavorite>>, {token: string;data: BodyType<AddWorkspaceMarketplaceFavoriteBody>}> = (props) => {
+          const {token,data} = props ?? {};
+
+          return  addWorkspaceMarketplaceFavorite(token,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddWorkspaceMarketplaceFavoriteMutationResult = NonNullable<Awaited<ReturnType<typeof addWorkspaceMarketplaceFavorite>>>
+    export type AddWorkspaceMarketplaceFavoriteMutationBody = BodyType<AddWorkspaceMarketplaceFavoriteBody>
+    export type AddWorkspaceMarketplaceFavoriteMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Workspace — add favorite
+ */
+export const useAddWorkspaceMarketplaceFavorite = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addWorkspaceMarketplaceFavorite>>, TError,{token: string;data: BodyType<AddWorkspaceMarketplaceFavoriteBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addWorkspaceMarketplaceFavorite>>,
+        TError,
+        {token: string;data: BodyType<AddWorkspaceMarketplaceFavoriteBody>},
+        TContext
+      > => {
+      return useMutation(getAddWorkspaceMarketplaceFavoriteMutationOptions(options));
+    }
+
+export const getRemoveWorkspaceMarketplaceFavoriteUrl = (token: string,
+    itemType: string,
+    itemId: number,) => {
+
+
+
+
+  return `/api/public/customer/workspace/${token}/creative-marketplace/favorites/${itemType}/${itemId}`
+}
+
+/**
+ * @summary Workspace — remove favorite
+ */
+export const removeWorkspaceMarketplaceFavorite = async (token: string,
+    itemType: string,
+    itemId: number, options?: RequestInit): Promise<OkResult> => {
+
+  return customFetch<OkResult>(getRemoveWorkspaceMarketplaceFavoriteUrl(token,itemType,itemId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getRemoveWorkspaceMarketplaceFavoriteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeWorkspaceMarketplaceFavorite>>, TError,{token: string;itemType: string;itemId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof removeWorkspaceMarketplaceFavorite>>, TError,{token: string;itemType: string;itemId: number}, TContext> => {
+
+const mutationKey = ['removeWorkspaceMarketplaceFavorite'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeWorkspaceMarketplaceFavorite>>, {token: string;itemType: string;itemId: number}> = (props) => {
+          const {token,itemType,itemId} = props ?? {};
+
+          return  removeWorkspaceMarketplaceFavorite(token,itemType,itemId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveWorkspaceMarketplaceFavoriteMutationResult = NonNullable<Awaited<ReturnType<typeof removeWorkspaceMarketplaceFavorite>>>
+
+    export type RemoveWorkspaceMarketplaceFavoriteMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Workspace — remove favorite
+ */
+export const useRemoveWorkspaceMarketplaceFavorite = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeWorkspaceMarketplaceFavorite>>, TError,{token: string;itemType: string;itemId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof removeWorkspaceMarketplaceFavorite>>,
+        TError,
+        {token: string;itemType: string;itemId: number},
+        TContext
+      > => {
+      return useMutation(getRemoveWorkspaceMarketplaceFavoriteMutationOptions(options));
+    }
+
+export const getGetWorkspaceCreativeMarketplaceDownloadsUrl = (token: string,
+    params?: GetWorkspaceCreativeMarketplaceDownloadsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/customer/workspace/${token}/creative-marketplace/downloads?${stringifiedParams}` : `/api/public/customer/workspace/${token}/creative-marketplace/downloads`
+}
+
+/**
+ * @summary Workspace — download history
+ */
+export const getWorkspaceCreativeMarketplaceDownloads = async (token: string,
+    params?: GetWorkspaceCreativeMarketplaceDownloadsParams, options?: RequestInit): Promise<GetWorkspaceCreativeMarketplaceDownloads200> => {
+
+  return customFetch<GetWorkspaceCreativeMarketplaceDownloads200>(getGetWorkspaceCreativeMarketplaceDownloadsUrl(token,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorkspaceCreativeMarketplaceDownloadsQueryKey = (token: string,
+    params?: GetWorkspaceCreativeMarketplaceDownloadsParams,) => {
+    return [
+    `/api/public/customer/workspace/${token}/creative-marketplace/downloads`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetWorkspaceCreativeMarketplaceDownloadsQueryOptions = <TData = Awaited<ReturnType<typeof getWorkspaceCreativeMarketplaceDownloads>>, TError = ErrorType<unknown>>(token: string,
+    params?: GetWorkspaceCreativeMarketplaceDownloadsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceCreativeMarketplaceDownloads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkspaceCreativeMarketplaceDownloadsQueryKey(token,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkspaceCreativeMarketplaceDownloads>>> = ({ signal }) => getWorkspaceCreativeMarketplaceDownloads(token,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceCreativeMarketplaceDownloads>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorkspaceCreativeMarketplaceDownloadsQueryResult = NonNullable<Awaited<ReturnType<typeof getWorkspaceCreativeMarketplaceDownloads>>>
+export type GetWorkspaceCreativeMarketplaceDownloadsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Workspace — download history
+ */
+
+export function useGetWorkspaceCreativeMarketplaceDownloads<TData = Awaited<ReturnType<typeof getWorkspaceCreativeMarketplaceDownloads>>, TError = ErrorType<unknown>>(
+ token: string,
+    params?: GetWorkspaceCreativeMarketplaceDownloadsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceCreativeMarketplaceDownloads>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorkspaceCreativeMarketplaceDownloadsQueryOptions(token,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetWorkspaceCreativeMarketplaceAssetsUrl = (token: string,
+    params?: GetWorkspaceCreativeMarketplaceAssetsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/public/customer/workspace/${token}/creative-marketplace/assets?${stringifiedParams}` : `/api/public/customer/workspace/${token}/creative-marketplace/assets`
+}
+
+/**
+ * @summary Workspace — browse assets with personalization
+ */
+export const getWorkspaceCreativeMarketplaceAssets = async (token: string,
+    params?: GetWorkspaceCreativeMarketplaceAssetsParams, options?: RequestInit): Promise<CreativeCreativeMarketplaceAssetList> => {
+
+  return customFetch<CreativeCreativeMarketplaceAssetList>(getGetWorkspaceCreativeMarketplaceAssetsUrl(token,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWorkspaceCreativeMarketplaceAssetsQueryKey = (token: string,
+    params?: GetWorkspaceCreativeMarketplaceAssetsParams,) => {
+    return [
+    `/api/public/customer/workspace/${token}/creative-marketplace/assets`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetWorkspaceCreativeMarketplaceAssetsQueryOptions = <TData = Awaited<ReturnType<typeof getWorkspaceCreativeMarketplaceAssets>>, TError = ErrorType<unknown>>(token: string,
+    params?: GetWorkspaceCreativeMarketplaceAssetsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceCreativeMarketplaceAssets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWorkspaceCreativeMarketplaceAssetsQueryKey(token,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWorkspaceCreativeMarketplaceAssets>>> = ({ signal }) => getWorkspaceCreativeMarketplaceAssets(token,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceCreativeMarketplaceAssets>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWorkspaceCreativeMarketplaceAssetsQueryResult = NonNullable<Awaited<ReturnType<typeof getWorkspaceCreativeMarketplaceAssets>>>
+export type GetWorkspaceCreativeMarketplaceAssetsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Workspace — browse assets with personalization
+ */
+
+export function useGetWorkspaceCreativeMarketplaceAssets<TData = Awaited<ReturnType<typeof getWorkspaceCreativeMarketplaceAssets>>, TError = ErrorType<unknown>>(
+ token: string,
+    params?: GetWorkspaceCreativeMarketplaceAssetsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWorkspaceCreativeMarketplaceAssets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWorkspaceCreativeMarketplaceAssetsQueryOptions(token,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

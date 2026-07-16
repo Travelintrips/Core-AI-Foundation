@@ -1,0 +1,626 @@
+PROMPT TEAM 1 — PHASE 3A: BATCH ORCHESTRATION, DISPATCH, RETRY, RECOVERY
+
+Anda adalah Team 1 — Batch Orchestration Team.
+
+Kerjakan hanya bagian queue, batch dispatcher, lifecycle, retry, recovery, reconciliation, cancellation, dan tenant fairness untuk Design Template Engine.
+
+Branch kerja:
+
+feature/design-template-phase3a-batch
+
+Jangan merge ke main.
+
+Konteks Existing
+
+Phase 1 sudah menyediakan:
+
+design_templates
+design_template_versions
+design_render_batches
+design_render_items
+immutable template version
+variable resolver
+API template dan batch
+job types:
+design_render
+design_render_batch_dispatch
+design_render_zip_export
+tenant isolation
+audit logging
+
+Phase 2 sudah menyediakan:
+
+SVG + Sharp renderer
+PNG, JPG, WebP, dan rasterized PDF
+executeDesignRenderJob()
+atomic item claim
+idempotent job re-delivery
+storage upload
+cooperative cancellation checkpoints
+SSRF protection
+render warnings
+712 test lulus
+
+Gunakan seluruh komponen existing. Jangan membuat queue framework, renderer, storage service, tenant context, atau variable resolver baru.
+
+Batas Tanggung Jawab
+
+Anda bertanggung jawab atas:
+
+implementasi produksi design_render_batch_dispatch,
+lifecycle batch yang eksplisit,
+dispatch item secara chunked,
+dispatch marker canonical,
+bounded enqueue concurrency,
+retry policy,
+processing lease,
+stale item recovery,
+restart recovery,
+progress reconciliation,
+cancellation end-to-end,
+tenant fairness,
+API filter dan pagination untuk render items,
+observability batch,
+test terkait batch orchestration.
+
+Anda tidak bertanggung jawab atas:
+
+ZIP generation,
+ZIP manifest,
+signed ZIP download,
+Template Library frontend,
+Visual Template Editor,
+CSV/XLSX mapping UI,
+AI Template Assistant,
+perubahan visual renderer,
+penambahan tipe elemen desain.
+Kepemilikan File
+
+Anda boleh mengubah:
+
+artifacts/api-server/src/services/designRenderBatchService.ts
+artifacts/api-server/src/services/designRenderWorkerService.ts
+artifacts/api-server/src/jobWorkerService.ts
+artifacts/api-server/src/routes/design-templates.ts
+artifacts/api-server/src/types/designTemplate.ts
+artifacts/api-server/src/validators/designTemplateSchema.ts
+lib/db/src/schema/design-template-engine.ts
+lib/db/src/schema/index.ts
+migrate-prod.ts
+artifacts/api-server/package.json
+
+Anda boleh membuat file baru hanya di area:
+
+artifacts/api-server/src/services/design-batch/
+artifacts/api-server/src/services/design-recovery/
+artifacts/api-server/src/tests/designBatch*.test.ts
+
+Jangan mengubah file di:
+
+artifacts/api-server/src/services/design-zip/
+artifacts/customer-portal/
+artifacts/bizportal/src/pages/design-templates/
+artifacts/bizportal/src/components/design-editor/
+artifacts/api-server/src/services/design-ai/
+
+Apabila file shared seperti routes/design-templates.ts, jobWorkerService.ts, atau schema perlu diubah, minimalkan perubahan dan dokumentasikan setiap bagian yang disentuh.
+
+Kontrak dengan Team 2
+
+Team 2 menangani ZIP export.
+
+Anda harus menyediakan kontrak stabil berikut untuk Team 2:
+
+reconcileDesignRenderBatch(
+  tenantId: string,
+  batchId: string,
+  executor?: DatabaseExecutor
+): Promise<DesignRenderBatchSummary>
+getExportableBatchSnapshot(
+  tenantId: string,
+  batchId: string
+): Promise<ExportableBatchSnapshot>
+
+Snapshot minimal harus menyediakan:
+
+type ExportableBatchSnapshot = {
+  batch: {
+    id: string;
+    tenantId: string;
+    templateId: string;
+    templateVersionId: string;
+    name: string;
+    status: string;
+    outputFormat: string;
+  };
+  completedItems: Array<{
+    id: string;
+    rowIndex: number;
+    outputAssetId?: string | null;
+    outputPath?: string | null;
+    outputUrl?: string | null;
+    outputFormat: string;
+    width?: number | null;
+    height?: number | null;
+    inputHash: string;
+  }>;
+  failedItems: Array<{
+    id: string;
+    rowIndex: number;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+    attemptCount: number;
+  }>;
+  sourceFingerprint: string;
+};
+
+Jangan mengimplementasikan ZIP di Team 1.
+
+Audit Sebelum Coding
+
+Audit:
+
+implementasi enqueue(),
+retry semantics queue existing,
+payload limit,
+worker concurrency,
+shutdown lifecycle,
+transaction pattern,
+FOR UPDATE SKIP LOCKED,
+advisory lock jika ada,
+worker identifier,
+startup recovery mechanism,
+current batch status values,
+current item status values,
+current counter fields,
+current cancellation implementation,
+audit logger,
+configuration pattern.
+
+Laporkan audit singkat, lalu langsung implementasi.
+
+Batch Lifecycle
+
+Gunakan state machine eksplisit.
+
+Status minimal:
+
+draft
+queued
+dispatching
+processing
+completed
+partially_failed
+failed
+cancelling
+cancelled
+
+Jangan memasukkan status ZIP ke lifecycle utama jika Team 2 menggunakan export record terpisah.
+
+Valid transition:
+
+draft → queued
+queued → dispatching
+dispatching → processing
+processing → completed
+processing → partially_failed
+processing → failed
+queued → cancelling
+dispatching → cancelling
+processing → cancelling
+cancelling → cancelled
+partially_failed → queued melalui retry
+failed → queued melalui retry
+
+Transition ilegal harus ditolak dengan structured error.
+
+Buat helper:
+
+assertBatchTransition(currentStatus, nextStatus)
+
+Tambahkan unit test semua transition valid dan invalid.
+
+Batch Creation
+
+Pastikan batch creation:
+
+tenant-scoped,
+memilih immutable template version,
+memvalidasi format,
+memvalidasi ukuran output,
+memvalidasi jumlah row,
+menormalisasi data,
+menghitung input hash,
+membuat render item canonical,
+memakai chunked insert,
+tidak memasukkan seluruh dataset ke job payload.
+
+Konfigurasi:
+
+DESIGN_BATCH_MAX_ITEMS=10000
+DESIGN_BATCH_INSERT_CHUNK_SIZE=250
+DESIGN_BATCH_DISPATCH_CHUNK_SIZE=100
+DESIGN_BATCH_DISPATCH_CONCURRENCY=5
+
+Gunakan configuration utility existing.
+
+Dispatcher
+
+Implementasikan design_render_batch_dispatch.
+
+Dispatcher harus:
+
+menerima identifier saja,
+membaca batch canonical,
+memverifikasi tenant,
+claim batch secara atomik,
+menghentikan proses jika cancelled,
+memilih queued items yang belum dispatched,
+membatasi jumlah outstanding jobs,
+enqueue design_render secara chunked,
+menyimpan dispatch marker,
+dapat dipanggil ulang secara aman,
+dapat dilanjutkan setelah crash,
+tidak merender gambar.
+
+Payload child job:
+
+{
+  tenantId: string;
+  batchId: string;
+  renderItemId: string;
+  requestId?: string;
+}
+
+Jangan memasukkan template JSON, gambar, binary, atau seluruh row ke payload.
+
+Dispatch Marker
+
+Audit kolom existing. Jika belum tersedia, tambahkan migration additive:
+
+dispatch_status
+dispatch_attempt_count
+last_dispatched_at
+queue_job_id
+next_retry_at
+worker_id
+lease_expires_at
+heartbeat_at
+
+Gunakan enum/string yang konsisten dengan pola repository.
+
+Jangan mengubah atau menghapus data Phase 1 dan Phase 2.
+
+Logical Deduplication
+
+Pastikan duplicate dispatcher tidak menghasilkan duplicate logical render.
+
+Gunakan state canonical seperti:
+
+dispatch_status = pending
+dispatch_status = dispatching
+dispatch_status = dispatched
+
+Jika enqueue berhasil tetapi proses mati sebelum update marker, re-delivery tetap aman karena worker Phase 2 idempotent. Namun dispatcher juga harus memperkecil duplicate enqueue.
+
+Dokumentasikan failure window dan mitigation-nya.
+
+Lease dan Atomic Claim
+
+Audit atomic claim Phase 2.
+
+Tambahkan lease:
+
+DESIGN_RENDER_PROCESSING_LEASE_MS=120000
+DESIGN_RENDER_STALE_SCAN_INTERVAL_MS=60000
+
+Ketika worker claim item:
+
+set worker_id,
+set lease_expires_at,
+set heartbeat_at,
+increment attempt atomically.
+
+Untuk render yang lama, heartbeat dapat diperbarui pada checkpoint aman.
+
+Jangan membuat heartbeat interval berlebihan.
+
+Stale Recovery
+
+Buat service:
+
+recoverStaleDesignRenderItems()
+
+Harus:
+
+paginate hasil,
+memilih item processing dengan lease expired,
+menggunakan atomic update,
+tidak mengambil lease aktif,
+melihat attempt count,
+requeue jika masih retryable,
+terminal failed jika max attempts tercapai,
+menghormati cancellation,
+menjalankan reconciliation,
+mencatat audit.
+
+Jangan hanya melakukan update berdasarkan timestamp tanpa status dan lease condition.
+
+Startup Resume
+
+Buat:
+
+resumeIncompleteDesignRenderBatches()
+
+Jalankan melalui pola startup/scheduler existing.
+
+Harus menangani:
+
+queued batch belum dispatch,
+dispatching batch terhenti,
+processing batch dengan queued item,
+stale processing items,
+cancelling batch yang masih memiliki queued item.
+
+Gunakan pagination dan limit.
+
+Jangan memindai seluruh database dalam satu query tanpa batas.
+
+Retry Policy
+
+Gunakan error retryability Phase 2.
+
+Konfigurasi:
+
+DESIGN_RENDER_MAX_ATTEMPTS=3
+DESIGN_RENDER_RETRY_BASE_DELAY_MS=30000
+
+Backoff minimal:
+
+attempt 1 → immediate
+attempt 2 → +30 detik
+attempt 3 → +2 menit
+
+Boleh mengikuti retry framework existing jika lebih konsisten.
+
+Non-retryable error harus terminal.
+
+Bedakan:
+
+queue delivery retry,
+render attempt,
+manual retry user.
+
+Manual retry endpoint harus:
+
+hanya memilih failed item,
+tidak menduplikasi row,
+tidak menyentuh completed item,
+menghapus error terminal yang relevan,
+set kembali queued,
+reset dispatch marker,
+menghitung ulang batch,
+enqueue dispatcher.
+Cancellation
+
+Implementasikan:
+
+queued|dispatching|processing → cancelling → cancelled
+
+Saat cancel:
+
+queued item menjadi cancelled,
+item completed tetap completed,
+item failed tetap dapat dipertahankan sebagai failed,
+dispatcher berhenti,
+worker aktif mendeteksi cooperative cancellation,
+setelah tidak ada processing item, batch menjadi cancelled.
+
+Endpoint cancel harus idempotent.
+
+Jangan menghapus output completed.
+
+Reconciliation
+
+Buat fungsi canonical:
+
+reconcileDesignRenderBatch(
+  tenantId,
+  batchId,
+  executor?
+)
+
+Hitung langsung dari design_render_items:
+
+total,
+queued,
+processing,
+completed,
+failed,
+cancelled.
+
+Tentukan status batch dari data aktual.
+
+Aturan:
+
+non-terminal masih ada → processing atau cancelling
+semua completed → completed
+completed + failed → partially_failed
+semua failed → failed
+semua terminal dan cancellation aktif → cancelled
+
+Counter tidak boleh negatif atau melebihi total.
+
+Gunakan reconciliation:
+
+setelah success,
+setelah failure,
+setelah retry,
+setelah cancel,
+setelah stale recovery,
+sebelum memberikan export snapshot,
+melalui repair job.
+Tenant Fairness dan Backpressure
+
+Gunakan default:
+
+DESIGN_RENDER_CONCURRENCY=2
+DESIGN_BATCH_MAX_ACTIVE_ITEMS_PER_TENANT=200
+DESIGN_BATCH_MAX_ACTIVE_BATCHES_PER_TENANT=5
+DESIGN_BATCH_DISPATCH_WINDOW_SIZE=100
+
+Jangan menaikkan concurrency default ke 4.
+
+Implementasikan minimal salah satu:
+
+dispatch window per batch,
+outstanding job cap per tenant,
+round-robin batch selection per tenant.
+
+Satu tenant dengan 10.000 item tidak boleh memonopoli seluruh queue.
+
+Progress API
+
+Batch detail minimal mengembalikan:
+
+{
+  "status": "processing",
+  "counts": {
+    "total": 1000,
+    "queued": 20,
+    "processing": 4,
+    "completed": 960,
+    "failed": 16,
+    "cancelled": 0
+  },
+  "progressPercent": 96
+}
+
+Jangan memberikan estimasi selesai palsu.
+
+Items endpoint harus mendukung:
+
+status filter,
+error code filter,
+row index,
+cursor pagination,
+bounded limit.
+Audit Logging
+
+Gunakan logAudit() existing untuk:
+
+batch queued,
+batch dispatched,
+batch cancelled,
+failed items retried,
+stale item recovered,
+batch reconciled jika drift signifikan.
+
+Jangan membuat audit service baru.
+
+Testing
+
+Pertahankan 712 test existing.
+
+Tambahkan:
+
+Lifecycle tests
+transition valid,
+transition ilegal,
+completed,
+partially failed,
+all failed,
+cancelling,
+cancelled.
+Dispatcher tests
+chunked dispatch,
+duplicate delivery idempotent,
+cancelled batch tidak didispatch,
+enqueue failure dapat dilanjutkan,
+payload hanya identifier,
+tenant mismatch,
+fairness dua tenant,
+active job cap.
+Lease tests
+atomic claim,
+active lease tidak direbut,
+expired lease direcover,
+attempt max menjadi failed,
+heartbeat memperpanjang lease.
+Retry tests
+retryable error requeued,
+non-retryable terminal,
+manual retry tidak menduplikasi row,
+completed item tidak ikut retry,
+backoff dihormati.
+Reconciliation tests
+drift diperbaiki,
+progress tidak lebih dari 100%,
+batch tidak completed jika queued masih ada,
+cancellation tidak menghapus completed output.
+Recovery tests
+restart setelah dispatcher partial,
+restart setelah worker claim,
+stale processing recovery,
+pagination recovery.
+API tests
+cancel idempotent,
+retry idempotent,
+cross-tenant denied,
+item pagination,
+item filtering,
+progress real.
+Benchmark
+
+Ukur:
+
+create 100 canonical items,
+create 1.000 canonical items,
+dispatch 100,
+dispatch 1.000 secara simulasi,
+reconciliation 100,
+reconciliation 1.000,
+peak memory jika tersedia.
+
+Jangan menjalankan full render 10.000 item.
+
+Acceptance Criteria
+
+Team 1 selesai jika:
+
+dispatcher bukan stub,
+dispatch chunked,
+dispatcher idempotent,
+logical duplicate diminimalkan,
+lease tersedia,
+stale item recovery bekerja,
+restart recovery bekerja,
+retry policy bekerja,
+non-retryable error terminal,
+reconciliation canonical,
+counter drift diperbaiki,
+cancellation end-to-end,
+tenant fairness ada,
+backpressure ada,
+progress API akurat,
+test lama tetap lulus,
+test baru lulus,
+build lulus,
+tidak ada typecheck error baru,
+kontrak export snapshot tersedia untuk Team 2.
+Handoff
+
+Jangan merge.
+
+Saat selesai:
+
+commit seluruh perubahan,
+push branch,
+berikan commit SHA,
+daftar migration,
+daftar file shared yang disentuh,
+kontrak service untuk Team 2,
+hasil test,
+hasil build,
+benchmark,
+known limitations.

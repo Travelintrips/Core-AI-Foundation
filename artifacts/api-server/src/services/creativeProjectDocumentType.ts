@@ -24,7 +24,9 @@ export type CreativeDocumentType =
   | "brand_strategy"
   | "copywriting"
   | "creative_consultation"
-  | "brand_identity_guideline";
+  | "brand_identity_guideline"
+  | "fashion_design"
+  | "interior_design";
 
 /**
  * Maps a catalog `serviceCode` to the document type its PDF export worker
@@ -38,6 +40,8 @@ export const SERVICE_CODE_TO_DOCUMENT_TYPE: Readonly<Record<string, CreativeDocu
   "copywriting":            "copywriting",
   "creative-consultation":  "creative_consultation",
   "brand-identity":         "brand_identity_guideline",
+  "fashion-design":         "fashion_design",
+  "interior-design":        "interior_design",
 };
 
 /**

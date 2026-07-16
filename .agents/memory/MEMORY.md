@@ -65,3 +65,12 @@
 - [wp03-audit-log](wp03-audit-log.md) — audit actor-type vocab differs from RequestContext's; diff-then-redact order matters; logAudit dual signature; auditHook.ts is a standalone new file
 - [wp04-wp05-soft-delete](wp04-wp05-soft-delete.md) — soft delete pattern: softDeleteGuard helper, self-referential db.transaction mock, purge requires platform scope + platformOperation
 - [phase-v45-design-studio](phase-v45-design-studio.md) — V4.5 canvas editor; route prefix must be /ai/... not /api/ai/... ; canvas state as JSONB; pre-existing typecheck failures in presentation/zip services
+- [phase-v47-creative-marketplace](phase-v47-creative-marketplace.md) — V4.7 asset marketplace; Creative prefix on all schemas (collision with skills marketplace); resolveWorkspaceSession for token auth
+- [wp08-wp11-quotation](wp08-wp11-quotation.md) — Quotation repo write+audit, soft-delete cascade, restore role guard, legacy freeze (410), vi.hoisted() test pattern
+- [cp-real-file-upload](cp-real-file-upload.md) — logo/photo/doc/video uploads now real (object storage), fixed missing adminAuth public exception; PDF still doesn't embed uploaded logo/photos
+- [design-template-blueprints](design-template-blueprints.md) — builtin templates served from code (no DB); add to BUILTIN_TEMPLATES array, no migration needed
+- [design-template-engine-phase1](design-template-engine-phase1.md) — Phase 1 foundation: 4 tables, 13 API endpoints, 46 tests, zod catalog dep, date formatter order rule, Phase 2 stub locations
+- [design-template-engine-phase2](design-template-engine-phase2.md) — Phase 2 renderer: 12 files in design-renderer/, single-render creates batch+item first, ZIP returns 501, 712 tests all pass
+- [phase5-visual-template-editor](phase5-visual-template-editor.md) — Phase 5 visual editor complete: react-konva canvas, 38 tests pass, adapter z-index normalization rule, pnpm build requires PORT env (use typecheck instead)
+- [phase3a-batch-orchestration](phase3a-batch-orchestration.md) — Phase 3A lifecycle machine, dispatcher idempotency/tenant-cap, reconcile rules, stale recovery, Team 2 snapshot contract
+- [phase4-library-integration](phase4-library-integration.md) — Phase 4 cherry-pick rules: lib/db tsc -b required, createVersion() obj-arg, PreviewResult has no renderDurationMs, "jpeg" not in RenderFormat

@@ -17,6 +17,8 @@ import { brandStrategyDefinition }           from "./mappers/brandStrategyDocume
 import { copywritingDefinition }             from "./mappers/copywritingDocumentMapper.js";
 import { creativeConsultationDefinition }    from "./mappers/creativeConsultationDocumentMapper.js";
 import { brandIdentityGuidelineDefinition }  from "./mappers/brandIdentityGuidelineDocumentMapper.js";
+import { fashionDesignDefinition }           from "./mappers/fashionDesignDocumentMapper.js";
+import { interiorDesignDefinition }          from "./mappers/interiorDesignDocumentMapper.js";
 
 /** Call once at startup to register all document type definitions. */
 export function initDocumentRegistry(): void {
@@ -25,4 +27,6 @@ export function initDocumentRegistry(): void {
   registerDocument(copywritingDefinition);
   registerDocument(creativeConsultationDefinition);
   registerDocument(brandIdentityGuidelineDefinition);
+  registerDocument(fashionDesignDefinition);
+  registerDocument(interiorDesignDefinition);
 }

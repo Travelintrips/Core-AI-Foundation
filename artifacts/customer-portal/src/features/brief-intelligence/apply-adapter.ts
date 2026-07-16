@@ -32,9 +32,29 @@ export const STYLE_MAX = 3;
 export const COLOR_MAX = 3;
 export const AUDIENCE_MAX = 4;
 
-const FREE_TEXT_CATEGORIES: RecommendationCategory[] = [
+export const FREE_TEXT_CATEGORIES: RecommendationCategory[] = [
   "deliverable", "personality", "toneOfVoice", "photographyDirection", "visualDirection", "contentDirection",
 ];
+
+/** Which BriefData field a free-text category writes into, or null if the
+ *  category isn't a free-text one (style/color/audience are chip fields
+ *  handled separately in applyOne). */
+export function getFreeTextTargetField(category: RecommendationCategory): keyof BriefData | null {
+  if (!FREE_TEXT_CATEGORIES.includes(category)) return null;
+  return category === "deliverable" ? "outputFormats" : "specialRequirements";
+}
+
+/**
+ * True when a free-text category's target field is already filled in, which
+ * means applying ANY item in that category is guaranteed to be a no-op skip
+ * (see applyOne below). Used by the panel to hide those items entirely
+ * instead of showing a clickable "Gunakan" that silently does nothing.
+ */
+export function isFreeTextCategoryFilled(brief: BriefData, category: RecommendationCategory): boolean {
+  const field = getFreeTextTargetField(category);
+  if (!field) return false;
+  return brief[field].trim().length > 0;
+}
 
 const FREE_TEXT_CATEGORY_LABEL: Record<string, string> = {
   deliverable: "Format output disarankan",
@@ -112,14 +132,13 @@ function applyOne(
   }
 
   if (FREE_TEXT_CATEGORIES.includes(rec.category)) {
-    const targetField: keyof BriefData = rec.category === "deliverable" ? "outputFormats" : "specialRequirements";
+    const targetField = getFreeTextTargetField(rec.category)!;
     const current = brief[targetField];
-    if (current.trim() && rec.category !== "deliverable") {
-      skipped.push({ category: rec.category, key: rec.key, reason: "Field sudah diisi — tidak menimpa jawaban Anda" });
-      return brief;
-    }
-    if (rec.category === "deliverable" && current.trim()) {
-      skipped.push({ category: rec.category, key: rec.key, reason: "Field Format Output sudah diisi — tidak menimpa jawaban Anda" });
+    if (isFreeTextCategoryFilled(brief, rec.category)) {
+      const reason = rec.category === "deliverable"
+        ? "Field Format Output sudah diisi — tidak menimpa jawaban Anda"
+        : "Field sudah diisi — tidak menimpa jawaban Anda";
+      skipped.push({ category: rec.category, key: rec.key, reason });
       return brief;
     }
     const nextValue = appendToFreeText(current, rec.category, rec.label);

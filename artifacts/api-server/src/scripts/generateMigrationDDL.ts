@@ -1,0 +1,247 @@
+/**
+ * Generates CREATE TABLE IF NOT EXISTS DDL for all tables in ai_platform
+ * that exist in dev but not in prod, then applies them to prod.
+ *
+ * Run: npx tsx src/scripts/generateMigrationDDL.ts
+ */
+import { pool } from "@workspace/db";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const client = await pool.connect();
+
+// ─── 1. Get dev table list ────────────────────────────────────────────────────
+const devTablesRes = await client.query<{ table_name: string }>(
+  `SELECT table_name FROM information_schema.tables
+   WHERE table_schema = 'ai_platform' ORDER BY table_name`
+);
+const devTables = devTablesRes.rows.map((r) => r.table_name);
+console.log(`Dev tables: ${devTables.length}`);
+
+// ─── 2. Get prod table list ───────────────────────────────────────────────────
+// We need a separate connection to prod. We'll read SUPABASE_PROD_DATABASE_URL
+// and connect via pg directly.
+import pgPkg from "pg";
+const { Pool: PgPool } = pgPkg;
+const prodPool = new PgPool({
+  connectionString: process.env.SUPABASE_PROD_DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+  options: "-c search_path=ai_platform,public",
+  max: 5,
+});
+const prodClient = await prodPool.connect();
+
+const prodTablesRes = await prodClient.query<{ table_name: string }>(
+  `SELECT table_name FROM information_schema.tables
+   WHERE table_schema = 'ai_platform' ORDER BY table_name`
+);
+const prodTables = new Set(prodTablesRes.rows.map((r) => r.table_name));
+console.log(`Prod tables: ${prodTables.size}`);
+
+const missingTables = devTables.filter((t) => !prodTables.has(t));
+console.log(`Missing in prod: ${missingTables.length}`);
+console.log(missingTables.join(", "));
+
+// ─── 3. Generate DDL for each missing table ───────────────────────────────────
+const lines: string[] = [
+  "-- Auto-generated migration: dev → prod (missing tables)",
+  "-- Generated: " + new Date().toISOString(),
+  "SET search_path TO ai_platform, public;",
+  "",
+];
+
+for (const table of missingTables) {
+  // Get columns
+  const colsRes = await client.query<{
+    column_name: string;
+    data_type: string;
+    udt_name: string;
+    character_maximum_length: number | null;
+    numeric_precision: number | null;
+    numeric_scale: number | null;
+    is_nullable: string;
+    column_default: string | null;
+    is_identity: string;
+    identity_generation: string | null;
+  }>(
+    `SELECT
+       column_name,
+       data_type,
+       udt_name,
+       character_maximum_length,
+       numeric_precision,
+       numeric_scale,
+       is_nullable,
+       column_default,
+       is_identity,
+       identity_generation
+     FROM information_schema.columns
+     WHERE table_schema = 'ai_platform' AND table_name = $1
+     ORDER BY ordinal_position`,
+    [table]
+  );
+
+  // Get primary key columns
+  const pkRes = await client.query<{ column_name: string }>(
+    `SELECT kcu.column_name
+     FROM information_schema.table_constraints tc
+     JOIN information_schema.key_column_usage kcu
+       ON tc.constraint_name = kcu.constraint_name
+       AND tc.table_schema = kcu.table_schema
+     WHERE tc.constraint_type = 'PRIMARY KEY'
+       AND tc.table_schema = 'ai_platform'
+       AND tc.table_name = $1
+     ORDER BY kcu.ordinal_position`,
+    [table]
+  );
+  const pkCols = pkRes.rows.map((r) => r.column_name);
+
+  // Get unique constraints (excluding PK)
+  const uqRes = await client.query<{
+    constraint_name: string;
+    column_name: string;
+  }>(
+    `SELECT tc.constraint_name, kcu.column_name
+     FROM information_schema.table_constraints tc
+     JOIN information_schema.key_column_usage kcu
+       ON tc.constraint_name = kcu.constraint_name
+       AND tc.table_schema = kcu.table_schema
+     WHERE tc.constraint_type = 'UNIQUE'
+       AND tc.table_schema = 'ai_platform'
+       AND tc.table_name = $1
+     ORDER BY tc.constraint_name, kcu.ordinal_position`,
+    [table]
+  );
+  // Group by constraint_name
+  const uqMap = new Map<string, string[]>();
+  for (const r of uqRes.rows) {
+    if (!uqMap.has(r.constraint_name)) uqMap.set(r.constraint_name, []);
+    uqMap.get(r.constraint_name)!.push(r.column_name);
+  }
+
+  // Get check constraints
+  const chkRes = await client.query<{
+    constraint_name: string;
+    check_clause: string;
+  }>(
+    `SELECT cc.constraint_name, cc.check_clause
+     FROM information_schema.check_constraints cc
+     JOIN information_schema.table_constraints tc
+       ON cc.constraint_name = tc.constraint_name
+       AND cc.constraint_schema = tc.constraint_schema
+     WHERE tc.table_schema = 'ai_platform'
+       AND tc.table_name = $1`,
+    [table]
+  );
+
+  function mapType(col: (typeof colsRes.rows)[0]): string {
+    if (col.is_identity === "YES") {
+      return col.identity_generation === "ALWAYS"
+        ? "BIGINT GENERATED ALWAYS AS IDENTITY"
+        : "BIGINT GENERATED BY DEFAULT AS IDENTITY";
+    }
+    const dt = col.data_type;
+    // Handle sequences (integer/bigint with nextval defaults → use SERIAL/BIGSERIAL)
+    if (
+      col.column_default &&
+      col.column_default.startsWith("nextval(") &&
+      dt === "integer"
+    ) {
+      return "SERIAL";
+    }
+    if (
+      col.column_default &&
+      col.column_default.startsWith("nextval(") &&
+      dt === "bigint"
+    ) {
+      return "BIGSERIAL";
+    }
+    if (dt === "character varying") {
+      return col.character_maximum_length
+        ? `VARCHAR(${col.character_maximum_length})`
+        : "TEXT";
+    }
+    if (dt === "character") return `CHAR(${col.character_maximum_length ?? 1})`;
+    if (dt === "numeric") {
+      if (col.numeric_precision && col.numeric_scale != null)
+        return `NUMERIC(${col.numeric_precision},${col.numeric_scale})`;
+      return "NUMERIC";
+    }
+    if (dt === "ARRAY") {
+      // udt_name starts with _ for arrays
+      const base = col.udt_name.startsWith("_")
+        ? col.udt_name.slice(1)
+        : col.udt_name;
+      return base.toUpperCase() + "[]";
+    }
+    if (dt === "USER-DEFINED") return col.udt_name;
+    if (dt === "timestamp without time zone") return "TIMESTAMP";
+    if (dt === "timestamp with time zone") return "TIMESTAMPTZ";
+    if (dt === "time without time zone") return "TIME";
+    if (dt === "time with time zone") return "TIMETZ";
+    if (dt === "double precision") return "DOUBLE PRECISION";
+    return dt.toUpperCase();
+  }
+
+  const colDefs: string[] = [];
+  for (const col of colsRes.rows) {
+    const type = mapType(col);
+    const nullable = col.is_nullable === "YES" ? "" : " NOT NULL";
+
+    let defaultClause = "";
+    // Skip nextval defaults if already SERIAL/BIGSERIAL
+    if (
+      col.column_default &&
+      !col.column_default.startsWith("nextval(") &&
+      col.is_identity !== "YES"
+    ) {
+      defaultClause = ` DEFAULT ${col.column_default}`;
+    }
+
+    colDefs.push(`  ${col.column_name} ${type}${defaultClause}${nullable}`);
+  }
+
+  // Add PK constraint
+  if (pkCols.length === 1) {
+    // Find the col def and append PRIMARY KEY
+    const idx = colDefs.findIndex((c) =>
+      c.trimStart().startsWith(pkCols[0] + " ")
+    );
+    if (idx >= 0) colDefs[idx] += " PRIMARY KEY";
+  } else if (pkCols.length > 1) {
+    colDefs.push(`  PRIMARY KEY (${pkCols.join(", ")})`);
+  }
+
+  // Add unique constraints
+  for (const [name, cols] of uqMap) {
+    colDefs.push(`  CONSTRAINT ${name} UNIQUE (${cols.join(", ")})`);
+  }
+
+  // Add check constraints (skip NOT NULL checks which pg exposes as check)
+  for (const chk of chkRes.rows) {
+    if (!chk.check_clause.includes("IS NOT NULL")) {
+      colDefs.push(
+        `  CONSTRAINT ${chk.constraint_name} CHECK (${chk.check_clause})`
+      );
+    }
+  }
+
+  lines.push(`CREATE TABLE IF NOT EXISTS ai_platform.${table} (`);
+  lines.push(colDefs.join(",\n"));
+  lines.push(`);`);
+  lines.push("");
+}
+
+// ─── 4. Write SQL file ────────────────────────────────────────────────────────
+const sqlPath = path.join(__dirname, "migration_prod.sql");
+fs.writeFileSync(sqlPath, lines.join("\n"), "utf8");
+console.log(`\n✅ SQL written to ${sqlPath}`);
+console.log(`   Lines: ${lines.length}`);
+
+client.release();
+prodClient.release();
+await pool.end();
+await prodPool.end();

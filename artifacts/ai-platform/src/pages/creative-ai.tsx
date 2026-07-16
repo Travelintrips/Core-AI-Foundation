@@ -93,11 +93,37 @@ const PIPELINE_STEPS = [
 ];
 
 const STEP_NAME_MAP: Record<string, string> = {
-  "brand-strategist":  "Brand Strategy",
-  "creative-director": "Creative Direction",
-  "copywriter":        "Copy Production",
-  "quality-control":   "Quality Control",
+  "brand-strategist":           "Brand Strategy",
+  "creative-director":          "Creative Direction",
+  "copywriter":                 "Copy Production",
+  "quality-control":            "Quality Control",
+  "fashion-design-specialist":  "Fashion Specialist",
+  "interior-design-specialist": "Interior Specialist",
 };
+
+/** Specialist agents — displayed separately from the main pipeline */
+const SPECIALIST_AGENTS = [
+  {
+    slug:  "fashion-design-specialist",
+    label: "Fashion Design Specialist",
+    model: "Claude Opus 4.8",
+    provider: "Anthropic",
+    color: "from-rose-500/10 to-pink-500/10 border-rose-500/20",
+    iconColor: "text-rose-400",
+    description: "Koleksi fashion, brand storytelling, editorial copywriting, dan fashion brand strategy.",
+    capabilities: ["Collection Brief", "Fashion Copywriting", "Brand Strategy", "Trend Research"],
+  },
+  {
+    slug:  "interior-design-specialist",
+    label: "Interior Design Specialist",
+    model: "Gemini 2.5 Pro",
+    provider: "Google",
+    color: "from-teal-500/10 to-emerald-500/10 border-teal-500/20",
+    iconColor: "text-teal-400",
+    description: "Konsep spasial, spesifikasi material, proposal klien, dan interior brand identity.",
+    capabilities: ["Spatial Concept", "Material Spec", "Client Proposal", "Style Direction"],
+  },
+];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -766,6 +792,7 @@ function ClientReviewSection({ projectId }: { projectId: string }) {
   const [freshToken, setFreshToken] = useState<{ token: string; id: number } | null>(null);
   const [copied, setCopied] = useState(false);
   const [form, setForm] = useState({ clientName: "", clientEmail: "", clientPhone: "", expiresInDays: 7 });
+  const [resendingId, setResendingId] = useState<number | null>(null);
 
   const { data: reviews = [] } = useListClientReviews(projectId, {
     query: { queryKey: getListClientReviewsQueryKey(projectId) },
@@ -773,6 +800,34 @@ function ClientReviewSection({ projectId }: { projectId: string }) {
   const { data: comments = [] } = useListReviewComments(projectId, {
     query: { queryKey: getListReviewCommentsQueryKey(projectId) },
   });
+
+  const adminKey = import.meta.env.VITE_ADMIN_API_KEY as string | undefined;
+  const adminHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(adminKey ? { "x-admin-api-key": adminKey } : {}),
+  };
+  const apiBase = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+
+  // Auto-fill form with customer data from service request when form opens
+  const handleOpenCreate = async () => {
+    setShowCreate(true);
+    try {
+      const res = await fetch(`${apiBase}/api/creative-ai/projects/${projectId}/customer-info`, {
+        headers: adminHeaders,
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { name: string; email: string; phone: string };
+        setForm((f) => ({
+          ...f,
+          clientName: data.name || f.clientName,
+          clientEmail: data.email || f.clientEmail,
+          clientPhone: data.phone || f.clientPhone,
+        }));
+      }
+    } catch {
+      // silent — form stays empty, admin can fill manually
+    }
+  };
 
   const createLink = useCreateClientReviewLink({
     mutation: {
@@ -796,6 +851,37 @@ function ClientReviewSection({ projectId }: { projectId: string }) {
       onError: () => toast({ title: "Failed to revoke", variant: "destructive" }),
     },
   });
+
+  const handleResend = async (reviewId: number, clientEmail?: string | null) => {
+    setResendingId(reviewId);
+    try {
+      const res = await fetch(`${apiBase}/api/creative-ai/client-reviews/${reviewId}/resend`, {
+        method: "PATCH",
+        headers: adminHeaders,
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Failed to resend");
+      }
+      const data = (await res.json()) as { token?: string };
+      queryClient.invalidateQueries({ queryKey: getListClientReviewsQueryKey(projectId) });
+      if (data.token) setFreshToken({ token: data.token, id: reviewId });
+      toast({
+        title: "Revision selesai — link baru sudah aktif",
+        description: clientEmail
+          ? `Email notifikasi dikirim ke ${clientEmail}`
+          : "Salin link baru dan bagikan ke klien.",
+      });
+    } catch (err: unknown) {
+      toast({
+        title: "Gagal mengirim notifikasi",
+        description: err instanceof Error ? err.message : "Coba lagi",
+        variant: "destructive",
+      });
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   const publicBase =
     `${window.location.origin}${import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}/review/creative/`;
@@ -833,7 +919,7 @@ function ClientReviewSection({ projectId }: { projectId: string }) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setShowCreate((v) => !v)}
+          onClick={() => showCreate ? setShowCreate(false) : handleOpenCreate()}
           className="h-6 gap-1.5 text-[10px] font-mono text-muted-foreground hover:text-primary"
         >
           <Link2 className="size-3" />
@@ -969,6 +1055,22 @@ function ClientReviewSection({ projectId }: { projectId: string }) {
                   >
                     {review.status.replace(/_/g, " ")}
                   </Badge>
+                  {/* Revision Done button — only on revision_requested reviews */}
+                  {review.status === "revision_requested" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 gap-1 text-[10px] font-mono text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10 px-2"
+                      title={review.clientEmail ? `Kirim email notifikasi ke ${review.clientEmail}` : "Aktifkan link baru untuk klien"}
+                      onClick={() => handleResend(review.id, review.clientEmail)}
+                      disabled={resendingId === review.id}
+                    >
+                      {resendingId === review.id
+                        ? <Loader2 className="size-3 animate-spin" />
+                        : <Send className="size-3" />}
+                      Revision Done
+                    </Button>
+                  )}
                   {!["revoked", "approved", "rejected", "expired"].includes(review.status) && (
                     <Button
                       variant="ghost"
@@ -1732,6 +1834,28 @@ export default function CreativeAI() {
             )}
           </div>
         </ScrollArea>
+
+        {/* ── Specialist Agents Info ───────────────────────────────── */}
+        <div className="border-t border-border/40 p-3 space-y-2">
+          <p className="text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider px-1">Specialist Agents</p>
+          {SPECIALIST_AGENTS.map((agent) => (
+            <div
+              key={agent.slug}
+              className={cn("rounded-md border bg-gradient-to-br p-2.5 space-y-1.5", agent.color)}
+            >
+              <div className="flex items-center justify-between gap-1">
+                <span className={cn("text-[11px] font-mono font-semibold truncate", agent.iconColor)}>{agent.label}</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground/80 leading-relaxed">{agent.description}</p>
+              <div className="flex flex-wrap gap-1">
+                {agent.capabilities.slice(0, 2).map((cap) => (
+                  <span key={cap} className="text-[9px] font-mono bg-background/40 border border-border/40 rounded px-1 py-0.5 text-muted-foreground">{cap}</span>
+                ))}
+                <span className="text-[9px] font-mono text-muted-foreground/60">via {agent.model}</span>
+              </div>
+            </div>
+          ))}
+        </div>
       </aside>
 
       {/* ── Right panel: form or detail ──────────────────────────────── */}

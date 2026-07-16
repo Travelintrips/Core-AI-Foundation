@@ -30,6 +30,7 @@ import { logAudit } from "./aiAuditService.js";
 import { recordCost, getProjectCosts } from "./costService.js";
 import { readGuardrails } from "./guardrailService.js";
 import { applyTextOverlay, type OverlaySpec, type OverlayContext } from "../lib/textOverlay.js";
+import { getPublicBaseUrl } from "../lib/publicBaseUrl.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -392,10 +393,9 @@ export interface GeneratedNamedAsset {
 
 /** Background jobs have no Express request to read forwarded headers from, so
  * this mirrors the buildBaseUrl() helpers used by request-scoped routes but
- * without req dependency. REPLIT_DEV_DOMAIN covers Replit dev/prod hosting. */
+ * without req dependency. PUBLIC_APP_URL overrides for production. */
 function getServiceBaseUrl(): string {
-  if (process.env["REPLIT_DEV_DOMAIN"]) return `https://${process.env["REPLIT_DEV_DOMAIN"]}`;
-  return `http://localhost:${process.env["PORT"] ?? 8080}`;
+  return getPublicBaseUrl();
 }
 
 /**

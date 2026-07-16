@@ -66,9 +66,13 @@ import zipDeliveryRouter from "./zip-delivery";
 import brandIntelligenceRouter from "./brand-intelligence";
 import assetIntelligenceRouter from "./asset-intelligence";
 import templatesRouter from "./templates";
+import templateEngineRouter from "./template-engine";
 import portfolioGalleryRouter from "./portfolio-gallery";
 import productionPipelineRouter from "./production-pipeline";
 import designStudioRouter from "./design-studio";
+import designTemplatesRouter from "./design-templates";
+import designTemplatesAiAssistRouter from "./design-templates-ai-assist";
+import creativeMarketplaceRouter from "./creative-marketplace";
 
 const router: IRouter = Router();
 
@@ -125,6 +129,7 @@ router.use(zipDeliveryRouter);
 router.use(brandIntelligenceRouter);
 router.use(assetIntelligenceRouter);
 router.use(templatesRouter);
+router.use(templateEngineRouter);
 router.use(portfolioGalleryRouter);
 router.use(productionPipelineRouter);
 router.use(customerWorkspaceSseRouter);
@@ -137,9 +142,11 @@ router.use(referralsRouter);
 router.use(affiliatesRouter);
 router.use(customerHealthRouter);
 router.use(commercialAnalyticsRouter);
-router.use(storageRouter);
 router.use(observabilityRouter);
 router.use(metricsRouter);
 router.use(designStudioRouter);
+router.use(designTemplatesRouter);
+router.use(designTemplatesAiAssistRouter);
+router.use(creativeMarketplaceRouter);
 
 export default router;

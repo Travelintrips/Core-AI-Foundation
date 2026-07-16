@@ -37,7 +37,9 @@ import {
 
 // ── API helper ─────────────────────────────────────────────────────────────────
 
-const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+// Use empty string so fetch("/api/...") goes through the Vite /api proxy.
+// Do NOT use BASE_URL here — that prepends "/admin" which breaks proxy routing.
+const API_BASE = "";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const key = import.meta.env.VITE_ADMIN_API_KEY;

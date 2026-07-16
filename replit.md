@@ -1,41 +1,93 @@
-# AI Enterprise Platform
+# Creative AI Studio — AI Enterprise Platform
 
-A full-stack AI enterprise platform built as a pnpm monorepo. Supports multi-provider AI dispatch, a customer creative studio portal, job scheduling, event bus, human task center, and quotation/invoicing flows.
+An enterprise-grade AI service platform for creative and business document production. Clients submit service requests through the customer portal; the admin team manages them through the internal admin dashboard; AI workers process jobs (text, image, document generation) in the background.
 
 ## Architecture
 
-| Artifact | URL | Description |
+This is a **pnpm monorepo** with three live artifacts and shared libraries:
+
+| Artifact | Preview Path | Description |
 |---|---|---|
-| `artifacts/customer-portal` | `/` (port 23434) | Customer-facing Creative AI Studio portal |
-| `artifacts/ai-platform` | `/admin/` (port 20785) | Internal staff admin panel |
-| `artifacts/api-server` | `/api` (port 8080) | Express + Drizzle ORM backend |
-| `artifacts/mockup-sandbox` | `/__mockup` | UI component preview sandbox |
+| `artifacts/customer-portal` | `/` | Customer-facing landing page + client workspace portal |
+| `artifacts/ai-platform` | `/admin/` | Internal admin dashboard (staff/owner only) |
+| `artifacts/api-server` | `/api` | Express + Drizzle ORM backend API |
+| `artifacts/mockup-sandbox` | `/__mockup` | Design canvas preview server |
 
-### Shared libraries (`lib/`)
-- `@workspace/api-spec` — OpenAPI spec + codegen (orval)
-- `@workspace/api-client-react` — Generated React Query hooks
-- `@workspace/api-zod` — Generated Zod schemas
-- `@workspace/db` — Drizzle ORM schema + Supabase client
+### Shared Libraries (`lib/`)
+- `lib/db` — Drizzle ORM schema + Supabase DB client
+- `lib/api-spec` — OpenAPI spec + orval codegen
+- `lib/api-client-react` — Generated React Query hooks
+- `lib/api-zod` — Generated Zod validation schemas
 
-## How to run
+## How to Run
 
-All workflows start automatically. To restart manually:
+All services start automatically via Replit workflows. To restart manually:
 
 ```bash
-# Install dependencies (run once after import)
-pnpm install
+# Build libs first (required before api-server build)
+pnpm run typecheck:libs
 
-# Build shared libraries & API server
-pnpm run build:generated   # codegen from OpenAPI spec
-pnpm run build:libs        # TypeScript project references
-pnpm run build:api         # esbuild api-server → dist/
+# Build & start API server
+pnpm --filter @workspace/api-server run dev
 
-# Seed the database (first run)
+# Start frontends (each in separate terminal)
+pnpm --filter @workspace/customer-portal run dev
+pnpm --filter @workspace/ai-platform run dev
+```
+
+## Key Environment Variables
+
+All set via Replit userenv (`.replit`) and Secrets:
+- `SUPABASE_DEV_DATABASE_URL` — Supabase PostgreSQL (dev)
+- `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY` — Admin authentication key
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc. — AI provider keys
+- `SMTP_*` — Email (Hostinger SMTP)
+
+## Database
+
+Supabase PostgreSQL with a dedicated `ai_platform` schema. Dev and prod use separate Supabase projects. To seed:
+
+### Production Migration (Dev → Prod sync)
+
+Dev dan Prod adalah **dua database terpisah**. Setiap kali ada tabel/kolom baru di dev, jalankan script ini ke prod:
+
+```bash
+# Preview SQL yang akan dijalankan (tanpa mengubah apapun):
+pnpm run migrate:prod:dry-run
+
+# Jalankan semua migration ke prod (butuh SUPABASE_PROD_DATABASE_URL di Replit Secrets):
+pnpm run migrate:prod
+
+# Setelah migration, isi data awal ke prod:
+NODE_ENV=production pnpm --filter @workspace/api-server run seed
+```
+
+Script ini (`scripts/src/migrate-prod.ts`) menjalankan **11 migration** secara berurutan:
+1. V4.2E — ai_brand_dna + ai_asset_intelligence
+2. V4.3 — ai_templates + ai_template_analytics
+3. V4.3 Gallery — ai_portfolio_favorites
+4. V4.4 — ai_production_pipelines + ai_pipeline_stages
+5. P2.5 Commercial Layer — sales_funnel_events, promotions, coupons, referrals, affiliates
+6. P7 Internal RBAC — internal_users + service category columns
+7. P1.1 Customer Workspace — ai_customer_documents + impersonation tokens
+8. WP04/WP05 Soft Delete — deleted_at/archived_at columns
+9. CP Brief Guard — brief_guard_override columns
+10. V4.5 Design Studio — ai_design_projects + ai_design_versions
+11. Seed AI Sales Manager — employee record upsert
+
+Semua statement menggunakan `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` — **aman dijalankan ulang kapanpun**.
+
+To seed:
 pnpm --filter @workspace/api-server run seed
 ```
 
-## Environment Variables
+## Tech Stack
 
+- **Frontend**: React 19 + Vite + TailwindCSS + shadcn/ui + Wouter + TanStack Query
+- **Backend**: Express 5 + Drizzle ORM + Supabase + pino logging
+- **AI**: OpenAI, Anthropic, Gemini, Mistral, Cohere, Replicate
+- **Storage**: Supabase Storage (S3-compatible)
+- **Auth**: Custom JWT-based admin auth + customer token system
 All API keys and Supabase credentials are configured in `.replit` under `[userenv]`.
 
 **Required secrets (set in Replit Secrets):**
@@ -54,6 +106,7 @@ Note: artifact/workflow registration lives outside git, so it does not survive r
 Re-verified again the same day after another re-import wiped artifact/workflow registration (registration doesn't survive git-based re-imports even though `artifact.toml` files stay on disk). Ran post-merge setup to restore all 4 artifacts/workflows; all secrets were already present, all services came back up clean with no code changes needed.
 A second re-import wiped `node_modules` and artifact/workflow registration again. Fix: `pnpm install`, then `pnpm run build:generated` (orval codegen + libs typecheck) and `pnpm run build:api` (esbuild bundle) before restarting workflows — otherwise `vite: not found` / `Cannot find package 'esbuild'` errors on first boot. All 4 services re-verified running afterward.
 A third re-import (2026-07-14) again wiped artifact/workflow registration only; `runPostMergeSetup()` re-registered all 4 artifacts/workflows in one pass with no code changes. All secrets (including `ADMIN_API_KEY`/`VITE_ADMIN_API_KEY`) were already present. Verified: customer-portal renders landing page, ai-platform shows the expected staff login gate, api-server returns 401 (expected without an admin key) on an authenticated route.
+A fourth re-import (2026-07-14) wiped artifact/workflow registration and `node_modules`. Additionally, `artifacts/api-server/src/routes/templates.ts` had 10 concatenated route stubs (old unclosed v1 lines immediately followed by v2 handler bodies) causing a build failure. Fix: `pnpm install`, fix the concatenated stubs in templates.ts, `pnpm run build:generated`, `pnpm run build:api`, restart all 4 workflows. All services verified running after fix.
 Re-verified again 2026-07-14: another re-import wiped `node_modules` + registration. Same fix (`pnpm install` → `build:generated` → `build:api` → restart workflows) resolved it; all secrets already present in `.replit`, no code changes needed. All 4 services confirmed up: api-server (8080, dispatcher/scheduler/cluster workers started), customer-portal (23434, landing page renders), ai-platform admin (20785, shows login gate as expected), mockup-sandbox (8081).
 Re-verified a further time 2026-07-14 (same day, another re-import): identical symptoms (artifacts/workflows re-registered automatically, `node_modules` missing). Same fix applied (`pnpm install` → `build:generated` → `build:api` → restart all 4 workflows) with no code changes. All secrets (including `ADMIN_API_KEY`/`VITE_ADMIN_API_KEY`) already present in `.replit`. All 4 services confirmed running and rendering correctly via screenshots.
 Re-verified once more 2026-07-14 (second pass same day): same wipe pattern (node_modules + artifact/workflow registration gone), same fix applied successfully. All 4 services re-confirmed running via screenshots: customer-portal landing page renders correctly (Indonesian copy, dashboard mockup), ai-platform shows the expected staff login gate (401 on API calls pre-login is expected, not a bug).
@@ -65,6 +118,7 @@ Re-verified a further time 2026-07-14 (same day, later re-import): identical sym
 Re-verified again 2026-07-14 (another re-import): `node_modules` + artifact/workflow registration wiped. Additionally, `artifacts/api-server/src/routes/templates.ts` had concatenated v1 stub lines (orphaned `router.get(…, requireAdminApiKey, …) => {` openers with no handler bodies, followed by full v2 handlers — causing esbuild "Unexpected export" syntax error). Fix: removed orphaned stubs via sed, stripped erroneous `/api` prefix from admin route paths. Then standard fix (`pnpm install` → `build:generated` → `build:api` → restart 4 workflows). All 4 services confirmed up: customer-portal landing page renders, ai-platform shows staff login gate, api-server scheduler/dispatcher/cluster workers started, mockup-sandbox vite server ready.
 Re-verified again 2026-07-14 (latest re-import): same wipe pattern. Additional fix needed: `artifacts/api-server/src/routes/templates.ts` had the concatenated-file bug (stale v1 route openers interleaved with v2 openers causing esbuild parse error). Removed the 10 stale lines (had `requireAdminApiKey` per-route). Then standard fix applied; all 4 services confirmed up.
 Re-verified again 2026-07-14: same wipe pattern. Additionally found concatenation bug in `artifacts/api-server/src/routes/templates.ts` — GitHub import had merged stale v1 route openers before each of the 10 admin routes; removed the stale lines. Fix: `pnpm install` → `build:generated` → `build:api` → restart 4 workflows. All 4 services confirmed up, customer-portal landing page renders correctly.
+Re-verified 2026-07-15: same wipe pattern (`node_modules` + registration). Additionally `artifacts/api-server/src/services/creativeWorkflowRunner.ts` had two concatenated-file bugs: duplicate `const isDocumentProject` declaration (lines 720-721, stale v1 using `finalDocumentType`) and duplicate `payloadJson` key in the `enqueue()` call (stale v1 line using `finalDocumentType`). Fixed both by removing the stale v1 lines. Fix: `pnpm install` → `build:generated` → fix concatenated bugs → `build:api` → `runPostMergeSetup()`. All 4 services confirmed up with clean build (0 errors, 0 warnings).
 Re-verified again 2026-07-14: same wipe pattern. `artifacts/api-server/src/routes/templates.ts` had concatenated-routes bug reintroduced (orphaned v1 route openings + wrong `/api/ai/templates/...` path prefix on v2 admin lines). Fixed by stripping v1 orphan lines and correcting paths to `/ai/templates/...` before `build:api`. All 4 services confirmed up via screenshots afterward.
 Re-verified a further time 2026-07-14 (same day, later re-import): identical symptom (`node_modules` + registration wiped), identical fix applied, all 4 services confirmed running again. Also fixed two code bugs uncovered during this import: (1) `templates.ts` imported `requireAdminApiKey` from `adminAuth.ts` but the export is named `adminAuth` — aliased on import; (2) `layout.tsx` used `LayoutTemplate` icon from lucide-react without importing it — added to import list.
 
@@ -78,6 +132,8 @@ Added a full Canva-like editor to the admin panel:
 
 Re-verified once more 2026-07-14 (later re-import): same wipe pattern, same fix, but this time two genuine code bugs surfaced (not present in earlier re-imports) and were fixed: (1) `templates.ts` imported a non-existent `requireAdminApiKey` export from `adminAuth.ts` — added it as an alias for `adminAuth`. (2) `ai-platform`'s `layout.tsx` referenced the `LayoutTemplate` lucide-react icon without importing it — added to the import list. All 4 services re-verified running via screenshot after the fixes.
 
+Re-verified again 2026-07-14 (latest): same wipe pattern (`node_modules` + registration gone; both known code fixes above were already present, no new bugs). Fix: `pnpm install` → `build:generated` → `build:api` → `runPostMergeSetup()` to re-register all 4 artifacts/workflows. All 4 services confirmed up via screenshot: customer-portal landing page renders, ai-platform shows staff login gate (401 on unauthenticated API call is expected), api-server and mockup-sandbox running clean.
+
 ## Key Technical Notes
 ## Database
 
@@ -88,5 +144,7 @@ Re-verified once more 2026-07-14 (later re-import): same wipe pattern, same fix,
 
 ## User Preferences
 
-- Keep existing project structure and stack — do not restructure
-- Use pnpm for all package management
+- Keep existing monorepo structure — do not migrate or restructure without asking
+- Use `pnpm` — never npm or yarn
+- Do not use `drizzle-kit push` for new tables (proposes dropping schema); write DDL by hand instead
+- Import from `@workspace/api-zod` in api-server routes — never import `zod/v4` directly

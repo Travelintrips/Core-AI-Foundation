@@ -5,6 +5,7 @@ import {
   creativeProjectsTable,
   creativeAiClientReviewsTable,
   creativeAiClientCommentsTable,
+  aiServiceRequestsTable,
 } from "@workspace/db";
 import { logAudit } from "../services/aiAuditService.js";
 import {
@@ -140,6 +141,141 @@ router.get("/creative-ai/projects/:id/client-reviews", async (req, res): Promise
   );
 
   res.json(withComments);
+});
+
+// ── Admin: Customer info for auto-filling the review form ─────────────────────
+
+/** GET /api/creative-ai/projects/:id/customer-info
+ *  Returns { name, email, phone } sourced from the linked service request.
+ *  Falls back to the most recent review's stored data if no service request. */
+router.get("/creative-ai/projects/:id/customer-info", async (req, res): Promise<void> => {
+  const projectId = req.params.id as string;
+
+  const [project] = await db
+    .select()
+    .from(creativeProjectsTable)
+    .where(eq(creativeProjectsTable.projectId, projectId));
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  // Primary source: linked service request has canonical customer data
+  if (project.serviceRequestId) {
+    const [sr] = await db
+      .select({
+        customerName: aiServiceRequestsTable.customerName,
+        customerEmail: aiServiceRequestsTable.customerEmail,
+        customerPhone: aiServiceRequestsTable.customerPhone,
+      })
+      .from(aiServiceRequestsTable)
+      .where(eq(aiServiceRequestsTable.id, project.serviceRequestId));
+
+    if (sr) {
+      res.json({ name: sr.customerName, email: sr.customerEmail, phone: sr.customerPhone ?? "" });
+      return;
+    }
+  }
+
+  // Fallback: pull from the most recent review for this project
+  const [latestReview] = await db
+    .select({
+      clientName: creativeAiClientReviewsTable.clientName,
+      clientEmail: creativeAiClientReviewsTable.clientEmail,
+      clientPhone: creativeAiClientReviewsTable.clientPhone,
+    })
+    .from(creativeAiClientReviewsTable)
+    .where(eq(creativeAiClientReviewsTable.projectId, projectId))
+    .orderBy(desc(creativeAiClientReviewsTable.createdAt))
+    .limit(1);
+
+  res.json({
+    name: latestReview?.clientName ?? "",
+    email: latestReview?.clientEmail ?? "",
+    phone: latestReview?.clientPhone ?? "",
+  });
+});
+
+// ── Admin: Resend review link after revision is complete ───────────────────────
+
+/** PATCH /api/creative-ai/client-reviews/:reviewId/resend
+ *  Reactivates a revision_requested review: generates a new token, extends
+ *  expiry 7 days, and emails the client that their revised work is ready. */
+router.patch("/creative-ai/client-reviews/:reviewId/resend", async (req, res): Promise<void> => {
+  const reviewId = parseInt(req.params.reviewId as string, 10);
+  if (isNaN(reviewId)) {
+    res.status(400).json({ error: "Invalid review ID" });
+    return;
+  }
+
+  const [review] = await db
+    .select()
+    .from(creativeAiClientReviewsTable)
+    .where(eq(creativeAiClientReviewsTable.id, reviewId));
+
+  if (!review) {
+    res.status(404).json({ error: "Review not found" });
+    return;
+  }
+
+  if (review.status !== "revision_requested") {
+    res.status(400).json({ error: `Review is in '${review.status}' status — can only resend from revision_requested` });
+    return;
+  }
+
+  // Generate fresh token so we can include the URL in the email
+  const { plaintext: newToken, hash: newHash } = generateReviewToken();
+  const newExpiresAt = new Date();
+  newExpiresAt.setDate(newExpiresAt.getDate() + DEFAULT_EXPIRY_DAYS);
+
+  const [updated] = await db
+    .update(creativeAiClientReviewsTable)
+    .set({
+      status: "shared",
+      reviewTokenHash: newHash,
+      tokenExpiresAt: newExpiresAt,
+      sharedAt: new Date(),
+      // Clear the revision timestamp so the timeline is clean
+      revisionRequestedAt: review.revisionRequestedAt, // preserve for history
+    })
+    .where(eq(creativeAiClientReviewsTable.id, reviewId))
+    .returning();
+
+  if (!updated) {
+    res.status(500).json({ error: "Failed to update review" });
+    return;
+  }
+
+  await logAudit("client-review", "review_resent_after_revision", String(reviewId), "client_review", "success", {
+    projectId: review.projectId,
+    clientName: review.clientName,
+  }).catch(() => {});
+
+  // Send email notification if client email is available
+  if (review.clientEmail) {
+    const base = process.env["CUSTOMER_PORTAL_BASE_URL"] ??
+      (process.env["REPLIT_DEV_DOMAIN"] ? `https://${process.env["REPLIT_DEV_DOMAIN"]}` : "");
+    const reviewUrl = base ? `${base}/review/creative/${newToken}` : null;
+
+    await clientReviewNotificationService
+      .notifyRevisionComplete(review.projectId, reviewId, review.clientName, review.clientEmail, reviewUrl ?? undefined)
+      .catch(() => {});
+  }
+
+  res.json({
+    ...updated,
+    token: newToken, // return so admin can copy if needed
+    tokenExpiresAt: updated.tokenExpiresAt.toISOString(),
+    sharedAt: updated.sharedAt?.toISOString() ?? null,
+    viewedAt: updated.viewedAt?.toISOString() ?? null,
+    approvedAt: updated.approvedAt?.toISOString() ?? null,
+    rejectedAt: updated.rejectedAt?.toISOString() ?? null,
+    revisionRequestedAt: updated.revisionRequestedAt?.toISOString() ?? null,
+    revokedAt: updated.revokedAt?.toISOString() ?? null,
+    createdAt: updated.createdAt.toISOString(),
+    updatedAt: updated.updatedAt.toISOString(),
+  });
 });
 
 // ── Admin: Revoke a review link ────────────────────────────────────────────────

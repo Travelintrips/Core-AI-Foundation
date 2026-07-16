@@ -11637,3 +11637,1171 @@ export const AiRegenerateElementResponse = zod.object({
 })
 
 
+/**
+ * @summary Admin — list / filter marketplace assets
+ */
+export const listCreativeMarketplaceAssetsAdminQueryLimitDefault = 24;
+export const listCreativeMarketplaceAssetsAdminQueryOffsetDefault = 0;
+
+export const ListCreativeMarketplaceAssetsAdminQueryParams = zod.object({
+  "assetType": zod.coerce.string().optional(),
+  "category": zod.coerce.string().optional(),
+  "priceType": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "featured": zod.coerce.boolean().optional(),
+  "creatorId": zod.coerce.number().optional(),
+  "sortBy": zod.enum(['newest', 'popular', 'rating', 'downloads']).optional(),
+  "limit": zod.coerce.number().default(listCreativeMarketplaceAssetsAdminQueryLimitDefault),
+  "offset": zod.coerce.number().default(listCreativeMarketplaceAssetsAdminQueryOffsetDefault)
+})
+
+export const ListCreativeMarketplaceAssetsAdminResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "assetCode": zod.string(),
+  "assetType": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().nullish(),
+  "creator": zod.union([zod.object({
+  "name": zod.string(),
+  "code": zod.string(),
+  "verified": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}),zod.null()]).optional(),
+  "priceType": zod.string(),
+  "priceAmount": zod.string(),
+  "currency": zod.string(),
+  "fileUrl": zod.string().nullish(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "fileFormat": zod.string().nullish(),
+  "license": zod.string(),
+  "isFeatured": zod.boolean(),
+  "isActive": zod.boolean(),
+  "downloadsCount": zod.number(),
+  "viewsCount": zod.number(),
+  "favoritesCount": zod.number(),
+  "avgRating": zod.string(),
+  "ratingsCount": zod.number(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Admin — create marketplace asset
+ */
+export const createCreativeMarketplaceAssetBodyPriceTypeDefault = `free`;
+export const createCreativeMarketplaceAssetBodyPriceAmountDefault = `0`;
+export const createCreativeMarketplaceAssetBodyCurrencyDefault = `IDR`;
+export const createCreativeMarketplaceAssetBodyLicenseDefault = `standard`;
+export const createCreativeMarketplaceAssetBodyIsFeaturedDefault = false;
+
+export const CreateCreativeMarketplaceAssetBody = zod.object({
+  "assetCode": zod.string(),
+  "assetType": zod.enum(['illustration', 'icon', 'cover', 'layout', 'background', 'photo', 'brand_pack']),
+  "title": zod.string(),
+  "description": zod.string().optional(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().optional(),
+  "priceType": zod.enum(['free', 'premium']).default(createCreativeMarketplaceAssetBodyPriceTypeDefault),
+  "priceAmount": zod.string().default(createCreativeMarketplaceAssetBodyPriceAmountDefault),
+  "currency": zod.string().default(createCreativeMarketplaceAssetBodyCurrencyDefault),
+  "fileUrl": zod.string().optional(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().optional(),
+  "fileFormat": zod.string().optional(),
+  "license": zod.enum(['standard', 'extended', 'exclusive']).default(createCreativeMarketplaceAssetBodyLicenseDefault),
+  "isFeatured": zod.boolean().default(createCreativeMarketplaceAssetBodyIsFeaturedDefault),
+  "metadata": zod.object({
+
+}).passthrough().optional()
+})
+
+export const CreateCreativeMarketplaceAssetResponse = zod.object({
+  "id": zod.number(),
+  "assetCode": zod.string(),
+  "assetType": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().nullish(),
+  "creator": zod.union([zod.object({
+  "name": zod.string(),
+  "code": zod.string(),
+  "verified": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}),zod.null()]).optional(),
+  "priceType": zod.string(),
+  "priceAmount": zod.string(),
+  "currency": zod.string(),
+  "fileUrl": zod.string().nullish(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "fileFormat": zod.string().nullish(),
+  "license": zod.string(),
+  "isFeatured": zod.boolean(),
+  "isActive": zod.boolean(),
+  "downloadsCount": zod.number(),
+  "viewsCount": zod.number(),
+  "favoritesCount": zod.number(),
+  "avgRating": zod.string(),
+  "ratingsCount": zod.number(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — get asset by id
+ */
+export const GetCreativeMarketplaceAssetAdminParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCreativeMarketplaceAssetAdminResponse = zod.object({
+  "id": zod.number(),
+  "assetCode": zod.string(),
+  "assetType": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().nullish(),
+  "creator": zod.union([zod.object({
+  "name": zod.string(),
+  "code": zod.string(),
+  "verified": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}),zod.null()]).optional(),
+  "priceType": zod.string(),
+  "priceAmount": zod.string(),
+  "currency": zod.string(),
+  "fileUrl": zod.string().nullish(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "fileFormat": zod.string().nullish(),
+  "license": zod.string(),
+  "isFeatured": zod.boolean(),
+  "isActive": zod.boolean(),
+  "downloadsCount": zod.number(),
+  "viewsCount": zod.number(),
+  "favoritesCount": zod.number(),
+  "avgRating": zod.string(),
+  "ratingsCount": zod.number(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — update asset
+ */
+export const UpdateCreativeMarketplaceAssetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateCreativeMarketplaceAssetBody = zod.object({
+  "title": zod.string().optional(),
+  "description": zod.string().optional(),
+  "category": zod.string().optional(),
+  "tags": zod.array(zod.string()).optional(),
+  "priceType": zod.string().optional(),
+  "priceAmount": zod.string().optional(),
+  "fileUrl": zod.string().optional(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().optional(),
+  "fileFormat": zod.string().optional(),
+  "license": zod.string().optional(),
+  "metadata": zod.object({
+
+}).passthrough().optional()
+})
+
+export const UpdateCreativeMarketplaceAssetResponse = zod.object({
+  "id": zod.number(),
+  "assetCode": zod.string(),
+  "assetType": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().nullish(),
+  "creator": zod.union([zod.object({
+  "name": zod.string(),
+  "code": zod.string(),
+  "verified": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}),zod.null()]).optional(),
+  "priceType": zod.string(),
+  "priceAmount": zod.string(),
+  "currency": zod.string(),
+  "fileUrl": zod.string().nullish(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "fileFormat": zod.string().nullish(),
+  "license": zod.string(),
+  "isFeatured": zod.boolean(),
+  "isActive": zod.boolean(),
+  "downloadsCount": zod.number(),
+  "viewsCount": zod.number(),
+  "favoritesCount": zod.number(),
+  "avgRating": zod.string(),
+  "ratingsCount": zod.number(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — toggle featured status
+ */
+export const FeatureCreativeMarketplaceAssetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const FeatureCreativeMarketplaceAssetBody = zod.object({
+  "featured": zod.boolean().optional()
+})
+
+export const FeatureCreativeMarketplaceAssetResponse = zod.object({
+  "id": zod.number(),
+  "assetCode": zod.string(),
+  "assetType": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().nullish(),
+  "creator": zod.union([zod.object({
+  "name": zod.string(),
+  "code": zod.string(),
+  "verified": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}),zod.null()]).optional(),
+  "priceType": zod.string(),
+  "priceAmount": zod.string(),
+  "currency": zod.string(),
+  "fileUrl": zod.string().nullish(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "fileFormat": zod.string().nullish(),
+  "license": zod.string(),
+  "isFeatured": zod.boolean(),
+  "isActive": zod.boolean(),
+  "downloadsCount": zod.number(),
+  "viewsCount": zod.number(),
+  "favoritesCount": zod.number(),
+  "avgRating": zod.string(),
+  "ratingsCount": zod.number(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — toggle active/inactive
+ */
+export const ActivateCreativeMarketplaceAssetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ActivateCreativeMarketplaceAssetBody = zod.object({
+  "active": zod.boolean().optional()
+})
+
+export const ActivateCreativeMarketplaceAssetResponse = zod.object({
+  "id": zod.number(),
+  "assetCode": zod.string(),
+  "assetType": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().nullish(),
+  "creator": zod.union([zod.object({
+  "name": zod.string(),
+  "code": zod.string(),
+  "verified": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}),zod.null()]).optional(),
+  "priceType": zod.string(),
+  "priceAmount": zod.string(),
+  "currency": zod.string(),
+  "fileUrl": zod.string().nullish(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "fileFormat": zod.string().nullish(),
+  "license": zod.string(),
+  "isFeatured": zod.boolean(),
+  "isActive": zod.boolean(),
+  "downloadsCount": zod.number(),
+  "viewsCount": zod.number(),
+  "favoritesCount": zod.number(),
+  "avgRating": zod.string(),
+  "ratingsCount": zod.number(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — list creators
+ */
+export const listCreativeMarketplaceCreatorsAdminQueryLimitDefault = 24;
+export const listCreativeMarketplaceCreatorsAdminQueryOffsetDefault = 0;
+
+export const ListCreativeMarketplaceCreatorsAdminQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "isVerified": zod.coerce.boolean().optional(),
+  "limit": zod.coerce.number().default(listCreativeMarketplaceCreatorsAdminQueryLimitDefault),
+  "offset": zod.coerce.number().default(listCreativeMarketplaceCreatorsAdminQueryOffsetDefault)
+})
+
+export const ListCreativeMarketplaceCreatorsAdminResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "creatorCode": zod.string(),
+  "displayName": zod.string(),
+  "bio": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish(),
+  "websiteUrl": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "isVerified": zod.boolean(),
+  "isActive": zod.boolean(),
+  "totalAssets": zod.number(),
+  "totalDownloads": zod.number(),
+  "avgRating": zod.string(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Admin — create creator
+ */
+export const createCreativeMarketplaceCreatorBodyIsVerifiedDefault = false;
+
+export const CreateCreativeMarketplaceCreatorBody = zod.object({
+  "creatorCode": zod.string(),
+  "displayName": zod.string(),
+  "bio": zod.string().optional(),
+  "avatarUrl": zod.string().optional(),
+  "websiteUrl": zod.string().optional(),
+  "email": zod.string().optional(),
+  "isVerified": zod.boolean().default(createCreativeMarketplaceCreatorBodyIsVerifiedDefault),
+  "metadata": zod.object({
+
+}).passthrough().optional()
+})
+
+export const CreateCreativeMarketplaceCreatorResponse = zod.object({
+  "id": zod.number(),
+  "creatorCode": zod.string(),
+  "displayName": zod.string(),
+  "bio": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish(),
+  "websiteUrl": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "isVerified": zod.boolean(),
+  "isActive": zod.boolean(),
+  "totalAssets": zod.number(),
+  "totalDownloads": zod.number(),
+  "avgRating": zod.string(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — get creator with assets
+ */
+export const GetCreativeMarketplaceCreatorAdminParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCreativeMarketplaceCreatorAdminResponse = zod.object({
+  "id": zod.number(),
+  "creatorCode": zod.string(),
+  "displayName": zod.string(),
+  "bio": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish(),
+  "websiteUrl": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "isVerified": zod.boolean(),
+  "isActive": zod.boolean(),
+  "totalAssets": zod.number(),
+  "totalDownloads": zod.number(),
+  "avgRating": zod.string(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "assets": zod.array(zod.object({
+  "id": zod.number(),
+  "assetCode": zod.string(),
+  "assetType": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().nullish(),
+  "creator": zod.union([zod.object({
+  "name": zod.string(),
+  "code": zod.string(),
+  "verified": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}),zod.null()]).optional(),
+  "priceType": zod.string(),
+  "priceAmount": zod.string(),
+  "currency": zod.string(),
+  "fileUrl": zod.string().nullish(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "fileFormat": zod.string().nullish(),
+  "license": zod.string(),
+  "isFeatured": zod.boolean(),
+  "isActive": zod.boolean(),
+  "downloadsCount": zod.number(),
+  "viewsCount": zod.number(),
+  "favoritesCount": zod.number(),
+  "avgRating": zod.string(),
+  "ratingsCount": zod.number(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+}))
+
+
+/**
+ * @summary Admin — update creator
+ */
+export const UpdateCreativeMarketplaceCreatorParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateCreativeMarketplaceCreatorBody = zod.object({
+  "displayName": zod.string().optional(),
+  "bio": zod.string().optional(),
+  "avatarUrl": zod.string().optional(),
+  "websiteUrl": zod.string().optional(),
+  "isVerified": zod.boolean().optional(),
+  "isActive": zod.boolean().optional(),
+  "metadata": zod.object({
+
+}).passthrough().optional()
+})
+
+export const UpdateCreativeMarketplaceCreatorResponse = zod.object({
+  "id": zod.number(),
+  "creatorCode": zod.string(),
+  "displayName": zod.string(),
+  "bio": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish(),
+  "websiteUrl": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "isVerified": zod.boolean(),
+  "isActive": zod.boolean(),
+  "totalAssets": zod.number(),
+  "totalDownloads": zod.number(),
+  "avgRating": zod.string(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Admin — marketplace analytics dashboard
+ */
+export const GetCreativeMarketplaceAnalyticsResponse = zod.object({
+  "totalAssets": zod.number(),
+  "freeAssets": zod.number(),
+  "premiumAssets": zod.number(),
+  "totalCreators": zod.number(),
+  "verifiedCreators": zod.number(),
+  "totalDownloads": zod.number(),
+  "totalFavorites": zod.number(),
+  "totalRatings": zod.number(),
+  "avgRating": zod.number(),
+  "byType": zod.array(zod.object({
+  "assetType": zod.string(),
+  "count": zod.number(),
+  "downloads": zod.number()
+}))
+})
+
+
+/**
+ * @summary Admin — download event log
+ */
+export const listCreativeMarketplaceDownloadsAdminQueryLimitDefault = 100;
+export const listCreativeMarketplaceDownloadsAdminQueryOffsetDefault = 0;
+
+export const ListCreativeMarketplaceDownloadsAdminQueryParams = zod.object({
+  "limit": zod.coerce.number().default(listCreativeMarketplaceDownloadsAdminQueryLimitDefault),
+  "offset": zod.coerce.number().default(listCreativeMarketplaceDownloadsAdminQueryOffsetDefault)
+})
+
+export const ListCreativeMarketplaceDownloadsAdminResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "customerEmail": zod.string().nullish(),
+  "itemType": zod.string(),
+  "itemId": zod.number(),
+  "ipAddress": zod.string().nullish(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Public — featured assets
+ */
+export const listFeaturedCreativeMarketplaceAssetsQueryLimitDefault = 12;
+
+export const ListFeaturedCreativeMarketplaceAssetsQueryParams = zod.object({
+  "limit": zod.coerce.number().default(listFeaturedCreativeMarketplaceAssetsQueryLimitDefault)
+})
+
+export const ListFeaturedCreativeMarketplaceAssetsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "assetCode": zod.string(),
+  "assetType": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().nullish(),
+  "creator": zod.union([zod.object({
+  "name": zod.string(),
+  "code": zod.string(),
+  "verified": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}),zod.null()]).optional(),
+  "priceType": zod.string(),
+  "priceAmount": zod.string(),
+  "currency": zod.string(),
+  "fileUrl": zod.string().nullish(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "fileFormat": zod.string().nullish(),
+  "license": zod.string(),
+  "isFeatured": zod.boolean(),
+  "isActive": zod.boolean(),
+  "downloadsCount": zod.number(),
+  "viewsCount": zod.number(),
+  "favoritesCount": zod.number(),
+  "avgRating": zod.string(),
+  "ratingsCount": zod.number(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Public — list asset types and categories
+ */
+export const ListMarketplaceCategoriesResponse = zod.object({
+  "assetTypes": zod.array(zod.string()),
+  "categories": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Public — search templates and assets
+ */
+export const searchMarketplaceQueryLimitDefault = 20;
+
+export const SearchMarketplaceQueryParams = zod.object({
+  "q": zod.coerce.string(),
+  "assetType": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(searchMarketplaceQueryLimitDefault)
+})
+
+export const SearchMarketplaceResponse = zod.object({
+  "assets": zod.array(zod.object({
+  "id": zod.number(),
+  "assetCode": zod.string(),
+  "assetType": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().nullish(),
+  "creator": zod.union([zod.object({
+  "name": zod.string(),
+  "code": zod.string(),
+  "verified": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}),zod.null()]).optional(),
+  "priceType": zod.string(),
+  "priceAmount": zod.string(),
+  "currency": zod.string(),
+  "fileUrl": zod.string().nullish(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "fileFormat": zod.string().nullish(),
+  "license": zod.string(),
+  "isFeatured": zod.boolean(),
+  "isActive": zod.boolean(),
+  "downloadsCount": zod.number(),
+  "viewsCount": zod.number(),
+  "favoritesCount": zod.number(),
+  "avgRating": zod.string(),
+  "ratingsCount": zod.number(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "templates": zod.array(zod.object({
+
+}).passthrough()),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Public — browse assets
+ */
+export const listCreativeMarketplaceAssetsPublicQueryLimitDefault = 24;
+export const listCreativeMarketplaceAssetsPublicQueryOffsetDefault = 0;
+
+export const ListCreativeMarketplaceAssetsPublicQueryParams = zod.object({
+  "assetType": zod.coerce.string().optional(),
+  "category": zod.coerce.string().optional(),
+  "priceType": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "sortBy": zod.enum(['newest', 'popular', 'rating', 'downloads']).optional(),
+  "limit": zod.coerce.number().default(listCreativeMarketplaceAssetsPublicQueryLimitDefault),
+  "offset": zod.coerce.number().default(listCreativeMarketplaceAssetsPublicQueryOffsetDefault)
+})
+
+export const ListCreativeMarketplaceAssetsPublicResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "assetCode": zod.string(),
+  "assetType": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().nullish(),
+  "creator": zod.union([zod.object({
+  "name": zod.string(),
+  "code": zod.string(),
+  "verified": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}),zod.null()]).optional(),
+  "priceType": zod.string(),
+  "priceAmount": zod.string(),
+  "currency": zod.string(),
+  "fileUrl": zod.string().nullish(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "fileFormat": zod.string().nullish(),
+  "license": zod.string(),
+  "isFeatured": zod.boolean(),
+  "isActive": zod.boolean(),
+  "downloadsCount": zod.number(),
+  "viewsCount": zod.number(),
+  "favoritesCount": zod.number(),
+  "avgRating": zod.string(),
+  "ratingsCount": zod.number(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Public — get asset detail (records view)
+ */
+export const GetCreativeMarketplaceAssetPublicParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCreativeMarketplaceAssetPublicResponse = zod.object({
+  "id": zod.number(),
+  "assetCode": zod.string(),
+  "assetType": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().nullish(),
+  "creator": zod.union([zod.object({
+  "name": zod.string(),
+  "code": zod.string(),
+  "verified": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}),zod.null()]).optional(),
+  "priceType": zod.string(),
+  "priceAmount": zod.string(),
+  "currency": zod.string(),
+  "fileUrl": zod.string().nullish(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "fileFormat": zod.string().nullish(),
+  "license": zod.string(),
+  "isFeatured": zod.boolean(),
+  "isActive": zod.boolean(),
+  "downloadsCount": zod.number(),
+  "viewsCount": zod.number(),
+  "favoritesCount": zod.number(),
+  "avgRating": zod.string(),
+  "ratingsCount": zod.number(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Public — download asset (tracks event)
+ */
+export const DownloadCreativeMarketplaceAssetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DownloadCreativeMarketplaceAssetBody = zod.object({
+  "customerEmail": zod.string().email().optional()
+})
+
+export const DownloadCreativeMarketplaceAssetResponse = zod.object({
+  "downloadUrl": zod.string().nullish(),
+  "asset": zod.object({
+  "id": zod.number(),
+  "assetCode": zod.string(),
+  "assetType": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().nullish(),
+  "creator": zod.union([zod.object({
+  "name": zod.string(),
+  "code": zod.string(),
+  "verified": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}),zod.null()]).optional(),
+  "priceType": zod.string(),
+  "priceAmount": zod.string(),
+  "currency": zod.string(),
+  "fileUrl": zod.string().nullish(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "fileFormat": zod.string().nullish(),
+  "license": zod.string(),
+  "isFeatured": zod.boolean(),
+  "isActive": zod.boolean(),
+  "downloadsCount": zod.number(),
+  "viewsCount": zod.number(),
+  "favoritesCount": zod.number(),
+  "avgRating": zod.string(),
+  "ratingsCount": zod.number(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+})
+
+
+/**
+ * @summary Public — rate an asset
+ */
+export const RateCreativeMarketplaceAssetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const rateCreativeMarketplaceAssetBodyRatingMax = 5;
+
+
+
+export const RateCreativeMarketplaceAssetBody = zod.object({
+  "customerEmail": zod.string().email(),
+  "rating": zod.number().min(1).max(rateCreativeMarketplaceAssetBodyRatingMax),
+  "review": zod.string().optional()
+})
+
+export const RateCreativeMarketplaceAssetResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Public — get ratings for an asset
+ */
+export const GetCreativeMarketplaceAssetRatingsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const getCreativeMarketplaceAssetRatingsResponseItemsItemRatingMax = 5;
+
+
+
+export const GetCreativeMarketplaceAssetRatingsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "customerEmail": zod.string(),
+  "itemType": zod.string(),
+  "itemId": zod.number(),
+  "rating": zod.number().min(1).max(getCreativeMarketplaceAssetRatingsResponseItemsItemRatingMax),
+  "review": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date().optional()
+}))
+})
+
+
+/**
+ * @summary Public — list creators
+ */
+export const listCreativeMarketplaceCreatorsPublicQueryLimitDefault = 24;
+export const listCreativeMarketplaceCreatorsPublicQueryOffsetDefault = 0;
+
+export const ListCreativeMarketplaceCreatorsPublicQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(listCreativeMarketplaceCreatorsPublicQueryLimitDefault),
+  "offset": zod.coerce.number().default(listCreativeMarketplaceCreatorsPublicQueryOffsetDefault)
+})
+
+export const ListCreativeMarketplaceCreatorsPublicResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "creatorCode": zod.string(),
+  "displayName": zod.string(),
+  "bio": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish(),
+  "websiteUrl": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "isVerified": zod.boolean(),
+  "isActive": zod.boolean(),
+  "totalAssets": zod.number(),
+  "totalDownloads": zod.number(),
+  "avgRating": zod.string(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+
+/**
+ * @summary Public — creator profile with assets
+ */
+export const GetCreativeMarketplaceCreatorPublicParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCreativeMarketplaceCreatorPublicResponse = zod.object({
+  "id": zod.number(),
+  "creatorCode": zod.string(),
+  "displayName": zod.string(),
+  "bio": zod.string().nullish(),
+  "avatarUrl": zod.string().nullish(),
+  "websiteUrl": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "isVerified": zod.boolean(),
+  "isActive": zod.boolean(),
+  "totalAssets": zod.number(),
+  "totalDownloads": zod.number(),
+  "avgRating": zod.string(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}).and(zod.object({
+  "assets": zod.array(zod.object({
+  "id": zod.number(),
+  "assetCode": zod.string(),
+  "assetType": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().nullish(),
+  "creator": zod.union([zod.object({
+  "name": zod.string(),
+  "code": zod.string(),
+  "verified": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}),zod.null()]).optional(),
+  "priceType": zod.string(),
+  "priceAmount": zod.string(),
+  "currency": zod.string(),
+  "fileUrl": zod.string().nullish(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "fileFormat": zod.string().nullish(),
+  "license": zod.string(),
+  "isFeatured": zod.boolean(),
+  "isActive": zod.boolean(),
+  "downloadsCount": zod.number(),
+  "viewsCount": zod.number(),
+  "favoritesCount": zod.number(),
+  "avgRating": zod.string(),
+  "ratingsCount": zod.number(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}))
+}))
+
+
+/**
+ * @summary Workspace — get favorites
+ */
+export const GetWorkspaceMarketplaceFavoritesParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetWorkspaceMarketplaceFavoritesResponse = zod.object({
+  "favorites": zod.array(zod.object({
+  "id": zod.number(),
+  "customerEmail": zod.string(),
+  "itemType": zod.string(),
+  "itemId": zod.number(),
+  "createdAt": zod.coerce.date()
+})),
+  "assets": zod.array(zod.object({
+  "id": zod.number(),
+  "assetCode": zod.string(),
+  "assetType": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().nullish(),
+  "creator": zod.union([zod.object({
+  "name": zod.string(),
+  "code": zod.string(),
+  "verified": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}),zod.null()]).optional(),
+  "priceType": zod.string(),
+  "priceAmount": zod.string(),
+  "currency": zod.string(),
+  "fileUrl": zod.string().nullish(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "fileFormat": zod.string().nullish(),
+  "license": zod.string(),
+  "isFeatured": zod.boolean(),
+  "isActive": zod.boolean(),
+  "downloadsCount": zod.number(),
+  "viewsCount": zod.number(),
+  "favoritesCount": zod.number(),
+  "avgRating": zod.string(),
+  "ratingsCount": zod.number(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "templates": zod.array(zod.object({
+
+}).passthrough())
+})
+
+
+/**
+ * @summary Workspace — add favorite
+ */
+export const AddWorkspaceMarketplaceFavoriteParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const AddWorkspaceMarketplaceFavoriteBody = zod.object({
+  "itemType": zod.enum(['asset', 'template']),
+  "itemId": zod.number()
+})
+
+export const AddWorkspaceMarketplaceFavoriteResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Workspace — remove favorite
+ */
+export const RemoveWorkspaceMarketplaceFavoriteParams = zod.object({
+  "token": zod.coerce.string(),
+  "itemType": zod.coerce.string(),
+  "itemId": zod.coerce.number()
+})
+
+export const RemoveWorkspaceMarketplaceFavoriteResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Workspace — download history
+ */
+export const GetWorkspaceCreativeMarketplaceDownloadsParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const getWorkspaceCreativeMarketplaceDownloadsQueryLimitDefault = 50;
+
+export const GetWorkspaceCreativeMarketplaceDownloadsQueryParams = zod.object({
+  "limit": zod.coerce.number().default(getWorkspaceCreativeMarketplaceDownloadsQueryLimitDefault)
+})
+
+export const GetWorkspaceCreativeMarketplaceDownloadsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "customerEmail": zod.string().nullish(),
+  "itemType": zod.string(),
+  "itemId": zod.number(),
+  "ipAddress": zod.string().nullish(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Workspace — browse assets with personalization
+ */
+export const GetWorkspaceCreativeMarketplaceAssetsParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const getWorkspaceCreativeMarketplaceAssetsQueryLimitDefault = 24;
+export const getWorkspaceCreativeMarketplaceAssetsQueryOffsetDefault = 0;
+
+export const GetWorkspaceCreativeMarketplaceAssetsQueryParams = zod.object({
+  "assetType": zod.coerce.string().optional(),
+  "category": zod.coerce.string().optional(),
+  "priceType": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional(),
+  "sortBy": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().default(getWorkspaceCreativeMarketplaceAssetsQueryLimitDefault),
+  "offset": zod.coerce.number().default(getWorkspaceCreativeMarketplaceAssetsQueryOffsetDefault)
+})
+
+export const GetWorkspaceCreativeMarketplaceAssetsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "assetCode": zod.string(),
+  "assetType": zod.string(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "category": zod.string(),
+  "tags": zod.array(zod.string()).optional(),
+  "creatorId": zod.number().nullish(),
+  "creator": zod.union([zod.object({
+  "name": zod.string(),
+  "code": zod.string(),
+  "verified": zod.boolean(),
+  "avatarUrl": zod.string().nullish()
+}),zod.null()]).optional(),
+  "priceType": zod.string(),
+  "priceAmount": zod.string(),
+  "currency": zod.string(),
+  "fileUrl": zod.string().nullish(),
+  "previewUrls": zod.array(zod.string()).optional(),
+  "thumbnailUrl": zod.string().nullish(),
+  "fileSizeBytes": zod.number().nullish(),
+  "fileFormat": zod.string().nullish(),
+  "license": zod.string(),
+  "isFeatured": zod.boolean(),
+  "isActive": zod.boolean(),
+  "downloadsCount": zod.number(),
+  "viewsCount": zod.number(),
+  "favoritesCount": zod.number(),
+  "avgRating": zod.string(),
+  "ratingsCount": zod.number(),
+  "metadata": zod.object({
+
+}).passthrough().optional(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "total": zod.number()
+})
+
+

@@ -253,14 +253,16 @@ beforeEach(() => {
 // ── A. Registry ───────────────────────────────────────────────────────────────
 
 describe("A. Document registry", () => {
-  it("registers all 5 supported document types", () => {
+  it("registers all supported document types", () => {
     const types = getSupportedDocumentTypes();
     expect(types).toContain("company_profile");
     expect(types).toContain("brand_strategy");
     expect(types).toContain("copywriting");
     expect(types).toContain("creative_consultation");
     expect(types).toContain("brand_identity_guideline");
-    expect(types).toHaveLength(5);
+    expect(types).toContain("fashion_design");
+    expect(types).toContain("interior_design");
+    expect(types).toHaveLength(7);
   });
 
   it("returns a definition for every registered type with correct contract shape", () => {

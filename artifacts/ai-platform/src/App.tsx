@@ -41,6 +41,7 @@ import Payments from "@/pages/payments";
 import PortfolioAdmin from "@/pages/portfolio-admin";
 import CreativeIntelligence from "@/pages/creative-intelligence";
 import TemplateMarketplace from "@/pages/template-marketplace";
+import TemplateEngine from "@/pages/template-engine";
 import CommercialPage from "@/pages/commercial";
 import PromotionsPage from "@/pages/promotions";
 import CouponsPage from "@/pages/coupons";
@@ -51,6 +52,14 @@ import ObservabilityPage from "@/pages/observability";
 import ProductionPipelinePage from "@/pages/production-pipeline";
 import DesignStudio from "@/pages/design-studio";
 import DesignStudioEditor from "@/pages/design-studio-editor";
+import CreativeMarketplace from "@/pages/creative-marketplace";
+import DesignRenderBatches from "@/pages/design-render-batches";
+import DesignRenderBatchesNew from "@/pages/design-render-batches-new";
+import DesignRenderBatchDetail from "@/pages/design-render-batch-detail";
+import DesignTemplateAiCreate from "@/pages/design-template-ai-create";
+import DesignTemplateEditor from "@/pages/design-template-editor";
+import DesignTemplates from "@/pages/design-templates";
+import DesignTemplateDetail from "@/pages/design-template-detail";
 
 const queryClient = new QueryClient();
 
@@ -96,8 +105,17 @@ function AdminRouter() {
         <Route path="/production-pipeline" component={ProductionPipelinePage} />
         <Route path="/creative-intelligence" component={CreativeIntelligence} />
         <Route path="/template-marketplace" component={TemplateMarketplace} />
+        <Route path="/template-engine" component={TemplateEngine} />
         <Route path="/design-studio" component={DesignStudio} />
         <Route path="/design-studio/:id" component={DesignStudioEditor} />
+        <Route path="/design-templates/ai-create" component={DesignTemplateAiCreate} />
+        <Route path="/design-templates/:id/editor" component={DesignTemplateEditor} />
+        <Route path="/design-templates/:id" component={DesignTemplateDetail} />
+        <Route path="/design-templates" component={DesignTemplates} />
+        <Route path="/creative-marketplace" component={CreativeMarketplace} />
+        <Route path="/design-render-batches/new" component={DesignRenderBatchesNew} />
+        <Route path="/design-render-batches/:id" component={DesignRenderBatchDetail} />
+        <Route path="/design-render-batches" component={DesignRenderBatches} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

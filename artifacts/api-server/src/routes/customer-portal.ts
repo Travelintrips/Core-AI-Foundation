@@ -6,6 +6,7 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { randomUUID, createHash } from "crypto";
+import { getPublicBaseUrl } from "../lib/publicBaseUrl";
 import {
   db,
   creativeProjectsTable,
@@ -54,13 +55,7 @@ function hashEmail(email: string): string {
 
 /** Build the base URL for constructing portal links from a request */
 function buildBaseUrl(req: import("express").Request): string {
-  // On Replit, REPLIT_DEV_DOMAIN gives the correct public domain
-  if (process.env["REPLIT_DEV_DOMAIN"]) {
-    return `https://${process.env["REPLIT_DEV_DOMAIN"]}`;
-  }
-  const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0] ?? req.protocol;
-  const host = (req.headers["x-forwarded-host"] as string | undefined) ?? req.get("host") ?? "localhost";
-  return `${proto}://${host}`;
+  return getPublicBaseUrl(req);
 }
 
 const DASHBOARD_TOKEN_EXPIRY_DAYS = 30;

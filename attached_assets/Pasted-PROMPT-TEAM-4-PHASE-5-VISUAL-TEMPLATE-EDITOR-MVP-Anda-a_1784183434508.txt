@@ -1,0 +1,477 @@
+PROMPT TEAM 4 — PHASE 5: VISUAL TEMPLATE EDITOR MVP
+
+Anda adalah Team 4 — Visual Editor Team.
+
+Branch:
+
+feature/design-template-phase5-editor
+
+Mulai dari commit Phase 2 yang sama. Jangan merge ke main.
+
+Target
+
+Bangun Visual Template Editor MVP untuk membuat dan mengubah draft template JSON.
+
+Target bukan meniru seluruh Canva.
+
+Fitur utama:
+
+canvas,
+add text,
+add image placeholder,
+add shape,
+add line,
+add QR,
+drag,
+resize,
+rotate,
+z-index,
+duplicate,
+delete,
+lock,
+element properties,
+variable binding,
+sample data preview,
+save draft,
+create new version,
+publish handoff.
+Keputusan Library
+
+Audit apakah repository sudah memakai Fabric.js atau Konva.
+
+Gunakan existing library bila ada.
+
+Jika belum, pilih satu:
+
+Konva + react-konva, atau
+Fabric.js.
+
+Jangan memasang keduanya.
+
+Keputusan harus mempertimbangkan:
+
+React integration,
+serialization,
+text handling,
+image loading,
+transform controls,
+bundle size,
+existing stack.
+Batas Scope
+
+Anda tidak mengerjakan:
+
+Template Library utama,
+batch queue,
+ZIP,
+CSV/XLSX mapping,
+AI prompt generator,
+backend renderer,
+tambahan tipe elemen backend di luar schema existing.
+
+Editor harus menghasilkan JSON yang kompatibel dengan schema Phase 1/2.
+
+Jangan membuat schema editor sendiri yang tidak kompatibel.
+
+Kepemilikan File
+
+Boleh membuat:
+
+artifacts/bizportal/src/pages/design-template-editor/
+artifacts/bizportal/src/components/design-editor/
+artifacts/bizportal/src/hooks/design-editor/
+artifacts/bizportal/src/services/design-editor-api.ts
+artifacts/bizportal/src/state/design-editor/
+artifacts/bizportal/src/utils/design-editor/
+
+Boleh mengubah minimal:
+
+frontend route registry
+sidebar link jika diperlukan
+package.json frontend
+lockfile
+
+Jangan mengubah:
+
+backend renderer
+designRenderWorkerService.ts
+designRenderBatchService.ts
+ZIP services
+dataset mapping files
+AI template generator
+Route
+
+Gunakan:
+
+/design-templates/:id/editor
+
+Kontrak ini harus sama dengan Team 3.
+
+Editor Layout
+
+Gunakan layout:
+
+Top Bar
+- Back
+- Template name
+- Draft/published status
+- Undo
+- Redo
+- Preview
+- Save
+- Publish
+
+Left Sidebar
+- Elements
+- Text
+- Uploads/Images
+- Variables
+- Layers
+- Canvas
+
+Center
+- Canvas workspace
+
+Right Sidebar
+- Position
+- Size
+- Rotation
+- Opacity
+- Typography
+- Fill
+- Border
+- Shadow
+- Binding
+- Visibility
+
+Tidak harus semua property sangat lengkap, tetapi struktur harus extensible.
+
+State Model
+
+Gunakan satu canonical editor state.
+
+Minimal:
+
+type EditorState = {
+  templateId: string;
+  baseVersionId?: string;
+  canvas: CanvasDefinition;
+  elements: DesignElement[];
+  variables: TemplateVariable[];
+  selectedElementIds: string[];
+  sampleData: Record<string, unknown>;
+  dirty: boolean;
+  history: EditorHistory;
+};
+
+Jangan menyimpan binary image di state.
+
+Gunakan asset IDs atau safe URLs.
+
+Serialization
+
+Editor harus:
+
+load template JSON,
+normalisasi schema,
+render ke canvas,
+edit,
+serialize kembali ke schema backend,
+validate sebelum save.
+
+Jangan menyimpan Fabric/Konva internal JSON sebagai canonical template JSON jika berbeda dari domain schema.
+
+Buat adapter:
+
+DesignTemplate JSON
+↔
+Editor Scene Model
+
+Tambahkan round-trip tests.
+
+Elements
+Text
+
+Dukung:
+
+static text,
+variable-bound text,
+font family dari safe registry,
+font size,
+weight,
+italic,
+color,
+alignment,
+line height dasar,
+opacity,
+rotation,
+auto-shrink settings,
+max lines.
+
+Editor preview tidak perlu pixel-perfect terhadap backend, tetapi final preview harus selalu tersedia melalui backend Preview API.
+
+Image
+
+Dukung:
+
+image placeholder,
+asset selection,
+cover/contain/fill,
+crop basic jika library mendukung dengan aman,
+border radius,
+opacity,
+rotation,
+variable binding.
+
+Jangan mengizinkan arbitrary remote URL tanpa backend asset validation.
+
+Shape
+
+Dukung:
+
+rectangle,
+rounded rectangle,
+circle,
+fill,
+border,
+opacity,
+rotation.
+Line
+
+Dukung:
+
+color,
+width,
+dash jika schema mendukung,
+rotation.
+QR
+
+Dukung element placeholder dengan:
+
+binding variable,
+foreground,
+background,
+margin.
+
+Tidak perlu menghasilkan QR final sendiri sebagai source of truth. Canvas dapat menampilkan placeholder atau preview lokal, tetapi backend preview adalah final.
+
+Canvas
+
+Dukung:
+
+width,
+height,
+background color,
+background asset jika schema mendukung,
+zoom,
+fit-to-screen,
+ruler/guides sederhana jika mudah,
+safe work area.
+
+Batasi ukuran menggunakan DESIGN_LIMITS.
+
+Manipulation
+
+Dukung:
+
+select,
+drag,
+resize,
+rotate,
+duplicate,
+delete,
+lock,
+bring forward,
+send backward,
+bring to front,
+send to back,
+alignment basic,
+keyboard delete,
+arrow-key movement.
+
+Multi-select boleh dibatasi jika berisiko.
+
+Layers
+
+Tampilkan layer list:
+
+name,
+type,
+visible,
+locked,
+reorder.
+
+Reorder harus memperbarui zIndex deterministic.
+
+Variables
+
+Editor dapat:
+
+melihat variables,
+menambah variable,
+edit label/default/required,
+menghapus variable yang tidak terpakai,
+bind element,
+melihat warning jika menghapus variable yang sedang dipakai.
+
+Gunakan type existing:
+
+text
+number
+currency
+image
+color
+url
+date
+boolean
+
+Jangan menambah expression JavaScript.
+
+Visibility
+
+Dukung conditional visibility existing:
+
+equals,
+not equals,
+exists,
+truthy/falsy sesuai schema.
+
+Jangan membuat expression engine baru.
+
+Undo/Redo
+
+Implementasikan bounded history.
+
+Jangan menyimpan asset binary di history.
+
+Konfigurasi internal misalnya maksimal 50–100 langkah.
+
+Group perubahan drag kontinu agar tidak membuat ratusan history entry.
+
+Save dan Versioning
+
+Save draft:
+
+validate,
+kirim template JSON,
+buat draft version baru sesuai API contract existing,
+tidak mengubah published version.
+
+Jika backend hanya mendukung create version, gunakan endpoint tersebut.
+
+Jangan mengedit immutable version.
+
+Tambahkan autosave hanya jika aman. Untuk MVP, explicit save lebih baik daripada autosave yang berisiko.
+
+Backend Preview
+
+Tombol Preview harus menggunakan:
+
+POST /api/ai/design-templates/:id/preview
+
+Kirim current unsaved template hanya jika backend mendukung preview draft payload secara aman. Jika tidak, save draft dulu lalu preview version.
+
+Jangan menganggap canvas frontend identik dengan final render.
+
+Tampilkan label:
+
+Final Renderer Preview
+Publish
+
+Editor boleh memanggil publish endpoint setelah save.
+
+Sebelum publish:
+
+validate,
+pastikan tidak ada required variable invalid,
+tampilkan confirmation,
+jelaskan immutable version.
+Image Upload
+
+Gunakan asset/media service existing.
+
+Jangan membuat upload storage baru.
+
+Jangan menyimpan base64 besar dalam template JSON.
+
+Performance
+
+Editor harus tetap responsif untuk target MVP:
+
+100–200 elements.
+
+Jangan menjanjikan ribuan element.
+
+Gunakan memoization dan avoid full rerender.
+
+Accessibility
+
+Sediakan:
+
+keyboard actions,
+property form labels,
+focus states,
+tooltips,
+confirmation delete,
+readable error.
+
+Canvas interactions dapat memiliki keterbatasan aksesibilitas, tetapi property editing harus dapat dilakukan via form.
+
+Tests
+
+Tambahkan:
+
+schema-to-editor conversion,
+editor-to-schema conversion,
+round-trip,
+add/delete element,
+drag updates position,
+resize,
+rotation,
+z-index reorder,
+lock,
+variable binding,
+delete bound variable warning,
+undo/redo,
+draft save payload,
+published version not mutated,
+preview endpoint use,
+canvas limit,
+no base64 binary persisted,
+keyboard delete.
+Acceptance Criteria
+Editor route bekerja.
+Template JSON dapat dibuka.
+Text dapat ditambah.
+Image placeholder dapat ditambah.
+Shape dapat ditambah.
+QR dapat ditambah.
+Line dapat ditambah.
+Drag/resize/rotate bekerja.
+Layer ordering bekerja.
+Variable binding bekerja.
+Undo/redo bekerja.
+Save membuat draft version.
+Published version tidak dimutasi.
+Final preview memakai backend.
+JSON kompatibel dengan renderer.
+test lulus.
+build lulus.
+tidak ada conflict area dengan Team 1/2/3/5 selain route registry.
+Handoff
+
+Jangan merge.
+
+Berikan:
+
+commit SHA,
+library yang dipilih,
+dependency change,
+JSON adapter contract,
+route,
+screenshot editor,
+screenshot variable binding,
+screenshot final preview,
+test/build,
+known visual differences frontend vs backend,
+shared files yang disentuh.

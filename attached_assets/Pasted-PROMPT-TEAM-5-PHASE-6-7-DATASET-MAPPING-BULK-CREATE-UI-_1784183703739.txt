@@ -1,0 +1,488 @@
+PROMPT TEAM 5 — PHASE 6 + 7: DATASET MAPPING, BULK CREATE UI, AI TEMPLATE ASSISTANT
+
+Anda adalah Team 5 — Bulk Create and AI Assistant Team.
+
+Branch:
+
+feature/design-template-phase6-7-bulk-ai
+
+Mulai dari commit Phase 2 yang sama. Jangan merge ke main.
+
+Karena scope cukup besar, kerjakan dalam dua subfase pada branch yang sama:
+
+Phase 6A — Dataset import and mapping
+Phase 6B — Bulk create monitoring UI
+Phase 7 — AI Template Assistant
+
+Selesaikan dan test setiap subfase sebelum lanjut.
+
+Batas Scope
+
+Anda bertanggung jawab atas:
+
+CSV upload,
+XLSX upload,
+parser aman,
+dataset preview,
+column-to-variable mapping,
+row validation,
+valid/invalid row summary,
+batch creation request,
+batch monitoring UI,
+item result gallery,
+retry/cancel/export UI integration,
+AI prompt to template plan,
+AI prompt to template JSON,
+validation/sanitization AI output,
+draft creation from AI result.
+
+Anda tidak bertanggung jawab atas:
+
+internal queue,
+ZIP worker,
+core renderer,
+visual editor internals,
+Template Library utama,
+storage internals.
+Kepemilikan File
+
+Boleh membuat:
+
+artifacts/bizportal/src/pages/design-render-batches/
+artifacts/bizportal/src/components/design-bulk-create/
+artifacts/bizportal/src/components/design-batch-monitor/
+artifacts/bizportal/src/hooks/design-render-batches/
+artifacts/bizportal/src/services/design-batch-api.ts
+artifacts/bizportal/src/utils/dataset-import/
+artifacts/api-server/src/services/design-ai/
+artifacts/api-server/src/routes/design-template-ai.ts
+artifacts/api-server/src/validators/designTemplateAiSchema.ts
+artifacts/api-server/src/tests/designTemplateAi*.test.ts
+
+Boleh mengubah minimal:
+
+frontend route registry
+sidebar/navigation
+backend routes index
+AI worker registry jika benar-benar diperlukan
+package.json/lockfile
+
+Jangan mengubah:
+
+services/design-renderer/*
+services/design-recovery/*
+services/design-zip/*
+visual editor core
+designRenderWorkerService.ts
+Route Contracts
+
+Gunakan:
+
+/design-render-batches/new?templateId={id}&versionId={id}
+/design-render-batches
+/design-render-batches/:id
+/design-templates/ai-create
+
+Team 3 akan mengarahkan tombol Create Batch ke route pertama.
+
+Phase 6A — Dataset Import
+
+Dukung:
+
+CSV,
+XLSX.
+
+Audit library existing seperti:
+
+Papa Parse,
+SheetJS/xlsx.
+
+Gunakan existing dependency jika tersedia.
+
+Jangan mengirim file mentah besar ke backend sebelum validasi jika parsing aman dapat dilakukan frontend. Namun untuk keamanan dan canonical validation, backend tetap harus memvalidasi data batch.
+
+File Limits
+
+Terapkan limit configurable atau UI limit:
+
+max file size,
+max rows,
+max columns,
+max cell length.
+
+Sinkronkan dengan backend DESIGN_BATCH_MAX_ITEMS.
+
+Jangan mencoba menampilkan 10.000 row penuh dalam DOM.
+
+Gunakan preview 10–50 row dan virtualized/paginated invalid rows jika diperlukan.
+
+Parsing
+
+Tangani:
+
+delimiter,
+quoted field,
+UTF-8 BOM,
+empty lines,
+duplicate headers,
+whitespace,
+Excel date,
+number formats,
+boolean,
+formula cells.
+
+Jangan mengeksekusi formula.
+
+Ambil nilai hasil parsing sebagai data, bukan menjalankan formula.
+
+Waspadai CSV formula injection pada export/display.
+
+Mapping UI
+
+Tampilkan dua sisi:
+
+Template Variables
+Dataset Columns
+
+Contoh:
+
+product_name → Nama Produk
+price        → Harga Jual
+image        → URL Gambar
+country      → Negara Asal
+
+Fitur:
+
+automatic mapping suggestion berdasarkan nama,
+manual override,
+required indicator,
+type compatibility,
+default value,
+unmapped optional allowed,
+unmapped required blocked.
+
+Jangan memakai AI untuk mapping sederhana kecuali optional suggestion. Mapping deterministic harus tersedia.
+
+Validation
+
+Validasi per row berdasarkan variable schema:
+
+required,
+text max length,
+number,
+currency,
+color,
+URL,
+date,
+boolean,
+image/asset reference.
+
+Tampilkan:
+
+valid row count,
+invalid row count,
+error per column,
+preview corrected values bila normalization diterapkan.
+
+Jangan diam-diam membuang invalid row.
+
+User harus memilih:
+
+render valid rows only, atau
+kembali memperbaiki data.
+
+Default lebih aman: block submission jika required mappings invalid.
+
+Image Input
+
+Jika dataset berisi URL gambar:
+
+jangan fetch semua gambar dari frontend,
+backend renderer akan melakukan canonical validation/SSRF protection,
+tampilkan warning bahwa URL harus HTTPS dan dapat diakses.
+
+Jika asset ID internal tersedia, prioritaskan asset ID.
+
+Batch Creation
+
+Saat submit:
+
+kirim template ID,
+immutable version ID,
+requested format,
+dimensions,
+normalized valid rows,
+mapping metadata jika backend memerlukannya,
+idempotency key.
+
+Gunakan chunked upload/API apabila payload terlalu besar dan repository sudah memiliki upload/session pattern.
+
+Jangan memasukkan 10.000 row ke URL atau query string.
+
+Jika current backend hanya menerima JSON body dan limit aman, dokumentasikan limit tested.
+
+Phase 6B — Batch Monitoring
+
+Halaman list:
+
+batch name,
+template,
+status,
+total,
+progress,
+completed,
+failed,
+created time,
+actions.
+
+Detail:
+
+progress real,
+counts,
+paginated items,
+result thumbnails,
+failed error,
+retry failed,
+cancel,
+request ZIP,
+export status,
+signed download link saat ready.
+
+Jangan membuat progress timer palsu.
+
+Polling harus:
+
+berhenti saat terminal,
+menggunakan interval wajar,
+handle tab hidden jika mudah,
+cancel request saat unmount.
+Result Gallery
+
+Tampilkan completed output secara paginated/lazy.
+
+Jangan memuat semua gambar sekaligus.
+
+Gunakan thumbnails atau output URLs authorized sesuai API.
+
+Retry dan Cancel
+
+UI harus menggunakan API Team 1.
+
+retry only failed,
+cancel confirmation,
+completed item tetap terlihat,
+status refresh setelah action.
+ZIP UI
+
+Gunakan API Team 2.
+
+Flow:
+
+Request ZIP
+→ queued
+→ processing
+→ completed
+→ signed download
+
+Jangan berasumsi ZIP langsung tersedia.
+
+Phase 7 — AI Template Assistant
+
+Target:
+
+User prompt
+→ structured design brief
+→ template plan
+→ typed Template JSON
+→ schema validation
+→ preview
+→ save as draft
+
+AI hanya membuat atau mengubah template. AI tidak merender setiap row.
+
+AI Input
+
+Contoh:
+
+Buat template Instagram 1080x1350 untuk produk ekspor.
+Area foto produk besar, logo di atas, nama produk, tiga spesifikasi,
+negara asal, tombol WhatsApp, dan QR code.
+Gunakan gaya profesional biru-putih.
+
+Form dapat menerima:
+
+prompt,
+size preset,
+industry/category,
+brand colors,
+logo asset,
+desired variables,
+language.
+AI Output Contract
+
+Jangan meminta AI mengembalikan gambar final.
+
+Minta structured JSON:
+
+type AiTemplateProposal = {
+  summary: string;
+  assumptions: string[];
+  variables: TemplateVariable[];
+  template: DesignTemplateDraft;
+  warnings: string[];
+};
+
+Gunakan structured output/schema jika provider mendukung.
+
+Validation Pipeline
+
+AI output harus:
+
+parse JSON,
+validate Zod schema,
+normalize coordinates,
+enforce canvas limits,
+enforce element limits,
+enforce allowed types,
+validate colors,
+validate fonts,
+remove unknown fields,
+block script/HTML/raw SVG,
+ensure unique element IDs,
+ensure valid variable bindings,
+save hanya sebagai draft.
+
+Jangan mempercayai AI output langsung.
+
+AI Security
+
+AI tidak boleh menghasilkan:
+
+arbitrary JavaScript,
+arbitrary HTML,
+raw SVG scripts,
+external font URL,
+local file path,
+shell command,
+private network URL,
+executable expression.
+
+Image generation terpisah boleh digunakan nanti, tetapi bukan bagian wajib Phase 7 ini.
+
+AI Cost Tracking
+
+Integrasikan dengan cost tracking existing jika tersedia.
+
+Catat:
+
+provider,
+model,
+input tokens,
+output tokens,
+request ID,
+tenant,
+feature design_template_assistant.
+
+Jangan mencatat token render non-AI sebagai AI usage.
+
+AI Preview
+
+Setelah proposal valid:
+
+tampilkan summary,
+variables,
+warnings,
+backend final preview,
+tombol regenerate,
+tombol save draft,
+tombol open editor.
+
+Route editor Team 4:
+
+/design-templates/:id/editor
+Determinism dan Regeneration
+
+Setiap regeneration adalah request AI baru.
+
+Jangan menimpa draft lama tanpa confirmation.
+
+Simpan prompt dan metadata jika policy existing mengizinkan, tetapi jangan simpan rahasia.
+
+Fallback
+
+Jika AI gagal menghasilkan schema valid:
+
+retry repair maksimal terbatas,
+tampilkan error,
+jangan menyimpan template rusak,
+jangan membuat mock success.
+Tests Phase 6
+CSV parse,
+BOM,
+quoted comma,
+duplicate headers,
+XLSX parse,
+formula treated as data,
+mapping suggestion,
+required mapping,
+type validation,
+10.000 row UI tidak dirender penuh,
+batch payload,
+idempotency,
+progress polling,
+cancel,
+retry,
+export polling,
+lazy result gallery.
+Tests Phase 7
+valid structured output,
+invalid JSON,
+unknown element type,
+canvas overflow,
+duplicate element IDs,
+invalid variable binding,
+arbitrary HTML/script removed/rejected,
+unsafe URL rejected,
+save draft only,
+AI cost recorded,
+no image render per dataset row,
+cross-tenant denied.
+Acceptance Criteria
+CSV dapat diunggah.
+XLSX dapat diunggah.
+Mapping bekerja.
+Required validation bekerja.
+Invalid rows terlihat.
+Batch dapat dibuat.
+Progress real tampil.
+Retry/cancel bekerja.
+ZIP status tampil.
+Result gallery paginated.
+Prompt menghasilkan proposal JSON.
+Proposal divalidasi.
+Unsafe output ditolak.
+AI result disimpan sebagai draft.
+Final preview memakai renderer backend.
+Open in editor bekerja melalui route contract.
+AI cost tracking terintegrasi bila tersedia.
+test lulus.
+build lulus.
+tidak menyentuh core queue/renderer/ZIP.
+Handoff
+
+Jangan merge.
+
+Berikan:
+
+commit SHA,
+route,
+dependencies,
+CSV/XLSX limits,
+maximum tested rows,
+AI schema,
+AI provider assumptions,
+cost tracking integration,
+screenshots,
+test/build,
+shared files touched,
+known limitations.

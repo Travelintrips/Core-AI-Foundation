@@ -71,6 +71,8 @@ const PUBLIC_PATH_PREFIXES = [
   "/ai/healthz",
   "/public",   // public client review endpoints — token-protected, not admin-key-protected
   "/storage/public-objects", // unconditionally public asset serving (object-storage skill convention)
+  "/storage/uploads/request-url", // public brief file uploads (customer portal — logo/photos/docs/video)
+  "/storage/objects", // serves back the same public brief uploads for preview/generation
   "/ai/catalog/public", // customer-facing catalog — must never require the admin key
   "/internal/auth/login", // internal staff login — must be reachable before a session exists
 ];
@@ -105,6 +107,9 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
   { method: "GET", pattern: /^\/ai\/portfolio\/preview\/\d+$/ },
   { method: "GET", pattern: /^\/ai\/portfolio\/preview\/session\/[^/]+\/count$/ },
   { method: "POST", pattern: /^\/ai\/portfolio\/preview\/\d+\/continue$/ },
+  // Design ZIP export download — signed-token-protected; token is the sole credential.
+  // Only the download sub-path is public; admin CRUD routes on the same mount remain protected.
+  { method: "GET", pattern: /^\/ai\/design-zip-exports\/\d+\/download$/ },
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {

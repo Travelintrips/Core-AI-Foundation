@@ -117,6 +117,14 @@ export interface CompanyProfileBrief {
   cpContactPhone?: string;
   cpContactAddress?: string;
   cpContactWebsite?: string;
+  // ── P1.3: uploaded assets (object storage URLs, not embedded in the PDF —
+  // logo/photos are only used for brief-completeness scoring today; the
+  // PDF's images still come from the AI image pipeline, see
+  // mapCompanyProfileToDocumentSpec's `existingImages` param) ──
+  cpUploadedLogo?: string;
+  cpUploadedPhotos?: string;
+  cpReferenceDocuments?: string;
+  cpVideo?: string;
   // ── P1.2: Package enforcement ──
   packageLevel?: string;  // starter | professional | business | enterprise
   packageName?: string;

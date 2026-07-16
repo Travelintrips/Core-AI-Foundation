@@ -1,0 +1,31 @@
+Rekomendasi per Kebutuhan Agent
+🎨 Fashion Design Specialist Agent
+Kebutuhan	Model Terbaik	Alasan
+Nulis brief kreatif fashion (tren, storytelling koleksi, brand positioning)	Claude Opus 4	Paling kuat untuk nuansa bahasa, tone premium, dan kreativitas konseptual — cocok untuk brand fashion
+Strategi & research fashion (target market, segmentasi, kompetitor)	Gemini 2.5 Pro	Knowledge terluas soal tren global, kultur fashion, data industri
+Copywriting fashion (caption, tagline, product description)	GPT-4o	Paling konsisten untuk commercial copy yang convert
+Visual / mood board image	FLUX.1 Dev (sudah ada)	Kualitas tinggi untuk fashion photography style, texture, lighting
+Rekomendasi utama: Claude Opus 4 untuk fashion — karena fashion butuh bahasa yang kaya, emosional, dan tidak kaku. Claude paling unggul di sini.
+
+🏠 Interior Design Specialist Agent
+Kebutuhan	Model Terbaik	Alasan
+Konsep & mood ruangan (gaya, material, suasana)	Gemini 2.5 Pro	Sangat baik untuk spatial reasoning dan deskripsi visual yang detail
+Copywriting interior (deskripsi proyek, proposal client)	GPT-4o	Konsisten dan profesional untuk proposal desain
+Technical brief (spesifikasi material, finishing, dimensi)	Claude Sonnet 4.5	Baik untuk structured output dan detil teknis
+Render / visualisasi ruangan	FLUX.1 Dev (sudah ada)	Bisa generate interior render dengan prompt yang tepat
+Rekomendasi utama: Gemini 2.5 Pro untuk interior — karena interior butuh pemahaman spatial, material, dan gaya arsitektur yang luas.
+
+Perlu Ditambahkan ke Platform?
+Untuk image generation yang lebih spesifik fashion/interior, ada dua opsi via Replicate (sudah terhubung):
+
+Model	Spesialisasi	Tambah ke Platform?
+Stable Diffusion XL (Replicate)	Fashion photography, editorial look	Bisa ditambah — tinggal daftar model baru
+Interior AI / RealVisXL	Interior render realistis	Bisa ditambah via Replicate
+Midjourney API	Terbaik untuk fashion & interior visual	❌ Belum ada API publik resmi
+Rekomendasi Implementasi
+Untuk platform ini, tidak perlu tambah provider baru dulu. Cukup:
+
+Fashion Agent  → Claude Opus 4    (teks) + FLUX.1 Dev (visual)
+Interior Agent → Gemini 2.5 Pro   (teks) + FLUX.1 Dev (visual)
+
+Keduanya sudah ada di platform — tinggal buat agent baru dengan system prompt spesifik dan arahkan intelligentRouter.ts untuk pilih model yang tepat berdasarkan agent type

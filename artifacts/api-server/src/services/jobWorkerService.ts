@@ -604,6 +604,28 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
       // Used for seed / testing
       return { message: "No-op job executed", jobId: job.id };
 
+    case "design_render": {
+      const { executeDesignRenderJob } = await import("./designRenderWorkerService.js");
+      return executeDesignRenderJob(job, workerId);
+    }
+
+    case "design_render_batch_dispatch": {
+      const { executeDesignRenderBatchDispatch } = await import("./designRenderWorkerService.js");
+      return executeDesignRenderBatchDispatch(job, workerId);
+    }
+
+    case "design_render_zip_export": {
+      const { executeZipExportJob } = await import("./designZipExportService.js");
+      const zipPayload = job.payloadJson as { exportId?: number; tenantId?: string; batchId?: number } | null;
+      const zipExportId = zipPayload?.exportId;
+      const zipTenantId = zipPayload?.tenantId;
+      const zipBatchId = zipPayload?.batchId;
+      if (!zipExportId || !zipTenantId || !zipBatchId) {
+        throw new Error("design_render_zip_export: payload missing exportId, tenantId, or batchId");
+      }
+      return executeZipExportJob(zipExportId, zipTenantId, zipBatchId);
+    }
+
     default:
       return { message: `Job type '${job.jobType}' dispatched`, jobId: job.id };
   }
