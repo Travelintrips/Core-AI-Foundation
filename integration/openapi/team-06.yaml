@@ -1,0 +1,833 @@
+openapi: "3.1.0"
+info:
+  title: "Team 06 — Asset Intelligence V2 Fragment"
+  version: "2.0.0"
+  description: |
+    OpenAPI fragment for Team 06 Asset Intelligence V2 routes.
+    Mount prefix: /api (handled by Team 24 integration).
+    Admin routes require X-Admin-Api-Key header.
+    Public routes use workspace token in path.
+
+# ── Paths ──────────────────────────────────────────────────────────────────────
+
+paths:
+
+  # ── Analyze ──
+
+  /ai/asset-intelligence/v2/analyze/{assetId}:
+    post:
+      operationId: analyzeAssetV2
+      summary: Analyze a single asset (v2 pipeline)
+      tags: [AssetIntelligenceV2]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/AssetIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyzeAssetV2Request"
+      responses:
+        "200":
+          description: Analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetIntelligenceV2View"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/asset-intelligence/v2/analyze-batch:
+    post:
+      operationId: batchAnalyzeAssetsV2
+      summary: Analyze up to 100 assets in one request
+      tags: [AssetIntelligenceV2]
+      security:
+        - AdminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchAnalyzeV2Request"
+      responses:
+        "200":
+          description: Batch result summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchAnalyzeV2Result"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  # ── Read ──
+
+  /ai/asset-intelligence/v2/{assetId}:
+    get:
+      operationId: getAssetIntelligenceV2
+      summary: Get v2 intelligence record for an asset
+      tags: [AssetIntelligenceV2]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/AssetIdParam"
+        - name: source
+          in: query
+          schema: { type: string, enum: [brand_kit, library, creative_asset], default: library }
+        - name: clientId
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Intelligence record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetIntelligenceV2View"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/asset-intelligence/v2/client/{clientId}:
+    get:
+      operationId: listClientIntelligenceV2
+      summary: List all v2 intelligence records for a client
+      tags: [AssetIntelligenceV2]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of intelligence records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/AssetIntelligenceV2View" }
+                  total: { type: integer }
+
+  /ai/asset-intelligence/v2/duplicates/{clientId}:
+    get:
+      operationId: getDuplicateReportV2
+      summary: Get duplicate detection report for a client
+      tags: [AssetIntelligenceV2]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Duplicate report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DuplicateReportV2"
+
+  /ai/asset-intelligence/v2/similar/{assetId}:
+    get:
+      operationId: getSimilarAssetsV2
+      summary: Find similar assets by tag overlap and perceptual hash
+      tags: [AssetIntelligenceV2]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/AssetIdParam"
+        - name: source
+          in: query
+          schema: { type: string, default: library }
+        - name: clientId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20, default: 10 }
+      responses:
+        "200":
+          description: Similar assets ranked by score
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assetId: { type: integer }
+                  assetSource: { type: string }
+                  similar:
+                    type: array
+                    items: { $ref: "#/components/schemas/SimilarAssetResult" }
+                  total: { type: integer }
+
+  # ── Version chains ──
+
+  /ai/asset-intelligence/v2/version-chains/{clientId}:
+    get:
+      operationId: listVersionChainsV2
+      summary: List all version chains for a client
+      tags: [AssetIntelligenceV2, VersionChains]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: List of version chains
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chains:
+                    type: array
+                    items: { $ref: "#/components/schemas/VersionChainV2" }
+                  total: { type: integer }
+
+  /ai/asset-intelligence/v2/version-chains:
+    post:
+      operationId: createVersionChainV2
+      summary: Create a new version chain
+      tags: [AssetIntelligenceV2, VersionChains]
+      security:
+        - AdminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientId]
+              properties:
+                clientId: { type: string }
+                primaryAssetId: { type: integer }
+      responses:
+        "201":
+          description: Created chain
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chainId: { type: integer }
+
+  /ai/asset-intelligence/v2/version-chains/auto-group:
+    post:
+      operationId: autoGroupVersionChainsV2
+      summary: Auto-group assets into version chains by perceptual hash
+      tags: [AssetIntelligenceV2, VersionChains]
+      security:
+        - AdminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientId]
+              properties:
+                clientId: { type: string }
+      responses:
+        "200":
+          description: Auto-grouping result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chainsCreated: { type: integer }
+                  assetsGrouped: { type: integer }
+
+  /ai/asset-intelligence/v2/version-chain/{chainId}:
+    get:
+      operationId: getVersionChainV2
+      summary: Get a specific version chain with all members
+      tags: [AssetIntelligenceV2, VersionChains]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - name: chainId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Version chain with members
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VersionChainV2" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/asset-intelligence/v2/version-chains/{chainId}/members:
+    post:
+      operationId: addVersionChainMemberV2
+      summary: Add an asset to a version chain
+      tags: [AssetIntelligenceV2, VersionChains]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - name: chainId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assetId, assetSource]
+              properties:
+                assetId: { type: integer }
+                assetSource: { type: string }
+                versionType: { type: string }
+                versionLabel: { type: string }
+                role: { type: string, enum: [primary, variant] }
+      responses:
+        "200":
+          description: Member added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  chainId: { type: integer }
+                  assetId: { type: integer }
+
+  # ── Licensing ──
+
+  /ai/asset-intelligence/v2/licensing/{assetId}:
+    get:
+      operationId: getAssetLicensingV2
+      summary: Get licensing metadata for an asset (full, admin-only)
+      tags: [AssetIntelligenceV2, Licensing]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/AssetIdParam"
+        - name: source
+          in: query
+          schema: { type: string, default: library }
+      responses:
+        "200":
+          description: Licensing metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LicensingMetadata" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      operationId: upsertAssetLicensingV2
+      summary: Set or update licensing metadata for an asset
+      tags: [AssetIntelligenceV2, Licensing]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/AssetIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertLicensingRequest"
+      responses:
+        "200":
+          description: Updated licensing metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LicensingMetadata" }
+
+  # ── Safety ──
+
+  /ai/asset-intelligence/v2/safety/{assetId}:
+    get:
+      operationId: getAssetSafetyV2
+      summary: Get safety classification for an asset
+      tags: [AssetIntelligenceV2, Safety]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/AssetIdParam"
+        - name: source
+          in: query
+          schema: { type: string, default: library }
+      responses:
+        "200":
+          description: Safety result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetSafetyResult" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/asset-intelligence/v2/safety-report/{clientId}:
+    get:
+      operationId: getClientSafetyReportV2
+      summary: List all flagged/unsafe assets for a client
+      tags: [AssetIntelligenceV2, Safety]
+      security:
+        - AdminApiKey: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Safety report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clientId: { type: string }
+                  flaggedAssets:
+                    type: array
+                    items: { $ref: "#/components/schemas/AssetSafetyResult" }
+                  total: { type: integer }
+
+  # ── Knowledge tags ──
+
+  /ai/asset-intelligence/v2/knowledge-tags:
+    get:
+      operationId: getKnowledgeTagsV2
+      summary: Get knowledge tag taxonomy (optionally filtered by asset type)
+      tags: [AssetIntelligenceV2, KnowledgeTags]
+      parameters:
+        - name: assetType
+          in: query
+          schema:
+            type: string
+            enum: [graphic, photo, illustration, svg, document, interior_material, furniture_image, fashion_motif, garment_mockup, packaging_asset]
+      responses:
+        "200":
+          description: Knowledge tag taxonomy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assetTypes:
+                    type: array
+                    items: { type: string }
+                  taxonomy:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items: { $ref: "#/components/schemas/KnowledgeTag" }
+
+  /ai/asset-intelligence/v2/tags/normalize:
+    post:
+      operationId: normalizeTagsV2
+      summary: Normalize a list of raw tags and infer asset type
+      tags: [AssetIntelligenceV2, KnowledgeTags]
+      security:
+        - AdminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tags]
+              properties:
+                tags:
+                  type: array
+                  items: { type: string }
+                mimeType: { type: string }
+                fileName: { type: string }
+      responses:
+        "200":
+          description: Normalization result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  input:
+                    type: array
+                    items: { type: string }
+                  normalized:
+                    type: array
+                    items: { type: string }
+                  inferredAssetType: { type: string }
+
+  # ── Public (token-auth) ──
+
+  /public/customer/workspace/{token}/asset-intelligence/v2:
+    get:
+      operationId: listCustomerIntelligenceV2
+      summary: List asset intelligence records for the workspace owner (redacted)
+      tags: [AssetIntelligenceV2, Public]
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Redacted intelligence records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/AssetIntelligenceV2ViewPublic" }
+                  total: { type: integer }
+
+  /public/customer/workspace/{token}/asset-intelligence/v2/{assetId}:
+    get:
+      operationId: getCustomerIntelligenceV2
+      summary: Get one intelligence record for the workspace owner (redacted, ownership-checked)
+      tags: [AssetIntelligenceV2, Public]
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/AssetIdParam"
+        - name: source
+          in: query
+          schema: { type: string, default: library }
+      responses:
+        "200":
+          description: Redacted intelligence record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssetIntelligenceV2ViewPublic" }
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+# ── Components ─────────────────────────────────────────────────────────────────
+
+components:
+  securitySchemes:
+    AdminApiKey:
+      type: apiKey
+      in: header
+      name: X-Admin-Api-Key
+
+  parameters:
+    AssetIdParam:
+      name: assetId
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+    Forbidden:
+      description: Forbidden — asset does not belong to this workspace
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+
+  schemas:
+    AnalyzeAssetV2Request:
+      type: object
+      required: [assetSource, clientId]
+      properties:
+        assetSource:
+          type: string
+          enum: [brand_kit, library, creative_asset]
+        clientId:
+          type: string
+        reanalyze:
+          type: boolean
+          default: false
+        skipSafety:
+          type: boolean
+          default: false
+        skipLicensing:
+          type: boolean
+          default: false
+
+    BatchAnalyzeV2Request:
+      type: object
+      required: [assets, clientId]
+      properties:
+        assets:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            required: [assetId, assetSource]
+            properties:
+              assetId: { type: integer }
+              assetSource:
+                type: string
+                enum: [brand_kit, library, creative_asset]
+        clientId: { type: string }
+        options:
+          type: object
+          properties:
+            reanalyze: { type: boolean }
+            skipSafety: { type: boolean }
+            skipLicensing: { type: boolean }
+
+    BatchAnalyzeV2Result:
+      type: object
+      properties:
+        requested: { type: integer }
+        succeeded: { type: integer }
+        failed: { type: integer }
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              assetId: { type: integer }
+              assetSource: { type: string }
+              ok: { type: boolean }
+              error: { type: string }
+
+    QualityMetadataV2:
+      type: object
+      properties:
+        overallScore: { type: integer, minimum: 0, maximum: 100 }
+        resolutionScore: { type: integer }
+        formatScore: { type: integer }
+        completenessScore: { type: integer }
+        usabilityScore: { type: integer }
+        resolutionInfo:
+          type: object
+          properties:
+            width: { type: integer, nullable: true }
+            height: { type: integer, nullable: true }
+            dpi: { type: integer, nullable: true }
+            aspectRatio: { type: string, nullable: true }
+            pixelCount: { type: integer, nullable: true }
+        hasTransparency: { type: boolean }
+        isVector: { type: boolean }
+        recommendation: { type: string }
+
+    LicensingMetadata:
+      type: object
+      properties:
+        assetId: { type: integer }
+        assetSource: { type: string }
+        licenseType: { type: string }
+        licenseOwner: { type: string, nullable: true, description: "Admin-only field" }
+        attribution: { type: string, nullable: true }
+        usageRights:
+          type: array
+          items: { type: string }
+        restrictions:
+          type: array
+          items: { type: string }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        notes: { type: string, nullable: true, description: "Admin-only field" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    UpsertLicensingRequest:
+      type: object
+      required: [assetSource, clientId, licenseType]
+      properties:
+        assetSource: { type: string }
+        clientId: { type: string }
+        licenseType:
+          type: string
+          enum: [proprietary, cc_by, cc_by_sa, cc_by_nd, cc_by_nc, cc0, royalty_free, rights_managed, ai_generated, unknown]
+        licenseOwner: { type: string }
+        attribution: { type: string }
+        usageRights:
+          type: array
+          items: { type: string }
+        restrictions:
+          type: array
+          items: { type: string }
+        expiresAt: { type: string, format: date-time }
+        notes: { type: string }
+
+    AssetSafetyResult:
+      type: object
+      properties:
+        assetId: { type: integer }
+        assetSource: { type: string }
+        clientId: { type: string }
+        safetyLevel:
+          type: string
+          enum: [safe, review, unsafe]
+        brandSafetyScore: { type: integer, minimum: 0, maximum: 100 }
+        flags:
+          type: array
+          items: { type: string }
+        reviewRequired: { type: boolean }
+        autoApproved: { type: boolean }
+        notes: { type: string, nullable: true }
+        classifiedAt: { type: string, format: date-time }
+
+    VersionChainMember:
+      type: object
+      properties:
+        assetId: { type: integer }
+        assetSource: { type: string }
+        versionType: { type: string }
+        versionLabel: { type: string }
+        role:
+          type: string
+          enum: [primary, variant]
+
+    VersionChainV2:
+      type: object
+      properties:
+        chainId: { type: integer }
+        clientId: { type: string }
+        primaryAssetId: { type: integer, nullable: true }
+        members:
+          type: array
+          items: { $ref: "#/components/schemas/VersionChainMember" }
+        totalVariants: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    SimilarAssetResult:
+      type: object
+      properties:
+        assetId: { type: integer }
+        assetSource: { type: string }
+        similarityScore: { type: integer, minimum: 0, maximum: 100 }
+        tagOverlapScore: { type: integer }
+        knowledgeTagScore: { type: integer }
+        hashScore: { type: integer }
+        sharedTags:
+          type: array
+          items: { type: string }
+        sharedKnowledgeTags:
+          type: array
+          items: { type: string }
+
+    KnowledgeTag:
+      type: object
+      properties:
+        tag: { type: string }
+        normalizedTag: { type: string }
+        category: { type: string }
+        subcategory: { type: string, nullable: true }
+        assetTypes:
+          type: array
+          items: { type: string }
+        weight: { type: number, minimum: 0, maximum: 1 }
+
+    DuplicateReportV2:
+      type: object
+      properties:
+        clientId: { type: string }
+        totalAnalyzed: { type: integer }
+        totalDuplicates: { type: integer }
+        duplicateGroups:
+          type: array
+          items:
+            type: object
+            properties:
+              perceptualHash: { type: string }
+              hashTier: { type: string }
+              assetIds:
+                type: array
+                items: { type: integer }
+              versionTypes:
+                type: array
+                items: { type: string }
+              recommendation: { type: string }
+
+    AssetIntelligenceV2View:
+      type: object
+      properties:
+        id: { type: integer }
+        assetId: { type: integer }
+        assetSource: { type: string }
+        clientId: { type: string }
+        assetTypeV2:
+          type: string
+          nullable: true
+          enum: [graphic, photo, illustration, svg, document, interior_material, furniture_image, fashion_motif, garment_mockup, packaging_asset]
+        autoTags:
+          type: array
+          items: { type: string }
+        normalizedTags:
+          type: array
+          items: { type: string }
+        knowledgeTags:
+          type: array
+          items: { type: string }
+        searchKeywords:
+          type: array
+          items: { type: string }
+        detectedSubjects:
+          type: array
+          items: { type: string }
+        perceptualHash: { type: string, nullable: true }
+        hashTier: { type: string, nullable: true, enum: [full, metadata] }
+        isDuplicate: { type: boolean }
+        duplicateOfId: { type: integer, nullable: true }
+        duplicateSimilarityScore: { type: number, nullable: true }
+        versionType: { type: string }
+        versionChainId: { type: integer, nullable: true }
+        quality:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/QualityMetadataV2"
+        suggestedUsage:
+          type: array
+          items: { type: string }
+        colorPalette:
+          type: array
+          items: { type: string }
+        licensing:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/LicensingMetadata"
+        safety:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/AssetSafetyResult"
+        analysisFailed: { type: boolean }
+        failureReason: { type: string, nullable: true }
+        confidenceScore: { type: number }
+        analyzedAt: { type: string, format: date-time }
+
+    # Public variant — licenseOwner and notes stripped
+    AssetIntelligenceV2ViewPublic:
+      allOf:
+        - $ref: "#/components/schemas/AssetIntelligenceV2View"
+      description: "Same as AssetIntelligenceV2View but licensing.licenseOwner and licensing.notes are omitted"

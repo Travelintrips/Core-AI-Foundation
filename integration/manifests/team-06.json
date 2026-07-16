@@ -1,0 +1,159 @@
+{
+  "team": "06",
+  "branch": "feature/06-asset-intelligence",
+  "domain": "Asset Intelligence V2 — Creative Knowledge Foundation",
+  "description": "Extends the existing Asset Library with auto-tagging, duplicate detection, perceptual hash abstraction, version chains, similar-asset search, quality metadata, suggested usage, licensing metadata placeholder, asset safety classification, and knowledge taxonomy for 10 creative asset types.",
+
+  "ownedFolders": [
+    "artifacts/api-server/src/services/asset-intelligence-v2/",
+    "artifacts/api-server/src/routes/asset-intelligence-v2/",
+    "artifacts/ai-platform/src/pages/asset-intelligence-v2/",
+    "integration/openapi/team-06.yaml",
+    "integration/migrations/team-06.sql",
+    "integration/manifests/team-06.json"
+  ],
+
+  "routesToMount": [
+    {
+      "importPath": "./routes/asset-intelligence-v2/index.js",
+      "namedExport": "assetIntelligenceV2Router",
+      "mountComment": "Team 06 — Asset Intelligence V2 — mount AFTER global adminAuth middleware; routes include both /ai/asset-intelligence/v2/* (admin) and /public/customer/workspace/:token/asset-intelligence/v2/* (public)"
+    }
+  ],
+
+  "pagesToRegister": [
+    {
+      "path": "/asset-intelligence-v2",
+      "componentPath": "./pages/asset-intelligence-v2/index.tsx",
+      "defaultExport": "AssetIntelligenceV2Page",
+      "label": "Asset Intelligence V2",
+      "icon": "Brain"
+    }
+  ],
+
+  "sidebarItems": [
+    {
+      "section": "Intelligence",
+      "label": "Asset Intel V2",
+      "path": "/asset-intelligence-v2",
+      "icon": "Brain",
+      "insertAfter": "/asset-intelligence"
+    }
+  ],
+
+  "openapiFragment": "integration/openapi/team-06.yaml",
+  "migrationDrafts": ["integration/migrations/team-06.sql"],
+  "seedDrafts": [],
+
+  "dependenciesRequested": [],
+
+  "tablesCreated": [
+    {
+      "name": "ai_platform.ai_asset_intelligence_v2",
+      "description": "Extended intelligence per asset: knowledge taxonomy, quality scoring, duplicate detection, version type",
+      "uniqueConstraint": "(asset_id, asset_source)"
+    },
+    {
+      "name": "ai_platform.ai_asset_version_chains",
+      "description": "Groups all intentional variants of the same logical asset into a chain"
+    },
+    {
+      "name": "ai_platform.ai_asset_version_chain_members",
+      "description": "Many-to-chain membership with version_type, role (primary|variant)",
+      "uniqueConstraint": "(chain_id, asset_id, asset_source)"
+    },
+    {
+      "name": "ai_platform.ai_asset_licensing",
+      "description": "Licensing metadata placeholder (proprietary/CC/RF/AI-generated). licenseOwner and notes are admin-only — redacted in public API.",
+      "uniqueConstraint": "(asset_id, asset_source)"
+    },
+    {
+      "name": "ai_platform.ai_asset_safety",
+      "description": "Brand safety classification: safe|review|unsafe with rule-based flag detection",
+      "uniqueConstraint": "(asset_id, asset_source)"
+    }
+  ],
+
+  "tablesReadOnly": [
+    "ai_platform.ai_asset_library",
+    "ai_platform.ai_brand_kit_assets",
+    "ai_platform.creative_ai_assets"
+  ],
+
+  "tablesNeverTouched": [
+    "ai_platform.ai_jobs",
+    "ai_platform.ai_workers",
+    "ai_platform.ai_event_bus",
+    "ai_platform.ai_payments",
+    "ai_platform.ai_quotations",
+    "ai_platform.ai_service_requests"
+  ],
+
+  "eventsPublished": [],
+  "eventsConsumed": [],
+
+  "workerJobTypesRequested": [],
+  "sharedTypesRequested": [],
+
+  "integrationOrder": [
+    "1. Apply migration: integration/migrations/team-06.sql",
+    "2. Mount router in app.ts AFTER global adminAuth middleware",
+    "3. Register page /asset-intelligence-v2 in App.tsx",
+    "4. Add sidebar item under Intelligence section"
+  ],
+
+  "apiRoutes": {
+    "admin": [
+      "POST /ai/asset-intelligence/v2/analyze/:assetId",
+      "POST /ai/asset-intelligence/v2/analyze-batch",
+      "GET  /ai/asset-intelligence/v2/:assetId",
+      "GET  /ai/asset-intelligence/v2/client/:clientId",
+      "GET  /ai/asset-intelligence/v2/duplicates/:clientId",
+      "GET  /ai/asset-intelligence/v2/similar/:assetId",
+      "GET  /ai/asset-intelligence/v2/version-chains/:clientId",
+      "POST /ai/asset-intelligence/v2/version-chains",
+      "POST /ai/asset-intelligence/v2/version-chains/auto-group",
+      "GET  /ai/asset-intelligence/v2/version-chain/:chainId",
+      "POST /ai/asset-intelligence/v2/version-chains/:chainId/members",
+      "GET  /ai/asset-intelligence/v2/licensing/:assetId",
+      "PUT  /ai/asset-intelligence/v2/licensing/:assetId",
+      "GET  /ai/asset-intelligence/v2/safety/:assetId",
+      "GET  /ai/asset-intelligence/v2/safety-report/:clientId",
+      "GET  /ai/asset-intelligence/v2/knowledge-tags",
+      "POST /ai/asset-intelligence/v2/tags/normalize"
+    ],
+    "public": [
+      "GET /public/customer/workspace/:token/asset-intelligence/v2",
+      "GET /public/customer/workspace/:token/asset-intelligence/v2/:assetId",
+      "GET /public/customer/workspace/:token/asset-intelligence/v2/:assetId/similar",
+      "GET /public/customer/workspace/:token/asset-intelligence/v2/:assetId/licensing"
+    ]
+  },
+
+  "knownRisks": [
+    "Perceptual hash is metadata-based (filename + size + checksum), not pixel-based. True image similarity requires real pHash (sharp/dhash). The interface is compatible — upgrading to pixel-based is a drop-in replacement.",
+    "ai_asset_intelligence_v2 (asset_id, asset_source) UNIQUE constraint may conflict if the same asset was already analyzed by v1 under the same IDs — they use separate tables so no conflict, but clientId isolation depends on correct emailHash being passed by callers.",
+    "Version chain auto-grouping uses exact hash match. Cross-device re-uploads with different checksums will NOT be auto-grouped even if visually identical.",
+    "Safety classification is rule-based (keyword matching). False positives on words like 'adult' in legitimate contexts (e.g. 'adult education'). Manual override should be added in a follow-up.",
+    "Licensing metadata is a placeholder — no automated license detection. Admin must manually set license type via PUT /licensing/:assetId."
+  ],
+
+  "externalBlockers": [],
+
+  "testCoverage": {
+    "file": "artifacts/api-server/src/__tests__/team06-asset-intelligence-v2.test.ts",
+    "testCount": 40,
+    "areas": [
+      "tag normalization & deduplication",
+      "perceptual hash computation & comparison",
+      "version type detection",
+      "quality metadata scoring",
+      "duplicate detection via hash",
+      "knowledge tag inference per asset type",
+      "customer ownership check (clientId isolation)",
+      "metadata redaction (licenseOwner/notes stripped in public)",
+      "safety classification (flags + levels)",
+      "version chain member role assignment"
+    ]
+  }
+}
