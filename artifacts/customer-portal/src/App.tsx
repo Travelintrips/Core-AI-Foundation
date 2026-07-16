@@ -43,6 +43,7 @@ const WorkspaceSupportPage       = lazy(() => import('@/pages/workspace/support'
 const WorkspaceSettingsPage      = lazy(() => import('@/pages/workspace/settings'));
 const PortfolioPage              = lazy(() => import('@/pages/portfolio'));
 const CpReviewPage               = lazy(() => import('@/pages/cp-review'));
+const PackagingDesignPage        = lazy(() => import('@/pages/packaging-design'));
 
 /* ─── Loading fallback ─── */
 function PageLoader() {
@@ -124,6 +125,7 @@ function Router() {
         <Route path="/portfolio-gallery" component={PortfolioGalleryPage} />
         <Route path="/gallery" component={GalleryPage} />
         <Route path="/marketplace" component={AssetMarketplacePage} />
+        <Route path="/packaging-design" component={PackagingDesignPage} />
         <Route path="/workspace/:token/favorites" component={WorkspaceFavoritesPage} />
         <Route path="/workspace/:token/notifications" component={WorkspaceNotificationsPage} />
         <Route path="/workspace/:token/profile" component={WorkspaceProfilePage} />

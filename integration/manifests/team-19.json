@@ -1,0 +1,69 @@
+{
+  "team": "19",
+  "branch": "feature/19-packaging-design",
+  "domain": "Packaging Design",
+  "description": "End-to-end packaging design ordering, prepress technical validation, variant tracking, and print-ready certification for box, pouch, label, cup, sleeve, food, and cosmetic packaging.",
+  "ownership": {
+    "apiDomain": "artifacts/api-server/src/domains/packaging-design/",
+    "apiRoutes": "artifacts/api-server/src/routes/packaging-design.ts",
+    "customerPortal": "artifacts/customer-portal/src/pages/packaging-design/",
+    "adminPlatform": "artifacts/ai-platform/src/pages/packaging-design/",
+    "dbSchema": "lib/db/src/schema/packaging-design.ts",
+    "migration": "integration/migrations/team-19.sql",
+    "openapi": "integration/openapi/team-19.yaml"
+  },
+  "services": [
+    "box",
+    "pouch",
+    "bottle_label",
+    "jar_label",
+    "cup",
+    "sleeve",
+    "food_packaging",
+    "cosmetic_packaging"
+  ],
+  "blueprint": {
+    "panels": ["front", "back", "side", "top", "bottom"],
+    "zones": ["dieline", "bleed", "safe_area", "barcode", "ingredients_legal_block", "logo", "product_image", "variant_label"],
+    "validationChecks": [
+      "bleed_check",
+      "safe_area_check",
+      "barcode_zone_check",
+      "mandatory_info_check",
+      "variant_consistency_check",
+      "color_mode_check",
+      "print_warnings"
+    ]
+  },
+  "invariants": [
+    "print_ready status MUST NOT be set before prepress validation passes with zero error-severity blockers",
+    "Regulated service types (food_packaging, cosmetic_packaging, bottle_label, jar_label) MUST have hasIngredientsBlock AND hasLegalBlock",
+    "Barcode zone MUST NOT overlap bleed or safe-area margins",
+    "All active variants MUST pass consistency validation before the order reaches print_ready"
+  ],
+  "tables": [
+    "ai_platform.packaging_design_orders",
+    "ai_platform.packaging_design_variants",
+    "ai_platform.packaging_design_validation_log"
+  ],
+  "routes": {
+    "admin": [
+      "GET    /ai/packaging-design/orders",
+      "POST   /ai/packaging-design/orders",
+      "GET    /ai/packaging-design/orders/:id",
+      "PATCH  /ai/packaging-design/orders/:id",
+      "DELETE /ai/packaging-design/orders/:id",
+      "PATCH  /ai/packaging-design/orders/:id/status",
+      "POST   /ai/packaging-design/orders/:id/validate",
+      "GET    /ai/packaging-design/orders/:id/variants",
+      "POST   /ai/packaging-design/orders/:id/variants",
+      "PATCH  /ai/packaging-design/variants/:variantId",
+      "DELETE /ai/packaging-design/variants/:variantId",
+      "GET    /ai/packaging-design/analytics"
+    ],
+    "public": [
+      "POST /public/packaging-design/submit",
+      "GET  /public/packaging-design/orders/:orderId"
+    ]
+  }
+}

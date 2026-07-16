@@ -1,0 +1,542 @@
+openapi: 3.1.0
+info:
+  title: Team 19 — Packaging Design API
+  version: 1.0.0
+  description: |
+    Packaging Design domain (Team 19).
+    Covers: box, pouch, bottle label, jar label, cup, sleeve,
+    food packaging, cosmetic packaging.
+
+    Key invariants:
+    - A print-ready declaration requires a passing prepress validation (no error-severity blockers).
+    - Regulated service types (food_packaging, cosmetic_packaging, bottle_label, jar_label)
+      require hasIngredientsBlock AND hasLegalBlock.
+    - Barcode zones must not overlap bleed or safe-area margins.
+    - All variants must pass consistency validation before the order can reach print_ready.
+
+servers:
+  - url: /api
+
+tags:
+  - name: packaging-design-admin
+    description: Admin-key–protected endpoints
+  - name: packaging-design-public
+    description: Public / customer-facing endpoints
+
+paths:
+
+  # ── Admin: Orders ────────────────────────────────────────────────────────────
+
+  /ai/packaging-design/orders:
+    get:
+      tags: [packaging-design-admin]
+      summary: List packaging design orders
+      parameters:
+        - { name: status,      in: query, schema: { type: string } }
+        - { name: serviceType, in: query, schema: { type: string } }
+        - { name: email,       in: query, schema: { type: string } }
+        - { name: limit,       in: query, schema: { type: integer, default: 50 } }
+        - { name: offset,      in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: Paginated order list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders: { type: array, items: { $ref: '#/components/schemas/PackagingDesignOrder' } }
+                  total:  { type: integer }
+
+    post:
+      tags: [packaging-design-admin]
+      summary: Create a packaging design order (admin-initiated)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePackagingDesignOrderRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackagingDesignOrder' }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /ai/packaging-design/orders/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+
+    get:
+      tags: [packaging-design-admin]
+      summary: Get a packaging design order (with variants and last validation)
+      responses:
+        '200':
+          description: Order detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackagingDesignOrderDetail' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [packaging-design-admin]
+      summary: Update an order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdatePackagingDesignOrderRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackagingDesignOrder' }
+
+    delete:
+      tags: [packaging-design-admin]
+      summary: Soft-delete an order
+      responses:
+        '204': { description: Deleted }
+
+  /ai/packaging-design/orders/{id}/status:
+    patch:
+      tags: [packaging-design-admin]
+      summary: Update order status
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [draft, submitted, in_review, design_in_progress, prepress_validation, revision_requested, print_ready, completed, cancelled]
+                notes: { type: string }
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackagingDesignOrder' }
+        '409':
+          description: Print-ready guard — prepress validation not passed
+
+  /ai/packaging-design/orders/{id}/validate:
+    post:
+      tags: [packaging-design-admin]
+      summary: Run prepress / technical validation
+      description: |
+        Runs all prepress checks and stores the result.
+        Checks include: bleed, safe area, barcode zone, mandatory information blocks,
+        variant consistency, and colour mode.
+        The order is NOT automatically marked print_ready — an explicit PATCH to
+        /status with status=print_ready is required and enforces the invariant.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                runBy: { type: string }
+                notes: { type: string }
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PrepressValidationResult' }
+
+  /ai/packaging-design/orders/{id}/variants:
+    get:
+      tags: [packaging-design-admin]
+      summary: List variants for an order
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PackagingDesignVariant' }
+
+    post:
+      tags: [packaging-design-admin]
+      summary: Add a variant to an order
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateVariantRequest' }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackagingDesignVariant' }
+
+  /ai/packaging-design/variants/{variantId}:
+    patch:
+      tags: [packaging-design-admin]
+      summary: Update a variant
+      parameters:
+        - { name: variantId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateVariantRequest' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackagingDesignVariant' }
+    delete:
+      tags: [packaging-design-admin]
+      summary: Archive a variant
+      parameters:
+        - { name: variantId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '204': { description: Archived }
+
+  /ai/packaging-design/analytics:
+    get:
+      tags: [packaging-design-admin]
+      summary: Dashboard analytics
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PackagingDesignAnalytics' }
+
+  # ── Public: Customer submission ──────────────────────────────────────────────
+
+  /public/packaging-design/submit:
+    post:
+      tags: [packaging-design-public]
+      summary: Submit a packaging design order (customer-facing)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublicPackagingOrderRequest' }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:      { type: boolean }
+                  orderId: { type: string }
+                  message: { type: string }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /public/packaging-design/orders/{orderId}:
+    get:
+      tags: [packaging-design-public]
+      summary: Track a packaging order by UUID (customer-facing)
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicPackagingOrderStatus' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+# ─────────────────────────────────────────────────────────────────────────────
+components:
+  responses:
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:   { type: string }
+        details: { type: object }
+
+    PrepressCheck:
+      type: object
+      required: [code, name, severity, passed, detail]
+      properties:
+        code:     { type: string }
+        name:     { type: string }
+        severity: { type: string, enum: [error, warning, info] }
+        passed:   { type: boolean }
+        detail:   { type: string }
+
+    PrintWarning:
+      type: object
+      required: [code, message, severity]
+      properties:
+        code:     { type: string }
+        message:  { type: string }
+        severity: { type: string, enum: [error, warning, info] }
+
+    PrepressValidationResult:
+      type: object
+      properties:
+        outcome:      { type: string, enum: [passed, failed, passed_with_warnings] }
+        checks:       { type: array, items: { $ref: '#/components/schemas/PrepressCheck' } }
+        warnings:     { type: array, items: { $ref: '#/components/schemas/PrintWarning' } }
+        blockerCount: { type: integer }
+        warningCount: { type: integer }
+        runAt:        { type: string, format: date-time }
+        runBy:        { type: string }
+
+    PackagingDesignVariant:
+      type: object
+      properties:
+        id:                { type: integer }
+        orderId:           { type: integer }
+        variantName:       { type: string }
+        variantLabel:      { type: string }
+        sku:               { type: string }
+        barcodeValue:      { type: string }
+        colorAccent:       { type: string }
+        netWeight:         { type: string }
+        consistencyStatus: { type: string }
+        consistencyNotes:  { type: string }
+        dielineFileUrl:    { type: string }
+        artworkFileUrl:    { type: string }
+        mockupFileUrl:     { type: string }
+        status:            { type: string }
+        displayOrder:      { type: integer }
+        createdAt:         { type: string, format: date-time }
+
+    PackagingDesignOrder:
+      type: object
+      properties:
+        id:                    { type: integer }
+        orderId:               { type: string }
+        serviceType:           { type: string }
+        customerName:          { type: string }
+        customerEmail:         { type: string }
+        customerPhone:         { type: string }
+        companyName:           { type: string }
+        brandName:             { type: string }
+        productName:           { type: string }
+        productCategory:       { type: string }
+        marketTarget:          { type: string }
+        quantity:              { type: integer }
+        panelsRequired:        { type: array, items: { type: string } }
+        widthMm:               { type: string }
+        heightMm:              { type: string }
+        depthMm:               { type: string }
+        bleedMm:               { type: string }
+        safeAreaMm:            { type: string }
+        colorMode:             { type: string }
+        finishType:            { type: string }
+        materialType:          { type: string }
+        printSides:            { type: integer }
+        hasBarcodeZone:        { type: boolean }
+        barcodeType:           { type: string }
+        hasIngredientsBlock:   { type: boolean }
+        hasLegalBlock:         { type: boolean }
+        hasLogoZone:           { type: boolean }
+        hasProductImageZone:   { type: boolean }
+        hasNutritionFacts:     { type: boolean }
+        hasHalalCertification: { type: boolean }
+        hasSniBadge:           { type: boolean }
+        hasBpomNumber:         { type: boolean }
+        variantCount:          { type: integer }
+        status:                { type: string }
+        currency:              { type: string }
+        quotedPrice:           { type: string }
+        finalPrice:            { type: string }
+        completionNotes:       { type: string }
+        deliverableLinks:      { type: array, items: { type: object } }
+        createdAt:             { type: string, format: date-time }
+        updatedAt:             { type: string, format: date-time }
+
+    PackagingDesignOrderDetail:
+      allOf:
+        - $ref: '#/components/schemas/PackagingDesignOrder'
+        - type: object
+          properties:
+            variants:
+              type: array
+              items: { $ref: '#/components/schemas/PackagingDesignVariant' }
+            lastValidation:
+              $ref: '#/components/schemas/PrepressValidationResult'
+
+    PackagingDesignAnalytics:
+      type: object
+      properties:
+        totalOrders:       { type: integer }
+        byStatus:          { type: object, additionalProperties: { type: integer } }
+        byServiceType:     { type: object, additionalProperties: { type: integer } }
+        printReadyCount:   { type: integer }
+        validationPassRate: { type: number, format: float }
+        recentOrders:      { type: array, items: { $ref: '#/components/schemas/PackagingDesignOrder' } }
+
+    CreatePackagingDesignOrderRequest:
+      type: object
+      required: [serviceType, customerName, customerEmail, brandName, productName]
+      properties:
+        serviceType:           { type: string, enum: [box, pouch, bottle_label, jar_label, cup, sleeve, food_packaging, cosmetic_packaging] }
+        customerName:          { type: string }
+        customerEmail:         { type: string, format: email }
+        customerPhone:         { type: string }
+        companyName:           { type: string }
+        brandName:             { type: string }
+        productName:           { type: string }
+        productCategory:       { type: string }
+        marketTarget:          { type: string }
+        quantity:              { type: integer, minimum: 1 }
+        panelsRequired:        { type: array, items: { type: string, enum: [front, back, side, top, bottom] } }
+        widthMm:               { type: number }
+        heightMm:              { type: number }
+        depthMm:               { type: number }
+        bleedMm:               { type: number, default: 3 }
+        safeAreaMm:            { type: number, default: 5 }
+        colorMode:             { type: string, enum: [cmyk, pantone, rgb], default: cmyk }
+        finishType:            { type: string }
+        materialType:          { type: string }
+        printSides:            { type: integer, default: 1 }
+        hasBarcodeZone:        { type: boolean }
+        barcodeType:           { type: string }
+        hasIngredientsBlock:   { type: boolean }
+        hasLegalBlock:         { type: boolean }
+        hasLogoZone:           { type: boolean }
+        hasProductImageZone:   { type: boolean }
+        hasNutritionFacts:     { type: boolean }
+        hasHalalCertification: { type: boolean }
+        hasSniBadge:           { type: boolean }
+        hasBpomNumber:         { type: boolean }
+        variantCount:          { type: integer, default: 1 }
+        stylePreference:       { type: string }
+        colorPrimary:          { type: string }
+        colorSecondary:        { type: string }
+        referenceLinks:        { type: string }
+        additionalNotes:       { type: string }
+        briefJson:             { type: object }
+
+    UpdatePackagingDesignOrderRequest:
+      type: object
+      properties:
+        brandName:             { type: string }
+        productName:           { type: string }
+        productCategory:       { type: string }
+        panelsRequired:        { type: array, items: { type: string } }
+        bleedMm:               { type: number }
+        safeAreaMm:            { type: number }
+        colorMode:             { type: string }
+        finishType:            { type: string }
+        materialType:          { type: string }
+        hasBarcodeZone:        { type: boolean }
+        barcodeType:           { type: string }
+        hasIngredientsBlock:   { type: boolean }
+        hasLegalBlock:         { type: boolean }
+        quotedPrice:           { type: number }
+        finalPrice:            { type: number }
+        completionNotes:       { type: string }
+        deliverableLinks:      { type: array, items: { type: object } }
+        briefJson:             { type: object }
+
+    CreateVariantRequest:
+      type: object
+      required: [variantName]
+      properties:
+        variantName:  { type: string }
+        variantLabel: { type: string }
+        sku:          { type: string }
+        barcodeValue: { type: string }
+        colorAccent:  { type: string }
+        netWeight:    { type: string }
+        displayOrder: { type: integer }
+
+    UpdateVariantRequest:
+      type: object
+      properties:
+        variantName:       { type: string }
+        variantLabel:      { type: string }
+        sku:               { type: string }
+        barcodeValue:      { type: string }
+        colorAccent:       { type: string }
+        netWeight:         { type: string }
+        dielineFileUrl:    { type: string }
+        artworkFileUrl:    { type: string }
+        mockupFileUrl:     { type: string }
+        consistencyStatus: { type: string, enum: [not_validated, consistent, inconsistent] }
+        consistencyNotes:  { type: string }
+        status:            { type: string, enum: [active, archived] }
+        displayOrder:      { type: integer }
+
+    PublicPackagingOrderRequest:
+      type: object
+      required: [serviceType, customerName, customerEmail, brandName, productName]
+      properties:
+        serviceType:           { type: string }
+        customerName:          { type: string }
+        customerEmail:         { type: string, format: email }
+        customerPhone:         { type: string }
+        companyName:           { type: string }
+        brandName:             { type: string }
+        productName:           { type: string }
+        productCategory:       { type: string }
+        quantity:              { type: integer }
+        panelsRequired:        { type: array, items: { type: string } }
+        widthMm:               { type: number }
+        heightMm:              { type: number }
+        depthMm:               { type: number }
+        bleedMm:               { type: number }
+        safeAreaMm:            { type: number }
+        colorMode:             { type: string }
+        finishType:            { type: string }
+        materialType:          { type: string }
+        hasBarcodeZone:        { type: boolean }
+        barcodeType:           { type: string }
+        hasIngredientsBlock:   { type: boolean }
+        hasLegalBlock:         { type: boolean }
+        hasLogoZone:           { type: boolean }
+        hasNutritionFacts:     { type: boolean }
+        hasHalalCertification: { type: boolean }
+        hasSniBadge:           { type: boolean }
+        hasBpomNumber:         { type: boolean }
+        variantCount:          { type: integer }
+        stylePreference:       { type: string }
+        colorPrimary:          { type: string }
+        colorSecondary:        { type: string }
+        referenceLinks:        { type: string }
+        additionalNotes:       { type: string }
+
+    PublicPackagingOrderStatus:
+      type: object
+      properties:
+        orderId:     { type: string }
+        brandName:   { type: string }
+        productName: { type: string }
+        serviceType: { type: string }
+        status:      { type: string }
+        statusLabel: { type: string }
+        isPrintReady: { type: boolean }
+        completionNotes: { type: string }
+        deliverableLinks: { type: array, items: { type: object } }
+        createdAt:   { type: string, format: date-time }
+        updatedAt:   { type: string, format: date-time }
