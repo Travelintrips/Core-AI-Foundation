@@ -1,0 +1,60 @@
+{
+  "team": "07",
+  "branch": "feature/07-blueprint-library",
+  "ownedFolders": [
+    "artifacts/api-server/src/services/design-blueprints/",
+    "artifacts/api-server/src/routes/design-blueprints/",
+    "artifacts/ai-platform/src/pages/design-blueprints/"
+  ],
+  "routesToMount": [
+    {
+      "importPath": "./design-blueprints/index.js",
+      "targetFile": "artifacts/api-server/src/routes/index.ts",
+      "instruction": "Add: import designBlueprintsRouter from './design-blueprints/index.js'; router.use(designBlueprintsRouter);",
+      "routePrefix": "/ai/design-blueprints",
+      "note": "Static routes /validate, /check-compatibility, /normalize, /stats, /domain/:domain must be declared BEFORE /:id — already ordered correctly inside the router file."
+    }
+  ],
+  "pagesToRegister": [
+    {
+      "importPath": "./pages/design-blueprints/index.tsx",
+      "targetFile": "artifacts/ai-platform/src/App.tsx",
+      "route": "/design-blueprints",
+      "componentName": "DesignBlueprintsPage",
+      "instruction": "Add: import DesignBlueprintsPage from './pages/design-blueprints/index.tsx'; <Route path='/design-blueprints' component={DesignBlueprintsPage} />"
+    }
+  ],
+  "sidebarItems": [
+    {
+      "targetFile": "artifacts/ai-platform/src/components/layout.tsx",
+      "section": "Creative",
+      "label": "Blueprint Library",
+      "route": "/design-blueprints",
+      "icon": "Layers",
+      "instruction": "Add a sidebar nav item under the 'Creative' section. Icon: Layers from lucide-react."
+    }
+  ],
+  "openapiFragment": "integration/openapi/team-07.yaml",
+  "migrationDrafts": [
+    "integration/migrations/team-07.sql"
+  ],
+  "seedDrafts": [],
+  "dependenciesRequested": [],
+  "eventsPublished": [],
+  "eventsConsumed": [],
+  "workerJobTypesRequested": [],
+  "sharedTypesRequested": [],
+  "integrationOrder": [
+    "1. Team 24 executes integration/migrations/team-07.sql on dev DB",
+    "2. Team 24 mounts design-blueprints router in routes/index.ts",
+    "3. Team 24 registers /design-blueprints page in App.tsx",
+    "4. Team 24 adds Blueprint Library sidebar item in layout.tsx",
+    "5. Team 24 merges OpenAPI fragment into root openapi.yaml (optional — service functions as standalone)"
+  ],
+  "knownRisks": [
+    "In-process custom blueprint store resets on API server restart until DB migration is applied — built-ins are always available",
+    "Admin UI fetch calls use VITE_ADMIN_API_KEY — must be set for API calls to succeed",
+    "OpenAPI fragment uses operationId prefix 'listDesignBlueprints' etc — ensure no collision with existing operationIds",
+    "Blueprint dimensions use domain-native units (mm for interior/packaging, px for graphic_design/presentation) — zone bound checking is px-only"
+  ]
+}
