@@ -130,20 +130,40 @@ function resolveLayoutStrategy(
 
 // ── Input mappings ────────────────────────────────────────────────────────────
 
-function adaptDiscoveryForEngineering(discovery: DiscoveryTeamOutput): T4DiscoveryInput {
+function adaptDiscoveryForEngineering(
+  discovery: DiscoveryTeamOutput,
+  variablePlanFull?: Array<{ key: string; label: string; defaultValue?: string | number }>,
+): T4DiscoveryInput {
   const brief = discovery.creativeBrief;
   const req   = discovery.requirementAnalysis;
   const brand = discovery.brandStrategy;
+
+  // Build a map from the Variable Designer's full plan (with defaultValues)
+  const varDefaults = new Map<string, { label: string; defaultValue?: string | number }>();
+  for (const v of (variablePlanFull ?? [])) {
+    varDefaults.set(v.key, { label: v.label, defaultValue: v.defaultValue });
+  }
+
+  // Use all variable keys: union of discovery keys + variable plan keys
+  const allKeys = new Set([
+    ...req.requestedVariables,
+    ...(variablePlanFull ?? []).map(v => v.key),
+  ]);
+
   return {
     briefSummary:      brief.designGoal,
     targetAudience:    brief.targetAudience.primary,
     communicationGoals: brief.contentPriority,
-    requiredVariables: req.requestedVariables.map(key => ({
-      key,
-      label:    key.replace(/_/g, " "),
-      type:     inferVariableType(key),
-      required: true,
-    })),
+    requiredVariables: Array.from(allKeys).map(key => {
+      const fromPlan = varDefaults.get(key);
+      return {
+        key,
+        label:        fromPlan?.label ?? key.replace(/_/g, " "),
+        type:         inferVariableType(key),
+        required:     true,
+        defaultValue: fromPlan?.defaultValue,
+      };
+    }),
     recommendedSizePreset: toSizePreset(req.canvas.preset),
     canvasWidth:  req.canvas.width,
     canvasHeight: req.canvas.height,
@@ -196,6 +216,8 @@ function adaptComponentsForEngineering(
       id:            c.id,
       componentType: mapComponentType(c.type),
       purpose:       mapPurpose(c.purpose),
+      // Forward the variable binding so JSON Architect can set binding.fallback
+      variableKey:   c.variableKey,
     })),
   };
 }
@@ -229,7 +251,7 @@ export async function runEngineeringAdapter(
   opts:       EngineeringAdapterOptions,
 ): Promise<OrchestratorEngineeringOutput> {
   const t4Input: EngineeringTeamInput = {
-    discovery:  adaptDiscoveryForEngineering(discovery),
+    discovery:  adaptDiscoveryForEngineering(discovery, components.variablePlanFull),
     design:     adaptDesignForEngineering(design),
     components: adaptComponentsForEngineering(components),
   };

@@ -79,13 +79,31 @@ function adaptDesignForComponentTeam(
 // ── Output mapping: Team 3 real → orchestrator contract ──────────────────────
 
 function adaptComponentOutput(real: T3RealOutput): OrchestratorComponentOutput {
+  // Build a lookup: componentId → variable key (from usedByComponentIds on each variable)
+  const componentToVariableKey = new Map<string, string>();
+  for (const v of real.variablePlan.variables) {
+    for (const cid of v.usedByComponentIds) {
+      if (!componentToVariableKey.has(cid)) {
+        componentToVariableKey.set(cid, v.key);
+      }
+    }
+  }
+
   return {
     componentPlan: real.componentPlan.components.map(c => ({
-      id:      c.id,
-      type:    c.type,
-      purpose: c.role,
+      id:          c.id,
+      type:        c.type,
+      purpose:     c.role,
+      // Prefer explicit bindingKey; fall back to reverse-lookup from usedByComponentIds
+      variableKey: c.bindingKey ?? componentToVariableKey.get(c.id),
     })),
     variableKeys: real.variablePlan.variables.map(v => v.key),
+    // Forward full variable definitions so the Engineering adapter can inject defaultValues
+    variablePlanFull: real.variablePlan.variables.map(v => ({
+      key:          v.key,
+      label:        v.label,
+      defaultValue: v.defaultValue,
+    })),
     assetBindings: real.assetPlan.assets.map(a => ({
       variableKey: a.id,
       assetType:   a.type,

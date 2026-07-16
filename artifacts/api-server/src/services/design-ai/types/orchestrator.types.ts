@@ -45,8 +45,16 @@ export interface ComponentTeamOutput {
     id: string;
     type: string;
     purpose: string;
+    /** Variable key this component is bound to (from Variable Designer) */
+    variableKey?: string;
   }>;
   variableKeys: string[];
+  /** Full variable definitions including defaultValue — forwarded from Variable Designer */
+  variablePlanFull?: Array<{
+    key: string;
+    label: string;
+    defaultValue?: string | number;
+  }>;
   assetBindings: Array<{
     variableKey: string;
     assetType: string;

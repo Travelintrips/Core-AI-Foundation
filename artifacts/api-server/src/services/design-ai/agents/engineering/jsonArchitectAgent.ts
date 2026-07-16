@@ -108,6 +108,12 @@ function assembleTemplate(
     }));
 
   const variableKeys = new Set(variables.map((v) => v.key));
+  // Build a lookup of defaultValue per variable key so bindings can carry a fallback
+  const variableDefaultMap = new Map<string, string>(
+    variables
+      .filter((v) => v.defaultValue !== undefined && v.defaultValue !== null)
+      .map((v) => [v.key, String(v.defaultValue)]),
+  );
   const total = components.componentPlan.length;
 
   // Elements from component plan
@@ -135,12 +141,16 @@ function assembleTemplate(
           const hasBinding = comp.variableKey && variableKeys.has(comp.variableKey);
           const isHeading = comp.purpose === "heading" || comp.purpose === "cta";
           const typo = isHeading ? design.typography.heading : design.typography.body;
+          // Resolve fallback: prefer explicit defaultValue, then suggestedContent, then purpose label
+          const fallbackText = hasBinding
+            ? (variableDefaultMap.get(comp.variableKey!) ?? comp.suggestedContent ?? comp.purpose)
+            : undefined;
           return {
             ...base,
             type: "text",
             name: comp.purpose,
             content: hasBinding
-              ? { binding: { variableKey: comp.variableKey! } }
+              ? { binding: { variableKey: comp.variableKey!, fallback: fallbackText } }
               : (comp.suggestedContent ?? comp.purpose),
             fontFamily: typo.fontFamily,
             fontSize: typo.fontSize,
@@ -156,7 +166,7 @@ function assembleTemplate(
             type: "image",
             name: comp.purpose,
             ...(comp.variableKey && variableKeys.has(comp.variableKey)
-              ? { src: { binding: { variableKey: comp.variableKey } } }
+              ? { src: { binding: { variableKey: comp.variableKey, fallback: variableDefaultMap.get(comp.variableKey) } } }
               : {}),
             objectFit: "cover",
           };
@@ -180,7 +190,7 @@ function assembleTemplate(
             type: "qrcode",
             name: comp.purpose,
             content: comp.variableKey && variableKeys.has(comp.variableKey)
-              ? { binding: { variableKey: comp.variableKey } }
+              ? { binding: { variableKey: comp.variableKey, fallback: variableDefaultMap.get(comp.variableKey) ?? comp.suggestedContent ?? "https://example.com" } }
               : (comp.suggestedContent ?? "https://example.com"),
             fgColor: design.colorPalette.primary,
             bgColor: "#FFFFFF",

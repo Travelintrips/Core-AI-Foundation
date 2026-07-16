@@ -2,10 +2,9 @@
  * EditorCanvas — CSS-based canvas rendering (no Konva/Fabric dependency)
  * Handles drag/move, resize handles, rotation, selection
  */
-import { useRef, useCallback, useState, useEffect } from "react";
-import { cn } from "@/lib/utils";
-import type { SceneElement } from "@/lib/designTemplateAdapter";
-import type { Scene } from "@/lib/designTemplateAdapter";
+import { useRef, useCallback, useState, useEffect, useMemo } from "react";
+import type { SceneElement, Scene } from "@/lib/designTemplateAdapter";
+import type { TemplateVariable } from "@/lib/designTemplateTypes";
 
 interface Props {
   scene: Scene;
@@ -15,6 +14,8 @@ interface Props {
   onUpdate: (id: string, changes: Partial<SceneElement>) => void;
   onAdd?: (el: SceneElement) => void;
   readOnly?: boolean;
+  /** Variable definitions from the scene — used to resolve defaultValue for preview */
+  variables?: TemplateVariable[];
 }
 
 type DragState = {
@@ -52,7 +53,18 @@ function handleOffset(h: string, w: number, ht: number): {left:number;top:number
   }
 }
 
-function ElementDisplay({ el, zoom }: { el: SceneElement; zoom: number }) {
+const EMPTY_MAP = new Map<string, string>();
+
+function ElementDisplay({
+  el,
+  zoom,
+  variableDefaults = EMPTY_MAP,
+}: {
+  el: SceneElement;
+  zoom: number;
+  /** Map of variableKey → defaultValue for preview rendering */
+  variableDefaults?: Map<string, string>;
+}) {
   const style: React.CSSProperties = {
     position: "absolute", left: el.x * zoom, top: el.y * zoom,
     width: el.width * zoom, height: el.height * zoom,
@@ -64,8 +76,20 @@ function ElementDisplay({ el, zoom }: { el: SceneElement; zoom: number }) {
   };
 
   if (el.type === "text") {
+    // For variable-bound elements: show fallback (binding.fallback) → defaultValue → key label
     const content = el.contentMode === "variable"
-      ? `[${el.variableBinding?.variableKey ?? "variable"}]`
+      ? (() => {
+          const key = el.variableBinding?.variableKey;
+          if (!key) return "[variable]";
+          // binding.fallback carries the AI-generated defaultValue from the pipeline
+          const fromFallback = el.variableBinding?.fallback;
+          if (fromFallback) return fromFallback;
+          // Also check the scene's variable definitions
+          const fromScene = variableDefaults.get(key);
+          if (fromScene) return fromScene;
+          // Last resort: show key in brackets so it's obvious it's unresolved
+          return `[${key}]`;
+        })()
       : el.staticContent;
     return (
       <div style={{
@@ -117,7 +141,7 @@ function ElementDisplay({ el, zoom }: { el: SceneElement; zoom: number }) {
 
   if (el.type === "qrcode") {
     const label = el.contentMode === "variable"
-      ? `QR [${el.variableBinding?.variableKey ?? "variable"}]`
+      ? `QR — ${el.variableBinding?.variableKey ?? "variable"}`
       : "QR Code";
     return (
       <div style={{...style, background: el.bgColor, display:"flex",flexDirection:"column",
@@ -131,10 +155,17 @@ function ElementDisplay({ el, zoom }: { el: SceneElement; zoom: number }) {
   return null;
 }
 
-export function EditorCanvas({ scene, selectedIds, zoom, onSelect, onUpdate, readOnly }: Props) {
+export function EditorCanvas({ scene, selectedIds, zoom, onSelect, onUpdate, readOnly, variables }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const [localPositions, setLocalPositions] = useState<Record<string, {x:number;y:number;w:number;h:number}>>({});
+
+  // Build a fast lookup: variableKey → defaultValue for rendering variable-bound text
+  const variableDefaults = useMemo(() => new Map<string, string>(
+    (variables ?? scene.variables ?? [])
+      .filter((v) => v.defaultValue !== undefined && v.defaultValue !== null)
+      .map((v) => [v.key, String(v.defaultValue)]),
+  ), [variables, scene.variables]);
 
   useEffect(() => { setLocalPositions({}); }, [scene.elements]);
 
@@ -228,7 +259,7 @@ export function EditorCanvas({ scene, selectedIds, zoom, onSelect, onUpdate, rea
               onMouseDown={(e) => { if(e.button===0) startDrag(e, el.id); }}
               onClick={(e) => { e.stopPropagation(); onSelect(el.id, e.shiftKey||e.metaKey); }}
             >
-              <ElementDisplay el={displayEl} zoom={zoom} />
+              <ElementDisplay el={displayEl} zoom={zoom} variableDefaults={variableDefaults} />
             </div>
 
             {/* Selection handles */}
