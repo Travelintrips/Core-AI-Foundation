@@ -1,0 +1,334 @@
+MASTER RULE — BERLAKU UNTUK SEMUA TEAM
+
+Kita akan membangun arsitektur AI Creative Studio Multi-Agent yang terdiri dari 15 agent spesialis.
+
+Setiap team harus bekerja di branch terpisah dan tidak boleh mengubah file milik team lain tanpa kebutuhan integrasi yang benar-benar wajib.
+
+Branch
+
+Gunakan branch berikut:
+
+Team 1: feature/design-ai-discovery-team
+Team 2: feature/design-ai-design-team
+Team 3: feature/design-ai-component-team
+Team 4: feature/design-ai-engineering-team
+Team 5: feature/design-ai-qa-team
+
+Jangan merge langsung ke main.
+
+Setelah selesai:
+
+Commit seluruh perubahan.
+Jalankan test dan typecheck.
+Buat laporan file yang diubah.
+Laporkan kontrak input/output.
+Laporkan risiko konflik.
+Jangan melakukan merge tanpa persetujuan eksplisit.
+Aturan Arsitektur
+
+Semua agent wajib:
+
+berada di file terpisah;
+memiliki single responsibility;
+menerima input JSON terstruktur;
+mengembalikan output JSON terstruktur;
+tidak mengembalikan teks bebas sebagai kontrak utama;
+memiliki schema validation;
+mendukung dependency injection untuk AI model;
+tidak hard-code provider AI;
+tidak langsung memanggil OpenAI dari domain logic;
+memiliki unit test;
+mencatat latency, token usage, model, retry, warning, dan error;
+tidak mengubah output agent sebelumnya secara mutasi;
+menghasilkan object baru pada setiap tahap.
+
+Gunakan kontrak umum berikut bila belum tersedia:
+
+export type AgentStatus = "success" | "failed" | "skipped";
+
+export interface AgentExecutionMetadata {
+  agentId: string;
+  agentName: string;
+  agentVersion: string;
+  model?: string;
+  startedAt: string;
+  completedAt: string;
+  latencyMs: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  estimatedCost?: number;
+  retryCount: number;
+}
+
+export interface AgentOutput<T> {
+  status: AgentStatus;
+  data: T | null;
+  warnings: string[];
+  errors: string[];
+  metadata: AgentExecutionMetadata;
+}
+
+Gunakan zod atau schema validator yang sudah menjadi standar di repository.
+
+Jangan membuat database migration kecuali memang diminta dalam prompt team.
+
+PROMPT TEAM 1 — DISCOVERY TEAM
+
+Anda adalah Team 1 — Discovery Team.
+
+Kerjakan hanya Agent 1 sampai Agent 3:
+
+Creative Director AI
+Requirement Analyst AI
+Brand Strategist AI
+Tujuan
+
+Membangun tahap discovery yang menerjemahkan prompt user menjadi fondasi desain terstruktur sebelum masuk ke proses visual.
+
+Team ini tidak boleh membuat layout final, komponen canvas, template Konva, atau keputusan engineering.
+
+Scope File
+
+Buat atau gunakan struktur berikut:
+
+services/design-ai/
+  agents/discovery/
+    creativeDirectorAgent.ts
+    requirementAnalystAgent.ts
+    brandStrategistAgent.ts
+    index.ts
+
+  prompts/discovery/
+    creative-director.prompt.ts
+    requirement-analyst.prompt.ts
+    brand-strategist.prompt.ts
+
+  schemas/discovery/
+    creativeBrief.schema.ts
+    requirementAnalysis.schema.ts
+    brandStrategy.schema.ts
+
+  types/
+    discovery.types.ts
+
+  tests/discovery/
+
+Sesuaikan root path dengan struktur repository yang ada.
+
+Jangan memindahkan file lama secara besar-besaran.
+
+Agent 1 — Creative Director AI
+
+Tanggung jawab:
+
+memahami tujuan desain;
+mengidentifikasi pesan utama;
+menentukan target audiens;
+menentukan tone komunikasi;
+menentukan campaign context;
+menentukan visual direction tingkat tinggi;
+mendeteksi informasi yang belum tersedia;
+tidak mengarang fakta bisnis.
+
+Output wajib:
+
+interface CreativeBrief {
+  designGoal: string;
+  communicationObjective: string;
+  campaignName?: string;
+  campaignContext?: string;
+  targetAudience: {
+    primary: string;
+    secondary?: string;
+    characteristics: string[];
+  };
+  coreMessage: string;
+  tone: string[];
+  desiredEmotion: string[];
+  visualDirection: string[];
+  styleKeywords: string[];
+  contentPriority: string[];
+  assumptions: string[];
+  missingInformation: string[];
+}
+
+Larangan:
+
+jangan menentukan posisi elemen;
+jangan menentukan font spesifik;
+jangan menentukan nilai hex warna final;
+jangan membuat komponen canvas;
+jangan membuat JSON Konva.
+Agent 2 — Requirement Analyst AI
+
+Input:
+
+prompt asli user;
+output Creative Director.
+
+Tanggung jawab:
+
+mengekstrak seluruh requirement eksplisit;
+membedakan explicit requirement dan inferred requirement;
+menentukan ukuran canvas;
+menentukan platform;
+menentukan bahasa;
+menentukan CTA;
+menentukan section;
+menentukan format export;
+menentukan variabel dinamis;
+menentukan constraint desain;
+mendeteksi konflik requirement.
+
+Output wajib:
+
+interface RequirementAnalysis {
+  platform: string;
+  language: string;
+  canvas: {
+    width: number;
+    height: number;
+    unit: "px";
+    orientation: "portrait" | "landscape" | "square";
+    preset?: string;
+  };
+  sections: Array<{
+    id: string;
+    name: string;
+    required: boolean;
+    contentPurpose: string;
+  }>;
+  callsToAction: Array<{
+    label?: string;
+    purpose: string;
+    priority: "primary" | "secondary";
+  }>;
+  requestedVariables: string[];
+  requiredContent: string[];
+  optionalContent: string[];
+  contentConstraints: string[];
+  visualConstraints: string[];
+  exportFormats: string[];
+  explicitRequirements: string[];
+  inferredRequirements: string[];
+  conflicts: Array<{
+    requirementA: string;
+    requirementB: string;
+    resolution?: string;
+  }>;
+  missingInformation: string[];
+}
+
+Jangan mengisi ukuran secara sembarangan.
+
+Jika platform diketahui, boleh gunakan preset dari registry repository.
+
+Jika tidak diketahui, simpan sebagai unresolved requirement atau gunakan default resmi sistem dengan mencatat asumsi.
+
+Agent 3 — Brand Strategist AI
+
+Input:
+
+Creative Brief;
+Requirement Analysis;
+brand profile dari sistem apabila tersedia.
+
+Tanggung jawab:
+
+menentukan arah identitas visual;
+menggunakan brand kit yang sudah ada bila tersedia;
+menjaga brand consistency;
+menentukan mood;
+menentukan kategori typography;
+menentukan color direction tingkat strategi;
+menentukan visual keywords;
+menentukan aturan penggunaan logo;
+tidak mengarang brand guideline.
+
+Output wajib:
+
+interface BrandStrategy {
+  brandName?: string;
+  brandPersonality: string[];
+  brandStyle: string[];
+  mood: string[];
+  visualKeywords: string[];
+  colorDirection: {
+    primaryMood: string;
+    supportingMood: string[];
+    avoid: string[];
+    useExistingBrandPalette: boolean;
+  };
+  typographyDirection: {
+    category: string[];
+    personality: string[];
+    readabilityPriority: "high" | "medium" | "low";
+  };
+  imageryDirection: string[];
+  logoRules: string[];
+  brandingRules: string[];
+  forbiddenStyles: string[];
+  assumptions: string[];
+}
+Aggregated Output
+
+Buat fungsi:
+
+runDiscoveryPipeline(input): Promise<DiscoveryTeamOutput>
+
+Output:
+
+interface DiscoveryTeamOutput {
+  creativeBrief: CreativeBrief;
+  requirementAnalysis: RequirementAnalysis;
+  brandStrategy: BrandStrategy;
+}
+
+Fungsi harus menjalankan agent secara berurutan:
+
+Creative Director
+→ Requirement Analyst
+→ Brand Strategist
+Testing
+
+Buat unit test minimal untuk:
+
+prompt sederhana;
+prompt dengan ukuran canvas;
+prompt multilingual;
+prompt tanpa CTA;
+prompt dengan brand color;
+prompt dengan requirement konflik;
+prompt yang tidak memiliki informasi cukup;
+validasi schema;
+error AI provider;
+invalid JSON response;
+retry behavior.
+
+Mock AI provider dalam unit test.
+
+Jangan menggunakan API berbayar pada test.
+
+Definition of Done
+
+Team 1 dianggap selesai jika:
+
+ketiga agent berjalan;
+seluruh output tervalidasi;
+discovery pipeline dapat dipanggil secara mandiri;
+tidak ada keputusan layout atau Konva;
+unit test lulus;
+typecheck tidak menambah error baru;
+dokumentasi input/output tersedia.
+
+Di akhir pekerjaan, berikan laporan:
+
+Branch dan commit.
+File dibuat.
+File diubah.
+Test result.
+Typecheck result.
+Contoh output JSON.
+Kontrak yang harus digunakan Team 2.
+Potensi konflik integrasi.
