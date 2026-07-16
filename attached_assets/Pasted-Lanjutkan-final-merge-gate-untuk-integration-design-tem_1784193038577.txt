@@ -1,0 +1,153 @@
+Lanjutkan final merge gate untuk integration/design-template-phase4-repair.
+
+STATUS:
+
+- Integration report menyatakan SAFE_TO_MERGE secara kode.
+- 914/914 backend tests passing.
+- Tidak ada TypeScript error baru.
+- API server dan esbuild clean.
+- DDL design_render_zip_exports belum diterapkan.
+- Jangan merge ke main sebelum runtime ZIP diverifikasi.
+
+==================================================
+1. MIGRATION PREFLIGHT
+==================================================
+
+Audit file:
+
+artifacts/api-server/src/migrations/20260716_design_render_zip_exports.sql
+
+Pastikan:
+
+- additive only
+- no DROP
+- no TRUNCATE
+- no destructive rename
+- FK column types cocok
+- unique/idempotency constraint tersedia
+- index untuk batch/tenant/status/fingerprint tersedia
+- aman dijalankan ulang sesuai convention repo
+
+Laporkan preflight sebelum apply.
+
+==================================================
+2. APPLY DEV DDL
+==================================================
+
+Terapkan migration hanya ke development database.
+
+Jangan gunakan drizzle-kit push.
+Jangan menyentuh production.
+
+Gunakan psql atau approved database execution method.
+
+Set ON_ERROR_STOP agar partial failure tidak dianggap sukses.
+
+==================================================
+3. POST-MIGRATION CHECK
+==================================================
+
+Verifikasi:
+
+- table exists
+- columns match service assumptions
+- constraints exist
+- indexes exist
+- no duplicate migration artifact
+- API startup tetap clean
+
+==================================================
+4. ZIP RUNTIME SMOKE TEST
+==================================================
+
+Gunakan satu design render batch dengan asset nyata.
+
+Test:
+
+1. POST export ZIP membuat export.
+2. Job type design_render_zip_export terbuat.
+3. Worker memproses job.
+4. Poll endpoint menunjukkan state transition nyata.
+5. Completed export memiliki checksum/fingerprint.
+6. Signed token dibuat hanya saat completed.
+7. Signed token expiry satu jam.
+8. ZIP dapat diunduh dan dibuka.
+9. ZIP berisi file batch yang diharapkan.
+10. Request idempoten tidak membuat export/job ganda.
+11. Retry bekerja.
+12. Cross-tenant/batch access ditolak.
+13. Batch tanpa file gagal dengan status terstruktur, bukan completed ZIP kosong.
+14. Storage path tidak bocor ke response publik/admin yang tidak perlu.
+
+Jika minimal-files guard belum ada:
+- implementasikan guard kecil di domain ZIP saja
+- tambahkan test
+- jangan mengubah modul lain
+
+==================================================
+5. FINAL INTEGRATION VERIFY
+==================================================
+
+Jalankan:
+
+- pnpm test api-server
+- typecheck api-server
+- typecheck ai-platform
+- build api-server
+- build ai-platform
+- pnpm run verify
+- git diff --check
+- conflict-marker scan
+
+Pastikan tidak ada error baru.
+
+==================================================
+6. MERGE TO MAIN
+==================================================
+
+Hanya jika seluruh gate hijau:
+
+git switch main
+git pull --ff-only origin main
+git merge --no-ff integration/design-template-phase4-repair
+
+Jangan push dulu.
+
+Jalankan kembali di main:
+
+- pnpm run verify
+- relevant tests
+- api-server build
+- ai-platform build
+- ZIP smoke test singkat
+
+Jika semuanya hijau:
+
+git push origin main
+
+==================================================
+7. FINAL REPORT
+==================================================
+
+Laporkan:
+
+- migration preflight
+- migration apply result
+- table/index verification
+- ZIP smoke-test result
+- idempotency result
+- empty-ZIP guard result
+- tests/build/verify
+- merge commit SHA
+- push result
+- remaining known limitations
+
+Status akhir hanya:
+
+MERGED_TO_MAIN
+
+atau
+
+NOT_MERGED
+
+Jangan menyatakan merged jika migration atau ZIP runtime belum diverifikasi.

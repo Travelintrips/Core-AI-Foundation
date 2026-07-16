@@ -198,7 +198,7 @@ export function buildFailuresCsv(items: BatchItemSnapshot[]): string {
 
 // ── Storage Helpers ───────────────────────────────────────────────────────────
 
-function parseStoragePath(path: string): { bucketName: string; objectName: string } {
+export function parseStoragePath(path: string): { bucketName: string; objectName: string } {
   // path format: /bucketName/objectName...  or  bucketName/objectName...
   let p = path.startsWith("/") ? path.slice(1) : path;
   const slashIdx = p.indexOf("/");
@@ -215,6 +215,11 @@ async function downloadFromStorage(storagePath: string): Promise<Buffer> {
   const file = bucket.file(objectName);
   const [contents] = await file.download();
   return contents as Buffer;
+}
+
+/** Public alias used by the download route — keeps storage path opaque to the route layer. */
+export async function downloadBuffer(storagePath: string): Promise<Buffer> {
+  return downloadFromStorage(storagePath);
 }
 
 async function uploadToStorage(
@@ -444,15 +449,46 @@ export async function executeZipExportJob(
  * If an existing completed export has the same fingerprint, return it (idempotent).
  * If there is already a queued/generating export, return that.
  */
+/** Thrown when a ZIP export is requested for a batch with no completed items. */
+export class EmptyBatchError extends Error {
+  readonly code = "EMPTY_BATCH";
+  constructor(batchId: number) {
+    super(`Batch ${batchId} has no completed render items — cannot produce a non-empty ZIP`);
+    this.name = "EmptyBatchError";
+  }
+}
+
+export interface EnqueueZipExportResult {
+  export: DesignRenderZipExport;
+  /**
+   * `true` only when a brand-new export record was just inserted.
+   * `false` when returning an existing completed or in-progress export.
+   * Callers MUST only enqueue a worker job when this is `true` to avoid
+   * duplicate job dispatch on idempotent re-requests.
+   */
+  created: boolean;
+}
+
 export async function enqueueZipExport(
   batchId: number,
   tenantId: string,
-): Promise<DesignRenderZipExport> {
+): Promise<EnqueueZipExportResult> {
   // Compute fingerprint from current completed items
   const snapshot = await getExportableBatchSnapshot(batchId, tenantId);
+
+  // ── Zero-item guard ──────────────────────────────────────────────────────
+  // Reject batches with no completed items: we must not create an empty ZIP
+  // or a ZIP containing only manifest.json/failures.csv with zero content.
+  const completedCount = snapshot.items.filter(
+    (i) => i.status === "completed" && i.outputStoragePath,
+  ).length;
+  if (completedCount === 0) {
+    throw new EmptyBatchError(batchId);
+  }
+
   const fingerprint = computeBatchFingerprint(snapshot.items);
 
-  // Check for existing export with same fingerprint (completed)
+  // Check for existing export with same fingerprint (completed) → reuse
   const existing = await db
     .select()
     .from(designRenderZipExportsTable)
@@ -468,10 +504,11 @@ export async function enqueueZipExport(
     .limit(1);
 
   if (existing.length > 0) {
-    return existing[0]!;
+    return { export: existing[0]!, created: false };
   }
 
-  // Check for already queued/generating export (any fingerprint)
+  // Check for already queued/generating export (any fingerprint) → return it
+  // WITHOUT enqueuing another job (idempotency: one job per active export).
   const inProgress = await db
     .select()
     .from(designRenderZipExportsTable)
@@ -485,10 +522,10 @@ export async function enqueueZipExport(
     .limit(1);
 
   if (inProgress.length > 0) {
-    return inProgress[0]!;
+    return { export: inProgress[0]!, created: false };
   }
 
-  // Create new export record
+  // Create new export record — caller will enqueue worker job
   const [newExport] = await db
     .insert(designRenderZipExportsTable)
     .values({
@@ -499,7 +536,7 @@ export async function enqueueZipExport(
     } satisfies NewDesignRenderZipExport)
     .returning();
 
-  return newExport!;
+  return { export: newExport!, created: true };
 }
 
 // ── Status Query ──────────────────────────────────────────────────────────────

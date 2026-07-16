@@ -107,6 +107,9 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
   { method: "GET", pattern: /^\/ai\/portfolio\/preview\/\d+$/ },
   { method: "GET", pattern: /^\/ai\/portfolio\/preview\/session\/[^/]+\/count$/ },
   { method: "POST", pattern: /^\/ai\/portfolio\/preview\/\d+\/continue$/ },
+  // Design ZIP export download — signed-token-protected; token is the sole credential.
+  // Only the download sub-path is public; admin CRUD routes on the same mount remain protected.
+  { method: "GET", pattern: /^\/ai\/design-zip-exports\/\d+\/download$/ },
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {
