@@ -76,3 +76,50 @@ All secrets are configured in Replit's environment settings. Key variables:
 - Follow the pnpm workspace conventions (never use npm/yarn)
 - Never import `zod` directly in `api-server` routes — use `@workspace/api-zod` schemas
 - New DB tables: hand-write DDL (drizzle-kit push can falsely propose dropping the whole `ai_platform` schema)
+
+---
+
+## Global Parallel Development Rules (Multi-Team)
+
+These rules apply to ALL future tasks. Follow them automatically without being asked.
+
+### Branch discipline
+- Work on the team's own feature branch only — never directly on `main`, never merge to `main`
+
+### Shared file lock — NEVER modify these:
+- `App.tsx` (main), layout/sidebar/navigation, route registry / `routes/index.ts`
+- Root `openapi.yaml`, Orval configuration
+- Root `package.json`, `pnpm-lock.yaml`
+- `schema/index.ts` or any shared barrel export, api-client index, api-zod index, generated files
+- `jobWorkerService.ts`, `creativeWorkflowRunner.ts`, worker registry, workflow registry
+- Migration registry, seed master, shared Event Bus registry, shared status enum
+- Queue core, Dispatcher core, Payment core, Review core, Commercial core
+
+If a feature needs a change to any locked file: **do not change it** — create an Integration Request and Integration Manifest instead.
+
+### Forbidden commands:
+- `pnpm run build:generated`, `pnpm run clean:generated`, `pnpm run rebuild:all`
+- `drizzle-kit push`, any migration to shared/production DB
+- Global formatter, global autofix, global codegen, root dependency changes
+
+Only allowed to run: tests, typecheck, build, lint, and unit/integration tests for the **current team's own domain**.
+
+### Database changes:
+- Write a draft SQL file only: `integration/migrations/<team-code>.sql`
+- Must be additive (no DROP, TRUNCATE, destructive rename, changes to other teams' tables)
+- Use `CREATE INDEX IF NOT EXISTS` — do not execute
+
+### OpenAPI changes:
+- Write a fragment only: `integration/openapi/<team-code>.yaml`
+- Must include: paths, schemas, unique operationIds, validation, security, documented errors
+- Do not merge into root `openapi.yaml`
+
+### Global wiring:
+- Do NOT self-register: router, pages into App.tsx, sidebar items, worker cases, events, schema barrels, root dependencies, DB migrations
+- Team 24 handles all integration wiring
+
+### Integration Manifest:
+- Always create `integration/manifests/<team-code>.json` with the full manifest schema (team, branch, ownedFolders, routesToMount, pagesToRegister, sidebarItems, openapiFragment, migrationDrafts, seedDrafts, dependenciesRequested, eventsPublished, eventsConsumed, workerJobTypesRequested, sharedTypesRequested, integrationOrder, knownRisks)
+
+### Final Report (per task):
+Provide: branch, commit hash, files changed, domain architecture, local routes, DB draft, OpenAPI fragment, tests, build/typecheck result, screenshots (if UI), integration manifest, known limitations, external blockers.
