@@ -542,9 +542,8 @@ router.get("/ai/design-render-batches/:id/items", async (req, res) => {
 /**
  * POST /ai/design-render-batches/:id/export-zip
  *
- * Phase 3 stub — ZIP export is deferred to Phase 3.
- * Returns 501 with a clear message so the UI does not show a false success.
- * Does NOT enqueue a job that would silently fail.
+ * Enqueue a ZIP export for the batch. Idempotent — returns existing export
+ * if the fingerprint matches an already-completed export.
  */
 router.post("/ai/design-render-batches/:id/export-zip", async (req, res) => {
   try {
@@ -555,10 +554,97 @@ router.post("/ai/design-render-batches/:id/export-zip", async (req, res) => {
     const batch = await getBatch(id, ctx.tenantId);
     if (!batch) return res.status(404).json({ error: "Batch not found" });
 
-    return res.status(501).json({
-      error:  "ZIP export not yet implemented",
-      status: "not_implemented",
-      detail: "Batch ZIP export is scheduled for Phase 3. Download individual render item URLs from GET /ai/design-render-batches/:id/items instead.",
+    const { enqueueZipExport } = await import("../services/designZipExportService.js");
+    const zipExport = await enqueueZipExport(id, ctx.tenantId);
+
+    // If already completed (fingerprint match), no job needed — just return it
+    if (zipExport.status === "completed") {
+      return res.status(200).json({
+        exportId: zipExport.id,
+        batchId: zipExport.batchId,
+        status: zipExport.status,
+        sourceFingerprint: zipExport.sourceFingerprint,
+        fileSizeBytes: zipExport.fileSizeBytes,
+        createdAt: zipExport.createdAt,
+        updatedAt: zipExport.updatedAt,
+      });
+    }
+
+    // If newly queued, enqueue the worker job
+    if (zipExport.status === "queued") {
+      await enqueue({
+        jobType: "design_render_zip_export",
+        payloadJson: { exportId: zipExport.id, tenantId: ctx.tenantId, batchId: id },
+        priority: 50,
+        maxRetry: 2,
+        retryStrategy: "exponential",
+        tenantId: ctx.tenantId,
+      });
+    }
+
+    return res.status(202).json({
+      exportId: zipExport.id,
+      batchId: zipExport.batchId,
+      status: zipExport.status,
+      sourceFingerprint: zipExport.sourceFingerprint,
+      createdAt: zipExport.createdAt,
+      updatedAt: zipExport.updatedAt,
+    });
+  } catch (err) {
+    return handleError(res, err);
+  }
+});
+
+/**
+ * GET /ai/design-render-batches/:id/export-zip
+ *
+ * Poll status of the latest ZIP export for this batch.
+ * Includes a signed download URL only when the export is completed AND the
+ * request is authenticated — the URL is generated on demand, never stored.
+ */
+router.get("/ai/design-render-batches/:id/export-zip", async (req, res) => {
+  try {
+    const ctx = resolveAuthenticatedTenantContext(req);
+    const id = parseInt(String(req.params["id"]), 10);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid batch ID" });
+
+    const batch = await getBatch(id, ctx.tenantId);
+    if (!batch) return res.status(404).json({ error: "Batch not found" });
+
+    const { getLatestZipExportForBatch, generateZipDownloadToken } = await import(
+      "../services/designZipExportService.js"
+    );
+    const zipExport = await getLatestZipExportForBatch(id, ctx.tenantId);
+    if (!zipExport) {
+      return res.status(404).json({ error: "No ZIP export found for this batch" });
+    }
+
+    // Tenant isolation: already enforced by getLatestZipExportForBatch, but double-check
+    if (zipExport.tenantId !== ctx.tenantId) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    let signedUrl: string | undefined;
+    let signedUrlExpiresAt: string | undefined;
+    if (zipExport.status === "completed" && zipExport.zipStoragePath) {
+      const token = generateZipDownloadToken(zipExport.id, ctx.tenantId);
+      signedUrl = `/api/ai/design-zip-exports/${zipExport.id}/download?token=${token}`;
+      signedUrlExpiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+    }
+
+    return res.json({
+      exportId: zipExport.id,
+      batchId: zipExport.batchId,
+      status: zipExport.status,
+      sourceFingerprint: zipExport.sourceFingerprint,
+      fileSizeBytes: zipExport.fileSizeBytes,
+      manifestJson: zipExport.manifestJson,
+      errorMessage: zipExport.errorMessage,
+      retryCount: zipExport.retryCount,
+      signedUrl: signedUrl ?? null,
+      signedUrlExpiresAt: signedUrlExpiresAt ?? null,
+      createdAt: zipExport.createdAt,
+      updatedAt: zipExport.updatedAt,
     });
   } catch (err) {
     return handleError(res, err);

@@ -70,6 +70,7 @@ import portfolioGalleryRouter from "./portfolio-gallery";
 import productionPipelineRouter from "./production-pipeline";
 import designStudioRouter from "./design-studio";
 import designTemplatesRouter from "./design-templates";
+import designTemplatesAiAssistRouter from "./design-templates-ai-assist";
 import creativeMarketplaceRouter from "./creative-marketplace";
 
 const router: IRouter = Router();
@@ -143,6 +144,7 @@ router.use(commercialAnalyticsRouter);
 router.use(observabilityRouter);
 router.use(designStudioRouter);
 router.use(designTemplatesRouter);
+router.use(designTemplatesAiAssistRouter);
 router.use(creativeMarketplaceRouter);
 
 export default router;
