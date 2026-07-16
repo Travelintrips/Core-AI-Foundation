@@ -1,0 +1,159 @@
+{
+  "team": "16",
+  "domain": "presentation-document",
+  "branch": "feature/16-presentation-document",
+  "version": "1.0.0",
+  "description": "Presentation and Document Creative Services — PDF and PPTX generation for proposal, product catalog, annual report, whitepaper, case study, and ebook service types.",
+  "ownership": {
+    "backend": [
+      "artifacts/api-server/src/domains/presentation-document/"
+    ],
+    "customerPortal": [
+      "artifacts/customer-portal/src/pages/presentation-document/"
+    ],
+    "adminPlatform": [
+      "artifacts/ai-platform/src/pages/presentation-document/"
+    ],
+    "integration": [
+      "integration/openapi/team-16.yaml",
+      "integration/manifests/team-16.json"
+    ]
+  },
+  "serviceTypes": [
+    {
+      "serviceType": "company_profile",
+      "serviceCode": "company-profile",
+      "status": "existing_stable",
+      "renderEngine": "document",
+      "deliveryFormat": "pdf",
+      "minimumPageCount": 10,
+      "note": "Existing stable implementation — not modified by Team 16"
+    },
+    {
+      "serviceType": "pitch_deck",
+      "serviceCode": "pitch-deck",
+      "status": "existing_stable",
+      "renderEngine": "presentation",
+      "deliveryFormat": "pptx",
+      "minimumSlideCount": 7,
+      "note": "Existing stable implementation — not modified by Team 16"
+    },
+    {
+      "serviceType": "proposal",
+      "serviceCode": "proposal",
+      "status": "implemented",
+      "renderEngine": "document",
+      "deliveryFormat": "pdf",
+      "minimumPageCount": 4,
+      "maxInlineImages": 1,
+      "antiFabricationGuard": "no_pricing_figures_or_legal_terms",
+      "mapper": "artifacts/api-server/src/domains/presentation-document/mappers/proposalDocumentMapper.ts"
+    },
+    {
+      "serviceType": "product_catalog",
+      "serviceCode": "product-catalog",
+      "status": "implemented",
+      "renderEngine": "document",
+      "deliveryFormat": "pdf",
+      "minimumPageCount": 4,
+      "maxInlineImages": 2,
+      "antiFabricationGuard": "no_prices_or_stock_levels",
+      "mapper": "artifacts/api-server/src/domains/presentation-document/mappers/productCatalogDocumentMapper.ts"
+    },
+    {
+      "serviceType": "annual_report",
+      "serviceCode": "annual-report",
+      "status": "implemented",
+      "renderEngine": "document",
+      "deliveryFormat": "pdf",
+      "minimumPageCount": 8,
+      "maxInlineImages": 2,
+      "antiFabricationGuard": "no_financial_figures_or_audit_opinions",
+      "mapper": "artifacts/api-server/src/domains/presentation-document/mappers/annualReportDocumentMapper.ts"
+    },
+    {
+      "serviceType": "whitepaper",
+      "serviceCode": "whitepaper",
+      "status": "implemented",
+      "renderEngine": "document",
+      "deliveryFormat": "pdf",
+      "minimumPageCount": 6,
+      "maxInlineImages": 1,
+      "antiFabricationGuard": "no_statistics_or_third_party_citations",
+      "mapper": "artifacts/api-server/src/domains/presentation-document/mappers/whitepaperDocumentMapper.ts"
+    },
+    {
+      "serviceType": "case_study",
+      "serviceCode": "case-study",
+      "status": "implemented",
+      "renderEngine": "document",
+      "deliveryFormat": "pdf",
+      "minimumPageCount": 2,
+      "maxInlineImages": 1,
+      "antiFabricationGuard": "no_quantified_results_or_client_names",
+      "mapper": "artifacts/api-server/src/domains/presentation-document/mappers/caseStudyDocumentMapper.ts"
+    },
+    {
+      "serviceType": "ebook",
+      "serviceCode": "ebook",
+      "status": "implemented",
+      "renderEngine": "document",
+      "deliveryFormat": "pdf",
+      "minimumPageCount": 8,
+      "maxInlineImages": 2,
+      "antiFabricationGuard": "no_statistics_or_third_party_citations",
+      "mapper": "artifacts/api-server/src/domains/presentation-document/mappers/ebookDocumentMapper.ts"
+    }
+  ],
+  "domainInfrastructure": {
+    "domainIndex":             "artifacts/api-server/src/domains/presentation-document/index.ts",
+    "types":                   "artifacts/api-server/src/domains/presentation-document/types.ts",
+    "sectionMapping":          "artifacts/api-server/src/domains/presentation-document/sectionMapping.ts",
+    "packageRules":            "artifacts/api-server/src/domains/presentation-document/packageRules.ts",
+    "qcProfile":               "artifacts/api-server/src/domains/presentation-document/qcProfile.ts",
+    "templateCompatibility":   "artifacts/api-server/src/domains/presentation-document/templateCompatibility.ts",
+    "brandDnaAdapter":         "artifacts/api-server/src/domains/presentation-document/brandDnaAdapter.ts",
+    "universalAdapter":        "artifacts/api-server/src/domains/presentation-document/adapters/presentationDocumentAdapter.ts"
+  },
+  "registrationHooks": {
+    "documentRegistry": "artifacts/api-server/src/services/creativeDocumentRegistry.ts",
+    "typeMapping":       "artifacts/api-server/src/services/creativeProjectDocumentType.ts",
+    "note":              "initPresentationDocumentDomain() is called from initDocumentRegistry() at startup"
+  },
+  "tests": {
+    "suite":  "artifacts/api-server/src/domains/presentation-document/__tests__/presentationDocument.test.ts",
+    "covers": [
+      "domain init — all 6 types registered",
+      "proposal mapper — sections, anti-fabrication, timeline skip, Brand DNA",
+      "product catalog — features, image embedding, price guard",
+      "annual report — financial figures never fabricated",
+      "whitepaper — findings skip, statistics guard",
+      "case study — outcomes/testimonial skip, ROI guard",
+      "ebook — ToC generation, chapter coverage",
+      "QC profiles — scoring, pass/fail, hard-fail",
+      "package rules — tier resolution, page limits",
+      "template compatibility — style validation, fallback",
+      "Brand DNA adapter — dna > creative_direction > default",
+      "anti-fabrication guard — placeholder detection",
+      "adapter routing — pdf vs pptx"
+    ]
+  },
+  "antiFabricationPolicy": {
+    "rule": "All content must originate from project.result (AI workflow outputs), project.briefJson (client-provided data), or direct project fields. Sections requiring data not present in any of these sources are SKIPPED — never padded with placeholders, invented figures, or lorem ipsum text.",
+    "neverFabricated": [
+      "pricing_figures",
+      "legal_terms",
+      "payment_schedules",
+      "financial_projections",
+      "revenue_figures",
+      "roi_percentages",
+      "audit_opinions",
+      "research_statistics",
+      "third_party_citations",
+      "client_names",
+      "team_roster",
+      "testimonials_without_brief_data"
+    ]
+  },
+  "openApiSpec": "integration/openapi/team-16.yaml"
+}
