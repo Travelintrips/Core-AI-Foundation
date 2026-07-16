@@ -1,0 +1,1076 @@
+# PROMPT TEAM 6 — REVIEW SETIAP BRANCH, LAPORAN PER TIM, INTEGRASI, DAN PUSH KE MAIN
+
+Anda adalah **Team 6 — Independent Review, Integration, and Release Team**.
+
+Tugas utama Anda bukan membuat fitur baru.
+
+Anda harus:
+
+1. memeriksa pekerjaan Team 1–5 langsung di branch masing-masing,
+2. menjalankan test dan verifikasi secara independen,
+3. membuat laporan hasil review untuk setiap tim,
+4. menentukan status `APPROVED`, `APPROVED WITH NOTES`, atau `REJECTED`,
+5. tidak mengintegrasikan branch yang berstatus `REJECTED`,
+6. menggabungkan hanya branch yang sudah lolos,
+7. menjalankan regression dan integration test,
+8. baru push atau merge ke `main` setelah seluruh release gate lulus.
+
+## Branch yang Harus Diperiksa
+
+```text
+feature/design-template-phase3a-batch
+feature/design-template-phase3b-zip
+feature/design-template-phase4-library
+feature/design-template-phase5-editor
+feature/design-template-phase6-7-bulk-ai
+```
+
+Integration branch:
+
+```text
+integration/design-template-phase3-7
+```
+
+## Aturan Mutlak
+
+Jangan:
+
+* langsung merge semua branch ke integration branch,
+* percaya hanya pada laporan dari masing-masing tim,
+* menerima klaim test tanpa menjalankan test sendiri,
+* memperbaiki diam-diam pekerjaan tim yang gagal,
+* merge branch yang belum direview,
+* push langsung ke `main` sebelum semua gate lulus,
+* menggunakan `accept theirs` atau `accept ours` secara buta saat conflict,
+* menghapus test untuk membuat build lulus,
+* mengabaikan security issue,
+* menyatakan selesai sebelum verifikasi setelah merge ke `main`.
+
+Team 6 harus menjadi reviewer independen.
+
+# BAGIAN A — PERSIAPAN REVIEW
+
+Sebelum memeriksa branch:
+
+1. pastikan working tree bersih,
+2. fetch seluruh branch terbaru,
+3. catat commit baseline Phase 2,
+4. catat commit SHA terakhir setiap branch,
+5. pastikan semua branch berasal dari baseline yang sesuai,
+6. catat apakah branch tertinggal atau memiliki commit yang tidak berkaitan,
+7. jangan melakukan perubahan ke branch tim saat review awal.
+
+Buat tabel awal:
+
+```text
+Team | Branch | Commit SHA | Baseline Valid | Ready for Review
+```
+
+Jika branch belum memiliki commit final atau belum di-push, status:
+
+```text
+NOT READY FOR REVIEW
+```
+
+Jangan lanjutkan integrasi branch tersebut.
+
+# BAGIAN B — REVIEW TEAM 1
+
+Checkout:
+
+```text
+feature/design-template-phase3a-batch
+```
+
+Team 1 bertanggung jawab atas:
+
+* batch lifecycle,
+* batch dispatcher,
+* chunk dispatch,
+* retry,
+* lease,
+* stale recovery,
+* restart recovery,
+* cancellation,
+* progress reconciliation,
+* tenant fairness,
+* backpressure.
+
+## Pemeriksaan Kode Team 1
+
+Periksa:
+
+* `design_render_batch_dispatch` bukan stub,
+* dispatcher tidak melakukan render,
+* job payload hanya identifier,
+* insert dan dispatch dilakukan chunked,
+* duplicate dispatcher aman,
+* item tidak dibuat duplicate,
+* atomic claim tetap aman,
+* lease expiry diterapkan,
+* stale item recovery atomic,
+* active lease tidak direbut,
+* retryable dan non-retryable error dibedakan,
+* retry manual tidak membuat row baru,
+* completed item tidak ikut retry,
+* cancellation idempotent,
+* completed output tidak dihapus saat cancellation,
+* reconciliation menghitung dari item canonical,
+* progress tidak lebih dari 100%,
+* batch tidak completed jika masih ada queued/processing item,
+* tenant fairness benar-benar diterapkan,
+* default renderer concurrency tetap aman,
+* audit logging menggunakan service existing,
+* tidak ada duplicate queue atau context.
+
+## Test Team 1
+
+Jalankan secara independen:
+
+* lifecycle tests,
+* dispatcher tests,
+* retry tests,
+* lease tests,
+* recovery tests,
+* reconciliation tests,
+* cancellation tests,
+* tenant isolation tests,
+* fairness tests,
+* full backend test,
+* typecheck,
+* build.
+
+Lakukan simulasi:
+
+1. duplicate dispatcher delivery,
+2. enqueue gagal di tengah,
+3. worker mati setelah claim,
+4. lease expired,
+5. server restart,
+6. retry item failed,
+7. cancellation saat processing,
+8. dua tenant memiliki batch bersamaan.
+
+## Laporan Team 1
+
+Buat laporan:
+
+```text
+TEAM 1 REVIEW REPORT
+
+Branch:
+Commit SHA:
+Scope Reviewed:
+Files Reviewed:
+Migration Reviewed:
+Tests Run:
+Tests Passed:
+Tests Failed:
+Build:
+Typecheck:
+Security Findings:
+Tenant Isolation:
+Idempotency:
+Recovery:
+Performance:
+Conflicts with Existing Architecture:
+Issues Found:
+Required Fixes:
+Reviewer Notes:
+Status:
+```
+
+Status hanya boleh:
+
+```text
+APPROVED
+APPROVED WITH NOTES
+REJECTED
+```
+
+Gunakan `REJECTED` jika ada:
+
+* data race,
+* duplicate rendering,
+* recovery tidak bekerja,
+* tenant leak,
+* lifecycle salah,
+* test gagal,
+* build gagal,
+* error baru,
+* stub tersisa pada scope wajib.
+
+Jangan integrasikan Team 1 jika `REJECTED`.
+
+# BAGIAN C — REVIEW TEAM 2
+
+Checkout:
+
+```text
+feature/design-template-phase3b-zip
+```
+
+Team 2 bertanggung jawab atas:
+
+* export record,
+* ZIP worker,
+* manifest,
+* failures.csv,
+* filename sanitization,
+* ZIP Slip protection,
+* bounded-memory processing,
+* storage upload,
+* source fingerprint,
+* signed URL,
+* export retry.
+
+## Pemeriksaan Kode Team 2
+
+Periksa:
+
+* `design_render_zip_export` bukan stub,
+* export dilakukan asynchronous,
+* canonical export record tersedia,
+* source fingerprint deterministic,
+* duplicate export request reuse hasil valid,
+* output baru membuat fingerprint baru,
+* ZIP benar-benar valid,
+* seluruh completed output dimasukkan,
+* failed item tidak dibuatkan gambar palsu,
+* manifest akurat,
+* failures.csv aman,
+* formula injection dicegah,
+* filename aman,
+* path traversal dicegah,
+* ZIP Slip dicegah,
+* tidak membaca seluruh file ke memory,
+* temp file dihapus,
+* private storage policy dipatuhi,
+* signed URL dibuat setelah authorization,
+* signed URL tidak disimpan permanen,
+* worker atomic claim,
+* export retry aman,
+* tenant isolation benar.
+
+## Test Team 2
+
+Jalankan:
+
+* manifest tests,
+* CSV escaping tests,
+* filename tests,
+* ZIP Slip tests,
+* ZIP integration tests,
+* duplicate export tests,
+* stale fingerprint tests,
+* retry tests,
+* signed URL authorization tests,
+* cross-tenant tests,
+* full backend test,
+* typecheck,
+* build.
+
+Lakukan verifikasi ZIP nyata:
+
+* buka archive,
+* baca `manifest.json`,
+* baca `failures.csv`,
+* cocokkan file count,
+* pastikan file gambar valid,
+* pastikan archive tidak mengandung path berbahaya.
+
+## Laporan Team 2
+
+Gunakan format:
+
+```text
+TEAM 2 REVIEW REPORT
+
+Branch:
+Commit SHA:
+Scope Reviewed:
+Files Reviewed:
+Migration Reviewed:
+Dependencies:
+ZIP Strategy:
+Maximum Tested Files:
+Memory Behavior:
+Temporary File Cleanup:
+Storage Policy:
+Signed URL Policy:
+Tests Run:
+Tests Passed:
+Tests Failed:
+Build:
+Typecheck:
+Security Findings:
+Issues Found:
+Required Fixes:
+Reviewer Notes:
+Status:
+```
+
+Gunakan `REJECTED` jika:
+
+* ZIP masih stub,
+* ZIP corrupt,
+* seluruh output dimuat ke memory tanpa batas,
+* ZIP Slip memungkinkan,
+* signed URL tidak authorized,
+* output menjadi public tanpa alasan,
+* fingerprint salah,
+* cross-tenant access memungkinkan,
+* test/build gagal.
+
+# BAGIAN D — REVIEW TEAM 3
+
+Checkout:
+
+```text
+feature/design-template-phase4-library
+```
+
+Team 3 bertanggung jawab atas:
+
+* Template Library,
+* template detail,
+* version history,
+* publish,
+* duplicate,
+* archive,
+* backend-rendered preview,
+* search/filter/pagination.
+
+## Pemeriksaan Team 3
+
+Pastikan:
+
+* list memakai API canonical,
+* pagination nyata,
+* filter dan search bekerja,
+* tidak memuat semua data,
+* preview memakai endpoint backend,
+* list page tidak melakukan render preview untuk semua card,
+* published version immutable,
+* duplicate tidak mengubah sumber,
+* archive bukan hard delete,
+* error/loading/empty state tersedia,
+* tenant errors ditangani,
+* route sesuai kontrak,
+* tidak membuat frontend renderer kedua,
+* tidak membuat design system kedua.
+
+## Visual Review
+
+Ambil screenshot:
+
+* Template Library,
+* empty state,
+* detail page,
+* version history,
+* preview,
+* publish confirmation,
+* archive confirmation.
+
+Periksa desktop dan viewport kecil yang relevan.
+
+## Test Team 3
+
+Jalankan:
+
+* frontend tests,
+* route tests,
+* API client tests,
+* preview tests,
+* publish tests,
+* duplicate tests,
+* archive tests,
+* accessibility checks jika tersedia,
+* frontend build,
+* typecheck.
+
+## Laporan Team 3
+
+```text
+TEAM 3 REVIEW REPORT
+
+Branch:
+Commit SHA:
+Routes Reviewed:
+Components Reviewed:
+API Contracts:
+Visual Screenshots:
+Loading State:
+Empty State:
+Error State:
+Accessibility:
+Tests Run:
+Tests Passed:
+Tests Failed:
+Build:
+Typecheck:
+Issues Found:
+Required Fixes:
+Reviewer Notes:
+Status:
+```
+
+Gunakan `REJECTED` jika:
+
+* preview palsu,
+* publish memutasi version published,
+* route rusak,
+* halaman tidak dapat dipakai,
+* render storm terjadi,
+* API contract tidak cocok,
+* test/build gagal.
+
+# BAGIAN E — REVIEW TEAM 4
+
+Checkout:
+
+```text
+feature/design-template-phase5-editor
+```
+
+Team 4 bertanggung jawab atas Visual Template Editor.
+
+## Pemeriksaan Team 4
+
+Pastikan:
+
+* editor membuka template JSON canonical,
+* terdapat adapter schema ke scene model,
+* serialization kembali kompatibel,
+* Fabric/Konva internal JSON tidak menjadi canonical format,
+* text, image, shape, line, dan QR tersedia,
+* drag, resize, rotate bekerja,
+* z-index bekerja,
+* lock bekerja,
+* variable binding bekerja,
+* conditional visibility mengikuti schema,
+* undo/redo bounded,
+* binary image tidak disimpan dalam JSON,
+* save membuat draft version,
+* published version tidak diubah,
+* final preview menggunakan backend renderer,
+* editor tidak menambahkan arbitrary JS/HTML,
+* editor tidak menyentuh renderer core.
+
+## Round-Trip Verification
+
+Uji:
+
+```text
+Template JSON
+→ Editor Scene
+→ Edit
+→ Serialize
+→ Backend validation
+→ Backend preview
+```
+
+Pastikan backend menerima hasil tanpa manual correction.
+
+Bandingkan canvas editor dan backend final preview. Catat perbedaan yang masih wajar.
+
+## Visual Review
+
+Ambil screenshot:
+
+* editor default,
+* text selected,
+* image binding,
+* variable binding,
+* layers,
+* preview,
+* save success,
+* validation error.
+
+## Test Team 4
+
+Jalankan:
+
+* adapter round-trip,
+* element operations,
+* layer reorder,
+* undo/redo,
+* variable binding,
+* save payload,
+* immutability,
+* backend preview,
+* frontend build,
+* typecheck.
+
+## Laporan Team 4
+
+```text
+TEAM 4 REVIEW REPORT
+
+Branch:
+Commit SHA:
+Editor Library:
+Routes:
+Schema Adapter:
+Round-Trip Result:
+Supported Elements:
+Save Behavior:
+Published Version Protection:
+Backend Preview:
+Performance Tested Elements:
+Visual Differences:
+Tests Run:
+Tests Passed:
+Tests Failed:
+Build:
+Typecheck:
+Issues Found:
+Required Fixes:
+Reviewer Notes:
+Status:
+```
+
+Gunakan `REJECTED` jika:
+
+* JSON tidak kompatibel,
+* published version dimutasi,
+* base64 besar tersimpan,
+* preview hanya frontend,
+* save menghasilkan template invalid,
+* editor crash,
+* test/build gagal.
+
+# BAGIAN F — REVIEW TEAM 5
+
+Checkout:
+
+```text
+feature/design-template-phase6-7-bulk-ai
+```
+
+Team 5 bertanggung jawab atas:
+
+* CSV/XLSX import,
+* mapping,
+* row validation,
+* batch creation UI,
+* progress monitoring,
+* retry/cancel/export UI,
+* result gallery,
+* AI Template Assistant.
+
+## Pemeriksaan Dataset dan Bulk Create
+
+Pastikan:
+
+* CSV dapat diparse,
+* XLSX dapat diparse,
+* formula tidak dieksekusi,
+* duplicate header ditangani,
+* mapping required jelas,
+* type validation berjalan,
+* invalid rows tidak disembunyikan,
+* 10.000 row tidak dirender penuh di DOM,
+* batch request sesuai API,
+* idempotency key digunakan,
+* progress berasal dari API,
+* polling berhenti saat terminal,
+* result gallery lazy/paginated,
+* ZIP dianggap asynchronous,
+* signed download baru muncul saat completed.
+
+## Pemeriksaan AI Assistant
+
+Pastikan:
+
+* AI menghasilkan structured proposal,
+* output melalui Zod/schema validation,
+* coordinates dan limit dinormalisasi,
+* duplicate element ID ditolak,
+* unsafe URL ditolak,
+* arbitrary HTML/JS/SVG script ditolak,
+* AI result disimpan sebagai draft,
+* final preview menggunakan backend,
+* AI tidak dipanggil per render row,
+* cost tracking memakai sistem existing,
+* invalid AI output tidak disimpan,
+* tidak ada mock success.
+
+## Visual Review
+
+Ambil screenshot:
+
+* upload dataset,
+* mapping,
+* invalid row summary,
+* batch progress,
+* result gallery,
+* export status,
+* AI prompt,
+* AI proposal,
+* backend preview.
+
+## Test Team 5
+
+Jalankan:
+
+* CSV parser,
+* XLSX parser,
+* formula handling,
+* mapping,
+* validation,
+* large row UI,
+* batch API,
+* progress polling,
+* retry,
+* cancel,
+* export polling,
+* AI validation,
+* unsafe output,
+* draft save,
+* cost tracking,
+* full frontend/backend relevant tests,
+* builds,
+* typechecks.
+
+## Laporan Team 5
+
+```text
+TEAM 5 REVIEW REPORT
+
+Branch:
+Commit SHA:
+Routes:
+CSV/XLSX Limits:
+Maximum Rows Tested:
+Mapping:
+Validation:
+Batch Monitoring:
+ZIP Integration:
+AI Provider:
+AI Output Schema:
+AI Safety:
+AI Cost Tracking:
+No Per-Row AI Verification:
+Visual Screenshots:
+Tests Run:
+Tests Passed:
+Tests Failed:
+Build:
+Typecheck:
+Issues Found:
+Required Fixes:
+Reviewer Notes:
+Status:
+```
+
+Gunakan `REJECTED` jika:
+
+* invalid data silently dropped,
+* progress palsu,
+* AI output tidak divalidasi,
+* AI dipanggil untuk setiap row,
+* unsafe output diterima,
+* batch API tidak cocok,
+* test/build gagal.
+
+# BAGIAN G — PENANGANAN BRANCH YANG DITOLAK
+
+Jika satu branch `REJECTED`:
+
+1. jangan merge branch tersebut,
+2. jangan perbaiki sendiri kecuali masalah hanya integrasi kecil,
+3. buat laporan bug yang spesifik,
+4. sertakan:
+
+   * file,
+   * function,
+   * expected behavior,
+   * actual behavior,
+   * reproduction,
+   * test yang gagal,
+   * acceptance criteria,
+5. kembalikan kepada tim terkait,
+6. tunggu commit perbaikan,
+7. review ulang hanya commit delta dan regression terkait,
+8. ubah status hanya setelah verifikasi ulang.
+
+Format:
+
+```text
+REWORK REQUEST — TEAM X
+
+Branch:
+Reviewed Commit:
+Blocking Issue:
+Severity:
+Affected Files:
+Reproduction:
+Expected:
+Actual:
+Required Fix:
+Required Test:
+Do Not Change:
+Resubmission Requirements:
+```
+
+Jangan melanjutkan final integration jika branch wajib masih `REJECTED`.
+
+# BAGIAN H — RINGKASAN REVIEW SELURUH TIM
+
+Setelah seluruh review, buat tabel:
+
+```text
+Team | Branch | Commit | Tests | Build | Security | Status | Blocking Issues
+```
+
+Hanya lanjut integrasi jika:
+
+* Team 1 approved,
+* Team 2 approved,
+* Team 3 approved,
+* Team 4 approved,
+* Team 5 approved.
+
+`APPROVED WITH NOTES` hanya boleh untuk limitation non-blocking yang didokumentasikan.
+
+# BAGIAN I — INTEGRASI SETELAH SEMUA APPROVED
+
+Buat atau reset branch:
+
+```text
+integration/design-template-phase3-7
+```
+
+Integrasikan berurutan:
+
+```text
+1. Team 1
+2. Team 2
+3. Team 3
+4. Team 4
+5. Team 5
+```
+
+Setelah setiap merge:
+
+1. selesaikan conflict secara semantik,
+2. jalankan targeted tests,
+3. jalankan build domain terkait,
+4. commit integration step,
+5. catat conflict dan keputusan.
+
+Jangan menunggu semua branch masuk sebelum menjalankan test.
+
+# BAGIAN J — CONFLICT RESOLUTION
+
+Hotspots:
+
+```text
+jobWorkerService.ts
+routes/design-templates.ts
+routes/index.ts
+types/designTemplate.ts
+validators/designTemplateSchema.ts
+design-template-engine.ts
+schema/index.ts
+migrate-prod.ts
+package.json
+lockfile
+frontend route registry
+frontend sidebar
+```
+
+Untuk setiap conflict, catat:
+
+```text
+File:
+Team Sources:
+Conflict:
+Decision:
+Reason:
+Tests Run:
+```
+
+Jangan memilih satu sisi dan menghapus fungsi sisi lain tanpa analisis.
+
+# BAGIAN K — INTEGRATION TEST
+
+Setelah semua branch terintegrasi, verifikasi alur penuh:
+
+## Flow Manual Template
+
+```text
+Create template
+→ Edit draft
+→ Backend preview
+→ Publish version
+→ Upload CSV/XLSX
+→ Map columns
+→ Create batch
+→ Dispatch
+→ Render
+→ Monitor progress
+→ Retry failed
+→ Export ZIP
+→ Download
+```
+
+## Flow AI Template
+
+```text
+Prompt
+→ AI proposal
+→ Validate
+→ Save draft
+→ Open editor
+→ Edit
+→ Preview
+→ Publish
+→ Bulk render
+→ ZIP
+```
+
+## Recovery Flow
+
+```text
+Start batch
+→ interrupt dispatcher
+→ resume
+→ interrupt render worker
+→ lease expiry
+→ recover
+→ complete batch
+```
+
+## Cancellation Flow
+
+```text
+Start batch
+→ completed items exist
+→ cancel
+→ queued items cancelled
+→ active items stop cooperatively
+→ completed outputs remain
+```
+
+## Partial Failure Flow
+
+```text
+Batch with failed items
+→ partially_failed
+→ export ZIP
+→ images + manifest + failures.csv
+```
+
+# BAGIAN L — FULL RELEASE GATE
+
+Jalankan:
+
+* complete backend tests,
+* complete frontend tests,
+* full typecheck,
+* backend build,
+* all frontend builds affected,
+* migration verification,
+* security tests,
+* tenant isolation tests,
+* integration tests,
+* recovery tests,
+* idempotency tests,
+* visual QA,
+* benchmark.
+
+Tidak boleh ada error baru.
+
+Pre-existing errors harus dicatat dengan bukti baseline.
+
+# BAGIAN M — SECURITY GATE
+
+Periksa:
+
+* cross-tenant access,
+* SSRF,
+* ZIP Slip,
+* path traversal,
+* CSV formula injection,
+* arbitrary JavaScript,
+* unsafe SVG,
+* unsafe HTML,
+* signed URL authorization,
+* public storage exposure,
+* request size limit,
+* canvas limits,
+* element limits,
+* batch limits,
+* ZIP limits,
+* AI output validation,
+* sensitive logs.
+
+Critical atau high severity issue harus memblokir merge ke `main`.
+
+# BAGIAN N — FINAL INTEGRATION REPORT
+
+Sebelum push ke `main`, buat laporan:
+
+```text
+DESIGN TEMPLATE ENGINE — TEAM REVIEW AND INTEGRATION REPORT
+
+Baseline Commit:
+
+TEAM 1
+Branch:
+Commit:
+Status:
+Findings:
+Fixes/Re-review:
+
+TEAM 2
+Branch:
+Commit:
+Status:
+Findings:
+Fixes/Re-review:
+
+TEAM 3
+Branch:
+Commit:
+Status:
+Findings:
+Fixes/Re-review:
+
+TEAM 4
+Branch:
+Commit:
+Status:
+Findings:
+Fixes/Re-review:
+
+TEAM 5
+Branch:
+Commit:
+Status:
+Findings:
+Fixes/Re-review:
+
+Integration Branch:
+Integration Commits:
+Conflicts:
+Conflict Decisions:
+Migrations:
+Dependencies:
+Backend Tests:
+Frontend Tests:
+Typecheck:
+Builds:
+Security Audit:
+Tenant Isolation:
+Idempotency:
+Recovery:
+Visual QA:
+Benchmark:
+Known Limitations:
+Pre-existing Issues:
+New Issues:
+Rollback Plan:
+Final Status:
+```
+
+Final status hanya boleh:
+
+```text
+READY TO MERGE TO MAIN
+NOT READY TO MERGE TO MAIN
+```
+
+# BAGIAN O — PUSH ATAU MERGE KE MAIN
+
+Hanya jika final status:
+
+```text
+READY TO MERGE TO MAIN
+```
+
+Lakukan:
+
+1. fetch dan update `main`,
+2. rebase atau merge latest `main` ke integration branch sesuai policy repository,
+3. selesaikan conflict terbaru,
+4. jalankan ulang critical tests,
+5. jalankan build,
+6. buat final integration commit,
+7. push integration branch,
+8. buka PR ke `main` jika workflow repository menggunakan PR,
+9. review final diff,
+10. merge ke `main`,
+11. pull/check commit `main`,
+12. jalankan post-merge smoke test,
+13. laporkan commit SHA `main`.
+
+Jika user secara eksplisit memerintahkan direct push dan repository memang mengizinkan direct push:
+
+* tetap lakukan semua gate sebelumnya,
+* push hanya integration result yang sudah lulus,
+* jangan push branch tim satu per satu ke `main`.
+
+# BAGIAN P — LAPORAN SETELAH MAIN
+
+Setelah merge/push berhasil:
+
+```text
+POST-MERGE VERIFICATION
+
+Main Commit:
+Integration Commit:
+Migration Status:
+Smoke Tests:
+Critical API:
+Frontend Routes:
+Worker Registration:
+Batch Dispatch:
+Render:
+ZIP Export:
+AI Template Draft:
+Known Limitations:
+Rollback Reference:
+Final Result:
+```
+
+Final result:
+
+```text
+MAIN VERIFIED
+MAIN MERGED BUT VERIFICATION FAILED
+```
+
+Jika post-merge verification gagal:
+
+* jangan menyembunyikan kegagalan,
+* laporkan segera,
+* hentikan deployment berikutnya,
+* gunakan rollback plan atau corrective commit sesuai tingkat risiko.
+
+## Acceptance Criteria Team 6
+
+Pekerjaan Team 6 dianggap selesai hanya jika:
+
+1. setiap branch diperiksa langsung,
+2. laporan Team 1 tersedia,
+3. laporan Team 2 tersedia,
+4. laporan Team 3 tersedia,
+5. laporan Team 4 tersedia,
+6. laporan Team 5 tersedia,
+7. branch rejected tidak diintegrasikan,
+8. seluruh branch final berstatus approved,
+9. integration test lulus,
+10. security gate lulus,
+11. regression lulus,
+12. build lulus,
+13. tidak ada error baru,
+14. final integration report tersedia,
+15. status `READY TO MERGE TO MAIN`,
+16. integration result telah masuk ke `main`,
+17. post-merge verification selesai,
+18. commit SHA main dilaporkan.
+
+Mulai dengan memeriksa branch Team 1. Jangan melakukan merge sebelum laporan review Team 1 selesai.
