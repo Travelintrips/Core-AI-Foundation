@@ -1,0 +1,295 @@
+PROMPT TEAM 3 — COMPONENT TEAM
+
+Anda adalah Team 3 — Component Team.
+
+Kerjakan hanya Agent 9 sampai Agent 11:
+
+Component Builder AI
+Variable Designer AI
+Asset Planner AI
+Tujuan
+
+Mengubah creative brief dan design specification menjadi rencana komponen, variabel dinamis, dan placeholder asset.
+
+Team ini tidak boleh menghasilkan template Konva final dan tidak boleh melakukan final validation atau Art Director QA.
+
+Input Contract
+interface ComponentTeamInput {
+  discovery: DiscoveryTeamOutput;
+  design: DesignTeamOutput;
+}
+Scope File
+services/design-ai/
+  agents/components/
+    componentBuilderAgent.ts
+    variableDesignerAgent.ts
+    assetPlannerAgent.ts
+    index.ts
+
+  prompts/components/
+    component-builder.prompt.ts
+    variable-designer.prompt.ts
+    asset-planner.prompt.ts
+
+  schemas/components/
+  types/component-plan.types.ts
+  tests/components/
+Agent 9 — Component Builder AI
+
+Tanggung jawab:
+
+membuat daftar logical components;
+memetakan komponen ke section;
+menentukan jenis komponen;
+menentukan region;
+menentukan content role;
+menentukan layer role;
+menentukan required atau optional;
+tidak membuat Konva node final.
+
+Komponen yang didukung minimal:
+
+logo;
+image placeholder;
+title;
+subtitle;
+description;
+price;
+CTA;
+QR code;
+contact information;
+footer;
+social icon;
+badge;
+divider;
+background;
+shape.
+
+Output:
+
+interface ComponentPlan {
+  components: Array<{
+    id: string;
+    sectionId: string;
+    type: string;
+    role: string;
+    required: boolean;
+    contentSource:
+      | "static"
+      | "variable"
+      | "asset"
+      | "generated-placeholder";
+    bindingKey?: string;
+    region: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+    layerRole:
+      | "background"
+      | "decoration"
+      | "content"
+      | "foreground";
+    properties: Record<string, unknown>;
+  }>;
+}
+
+ID harus unik dan stabil.
+
+Gunakan ID semantik, bukan ID acak tanpa arti.
+
+Contoh:
+
+hero-title
+hero-subtitle
+product-image
+primary-cta
+footer-phone
+Agent 10 — Variable Designer AI
+
+Tanggung jawab:
+
+mengidentifikasi teks/data yang dapat diedit;
+membuat variable registry;
+menentukan data type;
+menentukan default value;
+menentukan validation;
+menentukan formatting;
+memetakan variable ke component;
+menghindari duplicate variable.
+
+Variable umum:
+
+brand_name
+restaurant_name
+product_name
+menu_name
+price
+description
+phone
+address
+instagram
+website
+cta_label
+promo_period
+qr_value
+
+Output:
+
+interface VariablePlan {
+  variables: Array<{
+    key: string;
+    label: string;
+    type:
+      | "text"
+      | "multiline"
+      | "number"
+      | "currency"
+      | "url"
+      | "phone"
+      | "email"
+      | "date";
+    required: boolean;
+    defaultValue?: string | number;
+    placeholder?: string;
+    validation?: {
+      minLength?: number;
+      maxLength?: number;
+      min?: number;
+      max?: number;
+      pattern?: string;
+    };
+    formatting?: {
+      locale?: string;
+      currency?: string;
+      prefix?: string;
+      suffix?: string;
+    };
+    usedByComponentIds: string[];
+  }>;
+}
+
+Jangan membuat variable yang tidak digunakan komponen.
+
+Agent 11 — Asset Planner AI
+
+Tanggung jawab:
+
+Karena pipeline ini tidak menghasilkan gambar final, agent hanya membuat kebutuhan placeholder asset.
+
+Jenis placeholder:
+
+photo;
+logo;
+icon;
+background;
+illustration;
+QR;
+product image.
+
+Output:
+
+interface AssetPlan {
+  assets: Array<{
+    id: string;
+    type:
+      | "photo"
+      | "logo"
+      | "icon"
+      | "background"
+      | "illustration"
+      | "qr";
+    componentId: string;
+    purpose: string;
+    required: boolean;
+    placeholderLabel: string;
+    dimensions: {
+      width: number;
+      height: number;
+    };
+    aspectRatio: string;
+    fit: "cover" | "contain" | "fill";
+    cropFocus?: "center" | "top" | "bottom" | "left" | "right";
+    acceptedMimeTypes?: string[];
+    visualGuidance: string[];
+  }>;
+}
+
+Agent tidak boleh:
+
+menghasilkan image URL palsu;
+mengarang logo;
+menggunakan URL eksternal tanpa asset nyata;
+membuat base64;
+memanggil image generation;
+menyimpan file.
+Aggregated Output
+interface ComponentTeamOutput {
+  componentPlan: ComponentPlan;
+  variablePlan: VariablePlan;
+  assetPlan: AssetPlan;
+}
+
+Buat fungsi:
+
+runComponentPipeline(
+  input: ComponentTeamInput
+): Promise<ComponentTeamOutput>
+
+Urutan:
+
+Component Builder
+→ Variable Designer
+→ Asset Planner
+Validation Internal
+
+Sebelum output dikembalikan, periksa:
+
+duplicate component ID;
+duplicate variable key;
+component tanpa section;
+variable tanpa component;
+asset tanpa component;
+region di luar canvas;
+asset dimension tidak valid;
+required component tanpa source.
+
+Validation ini hanya validation internal Team 3, bukan final validator Team 4.
+
+Testing
+
+Buat unit test untuk:
+
+component ID unik;
+binding variable;
+price formatting;
+phone validation;
+asset aspect ratio;
+logo placeholder;
+missing component;
+duplicate variable;
+component di luar canvas;
+section tanpa component;
+invalid AI JSON;
+retry.
+Definition of Done
+tiga agent selesai;
+component plan valid;
+variable binding jelas;
+asset placeholder valid;
+tidak menghasilkan JSON Konva final;
+test lulus;
+typecheck tidak menambah error.
+
+Laporan akhir:
+
+Branch dan commit.
+File dibuat.
+File diubah.
+Test.
+Typecheck.
+Contoh component plan.
+Contoh variable binding.
+Kontrak yang harus digunakan Team 4.
+Risiko integrasi.
