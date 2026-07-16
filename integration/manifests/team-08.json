@@ -1,0 +1,95 @@
+{
+  "team": "team-08",
+  "branch": "feature/08-component-library",
+  "description": "Universal Creative Component Library — 29 reusable component definitions across 4 creative domains (Graphic, Interior, Fashion, Packaging).",
+
+  "ownedFolders": [
+    "artifacts/api-server/src/services/design-components/",
+    "artifacts/api-server/src/routes/design-components/",
+    "artifacts/ai-platform/src/pages/design-components/",
+    "lib/db/src/schema/ai-design-components.ts",
+    "integration/openapi/team-08.yaml",
+    "integration/migrations/team-08.sql",
+    "integration/manifests/team-08.json"
+  ],
+
+  "routesToMount": [
+    {
+      "importPath": "./routes/design-components/router",
+      "exportName": "default",
+      "mountAt": "/ai/design-components",
+      "file": "artifacts/api-server/src/routes/index.ts",
+      "instruction": "import designComponentsRouter from './design-components/router'; then add app.use('/ai/design-components', designComponentsRouter); after existing route mounts"
+    }
+  ],
+
+  "pagesToRegister": [
+    {
+      "importPath": "@/pages/design-components",
+      "routePath": "/design-components",
+      "file": "artifacts/ai-platform/src/App.tsx",
+      "instruction": "Add <Route path='/design-components' component={DesignComponentsPage} /> inside the authenticated admin routes"
+    }
+  ],
+
+  "sidebarItems": [
+    {
+      "label": "Component Library",
+      "path": "/design-components",
+      "icon": "Layers",
+      "group": "Design Tools",
+      "file": "artifacts/ai-platform/src/components/layout/Sidebar.tsx",
+      "instruction": "Add sidebar entry under the 'Design Tools' group (or create the group if absent)"
+    }
+  ],
+
+  "dbSchemaToBarrel": [
+    {
+      "exportFrom": "lib/db/src/schema/ai-design-components.ts",
+      "exports": ["designComponentsTable", "DesignComponent", "NewDesignComponent"],
+      "addToBarrel": "lib/db/src/schema/index.ts",
+      "instruction": "Add: export { designComponentsTable, type DesignComponent, type NewDesignComponent } from './ai-design-components.js';"
+    }
+  ],
+
+  "openapiFragment": "integration/openapi/team-08.yaml",
+
+  "migrationDrafts": [
+    "integration/migrations/team-08.sql"
+  ],
+
+  "seedDrafts": [],
+
+  "dependenciesRequested": [],
+
+  "eventsPublished": [],
+
+  "eventsConsumed": [],
+
+  "workerJobTypesRequested": [],
+
+  "sharedTypesRequested": [],
+
+  "integrationOrder": [
+    "1. Apply migration: integration/migrations/team-08.sql",
+    "2. Add schema exports to lib/db barrel (see dbSchemaToBarrel above)",
+    "3. Run tsc -b in lib/db to rebuild types",
+    "4. Mount router in artifacts/api-server/src/routes/index.ts",
+    "5. Register page and sidebar in ai-platform"
+  ],
+
+  "knownRisks": [
+    {
+      "risk": "designComponentService.ts imports lib/db schema via relative path (not barrel) until Team 24 adds barrel export. If the barrel is updated first, update the import path in designComponentService.ts accordingly.",
+      "severity": "low"
+    },
+    {
+      "risk": "The ai_design_components table must be created before the API server starts or POST/GET/PATCH/DELETE instance routes will fail with 'relation does not exist'. Registry and validate routes are stateless and safe regardless.",
+      "severity": "medium"
+    },
+    {
+      "risk": "The frontend page fetches from /api/ai/design-components/registry at runtime — it shows an error state if the router is not yet mounted. The page is gracefully degraded (error message shown, not a crash).",
+      "severity": "low"
+    }
+  ]
+}
