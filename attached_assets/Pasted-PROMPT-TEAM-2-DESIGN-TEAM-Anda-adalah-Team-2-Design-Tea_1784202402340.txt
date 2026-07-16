@@ -1,0 +1,343 @@
+PROMPT TEAM 2 — DESIGN TEAM
+
+Anda adalah Team 2 — Design Team.
+
+Kerjakan hanya Agent 4 sampai Agent 8:
+
+Layout Architect AI
+Composition Designer AI
+Typography Designer AI
+Color Designer AI
+Decoration Designer AI
+Tujuan
+
+Mengubah output Discovery Team menjadi spesifikasi visual terstruktur.
+
+Team ini tidak boleh membuat template Konva final, variable binding final, asset placeholder registry final, validator engineering, atau orchestrator utama.
+
+Input Contract
+
+Team ini menerima:
+
+interface DiscoveryTeamOutput {
+  creativeBrief: CreativeBrief;
+  requirementAnalysis: RequirementAnalysis;
+  brandStrategy: BrandStrategy;
+}
+
+Jika type Team 1 belum tersedia, buat interface adapter lokal sementara di file khusus:
+
+types/discovery-contract.types.ts
+
+Jangan mengubah file Team 1.
+
+Scope File
+services/design-ai/
+  agents/design/
+    layoutArchitectAgent.ts
+    compositionDesignerAgent.ts
+    typographyDesignerAgent.ts
+    colorDesignerAgent.ts
+    decorationDesignerAgent.ts
+    index.ts
+
+  prompts/design/
+    layout-architect.prompt.ts
+    composition-designer.prompt.ts
+    typography-designer.prompt.ts
+    color-designer.prompt.ts
+    decoration-designer.prompt.ts
+
+  schemas/design/
+  types/design.types.ts
+  tests/design/
+Agent 4 — Layout Architect AI
+
+Tanggung jawab:
+
+menentukan grid;
+menentukan section hierarchy;
+menentukan safe area;
+menentukan reading order;
+menentukan whitespace;
+menentukan alignment;
+menentukan region berdasarkan canvas;
+memastikan semua section muat di canvas.
+
+Output:
+
+interface LayoutSpec {
+  canvas: {
+    width: number;
+    height: number;
+  };
+  grid: {
+    columns: number;
+    rows?: number;
+    gutter: number;
+    margin: {
+      top: number;
+      right: number;
+      bottom: number;
+      left: number;
+    };
+  };
+  safeArea: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  sections: Array<{
+    id: string;
+    name: string;
+    order: number;
+    region: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+    alignment: "left" | "center" | "right";
+    priority: number;
+  }>;
+  readingOrder: string[];
+  whitespaceRules: string[];
+}
+
+Gunakan koordinat logis yang konsisten.
+
+Tidak boleh membuat komponen final.
+
+Agent 5 — Composition Designer AI
+
+Input:
+
+LayoutSpec;
+DiscoveryTeamOutput.
+
+Tanggung jawab:
+
+menentukan focal point;
+menentukan eye flow;
+menentukan visual weight;
+menentukan balance;
+menentukan relation antar-section;
+menentukan spacing rhythm;
+mengurangi area yang terlalu padat.
+
+Output:
+
+interface CompositionSpec {
+  focalPoint: {
+    sectionId: string;
+    reason: string;
+  };
+  eyeFlow: string[];
+  balance: "symmetrical" | "asymmetrical" | "radial";
+  visualWeight: Array<{
+    sectionId: string;
+    weight: number;
+  }>;
+  spacingScale: number[];
+  relationships: Array<{
+    fromSectionId: string;
+    toSectionId: string;
+    relationship: string;
+  }>;
+  densityMap: Array<{
+    sectionId: string;
+    density: "low" | "medium" | "high";
+  }>;
+}
+Agent 6 — Typography Designer AI
+
+Tanggung jawab:
+
+memilih font hanya dari font registry sistem;
+membuat font pairing;
+menentukan size scale;
+menentukan line height;
+menentukan letter spacing;
+menentukan weight;
+menentukan hierarchy;
+memastikan keterbacaan.
+
+Output:
+
+interface TypographySpec {
+  fontPairing: {
+    headingFont: string;
+    bodyFont: string;
+    accentFont?: string;
+  };
+  styles: {
+    display: TextStyle;
+    heading: TextStyle;
+    subheading: TextStyle;
+    body: TextStyle;
+    caption: TextStyle;
+    button: TextStyle;
+    price?: TextStyle;
+  };
+  fallbackFonts: string[];
+  readabilityRules: string[];
+}
+
+Semua font wajib lolos registry validation.
+
+Jangan mengarang font yang tidak tersedia.
+
+Agent 7 — Color Designer AI
+
+Tanggung jawab:
+
+menghasilkan color tokens;
+menghormati Brand Strategy;
+memastikan contrast;
+menentukan gradient bila diperlukan;
+menentukan opacity;
+menentukan shadow;
+tidak berlebihan dalam penggunaan warna.
+
+Output:
+
+interface ColorSpec {
+  tokens: {
+    background: string;
+    surface: string;
+    primary: string;
+    secondary: string;
+    accent: string;
+    textPrimary: string;
+    textSecondary: string;
+    border: string;
+    success?: string;
+    warning?: string;
+    danger?: string;
+  };
+  gradients: Array<{
+    id: string;
+    type: "linear" | "radial";
+    colors: string[];
+    stops: number[];
+    angle?: number;
+  }>;
+  shadows: Array<{
+    id: string;
+    offsetX: number;
+    offsetY: number;
+    blur: number;
+    opacity: number;
+  }>;
+  contrastChecks: Array<{
+    foreground: string;
+    background: string;
+    ratio: number;
+    passed: boolean;
+  }>;
+}
+
+Gunakan format warna standar sistem, idealnya hex.
+
+Agent 8 — Decoration Designer AI
+
+Tanggung jawab:
+
+menghasilkan ornament;
+divider;
+badge;
+frame;
+pattern;
+abstract shape;
+decorative background;
+menjaga agar dekorasi tidak mengganggu CTA dan content hierarchy.
+
+Output:
+
+interface DecorationSpec {
+  decorations: Array<{
+    id: string;
+    type:
+      | "shape"
+      | "divider"
+      | "frame"
+      | "badge"
+      | "pattern"
+      | "background-accent";
+    targetSectionId?: string;
+    geometry: Record<string, unknown>;
+    style: Record<string, unknown>;
+    purpose: string;
+    decorativeOnly: boolean;
+  }>;
+}
+Aggregated Output
+
+Buat fungsi:
+
+runDesignPipeline(input: DiscoveryTeamOutput): Promise<DesignTeamOutput>
+
+Output:
+
+interface DesignTeamOutput {
+  layout: LayoutSpec;
+  composition: CompositionSpec;
+  typography: TypographySpec;
+  colors: ColorSpec;
+  decorations: DecorationSpec;
+}
+
+Urutan:
+
+Layout Architect
+→ Composition Designer
+→ Typography Designer
+→ Color Designer
+→ Decoration Designer
+Testing
+
+Buat test untuk:
+
+Instagram portrait;
+square post;
+landscape banner;
+layout dengan banyak section;
+canvas kecil;
+font registry invalid;
+contrast gagal;
+section overflow;
+empty decoration;
+deterministic schema;
+AI invalid JSON;
+retry.
+Batasan
+
+Jangan membuat:
+
+Konva JSON final;
+component binding;
+asset storage;
+database migration;
+main orchestrator;
+final validator;
+final optimizer;
+QA publish decision.
+Definition of Done
+lima agent selesai;
+output tervalidasi;
+tidak ada canvas element final;
+test lulus;
+tidak ada error typecheck baru;
+kontrak untuk Team 3 dan Team 4 terdokumentasi.
+
+Laporan akhir wajib mencantumkan:
+
+Branch dan commit.
+File dibuat.
+File diubah.
+Test.
+Typecheck.
+Contoh DesignTeamOutput.
+Asumsi.
+Risiko integrasi.
