@@ -1,0 +1,90 @@
+{
+  "team": "02",
+  "branch": "feature/02-customer-workspace",
+  "domain": "Customer Creative Workspace Experience",
+  "description": "Enhanced creative workspace: brief status, production progress, deliverable gallery, revision timeline, smart notifications, project history. Read-only adapter layer — no writes to shared tables.",
+  "ownedFolders": [
+    "artifacts/api-server/src/services/customer-creative-workspace/",
+    "artifacts/api-server/src/routes/customer-creative-workspace/",
+    "artifacts/customer-portal/src/pages/creative-workspace/",
+    "artifacts/customer-portal/src/components/creative-workspace/",
+    "artifacts/customer-portal/src/hooks/creative-workspace/"
+  ],
+  "routesToMount": [
+    {
+      "importPath": "./routes/customer-creative-workspace/index.js",
+      "mountIn": "artifacts/api-server/src/routes/index.ts",
+      "note": "Import the default export and add: router.use(creativeWorkspaceRouter); — no path prefix needed, routes self-register under /public/customer/creative-workspace/*"
+    }
+  ],
+  "pagesToRegister": [
+    {
+      "routePath": "/creative-workspace/:token",
+      "componentPath": "src/pages/creative-workspace/overview.tsx",
+      "importName": "CWOverviewPage",
+      "note": "Main creative workspace dashboard"
+    },
+    {
+      "routePath": "/creative-workspace/:token/projects",
+      "componentPath": "src/pages/creative-workspace/projects.tsx",
+      "importName": "CWProjectsPage",
+      "note": "Project list page"
+    },
+    {
+      "routePath": "/creative-workspace/:token/projects/:projectNumber",
+      "componentPath": "src/pages/creative-workspace/project-detail.tsx",
+      "importName": "CWProjectDetailPage",
+      "note": "Project detail with tabs (Brief / Progress / Files / Reviews / History)"
+    },
+    {
+      "routePath": "/creative-workspace/:token/notifications",
+      "componentPath": "src/pages/creative-workspace/notifications.tsx",
+      "importName": "CWNotificationsPage",
+      "note": "Enhanced notification center"
+    },
+    {
+      "routePath": "/creative-workspace/:token/support",
+      "componentPath": "src/pages/creative-workspace/support.tsx",
+      "importName": "CWSupportPage",
+      "note": "Support ticket center"
+    }
+  ],
+  "sidebarItems": [],
+  "openapiFragment": "integration/openapi/team-02.yaml",
+  "migrationDrafts": ["integration/migrations/team-02.sql"],
+  "seedDrafts": [],
+  "dependenciesRequested": [],
+  "eventsPublished": [],
+  "eventsConsumed": [],
+  "workerJobTypesRequested": [],
+  "sharedTypesRequested": [
+    {
+      "name": "WorkspaceSession",
+      "from": "artifacts/api-server/src/services/customerWorkspaceService.ts",
+      "note": "Imported read-only — Team 2 does not modify this type"
+    }
+  ],
+  "integrationOrder": [
+    "1. Team 24 mounts the router from routes/customer-creative-workspace/index.ts in routes/index.ts",
+    "2. Team 24 registers the 5 pages above in the customer-portal App.tsx Wouter routes",
+    "3. No migration execution needed (no new tables)"
+  ],
+  "securityNotes": [
+    "All routes validate the workspace token via resolveWorkspaceSession() before any data access",
+    "All project queries delegate IDOR protection to verifyProjectOwnership() (uses existing service)",
+    "No storagePath fields in any response DTO",
+    "No imageUrl (from creative_ai_assets) in any response — sign endpoint provided instead",
+    "No provider / model / tokenUsage / cost / prompt data in any response",
+    "No reviewTokenHash or reviewTokenPlain exposed — only reviewUrl built from plaintext for the session owner",
+    "customerNotificationReadsTable inserts are scoped to session.emailHash"
+  ],
+  "knownRisks": [
+    "creativeAiClientReviewsTable.reviewTokenPlain is only set for customer-submitted projects; direct projects may return reviewUrl: null",
+    "canonicalEventService.getEventsForProject — if the eventId is not a string UUID in older rows, the history endpoint returns an empty array gracefully",
+    "notification synthesis is stateless — synthesized IDs (e.g. synth-review-XXX) are stable per project state but regenerated on each request"
+  ],
+  "testLocations": [
+    "artifacts/api-server/src/routes/customer-creative-workspace/__tests__/",
+    "artifacts/customer-portal/src/pages/creative-workspace/__tests__/"
+  ]
+}

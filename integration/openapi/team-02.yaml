@@ -1,0 +1,432 @@
+openapi: "3.1.0"
+info:
+  title: "Team 02 — Customer Creative Workspace API Fragment"
+  version: "1.0.0"
+
+paths:
+  /public/customer/creative-workspace/{token}/overview:
+    get:
+      operationId: getCWOverview
+      summary: Unified creative workspace dashboard
+      description: Returns stats, recent projects, and urgent actions for the customer dashboard. All fields are customer-safe.
+      tags: [creative-workspace]
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceToken"
+      responses:
+        "200":
+          description: Overview data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CWOverview"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /public/customer/creative-workspace/{token}/projects:
+    get:
+      operationId: getCWProjects
+      summary: Enhanced project list with urgency classification
+      tags: [creative-workspace]
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceToken"
+        - { name: search, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: sort,   in: query, schema: { type: string, enum: [newest, oldest, delivery_date] } }
+      responses:
+        "200":
+          description: Project list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/CWProjectItem" } }
+                  total: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /public/customer/creative-workspace/{token}/projects/{projectNumber}/brief:
+    get:
+      operationId: getCWBriefStatus
+      summary: Brief status — structured field-by-field completion view
+      tags: [creative-workspace]
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceToken"
+        - $ref: "#/components/parameters/ProjectNumber"
+      responses:
+        "200":
+          description: Brief status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BriefStatus"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/customer/creative-workspace/{token}/projects/{projectNumber}/progress:
+    get:
+      operationId: getCWProductionProgress
+      summary: Production progress — step-by-step stage cards (no internal data)
+      tags: [creative-workspace]
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceToken"
+        - $ref: "#/components/parameters/ProjectNumber"
+      responses:
+        "200":
+          description: Production progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductionProgress"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/customer/creative-workspace/{token}/projects/{projectNumber}/deliverables:
+    get:
+      operationId: getCWDeliverables
+      summary: Customer-safe deliverable gallery (no storage paths, no internal URLs)
+      tags: [creative-workspace]
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceToken"
+        - $ref: "#/components/parameters/ProjectNumber"
+      responses:
+        "200":
+          description: Deliverable bundle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeliverableBundle"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/customer/creative-workspace/{token}/projects/{projectNumber}/revisions:
+    get:
+      operationId: getCWRevisionHistory
+      summary: Review and revision history (no review token hashes)
+      tags: [creative-workspace]
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceToken"
+        - $ref: "#/components/parameters/ProjectNumber"
+      responses:
+        "200":
+          description: Revision history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevisionHistory"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/customer/creative-workspace/{token}/projects/{projectNumber}/history:
+    get:
+      operationId: getCWProjectHistory
+      summary: Canonical event feed for a project (customer-safe activity log)
+      tags: [creative-workspace]
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceToken"
+        - $ref: "#/components/parameters/ProjectNumber"
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 100 } }
+      responses:
+        "200":
+          description: Project history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectHistory"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /public/customer/creative-workspace/{token}/notifications:
+    get:
+      operationId: getCWNotifications
+      summary: Enhanced notifications (DB + synthesized from project states)
+      tags: [creative-workspace]
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceToken"
+      responses:
+        "200":
+          description: Notification summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationSummary"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /public/customer/creative-workspace/{token}/notifications/{notificationId}/read:
+    post:
+      operationId: markCWNotificationRead
+      summary: Mark a single notification as read
+      tags: [creative-workspace]
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceToken"
+        - { name: notificationId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /public/customer/creative-workspace/{token}/notifications/read-all:
+    post:
+      operationId: markAllCWNotificationsRead
+      summary: Mark all notifications as read
+      tags: [creative-workspace]
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceToken"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  markedCount: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+components:
+  parameters:
+    WorkspaceToken:
+      name: token
+      in: path
+      required: true
+      description: Customer dashboard token (plaintext magic-link token)
+      schema: { type: string }
+    ProjectNumber:
+      name: projectNumber
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Token invalid or expired
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+    NotFound:
+      description: Resource not found or not owned by this token
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+
+  schemas:
+    BriefField:
+      type: object
+      properties:
+        key:      { type: string }
+        label:    { type: string }
+        value:    { type: string, nullable: true }
+        filled:   { type: boolean }
+        required: { type: boolean }
+
+    BriefStatus:
+      type: object
+      properties:
+        projectNumber:         { type: string }
+        serviceType:           { type: string, nullable: true }
+        briefCompletionPercent:{ type: integer }
+        fields:                { type: array, items: { $ref: "#/components/schemas/BriefField" } }
+        summary:               { type: string, nullable: true }
+        submittedAt:           { type: string, format: date-time, nullable: true }
+        lastUpdatedAt:         { type: string, format: date-time, nullable: true }
+
+    ProductionStage:
+      type: object
+      properties:
+        id:          { type: integer }
+        name:        { type: string }
+        label:       { type: string }
+        status:      { type: string, enum: [pending, working, completed, failed, blocked] }
+        startedAt:   { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        description: { type: string }
+
+    ProductionProgress:
+      type: object
+      properties:
+        projectNumber:      { type: string }
+        projectStatus:      { type: string }
+        overallStageLabel:  { type: string }
+        progressPercent:    { type: integer }
+        stages:             { type: array, items: { $ref: "#/components/schemas/ProductionStage" } }
+        currentStageName:   { type: string, nullable: true }
+        estimatedDelivery:  { type: string, nullable: true }
+        lastActivityAt:     { type: string, format: date-time, nullable: true }
+
+    CWDeliverable:
+      type: object
+      properties:
+        id:               { type: integer }
+        assetType:        { type: string }
+        category:         { type: string, nullable: true }
+        title:            { type: string }
+        status:           { type: string }
+        version:          { type: integer }
+        revisionNotes:    { type: string, nullable: true }
+        locked:           { type: boolean }
+        downloadAvailable:{ type: boolean }
+        signEndpoint:     { type: string, description: "POST this path to get a time-limited signed download URL" }
+        createdAt:        { type: string, format: date-time }
+
+    CWZipBundle:
+      type: object
+      properties:
+        id:           { type: integer }
+        status:       { type: string }
+        signEndpoint: { type: string }
+        assetCount:   { type: integer, nullable: true }
+        createdAt:    { type: string, format: date-time }
+
+    DeliverableBundle:
+      type: object
+      properties:
+        projectNumber:  { type: string }
+        filesUnlocked:  { type: boolean }
+        deliverables:   { type: array, items: { $ref: "#/components/schemas/CWDeliverable" } }
+        zipBundle:      { $ref: "#/components/schemas/CWZipBundle", nullable: true }
+        totalAssets:    { type: integer }
+        approvedAssets: { type: integer }
+        pendingAssets:  { type: integer }
+
+    CWRevisionEntry:
+      type: object
+      properties:
+        id:          { type: integer }
+        round:       { type: integer }
+        status:      { type: string }
+        statusLabel: { type: string }
+        feedback:    { type: string, nullable: true }
+        sharedAt:    { type: string, format: date-time, nullable: true }
+        viewedAt:    { type: string, format: date-time, nullable: true }
+        resolvedAt:  { type: string, format: date-time, nullable: true }
+        reviewUrl:   { type: string, nullable: true, description: "Safe to expose to the session owner" }
+
+    RevisionHistory:
+      type: object
+      properties:
+        projectNumber:       { type: string }
+        totalRounds:         { type: integer }
+        currentStatus:       { type: string }
+        currentStatusLabel:  { type: string }
+        entries:             { type: array, items: { $ref: "#/components/schemas/CWRevisionEntry" } }
+
+    CWHistoryEvent:
+      type: object
+      properties:
+        id:        { type: string }
+        eventType: { type: string }
+        title:     { type: string }
+        message:   { type: string }
+        severity:  { type: string, enum: [info, success, warning, error] }
+        createdAt: { type: string, format: date-time }
+
+    ProjectHistory:
+      type: object
+      properties:
+        projectNumber: { type: string }
+        events:        { type: array, items: { $ref: "#/components/schemas/CWHistoryEvent" } }
+        total:         { type: integer }
+
+    CWNotification:
+      type: object
+      properties:
+        id:            { type: string }
+        type:          { type: string }
+        title:         { type: string }
+        message:       { type: string }
+        projectNumber: { type: string, nullable: true }
+        read:          { type: boolean }
+        severity:      { type: string, enum: [info, success, warning, action] }
+        createdAt:     { type: string, format: date-time }
+        actionLabel:   { type: string, nullable: true }
+        actionPath:    { type: string, nullable: true }
+
+    NotificationSummary:
+      type: object
+      properties:
+        items:       { type: array, items: { $ref: "#/components/schemas/CWNotification" } }
+        unreadCount: { type: integer }
+        total:       { type: integer }
+
+    CWUrgentAction:
+      type: object
+      properties:
+        type:          { type: string }
+        projectNumber: { type: string }
+        projectName:   { type: string }
+        label:         { type: string }
+        message:       { type: string }
+        priority:      { type: string, enum: [high, medium, low] }
+        actionPath:    { type: string }
+
+    CWProjectCard:
+      type: object
+      properties:
+        projectNumber:     { type: string }
+        brandName:         { type: string }
+        serviceName:       { type: string }
+        packageName:       { type: string, nullable: true }
+        currentStage:      { type: string }
+        currentStageLabel: { type: string }
+        progressPercent:   { type: integer }
+        filesUnlocked:     { type: boolean }
+        deliveryDate:      { type: string, nullable: true }
+        reviewStatus:      { type: string, nullable: true }
+        paymentStatus:     { type: string, nullable: true }
+        urgentAction:      { $ref: "#/components/schemas/CWUrgentAction", nullable: true }
+        createdAt:         { type: string }
+        updatedAt:         { type: string }
+
+    CWOverview:
+      type: object
+      properties:
+        clientName:  { type: string }
+        clientEmail: { type: string }
+        stats:
+          type: object
+          properties:
+            totalProjects:       { type: integer }
+            activeProjects:      { type: integer }
+            waitingReview:       { type: integer }
+            completedProjects:   { type: integer }
+            pendingPayment:      { type: integer }
+            unreadNotifications: { type: integer }
+            downloadableAssets:  { type: integer }
+            outstandingBalance:  { type: number }
+            outstandingCurrency: { type: string }
+        recentProjects: { type: array, items: { $ref: "#/components/schemas/CWProjectCard" } }
+        urgentActions:  { type: array, items: { $ref: "#/components/schemas/CWUrgentAction" } }
+
+    CWProjectItem:
+      type: object
+      description: Project list item — same as CWProjectCard plus enrichment flags
+      allOf:
+        - $ref: "#/components/schemas/CWProjectCard"
+        - type: object
+          properties:
+            hasUrgentAction:               { type: boolean }
+            creativeWorkspaceDetailPath:   { type: string }
