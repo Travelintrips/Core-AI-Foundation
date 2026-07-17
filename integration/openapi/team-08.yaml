@@ -1,0 +1,719 @@
+openapi: "3.1.0"
+info:
+  title: "Team 8 — Universal Creative Component Library"
+  version: "1.0.0"
+  description: >
+    OpenAPI fragment for the design-components domain.
+    All paths are relative to the /api mount point.
+    Team 24 merges this into the root openapi.yaml.
+
+# ── Security (inherited from global config) ───────────────────────────────────
+security:
+  - AdminApiKey: []
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+paths:
+
+  /ai/design-components/registry:
+    get:
+      operationId: listComponentRegistry
+      summary: List full static component registry
+      tags: [design-components]
+      responses:
+        "200":
+          description: Full registry grouped by domain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComponentRegistryResponse"
+
+  /ai/design-components/registry/stats:
+    get:
+      operationId: getComponentRegistryStats
+      summary: Component counts per domain
+      tags: [design-components]
+      responses:
+        "200":
+          description: Component counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComponentRegistryStats"
+
+  /ai/design-components/registry/domain/{domain}:
+    get:
+      operationId: listComponentsByDomain
+      summary: List component definitions for a specific domain
+      tags: [design-components]
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/ComponentDomain"
+      responses:
+        "200":
+          description: Component definitions for the domain
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [domain, components, total]
+                properties:
+                  domain:
+                    $ref: "#/components/schemas/ComponentDomain"
+                  components:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ComponentDefinition"
+                  total:
+                    type: integer
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /ai/design-components/registry/{typeOrSlug}:
+    get:
+      operationId: getComponentDefinition
+      summary: Get a single component definition by type or slug
+      tags: [design-components]
+      parameters:
+        - name: typeOrSlug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Component definition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComponentDefinition"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/design-components/validate:
+    post:
+      operationId: validateComponentInstance
+      summary: Validate field values against a component definition
+      tags: [design-components]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateComponentRequest"
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /ai/design-components/blueprint-compatibility:
+    post:
+      operationId: checkBlueprintComposition
+      summary: Validate a set of components against a blueprint context
+      tags: [design-components]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlueprintCompatibilityRequest"
+      responses:
+        "200":
+          description: Composition validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlueprintCompositionResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /ai/design-components/blueprint-compatibility/compatible:
+    get:
+      operationId: listCompatibleComponents
+      summary: List component types compatible with a given domain
+      tags: [design-components]
+      parameters:
+        - name: domain
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/ComponentDomain"
+        - name: strict
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Compatible component definitions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [domain, compatible, total]
+                properties:
+                  domain:
+                    $ref: "#/components/schemas/ComponentDomain"
+                  compatible:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ComponentDefinition"
+                  total:
+                    type: integer
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /ai/design-components:
+    get:
+      operationId: listDesignComponents
+      summary: List saved component instances
+      tags: [design-components]
+      parameters:
+        - name: domain
+          in: query
+          schema:
+            $ref: "#/components/schemas/ComponentDomain"
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: blueprintId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, archived]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Paginated list of component instances
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DesignComponentListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+    post:
+      operationId: createDesignComponent
+      summary: Create and save a component instance
+      tags: [design-components]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDesignComponentRequest"
+      responses:
+        "201":
+          description: Created component instance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DesignComponent"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /ai/design-components/{id}:
+    get:
+      operationId: getDesignComponent
+      summary: Get a saved component instance
+      tags: [design-components]
+      parameters:
+        - $ref: "#/components/parameters/ComponentId"
+      responses:
+        "200":
+          description: Component instance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DesignComponent"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+    patch:
+      operationId: updateDesignComponent
+      summary: Update a saved component instance
+      tags: [design-components]
+      parameters:
+        - $ref: "#/components/parameters/ComponentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDesignComponentRequest"
+      responses:
+        "200":
+          description: Updated component instance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DesignComponent"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+    delete:
+      operationId: deleteDesignComponent
+      summary: Soft-delete a component instance
+      tags: [design-components]
+      parameters:
+        - $ref: "#/components/parameters/ComponentId"
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/design-components/{id}/duplicate:
+    post:
+      operationId: duplicateDesignComponent
+      summary: Duplicate a component instance
+      tags: [design-components]
+      parameters:
+        - $ref: "#/components/parameters/ComponentId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+      responses:
+        "201":
+          description: Duplicated component instance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DesignComponent"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+# ── Components ────────────────────────────────────────────────────────────────
+components:
+
+  securitySchemes:
+    AdminApiKey:
+      type: apiKey
+      in: header
+      name: X-Admin-Api-Key
+
+  parameters:
+    ComponentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+
+  schemas:
+
+    ComponentDomain:
+      type: string
+      enum: [graphic, interior, fashion, packaging]
+
+    FieldType:
+      type: string
+      enum: [string, number, boolean, color, url, enum, font, textarea, json, mm, pt, px]
+
+    FieldDefinition:
+      type: object
+      required: [type, label, required]
+      properties:
+        type:
+          $ref: "#/components/schemas/FieldType"
+        label:
+          type: string
+        required:
+          type: boolean
+        default: {}
+        options:
+          type: array
+          items:
+            type: string
+        min:
+          type: number
+        max:
+          type: number
+        maxLength:
+          type: integer
+        description:
+          type: string
+
+    Constraint:
+      type: object
+      required: [name, description, rule]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        rule:
+          type: string
+          enum: [required, min, max, pattern, enum, depends_on, exclusive_with, custom]
+        value: {}
+        relatedFields:
+          type: array
+          items:
+            type: string
+
+    # Note: interior table type is "interior_table" (not "table") to avoid
+    # collision with the graphic "table" type.
+    ComponentDefinition:
+      type: object
+      required: [type, domain, name, slug, description, version, supportedDomains, properties, constraints, tags]
+      properties:
+        type:
+          type: string
+        domain:
+          $ref: "#/components/schemas/ComponentDomain"
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+        supportedDomains:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentDomain"
+        properties:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/FieldDefinition"
+        constraints:
+          type: array
+          items:
+            $ref: "#/components/schemas/Constraint"
+        tags:
+          type: array
+          items:
+            type: string
+
+    ComponentRegistryResponse:
+      type: object
+      required: [total, byDomain, components]
+      properties:
+        total:
+          type: integer
+        byDomain:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/ComponentDefinition"
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentDefinition"
+
+    ComponentRegistryStats:
+      type: object
+      required: [total, byDomain]
+      properties:
+        total:
+          type: integer
+        byDomain:
+          type: object
+          required: [graphic, interior, fashion, packaging]
+          properties:
+            graphic:
+              type: integer
+            interior:
+              type: integer
+            fashion:
+              type: integer
+            packaging:
+              type: integer
+
+    ValidateComponentRequest:
+      type: object
+      required: [type, domain]
+      properties:
+        type:
+          type: string
+        domain:
+          $ref: "#/components/schemas/ComponentDomain"
+        fieldValues:
+          type: object
+          additionalProperties: true
+        partial:
+          type: boolean
+          default: false
+
+    ValidationError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+
+    ValidationResult:
+      type: object
+      required: [valid, errors]
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationError"
+
+    BlueprintCompatibilityRequest:
+      type: object
+      required: [context, components]
+      properties:
+        context:
+          type: object
+          required: [domain]
+          properties:
+            domain:
+              $ref: "#/components/schemas/ComponentDomain"
+            requiredComponentTypes:
+              type: array
+              items:
+                type: string
+            forbiddenComponentTypes:
+              type: array
+              items:
+                type: string
+            maxInstancesPerType:
+              type: object
+              additionalProperties:
+                type: integer
+            strictDomainMatch:
+              type: boolean
+        components:
+          type: array
+          items:
+            type: object
+            required: [type]
+            properties:
+              type:
+                type: string
+              instanceId:
+                type: string
+
+    BlueprintCompositionResult:
+      type: object
+      required: [valid, componentResults, coverageResult, instanceLimitViolations]
+      properties:
+        valid:
+          type: boolean
+        componentResults:
+          type: array
+          items:
+            type: object
+            required: [type, compatible, reasons]
+            properties:
+              type:
+                type: string
+              instanceId:
+                type: string
+              compatible:
+                type: boolean
+              reasons:
+                type: array
+                items:
+                  type: string
+        coverageResult:
+          type: object
+          required: [compatible, reasons, missingFields, unsupportedConstraints]
+          properties:
+            compatible:
+              type: boolean
+            reasons:
+              type: array
+              items:
+                type: string
+            missingFields:
+              type: array
+              items:
+                type: string
+            unsupportedConstraints:
+              type: array
+              items:
+                type: string
+        instanceLimitViolations:
+          type: array
+          items:
+            type: string
+
+    DesignComponent:
+      type: object
+      required: [id, tenantId, name, slug, type, domain, fieldValues, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        tenantId:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        type:
+          type: string
+        domain:
+          $ref: "#/components/schemas/ComponentDomain"
+        fieldValues:
+          type: object
+          additionalProperties: true
+        blueprintId:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, archived]
+        createdBy:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateDesignComponentRequest:
+      type: object
+      required: [type, name, domain]
+      properties:
+        type:
+          type: string
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        domain:
+          $ref: "#/components/schemas/ComponentDomain"
+        fieldValues:
+          type: object
+          additionalProperties: true
+        blueprintId:
+          type: string
+
+    UpdateDesignComponentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        fieldValues:
+          type: object
+          additionalProperties: true
+        blueprintId:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, archived]
+
+    DesignComponentListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DesignComponent"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: string
+              issues:
+                type: array
+                items: {}
+
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: string
+
+    Forbidden:
+      description: Access denied
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: string
+
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error, errors]
+            properties:
+              error:
+                type: string
+              errors:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ValidationError"

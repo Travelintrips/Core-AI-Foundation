@@ -1,0 +1,96 @@
+{
+  "team": "team-08",
+  "branch": "feature/08-component-library",
+  "description": "Universal Creative Component Library — 29 reusable component definitions across 4 creative domains (Graphic, Interior, Fashion, Packaging).",
+
+  "ownedFolders": [
+    "artifacts/api-server/src/services/design-components/",
+    "artifacts/api-server/src/routes/design-components/",
+    "artifacts/ai-platform/src/pages/design-components/",
+    "integration/openapi/team-08.yaml",
+    "integration/migrations/team-08.sql",
+    "integration/manifests/team-08.json"
+  ],
+
+  "routesToMount": [
+    {
+      "mountAt": "/ai/design-components",
+      "importFrom": "./routes/design-components/router",
+      "exportName": "default",
+      "method": "use",
+      "requiresAuth": true
+    }
+  ],
+
+  "pagesToRegister": [
+    {
+      "routePath": "/design-components",
+      "importFrom": "@/pages/design-components",
+      "exportName": "default",
+      "authRequired": true,
+      "layout": "admin"
+    }
+  ],
+
+  "sidebarItems": [
+    {
+      "label": "Component Library",
+      "path": "/design-components",
+      "icon": "Layers",
+      "group": "Design Tools",
+      "authRequired": true
+    }
+  ],
+
+  "schemaExportsRequested": [
+    {
+      "sourceFile": "integration/migrations/team-08.sql",
+      "drizzleDefinitionIn": "artifacts/api-server/src/services/design-components/designComponentService.ts",
+      "note": "The domain-local table definition lives inside the service file. Team 24 should promote it to lib/db/src/schema/ai-design-components.ts and export from the barrel (lib/db/src/schema/index.ts) when ready. The service will then update its import to @workspace/db.",
+      "exports": ["designComponentsTable", "DesignComponent", "NewDesignComponent"]
+    }
+  ],
+
+  "migrations": [
+    {
+      "file": "integration/migrations/team-08.sql",
+      "description": "Creates ai_platform.ai_design_components table with indexes and unique constraint on (tenant_id, slug). Additive only.",
+      "status": "draft",
+      "applyOrder": 1
+    }
+  ],
+
+  "openapiFragment": "integration/openapi/team-08.yaml",
+
+  "seedDrafts": [],
+
+  "dependenciesRequested": [],
+
+  "eventsPublished": [],
+
+  "eventsConsumed": [],
+
+  "workerJobTypesRequested": [],
+
+  "sharedTypesRequested": [],
+
+  "integrationNotes": [
+    "Apply migration/team-08.sql before starting the API server to ensure the ai_design_components table exists.",
+    "Mount the router under the /api prefix that the api-server already uses (result: /api/ai/design-components/*).",
+    "The router uses adminAuth middleware at router-level; no additional auth wiring is needed in routes/index.ts.",
+    "After barrel promotion (schemaExportsRequested above), update the import in designComponentService.ts from the local pgSchema definition to '@workspace/db'.",
+    "The frontend page (pagesToRegister) fetches from /api/ai/design-components/registry. It degrades gracefully (shows error state) if the router is not yet mounted.",
+    "Do NOT pass tenantId from client body/query to any route — tenantId is resolved server-side via resolveAuthenticatedTenantContext."
+  ],
+
+  "knownRisks": [
+    {
+      "risk": "designComponentService.ts uses a domain-local pgSchema definition. If the barrel is promoted before this service is updated, ensure imports are swapped to avoid duplicate table definitions.",
+      "severity": "low"
+    },
+    {
+      "risk": "The ai_design_components table must be created before the API server starts or POST/GET/PATCH/DELETE instance routes will fail with 'relation does not exist'. Registry and validate routes are stateless and safe regardless.",
+      "severity": "medium"
+    }
+  ]
+}
