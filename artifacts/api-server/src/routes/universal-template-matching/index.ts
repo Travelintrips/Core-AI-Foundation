@@ -9,15 +9,32 @@
  * Routes:
  *   POST /match           — Run full template matching
  *   POST /score/:id       — Score a single blueprint against input
- *   GET  /health          — Liveness check for this domain
+ *   GET  /health          — Liveness check for this domain (no auth required)
+ *
+ * Security:
+ *   All routes except /health are protected by router-level adminAuth.
+ *   The global adminAuthWithExceptions in app.ts also covers these routes,
+ *   but explicit router-level auth is required by the remediation protocol.
  */
 
 import { Router } from "express";
 import type { Request, Response, NextFunction } from "express";
+import { adminAuth } from "../../middleware/adminAuth.js";
 import { getDefaultMatcher } from "../../services/universal-template-matching/index.js";
 import type { MatchInput } from "../../services/universal-template-matching/index.js";
 
 const router = Router();
+
+// ── Router-level auth ─────────────────────────────────────────────────────────
+// /health is exempt (liveness probe, no sensitive data).
+// All other routes require valid admin credentials.
+router.use((req: Request, res: Response, next: NextFunction): void => {
+  if (req.path === "/health" || req.path === "/health/") {
+    next();
+    return;
+  }
+  void adminAuth(req, res, next);
+});
 
 // ── POST /match ──────────────────────────────────────────────────────────────
 
@@ -150,6 +167,11 @@ function arrayOfStrings(value: unknown): string[] | undefined {
   return arr.length > 0 ? arr : undefined;
 }
 
+// ── Input size limits (DoS prevention) ───────────────────────────────────────
+const MAX_BRIEF_LENGTH      = 2_000;  // characters
+const MAX_CONSTRAINTS_COUNT = 20;     // array items
+const MAX_ARRAY_ITEMS       = 50;     // generic array cap (audience, output, style)
+
 function validateMatchInput(input: MatchInput): string | null {
   const hasAnySignal = [
     input.serviceType,
@@ -166,6 +188,24 @@ function validateMatchInput(input: MatchInput): string | null {
   if (!hasAnySignal) {
     return "At least one matching signal must be provided (serviceType, domain, category, industry, brief, brandDna, audience, output, or style).";
   }
+
+  // Size guards
+  if (input.brief && input.brief.length > MAX_BRIEF_LENGTH) {
+    return `brief must not exceed ${MAX_BRIEF_LENGTH} characters.`;
+  }
+  if (input.constraints && input.constraints.length > MAX_CONSTRAINTS_COUNT) {
+    return `constraints array must not exceed ${MAX_CONSTRAINTS_COUNT} items.`;
+  }
+  if (input.audience && input.audience.length > MAX_ARRAY_ITEMS) {
+    return `audience array must not exceed ${MAX_ARRAY_ITEMS} items.`;
+  }
+  if (input.output && input.output.length > MAX_ARRAY_ITEMS) {
+    return `output array must not exceed ${MAX_ARRAY_ITEMS} items.`;
+  }
+  if (input.style && input.style.length > MAX_ARRAY_ITEMS) {
+    return `style array must not exceed ${MAX_ARRAY_ITEMS} items.`;
+  }
+
   return null;
 }
 

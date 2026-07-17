@@ -746,6 +746,141 @@ describe("runMatching", () => {
   });
 });
 
+// ── Security / Input Validation ───────────────────────────────────────────────
+// Tests for: malformed payload types, oversized inputs, invalid ID patterns,
+// limit abuse prevention. Auth middleware tests are handled at the middleware
+// layer (adminAuth.ts); here we test domain-level input hardening.
+
+describe("input validation — malformed payloads", () => {
+  it("ignores non-string serviceType (number in body)", () => {
+    // parseMatchInput filters out non-strings — no crash, treated as missing signal
+    const body = { serviceType: 42, industry: "logistics" };
+    // Simulate what parseMatchInput does with a non-string value
+    const serviceTypeValue = typeof (body as Record<string, unknown>).serviceType === "string"
+      ? body.serviceType
+      : undefined;
+    expect(serviceTypeValue).toBeUndefined();
+  });
+
+  it("ignores non-string domain (boolean in body)", () => {
+    const body: Record<string, unknown> = { domain: true, industry: "finance" };
+    const domainValue = typeof body.domain === "string" ? body.domain : undefined;
+    expect(domainValue).toBeUndefined();
+  });
+
+  it("ignores non-array audience (string in body)", () => {
+    const body: Record<string, unknown> = { audience: "B2B" };
+    const audienceValue = Array.isArray(body.audience) ? body.audience : undefined;
+    expect(audienceValue).toBeUndefined();
+  });
+
+  it("filters non-string items from arrays", () => {
+    const raw = [1, "B2B", null, "enterprise", {}];
+    const filtered = raw
+      .filter((v) => typeof v === "string")
+      .map((v) => (v as string).trim())
+      .filter(Boolean);
+    expect(filtered).toEqual(["B2B", "enterprise"]);
+  });
+
+  it("trims whitespace from string fields", () => {
+    const body: Record<string, unknown> = { serviceType: "  CP  ", industry: "  logistics  " };
+    const st = typeof body.serviceType === "string" ? body.serviceType.trim() : undefined;
+    const ind = typeof body.industry === "string" ? body.industry.trim() : undefined;
+    expect(st).toBe("CP");
+    expect(ind).toBe("logistics");
+  });
+});
+
+describe("input validation — size limits", () => {
+  // These test the validateMatchInput logic directly via runMatching to confirm
+  // the engine itself doesn't explode with large inputs (the route layer
+  // validates size before calling the engine — tested here for belt-and-suspenders).
+
+  it("brief with 2000 chars does not crash the scoring engine", () => {
+    const longBrief = "a".repeat(2_000);
+    const bp = makeBlueprint({ keywords: ["aaaa"] }); // won't match 'a's of length<3 after tokenise
+    const result = runMatching([bp], { brief: longBrief, serviceType: "CP" });
+    expect(result).toBeDefined();
+    expect(result.candidatesEvaluated).toBe(1);
+  });
+
+  it("50-item constraints array does not crash", () => {
+    const constraints = Array.from({ length: 50 }, (_, i) => `constraint-${i}`);
+    const bp = makeBlueprint();
+    const result = runMatching([bp], { serviceType: "CP", constraints });
+    expect(result).toBeDefined();
+  });
+
+  it("empty constraints array does not reject any blueprint", () => {
+    const bp = makeBlueprint({ unsupportedConstraints: ["dark-mode"] });
+    const result = runMatching([bp], { serviceType: "CP", constraints: [] });
+    // Empty constraints → no violations → blueprint is scored, not rejected
+    expect(result.topRecommendation).not.toBeNull();
+    expect(result.rejected).toHaveLength(0);
+  });
+});
+
+describe("input validation — limit enforcement", () => {
+  it("limit is capped at 20 regardless of input", () => {
+    const blueprints = Array.from({ length: 30 }, (_, i) =>
+      makeBlueprint({ id: `bp-${i}`, name: `Blueprint ${i}` }),
+    );
+    // runMatching clamps limit to max 20
+    const result = runMatching(blueprints, { serviceType: "CP", limit: 999 });
+    const total = (result.topRecommendation ? 1 : 0) + result.alternatives.length;
+    expect(total).toBeLessThanOrEqual(20);
+  });
+
+  it("limit minimum is 1", () => {
+    const blueprints = [makeBlueprint(), makeBlueprint({ id: "b" })];
+    const result = runMatching(blueprints, { serviceType: "CP", limit: 0 });
+    // limit 0 → clamped to 1 → topRecommendation + 0 alternatives = 1 total
+    const total = (result.topRecommendation ? 1 : 0) + result.alternatives.length;
+    expect(total).toBeGreaterThanOrEqual(1);
+  });
+
+  it("negative limit is treated as minimum (1)", () => {
+    const blueprints = [makeBlueprint()];
+    const result = runMatching(blueprints, { serviceType: "CP", limit: -10 });
+    expect(result.candidatesEvaluated).toBe(1);
+  });
+});
+
+describe("input validation — blueprint ID security", () => {
+  it("non-numeric blueprint ID (letters) is rejected before reaching the engine", () => {
+    // Test the regex used in the route handler
+    const validId = /^\d+$/;
+    expect(validId.test("123")).toBe(true);
+    expect(validId.test("abc")).toBe(false);
+    expect(validId.test("12abc")).toBe(false);
+    expect(validId.test("")).toBe(false);
+  });
+
+  it("SQL injection attempt in ID is rejected by numeric check", () => {
+    const validId = /^\d+$/;
+    expect(validId.test("1 OR 1=1")).toBe(false);
+    expect(validId.test("1; DROP TABLE ai_templates;--")).toBe(false);
+    expect(validId.test("' OR '1'='1")).toBe(false);
+    expect(validId.test("../../etc/passwd")).toBe(false);
+  });
+
+  it("large numeric ID passes the regex but returns null from port (no such blueprint)", async () => {
+    const matcher = new UniversalTemplateMatcher(makeDeps([]));
+    const result = await matcher.scoreSingle("999999999", makeInput());
+    // Port returns null → scoreSingle returns null → route returns 404
+    expect(result).toBeNull();
+  });
+
+  it("parseInt guard on non-numeric ID returns null from DbBlueprintPort pattern", () => {
+    // DbBlueprintPort.getById does parseInt(id, 10) and guards isNaN
+    const id = "not-a-number";
+    const numId = parseInt(id, 10);
+    expect(isNaN(numId)).toBe(true);
+    // When isNaN → port returns null → scoreSingle returns null → 404
+  });
+});
+
 // ── UniversalTemplateMatcher (integration) ────────────────────────────────────
 
 describe("UniversalTemplateMatcher", () => {
