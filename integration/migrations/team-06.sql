@@ -9,6 +9,12 @@
 --   ✅ No changes to tables owned by other teams
 --   ✅ Uses CREATE INDEX IF NOT EXISTS
 --   ✅ Schema: ai_platform (search_path must be set)
+--
+-- Remediations applied (vs original draft):
+--   [P2]  Added content_sha256 column for exact-duplicate detection
+--   [P2]  Added FK on ai_asset_intelligence_v2.version_chain_id
+--   [P0]  Added GIN indexes on auto_tags + knowledge_tags for array overlap queries
+--   [P0]  Added index on content_sha256 for exact-dup lookup
 -- ============================================================
 
 -- ── 1. Extended asset intelligence (v2) ─────────────────────────────────────
@@ -24,6 +30,12 @@ CREATE TABLE IF NOT EXISTS ai_platform.ai_asset_intelligence_v2 (
                                                     -- interior_material | furniture_image | fashion_motif |
                                                     -- garment_mockup | packaging_asset
 
+  -- [P1 HASH FIX] Content SHA-256 — PRIMARY exact-duplicate signal
+  -- Sourced directly from the source table's checksum column (file SHA-256).
+  -- Two assets are exact duplicates ONLY when both have a non-null content_sha256 that matches.
+  -- Perceptual/metadata hash is a SECONDARY similarity heuristic only.
+  content_sha256            TEXT,                   -- raw file SHA-256 (nullable — not all sources provide it)
+
   -- Tags
   auto_tags                 TEXT[]  NOT NULL DEFAULT '{}',
   normalized_tags           TEXT[]  NOT NULL DEFAULT '{}',
@@ -31,7 +43,7 @@ CREATE TABLE IF NOT EXISTS ai_platform.ai_asset_intelligence_v2 (
   search_keywords           TEXT[]  NOT NULL DEFAULT '{}',
   detected_subjects         TEXT[]  NOT NULL DEFAULT '{}',
 
-  -- Perceptual hash
+  -- Perceptual hash (secondary heuristic — similarity only)
   perceptual_hash           TEXT,
   hash_tier                 TEXT,                   -- 'full' | 'metadata'
   is_duplicate              BOOLEAN NOT NULL DEFAULT FALSE,
@@ -40,7 +52,8 @@ CREATE TABLE IF NOT EXISTS ai_platform.ai_asset_intelligence_v2 (
 
   -- Version
   version_type              TEXT    NOT NULL DEFAULT 'original',
-  version_chain_id          INTEGER,
+  -- [P2 FK FIX] version_chain_id now has a proper FK reference
+  version_chain_id          INTEGER REFERENCES ai_platform.ai_asset_version_chains(id) ON DELETE SET NULL,
 
   -- Quality
   quality_score             INTEGER,               -- 0–100
@@ -63,8 +76,15 @@ CREATE TABLE IF NOT EXISTS ai_platform.ai_asset_intelligence_v2 (
 
 COMMENT ON TABLE ai_platform.ai_asset_intelligence_v2 IS
   'Team 06 — Extended asset intelligence: knowledge taxonomy, quality scoring, duplicate detection v2.';
+COMMENT ON COLUMN ai_platform.ai_asset_intelligence_v2.content_sha256 IS
+  'Primary exact-duplicate signal: raw file SHA-256 from source table. Null when source does not provide checksum.';
+COMMENT ON COLUMN ai_platform.ai_asset_intelligence_v2.perceptual_hash IS
+  'Secondary similarity heuristic only. Never use alone for exact-duplicate determination.';
 
 -- ── 2. Version chains ────────────────────────────────────────────────────────
+
+-- Note: ai_asset_version_chains must exist BEFORE ai_asset_intelligence_v2
+-- so that the FK in step 1 can resolve. Create it first if running standalone.
 
 CREATE TABLE IF NOT EXISTS ai_platform.ai_asset_version_chains (
   id                  SERIAL PRIMARY KEY,
@@ -143,8 +163,33 @@ CREATE TABLE IF NOT EXISTS ai_platform.ai_asset_safety (
 COMMENT ON TABLE ai_platform.ai_asset_safety IS
   'Team 06 — Brand safety classification: safe | review | unsafe, with rule-based flag detection.';
 
+-- ── Additive column for existing deployments ──────────────────────────────────
+-- If the table already exists without content_sha256, add it:
+ALTER TABLE ai_platform.ai_asset_intelligence_v2
+  ADD COLUMN IF NOT EXISTS content_sha256 TEXT;
+
+-- If the version_chain_id FK is not yet set, add it:
+-- (FK cannot be added as IF NOT EXISTS in standard SQL; wrap in DO block)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_name = 'fk_aiv2_version_chain'
+      AND table_schema = 'ai_platform'
+      AND table_name   = 'ai_asset_intelligence_v2'
+  ) THEN
+    ALTER TABLE ai_platform.ai_asset_intelligence_v2
+      ADD CONSTRAINT fk_aiv2_version_chain
+      FOREIGN KEY (version_chain_id)
+      REFERENCES ai_platform.ai_asset_version_chains(id)
+      ON DELETE SET NULL;
+  END IF;
+END;
+$$;
+
 -- ── Indexes ───────────────────────────────────────────────────────────────────
 
+-- Existing indexes (retained from original draft)
 CREATE INDEX IF NOT EXISTS idx_ai_asset_intel_v2_client
   ON ai_platform.ai_asset_intelligence_v2 (client_id);
 
@@ -175,3 +220,19 @@ CREATE INDEX IF NOT EXISTS idx_ai_asset_safety_client_level
 CREATE INDEX IF NOT EXISTS idx_ai_asset_safety_flagged
   ON ai_platform.ai_asset_safety (client_id, review_required)
   WHERE review_required = TRUE;
+
+-- [P0 NEW] GIN indexes for array overlap queries (used by findSimilarAssets &&)
+CREATE INDEX IF NOT EXISTS idx_ai_asset_intel_v2_auto_tags_gin
+  ON ai_platform.ai_asset_intelligence_v2 USING GIN (auto_tags);
+
+CREATE INDEX IF NOT EXISTS idx_ai_asset_intel_v2_knowledge_tags_gin
+  ON ai_platform.ai_asset_intelligence_v2 USING GIN (knowledge_tags);
+
+-- [P1 NEW] Index for exact content SHA-256 duplicate lookup
+CREATE INDEX IF NOT EXISTS idx_ai_asset_intel_v2_content_sha256
+  ON ai_platform.ai_asset_intelligence_v2 (client_id, content_sha256)
+  WHERE content_sha256 IS NOT NULL;
+
+-- [P1 NEW] Composite index for paginated list query
+CREATE INDEX IF NOT EXISTS idx_ai_asset_intel_v2_client_analyzed
+  ON ai_platform.ai_asset_intelligence_v2 (client_id, analyzed_at DESC);

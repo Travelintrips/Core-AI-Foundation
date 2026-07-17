@@ -3,15 +3,22 @@
  *
  * Reads from ai_asset_library (existing table, no modification).
  * Writes to ai_asset_intelligence_v2 (new v2 table).
- * Coordinates: perceptual hash → tag normalization → knowledge tags →
- *              version detection → quality metadata → safety → licensing placeholder.
+ *
+ * P1 HASH FIX: content_sha256 (raw file SHA-256) is the PRIMARY signal for exact
+ * duplicate detection. Metadata/perceptual hash is a SECONDARY heuristic only.
+ * Two assets are exact duplicates only when:
+ *   a) Both have content_sha256 AND they match exactly, OR
+ *   b) Same perceptual_hash + hash_tier (weaker — metadata similarity only)
+ *
+ * P1 PAGINATION FIX: listIntelligenceV2ForClient uses DB-level LIMIT/OFFSET.
+ * No more full-table load + N+1 getIntelligenceV2 calls.
  *
  * Does NOT touch: Queue, Dispatcher, Event Bus, Payment, Storage core,
  *                 Signed URL core, or any shared registry.
  */
 
 import { db, aiAssetLibraryTable, aiBrandKitAssetsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { pool } from "@workspace/db";
 import { computeMetadataHash } from "./perceptualHash.js";
 import { normalizeTags, extractTagsFromFileName } from "./tagNormalization.js";
@@ -19,15 +26,17 @@ import { inferAssetTypeFromTags, matchKnowledgeTags } from "./knowledgeTag.js";
 import { detectVersionType } from "./versionChain.js";
 import { computeQualityMetadata } from "./qualityMetadata.js";
 import { classifyAndSaveAssetSafety } from "./assetSafety.js";
-import { upsertLicensing, AI_GENERATED_LICENSE } from "./licensing.js";
-import { getLicensing } from "./licensing.js";
+import { upsertLicensing, getLicensing, AI_GENERATED_LICENSE } from "./licensing.js";
 import { getAssetSafety } from "./assetSafety.js";
 import type {
   AssetIntelligenceV2View,
   AssetTypeV2,
   BatchAnalyzeRequest,
   BatchAnalyzeResult,
+  PagedResult,
+  ListPageParams,
 } from "./types.js";
+import { LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT } from "./types.js";
 
 // ── Subject detection (reused from v1 — no modification to v1 service) ────────
 
@@ -128,7 +137,6 @@ export async function analyzeAssetV2(
   }
 
   if (!record) {
-    // Store failure
     await upsertIntelligenceV2Record({
       assetId, assetSource, clientId,
       analysisFailed: true,
@@ -138,58 +146,92 @@ export async function analyzeAssetV2(
   }
 
   try {
-    // 1. Perceptual hash
+    // 1. Content SHA-256 (PRIMARY exact-duplicate signal)
+    //    Uses raw checksum from source table — this is the file's real SHA-256.
+    //    Two assets are exact duplicates ONLY when both have a non-null content_sha256 that matches.
+    const contentSha256 = record.checksum ?? null;
+
+    // 2. Perceptual / metadata hash (SECONDARY similarity heuristic)
     const pHash = computeMetadataHash(record.fileName, record.mimeType, record.fileSizeBytes, record.checksum);
 
-    // 2. Tag normalization
+    // 3. Tag normalization
     const rawTags  = [...record.tags, ...extractTagsFromFileName(record.fileName)];
     const normTags = normalizeTags(rawTags);
 
-    // 3. Asset type inference
+    // 4. Asset type inference
     const assetType = inferAssetTypeFromTags(normTags, record.mimeType, record.fileName);
 
-    // 4. Knowledge tags
+    // 5. Knowledge tags
     const knowledgeTags = matchKnowledgeTags(normTags, assetType, record.fileName);
 
-    // 5. Version detection
+    // 6. Version detection
     const versionType = detectVersionType(record.fileName);
 
-    // 6. Subjects
+    // 7. Subjects
     const subjects = detectSubjects(record.fileName, normTags);
 
-    // 7. Search keywords
+    // 8. Search keywords
     const searchKeywords = [...new Set([...normTags, ...knowledgeTags, ...subjects.map((s) => s.toLowerCase())])].slice(0, 15);
 
-    // 8. Quality metadata
+    // 9. Quality metadata
     const quality = computeQualityMetadata({
       assetType,
-      fileName:     record.fileName,
-      mimeType:     record.mimeType,
+      fileName:      record.fileName,
+      mimeType:      record.mimeType,
       fileSizeBytes: record.fileSizeBytes,
       hasTransparency: false,
-      hasTitle:     record.title.length > 0,
-      hasTags:      normTags.length > 0,
+      hasTitle:      record.title.length > 0,
+      hasTags:       normTags.length > 0,
       hasPreviewUrl: !!record.previewUrl,
-      hasChecksum:  !!record.checksum,
+      hasChecksum:   !!record.checksum,
     });
 
-    // 9. Duplicate detection — check if another asset with same hash exists
-    const dupCheck = await pool.query<{ asset_id: number }>(
-      `SELECT asset_id FROM ai_platform.ai_asset_intelligence_v2
-       WHERE client_id = $1 AND perceptual_hash = $2 AND hash_tier = $3
-         AND NOT (asset_id = $4 AND asset_source = $5)
-       LIMIT 1`,
-      [clientId, pHash.hash, pHash.tier, assetId, assetSource],
-    );
-    const isDuplicate = dupCheck.rows.length > 0;
-    const duplicateOfId = dupCheck.rows[0]?.asset_id ?? null;
+    // 10. Duplicate detection
+    //
+    // P1 FIX: Use content SHA-256 as primary exact-duplicate signal.
+    // Metadata hash (filename/mime/size) is too weak — similar names can hash alike.
+    //
+    // Priority order:
+    //   A. If this asset has a content_sha256: exact match against DB → definite duplicate
+    //   B. Otherwise: perceptual_hash + hash_tier match → weaker heuristic
+    let isDuplicate = false;
+    let duplicateOfId: number | null = null;
 
-    // 10. Suggested usage
+    if (contentSha256) {
+      // A. Exact content match (strongest signal)
+      const exactDup = await pool.query<{ asset_id: number }>(
+        `SELECT asset_id FROM ai_platform.ai_asset_intelligence_v2
+         WHERE client_id = $1
+           AND content_sha256 = $2
+           AND NOT (asset_id = $3 AND asset_source = $4)
+         LIMIT 1`,
+        [clientId, contentSha256, assetId, assetSource],
+      );
+      isDuplicate   = exactDup.rows.length > 0;
+      duplicateOfId = exactDup.rows[0]?.asset_id ?? null;
+    }
+
+    // B. Fallback: perceptual hash (only when no content SHA-256 available)
+    if (!isDuplicate && !contentSha256) {
+      const hashDup = await pool.query<{ asset_id: number }>(
+        `SELECT asset_id FROM ai_platform.ai_asset_intelligence_v2
+         WHERE client_id = $1
+           AND perceptual_hash = $2 AND hash_tier = $3
+           AND NOT (asset_id = $4 AND asset_source = $5)
+         LIMIT 1`,
+        [clientId, pHash.hash, pHash.tier, assetId, assetSource],
+      );
+      isDuplicate   = hashDup.rows.length > 0;
+      duplicateOfId = hashDup.rows[0]?.asset_id ?? null;
+    }
+
+    // 11. Suggested usage
     const suggestedUsage = deriveSuggestedUsage(assetType, knowledgeTags, subjects);
 
-    // 11. Persist to v2 table
+    // 12. Persist to v2 table
     await upsertIntelligenceV2Record({
       assetId, assetSource, clientId,
+      contentSha256,
       assetTypeV2: assetType,
       autoTags: normTags,
       normalizedTags: normTags,
@@ -205,12 +247,12 @@ export async function analyzeAssetV2(
       qualityScore: quality.overallScore,
       qualityMetadata: quality,
       suggestedUsage,
-      confidenceScore: 0.8,
+      confidenceScore: contentSha256 ? 0.95 : 0.8,
       analysisFailed: false,
       failureReason: null,
     });
 
-    // 12. Safety classification
+    // 13. Safety classification
     let safety = null;
     if (!opts?.skipSafety) {
       safety = await classifyAndSaveAssetSafety({
@@ -223,7 +265,7 @@ export async function analyzeAssetV2(
       });
     }
 
-    // 13. Default licensing for AI-generated assets
+    // 14. Default licensing for AI-generated assets
     let licensing = await getLicensing(assetId, assetSource);
     if (!licensing && !opts?.skipLicensing) {
       const isAiGenerated = record.uploadedBy === "ai" || assetSource === "creative_asset";
@@ -239,6 +281,7 @@ export async function analyzeAssetV2(
       id: 0, // populated by getIntelligenceV2 after insert
       assetId, assetSource, clientId,
       assetTypeV2: assetType,
+      contentSha256,
       autoTags: normTags,
       normalizedTags: normTags,
       knowledgeTags,
@@ -258,7 +301,7 @@ export async function analyzeAssetV2(
       safety: safety ?? null,
       analysisFailed: false,
       failureReason: null,
-      confidenceScore: 0.8,
+      confidenceScore: contentSha256 ? 0.95 : 0.8,
       analyzedAt: new Date().toISOString(),
     };
   } catch (err: unknown) {
@@ -273,7 +316,7 @@ export async function analyzeAssetV2(
 export async function batchAnalyzeAssetsV2(req: BatchAnalyzeRequest): Promise<BatchAnalyzeResult> {
   const results: BatchAnalyzeResult["results"] = [];
   let succeeded = 0;
-  let failed = 0;
+  let failed    = 0;
 
   for (const asset of req.assets) {
     try {
@@ -290,7 +333,7 @@ export async function batchAnalyzeAssetsV2(req: BatchAnalyzeRequest): Promise<Ba
   return { requested: req.assets.length, succeeded, failed, results };
 }
 
-// ── Read ──────────────────────────────────────────────────────────────────────
+// ── Read (single record) ──────────────────────────────────────────────────────
 
 export async function getIntelligenceV2(
   assetId: number,
@@ -300,6 +343,7 @@ export async function getIntelligenceV2(
   const res = await pool.query<{
     id: number; asset_id: number; asset_source: string; client_id: string;
     asset_type_v2: string | null;
+    content_sha256: string | null;
     auto_tags: string[] | null; normalized_tags: string[] | null;
     knowledge_tags: string[] | null; search_keywords: string[] | null;
     detected_subjects: string[] | null; perceptual_hash: string | null;
@@ -328,6 +372,7 @@ export async function getIntelligenceV2(
     assetSource: r.asset_source,
     clientId: r.client_id,
     assetTypeV2: (r.asset_type_v2 as AssetTypeV2) ?? null,
+    contentSha256: r.content_sha256 ?? null,
     autoTags: r.auto_tags ?? [],
     normalizedTags: r.normalized_tags ?? [],
     knowledgeTags: r.knowledge_tags ?? [],
@@ -352,60 +397,148 @@ export async function getIntelligenceV2(
   };
 }
 
-export async function listIntelligenceV2ForClient(clientId: string): Promise<AssetIntelligenceV2View[]> {
-  const res = await pool.query<{ asset_id: number; asset_source: string }>(
-    `SELECT asset_id, asset_source FROM ai_platform.ai_asset_intelligence_v2
-     WHERE client_id = $1 ORDER BY analyzed_at DESC`,
-    [clientId],
-  );
-  const views: AssetIntelligenceV2View[] = [];
-  for (const row of res.rows) {
-    const v = await getIntelligenceV2(row.asset_id, row.asset_source, clientId);
-    if (v) views.push(v);
-  }
-  return views;
+// ── P1 PAGINATION FIX: list with DB-level LIMIT/OFFSET ───────────────────────
+
+/**
+ * List intelligence records for a client with DB-level pagination.
+ *
+ * BEFORE: loaded all rows then did N individual getIntelligenceV2 calls (N+1, no limit).
+ * AFTER:  single paginated query returning lightweight list items.
+ *         Licensing and safety are omitted from list view (available via single-record endpoint).
+ */
+export async function listIntelligenceV2ForClient(
+  clientId: string,
+  params: ListPageParams = {},
+): Promise<PagedResult<AssetIntelligenceV2View>> {
+  const limit  = Math.min(Math.max(1, params.limit  ?? LIST_DEFAULT_LIMIT), LIST_MAX_LIMIT);
+  const page   = Math.max(1, params.page ?? 1);
+  const offset = (page - 1) * limit;
+
+  const [dataRes, countRes] = await Promise.all([
+    pool.query<{
+      id: number; asset_id: number; asset_source: string; client_id: string;
+      asset_type_v2: string | null; content_sha256: string | null;
+      auto_tags: string[] | null; normalized_tags: string[] | null;
+      knowledge_tags: string[] | null; search_keywords: string[] | null;
+      detected_subjects: string[] | null; perceptual_hash: string | null;
+      hash_tier: string | null; is_duplicate: boolean; duplicate_of_id: number | null;
+      duplicate_similarity_score: number | null; version_type: string;
+      version_chain_id: number | null; quality_score: number | null;
+      quality_metadata: Record<string, unknown> | null;
+      suggested_usage: string[] | null; confidence_score: number;
+      analysis_failed: boolean; failure_reason: string | null; analyzed_at: Date;
+    }>(
+      `SELECT * FROM ai_platform.ai_asset_intelligence_v2
+       WHERE client_id = $1
+       ORDER BY analyzed_at DESC
+       LIMIT $2 OFFSET $3`,
+      [clientId, limit, offset],
+    ),
+    pool.query<{ total: string }>(
+      `SELECT COUNT(*)::text AS total FROM ai_platform.ai_asset_intelligence_v2 WHERE client_id = $1`,
+      [clientId],
+    ),
+  ]);
+
+  const total = parseInt(countRes.rows[0]?.total ?? "0", 10);
+
+  const items: AssetIntelligenceV2View[] = dataRes.rows.map((r) => ({
+    id: r.id,
+    assetId: r.asset_id,
+    assetSource: r.asset_source,
+    clientId: r.client_id,
+    assetTypeV2: (r.asset_type_v2 as AssetTypeV2) ?? null,
+    contentSha256: r.content_sha256 ?? null,
+    autoTags: r.auto_tags ?? [],
+    normalizedTags: r.normalized_tags ?? [],
+    knowledgeTags: r.knowledge_tags ?? [],
+    searchKeywords: r.search_keywords ?? [],
+    detectedSubjects: r.detected_subjects ?? [],
+    perceptualHash: r.perceptual_hash,
+    hashTier: (r.hash_tier as "full" | "metadata") ?? null,
+    isDuplicate: r.is_duplicate,
+    duplicateOfId: r.duplicate_of_id ?? null,
+    duplicateSimilarityScore: r.duplicate_similarity_score ?? null,
+    versionType: r.version_type,
+    versionChainId: r.version_chain_id ?? null,
+    quality: r.quality_metadata as AssetIntelligenceV2View["quality"],
+    suggestedUsage: r.suggested_usage ?? [],
+    colorPalette: [],
+    // List view omits licensing & safety (requires individual record lookup)
+    licensing: null,
+    safety: null,
+    analysisFailed: r.analysis_failed,
+    failureReason: r.failure_reason ?? null,
+    confidenceScore: r.confidence_score,
+    analyzedAt: r.analyzed_at.toISOString(),
+  }));
+
+  return { items, total, page, limit, hasMore: offset + limit < total };
 }
 
-export async function getDuplicateReportV2(clientId: string): Promise<{
+// ── Duplicate report (paginated) ──────────────────────────────────────────────
+
+export async function getDuplicateReportV2(
+  clientId: string,
+  params: ListPageParams = {},
+): Promise<{
   clientId: string;
   totalAnalyzed: number;
   totalDuplicates: number;
   duplicateGroups: Array<{
     perceptualHash: string;
     hashTier: string;
+    contentSha256: string | null;
     assetIds: number[];
     versionTypes: string[];
     recommendation: string;
   }>;
+  page: number;
+  limit: number;
+  hasMore: boolean;
 }> {
+  const limit  = Math.min(Math.max(1, params.limit ?? LIST_DEFAULT_LIMIT), LIST_MAX_LIMIT);
+  const page   = Math.max(1, params.page ?? 1);
+  const offset = (page - 1) * limit;
+
+  // P1 FIX: group by content_sha256 FIRST (exact), then perceptual_hash (heuristic)
   const res = await pool.query<{
-    asset_id: number; perceptual_hash: string | null;
+    asset_id: number; perceptual_hash: string | null; content_sha256: string | null;
     hash_tier: string | null; is_duplicate: boolean; version_type: string;
   }>(
-    `SELECT asset_id, perceptual_hash, hash_tier, is_duplicate, version_type
+    `SELECT asset_id, perceptual_hash, content_sha256, hash_tier, is_duplicate, version_type
      FROM ai_platform.ai_asset_intelligence_v2
      WHERE client_id = $1 AND analysis_failed = false`,
     [clientId],
   );
 
-  const groups = new Map<string, typeof res.rows>();
+  const groups = new Map<string, { rows: typeof res.rows; contentSha256: string | null }>();
+
   for (const row of res.rows) {
-    if (!row.perceptual_hash) continue;
-    const key = `${row.hash_tier}:${row.perceptual_hash}`;
-    const g = groups.get(key) ?? [];
-    g.push(row);
-    groups.set(key, g);
+    // Group by content_sha256 if available (exact), fallback to hash:tier
+    const key = row.content_sha256
+      ? `sha256:${row.content_sha256}`
+      : row.perceptual_hash
+      ? `${row.hash_tier ?? "metadata"}:${row.perceptual_hash}`
+      : null;
+    if (!key) continue;
+
+    const existing = groups.get(key) ?? { rows: [], contentSha256: row.content_sha256 ?? null };
+    existing.rows.push(row);
+    groups.set(key, existing);
   }
 
-  const duplicateGroups = [];
-  for (const [key, assets] of groups.entries()) {
+  const allGroups = [];
+  for (const [key, { rows: assets, contentSha256 }] of Array.from(groups.entries())) {
     if (assets.length <= 1) continue;
-    const [tier, hash] = key.split(":");
+    const [, hash] = key.split(":");
+    const hashTier = key.startsWith("sha256:") ? "content_sha256" : (assets[0]?.hash_tier ?? "metadata");
     const versionTypes = assets.map((a) => a.version_type);
     const uniqueVersions = new Set(versionTypes).size;
-    duplicateGroups.push({
+    allGroups.push({
       perceptualHash: hash ?? "",
-      hashTier: tier ?? "",
+      hashTier,
+      contentSha256,
       assetIds: assets.map((a) => a.asset_id),
       versionTypes,
       recommendation: uniqueVersions > 1
@@ -414,11 +547,17 @@ export async function getDuplicateReportV2(clientId: string): Promise<{
     });
   }
 
+  const totalGroups = allGroups.length;
+  const paged = allGroups.slice(offset, offset + limit);
+
   return {
     clientId,
-    totalAnalyzed: res.rows.length,
+    totalAnalyzed:   res.rows.length,
     totalDuplicates: res.rows.filter((r) => r.is_duplicate).length,
-    duplicateGroups,
+    duplicateGroups: paged,
+    page,
+    limit,
+    hasMore: offset + limit < totalGroups,
   };
 }
 
@@ -426,6 +565,7 @@ export async function getDuplicateReportV2(clientId: string): Promise<{
 
 async function upsertIntelligenceV2Record(params: {
   assetId: number; assetSource: string; clientId: string;
+  contentSha256?: string | null;
   assetTypeV2?: AssetTypeV2; autoTags?: string[]; normalizedTags?: string[];
   knowledgeTags?: string[]; searchKeywords?: string[]; detectedSubjects?: string[];
   perceptualHash?: string; hashTier?: string; isDuplicate?: boolean;
@@ -436,13 +576,14 @@ async function upsertIntelligenceV2Record(params: {
 }): Promise<void> {
   await pool.query(
     `INSERT INTO ai_platform.ai_asset_intelligence_v2
-       (asset_id, asset_source, client_id, asset_type_v2,
+       (asset_id, asset_source, client_id, content_sha256, asset_type_v2,
         auto_tags, normalized_tags, knowledge_tags, search_keywords, detected_subjects,
         perceptual_hash, hash_tier, is_duplicate, duplicate_of_id, duplicate_similarity_score,
         version_type, quality_score, quality_metadata, suggested_usage,
         confidence_score, analysis_failed, failure_reason, analyzed_at, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,NOW(),NOW(),NOW())
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,NOW(),NOW(),NOW())
      ON CONFLICT (asset_id, asset_source) DO UPDATE SET
+       content_sha256             = EXCLUDED.content_sha256,
        asset_type_v2              = COALESCE(EXCLUDED.asset_type_v2, ai_asset_intelligence_v2.asset_type_v2),
        auto_tags                  = EXCLUDED.auto_tags,
        normalized_tags            = EXCLUDED.normalized_tags,
@@ -465,6 +606,7 @@ async function upsertIntelligenceV2Record(params: {
        updated_at                 = NOW()`,
     [
       params.assetId, params.assetSource, params.clientId,
+      params.contentSha256 ?? null,
       params.assetTypeV2 ?? null,
       params.autoTags ?? [], params.normalizedTags ?? [],
       params.knowledgeTags ?? [], params.searchKeywords ?? [],
@@ -486,6 +628,7 @@ async function upsertIntelligenceV2Record(params: {
 function buildFailureView(assetId: number, assetSource: string, clientId: string, reason: string): AssetIntelligenceV2View {
   return {
     id: 0, assetId, assetSource, clientId, assetTypeV2: null,
+    contentSha256: null,
     autoTags: [], normalizedTags: [], knowledgeTags: [], searchKeywords: [], detectedSubjects: [],
     perceptualHash: null, hashTier: null, isDuplicate: false, duplicateOfId: null,
     duplicateSimilarityScore: null, versionType: "original", versionChainId: null,

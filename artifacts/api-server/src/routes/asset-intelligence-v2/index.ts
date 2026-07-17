@@ -8,6 +8,9 @@
  * Public routes use token-based workspace auth (/public/... prefix).
  *
  * Convention: no zod imports — manual validation only.
+ *
+ * P1 PAGINATION: list endpoints accept ?page=&limit= query params.
+ *                Defaults: page=1, limit=20, max limit=100.
  */
 
 import { Router } from "express";
@@ -18,7 +21,11 @@ import {
   listIntelligenceV2ForClient,
   getDuplicateReportV2,
 } from "../../services/asset-intelligence-v2/orchestrator.js";
-import { findSimilarAssets } from "../../services/asset-intelligence-v2/similarAsset.js";
+import {
+  findSimilarAssets,
+  SIMILAR_ASSET_MAX_LIMIT,
+  SIMILAR_ASSET_DEFAULT_LIMIT,
+} from "../../services/asset-intelligence-v2/similarAsset.js";
 import {
   getVersionChain,
   listVersionChainsForClient,
@@ -40,7 +47,7 @@ import {
   inferAssetTypeFromTags,
 } from "../../services/asset-intelligence-v2/knowledgeTag.js";
 import { normalizeTags } from "../../services/asset-intelligence-v2/tagNormalization.js";
-import { ASSET_TYPE_V2, LICENSE_TYPES } from "../../services/asset-intelligence-v2/types.js";
+import { ASSET_TYPE_V2, LICENSE_TYPES, LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT } from "../../services/asset-intelligence-v2/types.js";
 import { resolveWorkspaceSession } from "../../services/customerWorkspaceService.js";
 
 const router = Router();
@@ -50,6 +57,12 @@ const router = Router();
 function parseAssetId(raw: string | undefined): number | null {
   const n = parseInt(raw ?? "0", 10);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function parsePagination(query: Record<string, string | undefined>): { page: number; limit: number } {
+  const page  = Math.max(1, parseInt(query["page"]  ?? "1",  10) || 1);
+  const limit = Math.min(Math.max(1, parseInt(query["limit"] ?? String(LIST_DEFAULT_LIMIT), 10) || LIST_DEFAULT_LIMIT), LIST_MAX_LIMIT);
+  return { page, limit };
 }
 
 async function withSession(req: import("express").Request, res: import("express").Response) {
@@ -131,21 +144,23 @@ router.post("/ai/asset-intelligence/v2/analyze-batch", async (req, res): Promise
   res.json(result);
 });
 
-// ── GET /ai/asset-intelligence/v2/client/:clientId ───────────────────────────
+// ── GET /ai/asset-intelligence/v2/client/:clientId — paginated list ───────────
 router.get("/ai/asset-intelligence/v2/client/:clientId", async (req, res): Promise<void> => {
   const { clientId } = req.params as { clientId: string };
-  const items = await listIntelligenceV2ForClient(clientId);
-  res.json({ items, total: items.length });
+  const { page, limit } = parsePagination(req.query as Record<string, string | undefined>);
+  const result = await listIntelligenceV2ForClient(clientId, { page, limit });
+  res.json(result);
 });
 
-// ── GET /ai/asset-intelligence/v2/duplicates/:clientId ───────────────────────
+// ── GET /ai/asset-intelligence/v2/duplicates/:clientId — paginated ────────────
 router.get("/ai/asset-intelligence/v2/duplicates/:clientId", async (req, res): Promise<void> => {
   const { clientId } = req.params as { clientId: string };
-  const report = await getDuplicateReportV2(clientId);
+  const { page, limit } = parsePagination(req.query as Record<string, string | undefined>);
+  const report = await getDuplicateReportV2(clientId, { page, limit });
   res.json(report);
 });
 
-// ── GET /ai/asset-intelligence/v2/similar/:assetId ───────────────────────────
+// ── GET /ai/asset-intelligence/v2/similar/:assetId — paginated ───────────────
 router.get("/ai/asset-intelligence/v2/similar/:assetId", async (req, res): Promise<void> => {
   const assetId = parseAssetId(req.params["assetId"]);
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
@@ -153,12 +168,13 @@ router.get("/ai/asset-intelligence/v2/similar/:assetId", async (req, res): Promi
   const q = req.query as Record<string, string | undefined>;
   const assetSource = q["source"] ?? "library";
   const clientId    = q["clientId"];
-  const limit       = Math.min(parseInt(q["limit"] ?? "10", 10), 20);
+  const limit       = Math.min(parseInt(q["limit"] ?? String(SIMILAR_ASSET_DEFAULT_LIMIT), 10), SIMILAR_ASSET_MAX_LIMIT);
+  const page        = Math.max(1, parseInt(q["page"] ?? "1", 10) || 1);
 
   if (!clientId) { res.status(400).json({ error: "clientId query param is required" }); return; }
 
-  const results = await findSimilarAssets(assetId, assetSource, clientId, limit);
-  res.json({ assetId, assetSource, similar: results, total: results.length });
+  const result = await findSimilarAssets(assetId, assetSource, clientId, limit, page);
+  res.json({ assetId, assetSource, ...result });
 });
 
 // ── GET /ai/asset-intelligence/v2/:assetId ───────────────────────────────────
@@ -229,9 +245,7 @@ router.post("/ai/asset-intelligence/v2/version-chains/:chainId/members", async (
   }
 
   await addMemberToChain(
-    chainId,
-    assetId,
-    assetSource,
+    chainId, assetId, assetSource,
     versionType ?? "original",
     versionLabel ?? versionType ?? "original",
     role ?? "variant",
@@ -313,7 +327,6 @@ router.get("/ai/asset-intelligence/v2/knowledge-tags", async (req, res): Promise
     res.json({ assetType, tags });
     return;
   }
-  // Return full taxonomy grouped by asset type
   const taxonomy: Record<string, unknown[]> = {};
   for (const t of ASSET_TYPE_V2) {
     taxonomy[t] = getKnowledgeTagsForAssetType(t);
@@ -339,19 +352,23 @@ router.post("/ai/asset-intelligence/v2/tags/normalize", async (req, res): Promis
 // PUBLIC ROUTES  (token-based workspace auth — no admin key)
 // ════════════════════════════════════════════════════════════════════════════
 
-// GET /public/customer/workspace/:token/asset-intelligence/v2
+// GET /public/customer/workspace/:token/asset-intelligence/v2 — paginated
 router.get("/public/customer/workspace/:token/asset-intelligence/v2", async (req, res): Promise<void> => {
   const session = await withSession(req, res);
   if (!session) return;
-  const items = await listIntelligenceV2ForClient(session.emailHash);
+  const { page, limit } = parsePagination(req.query as Record<string, string | undefined>);
+  const result = await listIntelligenceV2ForClient(session.emailHash, { page, limit });
   // Redact: strip licenseOwner and notes from licensing
-  const safe = items.map((item) => ({
-    ...item,
-    licensing: item.licensing
-      ? (({ licenseOwner: _lo, notes: _n, ...rest }) => rest)(item.licensing)
-      : null,
-  }));
-  res.json({ items: safe, total: safe.length });
+  const safe = {
+    ...result,
+    items: result.items.map((item) => ({
+      ...item,
+      licensing: item.licensing
+        ? (({ licenseOwner: _lo, notes: _n, ...rest }) => rest)(item.licensing)
+        : null,
+    })),
+  };
+  res.json(safe);
 });
 
 // GET /public/customer/workspace/:token/asset-intelligence/v2/:assetId
@@ -382,7 +399,7 @@ router.get("/public/customer/workspace/:token/asset-intelligence/v2/:assetId", a
   res.json(safe);
 });
 
-// GET /public/customer/workspace/:token/asset-intelligence/v2/:assetId/similar
+// GET /public/customer/workspace/:token/asset-intelligence/v2/:assetId/similar — paginated
 router.get("/public/customer/workspace/:token/asset-intelligence/v2/:assetId/similar", async (req, res): Promise<void> => {
   const session = await withSession(req, res);
   if (!session) return;
@@ -390,9 +407,11 @@ router.get("/public/customer/workspace/:token/asset-intelligence/v2/:assetId/sim
   const assetId = parseAssetId(req.params["assetId"]);
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
   const assetSource = (req.query["source"] as string) ?? "library";
+  const limit = Math.min(parseInt((req.query["limit"] as string) ?? "10", 10), SIMILAR_ASSET_MAX_LIMIT);
+  const page  = Math.max(1, parseInt((req.query["page"] as string) ?? "1", 10) || 1);
 
-  const similar = await findSimilarAssets(assetId, assetSource, session.emailHash, 10);
-  res.json({ assetId, similar, total: similar.length });
+  const result = await findSimilarAssets(assetId, assetSource, session.emailHash, limit, page);
+  res.json({ assetId, ...result });
 });
 
 // GET /public/customer/workspace/:token/asset-intelligence/v2/:assetId/licensing

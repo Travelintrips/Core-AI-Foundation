@@ -25,7 +25,7 @@ export type AssetTypeV2 = (typeof ASSET_TYPE_V2)[number];
 // ── Perceptual hash ───────────────────────────────────────────────────────────
 
 export interface PHashResult {
-  /** 64-char hex string representing the perceptual fingerprint */
+  /** 32-char hex string representing the perceptual fingerprint */
   hash: string;
   /** Algorithm tier: "full" (real dhash) | "metadata" (derived from file info) */
   tier: "full" | "metadata";
@@ -161,8 +161,9 @@ export interface AssetIntelligenceV2View {
   searchKeywords: string[];
   detectedSubjects: string[];
 
-  // Perceptual hash
-  perceptualHash: string | null;
+  // Exact-duplicate hash (P1 FIX: content SHA-256 is primary; metadata hash is secondary heuristic)
+  contentSha256: string | null;     // raw file SHA-256 from source table — exact duplicate signal
+  perceptualHash: string | null;    // metadata/pixel-based hash — similarity heuristic only
   hashTier: "full" | "metadata" | null;
   isDuplicate: boolean;
   duplicateOfId: number | null;
@@ -188,6 +189,24 @@ export interface AssetIntelligenceV2View {
   failureReason: string | null;
   confidenceScore: number;
   analyzedAt: string;
+}
+
+// ── Pagination ────────────────────────────────────────────────────────────────
+
+export interface ListPageParams {
+  page?: number;    // 1-based, default 1
+  limit?: number;   // default 20, max 100
+}
+
+export const LIST_DEFAULT_LIMIT = 20;
+export const LIST_MAX_LIMIT     = 100;
+
+export interface PagedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
 }
 
 // ── Batch analyze request ─────────────────────────────────────────────────────
