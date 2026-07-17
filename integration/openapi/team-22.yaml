@@ -1,0 +1,688 @@
+openapi: 3.1.0
+info:
+  title: Team 22 — Creative Vendor Ecosystem
+  version: 1.0.0
+  description: |
+    Vendor profiles, categories, service areas, portfolio, capabilities,
+    certifications, availability, ratings, contact requests, and
+    recommendation compatibility for the Creative AI Studio.
+    All public endpoints expose sanitized DTOs (contact info masked).
+
+# Team 24 merges these paths into the root openapi.yaml
+paths:
+
+  /public/creative-vendors:
+    get:
+      operationId: listCreativeVendors
+      summary: Browse and search creative vendors
+      tags: [creative-vendors]
+      security: []
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: Free-text search }
+        - { name: vendorType, in: query, schema: { $ref: '#/components/schemas/VendorType' } }
+        - { name: province, in: query, schema: { type: string } }
+        - { name: city, in: query, schema: { type: string } }
+        - { name: isAvailableNow, in: query, schema: { type: boolean } }
+        - { name: isVerified, in: query, schema: { type: boolean } }
+        - { name: isFeatured, in: query, schema: { type: boolean } }
+        - { name: maxLeadTimeDays, in: query, schema: { type: integer, minimum: 1 } }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [featured, rating, newest, lead_time]
+          default: featured
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 48, default: 24 } }
+      responses:
+        '200':
+          description: Paginated vendor list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, pagination]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PublicVendorCard' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /public/creative-vendors/categories:
+    get:
+      operationId: getVendorCategories
+      summary: Vendor category counts (for filter UI)
+      tags: [creative-vendors]
+      security: []
+      responses:
+        '200':
+          description: Category list with counts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  categories:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        vendorType: { $ref: '#/components/schemas/VendorType' }
+                        count: { type: integer }
+
+  /public/creative-vendors/recommend:
+    get:
+      operationId: recommendVendors
+      summary: Compatibility-scored vendor recommendations
+      tags: [creative-vendors]
+      security: []
+      parameters:
+        - { name: vendorType, in: query, required: true, schema: { $ref: '#/components/schemas/VendorType' } }
+        - { name: province, in: query, schema: { type: string } }
+        - { name: city, in: query, schema: { type: string } }
+        - { name: maxLeadTimeDays, in: query, schema: { type: integer } }
+        - { name: isRemoteOk, in: query, schema: { type: boolean } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 20, default: 10 } }
+      responses:
+        '200':
+          description: Scored vendor recommendations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recommendations:
+                    type: array
+                    items: { $ref: '#/components/schemas/ScoredVendor' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /public/creative-vendors/{id}:
+    get:
+      operationId: getVendorDetail
+      summary: Full vendor profile (public DTO — contact info masked)
+      tags: [creative-vendors]
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Vendor detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vendor: { $ref: '#/components/schemas/VendorDetailPublic' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /public/creative-vendors/{id}/portfolio:
+    get:
+      operationId: getVendorPortfolioPublic
+      summary: Vendor portfolio items (approved only)
+      tags: [creative-vendors]
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Portfolio items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PublicPortfolioItem' }
+
+  /public/creative-vendors/{id}/ratings:
+    get:
+      operationId: getVendorRatings
+      summary: Vendor ratings (approved only)
+      tags: [creative-vendors]
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        '200':
+          description: Rating list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ratings:
+                    type: array
+                    items: { $ref: '#/components/schemas/PublicRating' }
+
+    post:
+      operationId: submitVendorRating
+      summary: Submit a rating for a vendor
+      tags: [creative-vendors]
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientEmailHash, rating]
+              properties:
+                clientEmailHash: { type: string }
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                review: { type: string }
+                projectContext: { type: string }
+      responses:
+        '201': { description: Rating submitted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /public/customer/workspace/{token}/creative-vendors/{id}/contact:
+    post:
+      operationId: submitVendorContactRequest
+      summary: Submit a contact request to a vendor (workspace-token-gated)
+      tags: [creative-vendors]
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectDescription]
+              properties:
+                requesterName: { type: string }
+                projectDescription: { type: string }
+                budgetRange: { type: string }
+                preferredStartDate: { type: string, format: date }
+      responses:
+        '201':
+          description: Contact request submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contactRequest: { $ref: '#/components/schemas/ContactRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /public/customer/workspace/{token}/creative-vendors/my-requests:
+    get:
+      operationId: getMyVendorContactRequests
+      summary: List my contact requests (workspace-token-gated)
+      tags: [creative-vendors]
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: My contact requests
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requests:
+                    type: array
+                    items: { $ref: '#/components/schemas/ContactRequestPublic' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /ai/creative-vendors:
+    get:
+      operationId: adminListVendors
+      summary: Admin — list vendors with moderation filter
+      tags: [creative-vendors-admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: moderationStatus, in: query, schema: { type: string, enum: [pending, approved, rejected] } }
+        - { name: vendorType, in: query, schema: { $ref: '#/components/schemas/VendorType' } }
+        - { name: status, in: query, schema: { type: string, enum: [active, inactive, suspended] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, default: 30 } }
+      responses:
+        '200': { description: Admin vendor list }
+
+    post:
+      operationId: adminCreateVendor
+      summary: Admin — create a vendor
+      tags: [creative-vendors-admin]
+      security: [{ adminApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [displayName, vendorType]
+              properties:
+                displayName: { type: string }
+                vendorType: { $ref: '#/components/schemas/VendorType' }
+                brandName: { type: string }
+                description: { type: string }
+                shortBio: { type: string }
+                city: { type: string }
+                province: { type: string }
+                whatsapp: { type: string }
+                email: { type: string, format: email }
+                websiteUrl: { type: string, format: uri }
+                instagramUrl: { type: string, format: uri }
+                leadTimeDays: { type: integer, default: 7 }
+      responses:
+        '201': { description: Vendor created }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /ai/creative-vendors/analytics:
+    get:
+      operationId: adminVendorAnalytics
+      summary: Admin — vendor analytics dashboard
+      tags: [creative-vendors-admin]
+      security: [{ adminApiKey: [] }]
+      responses:
+        '200': { description: Analytics data }
+
+  /ai/creative-vendors/contact-requests:
+    get:
+      operationId: adminListContactRequests
+      summary: Admin — list all contact requests
+      tags: [creative-vendors-admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: vendorId, in: query, schema: { type: integer } }
+        - { name: status, in: query, schema: { type: string, enum: [pending, accepted, declined] } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+      responses:
+        '200': { description: Contact requests }
+
+  /ai/creative-vendors/{id}:
+    get:
+      operationId: adminGetVendor
+      summary: Admin — full vendor detail (no contact redaction)
+      tags: [creative-vendors-admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Full vendor detail }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+    patch:
+      operationId: adminUpdateVendor
+      summary: Admin — update vendor
+      tags: [creative-vendors-admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Vendor updated }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai/creative-vendors/{id}/approve:
+    post:
+      operationId: adminApproveVendor
+      summary: Admin — approve vendor
+      tags: [creative-vendors-admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Vendor approved }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai/creative-vendors/{id}/reject:
+    post:
+      operationId: adminRejectVendor
+      summary: Admin — reject vendor
+      tags: [creative-vendors-admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: Vendor rejected }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai/creative-vendors/{id}/portfolio:
+    get:
+      operationId: adminGetVendorPortfolio
+      summary: Admin — list all portfolio items (all moderation states)
+      tags: [creative-vendors-admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: moderationStatus, in: query, schema: { type: string, enum: [pending, approved, rejected] } }
+      responses:
+        '200': { description: Portfolio items }
+
+    post:
+      operationId: adminAddPortfolioItem
+      summary: Admin — add portfolio item to a vendor
+      tags: [creative-vendors-admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                description: { type: string }
+                category: { type: string }
+                coverImageUrl: { type: string, format: uri }
+                clientIndustry: { type: string }
+                projectDurationDays: { type: integer }
+                tagsJson: { type: array, items: { type: string } }
+      responses:
+        '201': { description: Portfolio item added }
+
+  /ai/creative-vendors/{id}/portfolio/{itemId}/approve:
+    patch:
+      operationId: adminApprovePortfolioItem
+      summary: Admin — approve a portfolio item
+      tags: [creative-vendors-admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: itemId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Item approved }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai/creative-vendors/{id}/portfolio/{itemId}/reject:
+    patch:
+      operationId: adminRejectPortfolioItem
+      summary: Admin — reject a portfolio item
+      tags: [creative-vendors-admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: itemId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: Item rejected }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai/creative-vendors/contact-requests/{id}:
+    patch:
+      operationId: adminUpdateContactRequest
+      summary: Admin — accept or decline a contact request
+      tags: [creative-vendors-admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [accepted, declined] }
+                vendorResponse: { type: string }
+      responses:
+        '200': { description: Contact request updated }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: Already in terminal state }
+
+components:
+  schemas:
+
+    VendorType:
+      type: string
+      enum:
+        - graphic_designer
+        - printing
+        - interior_designer
+        - furniture
+        - lighting
+        - flooring
+        - curtain
+        - kitchen
+        - custom_furniture
+        - textile
+        - konveksi
+        - embroidery
+        - apparel_printing
+        - packaging
+        - product_mockup
+        - photographer
+        - videographer
+
+    PublicVendorCard:
+      type: object
+      required:
+        - id
+        - vendorCode
+        - displayName
+        - vendorType
+        - leadTimeDays
+        - isAvailableNow
+        - isVerified
+        - isFeatured
+        - avgRating
+        - totalRatings
+        - country
+        - createdAt
+      properties:
+        id: { type: integer }
+        vendorCode: { type: string }
+        displayName: { type: string }
+        brandName: { type: string, nullable: true }
+        vendorType: { $ref: '#/components/schemas/VendorType' }
+        shortBio: { type: string, nullable: true }
+        logoUrl: { type: string, nullable: true }
+        coverUrl: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        province: { type: string, nullable: true }
+        country: { type: string }
+        # Contact — always masked in public DTO
+        contactWhatsapp: { type: string, nullable: true, description: "Masked: +62812*****" }
+        contactEmail: { type: string, nullable: true, description: "Masked: ven***@example.com" }
+        websiteUrl: { type: string, nullable: true }
+        instagramUrl: { type: string, nullable: true }
+        # Pricing — display only, NOT used for RAB/procurement
+        minPrice: { type: integer, nullable: true }
+        maxPrice: { type: integer, nullable: true }
+        priceCurrency: { type: string, nullable: true }
+        leadTimeDays: { type: integer }
+        isAvailableNow: { type: boolean }
+        isVerified: { type: boolean }
+        isFeatured: { type: boolean }
+        avgRating: { type: string }
+        totalRatings: { type: integer }
+        createdAt: { type: string, format: date-time }
+
+    VendorDetailPublic:
+      allOf:
+        - { $ref: '#/components/schemas/PublicVendorCard' }
+        - type: object
+          properties:
+            description: { type: string, nullable: true }
+            galleryJson:
+              type: array
+              nullable: true
+              items:
+                type: object
+                properties:
+                  url: { type: string }
+                  caption: { type: string }
+            serviceAreas:
+              type: array
+              items:
+                type: object
+                properties:
+                  province: { type: string }
+                  city: { type: string, nullable: true }
+                  isRemote: { type: boolean }
+            capabilities:
+              type: array
+              items:
+                type: object
+                properties:
+                  capabilityName: { type: string }
+                  proficiencyLevel: { type: string, enum: [beginner, intermediate, expert] }
+                  yearsExperience: { type: integer, nullable: true }
+                  toolsJson: { type: array, items: { type: string }, nullable: true }
+            certifications:
+              type: array
+              items:
+                type: object
+                properties:
+                  certificationName: { type: string }
+                  issuer: { type: string, nullable: true }
+                  issuedAt: { type: string, nullable: true }
+                  expiresAt: { type: string, nullable: true }
+            recentRatings:
+              type: array
+              items: { $ref: '#/components/schemas/PublicRating' }
+
+    PublicPortfolioItem:
+      type: object
+      properties:
+        id: { type: integer }
+        vendorId: { type: integer }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        category: { type: string, nullable: true }
+        coverImageUrl: { type: string, nullable: true }
+        galleryJson: { type: array, nullable: true }
+        clientIndustry: { type: string, nullable: true }
+        projectDurationDays: { type: integer, nullable: true }
+        tagsJson: { type: array, items: { type: string }, nullable: true }
+        isFeatured: { type: boolean }
+        displayOrder: { type: integer }
+        createdAt: { type: string, format: date-time }
+
+    PublicRating:
+      type: object
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        review: { type: string, nullable: true }
+        projectContext: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    ScoredVendor:
+      type: object
+      properties:
+        vendor: { $ref: '#/components/schemas/PublicVendorCard' }
+        compatibilityScore: { type: integer, minimum: 0, maximum: 100 }
+        scoreBreakdown:
+          type: object
+          properties:
+            categoryMatch: { type: integer }
+            areaMatch: { type: integer }
+            availability: { type: integer }
+            rating: { type: integer }
+            verification: { type: integer }
+        matchReasons:
+          type: array
+          items: { type: string }
+
+    ContactRequest:
+      type: object
+      properties:
+        id: { type: integer }
+        vendorId: { type: integer }
+        status: { type: string, enum: [pending, accepted, declined] }
+        projectDescription: { type: string }
+        budgetRange: { type: string, nullable: true }
+        preferredStartDate: { type: string, nullable: true }
+        vendorResponse: { type: string, nullable: true }
+        respondedAt: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    ContactRequestPublic:
+      allOf:
+        - { $ref: '#/components/schemas/ContactRequest' }
+        - type: object
+          properties:
+            revealedContact:
+              nullable: true
+              description: Only present when status is 'accepted'
+              type: object
+              properties:
+                whatsapp: { type: string, nullable: true }
+                email: { type: string, nullable: true }
+                websiteUrl: { type: string, nullable: true }
+
+    Pagination:
+      type: object
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+        totalPages: { type: integer }
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+
+  securitySchemes:
+    adminApiKey:
+      type: apiKey
+      in: header
+      name: x-admin-api-key

@@ -1,0 +1,261 @@
+{
+  "team": "22",
+  "branch": "feature/22-vendor-ecosystem",
+  "domain": "Creative Vendor Ecosystem",
+  "status": "BLOCKED_PENDING_VENDOR_CANONICAL_MAPPING",
+  "auditStatus": "TEAM_23_REMEDIATION_APPLIED",
+  "outputVerdict": "READY_FOR_ARCHITECTURE_REVIEW",
+  "integrationVerdict": "NOT_READY_FOR_INTEGRATION",
+
+  "domainMappingReview": {
+    "reviewDate": "2026-07-17",
+    "reviewedBy": "Team 23 audit remediation",
+    "canonicalSourceMapping": [
+      {
+        "team22Table": "creative_vendors",
+        "action": "REVERTED",
+        "canonicalSource": "marketplace_creators",
+        "reason": "creative_vendors was a parallel vendor master entity. Platform canonical vendor identity is marketplace_creators. creative_vendor_profiles (1:1 extension) replaces it.",
+        "replacedBy": "creative_vendor_profiles (FK: creator_id → marketplace_creators.id UNIQUE)"
+      },
+      {
+        "team22Table": "creative_vendor_ratings",
+        "action": "REVERTED",
+        "canonicalSource": "marketplace_ratings",
+        "reason": "marketplace_ratings supports itemType discriminator ('asset'|'template'). Extend with itemType='creative_vendor' and itemId=creative_vendor_profiles.id.",
+        "architectureReviewRequired": "Confirm itemType='creative_vendor' extension with marketplace team."
+      },
+      {
+        "team22Table": "creative_vendor_portfolio_items",
+        "action": "REVERTED",
+        "canonicalSource": "ai_service_portfolios",
+        "reason": "ai_service_portfolios is the platform-canonical portfolio table with moderation, AI generation linkage, and QC scoring.",
+        "architectureReviewRequired": "Choose Option A (FK column creative_vendor_profile_id on ai_service_portfolios) or Option B (join table creative_portfolio_associations)."
+      },
+      {
+        "team22Table": "creative_vendor_contact_requests",
+        "action": "REVERTED",
+        "canonicalSource": "PENDING",
+        "reason": "No exact duplicate found. Closest existing: ai_quotations (formal service purchase intent). Requires architecture decision on lightweight vendor inquiry flow.",
+        "architectureReviewRequired": "Choose: Option A (ai_quotations + vendor_profile_id + inquiry_type discriminator), Option B (new ai_vendor_inquiries table anchored to marketplace_creators), or Option C (quotation+discriminator pattern)."
+      }
+    ],
+    "extensionContractKept": [
+      {
+        "table": "creative_vendor_profiles",
+        "status": "ACTIVE",
+        "description": "1:1 extension of marketplace_creators. Adds: vendor_type (17 physical service categories), location (city/province), lead_time_days, is_available_now, pricing (display-only), whatsapp/instagram contact augmentation, moderation (pending/approved/rejected), is_featured."
+      },
+      {
+        "table": "creative_vendor_service_areas",
+        "status": "ACTIVE",
+        "description": "Geographic and remote service coverage per vendor profile. New concept — no existing counterpart."
+      },
+      {
+        "table": "creative_vendor_capabilities",
+        "status": "ACTIVE",
+        "description": "Creative capability tags: material/fashion/interior/graphic capabilities, proficiency levels, tools. New concept — no existing counterpart."
+      },
+      {
+        "table": "creative_vendor_certifications",
+        "status": "ACTIVE",
+        "description": "Vendor verification metadata: certifications, licences, industry body memberships. New concept — no existing counterpart."
+      }
+    ],
+    "blockedConcepts": [
+      {
+        "concept": "Vendor Ratings",
+        "blockedService": "vendorPortfolioService.ts (stubbed — throws VendorCanonicalMappingBlockedError)",
+        "canonicalTarget": "marketplace_ratings (itemType='creative_vendor')",
+        "architectureDecisionRequired": true
+      },
+      {
+        "concept": "Vendor Portfolio",
+        "blockedService": "vendorPortfolioService.ts (stubbed — throws VendorCanonicalMappingBlockedError)",
+        "canonicalTarget": "ai_service_portfolios",
+        "architectureDecisionRequired": true
+      },
+      {
+        "concept": "Vendor Contact Requests / Leads",
+        "blockedService": "vendorContactService.ts (stubbed — throws VendorContactBlockedError)",
+        "canonicalTarget": "PENDING — ai_quotations or ai_vendor_inquiries",
+        "architectureDecisionRequired": true
+      }
+    ]
+  },
+
+  "ownedFolders": [
+    "artifacts/api-server/src/domains/creative-vendors/",
+    "artifacts/customer-portal/src/pages/creative-vendors/",
+    "artifacts/customer-portal/src/hooks/use-vendors.ts",
+    "artifacts/ai-platform/src/pages/creative-vendors/",
+    "integration/openapi/team-22.yaml",
+    "integration/migrations/team-22.sql",
+    "integration/manifests/team-22.json"
+  ],
+
+  "lockedFileViolations": {
+    "found": [],
+    "status": "CLEAN — no locked files were modified by Team 22"
+  },
+
+  "activeEndpoints": [
+    "GET  /public/creative-vendors                  — browse/search (approved profiles + creator join)",
+    "GET  /public/creative-vendors/categories       — category counts by vendor_type",
+    "GET  /public/creative-vendors/recommend        — compatibility recommendations (0-100 score)",
+    "GET  /public/creative-vendors/:id              — vendor detail (profile + service areas + capabilities + certifications)",
+    "GET    /ai/creative-vendors                    — admin list (paginated)",
+    "POST   /ai/creative-vendors                    — admin create profile extension",
+    "GET    /ai/creative-vendors/analytics          — admin analytics",
+    "GET    /ai/creative-vendors/:id                — admin full detail",
+    "PATCH  /ai/creative-vendors/:id                — admin update profile",
+    "POST   /ai/creative-vendors/:id/approve        — admin approve",
+    "POST   /ai/creative-vendors/:id/reject         — admin reject"
+  ],
+
+  "blockedEndpoints": [
+    "GET/POST /public/creative-vendors/:id/portfolio       — BLOCKED (map to ai_service_portfolios)",
+    "GET/POST /public/creative-vendors/:id/ratings         — BLOCKED (map to marketplace_ratings)",
+    "POST     /public/customer/workspace/:token/…/contact  — BLOCKED (pending canonical inquiry mapping)",
+    "GET      /public/customer/workspace/:token/…/my-requests — BLOCKED",
+    "GET/POST /ai/creative-vendors/:id/portfolio/*         — BLOCKED",
+    "GET/PATCH /ai/creative-vendors/contact-requests/*     — BLOCKED"
+  ],
+
+  "routesToMount": [
+    {
+      "file": "artifacts/api-server/src/domains/creative-vendors/index.ts",
+      "export": "vendorRouter",
+      "mountNote": "app.use('/', vendorRouter) — paths self-prefix. Mount after portfolioGalleryRouter.",
+      "status": "PENDING_ARCHITECTURE_REVIEW — blocked endpoints return 503 BLOCKED_PENDING_VENDOR_CANONICAL_MAPPING"
+    }
+  ],
+
+  "pagesToRegister": [
+    {
+      "path": "/vendors",
+      "component": "@/pages/creative-vendors/VendorDirectoryPage",
+      "artifact": "customer-portal",
+      "lazy": true,
+      "status": "PENDING_ARCHITECTURE_REVIEW",
+      "note": "Depends on portfolio/ratings/contact endpoints being unblocked."
+    },
+    {
+      "path": "/vendors/:id",
+      "component": "@/pages/creative-vendors/VendorProfilePage",
+      "artifact": "customer-portal",
+      "lazy": true,
+      "status": "PENDING_ARCHITECTURE_REVIEW"
+    },
+    {
+      "path": "/creative-vendors",
+      "component": "@/pages/creative-vendors/VendorAdminPage",
+      "artifact": "ai-platform",
+      "lazy": false,
+      "status": "PENDING_ARCHITECTURE_REVIEW"
+    },
+    {
+      "path": "/creative-vendors/:id",
+      "component": "@/pages/creative-vendors/VendorAdminDetailPage",
+      "artifact": "ai-platform",
+      "lazy": false,
+      "status": "PENDING_ARCHITECTURE_REVIEW"
+    }
+  ],
+
+  "dbChanges": {
+    "newTables": [
+      "creative_vendor_profiles",
+      "creative_vendor_service_areas",
+      "creative_vendor_capabilities",
+      "creative_vendor_certifications"
+    ],
+    "revertedTables": [
+      "creative_vendors (REVERTED → marketplace_creators is canonical master)",
+      "creative_vendor_ratings (REVERTED → marketplace_ratings itemType='creative_vendor')",
+      "creative_vendor_portfolio_items (REVERTED → ai_service_portfolios)",
+      "creative_vendor_contact_requests (REVERTED → pending canonical mapping)"
+    ],
+    "pendingSchemaChanges": [
+      {
+        "table": "ai_service_portfolios",
+        "change": "ADD COLUMN creative_vendor_profile_id INTEGER REFERENCES creative_vendor_profiles(id)",
+        "note": "Option A for portfolio association — requires Team 24 architecture decision"
+      },
+      {
+        "table": "marketplace_ratings",
+        "change": "itemType enum/check constraint to include 'creative_vendor'",
+        "note": "Required to use marketplace_ratings for vendor ratings"
+      }
+    ],
+    "noLockedFileTouched": true
+  },
+
+  "architectureDecisionsRequired": [
+    {
+      "id": "ADR-22-01",
+      "title": "Vendor Portfolio Association Pattern",
+      "description": "How to associate vendor portfolio items with creative_vendor_profiles via existing ai_service_portfolios",
+      "options": [
+        "A: ADD COLUMN creative_vendor_profile_id on ai_service_portfolios (FK, nullable)",
+        "B: Join table creative_portfolio_associations (portfolio_id ↔ profile_id)"
+      ],
+      "recommendation": "Option A — simpler query pattern, avoids extra join"
+    },
+    {
+      "id": "ADR-22-02",
+      "title": "Vendor Rating Storage",
+      "description": "Whether to extend marketplace_ratings itemType or keep vendor ratings separate",
+      "options": [
+        "A: Extend marketplace_ratings with itemType='creative_vendor', itemId=creative_vendor_profiles.id",
+        "B: New table creative_vendor_ratings anchored to creative_vendor_profiles.id"
+      ],
+      "recommendation": "Option A — reuses existing rating infrastructure, single rating source"
+    },
+    {
+      "id": "ADR-22-03",
+      "title": "Vendor Contact / Lead Inquiry Pattern",
+      "description": "How to capture vendor contact / lead requests",
+      "options": [
+        "A: Extend ai_quotations with vendor_profile_id + inquiry_type='vendor_inquiry'",
+        "B: New table ai_vendor_inquiries anchored to marketplace_creators.id",
+        "C: Reuse service_request flow as lightweight vendor inquiry"
+      ],
+      "recommendation": "Option B — keeps vendor contact light-weight vs quotation semantics"
+    }
+  ],
+
+  "securityNotes": [
+    "External URLs validated at storage time (SSRF guard: protocol allowlist, private IP block, raw IP block)",
+    "Whatsapp masked in public DTO (first 5 chars + *****)",
+    "Email masked via marketplace_creators (source of truth)",
+    "pageSize capped at 50 (public) / 100 (admin) in service layer",
+    "Recommendation candidates capped at 200, results capped at 50",
+    "Blocked contact request endpoint preserves security spec for architecture review: rate limit, dedup, terminal state, PII hashing"
+  ],
+
+  "pricingNote": "Pricing fields (min_price, max_price) are display-only in creative_vendor_profiles. NOT connected to any checkout, procurement, payment, or RAB system. Explicitly excluded per specification.",
+
+  "testCoverage": {
+    "files": [
+      "artifacts/api-server/src/domains/creative-vendors/__tests__/vendorService.test.ts",
+      "artifacts/api-server/src/domains/creative-vendors/__tests__/vendorPortfolioService.test.ts",
+      "artifacts/api-server/src/domains/creative-vendors/__tests__/vendorContactService.test.ts",
+      "artifacts/api-server/src/domains/creative-vendors/__tests__/vendorRecommendationService.test.ts",
+      "artifacts/api-server/src/domains/creative-vendors/__tests__/vendorSecurity.test.ts"
+    ],
+    "covers": [
+      "toPublicCard: merged creator + profile DTO (id, profileId, creatorCode, isVerified, avgRating from creator; vendorType, location, operations from profile)",
+      "maskWhatsapp / maskEmail helpers",
+      "validateExternalUrl: SSRF guard (private IPs, raw IP literals, protocol enforcement)",
+      "VENDOR_TYPES exhaustiveness (17 types, material/fashion/interior coverage)",
+      "Portfolio blocked: VendorCanonicalMappingBlockedError thrown by all portfolio functions",
+      "Contact blocked: VendorContactBlockedError thrown by all contact functions",
+      "Recommendation scoring: category(30) + area(25) + availability(20) + rating(15) + verification(10)",
+      "Area matching: province match, remote fallback, no match",
+      "N+1 avoidance: single batch select for all service areas",
+      "Limit cap enforcement (service layer)",
+      "Empty results handling"
+    ]
+  }
+}
