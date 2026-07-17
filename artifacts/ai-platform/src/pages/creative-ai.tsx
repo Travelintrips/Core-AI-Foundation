@@ -1479,7 +1479,9 @@ function ProjectDetail({ projectId }: { projectId: string }) {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(err.error ?? "Failed to start revision");
       }
-      queryClient.invalidateQueries({ queryKey: getListProjectAssetsQueryKey(projectId) });
+      // Refetch immediately so the new "generating" row is visible,
+      // then the refetchInterval (3 s) takes over until generation completes.
+      await refetchAssets();
       toast({ title: "Revisi dimulai — gambar baru sedang di-generate" });
     } catch (err: unknown) {
       toast({
