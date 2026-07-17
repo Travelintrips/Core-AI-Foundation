@@ -1,0 +1,133 @@
+{
+  "$schema": "https://creative-ai-studio.internal/integration-manifest/v1",
+  "team": "21",
+  "domain": "Creative Marketplace — Category Extension & Licensing Adapter",
+  "branch": "feature/21-creative-marketplace",
+  "status": "BLOCKED_PENDING_MARKETPLACE_CONSOLIDATION",
+  "integrationReadiness": "NOT_READY_FOR_INTEGRATION",
+  "architectureReadiness": "READY_FOR_ARCHITECTURE_REVIEW",
+  "blockingReason": "Team 21 originally built a parallel marketplace engine (creative-marketplace-v2) that duplicated V4.7 creativeMarketplaceService. Per consolidation review, the duplicate engine has been reverted. Team 21's unique contributions (item type vocabulary extension, license metadata contract, compat metadata extension, category taxonomy) are preserved as a pure adapter. Integration is blocked pending architecture decision on unified marketplace with Teams 04, 06, 07–14.",
+
+  "ownership": {
+    "adapter": [
+      "artifacts/api-server/src/services/creative-marketplace/creativeAssetListingAdapter.ts"
+    ],
+    "integration": [
+      "integration/openapi/team-21.yaml",
+      "integration/migrations/team-21.sql",
+      "integration/manifests/team-21.json"
+    ],
+    "reverted": [
+      "artifacts/api-server/src/domains/creative-marketplace-v2/",
+      "artifacts/ai-platform/src/pages/creative-marketplace-v2/",
+      "artifacts/customer-portal/src/pages/creative-marketplace-v2/"
+    ]
+  },
+
+  "dependencies": {
+    "mustResolveFirst": [
+      {
+        "team": "04",
+        "domain": "Portfolio Showcase",
+        "reason": "Portfolio may already expose creator profiles and asset browsing — Team 21 adapter must defer creator profile ownership to Team 04."
+      },
+      {
+        "team": "06",
+        "domain": "Asset Intelligence",
+        "reason": "Asset metadata, tagging, and search may already be solved by Team 06. License/compat metadata should extend, not duplicate."
+      },
+      {
+        "team": "07-14",
+        "domain": "Design Asset Teams (Blueprint, Component, Pattern, Typography, Layout, Rendering)",
+        "reason": "Item type vocabulary and category taxonomy proposed by Team 21 must be validated against the actual asset types built by Teams 07-14."
+      },
+      {
+        "team": "EXISTING_V47",
+        "domain": "V4.7 Creative Marketplace (creativeMarketplaceService)",
+        "reason": "Source of truth for all listing/creator/favorites/ratings/downloads/moderation. Team 21 adapter wraps this service — never replaces it."
+      }
+    ]
+  },
+
+  "adapterContract": {
+    "file": "artifacts/api-server/src/services/creative-marketplace/creativeAssetListingAdapter.ts",
+    "exports": {
+      "itemTypeExtension": {
+        "CM2_EXTENDED_ITEM_TYPES": ["blueprint", "template", "pattern", "typography_pairing", "palette", "interior_material", "furniture_reference", "fashion_motif"],
+        "ALL_ITEM_TYPES": "V4.7 native types + Team 21 extensions",
+        "isExtendedItemType": "type guard"
+      },
+      "licenseMetadata": {
+        "CM2LicenseType": "standard | extended | exclusive",
+        "CM2LicenseMetadata": "interface — stored in marketplace_assets.metadata JSONB",
+        "defaultLicenseMeta": "pure function — no side effects",
+        "licenseSummary": "human-readable one-liner",
+        "extractLicenseMeta": "safe extractor from metadata blob"
+      },
+      "compatMetadata": {
+        "CM2CompatMetadata": "interface — stored in marketplace_assets.metadata JSONB",
+        "COMPAT_USE_CONTEXTS": ["print", "digital", "textile", "packaging", "interior", "web", "branding", "motion"],
+        "defaultCompatMeta": "pure function by item type",
+        "checkCompatibility": "validator — returns { compatible, reason? }",
+        "extractCompatMeta": "safe extractor from metadata blob"
+      },
+      "categoryExtension": {
+        "MARKETPLACE_CATEGORY_EXTENSION": "Record<CM2ExtendedItemType, string[]> — category taxonomy per extended type",
+        "categoriesForItemType": "lookup helper"
+      }
+    },
+    "storageStrategy": "All metadata stored in existing marketplace_assets.metadata JSONB column. No new tables required.",
+    "noPersistence": true,
+    "noRoutes": true,
+    "noPayment": true,
+    "noSubscription": true,
+    "noCreatorWallet": true
+  },
+
+  "database": {
+    "status": "DEFERRED",
+    "reason": "The 7 cm2_* tables in the original migration were part of the duplicate engine (now reverted). License and compat metadata can be stored in existing marketplace_assets.metadata JSONB — no new columns or tables required. If Team 24 architecture review determines a separate schema is needed, Team 21 can provide DDL proposals at that time.",
+    "migrationFile": "integration/migrations/team-21.sql",
+    "migrationStatus": "DRAFT_DEFERRED — see file for additive-only column proposals (not to be applied until architecture review)"
+  },
+
+  "routesToMount": [],
+  "pagesToRegister": [],
+
+  "integrationNotes": [
+    "Team 21 adapter is pure TypeScript — zero runtime side effects, no DB access.",
+    "When Team 24 builds unified marketplace: import creativeAssetListingAdapter.ts for item type/license/compat contract.",
+    "V4.7 creativeMarketplaceService remains the sole source of truth for all marketplace persistence.",
+    "Category taxonomy in MARKETPLACE_CATEGORY_EXTENSION is the canonical proposal — Teams 07-14 must validate against their actual asset categories before Team 24 wires it.",
+    "No routes mounted — removed from index.ts instruction. Route mounting deferred to architecture review."
+  ],
+
+  "dependencyRequests": [
+    "REQUEST to Team 04: Confirm whether creator profile schema supports extended item types.",
+    "REQUEST to Team 06: Confirm whether asset metadata JSONB supports license_metadata and compat_metadata keys without schema change.",
+    "REQUEST to Team 24: Architecture review required before any routes are mounted or tables created."
+  ],
+
+  "schemaExportsRequested": [],
+
+  "revertLog": {
+    "reverted": [
+      "artifacts/api-server/src/domains/creative-marketplace-v2/service.ts — duplicate of creativeMarketplaceService",
+      "artifacts/api-server/src/domains/creative-marketplace-v2/repository.ts — duplicate DB queries over separate cm2_* tables",
+      "artifacts/api-server/src/domains/creative-marketplace-v2/routes/admin.ts — duplicate admin endpoints",
+      "artifacts/api-server/src/domains/creative-marketplace-v2/routes/public.ts — duplicate public endpoints",
+      "artifacts/api-server/src/domains/creative-marketplace-v2/routes/workspace.ts — duplicate workspace endpoints",
+      "artifacts/api-server/src/domains/creative-marketplace-v2/types.ts — merged into adapter",
+      "artifacts/api-server/src/domains/creative-marketplace-v2/__tests__/marketplace-v2.test.ts — tests for reverted engine",
+      "artifacts/ai-platform/src/pages/creative-marketplace-v2/*.tsx — duplicate admin frontend",
+      "artifacts/customer-portal/src/pages/creative-marketplace-v2/*.tsx — duplicate customer frontend"
+    ],
+    "lockedFilesViolated": "None — routes/index.ts was NOT modified by Team 21 (cm2Router was never mounted).",
+    "kept": [
+      "artifacts/api-server/src/services/creative-marketplace/creativeAssetListingAdapter.ts — NEW slim adapter",
+      "integration/manifests/team-21.json — updated to BLOCKED status",
+      "integration/migrations/team-21.sql — updated to DEFERRED/additive-only proposals",
+      "integration/openapi/team-21.yaml — reduced to adapter contract only"
+    ]
+  }
+}

@@ -1,0 +1,175 @@
+openapi: "3.1.0"
+info:
+  title: "Creative Marketplace — Team 21 Adapter Contract"
+  version: "2.1.0-blocked"
+  description: |
+    Team 21 adapter contract. Status: BLOCKED_PENDING_MARKETPLACE_CONSOLIDATION.
+
+    The original V2 engine (duplicate of V4.7) has been reverted.
+    This spec documents the pure adapter types and contracts only.
+    No routes are mounted. No tables are created.
+
+    Integration: pending Team 24 architecture review with Teams 04, 06, 07-14.
+
+# No servers — no routes mounted.
+
+components:
+  schemas:
+
+    # ── Item type vocabulary extension ───────────────────────────────────────
+    CM2ExtendedItemType:
+      type: string
+      description: |
+        Item types proposed by Team 21, extending V4.7 native types.
+        V4.7 native: illustration | icon | cover | layout | background | photo | brand_pack
+        Team 21 extensions below.
+      enum:
+        - blueprint
+        - template
+        - pattern
+        - typography_pairing
+        - palette
+        - interior_material
+        - furniture_reference
+        - fashion_motif
+
+    CM2AllItemType:
+      type: string
+      description: Full combined vocabulary — V4.7 native + Team 21 extensions.
+      enum:
+        - illustration
+        - icon
+        - cover
+        - layout
+        - background
+        - photo
+        - brand_pack
+        - blueprint
+        - template
+        - pattern
+        - typography_pairing
+        - palette
+        - interior_material
+        - furniture_reference
+        - fashion_motif
+
+    # ── License types ─────────────────────────────────────────────────────────
+    CM2LicenseType:
+      type: string
+      enum: [standard, extended, exclusive]
+      description: |
+        standard  — Personal & editorial. Attribution required. No commercial.
+        extended  — Commercial use included. No resell. No attribution needed.
+        exclusive — Full commercial + resell rights. No attribution needed.
+
+    CM2PriceType:
+      type: string
+      enum: [free, premium]
+
+    # ── License metadata (stored in marketplace_assets.metadata JSONB) ────────
+    CM2LicenseMetadata:
+      type: object
+      description: |
+        Structured license terms. Stored as marketplace_assets.metadata.licenseMetadata.
+        No new DB columns required.
+      required:
+        - allowedUses
+        - requiresAttribution
+        - commercialUse
+        - editorialUse
+        - printUse
+        - digitalUse
+        - resellAllowed
+        - modificationAllowed
+        - geographicRestrictions
+      properties:
+        allowedUses:
+          type: array
+          items: { type: string }
+          example: ["personal", "editorial"]
+        requiresAttribution:
+          type: boolean
+        commercialUse:
+          type: boolean
+        editorialUse:
+          type: boolean
+        printUse:
+          type: boolean
+        digitalUse:
+          type: boolean
+        resellAllowed:
+          type: boolean
+        modificationAllowed:
+          type: boolean
+        numberOfSeats:
+          type: integer
+          nullable: true
+        geographicRestrictions:
+          type: array
+          items: { type: string }
+        notes:
+          type: string
+          nullable: true
+
+    # ── Compatibility metadata (stored in marketplace_assets.metadata JSONB) ──
+    CM2CompatMetadata:
+      type: object
+      description: |
+        Use-context compatibility for design assets (pattern, material, motif types).
+        Stored as marketplace_assets.metadata.compatMetadata. No new DB columns required.
+      required:
+        - compatibleContexts
+        - minDpi
+        - colorModes
+        - supportsSeamlessTiling
+      properties:
+        compatibleContexts:
+          type: array
+          items:
+            type: string
+            enum: [print, digital, textile, packaging, interior, web, branding, motion]
+        minDpi:
+          type: integer
+          description: Minimum recommended output DPI for this asset.
+        maxScaleFactor:
+          type: number
+          nullable: true
+          description: Maximum recommended scale factor before quality degrades.
+        colorModes:
+          type: array
+          items:
+            type: string
+            enum: [RGB, CMYK, Grayscale]
+        supportsSeamlessTiling:
+          type: boolean
+        notes:
+          type: string
+          nullable: true
+
+    # ── Compat check result ───────────────────────────────────────────────────
+    CM2CompatCheckResult:
+      type: object
+      required: [compatible]
+      properties:
+        compatible:
+          type: boolean
+        reason:
+          type: string
+          description: Present only when compatible is false.
+
+    # ── Category extension taxonomy ───────────────────────────────────────────
+    CM2CategoryExtension:
+      type: object
+      description: |
+        Category taxonomy for Team 21 extended item types.
+        Pure contract — source of truth is MARKETPLACE_CATEGORY_EXTENSION
+        in creativeAssetListingAdapter.ts. Teams 07-14 must validate before Team 24 wires.
+      additionalProperties:
+        type: array
+        items: { type: string }
+      example:
+        pattern: ["Geometric", "Floral", "Abstract", "Cultural", "Textile", "Surface"]
+        blueprint: ["UI/UX", "Web", "Mobile", "Print", "Branding"]
+
+# No paths — routes are blocked pending architecture review.
+paths: {}
