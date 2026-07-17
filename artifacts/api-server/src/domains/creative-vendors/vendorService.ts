@@ -1,33 +1,39 @@
 /**
  * vendorService.ts — Team 22 / Creative Vendor Ecosystem
  *
- * Core CRUD + search + public DTO for creative vendors.
- * Covers: profile, service areas, capabilities, certifications, ratings.
+ * DOMAIN MAPPING REVIEW — Team 23 Audit Remediation
+ * Status: BLOCKED_PENDING_VENDOR_CANONICAL_MAPPING
+ *
+ * Architecture: creative vendor = capability/profile extension of marketplace_creators.
+ *   - Vendor identity    → marketplace_creators (canonical master)
+ *   - Creative extension → creative_vendor_profiles (this domain)
+ *   - Ratings            → marketplace_ratings (itemType='creative_vendor') [BLOCKED]
+ *   - Portfolio          → ai_service_portfolios [BLOCKED — see vendorPortfolioService]
+ *   - Contact requests   → pending canonical mapping [BLOCKED — see vendorContactService]
  *
  * PUBLIC DTO rules:
  *   - Whatsapp masked: first 5 chars + *****
- *   - Email masked: first 3 chars + *** + @domain
- *   - Only approved portfolio items
- *   - Only approved ratings
- *   - No moderation notes or internal fields
+ *   - Email (from marketplace_creators) masked: first 3 chars + *** + @domain
+ *   - Only approved (moderationStatus='approved') profiles visible publicly
+ *   - No moderation notes in public response
  *
  * SECURITY:
- *   - External URLs validated at storage time (protocol allowlist, no private IPs)
- *   - Ratings deduplicated per (vendorId, clientEmailHash)
+ *   - External URLs validated (SSRF-safe) at storage time
  *   - pageSize capped in service layer
+ *   - Rating submission removed — delegated to marketplace_ratings
  */
-import { eq, and, ilike, desc, asc, sql, inArray, or } from "drizzle-orm";
+import { eq, and, ilike, desc, asc, sql, or } from "drizzle-orm";
 import {
   vendorDb,
-  vendorsTable,
+  creativeVendorProfilesTable,
   vendorServiceAreasTable,
   vendorCapabilitiesTable,
   vendorCertificationsTable,
-  vendorRatingsTable,
   VENDOR_TYPES,
-  type Vendor,
+  type CreativeVendorProfile,
   type VendorType,
 } from "./schema.js";
+import { marketplaceCreatorsTable } from "@workspace/db";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -39,48 +45,56 @@ export interface VendorSearchParams {
   province?: string;
   city?: string;
   isAvailableNow?: boolean;
-  isVerified?: boolean;
-  isFeatured?: boolean;
+  isVerified?: boolean;     // from marketplace_creators.isVerified
+  isFeatured?: boolean;     // from creative_vendor_profiles.isFeatured
   maxLeadTimeDays?: number;
   sort?: "rating" | "newest" | "lead_time" | "featured";
   page?: number;
   pageSize?: number;
 }
 
+/**
+ * Public vendor card — merged view of marketplace_creators + creative_vendor_profiles.
+ * Contact info masked per PII rules.
+ */
 export interface PublicVendorCard {
-  id: number;
-  vendorCode: string;
+  // Identity from marketplace_creators (canonical)
+  id: number;              // marketplace_creators.id (the canonical vendor ID)
+  profileId: number;       // creative_vendor_profiles.id (the extension ID)
+  creatorCode: string;     // marketplace_creators.creator_code
   displayName: string;
-  brandName: string | null;
+  avatarUrl: string | null;
+  isVerified: boolean;     // marketplace_creators.is_verified (platform trust signal)
+  avgRating: string;       // marketplace_creators.avg_rating
+
+  // Extension from creative_vendor_profiles
   vendorType: string;
-  shortBio: string | null;
-  logoUrl: string | null;
-  coverUrl: string | null;
+  brandName: string | null;  // from marketplace_creators.metadata.brandName if present
   city: string | null;
   province: string | null;
   country: string;
-  // Contact — masked
+
+  // Contact — masked (whatsapp from profiles extension)
   contactWhatsapp: string | null;
-  contactEmail: string | null;
-  websiteUrl: string | null;
-  instagramUrl: string | null;
-  // Pricing — display only, optional
+  websiteUrl: string | null;    // from marketplace_creators
+  instagramUrl: string | null;  // from profiles extension
+
+  // Pricing — display only
   minPrice: number | null;
   maxPrice: number | null;
   priceCurrency: string | null;
+
   // Operations
   leadTimeDays: number;
   isAvailableNow: boolean;
-  isVerified: boolean;
   isFeatured: boolean;
-  avgRating: string;
-  totalRatings: number;
+  moderationStatus: string;
+
   createdAt: Date;
 }
 
 export interface VendorDetailPublic extends PublicVendorCard {
-  description: string | null;
-  galleryJson: Array<{ url: string; caption?: string }> | null;
+  bio: string | null;           // from marketplace_creators.bio
   serviceAreas: Array<{ province: string; city: string | null; isRemote: boolean }>;
   capabilities: Array<{
     capabilityName: string;
@@ -94,29 +108,15 @@ export interface VendorDetailPublic extends PublicVendorCard {
     issuedAt: string | null;
     expiresAt: string | null;
   }>;
-  recentRatings: Array<{
-    rating: number;
-    review: string | null;
-    projectContext: string | null;
-    createdAt: Date;
-  }>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // URL validation (SSRF-safe at storage time)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Private/reserved IP range patterns that must be blocked */
 const PRIVATE_IP_RE =
   /^(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|169\.254\.\d+\.\d+|127\.\d+\.\d+\.\d+|::1|fc[0-9a-f]{2}:|fd[0-9a-f]{2}:|fe80:)/i;
 
-/**
- * Validate and return an external URL safe for storage.
- * - Only http/https allowed
- * - localhost and private IP ranges blocked
- * - IPv6 loopback/link-local blocked
- * Returns undefined if url is falsy. Throws on invalid URL.
- */
 export function validateExternalUrl(url: string | undefined | null): string | undefined {
   if (!url) return undefined;
   let parsed: URL;
@@ -125,214 +125,218 @@ export function validateExternalUrl(url: string | undefined | null): string | un
   } catch {
     throw new Error(`Invalid URL: "${url}"`);
   }
-
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error(`URL protocol "${parsed.protocol}" is not allowed — only http/https`);
+    throw new Error(`URL must use http or https: "${url}"`);
   }
-
-  const hostname = parsed.hostname.toLowerCase();
-
-  // Block localhost / unspecified
-  if (hostname === "localhost" || hostname === "0.0.0.0" || hostname === "") {
-    throw new Error("URL points to a restricted host");
+  const host = parsed.hostname.toLowerCase();
+  if (host === "localhost" || PRIVATE_IP_RE.test(host)) {
+    throw new Error(`URL targets a private/internal address: "${url}"`);
   }
-
-  // Block private/loopback IP ranges
-  if (PRIVATE_IP_RE.test(hostname)) {
-    throw new Error("URL points to a private or reserved network address");
+  // Block raw IP literals (catch-all)
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.startsWith("[")) {
+    throw new Error(`URL must use a domain name, not a raw IP: "${url}"`);
   }
-
   return url;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DTO helpers
+// Masking helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Mask whatsapp number: "+628121234567" → "+62812*****" */
-function maskWhatsapp(raw: string | null): string | null {
-  if (!raw) return null;
-  const cleaned = raw.replace(/\s+/g, "");
-  return cleaned.length > 5 ? `${cleaned.slice(0, 5)}*****` : "***";
+export function maskWhatsapp(v: string | null | undefined): string | null {
+  if (!v) return null;
+  return v.slice(0, 5) + "*****";
 }
 
-/** Mask email: "vendor@example.com" → "ven***@example.com" */
-function maskEmail(raw: string | null): string | null {
-  if (!raw) return null;
-  const atIdx = raw.indexOf("@");
-  if (atIdx < 0) return "***";
-  const local = raw.slice(0, atIdx);
-  const domain = raw.slice(atIdx);
-  const visible = local.slice(0, Math.min(3, local.length));
-  return `${visible}***${domain}`;
+export function maskEmail(v: string | null | undefined): string | null {
+  if (!v) return null;
+  const [local, domain] = v.split("@");
+  if (!domain) return null;
+  return local!.slice(0, 3) + "***@" + domain;
 }
 
-function toPublicCard(v: Vendor): PublicVendorCard {
+// ─────────────────────────────────────────────────────────────────────────────
+// DTO builder — merged creator + profile row
+// ─────────────────────────────────────────────────────────────────────────────
+
+type CreatorRow = typeof marketplaceCreatorsTable.$inferSelect;
+type ProfileRow = CreativeVendorProfile;
+
+export function toPublicCard(creator: CreatorRow, profile: ProfileRow): PublicVendorCard {
   return {
-    id: v.id,
-    vendorCode: v.vendorCode,
-    displayName: v.displayName,
-    brandName: v.brandName ?? null,
-    vendorType: v.vendorType,
-    shortBio: v.shortBio ?? null,
-    logoUrl: v.logoUrl ?? null,
-    coverUrl: v.coverUrl ?? null,
-    city: v.city ?? null,
-    province: v.province ?? null,
-    country: v.country,
-    contactWhatsapp: maskWhatsapp(v.whatsapp ?? null),
-    contactEmail: maskEmail(v.email ?? null),
-    websiteUrl: v.websiteUrl ?? null,
-    instagramUrl: v.instagramUrl ?? null,
-    minPrice: v.minPrice ?? null,
-    maxPrice: v.maxPrice ?? null,
-    priceCurrency: v.priceCurrency ?? null,
-    leadTimeDays: v.leadTimeDays,
-    isAvailableNow: v.isAvailableNow,
-    isVerified: v.isVerified,
-    isFeatured: v.isFeatured,
-    avgRating: String(v.avgRating ?? "0"),
-    totalRatings: v.totalRatings,
-    createdAt: v.createdAt,
+    id: creator.id,
+    profileId: profile.id,
+    creatorCode: creator.creatorCode,
+    displayName: creator.displayName,
+    avatarUrl: creator.avatarUrl ?? null,
+    isVerified: creator.isVerified,
+    avgRating: String(creator.avgRating ?? "0"),
+
+    vendorType: profile.vendorType,
+    brandName: null, // extension: can be populated from metadata if needed
+    city: profile.city ?? null,
+    province: profile.province ?? null,
+    country: profile.country,
+
+    contactWhatsapp: maskWhatsapp(profile.whatsapp),
+    websiteUrl: creator.websiteUrl ?? null,
+    instagramUrl: profile.instagramUrl ?? null,
+
+    minPrice: profile.minPrice ?? null,
+    maxPrice: profile.maxPrice ?? null,
+    priceCurrency: profile.priceCurrency ?? null,
+
+    leadTimeDays: profile.leadTimeDays,
+    isAvailableNow: profile.isAvailableNow,
+    isFeatured: profile.isFeatured,
+    moderationStatus: profile.moderationStatus,
+
+    createdAt: profile.createdAt,
   };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Search / Browse
+// Search — JOIN marketplace_creators + creative_vendor_profiles
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MAX_PAGE_SIZE = 48;
+const MAX_PAGE_SIZE = 50;
 
-export async function searchVendors(params: VendorSearchParams = {}) {
-  const {
-    q,
-    vendorType,
-    province,
-    city,
-    isAvailableNow,
-    isVerified,
-    isFeatured,
-    maxLeadTimeDays,
-    sort = "rating",
-    page = 1,
-    // Cap at service level — prevents callers bypassing router cap
-    pageSize = 24,
-  } = params;
+export async function searchVendors(params: VendorSearchParams): Promise<{
+  items: PublicVendorCard[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+}> {
+  const page = Math.max(1, params.page ?? 1);
+  const pageSize = Math.min(Math.max(1, params.pageSize ?? 20), MAX_PAGE_SIZE);
+  const offset = (page - 1) * pageSize;
 
-  const safePage = Math.max(1, page);
-  const safePageSize = Math.min(Math.max(1, pageSize), MAX_PAGE_SIZE);
-
-  const conditions = [
-    eq(vendorsTable.moderationStatus, "approved"),
-    eq(vendorsTable.status, "active"),
-    vendorType ? eq(vendorsTable.vendorType, vendorType) : undefined,
-    province ? ilike(vendorsTable.province, `%${province}%`) : undefined,
-    city ? ilike(vendorsTable.city, `%${city}%`) : undefined,
-    isAvailableNow !== undefined
-      ? eq(vendorsTable.isAvailableNow, isAvailableNow)
+  // Build WHERE conditions on profiles (always filter approved only for public)
+  const profileConditions = [
+    eq(creativeVendorProfilesTable.moderationStatus, "approved"),
+    params.vendorType
+      ? eq(creativeVendorProfilesTable.vendorType, params.vendorType)
       : undefined,
-    isVerified !== undefined ? eq(vendorsTable.isVerified, isVerified) : undefined,
-    isFeatured !== undefined ? eq(vendorsTable.isFeatured, isFeatured) : undefined,
-    maxLeadTimeDays !== undefined
-      ? sql`${vendorsTable.leadTimeDays} <= ${maxLeadTimeDays}`
+    params.province
+      ? eq(creativeVendorProfilesTable.province, params.province)
       : undefined,
-    q
+    params.city
+      ? eq(creativeVendorProfilesTable.city, params.city)
+      : undefined,
+    params.isAvailableNow !== undefined
+      ? eq(creativeVendorProfilesTable.isAvailableNow, params.isAvailableNow)
+      : undefined,
+    params.isFeatured !== undefined
+      ? eq(creativeVendorProfilesTable.isFeatured, params.isFeatured)
+      : undefined,
+    params.maxLeadTimeDays !== undefined
+      ? sql`${creativeVendorProfilesTable.leadTimeDays} <= ${params.maxLeadTimeDays}`
+      : undefined,
+  ].filter(Boolean) as ReturnType<typeof eq>[];
+
+  const creatorConditions = [
+    eq(marketplaceCreatorsTable.isActive, true),
+    params.isVerified !== undefined
+      ? eq(marketplaceCreatorsTable.isVerified, params.isVerified)
+      : undefined,
+    params.q
       ? or(
-          ilike(vendorsTable.displayName, `%${q}%`),
-          ilike(vendorsTable.brandName, `%${q}%`),
-          ilike(vendorsTable.shortBio, `%${q}%`),
+          ilike(marketplaceCreatorsTable.displayName, `%${params.q}%`),
+          ilike(marketplaceCreatorsTable.bio, `%${params.q}%`),
         )
       : undefined,
-  ].filter(Boolean);
+  ].filter(Boolean) as ReturnType<typeof eq>[];
 
-  const orderBy =
-    sort === "rating"
-      ? desc(vendorsTable.avgRating)
-      : sort === "newest"
-        ? desc(vendorsTable.createdAt)
-        : sort === "lead_time"
-          ? asc(vendorsTable.leadTimeDays)
-          : [desc(vendorsTable.isFeatured), desc(vendorsTable.avgRating)];
+  // ORDER BY
+  let orderBy: Parameters<typeof vendorDb.select>[0] extends never ? never : ReturnType<typeof asc>[];
+  switch (params.sort) {
+    case "rating":
+      orderBy = [desc(marketplaceCreatorsTable.avgRating)];
+      break;
+    case "featured":
+      orderBy = [desc(creativeVendorProfilesTable.isFeatured), desc(marketplaceCreatorsTable.avgRating)];
+      break;
+    case "lead_time":
+      orderBy = [asc(creativeVendorProfilesTable.leadTimeDays)];
+      break;
+    default: // newest
+      orderBy = [desc(creativeVendorProfilesTable.createdAt)];
+  }
 
-  const offset = (safePage - 1) * safePageSize;
+  const baseQuery = vendorDb
+    .select({
+      creator: marketplaceCreatorsTable,
+      profile: creativeVendorProfilesTable,
+    })
+    .from(creativeVendorProfilesTable)
+    .innerJoin(
+      marketplaceCreatorsTable,
+      eq(creativeVendorProfilesTable.creatorId, marketplaceCreatorsTable.id),
+    )
+    .where(and(...profileConditions, ...creatorConditions));
 
-  const [rows, countRow] = await Promise.all([
-    vendorDb
-      .select()
-      .from(vendorsTable)
-      .where(and(...conditions))
-      .orderBy(...(Array.isArray(orderBy) ? orderBy : [orderBy]))
-      .limit(safePageSize)
-      .offset(offset),
+  const [rows, countRows] = await Promise.all([
+    baseQuery.orderBy(...orderBy).limit(pageSize).offset(offset),
     vendorDb
       .select({ count: sql<number>`count(*)::int` })
-      .from(vendorsTable)
-      .where(and(...conditions)),
+      .from(creativeVendorProfilesTable)
+      .innerJoin(
+        marketplaceCreatorsTable,
+        eq(creativeVendorProfilesTable.creatorId, marketplaceCreatorsTable.id),
+      )
+      .where(and(...profileConditions, ...creatorConditions)),
   ]);
 
-  const total = countRow[0]?.count ?? 0;
+  const total = countRows[0]?.count ?? 0;
   return {
-    items: rows.map(toPublicCard),
+    items: rows.map((r) => toPublicCard(r.creator, r.profile)),
     pagination: {
-      page: safePage,
-      pageSize: safePageSize,
+      page,
+      pageSize,
       total,
-      totalPages: Math.ceil(total / safePageSize),
+      totalPages: Math.ceil(total / pageSize),
     },
   };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Get vendor detail (public)
+// Get public vendor detail (JOIN + child tables)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function getVendorDetailPublic(
-  id: number,
-): Promise<VendorDetailPublic | null> {
-  const [vendor] = await vendorDb
-    .select()
-    .from(vendorsTable)
+export async function getVendorDetailPublic(id: number): Promise<VendorDetailPublic | null> {
+  const [row] = await vendorDb
+    .select({ creator: marketplaceCreatorsTable, profile: creativeVendorProfilesTable })
+    .from(creativeVendorProfilesTable)
+    .innerJoin(
+      marketplaceCreatorsTable,
+      eq(creativeVendorProfilesTable.creatorId, marketplaceCreatorsTable.id),
+    )
     .where(
       and(
-        eq(vendorsTable.id, id),
-        eq(vendorsTable.moderationStatus, "approved"),
-        eq(vendorsTable.status, "active"),
+        eq(marketplaceCreatorsTable.id, id),
+        eq(creativeVendorProfilesTable.moderationStatus, "approved"),
+        eq(marketplaceCreatorsTable.isActive, true),
       ),
     );
 
-  if (!vendor) return null;
+  if (!row) return null;
 
-  const [serviceAreas, capabilities, certifications, ratings] = await Promise.all([
+  const [serviceAreas, capabilities, certifications] = await Promise.all([
     vendorDb
       .select()
       .from(vendorServiceAreasTable)
-      .where(eq(vendorServiceAreasTable.vendorId, id)),
+      .where(eq(vendorServiceAreasTable.profileId, row.profile.id)),
     vendorDb
       .select()
       .from(vendorCapabilitiesTable)
-      .where(eq(vendorCapabilitiesTable.vendorId, id)),
+      .where(eq(vendorCapabilitiesTable.profileId, row.profile.id)),
     vendorDb
       .select()
       .from(vendorCertificationsTable)
-      .where(eq(vendorCertificationsTable.vendorId, id)),
-    vendorDb
-      .select()
-      .from(vendorRatingsTable)
-      .where(
-        and(
-          eq(vendorRatingsTable.vendorId, id),
-          eq(vendorRatingsTable.moderationStatus, "approved"),
-        ),
-      )
-      .orderBy(desc(vendorRatingsTable.createdAt))
-      .limit(10),
+      .where(eq(vendorCertificationsTable.profileId, row.profile.id)),
   ]);
 
-  const base = toPublicCard(vendor);
   return {
-    ...base,
-    description: vendor.description ?? null,
-    galleryJson: (vendor.galleryJson as Array<{ url: string; caption?: string }>) ?? null,
+    ...toPublicCard(row.creator, row.profile),
+    bio: row.creator.bio ?? null,
     serviceAreas: serviceAreas.map((a) => ({
       province: a.province,
       city: a.city ?? null,
@@ -350,277 +354,239 @@ export async function getVendorDetailPublic(
       issuedAt: c.issuedAt ?? null,
       expiresAt: c.expiresAt ?? null,
     })),
-    recentRatings: ratings.map((r) => ({
-      rating: r.rating,
-      review: r.review ?? null,
-      projectContext: r.projectContext ?? null,
-      createdAt: r.createdAt,
-    })),
   };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Admin: full detail (no redaction)
+// Admin: get full vendor (unmasked)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function getVendorAdmin(id: number) {
-  const [vendor] = await vendorDb
-    .select()
-    .from(vendorsTable)
-    .where(eq(vendorsTable.id, id));
-  if (!vendor) return null;
+  const [row] = await vendorDb
+    .select({ creator: marketplaceCreatorsTable, profile: creativeVendorProfilesTable })
+    .from(creativeVendorProfilesTable)
+    .innerJoin(
+      marketplaceCreatorsTable,
+      eq(creativeVendorProfilesTable.creatorId, marketplaceCreatorsTable.id),
+    )
+    .where(eq(marketplaceCreatorsTable.id, id));
 
-  const [serviceAreas, capabilities, certifications] = await Promise.all([
-    vendorDb
-      .select()
-      .from(vendorServiceAreasTable)
-      .where(eq(vendorServiceAreasTable.vendorId, id)),
-    vendorDb
-      .select()
-      .from(vendorCapabilitiesTable)
-      .where(eq(vendorCapabilitiesTable.vendorId, id)),
-    vendorDb
-      .select()
-      .from(vendorCertificationsTable)
-      .where(eq(vendorCertificationsTable.vendorId, id)),
-  ]);
-
-  return { ...vendor, serviceAreas, capabilities, certifications };
+  if (!row) return null;
+  return { creator: row.creator, profile: row.profile };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Admin: list with moderation filter
+// Admin: list all vendors (paginated)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MAX_ADMIN_PAGE_SIZE = 100;
 
-export async function listVendorsAdmin(params: {
-  moderationStatus?: string;
-  vendorType?: string;
-  status?: string;
-  page?: number;
-  pageSize?: number;
-}) {
-  const {
-    moderationStatus,
-    vendorType,
-    status,
-    page = 1,
-    pageSize = 30,
-  } = params;
-
+export async function listVendorsAdmin(
+  moderationStatus?: string,
+  vendorType?: string,
+  page = 1,
+  pageSize = 30,
+) {
   const safePage = Math.max(1, page);
   const safePageSize = Math.min(Math.max(1, pageSize), MAX_ADMIN_PAGE_SIZE);
+  const offset = (safePage - 1) * safePageSize;
 
   const conditions = [
-    moderationStatus ? eq(vendorsTable.moderationStatus, moderationStatus) : undefined,
-    vendorType ? eq(vendorsTable.vendorType, vendorType) : undefined,
-    status ? eq(vendorsTable.status, status) : undefined,
-  ].filter(Boolean);
+    moderationStatus
+      ? eq(creativeVendorProfilesTable.moderationStatus, moderationStatus)
+      : undefined,
+    vendorType
+      ? eq(creativeVendorProfilesTable.vendorType, vendorType)
+      : undefined,
+  ].filter(Boolean) as ReturnType<typeof eq>[];
 
-  const offset = (safePage - 1) * safePageSize;
-  const rows = await vendorDb
-    .select()
-    .from(vendorsTable)
-    .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(vendorsTable.createdAt))
-    .limit(safePageSize)
-    .offset(offset);
-
-  const [countRow] = await vendorDb
-    .select({ count: sql<number>`count(*)::int` })
-    .from(vendorsTable)
-    .where(conditions.length ? and(...conditions) : undefined);
+  const [rows, countRows] = await Promise.all([
+    vendorDb
+      .select({ creator: marketplaceCreatorsTable, profile: creativeVendorProfilesTable })
+      .from(creativeVendorProfilesTable)
+      .innerJoin(
+        marketplaceCreatorsTable,
+        eq(creativeVendorProfilesTable.creatorId, marketplaceCreatorsTable.id),
+      )
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(creativeVendorProfilesTable.createdAt))
+      .limit(safePageSize)
+      .offset(offset),
+    vendorDb
+      .select({ count: sql<number>`count(*)::int` })
+      .from(creativeVendorProfilesTable)
+      .where(conditions.length ? and(...conditions) : undefined),
+  ]);
 
   return {
-    items: rows,
-    pagination: { page: safePage, pageSize: safePageSize, total: countRow?.count ?? 0 },
+    items: rows.map((r) => ({ creator: r.creator, profile: r.profile })),
+    pagination: {
+      page: safePage,
+      pageSize: safePageSize,
+      total: countRows[0]?.count ?? 0,
+      totalPages: Math.ceil((countRows[0]?.count ?? 0) / safePageSize),
+    },
   };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Admin: Create vendor
+// Admin: create vendor profile (extension over existing marketplace_creators entry)
+//
+// NOTE: Does NOT create a marketplace_creators row — the creator must already
+// exist in marketplace_creators. This domain only manages the extension.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function createVendor(data: {
-  displayName: string;
+export interface CreateVendorProfileInput {
+  creatorId: number;      // must exist in marketplace_creators
   vendorType: VendorType;
-  brandName?: string;
-  description?: string;
-  shortBio?: string;
+  whatsapp?: string;
+  instagramUrl?: string;
   city?: string;
   province?: string;
-  whatsapp?: string;
-  email?: string;
-  websiteUrl?: string;
-  instagramUrl?: string;
+  country?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  priceCurrency?: string;
   leadTimeDays?: number;
-}) {
-  // Validate external URLs at storage time (SSRF-safe)
-  const websiteUrl = validateExternalUrl(data.websiteUrl);
-  const instagramUrl = validateExternalUrl(data.instagramUrl);
+  isAvailableNow?: boolean;
+}
 
-  const vendorCode = `VND-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-  const [row] = await vendorDb
-    .insert(vendorsTable)
+export async function createVendorProfile(
+  input: CreateVendorProfileInput,
+): Promise<CreativeVendorProfile> {
+  const instagramUrl = validateExternalUrl(input.instagramUrl);
+
+  const [profile] = await vendorDb
+    .insert(creativeVendorProfilesTable)
     .values({
-      vendorCode,
-      displayName: data.displayName,
-      vendorType: data.vendorType,
-      brandName: data.brandName,
-      description: data.description,
-      shortBio: data.shortBio,
-      city: data.city,
-      province: data.province,
-      whatsapp: data.whatsapp,
-      email: data.email,
-      websiteUrl,
+      creatorId: input.creatorId,
+      vendorType: input.vendorType,
+      whatsapp: input.whatsapp,
       instagramUrl,
-      leadTimeDays: data.leadTimeDays ?? 7,
-    })
-    .returning();
-  return row!;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Admin: Update vendor
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function updateVendor(
-  id: number,
-  data: Partial<Omit<typeof vendorsTable.$inferInsert, "id" | "vendorCode" | "createdAt">>,
-) {
-  // Validate URLs if present
-  const sanitised = { ...data } as typeof data & { websiteUrl?: string; instagramUrl?: string };
-  if (sanitised.websiteUrl !== undefined) {
-    sanitised.websiteUrl = validateExternalUrl(sanitised.websiteUrl);
-  }
-  if (sanitised.instagramUrl !== undefined) {
-    sanitised.instagramUrl = validateExternalUrl(sanitised.instagramUrl);
-  }
-
-  const [row] = await vendorDb
-    .update(vendorsTable)
-    .set({ ...sanitised, updatedAt: new Date() })
-    .where(eq(vendorsTable.id, id))
-    .returning();
-  return row ?? null;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Admin: Approve / Reject
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function approveVendor(id: number) {
-  return updateVendor(id, {
-    moderationStatus: "approved",
-    moderationNote: null,
-    moderatedAt: new Date(),
-    status: "active",
-  });
-}
-
-export async function rejectVendor(id: number, reason: string) {
-  return updateVendor(id, {
-    moderationStatus: "rejected",
-    moderationNote: reason,
-    moderatedAt: new Date(),
-    status: "inactive",
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Ratings
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Submit a rating for a vendor.
- * Deduplication: one rating per (vendorId, clientEmailHash). Throws if duplicate.
- */
-export async function submitRating(
-  vendorId: number,
-  clientEmailHash: string,
-  rating: number,
-  review?: string,
-  projectContext?: string,
-) {
-  if (rating < 1 || rating > 5) throw new Error("Rating must be 1–5");
-
-  // ── Dedup check: one rating per (vendor, emailHash) ──
-  const [existing] = await vendorDb
-    .select({ id: vendorRatingsTable.id })
-    .from(vendorRatingsTable)
-    .where(
-      and(
-        eq(vendorRatingsTable.vendorId, vendorId),
-        eq(vendorRatingsTable.clientEmailHash, clientEmailHash),
-      ),
-    );
-  if (existing) {
-    throw new Error("Rating already submitted for this vendor");
-  }
-
-  const [row] = await vendorDb
-    .insert(vendorRatingsTable)
-    .values({
-      vendorId,
-      clientEmailHash,
-      rating,
-      review,
-      projectContext,
-      moderationStatus: "pending",
+      city: input.city,
+      province: input.province,
+      country: input.country ?? "ID",
+      minPrice: input.minPrice,
+      maxPrice: input.maxPrice,
+      priceCurrency: input.priceCurrency ?? "IDR",
+      leadTimeDays: input.leadTimeDays ?? 7,
+      isAvailableNow: input.isAvailableNow ?? true,
     })
     .returning();
 
-  // Recalculate avg rating (approved ratings only)
-  await recalcAvgRating(vendorId);
-  return row!;
+  return profile!;
 }
 
-async function recalcAvgRating(vendorId: number) {
-  const [stats] = await vendorDb
-    .select({
-      avg: sql<string>`COALESCE(AVG(rating)::numeric(3,2), 0)`,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(vendorRatingsTable)
-    .where(
-      and(
-        eq(vendorRatingsTable.vendorId, vendorId),
-        eq(vendorRatingsTable.moderationStatus, "approved"),
-      ),
-    );
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin: update vendor profile (extension fields only)
+// ─────────────────────────────────────────────────────────────────────────────
 
-  await vendorDb
-    .update(vendorsTable)
+export interface UpdateVendorProfileInput {
+  vendorType?: VendorType;
+  whatsapp?: string;
+  instagramUrl?: string;
+  city?: string;
+  province?: string;
+  country?: string;
+  minPrice?: number | null;
+  maxPrice?: number | null;
+  priceCurrency?: string;
+  leadTimeDays?: number;
+  isAvailableNow?: boolean;
+  isFeatured?: boolean;
+}
+
+export async function updateVendorProfile(
+  profileId: number,
+  input: UpdateVendorProfileInput,
+): Promise<CreativeVendorProfile | null> {
+  const instagramUrl = input.instagramUrl !== undefined
+    ? validateExternalUrl(input.instagramUrl)
+    : undefined;
+
+  const updateData: Partial<typeof creativeVendorProfilesTable.$inferInsert> = {
+    ...(input.vendorType !== undefined && { vendorType: input.vendorType }),
+    ...(input.whatsapp !== undefined && { whatsapp: input.whatsapp }),
+    ...(instagramUrl !== undefined && { instagramUrl }),
+    ...(input.city !== undefined && { city: input.city }),
+    ...(input.province !== undefined && { province: input.province }),
+    ...(input.country !== undefined && { country: input.country }),
+    ...(input.minPrice !== undefined && { minPrice: input.minPrice }),
+    ...(input.maxPrice !== undefined && { maxPrice: input.maxPrice }),
+    ...(input.priceCurrency !== undefined && { priceCurrency: input.priceCurrency }),
+    ...(input.leadTimeDays !== undefined && { leadTimeDays: input.leadTimeDays }),
+    ...(input.isAvailableNow !== undefined && { isAvailableNow: input.isAvailableNow }),
+    ...(input.isFeatured !== undefined && { isFeatured: input.isFeatured }),
+    updatedAt: new Date(),
+  };
+
+  const [profile] = await vendorDb
+    .update(creativeVendorProfilesTable)
+    .set(updateData)
+    .where(eq(creativeVendorProfilesTable.id, profileId))
+    .returning();
+
+  return profile ?? null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin: approve / reject
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function approveVendorProfile(profileId: number): Promise<CreativeVendorProfile | null> {
+  const [profile] = await vendorDb
+    .update(creativeVendorProfilesTable)
     .set({
-      avgRating: stats?.avg ?? "0",
-      totalRatings: stats?.count ?? 0,
+      moderationStatus: "approved",
+      moderationNote: null,
+      moderatedAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(eq(vendorsTable.id, vendorId));
+    .where(eq(creativeVendorProfilesTable.id, profileId))
+    .returning();
+  return profile ?? null;
+}
+
+export async function rejectVendorProfile(
+  profileId: number,
+  reason: string,
+): Promise<CreativeVendorProfile | null> {
+  const [profile] = await vendorDb
+    .update(creativeVendorProfilesTable)
+    .set({
+      moderationStatus: "rejected",
+      moderationNote: reason,
+      moderatedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(creativeVendorProfilesTable.id, profileId))
+    .returning();
+  return profile ?? null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Categories listing (for filter UI)
+// Category counts (for filter UI)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function getVendorCategories() {
   const rows = await vendorDb
     .select({
-      vendorType: vendorsTable.vendorType,
+      vendorType: creativeVendorProfilesTable.vendorType,
       count: sql<number>`count(*)::int`,
     })
-    .from(vendorsTable)
+    .from(creativeVendorProfilesTable)
+    .innerJoin(
+      marketplaceCreatorsTable,
+      eq(creativeVendorProfilesTable.creatorId, marketplaceCreatorsTable.id),
+    )
     .where(
       and(
-        eq(vendorsTable.moderationStatus, "approved"),
-        eq(vendorsTable.status, "active"),
+        eq(creativeVendorProfilesTable.moderationStatus, "approved"),
+        eq(marketplaceCreatorsTable.isActive, true),
       ),
     )
-    .groupBy(vendorsTable.vendorType)
+    .groupBy(creativeVendorProfilesTable.vendorType)
     .orderBy(desc(sql`count(*)`));
-
   return rows;
 }
 
@@ -632,27 +598,25 @@ export async function getVendorAnalytics() {
   const [summary] = await vendorDb
     .select({
       total: sql<number>`count(*)::int`,
-      approved: sql<number>`count(*) filter (where moderation_status = 'approved')::int`,
-      pending: sql<number>`count(*) filter (where moderation_status = 'pending')::int`,
-      rejected: sql<number>`count(*) filter (where moderation_status = 'rejected')::int`,
-      verified: sql<number>`count(*) filter (where is_verified = true)::int`,
-      featured: sql<number>`count(*) filter (where is_featured = true)::int`,
-      avgRating: sql<string>`COALESCE(AVG(avg_rating)::numeric(3,2), 0)`,
+      approved: sql<number>`count(*) filter (where ${creativeVendorProfilesTable.moderationStatus} = 'approved')::int`,
+      pending: sql<number>`count(*) filter (where ${creativeVendorProfilesTable.moderationStatus} = 'pending')::int`,
+      rejected: sql<number>`count(*) filter (where ${creativeVendorProfilesTable.moderationStatus} = 'rejected')::int`,
+      featured: sql<number>`count(*) filter (where ${creativeVendorProfilesTable.isFeatured} = true)::int`,
+      available: sql<number>`count(*) filter (where ${creativeVendorProfilesTable.isAvailableNow} = true)::int`,
     })
-    .from(vendorsTable);
+    .from(creativeVendorProfilesTable);
 
   const byType = await vendorDb
     .select({
-      vendorType: vendorsTable.vendorType,
+      vendorType: creativeVendorProfilesTable.vendorType,
       count: sql<number>`count(*)::int`,
-      avgRating: sql<string>`COALESCE(AVG(avg_rating)::numeric(3,2), 0)`,
     })
-    .from(vendorsTable)
-    .where(eq(vendorsTable.moderationStatus, "approved"))
-    .groupBy(vendorsTable.vendorType)
+    .from(creativeVendorProfilesTable)
+    .where(eq(creativeVendorProfilesTable.moderationStatus, "approved"))
+    .groupBy(creativeVendorProfilesTable.vendorType)
     .orderBy(desc(sql`count(*)`));
 
   return { summary, byType };
 }
 
-export { toPublicCard, maskWhatsapp, maskEmail, VENDOR_TYPES };
+export { VENDOR_TYPES };

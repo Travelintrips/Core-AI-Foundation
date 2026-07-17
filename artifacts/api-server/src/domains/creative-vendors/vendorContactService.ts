@@ -1,217 +1,82 @@
 /**
  * vendorContactService.ts — Team 22 / Creative Vendor Ecosystem
  *
- * Contact request lifecycle:
- *   pending → accepted | declined
+ * DOMAIN MAPPING REVIEW — Team 23 Audit Remediation
+ * Status: BLOCKED_PENDING_VENDOR_CANONICAL_MAPPING
  *
- * On accepted: full contact info revealed to requester.
- * No automatic procurement, payment payout, or external messaging.
+ * FINDING: creative_vendor_contact_requests has no direct duplicate, but
+ *   the platform's inquiry/lead capture mechanism is pending canonical review.
+ *   Closest existing concepts:
+ *     - ai_quotations (structured service purchase intent)
+ *     - service_request flow (formal service engagement)
  *
- * SECURITY:
- *   - requesterEmailHash derived server-side from workspace token (not from body)
- *   - getMyContactRequests bounded to MAX_MY_REQUESTS rows
- *   - listContactRequestsAdmin pageSize capped at MAX_ADMIN_PAGE_SIZE
- *   - Terminal state guard prevents re-updating accepted/declined requests
+ * INTEGRATION CONTRACT (for Team 24 architecture review):
+ *   Option A: Extend ai_quotations with vendorProfileId column —
+ *     a vendor inquiry becomes a lightweight quotation request.
+ *
+ *   Option B: New ai_vendor_inquiries table anchored to marketplace_creators —
+ *     if the contact flow is lighter-weight than a quotation.
+ *
+ *   Option C: Reuse ai_quotations + inquiry_type discriminator.
+ *
+ * SECURITY NOTE (preserved for architecture review):
+ *   - Requester identity must be hashed (SHA-256) before storage — no PII in DB
+ *   - Rate limiting: max N contact requests per email hash per vendor per 24h
+ *   - Deduplication: (vendor_id, requester_email_hash) within rolling window
+ *   - Terminal state guard: once accepted/declined, status is immutable
+ *   - Vendor contact info (whatsapp/email) revealed only on accepted status
+ *
+ * ALL FUNCTIONS IN THIS FILE THROW BLOCKED_PENDING_VENDOR_CANONICAL_MAPPING.
  */
-import { eq, and, desc, sql } from "drizzle-orm";
-import {
-  vendorDb,
-  vendorContactRequestsTable,
-  vendorsTable,
-  type VendorContactRequest,
-} from "./schema.js";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────────────────────
+export class VendorContactBlockedError extends Error {
+  readonly code = "BLOCKED_PENDING_VENDOR_CANONICAL_MAPPING";
+  readonly domain = "contact_requests";
+  readonly options = ["ai_quotations", "ai_vendor_inquiries", "quotation+discriminator"];
 
-const TERMINAL_STATES = ["accepted", "declined"] as const;
-const MAX_MY_REQUESTS = 200;    // Cap requester's own list
-const MAX_ADMIN_PAGE_SIZE = 100;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface ContactRequestPublic {
-  id: number;
-  vendorId: number;
-  status: string;
-  projectDescription: string;
-  budgetRange: string | null;
-  preferredStartDate: string | null;
-  vendorResponse: string | null;
-  respondedAt: Date | null;
-  createdAt: Date;
-  // Only populated when status === 'accepted'
-  revealedContact?: {
-    whatsapp: string | null;
-    email: string | null;
-    websiteUrl: string | null;
-  } | null;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Submit contact request (workspace-token-gated)
-// requesterEmailHash is derived server-side from the workspace token — NOT from body
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function submitContactRequest(
-  vendorId: number,
-  requesterEmailHash: string,
-  data: {
-    requesterName?: string;
-    projectDescription: string;
-    budgetRange?: string;
-    preferredStartDate?: string;
-  },
-): Promise<VendorContactRequest> {
-  // Verify vendor exists and is approved (fail closed — check DB, not body)
-  const [vendor] = await vendorDb
-    .select()
-    .from(vendorsTable)
-    .where(
-      and(
-        eq(vendorsTable.id, vendorId),
-        eq(vendorsTable.moderationStatus, "approved"),
-        eq(vendorsTable.status, "active"),
-      ),
+  constructor(fn: string) {
+    super(
+      `${fn}: BLOCKED_PENDING_VENDOR_CANONICAL_MAPPING — ` +
+        `contact request canonical source pending architecture review. ` +
+        `Options: ai_quotations extension, ai_vendor_inquiries new table, ` +
+        `or quotation+discriminator pattern. See vendorContactService.ts header.`,
     );
-
-  if (!vendor) throw new Error("Vendor not found or not available");
-
-  const [row] = await vendorDb
-    .insert(vendorContactRequestsTable)
-    .values({
-      vendorId,
-      requesterEmailHash,
-      requesterName: data.requesterName,
-      projectDescription: data.projectDescription,
-      budgetRange: data.budgetRange,
-      preferredStartDate: data.preferredStartDate,
-      status: "pending",
-    })
-    .returning();
-
-  // Increment contact request counter
-  await vendorDb
-    .update(vendorsTable)
-    .set({
-      totalContactRequests: sql`total_contact_requests + 1`,
-      updatedAt: new Date(),
-    })
-    .where(eq(vendorsTable.id, vendorId));
-
-  return row!;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Get contact requests for a requester (their own requests)
-// emailHash is resolved from workspace token — not from body/query
-// Capped at MAX_MY_REQUESTS to prevent loading unbounded rows
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function getMyContactRequests(
-  requesterEmailHash: string,
-): Promise<ContactRequestPublic[]> {
-  const rows = await vendorDb
-    .select({
-      req: vendorContactRequestsTable,
-      whatsapp: vendorsTable.whatsapp,
-      email: vendorsTable.email,
-      websiteUrl: vendorsTable.websiteUrl,
-    })
-    .from(vendorContactRequestsTable)
-    .innerJoin(vendorsTable, eq(vendorContactRequestsTable.vendorId, vendorsTable.id))
-    .where(eq(vendorContactRequestsTable.requesterEmailHash, requesterEmailHash))
-    .orderBy(desc(vendorContactRequestsTable.createdAt))
-    .limit(MAX_MY_REQUESTS);
-
-  return rows.map(({ req, whatsapp, email, websiteUrl }) => ({
-    id: req.id,
-    vendorId: req.vendorId,
-    status: req.status,
-    projectDescription: req.projectDescription,
-    budgetRange: req.budgetRange ?? null,
-    preferredStartDate: req.preferredStartDate ?? null,
-    vendorResponse: req.vendorResponse ?? null,
-    respondedAt: req.respondedAt ?? null,
-    createdAt: req.createdAt,
-    // Reveal full contact only if accepted
-    revealedContact:
-      req.status === "accepted"
-        ? {
-            whatsapp: whatsapp ?? null,
-            email: email ?? null,
-            websiteUrl: websiteUrl ?? null,
-          }
-        : null,
-  }));
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Admin: list all contact requests (paginated, capped)
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function listContactRequestsAdmin(params: {
-  vendorId?: number;
-  status?: string;
-  page?: number;
-  pageSize?: number;
-}) {
-  const { vendorId, status, page = 1, pageSize = 30 } = params;
-
-  const safePage = Math.max(1, page);
-  const safePageSize = Math.min(Math.max(1, pageSize), MAX_ADMIN_PAGE_SIZE);
-
-  const conditions = [
-    vendorId ? eq(vendorContactRequestsTable.vendorId, vendorId) : undefined,
-    status ? eq(vendorContactRequestsTable.status, status) : undefined,
-  ].filter(Boolean);
-
-  const rows = await vendorDb
-    .select()
-    .from(vendorContactRequestsTable)
-    .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(vendorContactRequestsTable.createdAt))
-    .limit(safePageSize)
-    .offset((safePage - 1) * safePageSize);
-
-  return rows;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Admin: update contact request status (accept / decline)
-// Terminal state guard: cannot update already-accepted/declined requests
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function updateContactRequestStatus(
-  id: number,
-  status: "accepted" | "declined",
-  vendorResponse?: string,
-): Promise<VendorContactRequest | null> {
-  const [existing] = await vendorDb
-    .select()
-    .from(vendorContactRequestsTable)
-    .where(eq(vendorContactRequestsTable.id, id));
-
-  if (!existing) return null;
-  if ((TERMINAL_STATES as readonly string[]).includes(existing.status)) {
-    throw new Error(
-      `Contact request is already in terminal state: ${existing.status}`,
-    );
+    this.name = "VendorContactBlockedError";
   }
+}
 
-  const [row] = await vendorDb
-    .update(vendorContactRequestsTable)
-    .set({
-      status,
-      vendorResponse,
-      respondedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(vendorContactRequestsTable.id, id))
-    .returning();
+/** Stub — BLOCKED. Pending canonical contact/inquiry mapping. */
+export async function submitContactRequest(
+  _vendorId: number,
+  _input: unknown,
+): Promise<never> {
+  throw new VendorContactBlockedError("submitContactRequest");
+}
 
-  return row ?? null;
+/** Stub — BLOCKED. Pending canonical contact/inquiry mapping. */
+export async function getMyContactRequests(
+  _requesterEmailHash: string,
+  _page?: number,
+  _pageSize?: number,
+): Promise<never> {
+  throw new VendorContactBlockedError("getMyContactRequests");
+}
+
+/** Stub — BLOCKED. Pending canonical contact/inquiry mapping. */
+export async function listContactRequestsAdmin(
+  _vendorId?: number,
+  _status?: string,
+  _page?: number,
+  _pageSize?: number,
+): Promise<never> {
+  throw new VendorContactBlockedError("listContactRequestsAdmin");
+}
+
+/** Stub — BLOCKED. Pending canonical contact/inquiry mapping. */
+export async function updateContactRequestStatus(
+  _id: number,
+  _status: "accepted" | "declined",
+  _vendorResponse?: string,
+): Promise<never> {
+  throw new VendorContactBlockedError("updateContactRequestStatus");
 }

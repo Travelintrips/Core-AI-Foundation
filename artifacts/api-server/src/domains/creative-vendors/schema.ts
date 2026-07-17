@@ -1,13 +1,26 @@
 /**
  * schema.ts — Team 22 / Creative Vendor Ecosystem
  *
- * Self-contained Drizzle schema for the creative-vendors domain.
- * Uses the shared pool from @workspace/db (correct search_path: ai_platform,public)
- * but defines tables locally so no shared files need to be modified.
+ * DOMAIN MAPPING REVIEW — Team 23 Audit Remediation
+ * Status: BLOCKED_PENDING_VENDOR_CANONICAL_MAPPING
  *
- * Team 24 integration task: add
- *   export * from "./creative-vendors";
- * to lib/db/src/schema/index.ts AND copy this file to lib/db/src/schema/creative-vendors.ts
+ * Canonical source mapping:
+ *   creative_vendors (REVERTED)            → marketplace_creators (existing master)
+ *   creative_vendor_ratings (REVERTED)     → marketplace_ratings (itemType='creative_vendor')
+ *   creative_vendor_portfolio_items (REVERTED) → ai_service_portfolios (existing)
+ *   creative_vendor_contact_requests (REVERTED) → pending canonical contact/inquiry mapping
+ *
+ * Extension contract (KEPT — new concepts with no existing counterpart):
+ *   creative_vendor_profiles               → extension of marketplace_creators
+ *   creative_vendor_service_areas          → service/geographic coverage
+ *   creative_vendor_capabilities           → creative capability tags
+ *   creative_vendor_certifications         → vendor verification metadata
+ *
+ * Team 24 integration task:
+ *   1. Run integration/migrations/team-22.sql
+ *   2. Mount vendorRouter via app.use('/', vendorRouter)
+ *   3. DO NOT add export to lib/db/src/schema/index.ts yet —
+ *      pending architecture review of vendor canonical source
  */
 import {
   pgSchema,
@@ -22,13 +35,18 @@ import {
 } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { pool } from "@workspace/db";
+import { marketplaceCreatorsTable } from "@workspace/db";
 
 const s = pgSchema("ai_platform");
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Enums (enforced at app level, stored as text in Postgres)
+// Enums (enforced at app level, stored as text)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Creative vendor types — physical/service vendors (distinct from
+ * marketplace_creators which are digital content creators).
+ */
 export const VENDOR_TYPES = [
   "graphic_designer",
   "printing",
@@ -51,9 +69,6 @@ export const VENDOR_TYPES = [
 
 export type VendorType = (typeof VENDOR_TYPES)[number];
 
-export const VENDOR_STATUSES = ["active", "inactive", "suspended"] as const;
-export type VendorStatus = (typeof VENDOR_STATUSES)[number];
-
 export const MODERATION_STATUSES = ["pending", "approved", "rejected"] as const;
 export type ModerationStatus = (typeof MODERATION_STATUSES)[number];
 
@@ -61,55 +76,51 @@ export const PROFICIENCY_LEVELS = ["beginner", "intermediate", "expert"] as cons
 export type ProficiencyLevel = (typeof PROFICIENCY_LEVELS)[number];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// creative_vendors — main vendor profile
+// creative_vendor_profiles — EXTENSION of marketplace_creators
+//
+// ARCHITECTURE DECISION:
+//   creative_vendors (master) was reverted. Creative vendor identity is anchored
+//   to marketplace_creators (the platform canonical vendor entity).
+//   This table adds physical-vendor-specific metadata only.
+//
+// FK: creator_id → marketplace_creators(id) UNIQUE (1:1 extension)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const vendorsTable = s.table("creative_vendors", {
+export const creativeVendorProfilesTable = s.table("creative_vendor_profiles", {
   id: serial("id").primaryKey(),
-  vendorCode: text("vendor_code").notNull().unique(),
-  displayName: text("display_name").notNull(),
-  brandName: text("brand_name"),
-  vendorType: text("vendor_type").notNull(), // VendorType
-  description: text("description"),
-  shortBio: text("short_bio"),
-  logoUrl: text("logo_url"),
-  coverUrl: text("cover_url"),
-  galleryJson: jsonb("gallery_json")
-    .$type<Array<{ url: string; caption?: string }>>()
-    .default([]),
 
-  // Contact info — redacted in public DTO
+  // Anchor — UNIQUE ensures 1:1 extension, not a separate master
+  creatorId: integer("creator_id").notNull().unique(),
+  // Note: FK to marketplace_creators(id) enforced in SQL migration;
+  // Drizzle cross-schema FK declaration requires the table in the same schema
+  // instance — enforced via migration DDL instead.
+
+  // Creative-specific identity
+  vendorType: text("vendor_type").notNull(), // VendorType
+
+  // Contact augmentation (physical vendors — not in marketplace_creators)
   whatsapp: text("whatsapp"),
-  email: text("email"),
-  websiteUrl: text("website_url"),
   instagramUrl: text("instagram_url"),
 
-  // Location
+  // Location (physical vendor dimension — not in marketplace_creators)
   city: text("city"),
   province: text("province"),
   country: text("country").notNull().default("ID"),
 
-  // Pricing (optional, display-only — NOT used for procurement/RAB)
-  minPrice: integer("min_price"), // IDR, nullable
-  maxPrice: integer("max_price"), // IDR, nullable
+  // Pricing — display-only; NOT connected to procurement, checkout, or RAB
+  minPrice: integer("min_price"),
+  maxPrice: integer("max_price"),
   priceCurrency: text("price_currency").default("IDR"),
 
-  // Operations
+  // Operations / lead time (creative service dimension)
   leadTimeDays: integer("lead_time_days").notNull().default(7),
   isAvailableNow: boolean("is_available_now").notNull().default(true),
 
-  // Moderation + status
-  status: text("status").notNull().default("active"), // VendorStatus
-  moderationStatus: text("moderation_status").notNull().default("pending"), // ModerationStatus
+  // Creative vendor moderation (separate from marketplace_creators.isActive)
+  moderationStatus: text("moderation_status").notNull().default("pending"),
   moderationNote: text("moderation_note"),
   moderatedAt: timestamp("moderated_at", { withTimezone: true }),
-
-  // Stats
-  isVerified: boolean("is_verified").notNull().default(false),
   isFeatured: boolean("is_featured").notNull().default(false),
-  totalRatings: integer("total_ratings").notNull().default(0),
-  avgRating: numeric("avg_rating", { precision: 3, scale: 2 }).notNull().default("0"),
-  totalContactRequests: integer("total_contact_requests").notNull().default(0),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
@@ -118,18 +129,20 @@ export const vendorsTable = s.table("creative_vendors", {
     .$onUpdate(() => new Date()),
 });
 
-export type Vendor = typeof vendorsTable.$inferSelect;
-export type InsertVendor = typeof vendorsTable.$inferInsert;
+export type CreativeVendorProfile = typeof creativeVendorProfilesTable.$inferSelect;
+export type InsertCreativeVendorProfile = typeof creativeVendorProfilesTable.$inferInsert;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// creative_vendor_service_areas — geographic coverage
+// creative_vendor_service_areas — geographic/remote coverage
+// FK: profile_id → creative_vendor_profiles(id)
+// NEW CONCEPT — no existing counterpart in platform
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const vendorServiceAreasTable = s.table("creative_vendor_service_areas", {
   id: serial("id").primaryKey(),
-  vendorId: integer("vendor_id")
-    .notNull()
-    .references(() => vendorsTable.id, { onDelete: "cascade" }),
+  profileId: integer("profile_id").notNull().references(() => creativeVendorProfilesTable.id, {
+    onDelete: "cascade",
+  }),
   province: text("province").notNull(),
   city: text("city"),
   isRemote: boolean("is_remote").notNull().default(false),
@@ -139,16 +152,19 @@ export const vendorServiceAreasTable = s.table("creative_vendor_service_areas", 
 export type VendorServiceArea = typeof vendorServiceAreasTable.$inferSelect;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// creative_vendor_capabilities — skills & tools
+// creative_vendor_capabilities — creative capability tags
+// Covers: material/fashion/interior capability, tools, proficiency
+// FK: profile_id → creative_vendor_profiles(id)
+// NEW CONCEPT — no existing counterpart in platform
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const vendorCapabilitiesTable = s.table("creative_vendor_capabilities", {
   id: serial("id").primaryKey(),
-  vendorId: integer("vendor_id")
-    .notNull()
-    .references(() => vendorsTable.id, { onDelete: "cascade" }),
+  profileId: integer("profile_id").notNull().references(() => creativeVendorProfilesTable.id, {
+    onDelete: "cascade",
+  }),
   capabilityName: text("capability_name").notNull(),
-  proficiencyLevel: text("proficiency_level").notNull().default("intermediate"), // ProficiencyLevel
+  proficiencyLevel: text("proficiency_level").notNull().default("intermediate"),
   yearsExperience: integer("years_experience"),
   toolsJson: jsonb("tools_json").$type<string[]>().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -157,14 +173,16 @@ export const vendorCapabilitiesTable = s.table("creative_vendor_capabilities", {
 export type VendorCapability = typeof vendorCapabilitiesTable.$inferSelect;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// creative_vendor_certifications
+// creative_vendor_certifications — vendor verification metadata
+// FK: profile_id → creative_vendor_profiles(id)
+// NEW CONCEPT — no existing counterpart in platform
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const vendorCertificationsTable = s.table("creative_vendor_certifications", {
   id: serial("id").primaryKey(),
-  vendorId: integer("vendor_id")
-    .notNull()
-    .references(() => vendorsTable.id, { onDelete: "cascade" }),
+  profileId: integer("profile_id").notNull().references(() => creativeVendorProfilesTable.id, {
+    onDelete: "cascade",
+  }),
   certificationName: text("certification_name").notNull(),
   issuer: text("issuer"),
   issuedAt: date("issued_at"),
@@ -176,98 +194,29 @@ export const vendorCertificationsTable = s.table("creative_vendor_certifications
 export type VendorCertification = typeof vendorCertificationsTable.$inferSelect;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// creative_vendor_portfolio_items — vendor portfolio with moderation
+// REVERTED TABLES — canonical mapping required
+//
+// creative_vendor_ratings      → marketplace_ratings (itemType='creative_vendor')
+// creative_vendor_portfolio_items → ai_service_portfolios
+// creative_vendor_contact_requests → pending canonical contact/inquiry mapping
+//
+// Services for these are stubbed with BLOCKED_PENDING_VENDOR_CANONICAL_MAPPING
+// in vendorPortfolioService.ts and vendorContactService.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const vendorPortfolioItemsTable = s.table("creative_vendor_portfolio_items", {
-  id: serial("id").primaryKey(),
-  vendorId: integer("vendor_id")
-    .notNull()
-    .references(() => vendorsTable.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  description: text("description"),
-  category: text("category"), // vendor type this portfolio belongs to
-  coverImageUrl: text("cover_image_url"),
-  galleryJson: jsonb("gallery_json")
-    .$type<Array<{ url: string; caption?: string }>>()
-    .default([]),
-  clientIndustry: text("client_industry"),
-  projectDurationDays: integer("project_duration_days"),
-  tagsJson: jsonb("tags_json").$type<string[]>().default([]),
-
-  // Moderation
-  moderationStatus: text("moderation_status").notNull().default("pending"), // ModerationStatus
-  moderationNote: text("moderation_note"),
-  moderatedAt: timestamp("moderated_at", { withTimezone: true }),
-
-  isFeatured: boolean("is_featured").notNull().default(false),
-  displayOrder: integer("display_order").notNull().default(0),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-});
-
-export type VendorPortfolioItem = typeof vendorPortfolioItemsTable.$inferSelect;
-
 // ─────────────────────────────────────────────────────────────────────────────
-// creative_vendor_ratings — client ratings
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const vendorRatingsTable = s.table("creative_vendor_ratings", {
-  id: serial("id").primaryKey(),
-  vendorId: integer("vendor_id")
-    .notNull()
-    .references(() => vendorsTable.id, { onDelete: "cascade" }),
-  clientEmailHash: text("client_email_hash").notNull(), // SHA-256 of email
-  rating: integer("rating").notNull(), // 1-5
-  review: text("review"),
-  projectContext: text("project_context"), // e.g. "Logo design for F&B"
-  moderationStatus: text("moderation_status").notNull().default("pending"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export type VendorRating = typeof vendorRatingsTable.$inferSelect;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// creative_vendor_contact_requests — lead / contact requests
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const vendorContactRequestsTable = s.table("creative_vendor_contact_requests", {
-  id: serial("id").primaryKey(),
-  vendorId: integer("vendor_id")
-    .notNull()
-    .references(() => vendorsTable.id, { onDelete: "cascade" }),
-  requesterEmailHash: text("requester_email_hash").notNull(),
-  requesterName: text("requester_name"),
-  projectDescription: text("project_description").notNull(),
-  budgetRange: text("budget_range"), // optional display-only
-  preferredStartDate: date("preferred_start_date"),
-  status: text("status").notNull().default("pending"), // pending | accepted | declined
-  vendorResponse: text("vendor_response"),
-  respondedAt: timestamp("responded_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-});
-
-export type VendorContactRequest = typeof vendorContactRequestsTable.$inferSelect;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Local Drizzle instance (self-contained — does not require lib/db changes)
+// Local Drizzle instance
+//
+// marketplaceCreatorsTable imported from @workspace/db (read-only, no locked
+// files touched) — needed for JOIN queries in vendorService.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const vendorDb = drizzle(pool, {
   schema: {
-    vendorsTable,
+    marketplaceCreatorsTable,   // platform canonical — imported for JOIN
+    creativeVendorProfilesTable,
     vendorServiceAreasTable,
     vendorCapabilitiesTable,
     vendorCertificationsTable,
-    vendorPortfolioItemsTable,
-    vendorRatingsTable,
-    vendorContactRequestsTable,
   },
 });
