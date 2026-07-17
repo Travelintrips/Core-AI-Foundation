@@ -1,0 +1,253 @@
+Anda adalah Release Manager / Integration Engineer.
+
+Status proyek saat ini:
+
+- Seluruh feature branch telah selesai.
+- QA selesai.
+- Integration selesai.
+- UAT Final Retest telah PASS.
+- Final Verdict:
+  READY_FOR_MAIN_MERGE
+
+====================================================
+ATURAN
+====================================================
+
+JANGAN mengubah business logic.
+
+JANGAN menambah fitur baru.
+
+JANGAN mengubah schema database.
+
+JANGAN mengubah API contract.
+
+JANGAN melakukan refactor.
+
+JANGAN memperbaiki code yang tidak berhubungan dengan merge.
+
+Fokus hanya pada proses release dan merge.
+
+====================================================
+PRE-MERGE VERIFICATION
+====================================================
+
+1. Fetch seluruh branch terbaru.
+
+2. Pastikan branch:
+
+integration/creative-enterprise
+
+adalah branch yang akan di-release.
+
+3. Pastikan commit fix terakhir sudah ada.
+
+4. Pastikan working tree bersih.
+
+5. Pastikan tidak ada uncommitted changes.
+
+6. Jalankan:
+
+- install dependencies
+- typecheck
+- build
+- full test suite
+
+Expected:
+
+1157/1157 PASS
+
+Jika ada test gagal:
+
+STOP.
+
+Jangan merge.
+
+====================================================
+BACKUP
+====================================================
+
+Sebelum merge:
+
+buat tag:
+
+backup-before-v1.0.0
+
+atau branch backup yang setara.
+
+====================================================
+CREATE RELEASE BRANCH
+====================================================
+
+Buat branch:
+
+release/v1.0.0
+
+dari:
+
+integration/creative-enterprise
+
+====================================================
+RELEASE VERIFICATION
+====================================================
+
+Pada release branch lakukan:
+
+1. build production
+
+2. typecheck
+
+3. full test suite
+
+4. verify seed idempotency
+
+5. verify public catalog
+
+6. verify Brand Intelligence
+
+7. verify Presentation Document
+
+8. verify Customer UI
+
+9. verify Customer Isolation
+
+10. verify Coupon duplicate
+
+Expected:
+
+Seluruh hasil sama seperti laporan UAT Final:
+
+PASS
+
+====================================================
+SMOKE TEST
+====================================================
+
+Verifikasi minimal:
+
+✓ Login Admin
+
+✓ Login Customer
+
+✓ Create Creative Project
+
+✓ Brand Intelligence
+
+✓ Graphic Design
+
+✓ Presentation Document
+
+✓ Marketplace
+
+✓ Customer Review
+
+✓ AI Workflow
+
+✓ Download Deliverable
+
+====================================================
+MERGE
+====================================================
+
+Jika seluruh verification PASS:
+
+merge:
+
+release/v1.0.0
+
+ke
+
+main
+
+Gunakan merge commit.
+
+JANGAN squash.
+
+JANGAN rebase.
+
+Pertahankan history.
+
+====================================================
+POST MERGE
+====================================================
+
+Setelah merge:
+
+jalankan kembali:
+
+- build
+
+- full tests
+
+- production build
+
+Pastikan:
+
+1157/1157 PASS
+
+====================================================
+TAG RELEASE
+====================================================
+
+Buat tag:
+
+v1.0.0
+
+Release Name:
+
+Creative Enterprise GA
+
+====================================================
+OUTPUT
+====================================================
+
+Laporkan:
+
+- release branch dibuat
+
+- merge berhasil
+
+- commit hash merge
+
+- release tag
+
+- jumlah test
+
+- build status
+
+- apakah terdapat conflict
+
+- apakah terdapat perubahan selain merge
+
+Jika seluruh langkah berhasil:
+
+Tuliskan:
+
+====================================================
+
+🎉 RELEASE SUCCESSFUL
+
+Version:
+
+v1.0.0
+
+Status:
+
+READY FOR PRODUCTION
+
+====================================================
+
+Jika terdapat masalah:
+
+JANGAN merge.
+
+Berikan laporan lengkap:
+
+- penyebab
+
+- file
+
+- conflict
+
+- solusi yang diperlukan
+
+Tanpa melakukan perubahan di luar proses merge.
