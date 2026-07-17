@@ -1,20 +1,22 @@
 /**
  * fashion-design.ts — Fashion & Apparel Design routes (Team 18)
  *
- * All routes mounted under /api (via app.ts → routes/index.ts).
- * Auth: admin routes require ADMIN_API_KEY (global middleware).
- *       Public service-listing route is excluded via adminAuthWithExceptions.
+ * Auth: All admin routes have EXPLICIT adminAuth middleware at router-level.
+ *       Public service-listing route (GET /services) has NO auth middleware.
+ *       When mounted, Team 24 must also add PUBLIC_ROUTE_RULES exception for
+ *       GET /ai/fashion-design/services in adminAuth.ts.
  *
  * Route prefix: paths do NOT include /api (applied by app.ts mount point).
  *
- * Domain: POST /ai/fashion-design/*
- *
  * IMPORTANT: Do NOT import zod/v4 here. Use plain zod for request parsing.
  * IMPORTANT: Route paths do NOT include the /api prefix.
+ * IMPORTANT: This router is NOT mounted in routes/index.ts (locked file).
+ *            See integration/manifests/team-18.json → routesToMount.
  */
 
 import { Router } from "express";
 import { z } from "zod";
+import { adminAuth } from "../middleware/adminAuth.js";
 import {
   createOrder,
   listOrders,
@@ -90,7 +92,9 @@ const saveBlueprintSchema = z.object({
 /**
  * GET /ai/fashion-design/services
  * Lists available apparel service types with panel/output metadata.
- * Public — excluded from admin auth via app.ts PUBLIC_ROUTE_RULES.
+ * Public — no auth middleware on this handler.
+ * Note: When router is mounted, Team 24 must also add PUBLIC_ROUTE_RULES
+ * exception in adminAuth.ts so the global middleware skips this path.
  */
 router.get("/ai/fashion-design/services", (_req, res) => {
   try {
@@ -101,13 +105,13 @@ router.get("/ai/fashion-design/services", (_req, res) => {
   }
 });
 
-// ── Orders ────────────────────────────────────────────────────────────────────
+// ── Orders (admin) ────────────────────────────────────────────────────────────
 
 /**
  * POST /ai/fashion-design/orders
  * Create a new fashion design order.
  */
-router.post("/ai/fashion-design/orders", async (req, res) => {
+router.post("/ai/fashion-design/orders", adminAuth, async (req, res) => {
   try {
     const parsed = createOrderSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -123,9 +127,9 @@ router.post("/ai/fashion-design/orders", async (req, res) => {
 
 /**
  * GET /ai/fashion-design/orders
- * List all orders (admin).
+ * List all orders with pagination (admin).
  */
-router.get("/ai/fashion-design/orders", async (req, res) => {
+router.get("/ai/fashion-design/orders", adminAuth, async (req, res) => {
   try {
     const page = parseInt(String(req.query["page"] ?? "1"), 10);
     const pageSize = Math.min(parseInt(String(req.query["pageSize"] ?? "20"), 10), 100);
@@ -142,11 +146,11 @@ router.get("/ai/fashion-design/orders", async (req, res) => {
 
 /**
  * GET /ai/fashion-design/orders/:id
- * Get a single order with its blueprint.
+ * Get a single order with its blueprint (admin).
  */
-router.get("/ai/fashion-design/orders/:id", async (req, res) => {
+router.get("/ai/fashion-design/orders/:id", adminAuth, async (req, res) => {
   try {
-    const id = parseId(req.params["id"]);
+    const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
 
     const [order, blueprint] = await Promise.all([getOrder(id), getBlueprint(id)]);
@@ -162,9 +166,9 @@ router.get("/ai/fashion-design/orders/:id", async (req, res) => {
  * PATCH /ai/fashion-design/orders/:id/status
  * Update order status (admin).
  */
-router.patch("/ai/fashion-design/orders/:id/status", async (req, res) => {
+router.patch("/ai/fashion-design/orders/:id/status", adminAuth, async (req, res) => {
   try {
-    const id = parseId(req.params["id"]);
+    const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
 
     const parsed = updateStatusSchema.safeParse(req.body);
@@ -183,11 +187,11 @@ router.patch("/ai/fashion-design/orders/:id/status", async (req, res) => {
 
 /**
  * PATCH /ai/fashion-design/orders/:id/colorways
- * Update colorways and motif config.
+ * Update colorways and motif config (admin).
  */
-router.patch("/ai/fashion-design/orders/:id/colorways", async (req, res) => {
+router.patch("/ai/fashion-design/orders/:id/colorways", adminAuth, async (req, res) => {
   try {
-    const id = parseId(req.params["id"]);
+    const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
 
     const parsed = colorwaysSchema.safeParse(req.body);
@@ -210,11 +214,11 @@ router.patch("/ai/fashion-design/orders/:id/colorways", async (req, res) => {
 
 /**
  * DELETE /ai/fashion-design/orders/:id
- * Delete a draft/cancelled order.
+ * Delete a draft/cancelled order (admin).
  */
-router.delete("/ai/fashion-design/orders/:id", async (req, res) => {
+router.delete("/ai/fashion-design/orders/:id", adminAuth, async (req, res) => {
   try {
-    const id = parseId(req.params["id"]);
+    const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
 
     const deleted = await deleteOrder(id);
@@ -225,15 +229,15 @@ router.delete("/ai/fashion-design/orders/:id", async (req, res) => {
   }
 });
 
-// ── Blueprint ─────────────────────────────────────────────────────────────────
+// ── Blueprint (admin) ─────────────────────────────────────────────────────────
 
 /**
  * GET /ai/fashion-design/orders/:id/blueprint
- * Get blueprint for an order.
+ * Get blueprint for an order (admin).
  */
-router.get("/ai/fashion-design/orders/:id/blueprint", async (req, res) => {
+router.get("/ai/fashion-design/orders/:id/blueprint", adminAuth, async (req, res) => {
   try {
-    const id = parseId(req.params["id"]);
+    const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
 
     const order = await getOrder(id);
@@ -248,12 +252,12 @@ router.get("/ai/fashion-design/orders/:id/blueprint", async (req, res) => {
 
 /**
  * PUT /ai/fashion-design/orders/:id/blueprint
- * Save/update blueprint spec for an order.
+ * Save/update blueprint spec for an order (admin).
  * Validates panel constraints, numbering, logo placement, motif repeat.
  */
-router.put("/ai/fashion-design/orders/:id/blueprint", async (req, res) => {
+router.put("/ai/fashion-design/orders/:id/blueprint", adminAuth, async (req, res) => {
   try {
-    const id = parseId(req.params["id"]);
+    const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
 
     const parsed = saveBlueprintSchema.safeParse(req.body);
@@ -269,15 +273,15 @@ router.put("/ai/fashion-design/orders/:id/blueprint", async (req, res) => {
   }
 });
 
-// ── Trademark check ───────────────────────────────────────────────────────────
+// ── Trademark check (admin) ───────────────────────────────────────────────────
 
 /**
  * POST /ai/fashion-design/orders/:id/trademark-check
- * Run trademark safety check against known brand blocklist.
+ * Run trademark safety check against known brand blocklist (admin).
  */
-router.post("/ai/fashion-design/orders/:id/trademark-check", async (req, res) => {
+router.post("/ai/fashion-design/orders/:id/trademark-check", adminAuth, async (req, res) => {
   try {
-    const id = parseId(req.params["id"]);
+    const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
 
     const result = await runTrademarkCheck(id);
@@ -287,16 +291,16 @@ router.post("/ai/fashion-design/orders/:id/trademark-check", async (req, res) =>
   }
 });
 
-// ── Generation ────────────────────────────────────────────────────────────────
+// ── Generation (admin) ────────────────────────────────────────────────────────
 
 /**
  * POST /ai/fashion-design/orders/:id/generate
- * Generate outputs: composition JSON, placement spec, colorways.
+ * Generate outputs: composition JSON, placement spec, colorways (admin).
  * Image generation (flat-design, front/back preview) requires AI pipeline.
  */
-router.post("/ai/fashion-design/orders/:id/generate", async (req, res) => {
+router.post("/ai/fashion-design/orders/:id/generate", adminAuth, async (req, res) => {
   try {
-    const id = parseId(req.params["id"]);
+    const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
 
     const result = await generateOutputs(id);
@@ -308,11 +312,11 @@ router.post("/ai/fashion-design/orders/:id/generate", async (req, res) => {
 
 /**
  * GET /ai/fashion-design/orders/:id/outputs
- * Get generated outputs for an order.
+ * Get generated outputs for an order (admin).
  */
-router.get("/ai/fashion-design/orders/:id/outputs", async (req, res) => {
+router.get("/ai/fashion-design/orders/:id/outputs", adminAuth, async (req, res) => {
   try {
-    const id = parseId(req.params["id"]);
+    const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
 
     const order = await getOrder(id);

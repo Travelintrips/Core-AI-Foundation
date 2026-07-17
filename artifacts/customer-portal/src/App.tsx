@@ -43,7 +43,6 @@ const WorkspaceSupportPage       = lazy(() => import('@/pages/workspace/support'
 const WorkspaceSettingsPage      = lazy(() => import('@/pages/workspace/settings'));
 const PortfolioPage              = lazy(() => import('@/pages/portfolio'));
 const CpReviewPage               = lazy(() => import('@/pages/cp-review'));
-const FashionDesignPage          = lazy(() => import('@/pages/fashion-design'));
 
 /* ─── Loading fallback ─── */
 function PageLoader() {
@@ -130,7 +129,6 @@ function Router() {
         <Route path="/workspace/:token/profile" component={WorkspaceProfilePage} />
         <Route path="/workspace/:token/support" component={WorkspaceSupportPage} />
         <Route path="/workspace/:token/settings" component={WorkspaceSettingsPage} />
-        <Route path="/fashion-design" component={FashionDesignPage} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

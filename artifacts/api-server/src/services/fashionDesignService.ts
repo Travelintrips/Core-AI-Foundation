@@ -17,7 +17,7 @@ import {
   type FashionDesignOrder,
   type FashionDesignBlueprint,
   type FashionOrderStatus,
-} from "@workspace/db";
+} from "../domains/fashion-design/schema.js";
 import { eq, desc, and, like, SQL } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 

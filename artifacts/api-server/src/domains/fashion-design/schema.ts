@@ -1,7 +1,26 @@
-import { appSchema } from "./_pg-schema";
-import { serial, text, boolean, timestamp, jsonb, integer } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
+/**
+ * Fashion & Apparel Design — Domain-local schema definition (Team 18)
+ *
+ * IMPORTANT: This file is intentionally NOT exported through lib/db/src/schema/index.ts.
+ * The tables are defined here to keep Team 18's domain self-contained.
+ * Team 24 integration task: add barrel export to lib/db/src/schema/index.ts
+ * once the domain has been reviewed and approved for global registration.
+ *
+ * Uses appSchema (ai_platform Postgres schema) directly via pgSchema().
+ */
+
+import {
+  pgSchema,
+  serial,
+  text,
+  boolean,
+  timestamp,
+  jsonb,
+  integer,
+} from "drizzle-orm/pg-core";
+
+// Mirror of lib/db/src/schema/_pg-schema.ts — same schema name, idempotent.
+const appSchema = pgSchema("ai_platform");
 
 // ── Service types ─────────────────────────────────────────────────────────────
 export const FASHION_SERVICE_TYPES = [
@@ -72,11 +91,11 @@ export const fashionDesignOrdersTable = appSchema.table("fashion_design_orders",
   description: text("description"),
 
   // Service
-  serviceType: text("service_type").notNull(), // FashionServiceType
+  serviceType: text("service_type").notNull(),
   quantity: integer("quantity").notNull().default(1),
 
   // Status & safety
-  status: text("status").notNull().default("draft"), // FashionOrderStatus
+  status: text("status").notNull().default("draft"),
   trademarkSafe: boolean("trademark_safe").notNull().default(true),
   trademarkNotes: text("trademark_notes"),
 
@@ -100,16 +119,10 @@ export const fashionDesignOrdersTable = appSchema.table("fashion_design_orders",
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
-export const insertFashionDesignOrderSchema = createInsertSchema(fashionDesignOrdersTable).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-export type InsertFashionDesignOrder = z.infer<typeof insertFashionDesignOrderSchema>;
 export type FashionDesignOrder = typeof fashionDesignOrdersTable.$inferSelect;
+export type InsertFashionDesignOrder = typeof fashionDesignOrdersTable.$inferInsert;
 
 // ── fashion_design_blueprints ─────────────────────────────────────────────────
-// One blueprint per order; stores panel-by-panel placement spec
 export const fashionDesignBlueprintsTable = appSchema.table("fashion_design_blueprints", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id")
@@ -117,7 +130,6 @@ export const fashionDesignBlueprintsTable = appSchema.table("fashion_design_blue
     .references(() => fashionDesignOrdersTable.id, { onDelete: "cascade" }),
 
   // Panel configurations — keyed by BlueprintPanel
-  // Each value: { enabled: boolean, content: string, position: {x,y}, size: {w,h}, color: string }
   panels: jsonb("panels").notNull().default({}),
 
   // Placement specification document
@@ -130,8 +142,8 @@ export const fashionDesignBlueprintsTable = appSchema.table("fashion_design_blue
   logoPlacement: jsonb("logo_placement"),
 
   // Number/name fields
-  numberValue: text("number_value"),   // e.g. "10"
-  nameValue: text("name_value"),       // e.g. "SURYANTO"
+  numberValue: text("number_value"),
+  nameValue: text("name_value"),
   numberFont: text("number_font"),
   numberColor: text("number_color"),
 
@@ -142,10 +154,5 @@ export const fashionDesignBlueprintsTable = appSchema.table("fashion_design_blue
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
-export const insertFashionDesignBlueprintSchema = createInsertSchema(fashionDesignBlueprintsTable).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-export type InsertFashionDesignBlueprint = z.infer<typeof insertFashionDesignBlueprintSchema>;
 export type FashionDesignBlueprint = typeof fashionDesignBlueprintsTable.$inferSelect;
+export type InsertFashionDesignBlueprint = typeof fashionDesignBlueprintsTable.$inferInsert;

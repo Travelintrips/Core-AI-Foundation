@@ -53,7 +53,6 @@ import ProductionPipelinePage from "@/pages/production-pipeline";
 import DesignStudio from "@/pages/design-studio";
 import DesignStudioEditor from "@/pages/design-studio-editor";
 import CreativeMarketplace from "@/pages/creative-marketplace";
-import FashionDesign from "@/pages/fashion-design";
 import DesignRenderBatches from "@/pages/design-render-batches";
 import DesignRenderBatchesNew from "@/pages/design-render-batches-new";
 import DesignRenderBatchDetail from "@/pages/design-render-batch-detail";
@@ -116,7 +115,6 @@ function AdminRouter() {
         <Route path="/design-templates/:id" component={DesignTemplateDetail} />
         <Route path="/design-templates" component={DesignTemplates} />
         <Route path="/creative-marketplace" component={CreativeMarketplace} />
-        <Route path="/fashion-design" component={FashionDesign} />
         <Route path="/design-render-batches/new" component={DesignRenderBatchesNew} />
         <Route path="/design-render-batches/:id" component={DesignRenderBatchDetail} />
         <Route path="/design-render-batches" component={DesignRenderBatches} />
