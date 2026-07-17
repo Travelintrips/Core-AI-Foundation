@@ -1,0 +1,271 @@
+{
+  "team": "01",
+  "branch": "feature/01-creative-workflow",
+  "description": "Creative Workflow Engine v2 — Universal Execution Planning for Creative AI",
+
+  "ownedFolders": [
+    "artifacts/api-server/src/services/creative-workflow-v2/",
+    "artifacts/api-server/src/routes/creative-workflow-v2/",
+    "artifacts/api-server/src/types/creative-workflow-v2/",
+    "artifacts/api-server/src/services/creative-workflow-v2/__tests__/",
+    "artifacts/api-server/src/routes/creative-workflow-v2/__tests__/",
+    "integration/openapi/team-01.yaml",
+    "integration/migrations/team-01.sql",
+    "integration/manifests/team-01.json"
+  ],
+
+  "routesToMount": [
+    {
+      "importPath": "artifacts/api-server/src/routes/creative-workflow-v2/index.js",
+      "export": "creativeWorkflowV2Router",
+      "mountPoint": "/api/ai/creative-workflow/v2",
+      "middleware": ["adminAuthWithExceptions"],
+      "note": "Admin router — /definitions/* and /plans/* are protected by explicit adminAuth inside the router itself (belt-and-suspenders). Call setDefinitionResolver(fn) after mounting."
+    },
+    {
+      "importPath": "artifacts/api-server/src/routes/creative-workflow-v2/index.js",
+      "export": "creativeWorkflowPublicRouter",
+      "mountPoint": "/api/ai/creative-workflow/v2",
+      "middleware": [],
+      "note": "Public router — must be mounted BEFORE adminAuthWithExceptions (or the path /api/ai/creative-workflow/v2/public/progress must be added to PUBLIC_PATH_PREFIXES in middleware/adminAuth.ts). Handles only GET /public/progress with token-based auth."
+    }
+  ],
+
+  "pagesToRegister": [],
+
+  "sidebarItems": [
+    {
+      "section": "AI Workflows",
+      "label": "Workflow Engine v2",
+      "href": "/creative-workflow-v2",
+      "icon": "GitBranch",
+      "note": "Team 01 does not ship a frontend page. Optional — wire by Team 24 if a UI is desired."
+    }
+  ],
+
+  "openapiFragment": "integration/openapi/team-01.yaml",
+
+  "migrationDrafts": [
+    "integration/migrations/team-01.sql"
+  ],
+
+  "seedDrafts": [],
+
+  "integrationOrder": [
+    "Run migration draft in this order: STEP 1 cwf_workflow_definitions → STEP 2 cwf_execution_plans (FK to step 1) → STEP 3 cwf_plan_events (FK to step 2) → STEP 4 indexes",
+    "Mount creativeWorkflowPublicRouter at /api/ai/creative-workflow/v2 BEFORE adminAuthWithExceptions (public endpoint)",
+    "Add '/api/ai/creative-workflow/v2/public' to PUBLIC_PATH_PREFIXES in middleware/adminAuth.ts so it bypasses admin key check",
+    "Mount creativeWorkflowV2Router at /api/ai/creative-workflow/v2 AFTER adminAuthWithExceptions (admin endpoint)",
+    "Call setDefinitionResolver(dbBackedFn) to swap in-memory definition store for DB",
+    "Call setContextTokenResolver(fn) to enable token → contextId resolution for public progress",
+    "Call setPublicPlanReader(fn) to enable contextId-filtered plan reads for public progress",
+    "Wire EventBusPort adapter to real aiEventBusService.publishSafe/publish",
+    "Wire QueuePort adapter to real queueManagerService.enqueue/cancelJob",
+    "Wire WorkerPort adapter to real workerClusterService.getCapabilities",
+    "Wire DispatcherPort adapter to real jobDispatcherService.getStatus",
+    "Register OpenAPI fragment paths in root openapi.yaml (all operationIds prefixed cwfV2)"
+  ],
+
+  "dependenciesRequested": [],
+
+  "eventsPublished": [
+    {
+      "eventType": "cwf.plan.started",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when an execution plan transitions from pending → running."
+    },
+    {
+      "eventType": "cwf.plan.paused",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when an execution plan is paused by an operator."
+    },
+    {
+      "eventType": "cwf.plan.resumed",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when a paused plan resumes."
+    },
+    {
+      "eventType": "cwf.plan.cancelled",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when a plan is cancelled (terminal)."
+    },
+    {
+      "eventType": "cwf.plan.completed",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when all nodes in a plan complete successfully."
+    },
+    {
+      "eventType": "cwf.plan.failed",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when one or more nodes fail beyond retry budget with no failover."
+    },
+    {
+      "eventType": "cwf.node.ready",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when a node's dependencies are met and it is eligible for dispatch."
+    },
+    {
+      "eventType": "cwf.node.running",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when a node's job is claimed by a worker."
+    },
+    {
+      "eventType": "cwf.node.completed",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when a node's job completes successfully."
+    },
+    {
+      "eventType": "cwf.node.failed",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when a node fails (after retries/failover exhausted)."
+    },
+    {
+      "eventType": "cwf.milestone.reached",
+      "sourceModule": "creative-workflow-v2",
+      "description": "Emitted when a milestone's completion condition is satisfied."
+    }
+  ],
+
+  "eventsConsumed": [],
+  "workerJobTypesRequested": [],
+  "sharedTypesRequested": [],
+
+  "remediationLog": [
+    {
+      "finding": "P1-01 — No explicit auth middleware on admin routers",
+      "fix": "Added adminAuth import + router.use(adminAuth) as first middleware in both definitions.ts and plans.ts. Belt-and-suspenders: enforces auth even if global mount-point middleware is misconfigured.",
+      "files": [
+        "artifacts/api-server/src/routes/creative-workflow-v2/definitions.ts",
+        "artifacts/api-server/src/routes/creative-workflow-v2/plans.ts"
+      ]
+    },
+    {
+      "finding": "P1-02 — IDOR vulnerability: public execution progress accepts plan ID from URL",
+      "fix": "Created publicProgress.ts with GET /public/progress?token=<contextToken>. contextToken is resolved SERVER-SIDE to { contextId, contextType } via injected resolver. Plans are fetched by server-resolved contextId only — no plan ID is accepted from the request. Unknown/expired tokens fail closed (401). Separate router (creativeWorkflowPublicRouter) with no admin auth — token is the sole credential.",
+      "files": [
+        "artifacts/api-server/src/routes/creative-workflow-v2/publicProgress.ts",
+        "artifacts/api-server/src/routes/creative-workflow-v2/index.ts"
+      ]
+    },
+    {
+      "finding": "P1-03 — OpenAPI operationIds not unique, no cwfV2 prefix",
+      "fix": "Renamed all 19 operationIds to have cwfV2 prefix (e.g. cwfV2ListDefinitions, cwfV2CreatePlan, cwfV2GetPublicProgress). All are globally unique.",
+      "files": [
+        "integration/openapi/team-01.yaml"
+      ]
+    },
+    {
+      "finding": "P1-04 — Migration ordering not explicit",
+      "fix": "Added STEP 1/2/3/4 ordering comments with FK dependency explanations: STEP 1 cwf_workflow_definitions (no FK) → STEP 2 cwf_execution_plans (FK to step 1) → STEP 3 cwf_plan_events (FK to step 2) → STEP 4 indexes.",
+      "files": [
+        "integration/migrations/team-01.sql"
+      ]
+    },
+    {
+      "finding": "Previous remediation — pagination on list endpoints",
+      "fix": "GET /definitions and GET /plans both support limit/offset pagination (default 50, max 200).",
+      "files": [
+        "artifacts/api-server/src/routes/creative-workflow-v2/definitions.ts",
+        "artifacts/api-server/src/routes/creative-workflow-v2/plans.ts"
+      ]
+    },
+    {
+      "finding": "Previous remediation — unbounded resource use",
+      "fix": "MAX_WORKFLOW_NODES=500 guard in buildExecutionPlan throws immediately for oversized definitions.",
+      "files": [
+        "artifacts/api-server/src/services/creative-workflow-v2/executionPlanBuilder.ts"
+      ]
+    }
+  ],
+
+  "knownRisks": [
+    {
+      "risk": "In-memory store",
+      "severity": "high",
+      "description": "WorkflowDefinitions and ExecutionPlans are stored in-memory (Map). All data is lost on server restart until Team 24 runs the migration and wires the DB adapter.",
+      "mitigation": "Run migration draft + call setDefinitionResolver() before production use."
+    },
+    {
+      "risk": "Public router mount order",
+      "severity": "high",
+      "description": "creativeWorkflowPublicRouter MUST be mounted before adminAuthWithExceptions OR the path /public/progress must be added to PUBLIC_PATH_PREFIXES. If mounted after admin middleware without exception, the public endpoint will require an admin key.",
+      "mitigation": "See integrationOrder step 2-3. Add path exception or mount before global middleware."
+    },
+    {
+      "risk": "setContextTokenResolver not called",
+      "severity": "high",
+      "description": "Default resolver returns null for every token (fail-closed). If Team 24 does not call setContextTokenResolver(), the public progress endpoint will return 401 for all requests.",
+      "mitigation": "Call setContextTokenResolver(fn) during wiring. fn must return { contextId, contextType } for valid tokens."
+    },
+    {
+      "risk": "Port interfaces not wired",
+      "severity": "medium",
+      "description": "QueuePort, EventBusPort, DispatcherPort, and WorkerPort are interfaces only. The engine does not auto-dispatch jobs or publish events until Team 24 provides adapter implementations.",
+      "mitigation": "NullPort stubs are provided for testing. Wire adapters during integration."
+    },
+    {
+      "risk": "Node transition endpoints — worker-token auth",
+      "severity": "medium",
+      "description": "Node-level endpoints (running/completed/skipped/ready) are behind adminAuth but ideally should also validate a worker-specific token to prevent any admin-key holder from manually advancing node states.",
+      "mitigation": "Team 24 should add worker-token validation on node transition routes during integration."
+    },
+    {
+      "risk": "Critical path ties (equal duration nodes)",
+      "severity": "low",
+      "description": "When multiple branches have equal estimated duration, all are marked critical (zero slack). This is correct CPM behaviour.",
+      "mitigation": "Accepted. Operators should set distinct estimatedDurationMs values."
+    }
+  ],
+
+  "finalReport": {
+    "domain": "Creative Workflow Engine — universal execution planning for all Creative AI pipelines",
+    "authBoundaries": {
+      "/definitions/*": "adminAuth — explicit router.use(adminAuth) in definitions.ts",
+      "/plans/*": "adminAuth — explicit router.use(adminAuth) in plans.ts",
+      "/public/progress": "contextToken (query param) — resolved server-side, no admin key required"
+    },
+    "localRoutes": [
+      "GET    /api/ai/creative-workflow/v2/definitions                          (admin)",
+      "POST   /api/ai/creative-workflow/v2/definitions                          (admin)",
+      "GET    /api/ai/creative-workflow/v2/definitions/:id                      (admin)",
+      "PATCH  /api/ai/creative-workflow/v2/definitions/:id                      (admin)",
+      "DELETE /api/ai/creative-workflow/v2/definitions/:id                      (admin)",
+      "POST   /api/ai/creative-workflow/v2/definitions/:id/validate             (admin)",
+      "GET    /api/ai/creative-workflow/v2/plans                                (admin)",
+      "POST   /api/ai/creative-workflow/v2/plans                                (admin)",
+      "GET    /api/ai/creative-workflow/v2/plans/:id                            (admin)",
+      "GET    /api/ai/creative-workflow/v2/plans/:id/progress                   (admin)",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/start                      (admin)",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/pause                      (admin)",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/resume                     (admin)",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/cancel                     (admin)",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/nodes/:nodeId/running      (admin)",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/nodes/:nodeId/completed    (admin)",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/nodes/:nodeId/skipped      (admin)",
+      "POST   /api/ai/creative-workflow/v2/plans/:id/nodes/:nodeId/ready        (admin)",
+      "GET    /api/ai/creative-workflow/v2/public/progress?token=<t>            (public, token-auth)"
+    ],
+    "domainArchitecture": {
+      "types": "artifacts/api-server/src/types/creative-workflow-v2/ (workflow.ts, execution.ts, ports.ts)",
+      "services": {
+        "core": ["executionPlanBuilder.ts", "planControlService.ts", "retryPolicyService.ts", "progressCalculator.ts"],
+        "algorithms": ["cycleDetector.ts", "parallelGrouper.ts", "criticalPathCalculator.ts"],
+        "ports": ["ports/nullQueuePort.ts", "ports/nullDispatcherPort.ts", "ports/nullEventBusPort.ts", "ports/nullWorkerPort.ts"]
+      },
+      "routes": {
+        "admin": "artifacts/api-server/src/routes/creative-workflow-v2/ (definitions.ts, plans.ts, index.ts)",
+        "public": "artifacts/api-server/src/routes/creative-workflow-v2/publicProgress.ts"
+      }
+    },
+    "testFiles": [
+      "artifacts/api-server/src/services/creative-workflow-v2/__tests__/workflowEngine.test.ts (72 assertions — logic)",
+      "artifacts/api-server/src/routes/creative-workflow-v2/__tests__/auth.test.ts (HTTP auth, IDOR, OpenAPI, migration, large-graph)"
+    ],
+    "externalBlockers": [
+      "Team 24 must run migration draft (STEP 1→2→3→4 ordering required)",
+      "Team 24 must mount public router BEFORE adminAuthWithExceptions",
+      "Team 24 must call setContextTokenResolver() for public progress to work",
+      "Team 24 must wire port adapters before jobs are dispatched or events published"
+    ]
+  }
+}

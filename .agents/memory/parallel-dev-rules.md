@@ -1,20 +1,21 @@
 ---
-name: parallel-dev-rules
-description: Multi-team parallel development rules — branch discipline, shared file locks, forbidden commands, draft-only DB/OpenAPI, integration manifest requirement.
+name: Global Parallel Development Rules
+description: Multi-team branch isolation rules — shared file locks, forbidden commands, integration manifest pattern, Team 24 handles global wiring.
 ---
 
 # Global Parallel Development Rules
 
-**Why:** The project is built by multiple teams in parallel. These rules prevent conflicts and ensure Team 24 can integrate all work cleanly.
+These are standing rules saved by the user (2026-07-16). Full text is in `replit.md` under "Global Parallel Development Rules (Multi-Team)".
 
-## Rule summary
+## The rule in one sentence
+All feature work happens on a team's own branch; shared infrastructure files are locked; Team 24 integrates everything into main.
 
-- Work on the team's own feature branch only. Never touch `main`. Never merge.
-- Shared files are locked (see full list in replit.md "Shared file lock" section). If a feature needs one, write an Integration Request + Manifest instead of editing it.
-- Forbidden commands: `build:generated`, `clean:generated`, `rebuild:all`, `drizzle-kit push`, any global migration/codegen/formatter/root-dep change.
-- DB changes → draft SQL at `integration/migrations/<team-code>.sql` (additive only, not executed).
-- OpenAPI changes → fragment at `integration/openapi/<team-code>.yaml` (not merged to root).
-- No self-registration of routers, pages, sidebar items, workers, events, schema barrels, or migrations — Team 24 does all wiring.
-- Always produce `integration/manifests/<team-code>.json` with the full manifest schema.
+**Why:** This project is built by multiple parallel teams. Uncoordinated edits to shared files (router registry, openapi.yaml, barrel exports, core services) cause cascading breaks across all teams.
 
-**How to apply:** On every task that touches code, check replit.md "Global Parallel Development Rules" before making any edits. Refuse to touch locked files; produce integration artifacts instead.
+**How to apply:**
+- Before touching any file, check if it's on the Shared File Lock list (see replit.md).
+- If a feature needs a locked file → write an Integration Request + `integration/manifests/<team-code>.json` instead of editing it.
+- Never run global commands: `build:generated`, `clean:generated`, `rebuild:all`, `drizzle-kit push`, global formatter/autofix.
+- DB changes → draft only at `integration/migrations/<team-code>.sql` (additive, never run).
+- OpenAPI changes → fragment only at `integration/openapi/<team-code>.yaml` (never edit root openapi.yaml).
+- Never register routes, pages, sidebar items, workers, events, or migrations globally — Team 24 does that.
