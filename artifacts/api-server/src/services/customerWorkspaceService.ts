@@ -212,18 +212,34 @@ export interface WorkspaceProject {
   createdAt: string;
   updatedAt: string;
   internalProjectId: number | null; // creativeProjectsTable.id, when one exists
+  /** Admin-authored completion message shown to customer when project is done. */
+  completionNotes: string | null;
+  /**
+   * Deliverable links (Drive, Dropbox, etc.) added by admin after completion.
+   * Gated behind filesUnlocked — null until files are unlocked.
+   */
+  completionLinks: Array<{ label: string; url: string }> | null;
 }
 
 async function projectFromCreativeProject(
   req: Request,
   project: CreativeProject,
-  opts: { reviewToken?: string | null; serviceName?: string; packageName?: string | null; aiTeam?: string[] },
+  opts: {
+    reviewToken?: string | null;
+    serviceName?: string;
+    packageName?: string | null;
+    aiTeam?: string[];
+    completionNotes?: string | null;
+    completionLinks?: Array<{ label: string; url: string }> | null;
+  },
 ): Promise<WorkspaceProject> {
   const base = buildBaseUrl(req);
   const stage = stageForStatus(project.status, project.sourceType === "service_catalog" ? "service_catalog" : "direct");
   const [quotation] = project.sourceType === "direct"
     ? await db.select().from(creativeProjectQuotationsTable).where(eq(creativeProjectQuotationsTable.projectId, project.projectId))
     : [];
+  // completionLinks are gated: only expose once files are unlocked (same rule as catalog endpoint).
+  const safeLinks = project.filesUnlocked ? (opts.completionLinks ?? null) : null;
   return {
     projectNumber: project.projectId,
     kind: "creative_project",
@@ -250,6 +266,8 @@ async function projectFromCreativeProject(
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString(),
     internalProjectId: project.id,
+    completionNotes: opts.completionNotes ?? null,
+    completionLinks: safeLinks,
   };
 }
 
@@ -309,6 +327,8 @@ export async function listAllWorkspaceProjects(
           serviceName: service?.serviceName ?? "Layanan",
           packageName: pkg?.packageName ?? null,
           aiTeam: service?.aiEmployeesInvolved?.length ? service.aiEmployeesInvolved : undefined,
+          completionNotes: (sr.completionNotes as string | null) ?? null,
+          completionLinks: (sr.completionLinks as Array<{ label: string; url: string }> | null) ?? null,
         });
         item.reviewStatus = review?.status ?? null;
         results.push(item);
@@ -318,6 +338,7 @@ export async function listAllWorkspaceProjects(
 
     // No project yet — surface the service request itself as a pre-project item
     const stage = stageForStatus(sr.status, "service_catalog");
+    // completionLinks are gated: only expose once filesUnlocked (no linked project → always false)
     results.push({
       projectNumber: sr.requestId,
       kind: "service_request",
@@ -344,6 +365,8 @@ export async function listAllWorkspaceProjects(
       createdAt: sr.createdAt.toISOString(),
       updatedAt: sr.updatedAt.toISOString(),
       internalProjectId: null,
+      completionNotes: (sr.completionNotes as string | null) ?? null,
+      completionLinks: null, // hidden until filesUnlocked — no linked project means never unlocked yet
     });
   }
 

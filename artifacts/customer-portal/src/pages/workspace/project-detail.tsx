@@ -595,6 +595,40 @@ export default function WorkspaceProjectDetailPage({
                       <p className="text-sm">{overview.packageName}</p>
                     </div>
                   )}
+
+                  {/* ── Hasil Proyek (admin completion notes + deliverable links) ── */}
+                  {(overview.completionNotes || (overview.completionLinks && overview.completionLinks.length > 0)) && (
+                    <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-5 space-y-4">
+                      <h3 className="text-sm font-semibold flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Hasil Proyek
+                      </h3>
+                      {overview.completionNotes && (
+                        <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
+                          {overview.completionNotes}
+                        </p>
+                      )}
+                      {overview.completionLinks && overview.completionLinks.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">File & Link</p>
+                          {overview.completionLinks.map((link, i) => (
+                            <a
+                              key={i}
+                              href={link.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-3 p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-white/60 dark:bg-emerald-950/30 hover:bg-white dark:hover:bg-emerald-950/50 transition-colors group"
+                            >
+                              <ExternalLink className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300 group-hover:underline truncate">
+                                {link.label || link.url}
+                              </span>
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

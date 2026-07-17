@@ -55,6 +55,13 @@ export type WorkspaceProject = {
   createdAt: string;
   updatedAt: string;
   internalProjectId: number | null;
+  /** Admin-authored completion message shown to customer when project is done. */
+  completionNotes: string | null;
+  /**
+   * Deliverable links (Drive, Dropbox, etc.) added by admin after completion.
+   * Null until files are unlocked.
+   */
+  completionLinks: Array<{ label: string; url: string }> | null;
 };
 
 export type WorkspaceProjectDetail = {
