@@ -43,8 +43,16 @@ type SourceRow = { source: string; visitors: number; conversions: number; revenu
 
 /**
  * Builds historical funnel metrics over the given period.
+ *
+ * RBAC / Tenant scope:
+ *   - tenantId: when provided, restricts funnel events to customers belonging
+ *     to that tenant (via customer_profiles). Pass null/undefined for platform-wide
+ *     view — only super-admin callers should omit.
  */
-export async function buildFunnelMetrics(periodDays = 30): Promise<FunnelProjection> {
+export async function buildFunnelMetrics(
+  periodDays = 30,
+  tenantId?: string | null,
+): Promise<FunnelProjection> {
   const historicalFrom = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000);
   const historicalTo = new Date();
 
@@ -65,6 +73,9 @@ export async function buildFunnelMetrics(periodDays = 30): Promise<FunnelProject
       count(*) AS cnt
     FROM ai_platform.sales_funnel_events
     WHERE created_at BETWEEN ${historicalFrom.toISOString()} AND ${historicalTo.toISOString()}
+      ${tenantId != null ? sql`AND customer_id IN (
+        SELECT id FROM ai_platform.customer_profiles WHERE tenant_id = ${tenantId}
+      )` : sql``}
     GROUP BY stage
     HAVING CASE
       WHEN event_type = ANY(ARRAY['page.visited', 'session.started']) THEN 'visitor'

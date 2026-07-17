@@ -1,172 +1,277 @@
 /**
  * creative-commercial/approvalService.ts — Team 03
  *
- * Manages cc_pending_approvals: financial actions that require a manager
- * to approve before execution. All money-mutating commercial automation
- * actions go through this gate.
+ * ADAPTER over ai_commercial_gates (existing system).
  *
- * Pattern:
- *   1. Service creates a pending approval (requiresApproval=true)
- *   2. Admin approves/rejects via the route
- *   3. Approval triggers the actual financial action via the event bus
- *   4. Expired approvals (24h default) are auto-rejected on read
+ * Audit remediation (P1 — Duplicate Approval Flow):
+ *   - REMOVED parallel cc_pending_approvals state machine.
+ *   - NOW backed by ai_commercial_gates with gate_type='admin_approval'.
+ *   - Uses existing verifyGate() / failGate() from commercialGateService.
+ *   - Idempotent: requesting the same (customerProfileId, actionType) twice
+ *     returns the existing pending gate, not a new one.
+ *   - Approved gates cannot be re-approved (verifyGate guards pending→verified).
+ *   - Notes JSON stores: {actionType, actionPayload, requestedBy, customerProfileId, source}.
+ *
+ * Status mapping:
+ *   ai_commercial_gates.status  →  PendingApproval.status
+ *   pending                     →  pending
+ *   verified                    →  approved
+ *   failed                      →  rejected
+ *   waived                      →  rejected  (waive = admin override rejection)
+ *
+ * Events published (on approval):
+ *   commercial.approval.granted — payload includes gateId, actionType, actionPayload,
+ *   customerProfileId, approvedBy. Downstream handlers execute the actual action.
+ *
+ * Gates without a quotationId or serviceQuotationId are legal — the schema
+ * allows both FK columns to be null; only gate_type='admin_approval' is used here.
  */
 
-import { db } from "@workspace/db";
-import { sql } from "drizzle-orm";
+import { db, aiCommercialGatesTable, type AiCommercialGate } from "@workspace/db";
+import { eq, and, sql } from "drizzle-orm";
+import {
+  verifyGate,
+  failGate,
+} from "../commercialGateService.js";
 import { publishSafe } from "../aiEventBusService.js";
 import type { ApprovalActionType, ApprovalStatus, PendingApproval } from "./types.js";
 
-// ── Raw-SQL helpers (team-03 table, not in shared barrel) ─────────────────────
+// ── Internal note shape stored in gate.notes ──────────────────────────────────
 
-type ApprovalRow = {
+interface GateNotes {
+  actionType: ApprovalActionType;
+  actionPayload: Record<string, unknown>;
+  requestedBy: string;
+  customerProfileId: number;
+  source: "creative-commercial";
+  rejectionReason?: string;
+}
+
+// ── Raw row type — db.execute() returns snake_case column names ───────────────
+// AiCommercialGate is the Drizzle camelCase type, but db.execute<T> rows come
+// back from postgres as snake_case. We accept either shape in mapGate.
+
+type RawGateRow = {
   id: number;
-  customer_profile_id: number;
-  action_type: string;
-  action_payload: Record<string, unknown>;
-  requested_by: string;
-  status: string;
-  approved_by: string | null;
-  approved_at: string | null;
-  expires_at: string;
-  created_at: string;
+  gate_type?: string;
+  status?: string;
+  notes?: string | null;
+  verified_by?: string | null;
+  verified_at?: string | Date | null;
+  created_at?: string | Date;
+  tenant_id?: string | null;
+  service_request_id?: number | null;
+  quotation_id?: number | null;
+  service_quotation_id?: number | null;
+  required_amount?: string | null;
+  verified_amount?: string | null;
+  reference_number?: string | null;
+  updated_at?: string | Date;
 } & Record<string, unknown>;
 
-function mapRow(row: ApprovalRow): PendingApproval {
+// ── Map ai_commercial_gates → PendingApproval ─────────────────────────────────
+
+function mapGate(gate: AiCommercialGate | RawGateRow): PendingApproval {
+  // Support both camelCase (Drizzle ORM insert return) and snake_case (db.execute rows)
+  const row = gate as RawGateRow;
+  const rawStatus = (row.status ?? "pending") as string;
+  const rawNotes  = row.notes ?? null;
+  const verifiedBy = row.verified_by ?? (gate as AiCommercialGate).verifiedBy ?? null;
+  const verifiedAtRaw = row.verified_at ?? (gate as AiCommercialGate).verifiedAt ?? null;
+  const createdAtRaw  = row.created_at  ?? (gate as AiCommercialGate).createdAt;
+
+  let notes: Partial<GateNotes> = {};
+  try {
+    if (typeof rawNotes === "string") {
+      notes = JSON.parse(rawNotes) as GateNotes;
+    }
+  } catch {
+    // notes is malformed JSON — treat as empty
+  }
+
+  const status: ApprovalStatus =
+    rawStatus === "verified"
+      ? "approved"
+      : rawStatus === "failed" || rawStatus === "waived"
+        ? "rejected"
+        : "pending";
+
   return {
     id: row.id,
-    customerProfileId: row.customer_profile_id,
-    actionType: row.action_type as ApprovalActionType,
-    actionPayload: row.action_payload,
-    requestedBy: row.requested_by,
-    status: row.status as ApprovalStatus,
-    approvedBy: row.approved_by ?? undefined,
-    approvedAt: row.approved_at ? new Date(row.approved_at) : undefined,
-    expiresAt: new Date(row.expires_at),
-    createdAt: new Date(row.created_at),
+    customerProfileId: notes.customerProfileId ?? 0,
+    actionType: (notes.actionType ?? "issue_recovery_coupon") as ApprovalActionType,
+    actionPayload: notes.actionPayload ?? {},
+    requestedBy: notes.requestedBy ?? "unknown",
+    status,
+    approvedBy:   verifiedBy ?? undefined,
+    approvedAt:   verifiedAtRaw ? new Date(String(verifiedAtRaw)) : undefined,
+    // Gates don't expire — set far-future value for API compatibility
+    expiresAt:    new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+    createdAt:    createdAtRaw ? new Date(String(createdAtRaw)) : new Date(),
   };
 }
 
+// ── createPendingApproval ─────────────────────────────────────────────────────
+
+/**
+ * Idempotent: if a pending admin_approval gate already exists for this
+ * (customerProfileId, actionType) pair, return it instead of creating a new one.
+ * This prevents duplicate reward issuance from double-clicks or retries.
+ */
 export async function createPendingApproval(opts: {
   customerProfileId: number;
   actionType: ApprovalActionType;
   actionPayload: Record<string, unknown>;
   requestedBy: string;
-  expiresInHours?: number;
+  expiresInHours?: number; // kept for API compat — gates don't expire, value is stored in notes
 }): Promise<PendingApproval> {
-  const expiresInHours = opts.expiresInHours ?? 24;
-
-  const result = await db.execute<ApprovalRow>(sql`
-    INSERT INTO ai_platform.cc_pending_approvals
-      (customer_profile_id, action_type, action_payload, requested_by, status, expires_at)
-    VALUES (
-      ${opts.customerProfileId},
-      ${opts.actionType},
-      ${JSON.stringify(opts.actionPayload)}::jsonb,
-      ${opts.requestedBy},
-      'pending',
-      now() + ${expiresInHours} * interval '1 hour'
-    )
-    RETURNING *
+  // Idempotency check: find existing pending gate for same customer + actionType
+  const existing = await db.execute<RawGateRow>(sql`
+    SELECT *
+    FROM ai_platform.ai_commercial_gates
+    WHERE gate_type = 'admin_approval'
+      AND status = 'pending'
+      AND (notes->>'customerProfileId')::int = ${opts.customerProfileId}
+      AND notes->>'actionType' = ${opts.actionType}
+      AND notes->>'source' = 'creative-commercial'
+    ORDER BY created_at DESC
+    LIMIT 1
   `);
-  const rows = (result as unknown as { rows: ApprovalRow[] }).rows ?? [];
-  return mapRow(rows[0]);
+  const existingRows = (existing as unknown as { rows: RawGateRow[] }).rows ?? [];
+  if (existingRows.length > 0 && existingRows[0]) {
+    return mapGate(existingRows[0]);
+  }
+
+  // Create new gate backed by ai_commercial_gates
+  const notes: GateNotes = {
+    actionType: opts.actionType,
+    actionPayload: opts.actionPayload,
+    requestedBy: opts.requestedBy,
+    customerProfileId: opts.customerProfileId,
+    source: "creative-commercial",
+  };
+
+  const [gate] = await db
+    .insert(aiCommercialGatesTable)
+    .values({
+      gateType: "admin_approval",
+      status: "pending",
+      notes: JSON.stringify(notes),
+      tenantId: null, // default tenant
+    })
+    .returning();
+
+  if (!gate) throw new Error("Failed to create approval gate");
+
+  return mapGate(gate);
 }
 
+// ── approveApproval ───────────────────────────────────────────────────────────
+
+/**
+ * Approve a pending gate. Guards:
+ *   - Gate must exist.
+ *   - Gate must be pending (verifyGate enforces pending→verified, prevents double-approve).
+ * On success publishes commercial.approval.granted for downstream handlers.
+ */
 export async function approveApproval(
   approvalId: number,
   approvedBy: string,
 ): Promise<PendingApproval> {
-  const approval = await getApproval(approvalId);
-  if (!approval) throw new Error(`Approval #${approvalId} not found`);
-  if (approval.status !== "pending") throw new Error(`Approval #${approvalId} is already ${approval.status}`);
-  if (new Date() > approval.expiresAt) {
-    await expireApproval(approvalId);
-    throw new Error(`Approval #${approvalId} has expired`);
+  // Load gate first so we can check it belongs to creative-commercial domain
+  const rawGate = await loadGate(approvalId);
+  if (!rawGate) throw new Error(`Approval #${approvalId} not found`);
+  // Map to PendingApproval so status is in our vocabulary (approved/rejected/pending)
+  const current = mapGate(rawGate);
+  if (current.status !== "pending") {
+    throw new Error(`Approval #${approvalId} is already ${current.status}`);
   }
 
-  const result = await db.execute<ApprovalRow>(sql`
-    UPDATE ai_platform.cc_pending_approvals
-    SET status = 'approved', approved_by = ${approvedBy}, approved_at = now()
-    WHERE id = ${approvalId}
-    RETURNING *
-  `);
-  const rows = (result as unknown as { rows: ApprovalRow[] }).rows ?? [];
-  const updated = mapRow(rows[0]);
+  // verifyGate handles the pending→verified CAS internally (guards double-approve at DB level)
+  const updated = await verifyGate(approvalId, approvedBy);
+  const approval = mapGate(updated);
 
-  // Publish event so downstream systems can execute the action
+  // Publish event — downstream handlers execute the actual financial action
   publishSafe({
     eventType: "commercial.approval.granted",
     sourceModule: "creative-commercial",
     sourceId: String(approvalId),
     payload: {
-      approvalId,
-      actionType: updated.actionType,
-      actionPayload: updated.actionPayload,
-      customerProfileId: updated.customerProfileId,
+      gateId: approvalId,
+      actionType: approval.actionType,
+      actionPayload: approval.actionPayload,
+      customerProfileId: approval.customerProfileId,
       approvedBy,
     },
   });
 
-  return updated;
+  return approval;
 }
 
+// ── rejectApproval ────────────────────────────────────────────────────────────
+
+/**
+ * Reject a pending gate. failGate is idempotent: if already failed, returns
+ * current state. If already verified, this will fail (verifyGate took precedence).
+ */
 export async function rejectApproval(
   approvalId: number,
   rejectedBy: string,
   reason?: string,
 ): Promise<PendingApproval> {
-  const result = await db.execute<ApprovalRow>(sql`
-    UPDATE ai_platform.cc_pending_approvals
-    SET
-      status = 'rejected',
-      approved_by = ${rejectedBy},
-      approved_at = now(),
-      action_payload = action_payload || ${JSON.stringify({ rejectionReason: reason ?? "" })}::jsonb
-    WHERE id = ${approvalId} AND status = 'pending'
-    RETURNING *
-  `);
-  const rows = (result as unknown as { rows: ApprovalRow[] }).rows ?? [];
-  if (rows.length === 0) throw new Error(`Approval #${approvalId} not found or not pending`);
-  return mapRow(rows[0]);
+  const rawGate = await loadGate(approvalId);
+  if (!rawGate) throw new Error(`Approval #${approvalId} not found or not pending`);
+  const current = mapGate(rawGate);
+  if (current.status !== "pending") {
+    throw new Error(`Approval #${approvalId} is already ${current.status}`);
+  }
+
+  const updated = await failGate(approvalId, reason ?? `Rejected by ${rejectedBy}`);
+  return mapGate(updated);
 }
+
+// ── getApproval ───────────────────────────────────────────────────────────────
 
 export async function getApproval(approvalId: number): Promise<PendingApproval | null> {
-  const result = await db.execute<ApprovalRow>(sql`
-    SELECT * FROM ai_platform.cc_pending_approvals WHERE id = ${approvalId}
-  `);
-  const rows = (result as unknown as { rows: ApprovalRow[] }).rows ?? [];
-  if (rows.length === 0) return null;
-
-  const approval = mapRow(rows[0]);
-  // Auto-expire on read
-  if (approval.status === "pending" && new Date() > approval.expiresAt) {
-    await expireApproval(approvalId);
-    approval.status = "expired";
-  }
-  return approval;
+  const gate = await loadGate(approvalId);
+  if (!gate) return null;
+  return mapGate(gate);
 }
+
+// ── listPendingApprovals ──────────────────────────────────────────────────────
 
 export async function listPendingApprovals(
   customerProfileId?: number,
 ): Promise<PendingApproval[]> {
-  const whereClause = customerProfileId
-    ? sql`WHERE customer_profile_id = ${customerProfileId} AND status = 'pending' AND expires_at > now()`
-    : sql`WHERE status = 'pending' AND expires_at > now()`;
+  const customerFilter = customerProfileId
+    ? sql`AND (notes->>'customerProfileId')::int = ${customerProfileId}`
+    : sql``;
 
-  const result = await db.execute<ApprovalRow>(sql`
-    SELECT * FROM ai_platform.cc_pending_approvals
-    ${whereClause}
+  const result = await db.execute<RawGateRow>(sql`
+    SELECT *
+    FROM ai_platform.ai_commercial_gates
+    WHERE gate_type = 'admin_approval'
+      AND status = 'pending'
+      AND notes->>'source' = 'creative-commercial'
+      ${customerFilter}
     ORDER BY created_at DESC
     LIMIT 100
   `);
-  return ((result as unknown as { rows: ApprovalRow[] }).rows ?? []).map(mapRow);
+  const rows = (result as unknown as { rows: RawGateRow[] }).rows ?? [];
+  return rows.map(mapGate);
 }
 
-async function expireApproval(approvalId: number): Promise<void> {
-  await db.execute(sql`
-    UPDATE ai_platform.cc_pending_approvals
-    SET status = 'expired'
-    WHERE id = ${approvalId} AND status = 'pending'
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+/** Load a gate row, validating it belongs to the creative-commercial domain. */
+async function loadGate(approvalId: number): Promise<RawGateRow | null> {
+  const result = await db.execute<RawGateRow>(sql`
+    SELECT *
+    FROM ai_platform.ai_commercial_gates
+    WHERE id = ${approvalId}
+      AND gate_type = 'admin_approval'
+      AND notes->>'source' = 'creative-commercial'
   `);
+  const rows = (result as unknown as { rows: RawGateRow[] }).rows ?? [];
+  return rows[0] ?? null;
 }

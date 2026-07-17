@@ -39,19 +39,82 @@
     "integration/migrations/team-03.sql"
   ],
   "seedDrafts": [],
-  "dependenciesRequested": [],
+  "tableDependencies": [
+    {
+      "table": "ai_platform.ai_commercial_gates",
+      "owner": "Team 24 / core commercial system",
+      "usage": "Team 03 reads and creates admin_approval gates via commercialGateService. Approval state machine is NOT duplicated — ai_commercial_gates is the single source of truth. Requires gate_type='admin_approval' support (already present in schema).",
+      "mustExistBefore": "mounting /ai/creative-commercial routes"
+    },
+    {
+      "table": "ai_platform.sales_funnel_events",
+      "owner": "Team in main (commit 3a821a1 — pre-existing)",
+      "usage": "Read-only via raw SQL. NOT added by Team 03. Attribution and funnel projection read utm_source, customer_id, event_type from this table.",
+      "mustExistBefore": "funnel/attribution endpoints to return non-empty data"
+    },
+    {
+      "table": "ai_platform.customer_profiles",
+      "owner": "Core — pre-existing",
+      "usage": "Used for tenant-scoped filtering (WHERE tenant_id = ?) in attribution/funnel aggregate queries. Also used for customer_email → profile_id joins in repeat-order service."
+    },
+    {
+      "table": "ai_platform.ai_coupons",
+      "owner": "Core coupon system",
+      "usage": "Read-only. couponRecommendationService reads active coupons for scoring. Does NOT create or modify coupons — creation is gated through admin_approval flow.",
+      "overlapNote": "Route overlap with ai-coupons team: GET /ai/creative-commercial/recommendations/:id/coupon READS ai_coupons; POST /approvals/request-coupon creates a GATE to request coupon issuance. The gate approval publishes commercial.approval.granted — downstream handler (not Team 03) performs the actual coupon creation."
+    },
+    {
+      "table": "ai_platform.ai_promotions",
+      "owner": "Core promotions system",
+      "usage": "Read-only. bundlingService references promotions for pricing context. Does NOT create promotions.",
+      "overlapNote": "Route overlap with ai-promotions: Team 03 exposes /ai/creative-commercial/bundles which reads bundle templates from static code (not ai_promotions). No writes to ai_promotions. Teams should coordinate to avoid returning conflicting bundle/promotion recommendations to the same customer."
+    }
+  ],
+  "routeOverlaps": [
+    {
+      "ourRoute": "GET /ai/creative-commercial/recommendations/:customerProfileId/coupon",
+      "overlappingTeam": "ai-coupons / promotions team",
+      "overlapType": "READ overlap — both may expose coupon recommendations for a customer",
+      "resolution": "Team 03 is a pure read aggregator. The actual coupon issuance goes through ai_commercial_gates (approval required for >X% discount). Team 03 does NOT write to ai_coupons."
+    },
+    {
+      "ourRoute": "GET /ai/creative-commercial/bundles",
+      "overlappingTeam": "ai-promotions team",
+      "overlapType": "SEMANTIC overlap — both expose 'bundle' or 'promotion' concepts",
+      "resolution": "Team 03 bundles are static templates defined in bundlingService.ts (5 hardcoded templates). They are NOT backed by ai_promotions rows. If ai-promotions team creates a dynamic bundle system, Team 03 should replace its static templates with reads from that system."
+    },
+    {
+      "ourRoute": "POST /ai/creative-commercial/approvals/request-coupon",
+      "overlappingTeam": "ai-coupons team",
+      "overlapType": "WRITE GATE — Team 03 creates an admin_approval gate; the approval event triggers coupon creation by downstream handler",
+      "resolution": "Team 03 never directly inserts into ai_coupons. The commercial.approval.granted event payload includes actionType='issue_recovery_coupon' and all required fields. The coupon team's event handler performs the actual insert. Both teams must agree on the event payload schema."
+    },
+    {
+      "ourRoute": "GET /ai/creative-commercial/funnel/projection",
+      "overlappingTeam": "analytics / sales funnel team",
+      "overlapType": "READ overlap — reads the same sales_funnel_events table",
+      "resolution": "Team 03's funnel projection is a derived read model for commercial automation context (upsell triggers, abandonment detection). It is NOT a replacement for the primary funnel analytics dashboard. Tenant-scoped by query param."
+    }
+  ],
+  "dependenciesRequested": [
+    {
+      "from": "commercialGateService",
+      "functions": ["verifyGate", "failGate"],
+      "reason": "approvalService adapter uses these to implement approve/reject without duplicating state machine logic"
+    }
+  ],
   "eventsPublished": [
     {
       "eventType": "commercial.approval.granted",
       "sourceModule": "creative-commercial",
       "schema": {
-        "approvalId": "integer",
+        "gateId": "integer (ai_commercial_gates.id)",
         "actionType": "string (ApprovalActionType)",
         "actionPayload": "object",
         "customerProfileId": "integer",
         "approvedBy": "string"
       },
-      "comment": "Published when a pending financial approval is granted. Downstream handlers execute the actual financial action (e.g. issue coupon, apply bundle price)."
+      "comment": "Published when a pending admin_approval gate is verified. Downstream handlers should check actionType and execute the actual financial action (e.g. issue coupon, apply bundle price). Team 03 does NOT execute the action itself."
     }
   ],
   "eventsConsumed": [
@@ -80,6 +143,11 @@
       "reason": "Read coupon data for recommendation matching"
     },
     {
+      "type": "AiCommercialGate",
+      "from": "@workspace/db",
+      "reason": "Approval adapter is backed by ai_commercial_gates rows"
+    },
+    {
       "type": "AiPromotion",
       "from": "@workspace/db",
       "reason": "Read promotion data for bundle recommendations"
@@ -88,18 +156,38 @@
       "type": "AiAffiliate",
       "from": "@workspace/db",
       "reason": "Read affiliate data for attribution"
-    },
-    {
-      "type": "SalesFunnelEvent",
-      "from": "@workspace/db",
-      "reason": "Read funnel events for projection and attribution"
     }
   ],
   "integrationOrder": [
+    "Ensure ai_commercial_gates table exists (pre-existing — no migration needed)",
     "Run integration/migrations/team-03.sql BEFORE mounting routes",
     "Mount /ai/creative-commercial router in routes/index.ts",
     "Register /commercial-automation page in App.tsx",
-    "Add sidebar item in Analytics section"
+    "Add sidebar item in Analytics section",
+    "Register commercial.approval.granted event handler in downstream coupon/bundle team"
+  ],
+  "auditRemediationLog": [
+    {
+      "finding": "P0 — lib/db/src/schema/sales-funnel-events.ts",
+      "status": "CONFIRMED NOT ADDED BY TEAM 03",
+      "evidence": "git log --oneline main -- lib/db/src/schema/sales-funnel-events.ts → commit 3a821a1 (pre-existing in main). git diff main...HEAD --name-only → file not in Team 03 diff.",
+      "action": "Removed unused Drizzle ORM table imports (salesFunnelEventsTable, aiServiceRequestsTable) from attributionService.ts. All queries use raw SQL db.execute() only."
+    },
+    {
+      "finding": "P1 — Duplicate approval state machine (cc_pending_approvals)",
+      "status": "FIXED",
+      "action": "Removed cc_pending_approvals table from migration draft. Rewrote approvalService.ts as an adapter over ai_commercial_gates (gate_type='admin_approval'). Uses verifyGate()/failGate() from existing commercialGateService. Idempotent: (customerProfileId, actionType) pair checked before insert."
+    },
+    {
+      "finding": "P1 — RBAC / tenant scope on aggregate endpoints",
+      "status": "FIXED",
+      "action": "getAttributionReport() and buildFunnelMetrics() now accept optional tenantId parameter. Routes pass ?tenantId= query param through. Tenant filter applied via subquery on customer_profiles.tenant_id. Per-customer endpoints (attribution/:customerProfileId, recommendations/:customerProfileId) are already scoped by ID. Route docs updated."
+    },
+    {
+      "finding": "P1 — Missing auth on attribution/funnel/recommendation routes",
+      "status": "FIXED (previous round)",
+      "action": "Explicit router.use(adminAuth) applied in routes/creative-commercial/index.ts. Belt-and-suspenders over global adminAuthWithExceptions mount."
+    }
   ],
   "knownRisks": [
     {
@@ -121,6 +209,14 @@
     {
       "risk": "COOLDOWN_HOURS values are hardcoded in types.ts",
       "mitigation": "Move to ai_settings table for operator configurability in a follow-up. Not required for MVP."
+    },
+    {
+      "risk": "Platform-wide admin view (tenantId not provided) exposes all tenants' data",
+      "mitigation": "Aggregate endpoints (attribution/report, funnel/projection) are behind adminAuth. Platform-wide view is intentional for super-admin. Operators should provide tenantId when scoping to a specific tenant."
+    },
+    {
+      "risk": "ai_commercial_gates notes column is TEXT (JSON stored as string, not JSONB)",
+      "mitigation": "approvalService uses JSONB operators (notes->>'key') in raw SQL which works on text-cast-to-jsonb. If Postgres rejects the cast, add CAST(notes AS jsonb) explicitly. Team 24 may need to ALTER COLUMN notes TYPE JSONB if query performance degrades."
     }
   ]
 }

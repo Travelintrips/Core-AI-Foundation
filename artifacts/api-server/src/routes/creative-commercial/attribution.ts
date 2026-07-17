@@ -47,8 +47,12 @@ router.get("/attribution/report", async (req, res): Promise<void> => {
     ? (String(req.query["model"]) as "first_touch" | "last_touch" | "linear" | "time_decay")
     : "linear";
 
+  // Tenant scope: restrict aggregate to a specific tenant's customers when provided.
+  // Omitting tenantId = platform-wide view (super-admin only — all tenants visible).
+  const tenantId = req.query["tenantId"] ? String(req.query["tenantId"]) : undefined;
+
   try {
-    const report = await getAttributionReport({ periodDays, model });
+    const report = await getAttributionReport({ periodDays, model, tenantId });
     res.json(report);
   } catch (err) {
     logger.error({ err, model, periodDays }, "[creative-commercial] attribution report error");

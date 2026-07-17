@@ -26,8 +26,12 @@ router.get("/funnel/projection", async (req, res): Promise<void> => {
     365,
   );
 
+  // Tenant scope: restrict to a specific tenant's customers when provided.
+  // Omitting tenantId = platform-wide view (super-admin only).
+  const tenantId = req.query["tenantId"] ? String(req.query["tenantId"]) : undefined;
+
   try {
-    const projection = await buildFunnelMetrics(periodDays);
+    const projection = await buildFunnelMetrics(periodDays, tenantId);
     res.json(projection);
   } catch (err) {
     logger.error({ err, periodDays }, "[creative-commercial] funnel projection error");

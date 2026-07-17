@@ -18,8 +18,8 @@
  * No mutations to commercial source of truth — pure read model.
  */
 
-import { db, salesFunnelEventsTable, aiServiceRequestsTable } from "@workspace/db";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { db } from "@workspace/db";
+import { sql } from "drizzle-orm";
 import type { AttributionSummary, AttributionTouchpoint, TouchpointType } from "./types.js";
 
 type AttributionModel = "first_touch" | "last_touch" | "linear" | "time_decay";
@@ -163,10 +163,19 @@ export async function calculateAttribution(opts: {
 
 /**
  * Bulk attribution report: aggregates across all service requests in a period.
+ *
+ * RBAC / Tenant scope:
+ *   - tenantId: when provided, restricts results to customers belonging to that
+ *     tenant via customer_profiles.tenant_id. Pass null or omit for platform-wide
+ *     (super-admin) view — only callers with platform-level privilege should omit.
+ *   - Per-customer endpoints (getCustomerTouchpoints / calculateAttribution) are
+ *     already scoped by customerProfileId and need no additional filter here.
  */
 export async function getAttributionReport(opts: {
   periodDays?: number;
   model?: AttributionModel;
+  /** Restrict to a specific tenant. null/undefined = platform-wide (admin only). */
+  tenantId?: string | null;
 }): Promise<{
   model: AttributionModel;
   periodDays: number;
@@ -181,6 +190,14 @@ export async function getAttributionReport(opts: {
   const periodDays = opts.periodDays ?? 30;
   const model = opts.model ?? "linear";
 
+  // Build tenant scope filter — restricts customer_id to the tenant's customers.
+  // When tenantId is not provided, no filter is applied (platform-wide view).
+  const tenantFilter = opts.tenantId != null
+    ? sql`AND customer_id IN (
+        SELECT id FROM ai_platform.customer_profiles WHERE tenant_id = ${opts.tenantId}
+      )`
+    : sql``;
+
   const result = await db.execute<{
     utm_source: string | null;
     customer_id: number | null;
@@ -192,6 +209,7 @@ export async function getAttributionReport(opts: {
       count(*) AS event_count
     FROM ai_platform.sales_funnel_events
     WHERE created_at >= now() - ${periodDays} * interval '1 day'
+      ${tenantFilter}
     GROUP BY coalesce(utm_source, 'direct'), customer_id
     HAVING customer_id IS NOT NULL
   `);
@@ -221,9 +239,14 @@ export async function getAttributionReport(opts: {
       coalesce(sfe.utm_source, 'direct') AS utm_source,
       count(DISTINCT sr.id) AS conversion_count
     FROM ai_platform.ai_service_requests sr
-    JOIN ai_platform.sales_funnel_events sfe ON sfe.customer_id = sr.customer_profile_id
+    JOIN ai_platform.sales_funnel_events sfe ON sfe.customer_id::int = (
+      SELECT id FROM ai_platform.customer_profiles WHERE client_email = sr.customer_email LIMIT 1
+    )
     WHERE sr.created_at >= now() - ${periodDays} * interval '1 day'
       AND sr.status IN ('completed', 'delivered')
+      ${opts.tenantId != null ? sql`AND (
+        SELECT id FROM ai_platform.customer_profiles WHERE client_email = sr.customer_email LIMIT 1
+      ) IN (SELECT id FROM ai_platform.customer_profiles WHERE tenant_id = ${opts.tenantId})` : sql``}
     GROUP BY coalesce(sfe.utm_source, 'direct')
   `);
 
