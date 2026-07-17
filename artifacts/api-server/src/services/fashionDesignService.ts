@@ -18,6 +18,12 @@ import {
   type FashionDesignBlueprint,
   type FashionOrderStatus,
 } from "../domains/fashion-design/schema.js";
+import {
+  checkGenerationAllowed,
+  recordGenerationUsed,
+  cacheIdempotencyResult,
+} from "../domains/fashion-design/generationGuard.js";
+import { validateBlueprintUrls } from "../domains/fashion-design/fileSafety.js";
 import { eq, desc, and, like, SQL } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 
@@ -334,6 +340,16 @@ export async function saveBlueprint(
     violations.push(motifResult.error);
   }
 
+  // ── File safety: validate logo / sponsor URLs ────────────────────────────
+  const urlViolations = await validateBlueprintUrls(
+    {
+      logoPlacement: input.logoPlacement as Record<string, unknown> | null,
+      sponsors: input.sponsors as Array<Record<string, unknown>> | null,
+    },
+    orderId,
+  );
+  for (const v of urlViolations) violations.push(v);
+
   // Trademark check on name/number fields
   const tmFields: Record<string, string> = {};
   if (input.nameValue) tmFields["nameValue"] = input.nameValue;
@@ -442,7 +458,21 @@ export async function runTrademarkCheck(
 
 // ── Output generation (mock — production requires AI pipeline integration) ────
 
-export async function generateOutputs(orderId: number): Promise<GenerationResult> {
+export interface GenerationOptions {
+  /** Caller identifier (admin key suffix or IP) for domain rate limiting */
+  callerId?: string;
+  /** x-idempotency-key header value */
+  idempotencyKey?: string;
+  /** Estimated input tokens for this request */
+  estimatedInputTokens?: number;
+  /** Optional project ID for budget preflight */
+  projectId?: string;
+}
+
+export async function generateOutputs(
+  orderId: number,
+  opts: GenerationOptions = {},
+): Promise<GenerationResult & { fromCache?: boolean }> {
   const order = await getOrder(orderId);
   if (!order) throw new Error("Order not found");
   if (!["blueprint_ready", "review"].includes(order.status)) {
@@ -450,6 +480,34 @@ export async function generateOutputs(orderId: number): Promise<GenerationResult
   }
   if (!order.trademarkSafe) {
     throw new Error("Cannot generate outputs for an order with trademark flags. Resolve trademark issues first.");
+  }
+
+  // ── Cost & rate guard ────────────────────────────────────────────────────
+  const callerId = opts.callerId ?? `order:${orderId}`;
+  const guard = await checkGenerationAllowed({
+    callerId,
+    idempotencyKey: opts.idempotencyKey,
+    estimatedInputTokens: opts.estimatedInputTokens,
+    projectId: opts.projectId,
+    orderStatus: order.status,
+  });
+
+  if (!guard.allowed) {
+    if (guard.reason === "duplicate" && guard.cachedResult !== undefined) {
+      return { ...(guard.cachedResult as GenerationResult), fromCache: true };
+    }
+    if (guard.reason === "rate_limited") {
+      throw new Error(`Rate limit exceeded. Max ${guard.remainingGenerations ?? 0} generations remaining this hour.`);
+    }
+    if (guard.reason === "budget_exceeded") {
+      throw new Error(
+        `Budget exceeded: ${guard.currentBudgetUsd?.toFixed(4) ?? "?"} / ${guard.maxBudgetUsd?.toFixed(2) ?? "?"} max.`,
+      );
+    }
+    if (guard.reason === "token_cap") {
+      throw new Error("Request exceeds per-request token cap.");
+    }
+    throw new Error(`Generation blocked: ${guard.reason}`);
   }
 
   const bp = await getBlueprint(orderId);
@@ -508,7 +566,9 @@ export async function generateOutputs(orderId: number): Promise<GenerationResult
 
   logger.info({ orderId }, "[fashion-design] Outputs generated");
 
-  return {
+  // Record rate slot and cache for idempotency
+  recordGenerationUsed(callerId);
+  const result: GenerationResult = {
     outputs,
     warnings: [
       "Flat design and front/back preview require AI image generation pipeline connection.",
@@ -516,6 +576,11 @@ export async function generateOutputs(orderId: number): Promise<GenerationResult
       ...warnings,
     ],
   };
+  if (opts.idempotencyKey) {
+    cacheIdempotencyResult(opts.idempotencyKey, result);
+  }
+
+  return result;
 }
 
 // ── Metadata helpers ──────────────────────────────────────────────────────────

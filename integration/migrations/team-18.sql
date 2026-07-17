@@ -2,6 +2,13 @@
 -- Schema: ai_platform
 -- Tables: fashion_design_orders, fashion_design_blueprints
 -- Run against your Supabase dev/prod database.
+--
+-- IMPORTANT: This file is a DRAFT — do NOT apply directly.
+-- Team 24 controls migration execution via controlled migration process.
+--
+-- P1 FIX: updated_at trigger uses domain-unique function name
+-- `ai_platform.fashion_design_set_updated_at()` instead of the generic
+-- `ai_platform.set_updated_at()` which would override shared DB functions.
 
 SET search_path = ai_platform, public;
 
@@ -100,21 +107,26 @@ CREATE INDEX IF NOT EXISTS idx_fashion_design_orders_created_at
 CREATE INDEX IF NOT EXISTS idx_fashion_design_blueprints_order_id
     ON ai_platform.fashion_design_blueprints (order_id);
 
--- ── updated_at trigger ────────────────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION ai_platform.set_updated_at()
+-- ── updated_at trigger — DOMAIN-UNIQUE function name ─────────────────────────
+-- P1 FIX: Named `fashion_design_set_updated_at` (not the generic `set_updated_at`)
+-- to avoid overriding any shared DB function used by other teams.
+-- Does NOT drop triggers owned by other domains.
+CREATE OR REPLACE FUNCTION ai_platform.fashion_design_set_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
 $$;
 
-DROP TRIGGER IF EXISTS trg_fashion_design_orders_updated_at ON ai_platform.fashion_design_orders;
+DROP TRIGGER IF EXISTS trg_fashion_design_orders_updated_at
+    ON ai_platform.fashion_design_orders;
 CREATE TRIGGER trg_fashion_design_orders_updated_at
     BEFORE UPDATE ON ai_platform.fashion_design_orders
-    FOR EACH ROW EXECUTE FUNCTION ai_platform.set_updated_at();
+    FOR EACH ROW EXECUTE FUNCTION ai_platform.fashion_design_set_updated_at();
 
-DROP TRIGGER IF EXISTS trg_fashion_design_blueprints_updated_at ON ai_platform.fashion_design_blueprints;
+DROP TRIGGER IF EXISTS trg_fashion_design_blueprints_updated_at
+    ON ai_platform.fashion_design_blueprints;
 CREATE TRIGGER trg_fashion_design_blueprints_updated_at
     BEFORE UPDATE ON ai_platform.fashion_design_blueprints
-    FOR EACH ROW EXECUTE FUNCTION ai_platform.set_updated_at();
+    FOR EACH ROW EXECUTE FUNCTION ai_platform.fashion_design_set_updated_at();
 
 -- ── Comments ──────────────────────────────────────────────────────────────────
 COMMENT ON TABLE ai_platform.fashion_design_orders IS
@@ -128,3 +140,6 @@ COMMENT ON COLUMN ai_platform.fashion_design_orders.trademark_safe IS
 
 COMMENT ON COLUMN ai_platform.fashion_design_orders.composition_json IS
     'Editable JSON output for re-import into design tools. NOT a production pattern — requires size spec and technical review.';
+
+COMMENT ON FUNCTION ai_platform.fashion_design_set_updated_at() IS
+    'Team 18 domain-local updated_at trigger. Deliberately named with domain prefix to avoid overriding shared set_updated_at functions.';

@@ -1,15 +1,15 @@
 /**
  * fashion-design.ts — Fashion & Apparel Design routes (Team 18)
  *
- * Auth: All admin routes have EXPLICIT adminAuth middleware at router-level.
- *       Public service-listing route (GET /services) has NO auth middleware.
- *       When mounted, Team 24 must also add PUBLIC_ROUTE_RULES exception for
- *       GET /ai/fashion-design/services in adminAuth.ts.
+ * Auth: fashionDesignAuthGuard + adminAuth on ALL admin routes (explicit,
+ *       router-level). Public service-listing route has NO auth middleware.
+ *
+ * Rate limiting: aiGenerationLimiter (existing shared middleware) on /generate.
+ *
+ * Idempotency: x-idempotency-key header on POST /generate.
  *
  * Route prefix: paths do NOT include /api (applied by app.ts mount point).
- *
- * IMPORTANT: Do NOT import zod/v4 here. Use plain zod for request parsing.
- * IMPORTANT: Route paths do NOT include the /api prefix.
+ * IMPORTANT: Do NOT import zod/v4. Use plain zod only.
  * IMPORTANT: This router is NOT mounted in routes/index.ts (locked file).
  *            See integration/manifests/team-18.json → routesToMount.
  */
@@ -17,6 +17,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { adminAuth } from "../middleware/adminAuth.js";
+import { aiGenerationLimiter } from "../middleware/rateLimiter.js";
+import { fashionDesignAuthGuard } from "../domains/fashion-design/authGuard.js";
 import {
   createOrder,
   listOrders,
@@ -50,6 +52,13 @@ function handleError(res: import("express").Response, err: unknown) {
 function parseId(raw: string | undefined): number | null {
   const n = parseInt(raw ?? "", 10);
   return isNaN(n) ? null : n;
+}
+
+function getCallerId(req: import("express").Request): string {
+  const key = req.headers["x-admin-api-key"] ?? req.headers["x-admin-key"];
+  if (typeof key === "string" && key) return `key:${key.slice(-8)}`;
+  const ip = req.ip ?? req.socket?.remoteAddress ?? "unknown";
+  return `ip:${ip}`;
 }
 
 // ── Request schemas ───────────────────────────────────────────────────────────
@@ -87,14 +96,13 @@ const saveBlueprintSchema = z.object({
   sponsors: z.array(z.record(z.unknown())).max(10).optional(),
 });
 
-// ── Public routes (no admin key required) ─────────────────────────────────────
+// ── Public routes ─────────────────────────────────────────────────────────────
 
 /**
  * GET /ai/fashion-design/services
  * Lists available apparel service types with panel/output metadata.
- * Public — no auth middleware on this handler.
- * Note: When router is mounted, Team 24 must also add PUBLIC_ROUTE_RULES
- * exception in adminAuth.ts so the global middleware skips this path.
+ * Public — no auth middleware. When mounted, Team 24 must also add
+ * PUBLIC_ROUTE_RULES exception in adminAuth.ts.
  */
 router.get("/ai/fashion-design/services", (_req, res) => {
   try {
@@ -107,11 +115,7 @@ router.get("/ai/fashion-design/services", (_req, res) => {
 
 // ── Orders (admin) ────────────────────────────────────────────────────────────
 
-/**
- * POST /ai/fashion-design/orders
- * Create a new fashion design order.
- */
-router.post("/ai/fashion-design/orders", adminAuth, async (req, res) => {
+router.post("/ai/fashion-design/orders", fashionDesignAuthGuard, adminAuth, async (req, res) => {
   try {
     const parsed = createOrderSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -125,11 +129,7 @@ router.post("/ai/fashion-design/orders", adminAuth, async (req, res) => {
   }
 });
 
-/**
- * GET /ai/fashion-design/orders
- * List all orders with pagination (admin).
- */
-router.get("/ai/fashion-design/orders", adminAuth, async (req, res) => {
+router.get("/ai/fashion-design/orders", fashionDesignAuthGuard, adminAuth, async (req, res) => {
   try {
     const page = parseInt(String(req.query["page"] ?? "1"), 10);
     const pageSize = Math.min(parseInt(String(req.query["pageSize"] ?? "20"), 10), 100);
@@ -144,11 +144,7 @@ router.get("/ai/fashion-design/orders", adminAuth, async (req, res) => {
   }
 });
 
-/**
- * GET /ai/fashion-design/orders/:id
- * Get a single order with its blueprint (admin).
- */
-router.get("/ai/fashion-design/orders/:id", adminAuth, async (req, res) => {
+router.get("/ai/fashion-design/orders/:id", fashionDesignAuthGuard, adminAuth, async (req, res) => {
   try {
     const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -162,11 +158,7 @@ router.get("/ai/fashion-design/orders/:id", adminAuth, async (req, res) => {
   }
 });
 
-/**
- * PATCH /ai/fashion-design/orders/:id/status
- * Update order status (admin).
- */
-router.patch("/ai/fashion-design/orders/:id/status", adminAuth, async (req, res) => {
+router.patch("/ai/fashion-design/orders/:id/status", fashionDesignAuthGuard, adminAuth, async (req, res) => {
   try {
     const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -185,11 +177,7 @@ router.patch("/ai/fashion-design/orders/:id/status", adminAuth, async (req, res)
   }
 });
 
-/**
- * PATCH /ai/fashion-design/orders/:id/colorways
- * Update colorways and motif config (admin).
- */
-router.patch("/ai/fashion-design/orders/:id/colorways", adminAuth, async (req, res) => {
+router.patch("/ai/fashion-design/orders/:id/colorways", fashionDesignAuthGuard, adminAuth, async (req, res) => {
   try {
     const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -200,11 +188,7 @@ router.patch("/ai/fashion-design/orders/:id/colorways", adminAuth, async (req, r
       return;
     }
 
-    const updated = await updateOrderColorways(
-      id,
-      parsed.data.colorways,
-      parsed.data.motifConfig,
-    );
+    const updated = await updateOrderColorways(id, parsed.data.colorways, parsed.data.motifConfig);
     if (!updated) { res.status(404).json({ error: "Order not found" }); return; }
     res.json(updated);
   } catch (err) {
@@ -212,11 +196,7 @@ router.patch("/ai/fashion-design/orders/:id/colorways", adminAuth, async (req, r
   }
 });
 
-/**
- * DELETE /ai/fashion-design/orders/:id
- * Delete a draft/cancelled order (admin).
- */
-router.delete("/ai/fashion-design/orders/:id", adminAuth, async (req, res) => {
+router.delete("/ai/fashion-design/orders/:id", fashionDesignAuthGuard, adminAuth, async (req, res) => {
   try {
     const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -231,11 +211,7 @@ router.delete("/ai/fashion-design/orders/:id", adminAuth, async (req, res) => {
 
 // ── Blueprint (admin) ─────────────────────────────────────────────────────────
 
-/**
- * GET /ai/fashion-design/orders/:id/blueprint
- * Get blueprint for an order (admin).
- */
-router.get("/ai/fashion-design/orders/:id/blueprint", adminAuth, async (req, res) => {
+router.get("/ai/fashion-design/orders/:id/blueprint", fashionDesignAuthGuard, adminAuth, async (req, res) => {
   try {
     const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -250,12 +226,7 @@ router.get("/ai/fashion-design/orders/:id/blueprint", adminAuth, async (req, res
   }
 });
 
-/**
- * PUT /ai/fashion-design/orders/:id/blueprint
- * Save/update blueprint spec for an order (admin).
- * Validates panel constraints, numbering, logo placement, motif repeat.
- */
-router.put("/ai/fashion-design/orders/:id/blueprint", adminAuth, async (req, res) => {
+router.put("/ai/fashion-design/orders/:id/blueprint", fashionDesignAuthGuard, adminAuth, async (req, res) => {
   try {
     const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -275,11 +246,7 @@ router.put("/ai/fashion-design/orders/:id/blueprint", adminAuth, async (req, res
 
 // ── Trademark check (admin) ───────────────────────────────────────────────────
 
-/**
- * POST /ai/fashion-design/orders/:id/trademark-check
- * Run trademark safety check against known brand blocklist (admin).
- */
-router.post("/ai/fashion-design/orders/:id/trademark-check", adminAuth, async (req, res) => {
+router.post("/ai/fashion-design/orders/:id/trademark-check", fashionDesignAuthGuard, adminAuth, async (req, res) => {
   try {
     const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -291,30 +258,56 @@ router.post("/ai/fashion-design/orders/:id/trademark-check", adminAuth, async (r
   }
 });
 
-// ── Generation (admin) ────────────────────────────────────────────────────────
+// ── Generation (admin + rate-limited + idempotency) ───────────────────────────
 
 /**
  * POST /ai/fashion-design/orders/:id/generate
- * Generate outputs: composition JSON, placement spec, colorways (admin).
- * Image generation (flat-design, front/back preview) requires AI pipeline.
+ *
+ * Protected by:
+ *   1. fashionDesignAuthGuard — blocks if ADMIN_API_KEY not configured
+ *   2. adminAuth              — validates the key / session
+ *   3. aiGenerationLimiter    — shared 10 req / 10 min per-IP limiter
+ *
+ * Idempotency: pass x-idempotency-key header to get cached result on retry.
+ * Cost guards:  per-caller rate limit + budget preflight inside generateOutputs.
  */
-router.post("/ai/fashion-design/orders/:id/generate", adminAuth, async (req, res) => {
-  try {
-    const id = parseId(req.params["id"] as string);
-    if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
+router.post(
+  "/ai/fashion-design/orders/:id/generate",
+  fashionDesignAuthGuard,
+  adminAuth,
+  aiGenerationLimiter,
+  async (req, res) => {
+    try {
+      const id = parseId(req.params["id"] as string);
+      if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
 
-    const result = await generateOutputs(id);
-    res.json(result);
-  } catch (err) {
-    handleError(res, err);
-  }
-});
+      const idempotencyKey = typeof req.headers["x-idempotency-key"] === "string"
+        ? req.headers["x-idempotency-key"]
+        : undefined;
+      const callerId = getCallerId(req);
 
-/**
- * GET /ai/fashion-design/orders/:id/outputs
- * Get generated outputs for an order (admin).
- */
-router.get("/ai/fashion-design/orders/:id/outputs", adminAuth, async (req, res) => {
+      const result = await generateOutputs(id, { idempotencyKey, callerId });
+
+      if (result.fromCache) {
+        res.setHeader("X-Idempotent-Replayed", "true");
+      }
+      res.json(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unexpected error";
+      if (msg.includes("rate_limited") || msg.includes("Rate limit")) {
+        res.status(429).json({ error: msg, code: "RATE_LIMIT_EXCEEDED" });
+        return;
+      }
+      if (msg.includes("budget") || msg.includes("Budget")) {
+        res.status(402).json({ error: msg, code: "BUDGET_EXCEEDED" });
+        return;
+      }
+      handleError(res, err);
+    }
+  },
+);
+
+router.get("/ai/fashion-design/orders/:id/outputs", fashionDesignAuthGuard, adminAuth, async (req, res) => {
   try {
     const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }

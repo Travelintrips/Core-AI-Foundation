@@ -118,6 +118,19 @@
     "adminPanel": "/fashion-design"
   },
 
+  "integrationRequests": [
+    {
+      "requestId": "IR-18-01",
+      "priority": "P1",
+      "target": "Team 24 / Shared Infrastructure",
+      "file": "artifacts/api-server/src/middleware/adminAuth.ts",
+      "issue": "adminAuth fails OPEN in NODE_ENV=development when ADMIN_API_KEY is not configured (lines 37-41). Any team's router that relies solely on adminAuth is exposed to fail-open auth in dev environments.",
+      "requestedChange": "Remove the NODE_ENV=development fail-open bypass. Return 401 in ALL environments when ADMIN_API_KEY is missing. The dev convenience can be replaced by a documented .env.example file.",
+      "workaround": "Team 18 has implemented fashionDesignAuthGuard (artifacts/api-server/src/domains/fashion-design/authGuard.ts) that runs BEFORE adminAuth and returns 503 if ADMIN_API_KEY is not configured, regardless of NODE_ENV.",
+      "testEvidence": "fashionDesignAuthGuard test: 'blocks in development mode too (NODE_ENV=development) — no fail-open bypass'"
+    }
+  ],
+
   "integrationNotes": [
     "Domain schema is at artifacts/api-server/src/domains/fashion-design/schema.ts — self-contained, does NOT use @workspace/db barrel for table definitions.",
     "fashionDesignRouter must be registered in artifacts/api-server/src/routes/index.ts by Team 24.",
