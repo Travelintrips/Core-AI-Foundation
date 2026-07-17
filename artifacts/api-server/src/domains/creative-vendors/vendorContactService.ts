@@ -6,6 +6,12 @@
  *
  * On accepted: full contact info revealed to requester.
  * No automatic procurement, payment payout, or external messaging.
+ *
+ * SECURITY:
+ *   - requesterEmailHash derived server-side from workspace token (not from body)
+ *   - getMyContactRequests bounded to MAX_MY_REQUESTS rows
+ *   - listContactRequestsAdmin pageSize capped at MAX_ADMIN_PAGE_SIZE
+ *   - Terminal state guard prevents re-updating accepted/declined requests
  */
 import { eq, and, desc, sql } from "drizzle-orm";
 import {
@@ -16,10 +22,16 @@ import {
 } from "./schema.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Types
+// Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TERMINAL_STATES = ["accepted", "declined"] as const;
+const MAX_MY_REQUESTS = 200;    // Cap requester's own list
+const MAX_ADMIN_PAGE_SIZE = 100;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface ContactRequestPublic {
   id: number;
@@ -41,6 +53,7 @@ export interface ContactRequestPublic {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Submit contact request (workspace-token-gated)
+// requesterEmailHash is derived server-side from the workspace token — NOT from body
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function submitContactRequest(
@@ -53,7 +66,7 @@ export async function submitContactRequest(
     preferredStartDate?: string;
   },
 ): Promise<VendorContactRequest> {
-  // Verify vendor exists and is approved
+  // Verify vendor exists and is approved (fail closed — check DB, not body)
   const [vendor] = await vendorDb
     .select()
     .from(vendorsTable)
@@ -94,6 +107,8 @@ export async function submitContactRequest(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Get contact requests for a requester (their own requests)
+// emailHash is resolved from workspace token — not from body/query
+// Capped at MAX_MY_REQUESTS to prevent loading unbounded rows
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function getMyContactRequests(
@@ -109,7 +124,8 @@ export async function getMyContactRequests(
     .from(vendorContactRequestsTable)
     .innerJoin(vendorsTable, eq(vendorContactRequestsTable.vendorId, vendorsTable.id))
     .where(eq(vendorContactRequestsTable.requesterEmailHash, requesterEmailHash))
-    .orderBy(desc(vendorContactRequestsTable.createdAt));
+    .orderBy(desc(vendorContactRequestsTable.createdAt))
+    .limit(MAX_MY_REQUESTS);
 
   return rows.map(({ req, whatsapp, email, websiteUrl }) => ({
     id: req.id,
@@ -134,7 +150,7 @@ export async function getMyContactRequests(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Admin: list all contact requests
+// Admin: list all contact requests (paginated, capped)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function listContactRequestsAdmin(params: {
@@ -144,6 +160,10 @@ export async function listContactRequestsAdmin(params: {
   pageSize?: number;
 }) {
   const { vendorId, status, page = 1, pageSize = 30 } = params;
+
+  const safePage = Math.max(1, page);
+  const safePageSize = Math.min(Math.max(1, pageSize), MAX_ADMIN_PAGE_SIZE);
+
   const conditions = [
     vendorId ? eq(vendorContactRequestsTable.vendorId, vendorId) : undefined,
     status ? eq(vendorContactRequestsTable.status, status) : undefined,
@@ -154,14 +174,15 @@ export async function listContactRequestsAdmin(params: {
     .from(vendorContactRequestsTable)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(vendorContactRequestsTable.createdAt))
-    .limit(pageSize)
-    .offset((page - 1) * pageSize);
+    .limit(safePageSize)
+    .offset((safePage - 1) * safePageSize);
 
   return rows;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin: update contact request status (accept / decline)
+// Terminal state guard: cannot update already-accepted/declined requests
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function updateContactRequestStatus(

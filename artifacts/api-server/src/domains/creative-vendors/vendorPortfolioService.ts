@@ -2,8 +2,12 @@
  * vendorPortfolioService.ts — Team 22 / Creative Vendor Ecosystem
  *
  * Vendor portfolio CRUD + moderation.
- * Public view: only approved items.
- * Admin view: all items (pending, approved, rejected).
+ * Public view: only approved items, capped at 100.
+ * Admin view: paginated (max 100 per page).
+ *
+ * SECURITY:
+ *   - coverImageUrl validated (SSRF-safe) at storage time
+ *   - All list queries bounded by limit/offset
  */
 import { eq, and, desc, asc, sql } from "drizzle-orm";
 import {
@@ -12,6 +16,7 @@ import {
   vendorsTable,
   type VendorPortfolioItem,
 } from "./schema.js";
+import { validateExternalUrl } from "./vendorService.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -53,8 +58,10 @@ function toPublicItem(item: VendorPortfolioItem): PublicPortfolioItem {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Public: list approved portfolio items for a vendor
+// Public: list approved portfolio items for a vendor (bounded)
 // ─────────────────────────────────────────────────────────────────────────────
+
+const PUBLIC_PORTFOLIO_LIMIT = 100; // cap — prevents loading unbounded rows
 
 export async function listVendorPortfolioPublic(
   vendorId: number,
@@ -68,19 +75,31 @@ export async function listVendorPortfolioPublic(
         eq(vendorPortfolioItemsTable.moderationStatus, "approved"),
       ),
     )
-    .orderBy(desc(vendorPortfolioItemsTable.isFeatured), asc(vendorPortfolioItemsTable.displayOrder));
+    .orderBy(
+      desc(vendorPortfolioItemsTable.isFeatured),
+      asc(vendorPortfolioItemsTable.displayOrder),
+    )
+    .limit(PUBLIC_PORTFOLIO_LIMIT);
 
   return rows.map(toPublicItem);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Admin: list all portfolio items (all moderation states)
+// Admin: list all portfolio items (paginated)
 // ─────────────────────────────────────────────────────────────────────────────
+
+const MAX_ADMIN_PAGE_SIZE = 100;
 
 export async function listVendorPortfolioAdmin(
   vendorId: number,
   moderationStatus?: string,
+  page = 1,
+  pageSize = 30,
 ) {
+  const safePage = Math.max(1, page);
+  const safePageSize = Math.min(Math.max(1, pageSize), MAX_ADMIN_PAGE_SIZE);
+  const offset = (safePage - 1) * safePageSize;
+
   const conditions = [
     eq(vendorPortfolioItemsTable.vendorId, vendorId),
     moderationStatus
@@ -88,11 +107,28 @@ export async function listVendorPortfolioAdmin(
       : undefined,
   ].filter(Boolean);
 
-  return vendorDb
-    .select()
-    .from(vendorPortfolioItemsTable)
-    .where(and(...conditions))
-    .orderBy(desc(vendorPortfolioItemsTable.createdAt));
+  const [rows, countRow] = await Promise.all([
+    vendorDb
+      .select()
+      .from(vendorPortfolioItemsTable)
+      .where(and(...conditions))
+      .orderBy(desc(vendorPortfolioItemsTable.createdAt))
+      .limit(safePageSize)
+      .offset(offset),
+    vendorDb
+      .select({ count: sql<number>`count(*)::int` })
+      .from(vendorPortfolioItemsTable)
+      .where(and(...conditions)),
+  ]);
+
+  return {
+    items: rows,
+    pagination: {
+      page: safePage,
+      pageSize: safePageSize,
+      total: countRow[0]?.count ?? 0,
+    },
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,6 +148,9 @@ export async function addPortfolioItem(
     tagsJson?: string[];
   },
 ) {
+  // Validate external URL at storage time
+  const coverImageUrl = validateExternalUrl(data.coverImageUrl);
+
   const [row] = await vendorDb
     .insert(vendorPortfolioItemsTable)
     .values({
@@ -119,7 +158,7 @@ export async function addPortfolioItem(
       title: data.title,
       description: data.description,
       category: data.category,
-      coverImageUrl: data.coverImageUrl,
+      coverImageUrl,
       galleryJson: data.galleryJson ?? [],
       clientIndustry: data.clientIndustry,
       projectDurationDays: data.projectDurationDays,

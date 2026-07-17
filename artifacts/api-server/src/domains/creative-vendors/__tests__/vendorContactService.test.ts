@@ -6,7 +6,7 @@
  *
  * Chain resolution strategy:
  *   Queries ending in .where()    → where resolves
- *   Queries ending in .orderBy()  → orderBy resolves
+ *   Queries ending in .limit()    → limit resolves  (getMyContactRequests)
  *   Mutations ending in .returning() → returning resolves
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -34,6 +34,7 @@ vi.mock("../schema.js", () => ({
     email: "email",
     websiteUrl: "website_url",
     totalContactRequests: "total_contact_requests",
+    updatedAt: "updated_at",
   },
 }));
 
@@ -49,7 +50,7 @@ vi.mock("drizzle-orm", () => ({
 
 // ── Chain factories ────────────────────────────────────────────────────────────
 
-/** For queries whose last call is .where() — returns array directly */
+/** For queries whose last call is .where() — resolves directly */
 function makeWhereChain(result: unknown[]) {
   const c: Record<string, ReturnType<typeof vi.fn>> = {};
   c.select = vi.fn().mockReturnValue(c);
@@ -58,42 +59,46 @@ function makeWhereChain(result: unknown[]) {
   return c;
 }
 
-/** For queries ending in .orderBy() */
-function makeOrderByChain(result: unknown[]) {
+/**
+ * For getMyContactRequests: .from().innerJoin().where().orderBy().limit()
+ * limit is the terminal
+ */
+function makeLimitChain(result: unknown[]) {
   const c: Record<string, ReturnType<typeof vi.fn>> = {};
   c.select = vi.fn().mockReturnValue(c);
   c.from = vi.fn().mockReturnValue(c);
   c.innerJoin = vi.fn().mockReturnValue(c);
   c.where = vi.fn().mockReturnValue(c);
-  c.orderBy = vi.fn().mockResolvedValue(result);
+  c.orderBy = vi.fn().mockReturnValue(c);
+  c.limit = vi.fn().mockResolvedValue(result);
   return c;
 }
 
 /** For mutations ending in .returning() */
 function makeInsertChain(result: unknown[]) {
-  const c: Record<string, ReturnType<typeof vi.fn>> = {};
-  c.insert = vi.fn().mockReturnValue(c);
-  c.values = vi.fn().mockReturnValue(c);
-  c.returning = vi.fn().mockResolvedValue(result);
-  return c;
+  return {
+    values: vi.fn().mockReturnValue({
+      returning: vi.fn().mockResolvedValue(result),
+    }),
+  };
 }
 
-/** For updates ending in .returning() */
-function makeUpdateChain(result: unknown[]) {
-  const c: Record<string, ReturnType<typeof vi.fn>> = {};
-  c.update = vi.fn().mockReturnValue(c);
-  c.set = vi.fn().mockReturnValue(c);
-  c.where = vi.fn().mockReturnValue(c);
-  c.returning = vi.fn().mockResolvedValue(result);
-  return c;
-}
-
-/** For updates WITHOUT .returning() (fire-and-forget like increment) */
+/** For updates ending in .where() (fire-and-forget increment) */
 function makeUpdateWhereChain() {
   const c: Record<string, ReturnType<typeof vi.fn>> = {};
   c.update = vi.fn().mockReturnValue(c);
   c.set = vi.fn().mockReturnValue(c);
   c.where = vi.fn().mockResolvedValue([]);
+  return c;
+}
+
+/** For updates with .returning() */
+function makeUpdateReturningChain(result: unknown[]) {
+  const c: Record<string, ReturnType<typeof vi.fn>> = {};
+  c.update = vi.fn().mockReturnValue(c);
+  c.set = vi.fn().mockReturnValue(c);
+  c.where = vi.fn().mockReturnValue(c);
+  c.returning = vi.fn().mockResolvedValue(result);
   return c;
 }
 
@@ -121,19 +126,12 @@ const MOCK_CONTACT_REQUEST = {
 
 describe("submitContactRequest", () => {
   it("creates a contact request for an approved vendor", async () => {
-    // select vendor → .where() resolves
+    // 1. select vendor → .where() resolves
     mockVendorDb.select.mockReturnValue(makeWhereChain([MOCK_VENDOR_APPROVED]));
-    // insert request → .returning() resolves
-    mockVendorDb.insert.mockReturnValue(makeInsertChain([MOCK_CONTACT_REQUEST]).values
-      ? { values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([MOCK_CONTACT_REQUEST]) }) }
-      : makeInsertChain([MOCK_CONTACT_REQUEST]));
-    // update increment → .where() resolves
+    // 2. insert request → .values().returning() resolves
+    mockVendorDb.insert.mockReturnValue(makeInsertChain([MOCK_CONTACT_REQUEST]));
+    // 3. update increment → .set().where() resolves
     mockVendorDb.update.mockReturnValue(makeUpdateWhereChain());
-
-    // Wire insert properly
-    const insertChain = { values: vi.fn(), returning: vi.fn().mockResolvedValue([MOCK_CONTACT_REQUEST]) };
-    insertChain.values.mockReturnValue(insertChain);
-    mockVendorDb.insert.mockReturnValue(insertChain);
 
     const { submitContactRequest } = await import("../vendorContactService.js");
     const result = await submitContactRequest(10, "abc123hash", {
@@ -184,6 +182,19 @@ describe("updateContactRequestStatus — terminal state guard", () => {
     const result = await updateContactRequestStatus(999, "accepted");
     expect(result).toBeNull();
   });
+
+  it("updates status and returns updated request on valid transition", async () => {
+    const pendingRequest = { ...MOCK_CONTACT_REQUEST, status: "pending" };
+    const acceptedRequest = { ...pendingRequest, status: "accepted", respondedAt: new Date() };
+    // select existing → pending
+    mockVendorDb.select.mockReturnValue(makeWhereChain([pendingRequest]));
+    // update → returning
+    mockVendorDb.update.mockReturnValue(makeUpdateReturningChain([acceptedRequest]));
+
+    const { updateContactRequestStatus } = await import("../vendorContactService.js");
+    const result = await updateContactRequestStatus(1, "accepted");
+    expect(result?.status).toBe("accepted");
+  });
 });
 
 describe("getMyContactRequests — revealed contact on acceptance", () => {
@@ -202,7 +213,8 @@ describe("getMyContactRequests — revealed contact on acceptance", () => {
         websiteUrl: "https://kreatiifstudio.com",
       },
     ];
-    mockVendorDb.select.mockReturnValue(makeOrderByChain(rows));
+    // getMyContactRequests: .from().innerJoin().where().orderBy().limit() — limit is terminal
+    mockVendorDb.select.mockReturnValue(makeLimitChain(rows));
 
     const { getMyContactRequests } = await import("../vendorContactService.js");
     const requests = await getMyContactRequests("abc123hash");

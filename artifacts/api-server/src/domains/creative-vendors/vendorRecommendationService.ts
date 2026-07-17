@@ -9,16 +9,19 @@
  *   - Availability:      20 pts (isAvailableNow + lead time fit)
  *   - Rating:            15 pts (normalized 0-5 → 0-15)
  *   - Verification:      10 pts (verified badge)
+ *
+ * PERFORMANCE:
+ *   Service areas are batch-loaded (single query for all candidates) to avoid
+ *   N+1 DB calls. Previously: 1 query per vendor. Now: 1 query for all vendors.
  */
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import {
   vendorDb,
   vendorsTable,
   vendorServiceAreasTable,
-  type PublicVendorCard,
   VENDOR_TYPES,
 } from "./schema.js";
-import { searchVendors, toPublicCard, type VendorSearchParams } from "./vendorService.js";
+import { searchVendors, toPublicCard, type PublicVendorCard } from "./vendorService.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -46,6 +49,8 @@ export interface ScoredVendor {
   matchReasons: string[];
 }
 
+type ServiceAreaRow = { province: string; city: string | null; isRemote: boolean };
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,13 +60,14 @@ function clamp(v: number, min: number, max: number) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Score a single vendor
+// Score a single vendor (synchronous — service areas pre-fetched)
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function scoreVendor(
+function scoreVendor(
   vendor: PublicVendorCard,
   req: RecommendationRequest,
-): Promise<ScoredVendor> {
+  serviceAreas: ServiceAreaRow[],
+): ScoredVendor {
   const breakdown = {
     categoryMatch: 0,
     areaMatch: 0,
@@ -78,13 +84,7 @@ async function scoreVendor(
   }
 
   // ── Area match (25 pts) ──────────────────────────────────────────────────
-  // Check if vendor serves the requested province/city
   if (req.province) {
-    const serviceAreas = await vendorDb
-      .select()
-      .from(vendorServiceAreasTable)
-      .where(eq(vendorServiceAreasTable.vendorId, vendor.id));
-
     const vendorProvince = vendor.province?.toLowerCase();
     const requestedProvince = req.province.toLowerCase();
 
@@ -101,11 +101,10 @@ async function scoreVendor(
     } else if (isRemoteCapable && req.isRemoteOk) {
       breakdown.areaMatch = 15;
       matchReasons.push("Dapat bekerja remote");
-    } else if (!req.province) {
-      breakdown.areaMatch = 15; // No area filter — partial credit
     }
+    // else: no area points
   } else {
-    // No area constraint — full points
+    // No area constraint — full points (all vendors eligible)
     breakdown.areaMatch = 25;
   }
 
@@ -150,12 +149,16 @@ async function scoreVendor(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Recommend vendors for a project
+//
+// Performance: batch-loads service areas for all candidate vendors in a
+// single query (avoids N+1: was previously 1 DB call per vendor).
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function recommendVendors(
   req: RecommendationRequest,
 ): Promise<ScoredVendor[]> {
   const { vendorType, province, maxLeadTimeDays, limit = 10 } = req;
+  const safeLimit = Math.min(Math.max(1, limit), 20);
 
   // Pull a wider pool then score + rank
   const { items } = await searchVendors({
@@ -167,12 +170,39 @@ export async function recommendVendors(
     pageSize: 50,
   });
 
-  const scored = await Promise.all(items.map((v) => scoreVendor(v, req)));
+  if (items.length === 0) return [];
+
+  // Batch-load service areas for all candidate vendor IDs (single query)
+  const vendorIds = items.map((v) => v.id);
+  const allServiceAreas = vendorIds.length > 0
+    ? await vendorDb
+        .select({
+          vendorId: vendorServiceAreasTable.vendorId,
+          province: vendorServiceAreasTable.province,
+          city: vendorServiceAreasTable.city,
+          isRemote: vendorServiceAreasTable.isRemote,
+        })
+        .from(vendorServiceAreasTable)
+        .where(inArray(vendorServiceAreasTable.vendorId, vendorIds))
+    : [];
+
+  // Build a Map<vendorId, ServiceAreaRow[]> for O(1) lookup
+  const serviceAreaMap = new Map<number, ServiceAreaRow[]>();
+  for (const area of allServiceAreas) {
+    const existing = serviceAreaMap.get(area.vendorId) ?? [];
+    existing.push({ province: area.province, city: area.city, isRemote: area.isRemote });
+    serviceAreaMap.set(area.vendorId, existing);
+  }
+
+  // Score all candidates (now synchronous — no DB calls inside)
+  const scored = items.map((v) =>
+    scoreVendor(v, req, serviceAreaMap.get(v.id) ?? []),
+  );
 
   return scored
     .filter((s) => s.compatibilityScore > 0)
     .sort((a, b) => b.compatibilityScore - a.compatibilityScore)
-    .slice(0, limit);
+    .slice(0, safeLimit);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -194,5 +224,17 @@ export async function checkVendorCompatibility(
       ),
     );
   if (!v) return null;
-  return scoreVendor(toPublicCard(v), req);
+
+  // Load service areas for this specific vendor
+  const serviceAreas = await vendorDb
+    .select({
+      vendorId: vendorServiceAreasTable.vendorId,
+      province: vendorServiceAreasTable.province,
+      city: vendorServiceAreasTable.city,
+      isRemote: vendorServiceAreasTable.isRemote,
+    })
+    .from(vendorServiceAreasTable)
+    .where(eq(vendorServiceAreasTable.vendorId, vendorId));
+
+  return scoreVendor(toPublicCard(v), req, serviceAreas);
 }

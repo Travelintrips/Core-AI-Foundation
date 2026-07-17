@@ -160,7 +160,7 @@ describe("toPublicCard (public DTO redaction)", () => {
   });
 
   it("does NOT expose internal fields (moderationNote, whatsapp raw, email raw)", () => {
-    const card = toPublicCard(MOCK_VENDOR as Parameters<typeof toPublicCard>[0]) as Record<string, unknown>;
+    const card = toPublicCard(MOCK_VENDOR as Parameters<typeof toPublicCard>[0]) as unknown as Record<string, unknown>;
     expect(card["moderationNote"]).toBeUndefined();
     expect(card["moderatedAt"]).toBeUndefined();
     expect(card["whatsapp"]).toBeUndefined();

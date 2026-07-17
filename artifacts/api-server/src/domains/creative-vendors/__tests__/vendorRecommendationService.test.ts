@@ -3,6 +3,9 @@
  *
  * Tests: scoring breakdown, area matching, availability scoring,
  *        rating normalization, verification bonus, limit respected.
+ *
+ * Note: scoreVendor is now synchronous (service areas pre-fetched).
+ *       Tests pass service areas directly via the mocked searchVendors pool.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -32,6 +35,7 @@ vi.mock("../schema.js", () => ({
   vendorServiceAreasTable: {
     vendorId: "vendor_id",
     province: "province",
+    city: "city",
     isRemote: "is_remote",
   },
   VENDOR_TYPES: [
@@ -85,11 +89,10 @@ const MOCK_GRAPHIC_VENDOR_CARD = {
 };
 
 const MOCK_SERVICE_AREAS = [
-  { id: 1, vendorId: 1, province: "DKI Jakarta", city: "Jakarta Selatan", isRemote: true },
-  { id: 2, vendorId: 1, province: "Jawa Barat", city: null, isRemote: false },
+  { vendorId: 1, province: "DKI Jakarta", city: "Jakarta Selatan", isRemote: true },
+  { vendorId: 1, province: "Jawa Barat", city: null, isRemote: false },
 ];
 
-// Mock vendorService to control the vendor pool returned for scoring
 vi.mock("../vendorService.js", () => ({
   searchVendors: vi.fn().mockResolvedValue({
     items: [MOCK_GRAPHIC_VENDOR_CARD],
@@ -104,7 +107,7 @@ vi.mock("../vendorService.js", () => ({
   ],
 }));
 
-// ── Chain factory for queries ending in .where() ──────────────────────────────
+// The batch service-area query ends in .where() (inArray filter)
 function makeWhereChain(result: unknown[]) {
   const c: Record<string, ReturnType<typeof vi.fn>> = {};
   c.select = vi.fn().mockReturnValue(c);
@@ -115,8 +118,7 @@ function makeWhereChain(result: unknown[]) {
 
 describe("recommendVendors", () => {
   beforeEach(() => {
-    // scoreVendor internally calls vendorDb.select().from(serviceAreasTable).where(...)
-    // Each scored vendor triggers one service-areas lookup
+    // Batch service-area load → .where() resolves with service areas
     mockVendorDb.select.mockReturnValue(makeWhereChain(MOCK_SERVICE_AREAS));
   });
 
@@ -173,5 +175,17 @@ describe("recommendVendors", () => {
       province: "DKI Jakarta",
     });
     expect(results[0]!.scoreBreakdown.areaMatch).toBe(25);
+  });
+
+  it("returns empty array when no vendors match (score = 0)", async () => {
+    const { searchVendors } = await import("../vendorService.js");
+    vi.mocked(searchVendors).mockResolvedValueOnce({
+      items: [],
+      pagination: { page: 1, pageSize: 50, total: 0, totalPages: 0 },
+    });
+
+    const { recommendVendors } = await import("../vendorRecommendationService.js");
+    const results = await recommendVendors({ vendorType: "printing" });
+    expect(results).toHaveLength(0);
   });
 });

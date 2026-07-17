@@ -73,7 +73,7 @@ const router = Router();
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function idParam(req: Request): number | null {
-  const n = parseInt(req.params["id"] ?? "", 10);
+  const n = parseInt(String(req.params["id"] ?? ""), 10);
   return isNaN(n) ? null : n;
 }
 
@@ -580,7 +580,7 @@ router.patch(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const id = idParam(req);
-      const itemId = parseInt(req.params["itemId"] ?? "", 10);
+      const itemId = parseInt(String(req.params["itemId"] ?? ""), 10);
       if (!id || isNaN(itemId)) { err(res, 400, "Invalid id"); return; }
       const item = await approvePortfolioItem(id, itemId);
       if (!item) { err(res, 404, "Portfolio item not found"); return; }
@@ -599,7 +599,7 @@ router.patch(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const id = idParam(req);
-      const itemId = parseInt(req.params["itemId"] ?? "", 10);
+      const itemId = parseInt(String(req.params["itemId"] ?? ""), 10);
       if (!id || isNaN(itemId)) { err(res, 400, "Invalid id"); return; }
       const { reason } = req.body as { reason?: string };
       if (!reason?.trim()) { err(res, 400, "reason is required"); return; }

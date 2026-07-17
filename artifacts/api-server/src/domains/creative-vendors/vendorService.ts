@@ -10,6 +10,11 @@
  *   - Only approved portfolio items
  *   - Only approved ratings
  *   - No moderation notes or internal fields
+ *
+ * SECURITY:
+ *   - External URLs validated at storage time (protocol allowlist, no private IPs)
+ *   - Ratings deduplicated per (vendorId, clientEmailHash)
+ *   - pageSize capped in service layer
  */
 import { eq, and, ilike, desc, asc, sql, inArray, or } from "drizzle-orm";
 import {
@@ -98,7 +103,50 @@ export interface VendorDetailPublic extends PublicVendorCard {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helpers
+// URL validation (SSRF-safe at storage time)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Private/reserved IP range patterns that must be blocked */
+const PRIVATE_IP_RE =
+  /^(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|169\.254\.\d+\.\d+|127\.\d+\.\d+\.\d+|::1|fc[0-9a-f]{2}:|fd[0-9a-f]{2}:|fe80:)/i;
+
+/**
+ * Validate and return an external URL safe for storage.
+ * - Only http/https allowed
+ * - localhost and private IP ranges blocked
+ * - IPv6 loopback/link-local blocked
+ * Returns undefined if url is falsy. Throws on invalid URL.
+ */
+export function validateExternalUrl(url: string | undefined | null): string | undefined {
+  if (!url) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid URL: "${url}"`);
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`URL protocol "${parsed.protocol}" is not allowed — only http/https`);
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  // Block localhost / unspecified
+  if (hostname === "localhost" || hostname === "0.0.0.0" || hostname === "") {
+    throw new Error("URL points to a restricted host");
+  }
+
+  // Block private/loopback IP ranges
+  if (PRIVATE_IP_RE.test(hostname)) {
+    throw new Error("URL points to a private or reserved network address");
+  }
+
+  return url;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DTO helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Mask whatsapp number: "+628121234567" → "+62812*****" */
@@ -153,6 +201,8 @@ function toPublicCard(v: Vendor): PublicVendorCard {
 // Search / Browse
 // ─────────────────────────────────────────────────────────────────────────────
 
+const MAX_PAGE_SIZE = 48;
+
 export async function searchVendors(params: VendorSearchParams = {}) {
   const {
     q,
@@ -165,8 +215,12 @@ export async function searchVendors(params: VendorSearchParams = {}) {
     maxLeadTimeDays,
     sort = "rating",
     page = 1,
+    // Cap at service level — prevents callers bypassing router cap
     pageSize = 24,
   } = params;
+
+  const safePage = Math.max(1, page);
+  const safePageSize = Math.min(Math.max(1, pageSize), MAX_PAGE_SIZE);
 
   const conditions = [
     eq(vendorsTable.moderationStatus, "approved"),
@@ -200,7 +254,7 @@ export async function searchVendors(params: VendorSearchParams = {}) {
           ? asc(vendorsTable.leadTimeDays)
           : [desc(vendorsTable.isFeatured), desc(vendorsTable.avgRating)];
 
-  const offset = (page - 1) * pageSize;
+  const offset = (safePage - 1) * safePageSize;
 
   const [rows, countRow] = await Promise.all([
     vendorDb
@@ -208,7 +262,7 @@ export async function searchVendors(params: VendorSearchParams = {}) {
       .from(vendorsTable)
       .where(and(...conditions))
       .orderBy(...(Array.isArray(orderBy) ? orderBy : [orderBy]))
-      .limit(pageSize)
+      .limit(safePageSize)
       .offset(offset),
     vendorDb
       .select({ count: sql<number>`count(*)::int` })
@@ -220,10 +274,10 @@ export async function searchVendors(params: VendorSearchParams = {}) {
   return {
     items: rows.map(toPublicCard),
     pagination: {
-      page,
-      pageSize,
+      page: safePage,
+      pageSize: safePageSize,
       total,
-      totalPages: Math.ceil(total / pageSize),
+      totalPages: Math.ceil(total / safePageSize),
     },
   };
 }
@@ -338,6 +392,8 @@ export async function getVendorAdmin(id: number) {
 // Admin: list with moderation filter
 // ─────────────────────────────────────────────────────────────────────────────
 
+const MAX_ADMIN_PAGE_SIZE = 100;
+
 export async function listVendorsAdmin(params: {
   moderationStatus?: string;
   vendorType?: string;
@@ -345,20 +401,30 @@ export async function listVendorsAdmin(params: {
   page?: number;
   pageSize?: number;
 }) {
-  const { moderationStatus, vendorType, status, page = 1, pageSize = 30 } = params;
+  const {
+    moderationStatus,
+    vendorType,
+    status,
+    page = 1,
+    pageSize = 30,
+  } = params;
+
+  const safePage = Math.max(1, page);
+  const safePageSize = Math.min(Math.max(1, pageSize), MAX_ADMIN_PAGE_SIZE);
+
   const conditions = [
     moderationStatus ? eq(vendorsTable.moderationStatus, moderationStatus) : undefined,
     vendorType ? eq(vendorsTable.vendorType, vendorType) : undefined,
     status ? eq(vendorsTable.status, status) : undefined,
   ].filter(Boolean);
 
-  const offset = (page - 1) * pageSize;
+  const offset = (safePage - 1) * safePageSize;
   const rows = await vendorDb
     .select()
     .from(vendorsTable)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(vendorsTable.createdAt))
-    .limit(pageSize)
+    .limit(safePageSize)
     .offset(offset);
 
   const [countRow] = await vendorDb
@@ -368,7 +434,7 @@ export async function listVendorsAdmin(params: {
 
   return {
     items: rows,
-    pagination: { page, pageSize, total: countRow?.count ?? 0 },
+    pagination: { page: safePage, pageSize: safePageSize, total: countRow?.count ?? 0 },
   };
 }
 
@@ -390,6 +456,10 @@ export async function createVendor(data: {
   instagramUrl?: string;
   leadTimeDays?: number;
 }) {
+  // Validate external URLs at storage time (SSRF-safe)
+  const websiteUrl = validateExternalUrl(data.websiteUrl);
+  const instagramUrl = validateExternalUrl(data.instagramUrl);
+
   const vendorCode = `VND-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
   const [row] = await vendorDb
     .insert(vendorsTable)
@@ -404,8 +474,8 @@ export async function createVendor(data: {
       province: data.province,
       whatsapp: data.whatsapp,
       email: data.email,
-      websiteUrl: data.websiteUrl,
-      instagramUrl: data.instagramUrl,
+      websiteUrl,
+      instagramUrl,
       leadTimeDays: data.leadTimeDays ?? 7,
     })
     .returning();
@@ -420,9 +490,18 @@ export async function updateVendor(
   id: number,
   data: Partial<Omit<typeof vendorsTable.$inferInsert, "id" | "vendorCode" | "createdAt">>,
 ) {
+  // Validate URLs if present
+  const sanitised = { ...data } as typeof data & { websiteUrl?: string; instagramUrl?: string };
+  if (sanitised.websiteUrl !== undefined) {
+    sanitised.websiteUrl = validateExternalUrl(sanitised.websiteUrl);
+  }
+  if (sanitised.instagramUrl !== undefined) {
+    sanitised.instagramUrl = validateExternalUrl(sanitised.instagramUrl);
+  }
+
   const [row] = await vendorDb
     .update(vendorsTable)
-    .set({ ...data, updatedAt: new Date() })
+    .set({ ...sanitised, updatedAt: new Date() })
     .where(eq(vendorsTable.id, id))
     .returning();
   return row ?? null;
@@ -454,6 +533,10 @@ export async function rejectVendor(id: number, reason: string) {
 // Ratings
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Submit a rating for a vendor.
+ * Deduplication: one rating per (vendorId, clientEmailHash). Throws if duplicate.
+ */
 export async function submitRating(
   vendorId: number,
   clientEmailHash: string,
@@ -462,6 +545,20 @@ export async function submitRating(
   projectContext?: string,
 ) {
   if (rating < 1 || rating > 5) throw new Error("Rating must be 1–5");
+
+  // ── Dedup check: one rating per (vendor, emailHash) ──
+  const [existing] = await vendorDb
+    .select({ id: vendorRatingsTable.id })
+    .from(vendorRatingsTable)
+    .where(
+      and(
+        eq(vendorRatingsTable.vendorId, vendorId),
+        eq(vendorRatingsTable.clientEmailHash, clientEmailHash),
+      ),
+    );
+  if (existing) {
+    throw new Error("Rating already submitted for this vendor");
+  }
 
   const [row] = await vendorDb
     .insert(vendorRatingsTable)
