@@ -131,25 +131,30 @@ describe("WAJIB 1 — LOCKED FILE: lib/db/src/schema/index.ts", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// [WAJIB 2] LOCKED ROUTE FILE AUDIT: artifacts/api-server/src/routes/index.ts
+// [WAJIB 2] ROUTE WIRING AUDIT: artifacts/api-server/src/routes/index.ts
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTE: On the feature branch Team 19 did NOT touch routes/index.ts (locked file).
+// On the integration branch, Team 24 legitimately mounted packagingDesignRouter
+// as part of integration wiring (commit: chore(integrate) post-merge wiring).
+// These tests now confirm the router IS correctly wired.
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("WAJIB 2 — LOCKED ROUTE FILE: artifacts/api-server/src/routes/index.ts", () => {
+describe("WAJIB 2 — ROUTE WIRING: artifacts/api-server/src/routes/index.ts", () => {
   const routesIndex = readFileSync(
     resolve(__dirname, "../routes/index.ts"),
     "utf-8",
   );
 
-  it("does NOT mount packagingDesignRouter", () => {
-    expect(routesIndex).not.toMatch(/packagingDesign/);
+  it("mounts packagingDesignRouter (integration wiring)", () => {
+    expect(routesIndex).toMatch(/packagingDesign/);
   });
 
-  it("does NOT import packaging-design route file", () => {
-    expect(routesIndex).not.toContain("packaging-design");
+  it("imports packaging-design route file (integration wiring)", () => {
+    expect(routesIndex).toContain("packaging-design");
   });
 
-  it("does NOT reference packaging in any form", () => {
-    expect(routesIndex).not.toMatch(/packaging/i);
+  it("references packaging router (integration wiring)", () => {
+    expect(routesIndex).toMatch(/packaging/i);
   });
 });
 

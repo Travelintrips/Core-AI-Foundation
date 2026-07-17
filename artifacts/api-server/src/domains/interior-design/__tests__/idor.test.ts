@@ -304,15 +304,19 @@ describe("P1 Brand Intelligence: read-only adapter, no duplication", () => {
   });
 });
 
-// ── Locked file check ─────────────────────────────────────────────────────────
+// ── Route wiring check ────────────────────────────────────────────────────────
+// NOTE: On the feature branch Team 17 did NOT touch routes/index.ts (locked file).
+// On the integration branch, Team 24 legitimately mounted interiorDesignRouter
+// as part of integration wiring (commit: chore(integrate) post-merge wiring).
+// This test now confirms the router IS correctly wired.
 
-describe("Locked files not modified by Team 17", () => {
-  it("artifacts/api-server/src/routes/index.ts does not import interior-design", () => {
+describe("Route wiring — Team 17 router mounted by integration", () => {
+  it("artifacts/api-server/src/routes/index.ts imports interiorDesignRouter (integration wiring)", () => {
     const routesIndex = readFileSync(
       join(repoRoot(), "artifacts/api-server/src/routes/index.ts"),
       "utf-8",
     );
-    expect(routesIndex).not.toContain("interior-design");
-    expect(routesIndex).not.toContain("interiorDesign");
+    expect(routesIndex).toContain("interior-design");
+    expect(routesIndex).toContain("interiorDesign");
   });
 });
