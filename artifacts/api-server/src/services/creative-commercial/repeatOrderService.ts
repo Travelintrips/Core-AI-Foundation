@@ -38,6 +38,8 @@ export async function findRepeatOrderCandidates(opts: {
   const threshold = opts.inactiveDaysThreshold ?? 60;
   const limit = opts.limit ?? 100;
 
+  // ai_service_requests has customer_email, not customer_profile_id.
+  // Join via customer_profiles on client_email = customer_email to get the profile id.
   const result = await db.execute<{
     customer_profile_id: number;
     last_service_id: number | null;
@@ -47,21 +49,23 @@ export async function findRepeatOrderCandidates(opts: {
   }>(sql`
     WITH last_orders AS (
       SELECT
-        sr.customer_profile_id,
+        cp.id AS customer_profile_id,
         sr.service_id AS last_service_id,
         s.service_name AS last_service_name,
         max(sr.created_at) AS last_completed_at
       FROM ai_platform.ai_service_requests sr
+      JOIN ai_platform.customer_profiles cp ON cp.client_email = sr.customer_email
       LEFT JOIN ai_platform.ai_services s ON s.id = sr.service_id
       WHERE sr.status IN ('completed', 'delivered')
-        AND sr.customer_profile_id IS NOT NULL
-      GROUP BY sr.customer_profile_id, sr.service_id, s.service_name
+        AND sr.customer_email IS NOT NULL
+      GROUP BY cp.id, sr.service_id, s.service_name
     ),
     recent_activity AS (
-      SELECT DISTINCT customer_profile_id
-      FROM ai_platform.ai_service_requests
-      WHERE created_at >= now() - ${threshold} * interval '1 day'
-        AND customer_profile_id IS NOT NULL
+      SELECT DISTINCT cp2.id AS customer_profile_id
+      FROM ai_platform.ai_service_requests sr2
+      JOIN ai_platform.customer_profiles cp2 ON cp2.client_email = sr2.customer_email
+      WHERE sr2.created_at >= now() - ${threshold} * interval '1 day'
+        AND sr2.customer_email IS NOT NULL
     )
     SELECT
       lo.customer_profile_id,

@@ -47,7 +47,7 @@ export async function getCouponRecommendation(
 ): Promise<Recommendation | null> {
   const now = new Date();
 
-  // 1. Load active coupons that satisfy minimum order
+  // 1. Load active coupons that satisfy minimum order (capped at 100 to avoid full-table load)
   const coupons = await db
     .select()
     .from(aiCouponsTable)
@@ -61,7 +61,8 @@ export async function getCouponRecommendation(
           lte(aiCouponsTable.minimumOrder, ctx.orderAmount),
         ),
       ),
-    );
+    )
+    .limit(100);
 
   if (coupons.length === 0) return null;
 

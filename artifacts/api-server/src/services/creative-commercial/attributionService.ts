@@ -68,6 +68,7 @@ export async function getCustomerTouchpoints(
     WHERE customer_profile_id = ${customerProfileId}
       ${serviceRequestId ? sql`AND (service_request_id = ${serviceRequestId} OR service_request_id IS NULL)` : sql``}
     ORDER BY occurred_at ASC
+    LIMIT 200
   `);
 
   const storedRows = (stored as unknown as { rows: TouchpointRow[] }).rows ?? [];

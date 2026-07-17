@@ -2,6 +2,7 @@
  * creative-commercial/routes/funnel.ts — Team 03
  *
  * Funnel projection endpoints.
+ * Audit remediation: try/catch on all handlers.
  *
  * Routes (mounted under /ai/creative-commercial):
  *   GET /funnel/projection?periodDays=30
@@ -13,6 +14,7 @@ import {
   buildFunnelMetrics,
   getFunnelSnapshots,
 } from "../../services/creative-commercial/funnelProjectionService.js";
+import { logger } from "../../lib/logger.js";
 
 const router = Router();
 
@@ -24,16 +26,27 @@ router.get("/funnel/projection", async (req, res): Promise<void> => {
     365,
   );
 
-  const projection = await buildFunnelMetrics(periodDays);
-  res.json(projection);
+  try {
+    const projection = await buildFunnelMetrics(periodDays);
+    res.json(projection);
+  } catch (err) {
+    logger.error({ err, periodDays }, "[creative-commercial] funnel projection error");
+    res.status(500).json({ error: "Failed to build funnel projection" });
+  }
 });
 
 // ── GET /funnel/snapshots ─────────────────────────────────────────────────────
 
 router.get("/funnel/snapshots", async (req, res): Promise<void> => {
   const limit = Math.min(parseInt(String(req.query["limit"] ?? "30"), 10) || 30, 90);
-  const snapshots = await getFunnelSnapshots(limit);
-  res.json(snapshots);
+
+  try {
+    const snapshots = await getFunnelSnapshots(limit);
+    res.json(snapshots);
+  } catch (err) {
+    logger.error({ err }, "[creative-commercial] funnel snapshots error");
+    res.status(500).json({ error: "Failed to load funnel snapshots" });
+  }
 });
 
 export default router;
