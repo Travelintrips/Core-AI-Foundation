@@ -31,6 +31,19 @@ import {
 
 const router = Router();
 
+// ── Pagination helper ─────────────────────────────────────────────────────────
+
+const DEFAULT_PAGE_LIMIT = 50;
+const MAX_PAGE_LIMIT     = 100;
+
+function parsePagination(query: Record<string, string | undefined>): { limit: number; offset: number } {
+  const rawLimit  = parseInt(query["limit"]  ?? String(DEFAULT_PAGE_LIMIT), 10);
+  const rawOffset = parseInt(query["offset"] ?? "0", 10);
+  const limit  = Number.isFinite(rawLimit)  ? Math.min(Math.max(rawLimit, 1), MAX_PAGE_LIMIT) : DEFAULT_PAGE_LIMIT;
+  const offset = Number.isFinite(rawOffset) ? Math.max(rawOffset, 0)                          : 0;
+  return { limit, offset };
+}
+
 // ── GET /public/customer/creative-workspace/:token/overview ───────────────────
 // Unified dashboard response — stats + recent projects + urgent actions.
 router.get("/public/customer/creative-workspace/:token/overview", async (req, res): Promise<void> => {
@@ -67,7 +80,7 @@ router.get("/public/customer/creative-workspace/:token/projects", async (req, re
     });
 
     // Enrich with urgency flag
-    const enriched = items.map((p) => ({
+    const allEnriched = items.map((p) => ({
       ...p,
       hasUrgentAction:
         p.reviewStatus === "shared" ||
@@ -76,7 +89,11 @@ router.get("/public/customer/creative-workspace/:token/projects", async (req, re
       creativeWorkspaceDetailPath: `/creative-workspace/${token}/projects/${p.projectNumber}`,
     }));
 
-    res.json({ items: enriched, total: enriched.length });
+    // Apply pagination — projects sorted newest-first by listWorkspaceProjectsFiltered
+    const { limit: pLimit, offset: pOffset } = parsePagination(q as Record<string, string | undefined>);
+    const total = allEnriched.length;
+    const enriched = allEnriched.slice(pOffset, pOffset + pLimit);
+    res.json({ items: enriched, total, limit: pLimit, offset: pOffset });
   } catch (err) {
     console.error("[cw2] projects error", err);
     res.status(500).json({ error: "Failed to load projects" });
@@ -240,7 +257,12 @@ router.get(
         p.filesUnlocked,
         token,
       );
-      res.json(bundle);
+
+      // Apply pagination to deliverables list
+      const { limit, offset } = parsePagination(req.query as Record<string, string | undefined>);
+      const totalAssets = bundle.deliverables.length;
+      const paged = bundle.deliverables.slice(offset, offset + limit);
+      res.json({ ...bundle, deliverables: paged, totalAssets, limit, offset });
     } catch (err) {
       console.error("[cw2] deliverables error", err);
       res.status(500).json({ error: "Failed to load deliverables" });
@@ -280,8 +302,13 @@ router.get(
       }
 
       const baseUrl = getPublicBaseUrl(req);
-      const history = await getRevisionHistory(proj.projectId, projectNumber, baseUrl);
-      res.json(history);
+      const full = await getRevisionHistory(proj.projectId, projectNumber, baseUrl);
+
+      // Apply pagination to revision entries — stable createdAt-ASC order preserved in adapter
+      const { limit, offset } = parsePagination(req.query as Record<string, string | undefined>);
+      const totalRounds = full.entries.length;
+      const entries = full.entries.slice(offset, offset + limit);
+      res.json({ ...full, entries, totalRounds, limit, offset });
     } catch (err) {
       console.error("[cw2] revisions error", err);
       res.status(500).json({ error: "Failed to load revision history" });
@@ -321,8 +348,12 @@ router.get(
         return;
       }
 
-      const history = await getProjectHistory(proj.projectId, projectNumber, p.internalProjectId, limit);
-      res.json(history);
+      const { limit: histLimit, offset: histOffset } = parsePagination(req.query as Record<string, string | undefined>);
+      const history = await getProjectHistory(proj.projectId, projectNumber, p.internalProjectId, histLimit + histOffset);
+      // Apply offset (historyAdapter already caps at 100 but we paginate after)
+      const allEvents = history.events;
+      const pagedEvents = allEvents.slice(histOffset, histOffset + histLimit);
+      res.json({ ...history, events: pagedEvents, total: allEvents.length, limit: histLimit, offset: histOffset });
     } catch (err) {
       console.error("[cw2] history error", err);
       res.status(500).json({ error: "Failed to load project history" });
@@ -368,7 +399,11 @@ router.get("/public/customer/creative-workspace/:token/notifications", async (re
     }));
     summary.unreadCount = summary.items.filter((n) => !n.read).length;
 
-    res.json(summary);
+    // Apply pagination — stable descending-createdAt order preserved in adapter
+    const { limit: nLimit, offset: nOffset } = parsePagination(req.query as Record<string, string | undefined>);
+    const total = summary.items.length;
+    const items = summary.items.slice(nOffset, nOffset + nLimit);
+    res.json({ ...summary, items, total, limit: nLimit, offset: nOffset });
   } catch (err) {
     console.error("[cw2] notifications error", err);
     res.status(500).json({ error: "Failed to load notifications" });

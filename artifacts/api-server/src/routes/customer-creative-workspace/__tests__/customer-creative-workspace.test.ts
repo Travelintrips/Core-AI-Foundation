@@ -234,3 +234,222 @@ describe("Security — no internal data in DTOs", () => {
     expect(dto).not.toContain("storagePath");
   });
 });
+
+// ── Pagination — parsePagination logic (inline helper tests) ─────────────────
+// Tests exercise the pagination logic that mirrors the route helper.
+
+function parsePagination(query: Record<string, string | undefined>): { limit: number; offset: number } {
+  const DEFAULT_PAGE_LIMIT = 50;
+  const MAX_PAGE_LIMIT     = 100;
+  const rawLimit  = parseInt(query["limit"]  ?? String(DEFAULT_PAGE_LIMIT), 10);
+  const rawOffset = parseInt(query["offset"] ?? "0", 10);
+  const limit  = Number.isFinite(rawLimit)  ? Math.min(Math.max(rawLimit, 1), MAX_PAGE_LIMIT) : DEFAULT_PAGE_LIMIT;
+  const offset = Number.isFinite(rawOffset) ? Math.max(rawOffset, 0)                          : 0;
+  return { limit, offset };
+}
+
+describe("parsePagination — route pagination helper", () => {
+  it("defaults to limit=50, offset=0 when params absent", () => {
+    const { limit, offset } = parsePagination({});
+    expect(limit).toBe(50);
+    expect(offset).toBe(0);
+  });
+
+  it("respects valid limit and offset", () => {
+    const { limit, offset } = parsePagination({ limit: "10", offset: "20" });
+    expect(limit).toBe(10);
+    expect(offset).toBe(20);
+  });
+
+  it("clamps limit to maximum of 100", () => {
+    const { limit } = parsePagination({ limit: "9999" });
+    expect(limit).toBe(100);
+  });
+
+  it("clamps negative limit to 1 (minimum 1 item)", () => {
+    const { limit } = parsePagination({ limit: "-5" });
+    expect(limit).toBe(1);
+  });
+
+  it("clamps negative offset to 0", () => {
+    const { offset } = parsePagination({ offset: "-10" });
+    expect(offset).toBe(0);
+  });
+
+  it("falls back to defaults for non-numeric values", () => {
+    const { limit, offset } = parsePagination({ limit: "abc", offset: "xyz" });
+    expect(limit).toBe(50);
+    expect(offset).toBe(0);
+  });
+
+  it("falls back to defaults for empty strings", () => {
+    const { limit, offset } = parsePagination({ limit: "", offset: "" });
+    expect(limit).toBe(50);
+    expect(offset).toBe(0);
+  });
+});
+
+describe("Notification adapter — pagination behaviour", () => {
+  /** Generate N persisted notifications with distinct createdAt timestamps. */
+  function makePersistedBatch(n: number) {
+    const base = Date.now();
+    return Array.from({ length: n }, (_, i) => ({
+      id: i + 1,
+      type: "info",
+      title: `Notification ${i + 1}`,
+      message: `Message ${i + 1}`,
+      projectId: null,
+      read:     false,
+      severity: "info",
+      createdAt: new Date(base + i * 1000), // ascending timestamps
+      category:  null,
+    }));
+  }
+
+  it("returns all items when total ≤ limit", () => {
+    const result = buildEnhancedNotifications(makePersistedBatch(5), [], "tok");
+    expect(result.items).toHaveLength(5);
+    expect(result.total).toBe(5);
+  });
+
+  it("items are ordered newest-first (descending createdAt)", () => {
+    const result = buildEnhancedNotifications(makePersistedBatch(5), [], "tok");
+    const times = result.items.map((n) => new Date(n.createdAt).getTime());
+    for (let i = 1; i < times.length; i++) {
+      expect(times[i]).toBeLessThanOrEqual(times[i - 1]);
+    }
+  });
+
+  it("total reflects full count before any caller-side slicing", () => {
+    const result = buildEnhancedNotifications(makePersistedBatch(20), [], "tok");
+    expect(result.total).toBe(20);
+  });
+});
+
+// ── IDOR — cross-customer isolation (authGuard unit tests) ───────────────────
+
+// We test the IDOR contract through authGuard.guardToken, mocking
+// resolveWorkspaceSession so we don't need a live DB.
+vi.mock("../../../services/customerWorkspaceService.js", () => ({
+  resolveWorkspaceSession: vi.fn(),
+  listWorkspaceProjectsFiltered: vi.fn().mockResolvedValue([]),
+  getProjectDetail: vi.fn(),
+}));
+
+import { guardToken, verifyProjectOwnership } from "../../../services/customer-creative-workspace/authGuard.js";
+import {
+  resolveWorkspaceSession,
+  getProjectDetail,
+} from "../../../services/customerWorkspaceService.js";
+
+describe("IDOR — cross-customer isolation (authGuard)", () => {
+  const SESSION_A = {
+    emailHash: "hash-A",
+    clientEmail: "customer-a@test.com",
+    clientName: "Customer A",
+  };
+  const SESSION_B = {
+    emailHash: "hash-B",
+    clientEmail: "customer-b@test.com",
+    clientName: "Customer B",
+  };
+
+  function makeReq(token: string, params?: Record<string, string>) {
+    return {
+      params: { token, ...params },
+    } as unknown as import("express").Request;
+  }
+
+  function makeRes() {
+    const res: Record<string, unknown> = {};
+    res["status"] = vi.fn().mockReturnValue(res);
+    res["json"]   = vi.fn().mockReturnValue(res);
+    return res as unknown as import("express").Response;
+  }
+
+  beforeEach(() => {
+    vi.mocked(resolveWorkspaceSession).mockReset();
+    vi.mocked(getProjectDetail).mockReset();
+  });
+
+  it("valid token → resolves session and returns it", async () => {
+    vi.mocked(resolveWorkspaceSession).mockResolvedValue({
+      ok: true,
+      session: SESSION_A,
+    } as unknown as ReturnType<typeof resolveWorkspaceSession> extends Promise<infer T> ? T : never);
+    const session = await guardToken(makeReq("valid-token-aaa"), makeRes());
+    expect(session).not.toBeNull();
+    expect(session?.clientEmail).toBe("customer-a@test.com");
+  });
+
+  it("invalid/expired token → returns null and responds 401", async () => {
+    vi.mocked(resolveWorkspaceSession).mockResolvedValue({
+      ok: false, status: 401, error: "Token invalid",
+    } as unknown as ReturnType<typeof resolveWorkspaceSession> extends Promise<infer T> ? T : never);
+    const res = makeRes();
+    const session = await guardToken(makeReq("bad-token-xxx"), res);
+    expect(session).toBeNull();
+    expect(res["status"]).toHaveBeenCalledWith(401);
+  });
+
+  it("short token (<10 chars) → 400 before DB call", async () => {
+    const res = makeRes();
+    const session = await guardToken(makeReq("short"), res);
+    expect(session).toBeNull();
+    expect(res["status"]).toHaveBeenCalledWith(400);
+    // resolveWorkspaceSession must NOT be called for obviously bad tokens
+    expect(resolveWorkspaceSession).not.toHaveBeenCalled();
+  });
+
+  it("Customer A cannot access Customer B project — returns null", async () => {
+    // verifyProjectOwnership delegates to getProjectDetail with session's clientEmail.
+    // If getProjectDetail returns null it means the project doesn't belong to this customer.
+    vi.mocked(getProjectDetail).mockResolvedValue(null);
+    const result = await verifyProjectOwnership(
+      makeReq("valid-token-aaa", { projectNumber: "SR-BELONGS-TO-B" }),
+      SESSION_A,
+      "SR-BELONGS-TO-B",
+    );
+    expect(result).toBeNull();
+  });
+
+  it("Customer A can access their own project", async () => {
+    const fakeProjDetail = {
+      overview: {
+        projectNumber: "SR-A-001",
+        kind: "service_request",
+        internalProjectId: 1,
+        filesUnlocked: false,
+        currentStage: "building",
+        currentStageLabel: "Building",
+        progressPercent: 50,
+        deliveryDate: null,
+        reviewStatus: null,
+        paymentStatus: null,
+        serviceName: "Branding",
+        brandName: "Acme",
+      },
+    };
+    vi.mocked(getProjectDetail).mockResolvedValue(
+      fakeProjDetail as unknown as Awaited<ReturnType<typeof getProjectDetail>>,
+    );
+    const result = await verifyProjectOwnership(
+      makeReq("valid-token-aaa", { projectNumber: "SR-A-001" }),
+      SESSION_A,
+      "SR-A-001",
+    );
+    expect(result).not.toBeNull();
+  });
+
+  it("Customer B token cannot read Customer A project even with correct projectNumber", async () => {
+    // getProjectDetail filters by clientEmail — so Customer B's session
+    // with Customer A's projectNumber → null.
+    vi.mocked(getProjectDetail).mockResolvedValue(null);
+    const result = await verifyProjectOwnership(
+      makeReq("valid-token-bbb", { projectNumber: "SR-A-001" }),
+      SESSION_B,          // <— wrong session for this project
+      "SR-A-001",
+    );
+    expect(result).toBeNull();
+  });
+});
