@@ -273,13 +273,14 @@ export default function InteriorDesignBriefPage() {
         }),
       });
 
-      const data = (await res.json()) as { project?: { id: number }; error?: string };
+      const data = (await res.json()) as { project?: { id: number }; accessToken?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
 
-      const projectId = data.project?.id;
-      if (!projectId) throw new Error("No project ID returned");
+      // Project page is token-gated — use accessToken (UUID), never numeric id
+      const token = data.accessToken;
+      if (!token) throw new Error("No access token returned");
 
-      navigate(`/interior-design/${projectId}`);
+      navigate(`/interior-design/${token}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan");
     } finally {

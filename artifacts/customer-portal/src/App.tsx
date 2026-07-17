@@ -47,6 +47,9 @@ const CpReviewPage               = lazy(() => import('@/pages/cp-review'));
 const GalleryV2Page              = lazy(() => import('@/pages/creative-portfolio/GalleryV2Page'));
 const InspirationPage            = lazy(() => import('@/pages/creative-portfolio/InspirationPage'));
 const ComparePage                = lazy(() => import('@/pages/creative-portfolio/ComparePage'));
+// ── Team 17: Interior Design ─────────────────────────────────────────────
+const InteriorDesignBriefPage   = lazy(() => import('@/pages/interior-design/index'));
+const InteriorDesignProjectPage = lazy(() => import('@/pages/interior-design/project'));
 // ── Team 22: Vendor Directory ────────────────────────────────────────────
 const VendorDirectoryPage        = lazy(() => import('@/pages/creative-vendors/VendorDirectoryPage'));
 const VendorProfilePage          = lazy(() => import('@/pages/creative-vendors/VendorProfilePage'));
@@ -137,6 +140,8 @@ function Router() {
         <Route path="/workspace/:token/support" component={WorkspaceSupportPage} />
         <Route path="/workspace/:token/settings" component={WorkspaceSettingsPage} />
         {/* ── Team 04: Portfolio V2 ───────────────────────────────────── */}
+        <Route path="/interior-design" component={InteriorDesignBriefPage} />
+        <Route path="/interior-design/:id" component={InteriorDesignProjectPage} />
         <Route path="/portfolio-v2" component={GalleryV2Page} />
         <Route path="/inspiration" component={InspirationPage} />
         <Route path="/portfolio-compare" component={ComparePage} />
