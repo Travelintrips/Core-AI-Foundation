@@ -1476,4 +1476,47 @@ export const STYLE_KNOWLEDGE: InsertAiStyleKnowledge[] = [
     },
     sortOrder: 35,
   },
+  // ── Luxury Editorial (spec requirement) ─────────────────────────────────────
+  {
+    styleKey: "luxury_editorial",
+    displayName: "Luxury Editorial",
+    description: "High-fashion editorial aesthetics combined with luxury brand sensibility. Maximum drama, impeccable craft, cultural authority.",
+    colorPalette: {
+      recommended: [
+        { name: "Absolute Black", hex: "#0A0A0A", role: "primary" },
+        { name: "Antique White", hex: "#F5F0E8", role: "background" },
+        { name: "Burnished Gold", hex: "#B8963E", role: "accent" },
+        { name: "Ash Gray", hex: "#8A8A8A", role: "neutral" },
+      ],
+      forbidden: ["bright colors", "pastels", "neon", "saturated gradients", "rainbow"],
+      contrastRatio: "7:1 minimum — luxury editorial demands precision",
+      dominantMood: "Powerful, exclusive, culturally authoritative, aspirational",
+    },
+    typographyPairings: [
+      { headingFont: "Didot", bodyFont: "Garamond", fontMood: "classic editorial authority", hierarchyRules: "Extreme size contrast — display at 72px+, body at 14px; generous tracking in headings", useCase: "Luxury fashion, haute couture, editorial magazine" },
+      { headingFont: "Playfair Display", bodyFont: "Lato Light", fontMood: "modern editorial luxury", hierarchyRules: "Serif display, light-weight sans body, tight leading on body", useCase: "Luxury brand lookbook, high-end campaign" },
+    ],
+    emotions: ["desire", "awe", "exclusivity", "cultural aspiration"],
+    archetypes: ["Ruler", "Lover", "Creator"],
+    personalities: ["prestigious", "exclusive", "culturally-authoritative", "dramatic"],
+    industrySuitability: {
+      highFit: ["luxury_fashion", "jewelry", "beauty", "hotel", "wedding", "bag"],
+      mediumFit: ["high_fashion", "cosmetics", "boutique", "real_estate"],
+      poorFit: ["government", "agriculture", "logistics", "kids_fashion"],
+    },
+    visualRules: {
+      spacingStyle: "dramatic",
+      illustrationStyle: "none",
+      photographyStyle: "editorial-fashion",
+      iconStyle: "none",
+      layoutPreferences: ["full-bleed", "asymmetric editorial", "single-hero", "oversized typography"],
+      prohibitedPatterns: ["stock photography", "clip art", "system fonts", "symmetrical layouts", "multiple accent colors"],
+    },
+    promptGuidance: {
+      artDirectionPrompt: "High-fashion editorial photography. Extreme drama, controlled minimalism. Single powerful image. Typography as sculpture. Gold and black only.",
+      imagePrompt: "Luxury fashion editorial, extreme contrast, dramatic lighting, gold metallic props, high-fashion model, Vogue aesthetic, black and white with gold accent",
+      negativePrompt: "colorful, stock photo, casual, cheerful, busy background, multiple subjects competing",
+    },
+    sortOrder: 36,
+  },
 ];

@@ -8,12 +8,13 @@
  */
 
 import { Router } from "express";
-import { db, aiTemplatesTable } from "@workspace/db";
+import { db, aiTemplatesTable, aiTemplateKnowledgeTable } from "@workspace/db";
 import { upsertStyle, upsertIndustry, upsertSection } from "../services/knowledgeLibraryService.js";
 import { STYLE_KNOWLEDGE } from "../data/styleKnowledgeSeed.js";
 import { INDUSTRY_KNOWLEDGE } from "../data/industryKnowledgeSeed.js";
 import { SECTION_LIBRARY } from "../data/sectionLibrarySeed.js";
 import { generateTemplateKnowledge, getTemplateCount } from "../data/templateKnowledgeGenerator.js";
+import { generateTemplateKnowledgePayloads } from "../data/templateKnowledgePayloadGenerator.js";
 import type { Request, Response } from "express";
 
 const router = Router();
@@ -102,6 +103,37 @@ router.post("/knowledge", async (req: Request, res: Response) => {
       };
     } catch (err) {
       report.templates = { status: "error", error: String(err) };
+    }
+  }
+
+  // ── 5. Template Knowledge Payloads (rich ai_template_knowledge) ─────────────
+
+  const runPayloads = !parts || parts.includes("payloads");
+  if (runPayloads) {
+    try {
+      const payloads = generateTemplateKnowledgePayloads();
+      let inserted = 0;
+      let skipped = 0;
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < payloads.length; i += BATCH_SIZE) {
+        const batch = payloads.slice(i, i + BATCH_SIZE);
+        const result = await db
+          .insert(aiTemplateKnowledgeTable)
+          .values(batch)
+          .onConflictDoNothing()
+          .returning({ code: aiTemplateKnowledgeTable.templateCode });
+        inserted += result.length;
+        skipped += batch.length - result.length;
+      }
+      report.payloads = {
+        status: "ok",
+        count: inserted,
+        // @ts-expect-error extra field
+        skipped,
+        total: payloads.length,
+      };
+    } catch (err) {
+      report.payloads = { status: "error", error: String(err) };
     }
   }
 

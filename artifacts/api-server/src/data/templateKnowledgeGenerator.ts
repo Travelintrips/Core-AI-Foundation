@@ -22,7 +22,7 @@ const CATEGORIES = [
 type Category = typeof CATEGORIES[number];
 
 // Each category supports specific output formats
-const CATEGORY_OUTPUT: Record<Category, string[]> = {
+export const CATEGORY_OUTPUT: Record<Category, string[]> = {
   "Graphic Design":   ["pdf", "png", "svg"],
   "Company Profile":  ["pdf", "pptx"],
   "Presentation":     ["pdf", "pptx"],
@@ -38,7 +38,7 @@ const CATEGORY_OUTPUT: Record<Category, string[]> = {
 };
 
 // Default section orders per category
-const CATEGORY_SECTIONS: Record<Category, string[]> = {
+export const CATEGORY_SECTIONS: Record<Category, string[]> = {
   "Graphic Design":   ["cover_page", "portfolio_gallery", "about_company", "contact_form"],
   "Company Profile":  ["cover_page", "executive_summary", "about_company", "mission_vision", "statistics_impact", "services_grid", "team_members", "timeline_history", "portfolio_gallery", "partners_clients", "awards_certifications", "testimonials", "contact_form", "footer_full"],
   "Presentation":     ["cover_page", "executive_summary", "about_company", "services_grid", "statistics_impact", "case_study", "team_members", "cta_primary"],
@@ -55,7 +55,7 @@ const CATEGORY_SECTIONS: Record<Category, string[]> = {
 
 // ── Style configs ─────────────────────────────────────────────────────────────
 
-interface StyleConfig {
+export interface StyleConfig {
   style: string;
   colorTheme: { primary: string; secondary: string; accent: string; background: string; text: string };
   typography: { heading: string; body: string; style: string };
@@ -82,7 +82,7 @@ interface StyleConfig {
   prohibitedPatterns: string[];
 }
 
-const STYLE_CONFIGS: Record<string, StyleConfig> = {
+export const STYLE_CONFIGS: Record<string, StyleConfig> = {
   modern: {
     style: "modern", colorTheme: { primary: "#0A1628", secondary: "#2563EB", accent: "#F59E0B", background: "#F9FAFB", text: "#111827" },
     typography: { heading: "Inter", body: "Inter", style: "geometric-sans" },
@@ -212,7 +212,7 @@ function getStyleConfig(style: string): StyleConfig {
 
 // ── Industry + business context lookup ────────────────────────────────────────
 
-const INDUSTRY_CONTEXT: Record<string, { businessType: string; market: string; persona: string; price: string }> = {
+export const INDUSTRY_CONTEXT: Record<string, { businessType: string; market: string; persona: string; price: string }> = {
   fashion: { businessType: "D2C", market: "national", persona: "Fashion-forward professional, 25-40", price: "mid-market" },
   luxury_fashion: { businessType: "D2C", market: "global", persona: "HNWI, 30-60, quality-obsessed", price: "luxury" },
   technology: { businessType: "B2B", market: "global", persona: "Tech decision maker, 35-50", price: "premium" },
@@ -245,6 +245,18 @@ const INDUSTRY_CONTEXT: Record<string, { businessType: string; market: string; p
   wedding: { businessType: "B2C", market: "local", persona: "Engaged couple, 22-40", price: "premium" },
   modest_fashion: { businessType: "D2C", market: "national", persona: "Modest fashion shopper, 20-45", price: "mid-market" },
   streetwear_brand: { businessType: "D2C", market: "global", persona: "Urban youth, 16-30", price: "mid-market" },
+  // New industries from spec
+  fast_fashion:  { businessType: "D2C", market: "national", persona: "Budget-conscious shopper, 18-35", price: "budget" },
+  sportswear:    { businessType: "D2C", market: "national", persona: "Active lifestyle consumer, 20-40", price: "mid-market" },
+  kids_fashion:  { businessType: "B2C", market: "national", persona: "Parent purchasing for children, 25-40", price: "mid-market" },
+  boutique:      { businessType: "D2C", market: "local", persona: "Boutique fashion shopper, 25-50", price: "premium" },
+  jewelry:       { businessType: "D2C", market: "national", persona: "Jewelry buyer, 25-55", price: "premium" },
+  shoes:         { businessType: "D2C", market: "national", persona: "Footwear enthusiast, 18-45", price: "mid-market" },
+  bag:           { businessType: "D2C", market: "national", persona: "Accessories buyer, 22-45", price: "premium" },
+  cosmetics:     { businessType: "D2C", market: "national", persona: "Cosmetics buyer, 18-40", price: "mid-market" },
+  lifestyle:     { businessType: "B2C", market: "national", persona: "Lifestyle-driven consumer, 25-45", price: "mid-market" },
+  beverage:      { businessType: "B2C", market: "local", persona: "Beverage consumer, 18-45", price: "mid-market" },
+  media:         { businessType: "B2C", market: "national", persona: "Media consumer, 18-55", price: "mid-market" },
 };
 
 function getIndustryContext(industry: string) {
@@ -264,14 +276,14 @@ interface TemplateSpec {
   subCategory?: string;
 }
 
-function generateCode(category: string, industry: string, style: string, index: number): string {
+export function generateCode(category: string, industry: string, style: string, index: number): string {
   const cat = category.replace(/[^A-Z]/gi, "").substring(0, 3).toUpperCase();
   const ind = industry.replace(/[^A-Z]/gi, "").substring(0, 3).toUpperCase();
   const sty = style.replace(/[^A-Z]/gi, "").substring(0, 3).toUpperCase();
   return `${cat}-${ind}-${sty}-${String(index).padStart(3, "0")}`;
 }
 
-function generateSlug(category: string, industry: string, style: string, index: number): string {
+export function generateSlug(category: string, industry: string, style: string, index: number): string {
   const base = `${category}-${industry}-${style}-${index}`
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "-")
@@ -443,7 +455,7 @@ const COMPANY_PROFILE_SPECS: Omit<TemplateSpec, "category">[] = [
 ];
 
 // Generate all specs for all 12 categories
-function generateAllSpecs(): TemplateSpec[] {
+export function generateAllSpecs(): TemplateSpec[] {
   const all: TemplateSpec[] = [];
 
   // Company Profile
@@ -550,8 +562,8 @@ function generateAllSpecs(): TemplateSpec[] {
     });
   });
 
-  // Packaging — 100+
-  const pkgIndustries = ["food_beverage", "beauty", "coffee", "fashion", "luxury_fashion", "retail", "agriculture", "healthcare", "entertainment"];
+  // Packaging — 100+ (13 industries × 10 styles = 130, capped at 110)
+  const pkgIndustries = ["food_beverage", "beauty", "coffee", "fashion", "luxury_fashion", "retail", "agriculture", "healthcare", "entertainment", "cosmetics", "wedding", "hotel", "interior_design"];
   const pkgStyles = ["modern", "minimalist", "luxury", "bold", "organic", "retro", "vintage", "elegant", "playful", "corporate"];
   pkgIndustries.forEach((ind, i) => {
     pkgStyles.forEach((sty, j) => {
