@@ -56,8 +56,6 @@ import CreativeMarketplace from "@/pages/creative-marketplace";
 import DesignRenderBatches from "@/pages/design-render-batches";
 import DesignRenderBatchesNew from "@/pages/design-render-batches-new";
 import DesignRenderBatchDetail from "@/pages/design-render-batch-detail";
-import InteriorDesignPage from "@/pages/interior-design/index";
-import InteriorDesignDetailPage from "@/pages/interior-design/detail";
 import DesignTemplateAiCreate from "@/pages/design-template-ai-create";
 import DesignTemplateEditor from "@/pages/design-template-editor";
 import DesignTemplates from "@/pages/design-templates";
@@ -117,8 +115,6 @@ function AdminRouter() {
         <Route path="/design-templates/:id" component={DesignTemplateDetail} />
         <Route path="/design-templates" component={DesignTemplates} />
         <Route path="/creative-marketplace" component={CreativeMarketplace} />
-        <Route path="/interior-design/:id" component={InteriorDesignDetailPage} />
-        <Route path="/interior-design" component={InteriorDesignPage} />
         <Route path="/design-render-batches/new" component={DesignRenderBatchesNew} />
         <Route path="/design-render-batches/:id" component={DesignRenderBatchDetail} />
         <Route path="/design-render-batches" component={DesignRenderBatches} />

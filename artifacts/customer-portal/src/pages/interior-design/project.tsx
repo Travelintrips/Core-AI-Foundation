@@ -109,6 +109,10 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
   );
 }
 
+/**
+ * params.id is the accessToken (UUID), NOT a numeric project ID.
+ * The token-based URL prevents IDOR: possession of the token = ownership.
+ */
 export default function InteriorDesignProjectPage({ params }: { params: { id: string } }) {
   const [, navigate] = useLocation();
   const [loading, setLoading] = useState(true);
@@ -118,13 +122,15 @@ export default function InteriorDesignProjectPage({ params }: { params: { id: st
   const [output, setOutput] = useState<OutputData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const projectId = params.id;
+  // params.id is the accessToken (UUID) — used directly in the token-based URL
+  const accessToken = params.id;
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/public/interior-design/projects/${projectId}/outputs`);
+      // Token in path param — server verifies ownership; numeric id not accepted
+      const res = await fetch(`/api/public/interior-design/projects/${accessToken}/outputs`);
       if (!res.ok) {
         const d = (await res.json()) as { error?: string };
         throw new Error(d.error ?? `HTTP ${res.status}`);
@@ -143,7 +149,7 @@ export default function InteriorDesignProjectPage({ params }: { params: { id: st
 
   useEffect(() => {
     void load();
-  }, [projectId]);
+  }, [accessToken]);
 
   // Poll while analyzing
   useEffect(() => {

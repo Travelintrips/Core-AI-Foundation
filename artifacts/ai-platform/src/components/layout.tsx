@@ -122,7 +122,6 @@ const NAV_SECTIONS = [
       { href: "/creative-marketplace", label: "Creative Marketplace", icon: Store },
       { href: "/design-render-batches", label: "Bulk Render", icon: Layers },
       { href: "/design-templates/ai-create", label: "AI Template Assistant", icon: Sparkles },
-      { href: "/interior-design", label: "Interior Design", icon: LayoutGrid },
     ],
   },
   {

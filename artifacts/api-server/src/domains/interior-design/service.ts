@@ -1,12 +1,21 @@
 /**
  * Team 17 — Interior Design Planning — Service layer
- * Handles project CRUD, brief storage, AI output generation, and validation.
  *
- * NOTE: No RAB / pricing calculations. Outputs are design concepts only.
+ * Compliance notes (Global Remediation Rules):
+ * - Schema imported from domain-local ./schema.ts (NOT @workspace/db/schema)
+ * - Access token generated at project creation; all public reads verified by token
+ * - Brand Intelligence V2 is the source of truth for style/material data (via adapter)
+ * - Interior Design stores only: preference snapshot, sourceBrandProfileId/Version, overrides
+ * - No RAB / pricing calculations
  */
 import { db } from "@workspace/db";
-import { idProjectsTable, idBriefsTable, idOutputsTable } from "@workspace/db/schema";
+import {
+  idProjectsTable,
+  idBriefsTable,
+  idOutputsTable,
+} from "./schema.js";
 import { eq, desc, and, sql } from "drizzle-orm";
+import { randomUUID } from "crypto";
 import OpenAI from "openai";
 import {
   runFullValidation,
@@ -15,8 +24,8 @@ import {
   type DoorSpec,
   type WindowSpec,
   type ColumnSpec,
-  type PlacedFurniture,
 } from "./validation.js";
+import { readBrandStyleSnapshot } from "./brandIntelligenceAdapter.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -69,6 +78,7 @@ export async function createProject(input: CreateProjectInput) {
       clientEmail: input.clientEmail ?? null,
       notes: input.notes ?? null,
       status: "draft",
+      accessToken: randomUUID(),
     })
     .returning();
   return row;
@@ -101,11 +111,27 @@ export async function listProjects(opts: ListProjectsOptions = {}) {
   return { items: rows, total: countResult[0]?.count ?? 0, page, pageSize };
 }
 
+/** Admin: look up by numeric ID — admin routes only */
 export async function getProject(id: number) {
   const [project] = await db
     .select()
     .from(idProjectsTable)
     .where(eq(idProjectsTable.id, id))
+    .limit(1);
+  return project ?? null;
+}
+
+/**
+ * Public/customer: look up by access token — IDOR guard.
+ * Ownership is proven by possession of the token returned at creation.
+ * Never accept numeric projectId from public request body/query as identity.
+ */
+export async function getProjectByToken(token: string) {
+  if (!token || token.length < 8) return null;
+  const [project] = await db
+    .select()
+    .from(idProjectsTable)
+    .where(eq(idProjectsTable.accessToken, token))
     .limit(1);
   return project ?? null;
 }
@@ -119,7 +145,10 @@ export async function updateProjectStatus(id: number, status: string) {
   return updated ?? null;
 }
 
-export async function updateProject(id: number, patch: Partial<CreateProjectInput & { status: string }>) {
+export async function updateProject(
+  id: number,
+  patch: Partial<CreateProjectInput & { status: string }>,
+) {
   const [updated] = await db
     .update(idProjectsTable)
     .set({ ...patch, updatedAt: new Date() })
@@ -131,72 +160,52 @@ export async function updateProject(id: number, patch: Partial<CreateProjectInpu
 // ── Brief ─────────────────────────────────────────────────────────────────────
 
 export async function submitBrief(input: SubmitBriefInput) {
-  // Run validation before saving
   const geo: RoomGeometry = {
     roomLengthM: input.roomLengthM,
     roomWidthM: input.roomWidthM,
     ceilingHeightM: input.ceilingHeightM,
     roomType: input.roomType ?? "living_room",
   };
+  // Validate before save — result embedded in output later
+  void runFullValidation({ geo });
 
-  // Upsert brief (one brief per project)
   const existing = await getBriefByProject(input.projectId);
+
+  const briefValues = {
+    roomLengthM: String(input.roomLengthM),
+    roomWidthM: String(input.roomWidthM),
+    ceilingHeightM: String(input.ceilingHeightM),
+    doors: input.doors ?? [],
+    windows: input.windows ?? [],
+    columns: input.columns ?? [],
+    immutableZones: input.immutableZones ?? [],
+    style: input.style,
+    primaryColors: input.primaryColors ?? [],
+    secondaryColors: input.secondaryColors ?? [],
+    materialsPreference: input.materialsPreference ?? {},
+    lightingPreference: input.lightingPreference ?? {},
+    furnitureNeeds: input.furnitureNeeds ?? [],
+    budgetNotes: input.budgetNotes ?? null,
+    photoUrls: input.photoUrls ?? [],
+    floorPlanUrl: input.floorPlanUrl ?? null,
+    additionalNotes: input.additionalNotes ?? null,
+  };
 
   let brief;
   if (existing) {
     [brief] = await db
       .update(idBriefsTable)
-      .set({
-        roomLengthM: String(input.roomLengthM),
-        roomWidthM: String(input.roomWidthM),
-        ceilingHeightM: String(input.ceilingHeightM),
-        doors: input.doors ?? [],
-        windows: input.windows ?? [],
-        columns: input.columns ?? [],
-        immutableZones: input.immutableZones ?? [],
-        style: input.style,
-        primaryColors: input.primaryColors ?? [],
-        secondaryColors: input.secondaryColors ?? [],
-        materialsPreference: input.materialsPreference ?? {},
-        lightingPreference: input.lightingPreference ?? {},
-        furnitureNeeds: input.furnitureNeeds ?? [],
-        budgetNotes: input.budgetNotes ?? null,
-        photoUrls: input.photoUrls ?? [],
-        floorPlanUrl: input.floorPlanUrl ?? null,
-        additionalNotes: input.additionalNotes ?? null,
-        updatedAt: new Date(),
-      })
+      .set({ ...briefValues, updatedAt: new Date() })
       .where(eq(idBriefsTable.id, existing.id))
       .returning();
   } else {
     [brief] = await db
       .insert(idBriefsTable)
-      .values({
-        projectId: input.projectId,
-        roomLengthM: String(input.roomLengthM),
-        roomWidthM: String(input.roomWidthM),
-        ceilingHeightM: String(input.ceilingHeightM),
-        doors: input.doors ?? [],
-        windows: input.windows ?? [],
-        columns: input.columns ?? [],
-        immutableZones: input.immutableZones ?? [],
-        style: input.style,
-        primaryColors: input.primaryColors ?? [],
-        secondaryColors: input.secondaryColors ?? [],
-        materialsPreference: input.materialsPreference ?? {},
-        lightingPreference: input.lightingPreference ?? {},
-        furnitureNeeds: input.furnitureNeeds ?? [],
-        budgetNotes: input.budgetNotes ?? null,
-        photoUrls: input.photoUrls ?? [],
-        floorPlanUrl: input.floorPlanUrl ?? null,
-        additionalNotes: input.additionalNotes ?? null,
-      })
+      .values({ projectId: input.projectId, ...briefValues })
       .returning();
   }
 
-  // Update project status to brief_submitted
   await updateProjectStatus(input.projectId, "brief_submitted");
-
   return brief;
 }
 
@@ -262,7 +271,19 @@ const ROOM_LABELS: Record<string, string> = {
   booth: "Retail/Exhibition Booth",
 };
 
-export async function generateOutputs(projectId: number): Promise<{
+/**
+ * Generate design outputs for a project.
+ *
+ * Brand Intelligence flow (P1 compliance):
+ * 1. If clientId provided, read BrandDNA from Brand Intelligence V2 (read-only adapter).
+ * 2. Store sourceBrandProfileId + version in id_outputs for traceability.
+ * 3. Use brand palette/personality as DEFAULTS; brief preferences are project-specific OVERRIDES.
+ * 4. Interior Design never stores its own copy of brand style as source of truth.
+ */
+export async function generateOutputs(
+  projectId: number,
+  opts: { clientId?: string } = {},
+): Promise<{
   output: typeof idOutputsTable.$inferSelect;
   validationResult: ReturnType<typeof runFullValidation>;
   safetyDisclaimers: string[];
@@ -273,7 +294,6 @@ export async function generateOutputs(projectId: number): Promise<{
   const brief = await getBriefByProject(projectId);
   if (!brief) throw new Error(`No brief found for project ${projectId}`);
 
-  // Mark as analyzing
   await updateProjectStatus(projectId, "analyzing");
 
   const geo: RoomGeometry = {
@@ -283,7 +303,6 @@ export async function generateOutputs(projectId: number): Promise<{
     roomType: project.roomType,
   };
 
-  // Run validation first
   const doors = (brief.doors as DoorSpec[]) ?? [];
   const validationResult = runFullValidation({
     geo,
@@ -298,71 +317,78 @@ export async function generateOutputs(projectId: number): Promise<{
   const roomLabel = ROOM_LABELS[project.roomType] ?? project.roomType;
   const area = (geo.roomLengthM * geo.roomWidthM).toFixed(1);
 
+  // ── Brand Intelligence V2 read (P1 compliance) ────────────────────────────
+  // Read brand context from Brand Intelligence V2 if a clientId is available.
+  // Interior Design does NOT duplicate brand data — it only reads and references.
+  const clientId = opts.clientId ?? project.clientEmail ?? null;
+  const brandSnapshot = clientId ? await readBrandStyleSnapshot(clientId) : null;
+
+  // Project-specific overrides: brief's colors/style take precedence over brand defaults
+  const effectivePalette: string[] =
+    (brief.primaryColors ?? []).length > 0
+      ? [...(brief.primaryColors ?? []), ...(brief.secondaryColors ?? [])]
+      : (brandSnapshot?.palette ?? []);
+
+  const briefBrandContext = brandSnapshot
+    ? `\nBRAND INTELLIGENCE CONTEXT (read from Brand DNA, do not duplicate — use as inspiration):\n` +
+      `- Brand personality: ${brandSnapshot.brandPersonality.join(", ")}\n` +
+      `- Brand palette (defaults): ${brandSnapshot.palette.join(", ")}\n` +
+      `- Layout style: ${brandSnapshot.layoutStyle}\n` +
+      `- Creative direction: ${brandSnapshot.creativeDirection ?? "not available"}\n` +
+      `Note: Brief preferences OVERRIDE brand defaults where specified.`
+    : "";
+
   const prompt = `You are an expert interior designer. Generate a comprehensive interior design concept for the following project.
 
 PROJECT: ${project.title}
 ROOM TYPE: ${roomLabel}
 DIMENSIONS: ${geo.roomLengthM}m (L) × ${geo.roomWidthM}m (W) × ${geo.ceilingHeightM}m ceiling — area ${area}m²
 STYLE: ${styleLabel}
-PRIMARY COLORS: ${(brief.primaryColors ?? []).join(", ") || "Not specified"}
-SECONDARY COLORS: ${(brief.secondaryColors ?? []).join(", ") || "Not specified"}
+PRIMARY COLORS (project override): ${(brief.primaryColors ?? []).join(", ") || "Not specified"}
+SECONDARY COLORS (project override): ${(brief.secondaryColors ?? []).join(", ") || "Not specified"}
 FURNITURE NEEDS: ${(brief.furnitureNeeds ?? []).join(", ") || "Not specified"}
 MATERIALS PREFERENCE: ${JSON.stringify(brief.materialsPreference)}
 LIGHTING PREFERENCE: ${JSON.stringify(brief.lightingPreference)}
 ${brief.additionalNotes ? `ADDITIONAL NOTES: ${brief.additionalNotes}` : ""}
 ${doors.length > 0 ? `DOORS: ${doors.length} door(s) defined` : ""}
+${briefBrandContext}
 
-VALIDATION WARNINGS (consider these in your design):
+VALIDATION WARNINGS (consider in your design):
 ${[...validationResult.dimensionWarnings, ...validationResult.clearanceWarnings, ...validationResult.circulationWarnings].join("\n") || "None"}
 
 Return ONLY a JSON object (no markdown) with exactly this structure:
 {
   "moodboard": {
-    "palette": ["#hex1", "#hex2", "#hex3", "#hex4", "#hex5"],
-    "moodWords": ["word1", "word2", "word3", "word4", "word5"],
+    "palette": ["#hex1","#hex2","#hex3","#hex4","#hex5"],
+    "moodWords": ["word1","word2","word3","word4","word5"],
     "styleDescription": "2-3 sentences describing the aesthetic",
-    "textureDescriptions": ["texture1", "texture2", "texture3"],
+    "textureDescriptions": ["texture1","texture2","texture3"],
     "lightingMood": "description of overall light quality"
   },
   "spacePlan": {
-    "zones": [
-      { "id": "z1", "label": "Zone Name", "xM": 0, "yM": 0, "widthM": 2, "depthM": 2, "purpose": "description" }
-    ],
+    "zones": [{ "id":"z1","label":"Zone Name","xM":0,"yM":0,"widthM":2,"depthM":2,"purpose":"description" }],
     "scale": "1:50",
     "notes": "Key planning notes"
   },
-  "furniturePlacement": [
-    {
-      "item": "Furniture Name",
-      "widthM": 2.0,
-      "depthM": 0.9,
-      "heightM": 0.75,
-      "xM": 0.5,
-      "yM": 0.5,
-      "rotation": 0,
-      "clearanceFront": 0.9,
-      "clearanceSide": 0.45,
-      "note": "placement rationale"
-    }
-  ],
+  "furniturePlacement": [{
+    "item":"Furniture Name","widthM":2.0,"depthM":0.9,"heightM":0.75,
+    "xM":0.5,"yM":0.5,"rotation":0,"clearanceFront":0.9,"clearanceSide":0.45,"note":"placement rationale"
+  }],
   "circulationAnalysis": "Detailed paragraph describing traffic flow, main pathways, and any bottlenecks.",
   "materialRecommendations": {
-    "flooring": { "primary": "material name", "alternative": "alt material", "finish": "finish type", "why": "rationale" },
-    "walls": { "primary": "material/treatment", "accent": "accent wall treatment", "why": "rationale" },
-    "ceiling": { "treatment": "ceiling treatment", "height": "any modifications", "why": "rationale" },
-    "textiles": { "curtains": "description", "rugs": "description", "upholstery": "description" }
+    "flooring": { "primary":"material","alternative":"alt","finish":"finish","why":"rationale" },
+    "walls": { "primary":"treatment","accent":"accent","why":"rationale" },
+    "ceiling": { "treatment":"ceiling","height":"note","why":"rationale" },
+    "textiles": { "curtains":"description","rugs":"description","upholstery":"description" }
   },
   "lightingRecommendations": {
-    "ambient": { "type": "fixture type", "placement": "placement description", "colorTemp": "2700K–4000K" },
-    "task": { "type": "fixture type", "placement": "where task lighting goes", "colorTemp": "color temp" },
-    "accent": { "type": "fixture type", "purpose": "what it highlights" },
-    "natural": { "strategy": "how to maximise/control natural light" }
+    "ambient": { "type":"fixture","placement":"placement","colorTemp":"2700K" },
+    "task":    { "type":"fixture","placement":"placement","colorTemp":"3000K" },
+    "accent":  { "type":"fixture","purpose":"purpose" },
+    "natural": { "strategy":"strategy" }
   },
-  "visualConcept": "A 3–5 sentence narrative describing the completed space: atmosphere, sensory experience, how it will feel to be in it.",
-  "vendorCategories": [
-    { "category": "Furniture Store", "examples": "mid-range to high-end options", "why": "for key seating and case goods" },
-    { "category": "Lighting Specialist", "examples": "local or online showrooms", "why": "for custom or specification fixtures" }
-  ]
+  "visualConcept": "A 3-5 sentence narrative describing the completed space.",
+  "vendorCategories": [{ "category":"Store type","examples":"options","why":"reason" }]
 }`;
 
   const t0 = Date.now();
@@ -379,9 +405,8 @@ Return ONLY a JSON object (no markdown) with exactly this structure:
     });
     const raw = completion.choices[0]?.message?.content ?? "{}";
     aiData = JSON.parse(raw) as Record<string, unknown>;
-  } catch (err) {
-    // Fallback: generate rule-based output if no API key or quota exceeded
-    aiData = buildFallbackOutput(geo, brief.style, project.roomType, brief);
+  } catch {
+    aiData = buildFallbackOutput(geo, brief.style, project.roomType, brief, effectivePalette, brandSnapshot);
     modelUsed = "rule-based-fallback";
   }
 
@@ -393,62 +418,84 @@ Return ONLY a JSON object (no markdown) with exactly this structure:
     .set({ isLatest: false })
     .where(and(eq(idOutputsTable.projectId, projectId), eq(idOutputsTable.isLatest, true)));
 
-  // Insert new output
+  // Project-specific style overrides recorded for traceability
+  const projectStyleOverrides: Record<string, unknown> = {};
+  if ((brief.primaryColors ?? []).length > 0) projectStyleOverrides["primaryColors"] = brief.primaryColors;
+  if ((brief.secondaryColors ?? []).length > 0) projectStyleOverrides["secondaryColors"] = brief.secondaryColors;
+  if (brief.style) projectStyleOverrides["style"] = brief.style;
+  if (brief.materialsPreference && Object.keys(brief.materialsPreference as object).length > 0) {
+    projectStyleOverrides["materialsPreference"] = brief.materialsPreference;
+  }
+
   const [output] = await db
     .insert(idOutputsTable)
     .values({
       projectId,
-      moodboard: aiData["moodboard"] ?? null,
-      spacePlan: aiData["spacePlan"] ?? null,
-      furniturePlacement: aiData["furniturePlacement"] ?? null,
-      circulationAnalysis: typeof aiData["circulationAnalysis"] === "string" ? aiData["circulationAnalysis"] : null,
+      moodboard:               aiData["moodboard"] ?? null,
+      spacePlan:               aiData["spacePlan"] ?? null,
+      furniturePlacement:      aiData["furniturePlacement"] ?? null,
+      circulationAnalysis:     typeof aiData["circulationAnalysis"] === "string" ? aiData["circulationAnalysis"] : null,
       materialRecommendations: aiData["materialRecommendations"] ?? null,
       lightingRecommendations: aiData["lightingRecommendations"] ?? null,
-      visualConcept: typeof aiData["visualConcept"] === "string" ? aiData["visualConcept"] : null,
-      vendorCategories: aiData["vendorCategories"] ?? null,
-      validationResults: validationResult as unknown as Record<string, unknown>,
+      visualConcept:           typeof aiData["visualConcept"] === "string" ? aiData["visualConcept"] : null,
+      vendorCategories:        aiData["vendorCategories"] ?? null,
+      validationResults:       validationResult as unknown as Record<string, unknown>,
       safetyDisclaimers,
-      aiModelUsed: modelUsed,
-      generationDurationMs: durationMs,
-      isLatest: true,
+      // Brand Intelligence V2 reference (not a data copy)
+      sourceBrandProfileId:      brandSnapshot?.clientId ?? null,
+      sourceBrandProfileVersion: brandSnapshot?.profileVersion ?? null,
+      // Project-specific overrides applied on top of brand defaults
+      projectStyleOverrides:   Object.keys(projectStyleOverrides).length > 0 ? projectStyleOverrides : null,
+      aiModelUsed:             modelUsed,
+      generationDurationMs:    durationMs,
+      isLatest:                true,
     })
     .returning();
 
-  // Update project status to outputs_ready
   await updateProjectStatus(projectId, "outputs_ready");
 
   return { output: output!, validationResult, safetyDisclaimers };
 }
 
 // ── Rule-based fallback ───────────────────────────────────────────────────────
+// Used when OpenAI is unavailable.
+// Accepts brandSnapshot to use brand palette/personality as defaults
+// (project brief overrides take precedence, satisfying P1 requirement).
 
 function buildFallbackOutput(
   geo: RoomGeometry,
   style: string,
   roomType: string,
   brief: Record<string, unknown>,
+  effectivePalette: string[],
+  brandSnapshot: Awaited<ReturnType<typeof readBrandStyleSnapshot>>,
 ): Record<string, unknown> {
-  const colors = (brief["primaryColors"] as string[] | undefined) ?? [];
-  const palette = colors.length >= 3 ? colors.slice(0, 5) : ["#F5F5F0", "#E8E0D5", "#C4B5A0", "#8B7355", "#3D3530"];
+  const palette = effectivePalette.length >= 3
+    ? effectivePalette.slice(0, 5)
+    : ["#F5F5F0", "#E8E0D5", "#C4B5A0", "#8B7355", "#3D3530"];
+
+  // Brand personality enriches mood words if available (read-only, not stored)
+  const brandMoodWords = brandSnapshot?.brandPersonality.slice(0, 2) ?? [];
+  const moodWords = [...new Set([...getMoodWords(style), ...brandMoodWords])].slice(0, 5);
 
   return {
     moodboard: {
       palette,
-      moodWords: getMoodWords(style),
-      styleDescription: `A ${style} interior that emphasises ${getMoodWords(style).slice(0, 2).join(" and ")} through considered material and furniture selection.`,
+      moodWords,
+      styleDescription: `A ${style} interior that emphasises ${moodWords.slice(0, 2).join(" and ")} through considered material and furniture selection.`,
       textureDescriptions: getTextures(style),
       lightingMood: getLightingMood(style),
     },
     spacePlan: {
       zones: buildZones(geo, roomType),
       scale: "1:50",
-      notes: `Room ${geo.roomLengthM}m × ${geo.roomWidthM}m. Zones arranged to maximise natural light access and provide clear circulation paths.`,
+      notes: `Room ${geo.roomLengthM}m × ${geo.roomWidthM}m. Zones arranged to maximise natural light and clear circulation.`,
     },
     furniturePlacement: buildFurniturePlacement(geo, roomType, (brief["furnitureNeeds"] as string[] | undefined) ?? []),
     circulationAnalysis: `The ${geo.roomLengthM}m × ${geo.roomWidthM}m ${roomType.replace("_", " ")} provides approximately ${(geo.roomLengthM * geo.roomWidthM).toFixed(0)}m² of floor area. Primary circulation runs along the longest axis, with secondary paths ensuring access to all functional zones. Furniture is arranged to maintain minimum ${geo.roomLengthM > 4 ? "0.9" : "0.75"}m pathways throughout.`,
     materialRecommendations: getMaterials(style, roomType),
     lightingRecommendations: getLighting(style, roomType),
-    visualConcept: `This ${style} ${roomType.replace("_", " ")} creates a ${getMoodWords(style)[0]} atmosphere through a carefully curated palette of ${palette.slice(0, 3).join(", ")}. The spatial layout prioritises functionality while maintaining aesthetic coherence. Natural light is complemented by layered artificial lighting to support both daily activities and mood. Every material and finish has been selected to reinforce the ${style} concept while remaining practical for everyday use.`,
+    visualConcept: `This ${style} ${roomType.replace("_", " ")} creates a ${moodWords[0]} atmosphere through a carefully curated palette of ${palette.slice(0, 3).join(", ")}. The spatial layout prioritises functionality while maintaining aesthetic coherence. Natural light is complemented by layered artificial lighting to support both daily activities and mood. Every material and finish has been selected to reinforce the ${style} concept while remaining practical for everyday use.`,
     vendorCategories: getVendorCategories(roomType),
   };
 }
@@ -512,7 +559,7 @@ function buildZones(geo: RoomGeometry, roomType: string): object[] {
     ],
     bedroom: [
       { id: "z1", label: "Sleep Zone", xM: 0, yM: 0, widthM: l * 0.55, depthM: w * 0.6, purpose: "Bed and bedside tables" },
-      { id: "z2", label: "Wardrobe / Storage", xM: l * 0.55, yM: 0, widthM: l * 0.45, depthM: w * 0.5, purpose: "Clothing storage and dressing area" },
+      { id: "z2", label: "Wardrobe / Storage", xM: l * 0.55, yM: 0, widthM: l * 0.45, depthM: w * 0.5, purpose: "Clothing storage and dressing" },
       { id: "z3", label: "Circulation", xM: 0, yM: w * 0.6, widthM: l, depthM: w * 0.15, purpose: "Foot-of-bed and main pathway" },
     ],
     kitchen: [
@@ -527,7 +574,7 @@ function buildZones(geo: RoomGeometry, roomType: string): object[] {
     ],
     restaurant: [
       { id: "z1", label: "Dining Area", xM: 0, yM: 0, widthM: l * 0.75, depthM: w, purpose: "Tables and seating" },
-      { id: "z2", label: "Service Aisle", xM: l * 0.75, yM: 0, widthM: l * 0.1, depthM: w, purpose: `Min ${1.2}m service pathway` },
+      { id: "z2", label: "Service Aisle", xM: l * 0.75, yM: 0, widthM: l * 0.1, depthM: w, purpose: "Min 1.2m service pathway" },
       { id: "z3", label: "Bar / Service Counter", xM: l * 0.85, yM: 0, widthM: l * 0.15, depthM: w * 0.4, purpose: "Order point and bar service" },
     ],
     cafe: [
@@ -543,7 +590,7 @@ function buildZones(geo: RoomGeometry, roomType: string): object[] {
     lobby: [
       { id: "z1", label: "Reception Desk", xM: 0, yM: 0, widthM: l * 0.3, depthM: w * 0.4, purpose: "Front desk, check-in, concierge" },
       { id: "z2", label: "Waiting Lounge", xM: l * 0.3, yM: 0, widthM: l * 0.5, depthM: w * 0.7, purpose: "Seating for visitors" },
-      { id: "z3", label: "Main Circulation", xM: 0, yM: w * 0.4, widthM: l, depthM: w * 0.35, purpose: `≥${2.5}m lobby corridor` },
+      { id: "z3", label: "Main Circulation", xM: 0, yM: w * 0.4, widthM: l, depthM: w * 0.35, purpose: "≥2.5m lobby corridor" },
     ],
     booth: [
       { id: "z1", label: "Display Area", xM: 0, yM: 0, widthM: l * 0.7, depthM: w * 0.8, purpose: "Product display and signage" },
@@ -554,15 +601,14 @@ function buildZones(geo: RoomGeometry, roomType: string): object[] {
   return zoneMap[roomType] ?? zoneMap["living_room"]!;
 }
 
-function buildFurniturePlacement(geo: RoomGeometry, roomType: string, furnitureNeeds: string[]): object[] {
+function buildFurniturePlacement(geo: RoomGeometry, roomType: string, _furnitureNeeds: string[]): object[] {
   const l = geo.roomLengthM;
   const w = geo.roomWidthM;
-
   const defaults: Record<string, object[]> = {
     living_room: [
       { item: "3-seater Sofa", widthM: Math.min(2.2, l * 0.45), depthM: 0.9, heightM: 0.85, xM: 0.5, yM: 0.5, rotation: 0, clearanceFront: 0.9, clearanceSide: 0.45, note: "Centred on feature wall axis" },
-      { item: "Coffee Table", widthM: 1.2, depthM: 0.6, heightM: 0.45, xM: 0.5 + (Math.min(2.2, l * 0.45) - 1.2) / 2, yM: 0.5 + 0.9 + 0.9, rotation: 0, clearanceFront: 0.45, clearanceSide: 0.3, note: "In front of sofa" },
-      { item: "TV Cabinet / Sideboard", widthM: Math.min(1.8, l * 0.35), depthM: 0.5, heightM: 0.55, xM: l - 0.5 - Math.min(1.8, l * 0.35), yM: 0.5, rotation: 0, clearanceFront: 1.8, clearanceSide: 0.3, note: "Feature wall, screen viewing distance" },
+      { item: "Coffee Table", widthM: 1.2, depthM: 0.6, heightM: 0.45, xM: 0.5, yM: 1.5, rotation: 0, clearanceFront: 0.45, clearanceSide: 0.3, note: "In front of sofa" },
+      { item: "TV Cabinet / Sideboard", widthM: Math.min(1.8, l * 0.35), depthM: 0.5, heightM: 0.55, xM: l - 0.5 - Math.min(1.8, l * 0.35), yM: 0.5, rotation: 0, clearanceFront: 1.8, clearanceSide: 0.3, note: "Feature wall, viewing distance" },
     ],
     bedroom: [
       { item: "Queen Bed (1.6×2.0m)", widthM: 1.6, depthM: 2.0, heightM: 0.6, xM: (l - 1.6) / 2, yM: 0.6, rotation: 0, clearanceFront: 0.9, clearanceSide: 0.6, note: "Centred on primary wall" },
@@ -570,15 +616,14 @@ function buildFurniturePlacement(geo: RoomGeometry, roomType: string, furnitureN
       { item: "Wardrobe", widthM: Math.min(1.8, l * 0.4), depthM: 0.6, heightM: 2.1, xM: l - 0.5 - Math.min(1.8, l * 0.4), yM: 0.5, rotation: 0, clearanceFront: 0.6, clearanceSide: 0.15, note: "Against end wall" },
     ],
     kitchen: [
-      { item: "Base Cabinet Run (L-shape)", widthM: l - 0.6, depthM: 0.6, heightM: 0.9, xM: 0.3, yM: 0.3, rotation: 0, clearanceFront: 1.0, clearanceSide: 0.1, note: "L-shape maximises corner storage" },
-      { item: "Kitchen Island", widthM: Math.min(1.5, l * 0.35), depthM: 0.9, heightM: 0.9, xM: (l - Math.min(1.5, l * 0.35)) / 2, yM: 0.6 + 1.0, rotation: 0, clearanceFront: 1.0, clearanceSide: 1.0, note: "Central island with 1.0m aisle" },
+      { item: "Base Cabinet Run", widthM: l - 0.6, depthM: 0.6, heightM: 0.9, xM: 0.3, yM: 0.3, rotation: 0, clearanceFront: 1.0, clearanceSide: 0.1, note: "L-shape maximises corner storage" },
+      { item: "Kitchen Island", widthM: Math.min(1.5, l * 0.35), depthM: 0.9, heightM: 0.9, xM: (l - Math.min(1.5, l * 0.35)) / 2, yM: 1.6, rotation: 0, clearanceFront: 1.0, clearanceSide: 1.0, note: "Central island with 1.0m aisle" },
     ],
     office: [
       { item: "Work Desk", widthM: Math.min(1.6, l * 0.4), depthM: 0.75, heightM: 0.75, xM: 0.5, yM: 0.5, rotation: 0, clearanceFront: 0.9, clearanceSide: 0.45, note: "Positioned for natural light on side" },
-      { item: "Ergonomic Chair", widthM: 0.65, depthM: 0.65, heightM: 1.2, xM: 0.5 + (Math.min(1.6, l * 0.4) - 0.65) / 2, yM: 0.5 + 0.75 + 0.1, rotation: 0, clearanceFront: 0.5, clearanceSide: 0.2, note: "In front of desk" },
+      { item: "Ergonomic Chair", widthM: 0.65, depthM: 0.65, heightM: 1.2, xM: 0.5, yM: 1.4, rotation: 0, clearanceFront: 0.5, clearanceSide: 0.2, note: "In front of desk" },
     ],
   };
-
   return defaults[roomType] ?? defaults["living_room"]!;
 }
 
@@ -597,25 +642,21 @@ function getMaterials(style: string, roomType: string): object {
     },
     ceiling: {
       treatment: style === "industrial" ? "Exposed structure / services painted matte black" : style === "traditional" ? "Cornice and ceiling rose detail" : "Smooth plaster with concealed bulkhead for lighting",
-      height: `${geo_label(style)} — consider coffers or dropped soffits to define zones`,
+      height: style === "minimalist" ? "Keep ceiling plane uncluttered" : "Zone lighting via bulkheads",
       why: "Ceiling treatment anchors the style and accommodates lighting integration",
     },
     textiles: {
       curtains: style === "minimalist" ? "Sheer linen drapes, ceiling to floor" : style === "traditional" ? "Heavy lined drapes with pelmet" : "Linen or cotton blend, simple pleat",
-      rugs: `${style === "scandinavian" ? "Wool flat-weave or sheepskin accent rug" : style === "industrial" ? "Jute or cowhide rug" : "Low-pile wool or wool-blend area rug"}`,
-      upholstery: `${style === "industrial" ? "Leather or distressed velvet" : style === "scandinavian" ? "Boucle or textured wool" : "Quality fabric in tonal palette colour"}`,
+      rugs: style === "scandinavian" ? "Wool flat-weave or sheepskin accent rug" : style === "industrial" ? "Jute or cowhide rug" : "Low-pile wool or wool-blend area rug",
+      upholstery: style === "industrial" ? "Leather or distressed velvet" : style === "scandinavian" ? "Boucle or textured wool" : "Quality fabric in tonal palette colour",
     },
   };
-}
-
-function geo_label(style: string): string {
-  return style === "minimalist" ? "Keep ceiling plane uncluttered" : "Zone lighting via bulkheads";
 }
 
 function getLighting(style: string, roomType: string): object {
   return {
     ambient: {
-      type: style === "art_deco" ? "Statement chandelier or flush mount with geometric diffuser" : style === "industrial" ? "Exposed filament pendants on conduit rail" : "Recessed LED downlights (dimmable)",
+      type: style === "art_deco" ? "Statement chandelier with geometric diffuser" : style === "industrial" ? "Exposed filament pendants on conduit rail" : "Recessed LED downlights (dimmable)",
       placement: "Perimeter or grid layout for even illumination",
       colorTemp: style === "industrial" || style === "rustic" ? "2200K–2700K (warm amber)" : "2700K–3000K (warm white)",
     },
@@ -629,7 +670,7 @@ function getLighting(style: string, roomType: string): object {
       purpose: "Highlight artwork, architectural features, or display shelving",
     },
     natural: {
-      strategy: `Maximise window exposure on ${style === "scandinavian" ? "north-facing walls for consistent indirect light" : "east/west walls for morning/evening warmth"}. Use sheer diffusing layers to control glare without blocking daylight.`,
+      strategy: `Maximise window exposure on ${style === "scandinavian" ? "north-facing walls for consistent indirect light" : "east/west walls for morning/evening warmth"}. Use sheer diffusing layers to control glare.`,
     },
   };
 }
@@ -643,7 +684,6 @@ function getVendorCategories(roomType: string): object[] {
     { category: "Window Treatment Specialist", examples: "Curtain studio, blind supplier", why: "Curtains, blinds, sheers for light control and privacy" },
     { category: "Interior Textile Supplier", examples: "Upholstery fabric supplier, rug importer", why: "Rugs, cushions, throw blankets, upholstery" },
   ];
-
   if (["cafe", "restaurant"].includes(roomType)) {
     base.push({ category: "Commercial Kitchen Equipment", examples: "Catering equipment supplier", why: "Commercial-grade cooking and storage equipment" });
     base.push({ category: "Joinery / Cabinetmaker", examples: "Custom joinery workshop", why: "Counter, bar, display shelving, booth seating" });
@@ -655,6 +695,5 @@ function getVendorCategories(roomType: string): object[] {
   if (roomType === "office") {
     base.push({ category: "Office Systems Supplier", examples: "Ergonomic furniture dealer", why: "Height-adjustable desks, ergonomic chairs, cable management" });
   }
-
   return base;
 }
