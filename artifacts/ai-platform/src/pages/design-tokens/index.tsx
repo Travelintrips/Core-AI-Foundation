@@ -2,14 +2,25 @@
 // Route: /admin/design-tokens  (Team 24 registers this route)
 
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { useState } from "react";
 import { Type, Palette, Building2, Sparkles, ChevronRight, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { apiFetch } from "@/lib/apiFetch";
+
+// ── API helper ────────────────────────────────────────────────────────────────
+const ADMIN_KEY = import.meta.env.VITE_ADMIN_API_KEY ?? "";
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    ...opts,
+    headers: { "Content-Type": "application/json", "x-admin-api-key": ADMIN_KEY, ...(opts?.headers ?? {}) },
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json() as Promise<T>;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -49,7 +60,7 @@ const MOOD_COLORS: Record<string, string> = {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function DesignTokensPage() {
-  const navigate = useNavigate();
+  const [, navigate] = useLocation();
   const [selectedIndustry, setSelectedIndustry] = useState("technology");
 
   const { data: industries = [] } = useQuery<string[]>({
@@ -224,10 +235,11 @@ function ContrastCheckerWidget() {
   const [hex1, setHex1] = useState("#000000");
   const [hex2, setHex2] = useState("#ffffff");
 
-  const { data: result, refetch, isFetching } = useQuery({
+  interface ContrastResult { ratio: number; ratioFormatted: string; level: string; wcagAA: boolean; wcagAAA: boolean; }
+  const { data: result, refetch, isFetching } = useQuery<ContrastResult>({
     queryKey: ["contrast-check", hex1, hex2],
     queryFn: () =>
-      apiFetch("/api/ai/design-tokens/color-palettes/contrast-check", {
+      apiFetch<ContrastResult>("/api/ai/design-tokens/color-palettes/contrast-check", {
         method: "POST",
         body: JSON.stringify({ hex1, hex2 }),
       }),

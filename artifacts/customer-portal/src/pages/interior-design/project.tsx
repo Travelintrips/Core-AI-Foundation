@@ -160,6 +160,7 @@ export default function InteriorDesignProjectPage({ params }: { params: { id: st
       }, 5000);
       return () => clearInterval(id);
     }
+    return undefined;
   }, [project?.status]);
 
   if (loading) {

@@ -18,8 +18,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { apiFetch } from "@/lib/apiFetch";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
+
+// ── API helper ────────────────────────────────────────────────────────────────
+const ADMIN_KEY = import.meta.env.VITE_ADMIN_API_KEY ?? "";
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    ...opts,
+    headers: { "Content-Type": "application/json", "x-admin-api-key": ADMIN_KEY, ...(opts?.headers ?? {}) },
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json() as Promise<T>;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -389,7 +400,7 @@ function PaletteDetailDialog({ palette, onClose }: { palette: ColorPalette; onCl
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function ColorPalettesPage() {
-  const navigate = useNavigate();
+  const [, navigate] = useLocation();
   const qc = useQueryClient();
   const { toast } = useToast();
 

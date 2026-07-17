@@ -116,12 +116,11 @@ export type BriefData = {
   cpContactPhone: string;
   cpContactAddress: string;
   cpContactWebsite: string;
-  // Fashion Design Specialist — namespaced `fd*` to avoid collision
+  // Fashion Design Specialist (extended) — namespaced `fd*` to avoid collision
   fdCollectionName: string;
   fdSeasonCollection: string;
   fdGarmentTypes: string;
-  fdTargetGender: string;
-  fdPricePoint: string;
+  // fdTargetGender and fdPricePoint declared above (lines 71/73) — no duplicate
   fdFashionStyle: string;
   fdMoodBoardRef: string;
   fdBrandPersonality: string;
@@ -157,9 +156,9 @@ const EMPTY_BRIEF: BriefData = {
   cpSustainability: "", cpPageTarget: "", cpUploadedLogo: "",
   cpUploadedPhotos: "", cpReferenceDocuments: "", cpVideo: "", cpContactEmail: "",
   cpContactPhone: "", cpContactAddress: "", cpContactWebsite: "",
-  // Fashion Design Specialist
+  // Fashion Design Specialist (extended fields — fdTargetGender/fdPricePoint already set above)
   fdCollectionName: "", fdSeasonCollection: "", fdGarmentTypes: "",
-  fdTargetGender: "", fdPricePoint: "", fdFashionStyle: "",
+  fdFashionStyle: "",
   fdMoodBoardRef: "", fdBrandPersonality: "",
   // Interior Design Specialist
   idRoomTypes: "", idProjectType: "", idInteriorStyle: "",

@@ -61,6 +61,34 @@ import DesignTemplateEditor from "@/pages/design-template-editor";
 import DesignTemplates from "@/pages/design-templates";
 import DesignTemplateDetail from "@/pages/design-template-detail";
 
+// ── Team 03: Commercial Automation ───────────────────────────────────────
+import CommercialAutomationPage from "@/pages/creative-commercial/CommercialAutomationPage";
+// ── Team 05: Brand Intelligence V2 ───────────────────────────────────────
+import BrandIntelligenceV2Page from "@/pages/brand-intelligence-v2/BrandIntelligenceV2Page";
+// ── Team 06: Asset Intelligence V2 ───────────────────────────────────────
+import AssetIntelligenceV2Page from "@/pages/asset-intelligence-v2";
+// ── Team 07: Design Blueprints ────────────────────────────────────────────
+import DesignBlueprintsPage from "@/pages/design-blueprints";
+// ── Team 08: Design Components ───────────────────────────────────────────
+import DesignComponentsPage from "@/pages/design-components";
+// ── Team 09: Design Patterns ─────────────────────────────────────────────
+import DesignPatternsPage from "@/pages/design-patterns";
+// ── Team 10: Design Tokens ───────────────────────────────────────────────
+import DesignTokensPage from "@/pages/design-tokens";
+import FontPairsPage from "@/pages/design-tokens/font-pairs";
+import ColorPalettesPage from "@/pages/design-tokens/color-palettes";
+// ── Team 15: Graphic Design ───────────────────────────────────────────────
+import GraphicDesignPage from "@/pages/graphic-design";
+// ── Team 17: Interior Design ─────────────────────────────────────────────
+import InteriorDesignPage from "@/pages/interior-design";
+// ── Team 18: Fashion Design ──────────────────────────────────────────────
+import FashionDesignPage from "@/pages/fashion-design";
+// ── Team 19: Packaging Design ────────────────────────────────────────────
+import PackagingDesignPage from "@/pages/packaging-design";
+// ── Team 22: Vendor Ecosystem ─────────────────────────────────────────────
+import VendorAdminPage from "@/pages/creative-vendors/VendorAdminPage";
+import VendorAdminDetailPage from "@/pages/creative-vendors/VendorAdminDetailPage";
+
 const queryClient = new QueryClient();
 
 function AdminRouter() {
@@ -115,6 +143,33 @@ function AdminRouter() {
         <Route path="/design-templates/:id" component={DesignTemplateDetail} />
         <Route path="/design-templates" component={DesignTemplates} />
         <Route path="/creative-marketplace" component={CreativeMarketplace} />
+        {/* ── Team 03: Commercial Automation ─────────────────────────── */}
+        <Route path="/commercial-automation" component={CommercialAutomationPage} />
+        {/* ── Team 05: Brand Intelligence V2 ─────────────────────────── */}
+        <Route path="/brand-intelligence-v2" component={BrandIntelligenceV2Page} />
+        {/* ── Team 06: Asset Intelligence V2 ─────────────────────────── */}
+        <Route path="/asset-intelligence-v2" component={AssetIntelligenceV2Page} />
+        {/* ── Team 07: Design Blueprints ──────────────────────────────── */}
+        <Route path="/design-blueprints" component={DesignBlueprintsPage} />
+        {/* ── Team 08: Design Components ──────────────────────────────── */}
+        <Route path="/design-components" component={DesignComponentsPage} />
+        {/* ── Team 09: Design Patterns ────────────────────────────────── */}
+        <Route path="/design-patterns" component={DesignPatternsPage} />
+        {/* ── Team 10: Design Tokens ──────────────────────────────────── */}
+        <Route path="/design-tokens/font-pairs" component={FontPairsPage} />
+        <Route path="/design-tokens/color-palettes" component={ColorPalettesPage} />
+        <Route path="/design-tokens" component={DesignTokensPage} />
+        {/* ── Team 15: Graphic Design ─────────────────────────────────── */}
+        <Route path="/graphic-design" component={GraphicDesignPage} />
+        {/* ── Team 17: Interior Design ────────────────────────────────── */}
+        <Route path="/interior-design" component={InteriorDesignPage} />
+        {/* ── Team 18: Fashion Design ─────────────────────────────────── */}
+        <Route path="/fashion-design" component={FashionDesignPage} />
+        {/* ── Team 19: Packaging Design ───────────────────────────────── */}
+        <Route path="/packaging-design" component={PackagingDesignPage} />
+        {/* ── Team 22: Vendor Ecosystem ───────────────────────────────── */}
+        <Route path="/creative-vendors/:id" component={VendorAdminDetailPage} />
+        <Route path="/creative-vendors" component={VendorAdminPage} />
         <Route path="/design-render-batches/new" component={DesignRenderBatchesNew} />
         <Route path="/design-render-batches/:id" component={DesignRenderBatchDetail} />
         <Route path="/design-render-batches" component={DesignRenderBatches} />
