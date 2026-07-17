@@ -1,4 +1,5 @@
 - [parallel-dev-rules](parallel-dev-rules.md) — Multi-team branch isolation: shared file locks, forbidden global commands, integration manifests, Team 24 owns all global wiring
+- [team20-dedup-remediation](team20-dedup-remediation.md) — Team 20 de-duplication: creative-workflow-v2 was Team 1's engine (remove, not refactor); keep pure validators + 5 contract types + ExistingEngineAdapter
 - [team2-design-agents](team2-design-agents.md) — Team 2 Design Agents 4-8 built in services/design-ai/; dep-injection pattern (deps.executeAI), zod schemas, font registry validation, WCAG contrast checks, 1007 tests passing
 - [import-fix-concatenated-files](import-fix-concatenated-files.md) — GitHub import merged old+new versions of 5 files end-to-end; fix by keeping v2 and removing v1
 - [react-icons-v5-provider-icons](react-icons-v5-provider-icons.md) — SiOpenai/SiAnthropic/SiGoogle don't exist in react-icons v5.4.0; use Cpu+color or SiReplicate/SiMistralai
