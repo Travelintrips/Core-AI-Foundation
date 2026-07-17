@@ -168,7 +168,8 @@
     "DB MIGRATION: gd_briefs and gd_qc_runs tables created via integration/migrations/team-15.sql. Service layer uses in-memory Map until migration runs.",
     "SEED: seedCatalog.ts updated with 'graphic-design' category and 10 GD-* service codes (not a locked file).",
     "AUTH: All /ai/graphic-design/* routes covered by global adminAuthWithExceptions middleware in app.ts — no per-route auth needed.",
-    "PAGINATION: listBriefs() (page, pageSize) and listBriefJobs() (page, pageSize) both return paginated responses with total/page/pageSize envelope."
+    "PAGINATION: listBriefs() (page, pageSize) and listBriefJobs() (page, pageSize) both return paginated responses with total/page/pageSize envelope.",
+    "⚠️  SEED MERGE CONFLICT — TEAM 24 ACTION REQUIRED: Both Team 15 and Team 16 modified artifacts/api-server/src/seedCatalog.ts independently on their respective branches. Team 15 adds 'graphic-design' category + 10 GD-* service codes; Team 16 adds 6 presentation-document codes. These changes WILL conflict on git merge. Team 24 must NOT let git auto-resolve this file. Correct resolution: manually combine BOTH teams' additions into a single additive array — preserving all 10 GD-* codes (Team 15) AND all 6 presentation-document codes (Team 16). Verify final seedCatalog.ts contains entries from both teams before merging either branch."
   ],
   "dbTables": [
     "ai_platform.gd_briefs",
