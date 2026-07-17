@@ -95,6 +95,14 @@ router.post("/public/interior-design/projects", async (req, res): Promise<void> 
           floorPlanUrl:  typeof b["floorPlanUrl"]  === "string" ? b["floorPlanUrl"]  : undefined,
           additionalNotes: typeof b["additionalNotes"] === "string" ? b["additionalNotes"] : undefined,
         });
+
+        // Auto-trigger AI generation in background — client polls for status changes.
+        // generateOutputs() immediately sets status → "analyzing", then → "outputs_ready".
+        const clientId = typeof body["clientEmail"] === "string" ? body["clientEmail"] : undefined;
+        void generateOutputs(project.id, { clientId }).catch((genErr) => {
+          console.error("[interior-design] Auto-generation failed:", genErr instanceof Error ? genErr.message : genErr);
+        });
+
         // accessToken returned once at creation — customer must store it
         res.status(201).json({ project: publicProject(project as never), brief, accessToken: project.accessToken });
         return;
