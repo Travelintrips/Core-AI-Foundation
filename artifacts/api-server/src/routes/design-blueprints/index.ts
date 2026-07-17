@@ -39,8 +39,16 @@ import {
 } from "../../services/design-blueprints/index.js";
 import { BLUEPRINT_DOMAINS, BLUEPRINT_STATUSES } from "../../services/design-blueprints/types.js";
 import { logger } from "../../lib/logger.js";
+// P0: Explicit router-level auth — all blueprint routes are admin-only.
+// The global adminAuthWithExceptions in app.ts also covers these when mounted,
+// but router-level auth makes the requirement explicit and provides defense-in-depth
+// if the router is ever mounted without the global wrapper.
+import { adminAuth } from "../../middleware/adminAuth.js";
 
 const router = Router();
+
+// ── Auth: all routes in this router require admin authentication ───────────────
+router.use(adminAuth);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -74,9 +82,9 @@ const compatRequestSchema = z.object({
 
 router.get("/ai/design-blueprints/stats", (_req, res) => {
   try {
-    res.json(getBlueprintStats());
+    return res.json(getBlueprintStats());
   } catch (err) {
-    handleError(res, err, "GET /ai/design-blueprints/stats");
+    return handleError(res, err, "GET /ai/design-blueprints/stats");
   }
 });
 
@@ -89,9 +97,9 @@ router.get("/ai/design-blueprints", (req, res) => {
       return res.status(400).json({ error: "Invalid query parameters", details: parsed.error.issues });
     }
     const blueprints = listBlueprints(parsed.data);
-    res.json({ blueprints, total: blueprints.length });
+    return res.json({ blueprints, total: blueprints.length });
   } catch (err) {
-    handleError(res, err, "GET /ai/design-blueprints");
+    return handleError(res, err, "GET /ai/design-blueprints");
   }
 });
 
@@ -107,9 +115,9 @@ router.get("/ai/design-blueprints/domain/:domain", (req, res) => {
       });
     }
     const blueprints = getBlueprintsByDomain(domainParam as any);
-    res.json({ domain: domainParam, blueprints, total: blueprints.length });
+    return res.json({ domain: domainParam, blueprints, total: blueprints.length });
   } catch (err) {
-    handleError(res, err, "GET /ai/design-blueprints/domain/:domain");
+    return handleError(res, err, "GET /ai/design-blueprints/domain/:domain");
   }
 });
 
@@ -123,9 +131,9 @@ router.get("/ai/design-blueprints/:id", (req, res) => {
     if (!blueprint) {
       return res.status(404).json({ error: "Blueprint not found" });
     }
-    res.json(blueprint);
+    return res.json(blueprint);
   } catch (err) {
-    handleError(res, err, "GET /ai/design-blueprints/:id");
+    return handleError(res, err, "GET /ai/design-blueprints/:id");
   }
 });
 
@@ -144,9 +152,9 @@ router.post("/ai/design-blueprints", (req, res) => {
         issues: validation.issues,
       });
     }
-    res.status(201).json({ blueprint, validation });
+    return res.status(201).json({ blueprint, validation });
   } catch (err) {
-    handleError(res, err, "POST /ai/design-blueprints");
+    return handleError(res, err, "POST /ai/design-blueprints");
   }
 });
 
@@ -167,9 +175,9 @@ router.patch("/ai/design-blueprints/:id", (req, res) => {
         issues: result.validation.issues,
       });
     }
-    res.json({ blueprint: result.blueprint, validation: result.validation });
+    return res.json({ blueprint: result.blueprint, validation: result.validation });
   } catch (err) {
-    handleError(res, err, "PATCH /ai/design-blueprints/:id");
+    return handleError(res, err, "PATCH /ai/design-blueprints/:id");
   }
 });
 
@@ -181,9 +189,9 @@ router.post("/ai/design-blueprints/:id/deprecate", (req, res) => {
     const result = deprecateCustomBlueprint(id!);
     if (result.notFound) return res.status(404).json({ error: "Blueprint not found" });
     if (result.builtin) return res.status(403).json({ error: "Built-in blueprints cannot be deprecated via API" });
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (err) {
-    handleError(res, err, "POST /ai/design-blueprints/:id/deprecate");
+    return handleError(res, err, "POST /ai/design-blueprints/:id/deprecate");
   }
 });
 
@@ -193,9 +201,9 @@ router.post("/ai/design-blueprints/validate", (req, res) => {
   try {
     const result = validateBlueprintPayload(req.body);
     const status = result.valid ? 200 : 422;
-    res.status(status).json(result);
+    return res.status(status).json(result);
   } catch (err) {
-    handleError(res, err, "POST /ai/design-blueprints/validate");
+    return handleError(res, err, "POST /ai/design-blueprints/validate");
   }
 });
 
@@ -211,9 +219,9 @@ router.post("/ai/design-blueprints/check-compatibility", (req, res) => {
     if (result.blueprintNotFound) {
       return res.status(404).json({ error: "Blueprint not found", issues: result.issues });
     }
-    res.status(result.compatible ? 200 : 422).json(result);
+    return res.status(result.compatible ? 200 : 422).json(result);
   } catch (err) {
-    handleError(res, err, "POST /ai/design-blueprints/check-compatibility");
+    return handleError(res, err, "POST /ai/design-blueprints/check-compatibility");
   }
 });
 
@@ -222,9 +230,9 @@ router.post("/ai/design-blueprints/check-compatibility", (req, res) => {
 router.post("/ai/design-blueprints/normalize", (req, res) => {
   try {
     const result = normalizeBlueprintPayload(req.body);
-    res.status(result.valid ? 200 : 422).json(result);
+    return res.status(result.valid ? 200 : 422).json(result);
   } catch (err) {
-    handleError(res, err, "POST /ai/design-blueprints/normalize");
+    return handleError(res, err, "POST /ai/design-blueprints/normalize");
   }
 });
 

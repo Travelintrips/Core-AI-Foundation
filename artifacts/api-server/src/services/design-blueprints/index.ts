@@ -43,8 +43,11 @@ import { BLUEPRINT_SCHEMA_VERSION } from "./types.js";
 
 // ── In-process custom blueprint store ────────────────────────────────────────
 // Replaces DB until Team 24 mounts the migration draft.
+// P1-B: Maintain a secondary slug index so getBlueprintBySlug is O(1) on custom blueprints,
+// not O(N).
 
 const customBlueprintStore = new Map<string, Blueprint>();
+const customSlugIndex      = new Map<string, string>();  // slug → id
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -96,7 +99,10 @@ export function getBlueprintById(id: string): Blueprint | null {
 // ── Get by slug ───────────────────────────────────────────────────────────────
 
 export function getBlueprintBySlug(slug: string): Blueprint | null {
-  return BUILTIN_BLUEPRINT_BY_SLUG.get(slug) ?? [...customBlueprintStore.values()].find((bp) => bp.slug === slug) ?? null;
+  // P1-B fix: use the slug index for O(1) lookup instead of O(N) scan
+  const customId = customSlugIndex.get(slug);
+  const custom   = customId ? customBlueprintStore.get(customId) : undefined;
+  return BUILTIN_BLUEPRINT_BY_SLUG.get(slug) ?? custom ?? null;
 }
 
 // ── Get by domain ─────────────────────────────────────────────────────────────
@@ -117,7 +123,9 @@ export interface CreateBlueprintResult {
 export function createCustomBlueprint(input: CreateBlueprintInput): CreateBlueprintResult {
   const now = new Date().toISOString();
   const id  = `bp-custom-${randomUUID()}`;
-  const slug = makeUniqueSlug(slugify(input.name));
+  // Guard: name may be absent/non-string on a malformed payload; let the validator surface the error.
+  const safeName = typeof input.name === "string" ? input.name : "";
+  const slug = makeUniqueSlug(slugify(safeName));
 
   const draft: Blueprint = {
     ...input,
@@ -128,15 +136,20 @@ export function createCustomBlueprint(input: CreateBlueprintInput): CreateBluepr
     updatedAt: now,
   };
 
-  // Normalize first, then validate
+  // Validate before normalizing — the normalizer expects structurally sound
+  // arrays; calling it on a malformed payload crashes instead of returning
+  // a clean validation error.
+  const prelimValidation = validateBlueprint(draft);
+  if (!prelimValidation.valid) {
+    return { blueprint: null, validation: prelimValidation };
+  }
+
+  // Now safe to normalize (payload has passed structural checks).
   const { blueprint: normalized } = normalizeBlueprint(draft, now);
   const validation = validateBlueprint(normalized);
 
-  if (!validation.valid) {
-    return { blueprint: null, validation };
-  }
-
   customBlueprintStore.set(id, normalized);
+  customSlugIndex.set(normalized.slug, id);  // P1-B: keep slug index in sync
   return { blueprint: normalized, validation };
 }
 
@@ -171,7 +184,12 @@ export function updateCustomBlueprint(id: string, input: UpdateBlueprintInput): 
     return { blueprint: null, validation };
   }
 
+  // P1-B: if slug changed during update, re-index (old slug → new slug)
+  if (existing.slug !== normalized.slug) {
+    customSlugIndex.delete(existing.slug);
+  }
   customBlueprintStore.set(id, normalized);
+  customSlugIndex.set(normalized.slug, id);
   return { blueprint: normalized, validation };
 }
 
@@ -233,14 +251,26 @@ export function normalizeBlueprintPayload(payload: unknown): NormalizationResult
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
 export function getBlueprintStats() {
-  const all = listBlueprints();
-  const byDomain = Object.fromEntries(
-    [...BUILTIN_BLUEPRINT_BY_DOMAIN.entries()].map(([d, bps]) => [d, bps.length])
-  );
+  // P1-A fix: do NOT use listBlueprints() for counts — it applies a default
+  // limit of 100 and would undercount once custom blueprints grow beyond that.
+  // Count directly from the source stores instead.
+  const allCustom   = [...customBlueprintStore.values()];
+  const allBuiltins = BUILTIN_BLUEPRINTS;
+  const all         = [...allBuiltins, ...allCustom];
+
+  // byDomain: builtins from the index + custom grouped by domain
+  const byDomain: Record<string, number> = {};
+  for (const [d, bps] of BUILTIN_BLUEPRINT_BY_DOMAIN.entries()) {
+    byDomain[d] = bps.length;
+  }
+  for (const bp of allCustom) {
+    byDomain[bp.domain] = (byDomain[bp.domain] ?? 0) + 1;
+  }
+
   return {
-    total: all.length,
-    builtin: BUILTIN_BLUEPRINTS.length,
-    custom: customBlueprintStore.size,
+    total:   all.length,
+    builtin: allBuiltins.length,
+    custom:  customBlueprintStore.size,
     byDomain,
     byStatus: {
       active:     all.filter((b) => b.status === "active").length,
