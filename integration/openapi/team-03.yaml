@@ -1,0 +1,834 @@
+openapi: "3.1.0"
+info:
+  title: "Team 03 — Creative Commercial Automation Fragment"
+  description: |
+    OpenAPI fragment for the Creative AI Commercial Automation domain.
+    Mount point: /api/ai/creative-commercial
+    All endpoints require x-admin-api-key header (existing adminAuth middleware).
+    Team 24 merges this into root openapi.yaml.
+  version: "1.0.0"
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+
+paths:
+
+  # ── Recommendations ─────────────────────────────────────────────────────────
+
+  /ai/creative-commercial/recommendations/{customerProfileId}:
+    get:
+      operationId: getCreativeCommercialRecommendations
+      summary: Get all recommendation types for a customer
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/customerProfileId"
+        - name: serviceId
+          in: query
+          schema: { type: integer }
+          description: Currently viewed service ID (for context-aware recs)
+        - name: serviceCode
+          in: query
+          schema: { type: string }
+          description: Service code for cross-sell targeting
+        - name: packageId
+          in: query
+          schema: { type: integer }
+        - name: segment
+          in: query
+          schema: { type: string }
+          description: Customer segment hint (new/returning/vip/enterprise/at_risk)
+        - name: orderAmount
+          in: query
+          schema: { type: integer }
+          description: Estimated order value in IDR (integer)
+      responses:
+        "200":
+          description: All recommendation types in one payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AllRecommendationsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /ai/creative-commercial/recommendations/{customerProfileId}/packages:
+    get:
+      operationId: getPackageRecommendations
+      summary: Package upgrade recommendations for a customer
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/customerProfileId"
+        - name: serviceId
+          in: query
+          schema: { type: integer }
+        - name: packageId
+          in: query
+          schema: { type: integer }
+        - name: segment
+          in: query
+          schema: { type: string }
+        - name: orderAmount
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Array of package recommendations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Recommendation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /ai/creative-commercial/recommendations/{customerProfileId}/cross-sell:
+    get:
+      operationId: getCrossSellRecommendations
+      summary: Cross-sell (complementary service) recommendations
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/customerProfileId"
+        - name: serviceCode
+          in: query
+          schema: { type: string }
+          required: true
+        - name: serviceId
+          in: query
+          schema: { type: integer }
+        - name: segment
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Array of cross-sell recommendations (max 3)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Recommendation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /ai/creative-commercial/recommendations/{customerProfileId}/coupon:
+    get:
+      operationId: getCouponRecommendation
+      summary: Best matching coupon recommendation for a customer
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/customerProfileId"
+        - name: orderAmount
+          in: query
+          schema: { type: integer }
+          required: true
+          description: Order amount in IDR for minimum-order matching
+        - name: serviceId
+          in: query
+          schema: { type: integer }
+        - name: segment
+          in: query
+          schema: { type: string }
+        - name: isAbandoned
+          in: query
+          schema: { type: boolean }
+          description: true = abandoned checkout context (higher urgency)
+      responses:
+        "200":
+          description: Best matching coupon recommendation or null
+          content:
+            application/json:
+              schema:
+                nullable: true
+                oneOf:
+                  - $ref: "#/components/schemas/Recommendation"
+                  - type: "null"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /ai/creative-commercial/recommendations/{customerProfileId}/bundles:
+    get:
+      operationId: getBundleRecommendation
+      summary: Best bundle recommendation for a customer
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/customerProfileId"
+        - name: serviceCode
+          in: query
+          schema: { type: string }
+        - name: segment
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Best bundle recommendation or null
+          content:
+            application/json:
+              schema:
+                nullable: true
+                oneOf:
+                  - $ref: "#/components/schemas/ServiceBundle"
+                  - type: "null"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  # ── Bundle Catalog ───────────────────────────────────────────────────────────
+
+  /ai/creative-commercial/bundles:
+    get:
+      operationId: getCreativeCommercialBundles
+      summary: Full bundle catalog (no customer context)
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: segment
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: All available bundles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceBundle"
+
+  # ── Abandoned Checkouts ──────────────────────────────────────────────────────
+
+  /ai/creative-commercial/abandoned-checkouts:
+    get:
+      operationId: getAbandonedCheckouts
+      summary: Abandoned checkout detection and stats
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: windowHours
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 168 }
+          description: Detection window in hours (default 24, max 168)
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200 }
+        - name: recommendations
+          in: query
+          schema: { type: boolean }
+          description: If true, return Recommendation[] instead of raw events
+      responses:
+        "200":
+          description: Abandonments list with stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AbandonedCheckoutsResponse"
+
+  # ── Repeat Order Candidates ──────────────────────────────────────────────────
+
+  /ai/creative-commercial/repeat-order-candidates:
+    get:
+      operationId: getRepeatOrderCandidates
+      summary: Customers eligible for repeat-order nudge
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: inactiveDays
+          in: query
+          schema: { type: integer, minimum: 7, maximum: 365 }
+          description: Inactivity threshold in days (default 60)
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200 }
+        - name: recommendations
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Repeat-order candidates with stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepeatOrderResponse"
+
+  # ── Approvals ────────────────────────────────────────────────────────────────
+
+  /ai/creative-commercial/approvals:
+    get:
+      operationId: listCreativeCommercialApprovals
+      summary: List pending financial action approvals
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: customerProfileId
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Pending approvals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PendingApproval"
+
+  /ai/creative-commercial/approvals/{approvalId}:
+    get:
+      operationId: getCreativeCommercialApproval
+      summary: Get a single approval by ID
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/approvalId"
+      responses:
+        "200":
+          description: Approval detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingApproval"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/creative-commercial/approvals/{approvalId}/approve:
+    post:
+      operationId: approveCreativeCommercialApproval
+      summary: Approve a pending financial action
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/approvalId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approvedBy]
+              properties:
+                approvedBy:
+                  type: string
+                  description: Admin username or email approving the action
+      responses:
+        "200":
+          description: Approval granted — event published
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  approval: { $ref: "#/components/schemas/PendingApproval" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /ai/creative-commercial/approvals/{approvalId}/reject:
+    post:
+      operationId: rejectCreativeCommercialApproval
+      summary: Reject a pending financial action
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/approvalId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rejectedBy: { type: string }
+                reason: { type: string, maxLength: 500 }
+      responses:
+        "200":
+          description: Approval rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  approval: { $ref: "#/components/schemas/PendingApproval" }
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /ai/creative-commercial/approvals/request-coupon:
+    post:
+      operationId: requestCustomCouponIssuance
+      summary: Request approval to issue a custom recovery coupon
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestCouponBody"
+      responses:
+        "201":
+          description: Approval request created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  approvalId: { type: integer }
+                  message: { type: string }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /ai/creative-commercial/approvals/request-bundle-discount:
+    post:
+      operationId: requestBundleDiscount
+      summary: Request approval to apply a bundle discount to a customer
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestBundleDiscountBody"
+      responses:
+        "201":
+          description: Approval request created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  approvalId: { type: integer }
+                  bundle: { $ref: "#/components/schemas/ServiceBundle" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  # ── Funnel Projection ────────────────────────────────────────────────────────
+
+  /ai/creative-commercial/funnel/projection:
+    get:
+      operationId: getFunnelProjection
+      summary: Funnel stage metrics and forward projection
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: periodDays
+          in: query
+          schema: { type: integer, minimum: 7, maximum: 365 }
+          description: Historical window and projection horizon (default 30)
+      responses:
+        "200":
+          description: Funnel projection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunnelProjection"
+
+  /ai/creative-commercial/funnel/snapshots:
+    get:
+      operationId: getFunnelSnapshots
+      summary: Historical funnel snapshot trend data
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 90 }
+      responses:
+        "200":
+          description: Array of daily snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FunnelSnapshot"
+
+  # ── Attribution ──────────────────────────────────────────────────────────────
+
+  /ai/creative-commercial/attribution/{customerProfileId}:
+    get:
+      operationId: getCustomerAttribution
+      summary: Attribution summary for a customer
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/customerProfileId"
+        - name: model
+          in: query
+          schema:
+            type: string
+            enum: [first_touch, last_touch, linear, time_decay]
+          description: Attribution model (default linear)
+        - name: serviceRequestId
+          in: query
+          schema: { type: integer }
+        - name: conversionValue
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Attribution summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttributionSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /ai/creative-commercial/attribution/{customerProfileId}/touchpoints:
+    get:
+      operationId: getCustomerTouchpoints
+      summary: Raw attribution touchpoints for a customer
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/customerProfileId"
+        - name: serviceRequestId
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: List of touchpoints
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttributionTouchpoint"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /ai/creative-commercial/attribution/report:
+    get:
+      operationId: getAttributionReport
+      summary: Aggregated attribution report across all customers
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: periodDays
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 365 }
+        - name: model
+          in: query
+          schema:
+            type: string
+            enum: [first_touch, last_touch, linear, time_decay]
+      responses:
+        "200":
+          description: Attribution report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttributionReport"
+
+  /ai/creative-commercial/attribution/record-touchpoint:
+    post:
+      operationId: recordAttributionTouchpoint
+      summary: Record a marketing touchpoint for a customer
+      tags: [creative-commercial]
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordTouchpointBody"
+      responses:
+        "201":
+          description: Touchpoint recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+# ── Components ─────────────────────────────────────────────────────────────────
+
+components:
+  securitySchemes:
+    adminApiKey:
+      type: apiKey
+      in: header
+      name: x-admin-api-key
+
+  parameters:
+    customerProfileId:
+      name: customerProfileId
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    approvalId:
+      name: approvalId
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+
+  responses:
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+    Conflict:
+      description: State conflict (already approved/rejected/expired)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+
+  schemas:
+    Recommendation:
+      type: object
+      required: [id, type, customerProfileId, title, description, reasonCode, score, payload, requiresApproval, createdAt]
+      properties:
+        id:              { type: string, description: "Deterministic: type:customerId:contextKey" }
+        type:            { type: string, enum: [package_upgrade, cross_sell, coupon_recovery, bundle, repeat_order, abandoned_checkout] }
+        customerProfileId: { type: integer }
+        title:           { type: string }
+        description:     { type: string }
+        reasonCode:      { type: string }
+        score:           { type: number, minimum: 0, maximum: 100 }
+        payload:         { $ref: "#/components/schemas/RecommendationPayload" }
+        cooldownUntil:   { type: string, format: date-time }
+        requiresApproval: { type: boolean }
+        createdAt:       { type: string, format: date-time }
+
+    RecommendationPayload:
+      type: object
+      properties:
+        serviceId:      { type: integer }
+        packageId:      { type: integer }
+        couponId:       { type: integer }
+        couponCode:     { type: string }
+        discountAmount: { type: integer }
+        originalAmount: { type: integer }
+        savingsAmount:  { type: integer }
+        promotionId:    { type: integer }
+        serviceRequestId: { type: integer }
+        ctaLabel:       { type: string }
+        ctaUrl:         { type: string }
+        metadata:       { type: object }
+
+    ServiceBundle:
+      type: object
+      required: [bundleCode, bundleName, description, items, totalListPrice, bundlePrice, savingsAmount, savingsPercent, requiresApproval]
+      properties:
+        bundleCode:      { type: string }
+        bundleName:      { type: string }
+        description:     { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              serviceId:   { type: integer }
+              serviceCode: { type: string }
+              serviceName: { type: string }
+              unitPrice:   { type: integer }
+        totalListPrice:  { type: integer }
+        bundlePrice:     { type: integer }
+        savingsAmount:   { type: integer }
+        savingsPercent:  { type: integer }
+        targetSegments:  { type: array, items: { type: string } }
+        requiresApproval: { type: boolean }
+
+    PendingApproval:
+      type: object
+      required: [id, customerProfileId, actionType, actionPayload, requestedBy, status, expiresAt, createdAt]
+      properties:
+        id:                 { type: integer }
+        customerProfileId:  { type: integer }
+        actionType:         { type: string, enum: [issue_bundle_discount, issue_recovery_coupon, apply_vip_bundle_price, issue_repeat_order_discount] }
+        actionPayload:      { type: object }
+        requestedBy:        { type: string }
+        status:             { type: string, enum: [pending, approved, rejected, expired] }
+        approvedBy:         { type: string, nullable: true }
+        approvedAt:         { type: string, format: date-time, nullable: true }
+        expiresAt:          { type: string, format: date-time }
+        createdAt:          { type: string, format: date-time }
+
+    FunnelProjection:
+      type: object
+      properties:
+        periodDays:        { type: integer }
+        historicalFrom:    { type: string, format: date-time }
+        historicalTo:      { type: string, format: date-time }
+        projectedFrom:     { type: string, format: date-time }
+        projectedTo:       { type: string, format: date-time }
+        stages:
+          type: array
+          items:
+            $ref: "#/components/schemas/FunnelStageData"
+        projectedRevenue:  { type: integer }
+        projectedOrders:   { type: integer }
+        bySource:          { type: object }
+
+    FunnelStageData:
+      type: object
+      properties:
+        stage:          { type: string }
+        count:          { type: integer }
+        conversionRate: { type: number }
+        dropOffRate:    { type: number }
+
+    FunnelSnapshot:
+      type: object
+      properties:
+        snapshotDate:   { type: string, format: date }
+        stage:          { type: string }
+        count:          { type: integer }
+        conversionRate: { type: number }
+
+    AttributionTouchpoint:
+      type: object
+      properties:
+        id:                 { type: integer }
+        customerProfileId:  { type: integer }
+        serviceRequestId:   { type: integer, nullable: true }
+        touchpointType:     { type: string }
+        source:             { type: string }
+        medium:             { type: string, nullable: true }
+        campaign:           { type: string, nullable: true }
+        weight:             { type: number }
+        occurredAt:         { type: string, format: date-time }
+
+    AttributionSummary:
+      type: object
+      properties:
+        customerProfileId:  { type: integer }
+        serviceRequestId:   { type: integer, nullable: true }
+        totalTouchpoints:   { type: integer }
+        firstTouch:         { nullable: true, oneOf: [{ $ref: "#/components/schemas/AttributionTouchpoint" }] }
+        lastTouch:          { nullable: true, oneOf: [{ $ref: "#/components/schemas/AttributionTouchpoint" }] }
+        multiTouchWeighted: { type: object, additionalProperties: { type: number } }
+        conversionValue:    { type: integer }
+
+    AttributionReport:
+      type: object
+      properties:
+        model:       { type: string }
+        periodDays:  { type: integer }
+        bySource:    { type: object }
+        topChannels:
+          type: array
+          items:
+            type: object
+            properties:
+              source:        { type: string }
+              weightedShare: { type: number }
+
+    AllRecommendationsResponse:
+      type: object
+      properties:
+        customerProfileId: { type: integer }
+        packages:
+          type: array
+          items: { $ref: "#/components/schemas/Recommendation" }
+        crossSell:
+          type: array
+          items: { $ref: "#/components/schemas/Recommendation" }
+        coupon:
+          nullable: true
+          oneOf: [{ $ref: "#/components/schemas/Recommendation" }]
+        bundle:
+          nullable: true
+          oneOf: [{ $ref: "#/components/schemas/ServiceBundle" }]
+
+    AbandonedCheckoutsResponse:
+      type: object
+      properties:
+        abandonments:
+          type: array
+          items: { type: object }
+        stats:
+          type: object
+          properties:
+            totalAbandoned:            { type: integer }
+            recoveredCount:            { type: integer }
+            recoveryRate:              { type: number }
+            avgHoursBeforeAbandonment: { type: number }
+
+    RepeatOrderResponse:
+      type: object
+      properties:
+        candidates:
+          type: array
+          items: { type: object }
+        stats:
+          type: object
+          properties:
+            totalRepeatCustomers:    { type: integer }
+            avgDaysBetweenOrders:    { type: number }
+            repeatRate:              { type: number }
+
+    RequestCouponBody:
+      type: object
+      required: [customerProfileId, orderAmount, discountPercent, requestedBy]
+      properties:
+        customerProfileId: { type: integer }
+        orderAmount:       { type: integer, minimum: 1 }
+        discountPercent:   { type: integer, minimum: 1, maximum: 50 }
+        requestedBy:       { type: string }
+        reason:            { type: string, maxLength: 500 }
+
+    RequestBundleDiscountBody:
+      type: object
+      required: [customerProfileId, bundleCode, requestedBy]
+      properties:
+        customerProfileId: { type: integer }
+        bundleCode:        { type: string }
+        requestedBy:       { type: string }
+
+    RecordTouchpointBody:
+      type: object
+      required: [customerProfileId, source]
+      properties:
+        customerProfileId: { type: integer }
+        serviceRequestId:  { type: integer }
+        touchpointType:
+          type: string
+          enum: [organic, paid_search, social, email, affiliate, referral, direct, other]
+        source:    { type: string, maxLength: 100 }
+        medium:    { type: string, maxLength: 100 }
+        campaign:  { type: string, maxLength: 100 }
+        occurredAt: { type: string, format: date-time }

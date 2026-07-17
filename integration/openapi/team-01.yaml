@@ -1,0 +1,717 @@
+openapi: 3.1.0
+info:
+  title: "Creative Workflow Engine v2 — Team 01 OpenAPI Fragment"
+  version: "0.2.0"
+  description: |
+    Team 1 (feature/01-creative-workflow) API fragment.
+    Mount under /api/ai/creative-workflow/v2 in the root openapi.yaml.
+    Do NOT merge into root openapi.yaml directly — Team 24 handles integration.
+
+    Auth boundaries:
+      Admin routes (/definitions/*, /plans/*) require x-admin-api-key.
+      Public route (/public/progress) requires a context token query param — no admin key.
+
+# ── Security (inherits root apiKey scheme) ──────────────────────────────────
+security:
+  - apiKey: []
+
+# ── Paths ────────────────────────────────────────────────────────────────────
+paths:
+
+  # ── Workflow Definitions (admin-only) ─────────────────────────────────────
+
+  /ai/creative-workflow/v2/definitions:
+    get:
+      operationId: cwfV2ListDefinitions
+      summary: List all workflow definitions
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      parameters:
+        - { name: limit,  in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowDefinitionListResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+    post:
+      operationId: cwfV2CreateDefinition
+      summary: Create a new workflow definition
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkflowDefinitionInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowDefinitionResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /ai/creative-workflow/v2/definitions/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+
+    get:
+      operationId: cwfV2GetDefinition
+      summary: Get a workflow definition by id
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowDefinitionResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+    patch:
+      operationId: cwfV2UpdateDefinition
+      summary: Update a workflow definition (bumps version)
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkflowDefinitionInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowDefinitionResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+    delete:
+      operationId: cwfV2DeleteDefinition
+      summary: Delete a workflow definition
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      responses:
+        "204": { description: No Content }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /ai/creative-workflow/v2/definitions/{id}/validate:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      operationId: cwfV2ValidateDefinition
+      summary: Validate a stored workflow definition
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ── Execution Plans (admin-only) ──────────────────────────────────────────
+
+  /ai/creative-workflow/v2/plans:
+    get:
+      operationId: cwfV2ListPlans
+      summary: List execution plans (filterable, paginated)
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      parameters:
+        - { name: contextId,   in: query, schema: { type: string } }
+        - { name: contextType, in: query, schema: { type: string } }
+        - { name: status,      in: query, schema: { $ref: "#/components/schemas/PlanStatus" } }
+        - { name: limit,       in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: offset,      in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionPlanListResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+    post:
+      operationId: cwfV2CreatePlan
+      summary: Build an execution plan from a workflow definition
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExecutionPlanInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionPlanResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  /ai/creative-workflow/v2/plans/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: cwfV2GetPlan
+      summary: Get an execution plan by id
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionPlanResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ai/creative-workflow/v2/plans/{id}/progress:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: cwfV2GetPlanProgress
+      summary: Get deterministic progress snapshot for a plan (admin)
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgressSnapshotResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ai/creative-workflow/v2/plans/{id}/start:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      operationId: cwfV2StartPlan
+      summary: Transition plan from pending → running
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      responses:
+        "200":
+          description: Updated plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionPlanResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /ai/creative-workflow/v2/plans/{id}/pause:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      operationId: cwfV2PausePlan
+      summary: Pause a running plan
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "200":
+          description: Updated plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionPlanResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /ai/creative-workflow/v2/plans/{id}/resume:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      operationId: cwfV2ResumePlan
+      summary: Resume a paused plan
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      responses:
+        "200":
+          description: Updated plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionPlanResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /ai/creative-workflow/v2/plans/{id}/cancel:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      operationId: cwfV2CancelPlan
+      summary: Cancel a plan (terminal operation)
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "200":
+          description: Updated plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionPlanResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /ai/creative-workflow/v2/plans/{id}/nodes/{nodeId}/running:
+    parameters:
+      - { name: id,     in: path, required: true, schema: { type: string } }
+      - { name: nodeId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: cwfV2MarkNodeRunning
+      summary: Mark a node as running (job claimed)
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [jobId]
+              properties:
+                jobId: { type: string }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ExecutionPlanResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /ai/creative-workflow/v2/plans/{id}/nodes/{nodeId}/completed:
+    parameters:
+      - { name: id,     in: path, required: true, schema: { type: string } }
+      - { name: nodeId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: cwfV2MarkNodeCompleted
+      summary: Mark a node as completed
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                result: { type: object }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ExecutionPlanResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /ai/creative-workflow/v2/plans/{id}/nodes/{nodeId}/skipped:
+    parameters:
+      - { name: id,     in: path, required: true, schema: { type: string } }
+      - { name: nodeId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: cwfV2MarkNodeSkipped
+      summary: Mark a node as skipped
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ExecutionPlanResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /ai/creative-workflow/v2/plans/{id}/nodes/{nodeId}/ready:
+    parameters:
+      - { name: id,     in: path, required: true, schema: { type: string } }
+      - { name: nodeId, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: cwfV2MarkNodeReady
+      summary: Mark a node as ready (all dependencies met)
+      tags: [creative-workflow-v2]
+      security: [{ apiKey: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ExecutionPlanResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ── Public progress endpoint (token-auth, no admin key) ───────────────────
+
+  /ai/creative-workflow/v2/public/progress:
+    get:
+      operationId: cwfV2GetPublicProgress
+      summary: >
+        Get execution progress for a context identified by a customer-issued token.
+        Token is resolved server-side to contextId — never accepted from request body/path.
+      tags: [creative-workflow-v2-public]
+      security: []           # No admin key — context token is in query param
+      parameters:
+        - name: token
+          in: query
+          required: true
+          description: Opaque context access token issued by the platform
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicProgressResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+# ── Components ────────────────────────────────────────────────────────────────
+components:
+
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: x-admin-api-key
+
+  schemas:
+
+    PlanStatus:
+      type: string
+      enum: [pending, running, paused, completed, cancelled, failed]
+
+    NodeStatus:
+      type: string
+      enum: [pending, ready, running, completed, failed, skipped, cancelled]
+
+    RetryStrategy:
+      type: string
+      enum: [immediate, exponential, manual]
+
+    RetryPolicy:
+      type: object
+      required: [maxRetry, strategy]
+      properties:
+        maxRetry:     { type: integer, minimum: 0 }
+        strategy:     { $ref: "#/components/schemas/RetryStrategy" }
+        backoffMs:    { type: integer, minimum: 0 }
+        maxBackoffMs: { type: integer, minimum: 0 }
+
+    NodeDefinition:
+      type: object
+      required: [id, label, jobType]
+      properties:
+        id:                  { type: string }
+        label:               { type: string }
+        jobType:             { type: string }
+        dependencies:        { type: array, items: { type: string } }
+        estimatedDurationMs: { type: integer, minimum: 0 }
+        estimatedCost:       { type: number, minimum: 0 }
+        retryPolicy:         { $ref: "#/components/schemas/RetryPolicy" }
+        failover:
+          type: object
+          required: [fallbackNodeId]
+          properties:
+            fallbackNodeId:  { type: string }
+            propagateError:  { type: boolean }
+        metadata:            { type: object }
+
+    EdgeDefinition:
+      type: object
+      required: [from, to]
+      properties:
+        from:      { type: string }
+        to:        { type: string }
+        condition: { type: string, enum: [always, on_success, on_failure] }
+
+    MilestoneDefinition:
+      type: object
+      required: [id, label]
+      properties:
+        id:            { type: string }
+        label:         { type: string }
+        requiresAllOf: { type: array, items: { type: string } }
+        requiresAnyOf: { type: array, items: { type: string } }
+
+    WorkflowDefinition:
+      type: object
+      required: [id, name, version, nodes, edges, createdAt, updatedAt]
+      properties:
+        id:                  { type: string, format: uuid }
+        name:                { type: string }
+        version:             { type: integer, minimum: 1 }
+        description:         { type: string }
+        nodes:               { type: array, items: { $ref: "#/components/schemas/NodeDefinition" } }
+        edges:               { type: array, items: { $ref: "#/components/schemas/EdgeDefinition" } }
+        milestones:          { type: array, items: { $ref: "#/components/schemas/MilestoneDefinition" } }
+        defaultRetryPolicy:  { $ref: "#/components/schemas/RetryPolicy" }
+        tags:                { type: array, items: { type: string } }
+        createdAt:           { type: string, format: date-time }
+        updatedAt:           { type: string, format: date-time }
+
+    CreateWorkflowDefinitionInput:
+      type: object
+      required: [name, nodes]
+      properties:
+        name:               { type: string }
+        description:        { type: string }
+        nodes:              { type: array, items: { $ref: "#/components/schemas/NodeDefinition" }, minItems: 1 }
+        edges:              { type: array, items: { $ref: "#/components/schemas/EdgeDefinition" } }
+        milestones:         { type: array, items: { $ref: "#/components/schemas/MilestoneDefinition" } }
+        defaultRetryPolicy: { $ref: "#/components/schemas/RetryPolicy" }
+        tags:               { type: array, items: { type: string } }
+
+    UpdateWorkflowDefinitionInput:
+      type: object
+      properties:
+        name:               { type: string }
+        description:        { type: string }
+        nodes:              { type: array, items: { $ref: "#/components/schemas/NodeDefinition" } }
+        edges:              { type: array, items: { $ref: "#/components/schemas/EdgeDefinition" } }
+        milestones:         { type: array, items: { $ref: "#/components/schemas/MilestoneDefinition" } }
+        defaultRetryPolicy: { $ref: "#/components/schemas/RetryPolicy" }
+        tags:               { type: array, items: { type: string } }
+
+    WorkflowDefinitionResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/WorkflowDefinition" }
+
+    WorkflowDefinitionListResponse:
+      type: object
+      properties:
+        data:   { type: array, items: { $ref: "#/components/schemas/WorkflowDefinition" } }
+        total:  { type: integer }
+        limit:  { type: integer }
+        offset: { type: integer }
+
+    RetryState:
+      type: object
+      properties:
+        retryCount:  { type: integer }
+        maxRetry:    { type: integer }
+        strategy:    { $ref: "#/components/schemas/RetryStrategy" }
+        nextRetryAt: { type: string, format: date-time }
+        lastError:   { type: string }
+
+    ExecutionNode:
+      type: object
+      properties:
+        nodeId:              { type: string }
+        definitionId:        { type: string }
+        label:               { type: string }
+        jobType:             { type: string }
+        status:              { $ref: "#/components/schemas/NodeStatus" }
+        jobId:               { type: string }
+        retry:               { $ref: "#/components/schemas/RetryState" }
+        failoverNodeId:      { type: string }
+        estimatedDurationMs: { type: integer }
+        estimatedCost:       { type: number }
+        startedAt:           { type: string, format: date-time }
+        completedAt:         { type: string, format: date-time }
+        failedAt:            { type: string, format: date-time }
+        errorMessage:        { type: string }
+        result:              { type: object }
+
+    ExecutionMilestone:
+      type: object
+      properties:
+        id:            { type: string }
+        label:         { type: string }
+        requiresAllOf: { type: array, items: { type: string } }
+        requiresAnyOf: { type: array, items: { type: string } }
+        status:        { type: string, enum: [pending, reached] }
+        reachedAt:     { type: string, format: date-time }
+
+    ExecutionPlan:
+      type: object
+      properties:
+        id:                   { type: string, format: uuid }
+        workflowDefinitionId: { type: string }
+        workflowVersion:      { type: integer }
+        contextId:            { type: string }
+        contextType:          { type: string }
+        status:               { $ref: "#/components/schemas/PlanStatus" }
+        nodes:                { type: array, items: { $ref: "#/components/schemas/ExecutionNode" } }
+        parallelGroups:       { type: array, items: { type: array, items: { type: string } } }
+        criticalPath:         { type: array, items: { type: string } }
+        topologicalOrder:     { type: array, items: { type: string } }
+        milestones:           { type: array, items: { $ref: "#/components/schemas/ExecutionMilestone" } }
+        progressPct:          { type: number, minimum: 0, maximum: 100 }
+        totalNodes:           { type: integer }
+        completedNodes:       { type: integer }
+        failedNodes:          { type: integer }
+        runningNodes:         { type: integer }
+        skippedNodes:         { type: integer }
+        pendingNodes:         { type: integer }
+        readyNodes:           { type: integer }
+        startedAt:            { type: string, format: date-time }
+        pausedAt:             { type: string, format: date-time }
+        resumedAt:            { type: string, format: date-time }
+        cancelledAt:          { type: string, format: date-time }
+        cancelReason:         { type: string }
+        completedAt:          { type: string, format: date-time }
+        failedAt:             { type: string, format: date-time }
+        createdAt:            { type: string, format: date-time }
+        updatedAt:            { type: string, format: date-time }
+
+    ExecutionPlanResponse:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/ExecutionPlan" }
+
+    ExecutionPlanListResponse:
+      type: object
+      properties:
+        data:   { type: array, items: { $ref: "#/components/schemas/ExecutionPlan" } }
+        total:  { type: integer }
+        limit:  { type: integer }
+        offset: { type: integer }
+
+    CreateExecutionPlanInput:
+      type: object
+      required: [workflowDefinitionId, contextId, contextType]
+      properties:
+        workflowDefinitionId: { type: string, format: uuid }
+        contextId:            { type: string }
+        contextType:          { type: string }
+        metadata:             { type: object }
+
+    ProgressSnapshotResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            progressPct:    { type: number }
+            totalNodes:     { type: integer }
+            completedNodes: { type: integer }
+            failedNodes:    { type: integer }
+            runningNodes:   { type: integer }
+            skippedNodes:   { type: integer }
+            pendingNodes:   { type: integer }
+            readyNodes:     { type: integer }
+
+    PublicProgressPlanSummary:
+      type: object
+      description: Progress summary for a single plan (customer-safe — no node details)
+      properties:
+        planId:               { type: string, format: uuid }
+        workflowDefinitionId: { type: string }
+        contextType:          { type: string }
+        status:               { $ref: "#/components/schemas/PlanStatus" }
+        progress:
+          type: object
+          properties:
+            progressPct:    { type: number }
+            totalNodes:     { type: integer }
+            completedNodes: { type: integer }
+            failedNodes:    { type: integer }
+            runningNodes:   { type: integer }
+            skippedNodes:   { type: integer }
+            pendingNodes:   { type: integer }
+            readyNodes:     { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PublicProgressResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            contextId:   { type: string }
+            contextType: { type: string }
+            plans:
+              type: array
+              items: { $ref: "#/components/schemas/PublicProgressPlanSummary" }
+
+    ValidationResponse:
+      type: object
+      properties:
+        valid:  { type: boolean }
+        errors: { type: array, items: { type: string } }
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:   { type: string }
+        details: { type: array, items: { type: string } }
+
+  responses:
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Conflict:
+      description: Conflict (e.g. terminal-state transition attempt)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    UnprocessableEntity:
+      description: Unprocessable Entity (validation failure)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    InternalError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }

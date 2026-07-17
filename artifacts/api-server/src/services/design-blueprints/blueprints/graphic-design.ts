@@ -1,0 +1,53 @@
+import type { Blueprint } from "../types.js";
+
+export const graphicDesignBlueprint: Blueprint = {
+  id: "bp-graphic-design-v1",
+  slug: "graphic-design-standard",
+  schemaVersion: "1.0",
+  domain: "graphic_design",
+  name: "Graphic Design Standard",
+  description: "Universal blueprint for print and digital graphic design: posters, flyers, banners, social media assets, and editorial layouts.",
+  version: "1.0.0",
+  status: "active",
+  dimensions: { width: 2480, height: 3508, unit: "px", dpi: 300, aspectRatio: "A4" },
+  zones: [
+    { id: "z-header", name: "Header", description: "Primary headline and branding area", x: 0, y: 0, width: 2480, height: 700, required: true, slotRefs: ["s-headline", "s-logo"], zIndex: 2 },
+    { id: "z-hero", name: "Hero Visual", description: "Dominant visual or hero image", x: 0, y: 700, width: 2480, height: 1400, required: true, slotRefs: ["s-hero-image", "s-hero-caption"], zIndex: 1 },
+    { id: "z-body", name: "Body Content", description: "Main body copy and supporting visuals", x: 0, y: 2100, width: 2480, height: 1000, required: false, slotRefs: ["s-body-text", "s-supporting-image"], zIndex: 2 },
+    { id: "z-footer", name: "Footer", description: "Contact info, CTA, legal text", x: 0, y: 3100, width: 2480, height: 408, required: true, slotRefs: ["s-cta", "s-legal"], zIndex: 2 },
+  ],
+  slots: [
+    { id: "s-headline", name: "Headline", type: "text", required: true, maxItems: 1, constraints: { maxChars: 120, minFontSize: 48, maxFontSize: 300 } },
+    { id: "s-logo", name: "Brand Logo", type: "image", required: false, maxItems: 1, constraints: { maxWidth: 600, maxHeight: 300, allowedFormats: ["png", "svg", "webp"], maxFileSizeMb: 5 } },
+    { id: "s-hero-image", name: "Hero Image", type: "image", required: true, maxItems: 1, constraints: { aspectRatio: "16:9", allowedFormats: ["jpg", "png", "webp"], maxFileSizeMb: 20 } },
+    { id: "s-hero-caption", name: "Hero Caption", type: "text", required: false, maxItems: 1, constraints: { maxChars: 200, minFontSize: 16, maxFontSize: 48 } },
+    { id: "s-body-text", name: "Body Copy", type: "text", required: false, maxItems: 3, constraints: { maxChars: 1000, minFontSize: 10, maxFontSize: 24 } },
+    { id: "s-supporting-image", name: "Supporting Image", type: "image", required: false, maxItems: 2, constraints: { allowedFormats: ["jpg", "png", "webp"], maxFileSizeMb: 10 } },
+    { id: "s-cta", name: "Call to Action", type: "text", required: true, maxItems: 1, constraints: { maxChars: 80, minFontSize: 18, maxFontSize: 72 } },
+    { id: "s-legal", name: "Legal / Fine Print", type: "text", required: false, maxItems: 1, constraints: { maxChars: 500, minFontSize: 6, maxFontSize: 12 } },
+  ],
+  constraints: { maxZones: 8, maxSlots: 20, allowZoneOverlap: false, requiredZoneIds: ["z-header", "z-hero", "z-footer"] },
+  supportedComponents: [
+    { type: "rich-text-editor", versionRange: ">=1.0.0", required: true, fillsSlotTypes: ["text"] },
+    { type: "image-picker", versionRange: ">=1.0.0", required: true, fillsSlotTypes: ["image"] },
+    { type: "color-picker", versionRange: ">=1.0.0", required: false, fillsSlotTypes: ["color_swatch"] },
+    { type: "icon-library", versionRange: ">=1.0.0", required: false, fillsSlotTypes: ["icon"] },
+  ],
+  requiredData: [
+    { key: "brandName", label: "Brand Name", type: "string", required: true, maxLength: 100 },
+    { key: "primaryColor", label: "Primary Color", type: "color", required: true, description: "Hex color code" },
+    { key: "secondaryColor", label: "Secondary Color", type: "color", required: false },
+    { key: "targetFormat", label: "Output Format", type: "enum", required: true, allowedValues: ["print", "digital", "social"] },
+    { key: "bleedMm", label: "Bleed (mm)", type: "number", required: false, min: 0, max: 10, defaultValue: 3 },
+  ],
+  outputCapabilities: [
+    { format: "pdf", maxDpi: 300, multiPage: false, colorSpace: "cmyk", bleedMm: 3, iccProfile: "ISOcoated_v2_eci" },
+    { format: "png", maxDpi: 300, colorSpace: "rgb" },
+    { format: "jpg", maxDpi: 300, colorSpace: "rgb" },
+    { format: "svg", colorSpace: "rgb" },
+  ],
+  industryTags: ["advertising", "branding", "publishing", "retail", "events"],
+  styleTags: ["editorial", "minimalist", "bold", "typographic", "photographic"],
+  createdAt: "2026-07-16T00:00:00.000Z",
+  updatedAt: "2026-07-16T00:00:00.000Z",
+};

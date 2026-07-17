@@ -74,6 +74,45 @@ import designTemplatesRouter from "./design-templates";
 import designTemplatesAiAssistRouter from "./design-templates-ai-assist";
 import creativeMarketplaceRouter from "./creative-marketplace";
 
+// ── Team 01: Creative Workflow V2 ──────────────────────────────────────────
+import { creativeWorkflowV2Router, creativeWorkflowPublicRouter } from "./creative-workflow-v2/index.js";
+// ── Team 02: Customer Creative Workspace (enhanced) ───────────────────────
+import customerCreativeWorkspaceRouter from "./customer-creative-workspace/index.js";
+// ── Team 03: Creative Commercial Automation ───────────────────────────────
+import creativeCommercialRouter from "./creative-commercial/index.js";
+// ── Team 04: Portfolio V2 (Gallery, Inspiration, Compare) ────────────────
+import galleryV2Router from "./creative-portfolio-v2/index.js";
+// ── Team 05: Brand Intelligence V2 ───────────────────────────────────────
+import brandIntelligenceV2Router from "./brand-intelligence-v2/index.js";
+// ── Team 06: Asset Intelligence V2 ───────────────────────────────────────
+import assetIntelligenceV2Router from "./asset-intelligence-v2/index.js";
+// ── Team 07: Design Blueprints ────────────────────────────────────────────
+import designBlueprintsRouter from "./design-blueprints/index.js";
+// ── Team 08: Design Components ───────────────────────────────────────────
+import designComponentsRouter from "./design-components/router.js";
+// ── Team 09: Design Patterns ─────────────────────────────────────────────
+import designPatternsRouter from "./design-patterns/index.js";
+// ── Team 10: Design Tokens (Typography & Palette) ────────────────────────
+import designTokensRouter from "./design-tokens/index.js";
+// ── Team 11: Universal Template Matching ─────────────────────────────────
+import universalTemplateMatchingRouter from "./universal-template-matching/index.js";
+// ── Team 12: Layout Composer ─────────────────────────────────────────────
+import layoutComposerRouter from "./layout-composer/index.js";
+// ── Team 13: Dynamic Design Composer ─────────────────────────────────────
+import dynamicDesignComposerRouter from "./dynamic-design-composer/index.js";
+// ── Team 14: Universal Renderer ──────────────────────────────────────────
+import universalRendererRouter from "./universal-renderer/index.js";
+// ── Team 15: Graphic Design Domain ───────────────────────────────────────
+import graphicDesignRouter from "../domains/graphic-design/routes.js";
+// ── Team 17: Interior Design ─────────────────────────────────────────────
+import interiorDesignRouter from "./interior-design.js";
+// ── Team 18: Fashion Design ──────────────────────────────────────────────
+import fashionDesignRouter from "./fashion-design.js";
+// ── Team 19: Packaging Design ────────────────────────────────────────────
+import packagingDesignRouter from "./packaging-design.js";
+// ── Team 22: Creative Vendor Ecosystem ───────────────────────────────────
+import { vendorRouter } from "../domains/creative-vendors/index.js";
+
 const router: IRouter = Router();
 
 router.use(healthRouter);
@@ -148,5 +187,45 @@ router.use(designStudioRouter);
 router.use(designTemplatesRouter);
 router.use(designTemplatesAiAssistRouter);
 router.use(creativeMarketplaceRouter);
+
+// ── Team 01: Creative Workflow V2 ─────────────────────────────────────────
+router.use(creativeWorkflowPublicRouter);
+router.use(creativeWorkflowV2Router);
+// ── Team 02: Customer Creative Workspace Enhanced ─────────────────────────
+router.use(customerCreativeWorkspaceRouter);
+// ── Team 03: Creative Commercial Automation ───────────────────────────────
+router.use(creativeCommercialRouter);
+// ── Team 04: Portfolio V2 — mount BEFORE any catch-all ───────────────────
+router.use(galleryV2Router);
+// ── Team 05: Brand Intelligence V2 ───────────────────────────────────────
+router.use(brandIntelligenceV2Router);
+// ── Team 06: Asset Intelligence V2 ───────────────────────────────────────
+router.use(assetIntelligenceV2Router);
+// ── Team 07: Design Blueprints ────────────────────────────────────────────
+router.use(designBlueprintsRouter);
+// ── Team 08: Design Components ───────────────────────────────────────────
+router.use(designComponentsRouter);
+// ── Team 09: Design Patterns ─────────────────────────────────────────────
+router.use(designPatternsRouter);
+// ── Team 10: Design Tokens ───────────────────────────────────────────────
+router.use(designTokensRouter);
+// ── Team 11: Universal Template Matching ─────────────────────────────────
+router.use(universalTemplateMatchingRouter);
+// ── Team 12: Layout Composer ─────────────────────────────────────────────
+router.use(layoutComposerRouter);
+// ── Team 13: Dynamic Design Composer ─────────────────────────────────────
+router.use(dynamicDesignComposerRouter);
+// ── Team 14: Universal Renderer ──────────────────────────────────────────
+router.use(universalRendererRouter);
+// ── Team 15: Graphic Design Domain ───────────────────────────────────────
+router.use(graphicDesignRouter);
+// ── Team 17: Interior Design ─────────────────────────────────────────────
+router.use(interiorDesignRouter);
+// ── Team 18: Fashion Design ──────────────────────────────────────────────
+router.use(fashionDesignRouter);
+// ── Team 19: Packaging Design ────────────────────────────────────────────
+router.use(packagingDesignRouter);
+// ── Team 22: Creative Vendor Ecosystem — after portfolioGalleryRouter ─────
+router.use(vendorRouter);
 
 export default router;

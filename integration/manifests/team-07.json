@@ -1,0 +1,106 @@
+{
+  "_team": "07",
+  "_feature": "Universal Design Blueprint Library",
+  "_schemaVersion": "2.0",
+  "_lastUpdated": "2025-07-17",
+
+  "boundary": {
+    "summary": "Team 07 manages STRUCTURAL BLUEPRINTS — domain-level specifications for what a design should contain. This is distinct from the existing design-template-engine which manages RENDERABLE TEMPLATES.",
+
+    "existingEngine": {
+      "name": "design-template-engine (Phase 1 + 2)",
+      "purpose": "Manages renderable design templates: SVG/Sharp rendering pipeline, batch renders, ZIP delivery, visual asset output.",
+      "tables": [
+        "ai_platform.ai_design_templates",
+        "ai_platform.ai_design_render_batches",
+        "ai_platform.ai_design_render_items",
+        "ai_platform.ai_design_render_zip_exports"
+      ],
+      "schemaFiles": ["lib/db/src/schema/design-template-engine.ts"],
+      "serviceFiles": [
+        "artifacts/api-server/src/services/designTemplateService.ts",
+        "artifacts/api-server/src/services/design-renderer/"
+      ],
+      "routeFiles": ["artifacts/api-server/src/routes/design-templates.ts"],
+      "sourceOfTruth": "DB tables in design-template-engine schema"
+    },
+
+    "team07Domain": {
+      "name": "Universal Design Blueprint Library",
+      "purpose": "Manages structural blueprints: domain contracts declaring canvas dimensions, zones, slot types, constraints, supported components, required data fields, and output capabilities. No rendering logic.",
+      "tables": [
+        "ai_platform.ai_design_blueprints",
+        "ai_platform.ai_blueprint_validation_log"
+      ],
+      "schemaFiles": ["integration/migrations/team-07.sql (draft — applied by Team 24)"],
+      "serviceFiles": [
+        "artifacts/api-server/src/services/design-blueprints/",
+        "artifacts/api-server/src/services/design-blueprints/repository/"
+      ],
+      "routeFiles": ["artifacts/api-server/src/routes/design-blueprints/index.ts"],
+      "sourceOfTruth": "ai_platform.ai_design_blueprints for custom blueprints; code (blueprints/*.ts) for built-ins"
+    },
+
+    "relationship": "A blueprint is UPSTREAM of a template. A template may reference a blueprintId to declare its structural contract. The renderer (design-renderer/) operates on templates, not blueprints. Blueprints never contain rendering logic.",
+
+    "noRegistryCollision": "Built-in blueprints use 'bp-<domain>-v<N>' IDs (e.g. bp-graphic-design-v1). Built-in templates use 'CATEGORY-INDUSTRY-STYLE-NNN' codes (e.g. LOGO-FOOD-BOLD-002). Namespaces do not overlap."
+  },
+
+  "storageStrategy": {
+    "canonical": "database",
+    "description": "Production uses DbBlueprintRepository backed by ai_platform.ai_design_blueprints. InMemoryBlueprintRepository is test-only and must never be used in production.",
+    "repositoryPort": "artifacts/api-server/src/services/design-blueprints/repository/IBlueprintRepository.ts",
+    "productionAdapter": "artifacts/api-server/src/services/design-blueprints/repository/DbBlueprintRepository.ts",
+    "testStub": "artifacts/api-server/src/services/design-blueprints/repository/InMemoryBlueprintRepository.ts (test-only)",
+    "builtinStorage": "Code — services/design-blueprints/blueprints/*.ts. Always available, never in DB."
+  },
+
+  "authStrategy": {
+    "mutationRoutes": "adminAuth middleware applied at BOTH router level (router.use(adminAuth)) and individually on each mutation route handler (POST, PATCH, publish, archive, deprecate, validate, check-compatibility, normalize).",
+    "publicRoute": "GET /ai/design-blueprints/public — registered BEFORE router.use(adminAuth). Returns ONLY status=published blueprints. No auth required.",
+    "adminReadRoutes": "All other GET routes sit behind router.use(adminAuth). Return all statuses."
+  },
+
+  "visibilityRules": {
+    "published": "Public — returned by GET /ai/design-blueprints/public (no auth). Intended for customer-facing use.",
+    "active": "Admin-only — enabled but not public. Use for internal/platform-ready blueprints.",
+    "draft": "Admin-only — work-in-progress. Never surfaced publicly.",
+    "deprecated": "Admin-only — retired. Never surfaced publicly."
+  },
+
+  "routesToMount": {
+    "instruction": "Add to artifacts/api-server/src/routes/index.ts",
+    "code": "import designBlueprintsRouter from './design-blueprints/index.js';\nrouter.use(designBlueprintsRouter);"
+  },
+
+  "pagesToRegister": {
+    "instruction": "Add to artifacts/ai-platform/src/App.tsx",
+    "path": "/design-blueprints",
+    "component": "import BlueprintsPage from './pages/design-blueprints/index.tsx';\n<Route path=\"/design-blueprints\" component={BlueprintsPage} />"
+  },
+
+  "sidebarItem": {
+    "instruction": "Add to sidebar/layout in artifacts/ai-platform",
+    "label": "Blueprint Library",
+    "icon": "Layers",
+    "section": "Creative",
+    "path": "/design-blueprints"
+  },
+
+  "schemaExportsRequested": [],
+
+  "dependencyRequests": [],
+
+  "integrationNotes": [
+    "Migration draft MUST be applied before write operations work. Read operations on built-in blueprints work immediately without the migration.",
+    "The DbBlueprintRepository handles 'relation does not exist' gracefully on reads (returns empty) so built-ins remain available before migration.",
+    "Write operations (POST, PATCH, status changes) will return 500 if the migration has not been applied — this is intentional; the service must not silently drop data.",
+    "Built-in blueprints have status=active, NOT published. They are not on the public endpoint by default.",
+    "To make a blueprint public: POST /ai/design-blueprints/:id/publish"
+  ],
+
+  "knownRisks": [
+    "Custom blueprints are lost on server restart until migration is applied (DbBlueprintRepository not yet connected to real DB rows).",
+    "Built-in blueprints have id format 'bp-<domain>-v1' which could collide with custom blueprint public_ids if caller manually sets a matching id. Guard: custom blueprint IDs are always prefixed 'bp-custom-<uuid>'."
+  ]
+}

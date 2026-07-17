@@ -1,0 +1,66 @@
+{
+  "team": "04",
+  "branch": "feature/04-portfolio-showcase",
+  "ownedFolders": [
+    "artifacts/api-server/src/services/creative-portfolio-v2/",
+    "artifacts/api-server/src/routes/creative-portfolio-v2/",
+    "artifacts/customer-portal/src/pages/creative-portfolio/",
+    "artifacts/customer-portal/src/components/creative-portfolio/",
+    "artifacts/customer-portal/src/hooks/use-gallery-v2.ts"
+  ],
+  "routesToMount": [
+    {
+      "file": "artifacts/api-server/src/routes/creative-portfolio-v2/index.ts",
+      "mountNote": "Import as galleryV2Router and call app.use('/', galleryV2Router). All paths self-prefix (/public/portfolio-v2/* and /ai/portfolio-v2/*)."
+    }
+  ],
+  "pagesToRegister": [
+    {
+      "path": "/portfolio-v2",
+      "component": "@/pages/creative-portfolio/GalleryV2Page",
+      "lazy": true,
+      "note": "Enhanced portfolio gallery with search, sort, compare, industry showcase, and Brand DNA recs."
+    },
+    {
+      "path": "/inspiration",
+      "component": "@/pages/creative-portfolio/InspirationPage",
+      "lazy": true,
+      "note": "Curated inspiration feed grouped by mood/theme."
+    },
+    {
+      "path": "/portfolio-compare",
+      "component": "@/pages/creative-portfolio/ComparePage",
+      "lazy": true,
+      "note": "Standalone compare tool. Accepts ?ids=1,2,3 query param."
+    }
+  ],
+  "sidebarItems": [],
+  "openapiFragment": "integration/openapi/team-04.yaml",
+  "migrationDrafts": [
+    "integration/migrations/team-04.sql"
+  ],
+  "seedDrafts": [],
+  "dependenciesRequested": [],
+  "eventsPublished": [
+    "portfolio_v2.gallery_searched",
+    "portfolio_v2.detail_viewed",
+    "portfolio_v2.cta_clicked",
+    "portfolio_v2.compared",
+    "portfolio_v2.favorited"
+  ],
+  "eventsConsumed": [],
+  "workerJobTypesRequested": [],
+  "sharedTypesRequested": [],
+  "integrationOrder": [
+    "Team 24 mounts galleryV2Router AFTER existing portfolio-gallery.ts router to avoid path collision.",
+    "Team 24 registers /portfolio-v2, /inspiration, /portfolio-compare routes in App.tsx.",
+    "Team 24 applies migration draft (indexes only, additive, safe to re-run)."
+  ],
+  "knownRisks": [
+    "Routes /public/portfolio-v2/* must be mounted BEFORE any catch-all route in api-server/src/index.ts.",
+    "inspirationFeedService uses LOWER() style matching — case differences in existing data will reduce results.",
+    "colorTag JSONB containment query requires GIN index (team-04.sql) for good performance at scale.",
+    "BrandDnaRecs widget requires a workspace token — shows nothing for unauthenticated visitors (by design).",
+    "CompareDrawer launches from GalleryV2Page; deep-linking via /portfolio-compare?ids= requires Team 24 to wire the route."
+  ]
+}

@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "team": 15,
+  "domain": "graphic-design",
+  "version": "2.0.0",
+  "description": "Team 15 — Graphic Design Domain adapter manifest (post-P0-remediation)",
+  "ownership": {
+    "apiDomain":     "artifacts/api-server/src/domains/graphic-design/",
+    "customerPortal": "artifacts/customer-portal/src/pages/graphic-design/",
+    "adminPanel":    "artifacts/ai-platform/src/pages/graphic-design/",
+    "openapi":       "integration/openapi/team-15.yaml",
+    "migration":     "integration/migrations/team-15.sql",
+    "manifest":      "integration/manifests/team-15.json"
+  },
+  "adapterPattern": {
+    "summary": "Team 15 is a DOMAIN ADAPTER, not a rendering engine.",
+    "owns": [
+      "Brief intake & validation (schema.ts + service.ts)",
+      "Blueprint selection — canvas dimensions per service code (blueprints.ts)",
+      "Component requirements map (components.ts)",
+      "Domain-specific QC rules, 8 checks, threshold 70 (qc.ts)",
+      "Deliverable manifest per service/tier/format (manifest.ts)",
+      "Package policy and pricing (packagePolicy.ts)",
+      "Path/filename sanitization (sanitize.ts)",
+      "Port interfaces documenting the adapter boundary (ports.ts)"
+    ],
+    "doesNotOwn": [
+      "Canvas rendering — owned by existing designStudioService (Teams 7-8)",
+      "Template matching — future wiring by Team 24",
+      "Asset library — future wiring by Team 24",
+      "Batch job queue — future wiring by Team 24"
+    ],
+    "canonicalAdapter": {
+      "description": "approveBriefAndDispatch() goes through ONE CanonicalJobAdapter (single execution path). Default implementation wraps designStudioService.createDesignProject — the existing canvas engine.",
+      "interface": "CanonicalJobAdapter in artifacts/api-server/src/domains/graphic-design/service.ts",
+      "realService": "artifacts/api-server/src/services/designStudioService.ts → createDesignProject()",
+      "bluerprintRole": "Blueprint dimensions (blueprints.ts) drive canvasWidth/canvasHeight passed to the adapter — this is the adapter's core contribution.",
+      "testMockPattern": "approveBriefAndDispatch(id, mockAdapter) — inject CanonicalJobAdapter in tests"
+    }
+  },
+  "services": [
+    { "code": "GD-LOGO",       "name": "Logo Concept",      "basePriceIdr": 2500000 },
+    { "code": "GD-BCARD",      "name": "Business Card",     "basePriceIdr":  500000 },
+    { "code": "GD-LTRHEAD",    "name": "Letterhead",        "basePriceIdr":  750000 },
+    { "code": "GD-FLYER",      "name": "Flyer",             "basePriceIdr":  500000 },
+    { "code": "GD-POSTER",     "name": "Poster",            "basePriceIdr":  750000 },
+    { "code": "GD-BANNER",     "name": "Banner",            "basePriceIdr": 1000000 },
+    { "code": "GD-BROCHURE",   "name": "Brochure",          "basePriceIdr": 1500000 },
+    { "code": "GD-SOCIAL",     "name": "Social Media Kit",  "basePriceIdr": 1500000 },
+    { "code": "GD-CERT",       "name": "Certificate",       "basePriceIdr":  500000 },
+    { "code": "GD-STATIONERY", "name": "Stationery Suite",  "basePriceIdr": 3000000 }
+  ],
+  "packageTiers": {
+    "basic":    { "conceptVariants": "service-specific (GD-LOGO=2, most others=1)", "revisionRounds": 2,  "deliveryDays": 7, "priceMultiplier": 0.6 },
+    "standard": { "conceptVariants": "service-specific (GD-LOGO=3, most others=2)", "revisionRounds": 5,  "deliveryDays": 5, "priceMultiplier": 1.0 },
+    "premium":  { "conceptVariants": "service-specific (GD-LOGO=5, most others=3)", "revisionRounds": -1, "deliveryDays": 3, "priceMultiplier": 2.0 }
+  },
+  "qcPolicy": {
+    "passThreshold": 70,
+    "note": "Threshold is 70 (stricter than CP's 60) due to print tolerances.",
+    "checks": [
+      { "name": "componentPresence",    "weight": 25, "description": "All required design components present" },
+      { "name": "textFitting",          "weight": 20, "description": "Text within safe-area boundaries" },
+      { "name": "printDimensions",      "weight": 15, "description": "Canvas dimensions match blueprint spec (±0.5%)" },
+      { "name": "bleedCompliance",      "weight": 10, "description": "Background extends to bleed edge" },
+      { "name": "resolutionCompliance", "weight": 10, "description": "DPI meets minimum (300 print, 72 digital)" },
+      { "name": "colorModeCompliance",  "weight":  5, "description": "CMYK for print, RGB/sRGB for digital" },
+      { "name": "contrastCompliance",   "weight": 10, "description": "Text contrast ≥ WCAG 2.1 AA" },
+      { "name": "fileFormatCompliance", "weight":  5, "description": "All expected file formats present" }
+    ],
+    "securityNote": "All user-supplied strings in RenderedDeliverable (fileFormats, variant, colorMode) are sanitized via sanitize.ts before reaching QC checks."
+  },
+  "pathSecurity": {
+    "module": "artifacts/api-server/src/domains/graphic-design/sanitize.ts",
+    "rules": [
+      "GD_STORAGE_PREFIX = 'graphic-design/' — all deliverable files must live under this prefix",
+      "buildDeliverablePath() generates UUID-based paths — never derived from user input",
+      "sanitizeFileFormats() validates against ALLOWED_GD_EXTENSIONS allowlist",
+      "sanitizeVariantKey() strips to alphanumeric + hyphen, truncates to 100 chars",
+      "sanitizeColorMode() validates against ALLOWED_COLOR_MODES set",
+      "assertPathContained() rejects absolute paths, ../ traversal, paths outside prefix"
+    ]
+  },
+  "printSpecs": {
+    "bleedMmDefault":    3,
+    "bleedMmLargeFormat": 10,
+    "safeAreaMmDefault": 5,
+    "minDpiPrint":       300,
+    "minDpiDigital":     72,
+    "dimensionTolerancePrint":   0.5,
+    "dimensionToleranceDigital": 1.0
+  },
+  "routes": {
+    "mounted": [
+      "POST   /ai/graphic-design/briefs               — create brief (state only, no execution)",
+      "GET    /ai/graphic-design/briefs               — list briefs (paginated: page, pageSize)",
+      "GET    /ai/graphic-design/briefs/:id           — get brief",
+      "PATCH  /ai/graphic-design/briefs/:id/status   — update status",
+      "GET    /ai/graphic-design/briefs/:id/manifest  — deliverable manifest",
+      "GET    /ai/graphic-design/briefs/:id/qc        — last QC result (read-only)",
+      "GET    /ai/graphic-design/briefs/:id/jobs      — paginated job list (page, pageSize)",
+      "GET    /ai/graphic-design/blueprints           — all canvas blueprints",
+      "GET    /ai/graphic-design/blueprints/:code     — single blueprint",
+      "GET    /ai/graphic-design/packages             — all package policies",
+      "GET    /ai/graphic-design/packages/:code       — single package",
+      "GET    /ai/graphic-design/services             — service catalog"
+    ],
+    "manifestOnly_requiresTeam24Wiring": [
+      "POST   /ai/graphic-design/briefs/:id/approve   — dispatches via CanonicalJobAdapter → designStudioService.createDesignProject. Team 24 must mount the router AND expose this route after confirming canvas pipeline is ready.",
+      "POST   /ai/graphic-design/briefs/:id/qc        — QC callback from canvas renderer (Teams 7-8). Team 24 must mount and confirm renderer calls this endpoint with RenderedDeliverable payload after render completes."
+    ]
+  },
+  "routesToMount": [
+    {
+      "importPath": "../domains/graphic-design/index.js",
+      "exportName": "graphicDesignRouter",
+      "mountIn": "artifacts/api-server/src/routes/index.ts",
+      "mountCall": "router.use(graphicDesignRouter)",
+      "note": "Add after creativeMarketplaceRouter. routes/index.ts is a LOCKED FILE — Team 24 must apply this mount.",
+      "preConditions": [
+        "integration/migrations/team-15.sql applied to DB (gd_briefs + gd_qc_runs tables created)",
+        "POST /approve route verified with real designStudioService canvas pipeline",
+        "POST /qc route endpoint confirmed with Teams 7-8 renderer callback contract"
+      ]
+    }
+  ],
+  "pagesToRegister": [
+    {
+      "artifact": "artifacts/ai-platform",
+      "routePath": "/graphic-design",
+      "componentPath": "src/pages/graphic-design/index.tsx",
+      "label": "Graphic Design",
+      "icon": "palette",
+      "note": "Add to admin sidebar nav and App.tsx route list. App.tsx is a LOCKED FILE — Team 24 must register."
+    },
+    {
+      "artifact": "artifacts/customer-portal",
+      "routePath": "/graphic-design",
+      "componentPath": "src/pages/graphic-design/index.tsx",
+      "label": "Graphic Design",
+      "note": "BLOCKED: customer portal page posts directly to /ai/graphic-design/briefs (admin route). Team 24 must resolve auth boundary — either (a) expose a public brief-creation endpoint with session-derived tenantId, or (b) route through existing service-request/quotation flow. DO NOT register until resolved."
+    }
+  ],
+  "schemaExportsRequested": [],
+  "dependencyRequests": [
+    {
+      "from": "team-15",
+      "to": "team-24-integration",
+      "interface": "CanonicalJobAdapter",
+      "currentState": "Default adapter wraps designStudioService.createDesignProject — functional but creates 'draft' canvas projects only",
+      "requiredWiring": "Team 24 should confirm canvas pipeline is production-ready (rendering, export, status tracking) before enabling POST /approve route",
+      "portFile": "artifacts/api-server/src/domains/graphic-design/service.ts → CanonicalJobAdapter interface"
+    },
+    {
+      "from": "team-15",
+      "to": "team-7-8",
+      "interface": "QC callback",
+      "currentState": "POST /ai/graphic-design/briefs/:id/qc route implemented in routes.ts but NOT MOUNTED (manifest-only)",
+      "requiredWiring": "Teams 7-8 renderer must call POST /ai/graphic-design/briefs/:id/qc with RenderedDeliverable payload after canvas export. Payload is sanitized server-side before QC checks run.",
+      "portFile": "artifacts/api-server/src/domains/graphic-design/ports.ts → DesignRendererPort (documentation reference only)"
+    }
+  ],
+  "integrationNotes": [
+    "ADAPTER PATTERN: Team 15 is a domain adapter, not a rendering engine. No parallel renderer or workflow engine exists in this branch.",
+    "CANONICAL ADAPTER: All execution paths go through CanonicalJobAdapter (one interface). Default: designStudioService.createDesignProject. No stubs, no resolveAdapters().",
+    "PATH TRAVERSAL: sanitize.ts provides buildDeliverablePath() (UUID-based, never user-supplied), sanitizeFileFormats() (allowlist), assertPathContained() (prefix guard). All user strings sanitized in runBriefQc().",
+    "LOCKED FILES: routes/index.ts and App.tsx files not touched. routesToMount above must be applied by Team 24.",
+    "DB MIGRATION: gd_briefs and gd_qc_runs tables created via integration/migrations/team-15.sql. Service layer uses in-memory Map until migration runs.",
+    "SEED: seedCatalog.ts updated with 'graphic-design' category and 10 GD-* service codes (not a locked file).",
+    "AUTH: All /ai/graphic-design/* routes covered by global adminAuthWithExceptions middleware in app.ts — no per-route auth needed.",
+    "PAGINATION: listBriefs() (page, pageSize) and listBriefJobs() (page, pageSize) both return paginated responses with total/page/pageSize envelope.",
+    "⚠️  SEED MERGE CONFLICT — TEAM 24 ACTION REQUIRED: Both Team 15 and Team 16 modified artifacts/api-server/src/seedCatalog.ts independently on their respective branches. Team 15 adds 'graphic-design' category + 10 GD-* service codes; Team 16 adds 6 presentation-document codes. These changes WILL conflict on git merge. Team 24 must NOT let git auto-resolve this file. Correct resolution: manually combine BOTH teams' additions into a single additive array — preserving all 10 GD-* codes (Team 15) AND all 6 presentation-document codes (Team 16). Verify final seedCatalog.ts contains entries from both teams before merging either branch."
+  ],
+  "dbTables": [
+    "ai_platform.gd_briefs",
+    "ai_platform.gd_qc_runs"
+  ],
+  "catalogCategory":  "graphic-design",
+  "catalogServiceCodes": [
+    "GD-LOGO","GD-BCARD","GD-LTRHEAD","GD-FLYER","GD-POSTER",
+    "GD-BANNER","GD-BROCHURE","GD-SOCIAL","GD-CERT","GD-STATIONERY"
+  ],
+  "tests": {
+    "testDir": "artifacts/api-server/src/domains/graphic-design/tests/",
+    "files": [
+      "schema.test.ts",
+      "qc.test.ts",
+      "blueprints.test.ts",
+      "manifest.test.ts",
+      "service.test.ts",
+      "security.test.ts"
+    ],
+    "securityTestsCover": [
+      "P0 PATH TRAVERSAL: buildDeliverablePath rejects ../../ in ext and serviceCode",
+      "P0 USER FILENAME IGNORED: UUID always generated, user input never in path",
+      "P0 CONTAINMENT: assertPathContained validates every generated path",
+      "SANITIZE: sanitizeFormatExt allowlist, sanitizeFileFormats drops unknown exts",
+      "SANITIZE: sanitizeVariantKey strips traversal chars, sanitizeColorMode enum guard",
+      "ROUTE COLLISION: /graphic-design/ namespace does not overlap design-studio prefixes",
+      "CANONICAL ADAPTER: approveBriefAndDispatch calls adapter.createProject (single path)",
+      "JOB LIST PAGINATED: listBriefJobs returns page/pageSize/total envelope"
+    ]
+  }
+}

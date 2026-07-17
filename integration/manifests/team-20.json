@@ -1,0 +1,217 @@
+{
+  "team": "20",
+  "branch": "feature/20-product-design",
+  "status": "BLOCKED_PENDING_FOUNDATION",
+
+  "description": "Product Concept Design domain — form direction, material direction, CMF, feature/label placement, concept variants, manufacturer brief.",
+
+  "scopeBoundary": "Concept-stage design only. This domain does NOT provide engineering drawings, safety certifications, regulatory approvals, or manufacturing-ready CAD specifications. Any client-facing output must carry the CONCEPT_DISCLAIMER string.",
+
+  "blockedBy": {
+    "reason": "De-duplication remediation: duplicate engines removed. Domain logic paused pending foundation layer audit clearance.",
+    "dependencies": [
+      {
+        "team": "07",
+        "title": "AI Model Routing",
+        "requiredFor": "Routing concept-to-brief generation calls through the standard AI service catalog"
+      },
+      {
+        "team": "08",
+        "title": "Universal Component Library",
+        "requiredFor": "Reusing validated component types (logo, label, feature zones) as the building blocks for product concept composition"
+      },
+      {
+        "team": "11",
+        "title": "Blueprint Engine",
+        "requiredFor": "Generating ordered MockupLayer stacks from a ProductConcept (BlueprintPort adapter target)"
+      },
+      {
+        "team": "12",
+        "title": "Composition / Rendering Engine",
+        "requiredFor": "Rendering a finalised CompositionSpec to object storage (CompositionPort adapter target)"
+      },
+      {
+        "team": "13",
+        "title": "QC Pipeline",
+        "requiredFor": "Scoring concepts against ProductDesignQcProfile; calling domain validators via ExistingEngineAdapter.domainValidators"
+      },
+      {
+        "team": "14",
+        "title": "Deliverable Manifest Service",
+        "requiredFor": "Registering and tracking ProductDesignDeliverableManifest assets"
+      }
+    ]
+  },
+
+  "duplicationReview": {
+    "removedAssets": [
+      {
+        "path": "src/routes/creative-workflow-v2/",
+        "reason": "Full parallel DAG workflow engine (cycle detection, topological sort, critical path, retry policy). Duplicates existing routes/workflows.ts mounted on main. Belongs to Team 1."
+      },
+      {
+        "path": "src/services/creative-workflow-v2/",
+        "reason": "Same as above — service layer for the duplicate workflow engine."
+      },
+      {
+        "path": "src/types/creative-workflow-v2/",
+        "reason": "Types for the duplicate workflow engine."
+      },
+      {
+        "path": "integration/manifests/team-01.json",
+        "reason": "Belongs to Team 1, not Team 20. Removed from this branch."
+      },
+      {
+        "path": "integration/migrations/team-01.sql",
+        "reason": "Belongs to Team 1, not Team 20. Removed from this branch."
+      },
+      {
+        "path": "integration/openapi/team-01.yaml",
+        "reason": "Belongs to Team 1, not Team 20. Removed from this branch."
+      },
+      {
+        "path": "src/domains/product-design/routes/",
+        "reason": "CRUD routes implementing DB persistence before foundation tables exist. Removed until Teams 7–14 are integrated and DB tables are applied by Team 24."
+      },
+      {
+        "path": "src/domains/product-design/services/mockupComposer.ts",
+        "reason": "Implements layered composition rendering that duplicates existing services/design-renderer/templateRenderer.ts on main. Deferred to Teams 11/12 via ExistingEngineAdapter."
+      },
+      {
+        "path": "src/domains/product-design/services/ports/nullBlueprintPort.ts",
+        "reason": "Null stub only relevant when engine is active. Deferred to Teams 11/12 integration."
+      },
+      {
+        "path": "src/domains/product-design/services/ports/nullCompositionPort.ts",
+        "reason": "Null stub only relevant when engine is active. Deferred to Teams 11/12 integration."
+      },
+      {
+        "path": "artifacts/ai-platform/src/pages/product-design/index.tsx",
+        "reason": "Admin UI page before API routes and foundation are in place."
+      },
+      {
+        "path": "artifacts/customer-portal/src/pages/product-design/index.tsx",
+        "reason": "Customer portal page before API routes and foundation are in place."
+      }
+    ],
+
+    "retainedAssets": [
+      {
+        "path": "src/domains/product-design/types/contracts.ts",
+        "reason": "5 minimal domain contracts (ProductDesignRequirements, ProductDesignBrief, ProductDesignCompositionMapping, ProductDesignQcProfile, ProductDesignDeliverableManifest) + ExistingEngineAdapter interface. Pure type declarations, zero runtime deps."
+      },
+      {
+        "path": "src/domains/product-design/types/concept.ts",
+        "reason": "Unique domain knowledge: CMF, form direction, material direction, label areas, feature placements. No duplication with existing services."
+      },
+      {
+        "path": "src/domains/product-design/types/manufacturer.ts",
+        "reason": "Unique: ManufacturerBrief, RequirementEntry, UNSUPPORTED_MANUFACTURING_CLAIMS. No duplication."
+      },
+      {
+        "path": "src/domains/product-design/types/mockup.ts",
+        "reason": "Unique: MockupLayer, CompositionSpec, LAYER_ZINDEX canonical ordering. Type declarations only — no renderer code."
+      },
+      {
+        "path": "src/domains/product-design/types/variant.ts",
+        "reason": "Unique: ConceptVariant, VariantDelta, VariantConsistencyResult. No duplication."
+      },
+      {
+        "path": "src/domains/product-design/services/cmfValidator.ts",
+        "reason": "Pure logic: validates hex/Pantone/RAL color codes, material classes, zone uniqueness. No external deps."
+      },
+      {
+        "path": "src/domains/product-design/services/dimensionsValidator.ts",
+        "reason": "Pure logic: validates h/w/depth, wall thickness bounds, form-ratio heuristics. No external deps."
+      },
+      {
+        "path": "src/domains/product-design/services/componentPlacer.ts",
+        "reason": "Pure logic: 2D bounding-box placement validation, overlap detection. No external deps."
+      },
+      {
+        "path": "src/domains/product-design/services/disclaimerService.ts",
+        "reason": "Pure logic: CONCEPT_DISCLAIMER injection, claim guard, assertDisclaimerPresent. No external deps."
+      },
+      {
+        "path": "src/domains/product-design/services/variantConsistencyChecker.ts",
+        "reason": "Pure logic: structural axis consistency, multipleStructuralAxes flag. No external deps."
+      },
+      {
+        "path": "src/domains/product-design/services/manufacturerBriefBuilder.ts",
+        "reason": "Pure transformer: concept → ManufacturerBrief with process hints. No DB, no rendering, no external engine deps."
+      }
+    ]
+  },
+
+  "ownedFolders": [
+    "artifacts/api-server/src/domains/product-design/",
+    "integration/openapi/team-20.yaml",
+    "integration/migrations/team-20.sql",
+    "integration/manifests/team-20.json"
+  ],
+
+  "routesToMount": [],
+  "pagesToRegister": [],
+  "sidebarItems": [],
+
+  "schemaExportsRequested": [
+    {
+      "note": "DEFERRED — no schema exports until Teams 7–14 are integrated and migration applied. Tables: pcd_product_concepts, pcd_product_mockups, pcd_concept_variants, pcd_manufacturer_briefs."
+    }
+  ],
+
+  "migrations": [
+    {
+      "file": "integration/migrations/team-20.sql",
+      "description": "Draft DDL for 4 pcd_* tables in ai_platform schema. Additive, IF NOT EXISTS. DO NOT apply until foundation teams (7–14) are integrated.",
+      "status": "draft_do_not_apply",
+      "applyOrder": "after Teams 07 08 11 12 13 14"
+    }
+  ],
+
+  "integrationNotes": [
+    "All routes, pages, and sidebar registration entries are EMPTY — do not mount anything from this domain until BLOCKED status is resolved.",
+    "The 5 contracts in types/contracts.ts (ProductDesignRequirements, ProductDesignBrief, ProductDesignCompositionMapping, ProductDesignQcProfile, ProductDesignDeliverableManifest) are the integration surface. Teams 11–14 should reference these.",
+    "ExistingEngineAdapter (types/contracts.ts) defines the interface Team 24 must implement when wiring real engine adapters.",
+    "Pure validators (cmfValidator, dimensionsValidator, componentPlacer, disclaimerService, variantConsistencyChecker) are safe to call from any context — they have no external dependencies.",
+    "manufacturerBriefBuilder is a pure concept→brief transformer with no DB or engine dependencies. Safe to use standalone.",
+    "The creative-workflow-v2 engine removed from this branch belongs to Team 1 (feature/01-*). If needed, retrieve it from that branch — NOT from Team 20.",
+    "mockupComposer belongs logically to the Team 11/12 composition layer. Team 20 will provide a thin adapter once those engines clear audit."
+  ],
+
+  "futureIntegrationPoints": [
+    {
+      "id": "FIP-01",
+      "title": "Route layer",
+      "trigger": "After Teams 07/08/11/12/13/14 clear audit and migration applied",
+      "action": "Restore CRUD routes from git history (commit before de-duplication). Mount at /ai/product-design via routesToMount."
+    },
+    {
+      "id": "FIP-02",
+      "title": "ExistingEngineAdapter wiring",
+      "trigger": "After Team 11 (blueprint) and Team 12 (composition) are integrated",
+      "action": "Team 24 injects concrete BlueprintPort and CompositionPort implementations. mockupComposer logic re-enabled as an adapter, not a standalone engine."
+    },
+    {
+      "id": "FIP-03",
+      "title": "QC integration",
+      "trigger": "After Team 13 (QC pipeline) is integrated",
+      "action": "Team 13 calls ExistingEngineAdapter.domainValidators to score concepts against ProductDesignQcProfile."
+    },
+    {
+      "id": "FIP-04",
+      "title": "Deliverable manifest integration",
+      "trigger": "After Team 14 (deliverable manifest) is integrated",
+      "action": "Team 14 registers ProductDesignDeliverableManifest entries via ExistingEngineAdapter.deliverableManifest."
+    },
+    {
+      "id": "FIP-05",
+      "title": "UI restoration",
+      "trigger": "After FIP-01 and FIP-02 are complete",
+      "action": "Restore ai-platform/pages/product-design and customer-portal/pages/product-design from git history. Register via pagesToRegister and sidebarItems in manifest."
+    }
+  ],
+
+  "integrationOrder": 20,
+  "dependsOn": ["07", "08", "11", "12", "13", "14"]
+}

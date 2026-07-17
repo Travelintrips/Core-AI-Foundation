@@ -54,6 +54,7 @@ export const CATEGORIES: CategorySeed[] = [
   { code: "data-analytics", name: "Data Analytics AI", description: "Dashboards, insights, and reporting.", icon: "bar-chart", displayOrder: 14 },
   { code: "executive", name: "Executive AI", description: "Strategic decision support for leadership.", icon: "briefcase", displayOrder: 15 },
   { code: "customer-service", name: "Customer Service AI", description: "Support automation and client communication.", icon: "headset", displayOrder: 16 },
+  { code: "graphic-design", name: "Graphic Design AI", description: "Professional print and digital design: logos, cards, flyers, banners, brochures, social kits, and more — AI-generated, brand-consistent, print-ready.", icon: "palette", displayOrder: 17, visibility: "public" },
 ];
 
 // Category-level disclaimers shown next to any service/quotation in that
@@ -108,6 +109,13 @@ export const SERVICES: Record<string, ServiceSeed[]> = {
     svc("interior-client-proposal", "Interior Client Proposal", "Proposal klien desain interior profesional: scope of work, estimasi anggaran per elemen, dan panduan spesifikasi material.", "one_time", "1100000", "4-6 hari", true, ["Interior Design Specialist AI"], ["Client proposal PDF", "Scope of work", "Material specification"]),
     svc("interior-brand-identity", "Interior Brand Identity", "Identitas visual untuk bisnis desain interior: logo, palet warna, tipografi, dan panduan brand yang mencerminkan estetika studio.", "one_time", "1750000", "5-7 hari", true, ["Interior Design Specialist AI", "Creative Director AI", "Designer AI"], ["Brand guideline", "Logo suite", "Visual identity system"]),
     svc("interior-mood-visual", "Interior Mood Board (AI Render)", "Visualisasi mood board interior realistis menggunakan FLUX.1 Dev — render suasana ruangan, material, dan pencahayaan.", "one_time", "500000", "2-3 hari", false, ["Interior Design Specialist AI", "Designer AI"], ["Interior mood board visuals", "Room atmosphere renders"]),
+    // ── Team 16: Presentation & Document Creative Services ──
+    svc("proposal", "Proposal Bisnis", "Proposal bisnis profesional: latar belakang, ruang lingkup, deliverable, dan langkah selanjutnya. Anti-fabrikasi: tanpa angka harga atau pasal legal yang dikarang.", "one_time", "950000", "3-5 hari", true, ["Copywriter AI", "Brand Strategist AI"], ["Proposal PDF", "Executive summary"]),
+    svc("product-catalog", "Katalog Produk / Layanan", "Katalog produk atau layanan on-brand: intro brand, kategori, fitur unggulan, dan informasi pemesanan. Tanpa daftar harga yang dikarang.", "one_time", "1100000", "4-6 hari", true, ["Copywriter AI", "Designer AI"], ["Product catalog PDF"]),
+    svc("annual-report", "Laporan Tahunan (Annual Report)", "Laporan tahunan perusahaan: pesan kepemimpinan, sorotan kinerja operasional, keberlanjutan, dan outlook. Anti-fabrikasi: tanpa angka keuangan, laporan audit, atau dividen yang dikarang.", "one_time", "2500000", "7-10 hari", true, ["Copywriter AI", "Brand Strategist AI"], ["Annual report PDF"]),
+    svc("whitepaper", "White Paper / Thought Leadership", "White paper atau thought leadership: abstrak, pengantar, analisis masalah, kerangka solusi, dan rekomendasi. Anti-fabrikasi: tanpa statistik atau sitasi pihak ketiga yang dikarang.", "one_time", "1750000", "5-7 hari", true, ["Copywriter AI", "Brand Strategist AI"], ["Whitepaper PDF"]),
+    svc("case-study", "Case Study / Studi Kasus", "Studi kasus klien profesional: latar belakang, tantangan, solusi, dan hasil. Hasil kuantitatif hanya dicantumkan jika disediakan klien — tidak dikarang.", "one_time", "1100000", "4-6 hari", true, ["Copywriter AI", "Brand Strategist AI"], ["Case study PDF"]),
+    svc("ebook", "E-Book / Panduan Edukasi", "E-book edukasi atau panduan thought leadership: pengantar, hingga 5 bab tematis, dan kesimpulan. Dilengkapi daftar isi yang dihasilkan dari bab nyata — tanpa statistik yang dikarang.", "one_time", "2000000", "6-8 hari", true, ["Copywriter AI", "Brand Strategist AI"], ["E-book PDF", "Table of contents"]),
   ],
   marketing: [
     svc("marketing-plan", "Rencana Marketing", "Rencana marketing menyeluruh untuk brand atau produk Anda.", "one_time", "750000", "3-5 hari", false, ["Marketing Strategist AI"], ["Marketing plan document"]),
@@ -205,6 +213,18 @@ export const SERVICES: Record<string, ServiceSeed[]> = {
     svc("vendor-agreement", "Perjanjian Vendor", "Penyusunan/review perjanjian vendor.", "one_time", "2000000", "2-4 hari", true, ["Legal AI"], ["Vendor agreement draft"]),
     svc("contract-summary", "Ringkasan Kontrak", "Ringkasan poin-poin utama kontrak.", "one_time", "500000", "1 hari", false, ["Legal AI"], ["Contract summary document"]),
     svc("legal-ai-monthly", "Legal AI Bulanan", "Subscription dukungan legal bulanan (fair usage 10 dokumen).", "monthly_subscription", "3500000", "Ongoing, bulanan", true, ["Legal AI"], ["Monthly legal support"]),
+  ],
+  "graphic-design": [
+    svc("GD-LOGO",       "Logo Concept",       "AI-generated logo concepts: wordmark, lettermark, combination, emblem, or mascot styles.",                  "one_time", "2500000",  "3-7 hari",   false, ["Designer AI", "Creative Director AI"], ["Primary logo (SVG/PDF/PNG)", "Dark & monochrome variants", "Favicon set"]),
+    svc("GD-BCARD",      "Business Card",      "Print-ready business card design with full bleed, CMYK color profile, and all standard sizes.",              "one_time",  "500000",  "2-4 hari",   false, ["Designer AI"],                        ["Print-ready PDF (CMYK+bleed)", "PNG preview", "Digital PDF"]),
+    svc("GD-LTRHEAD",    "Letterhead",         "Professional A4/Letter letterhead with optional envelope, complimentary slip, and second-page variant.",     "one_time",  "750000",  "2-3 hari",   false, ["Designer AI"],                        ["Letterhead PDF (print-ready)", "Digital PDF", "PNG preview"]),
+    svc("GD-FLYER",      "Flyer",              "Eye-catching A4/A5/A6 flyers for events, promotions, menus, and product launches. Print-ready + digital.",  "one_time",  "500000",  "1-3 hari",   false, ["Designer AI"],                        ["Print-ready PDF", "PNG preview", "JPG social share"]),
+    svc("GD-POSTER",     "Poster",             "Large-format A0–A4 posters at 300dpi. Events, advertising, informational, and artistic styles.",            "one_time",  "750000",  "2-5 hari",   false, ["Designer AI"],                        ["Print-ready PDF", "PNG preview", "JPG web share", "Digital PDF"]),
+    svc("GD-BANNER",     "Banner",             "Roll-up, X-banner, backdrop, digital leaderboard, and billboard banners. Indoor and outdoor specs.",        "one_time", "1000000",  "2-4 hari",   false, ["Designer AI"],                        ["Print-ready PDF", "PNG preview", "Digital JPG"]),
+    svc("GD-BROCHURE",   "Brochure",           "Trifold, bifold, gatefold, and accordion brochures. A4/A5/DL sizes. Company profile to product catalogs.", "one_time", "1500000",  "3-5 hari",   false, ["Designer AI", "Copywriter AI"],       ["Print-ready PDF (CMYK+bleed)", "Cover PNG preview", "Digital flat PDF"]),
+    svc("GD-SOCIAL",     "Social Media Kit",   "Branded social media design sets for Instagram, Facebook, LinkedIn, Twitter, YouTube, and TikTok.",         "one_time", "1500000",  "2-4 hari",   false, ["Designer AI"],                        ["Platform-specific PNGs (all sizes)", "Story variants", "Highlight icons", "ZIP archive"]),
+    svc("GD-CERT",       "Certificate",        "Achievement, completion, and appreciation certificates with signatures, seals, and optional security.",     "one_time",  "500000",  "1-3 hari",   false, ["Designer AI"],                        ["Print-ready PDF", "Digital PDF", "PNG preview", "JPG social share"]),
+    svc("GD-STATIONERY", "Stationery Suite",   "Complete brand stationery: letterhead, envelope, business card, notepad, folder, ID card — all consistent.", "one_time", "3000000", "4-7 hari",   false, ["Designer AI", "Creative Director AI"], ["All stationery PDFs (print-ready)", "PNG previews", "ZIP archive"]),
   ],
 };
 

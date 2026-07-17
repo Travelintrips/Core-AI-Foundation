@@ -1,0 +1,1142 @@
+openapi: "3.1.0"
+info:
+  title: Team 13 — Dynamic Design Composition Engine
+  version: "1.0.0"
+  description: |
+    Deterministically composes a DesignCompositionSpec from blueprint, layout,
+    palette, typography, components, pattern, decoration, material, motif, and
+    Brand DNA.
+
+    No image generation. No file rendering. Returns structured JSON only.
+
+    All routes are protected by the global X-Admin-Api-Key header.
+  contact:
+    name: Team 13
+  x-team: "13"
+
+servers:
+  - url: /api
+    description: API server (Express)
+
+tags:
+  - name: composer
+    description: Dynamic Design Composition Engine endpoints
+
+paths:
+  /ai/composer/compose:
+    post:
+      operationId: composeDesign
+      summary: Compose a DesignCompositionSpec
+      description: |
+        Accepts all design elements and Brand DNA, resolves missing inputs via
+        deterministic fallbacks, validates compatibility and brand consistency,
+        and returns a fully-explained DesignCompositionSpec.
+
+        The compositionId is a SHA-256 hash of the normalised request — identical
+        inputs always produce identical compositionIds and identical specs.
+      tags: [composer]
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompositionRequest"
+            examples:
+              fullRequest:
+                summary: Full request with Brand DNA
+                value:
+                  blueprint:
+                    name: "Standard 12-column"
+                    columns: 12
+                    rows: 0
+                    gutter: 24
+                    maxWidth: 1280
+                    orientation: portrait
+                    medium: digital
+                  layoutPlan:
+                    name: "Hero + Content"
+                    strategy: hero-content
+                    flow: vertical
+                    heroWeight: 0.4
+                    sectionCount: 3
+                    hasSidebar: false
+                    emphasis: balanced
+                  components:
+                    - type: header
+                      required: true
+                      zone: top
+                    - type: hero
+                      required: true
+                      zone: top
+                    - type: cta
+                      required: true
+                      zone: bottom
+                    - type: footer
+                      required: true
+                      zone: bottom
+                  pattern:
+                    name: "No Pattern"
+                    type: none
+                    intensity: 0
+                    placement: background
+                    tile: false
+                  palette:
+                    name: "Corporate Blue"
+                    primary: "#1E3A5F"
+                    secondary: "#2D6A9F"
+                    accent: "#F4A261"
+                    background: "#FFFFFF"
+                    surface: "#F8F9FA"
+                    text: "#1A1A2E"
+                    textMuted: "#6C757D"
+                    mood: neutral
+                  typography:
+                    name: "Professional Sans"
+                    headingFont: Inter
+                    bodyFont: Inter
+                    headingWeight: "700"
+                    bodyWeight: "400"
+                    baseSize: 16
+                    scaleRatio: 1.25
+                    lineHeight: 1.6
+                    letterSpacing: normal
+                    style: sans-serif
+                  decoration:
+                    name: "Clean"
+                    borderRadius: medium
+                    borderStyle: none
+                    shadowDepth: low
+                    dividerStyle: line
+                    useGradients: false
+                    overlayOpacity: 0
+                  material:
+                    name: "Flat"
+                    surface: flat
+                    texture: smooth
+                    elevation: low
+                    opacity: solid
+                    blendMode: normal
+                  motif:
+                    name: "Abstract"
+                    theme: abstract
+                    repetition: none
+                    scale: small
+                    colorTreatment: monochrome
+                  brandDna:
+                    brandPersonality: ["Professional", "Corporate"]
+                    brandVoice: Formal
+                    industry: finance
+                    riskProfile: Conservative
+                    detectedColors:
+                      primary: "#1E3A5F"
+                      secondary: "#2D6A9F"
+                  allowOverrides: false
+      responses:
+        "200":
+          description: Composition successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DesignCompositionSpec"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /ai/composer/validate:
+    post:
+      operationId: validateCompositionRequest
+      summary: Validate inputs without composing
+      description: |
+        Validates a CompositionRequest and returns a preview of which fallbacks
+        would be applied, without running the full composition engine.
+        Useful for real-time form validation in UI builders.
+      tags: [composer]
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompositionRequest"
+      responses:
+        "200":
+          description: Validation result (always 200 — check `valid` field)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResult"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /ai/composer/compatibility:
+    post:
+      operationId: checkDesignCompatibility
+      summary: Check cross-element compatibility
+      description: |
+        Checks whether material, pattern, palette, and decoration are mutually
+        compatible. Returns issues with severity levels (warning / error) and
+        an overall compatibility score (0–100).
+
+        Does not require a full CompositionRequest — suitable for real-time
+        feedback while building a composition.
+      tags: [composer]
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompatibilityCheckRequest"
+      responses:
+        "200":
+          description: Compatibility report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompatibilityReport"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /ai/composer/health:
+    get:
+      operationId: composerHealth
+      summary: Service health probe
+      tags: [composer]
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                    example: dynamic-design-composer
+                  team:
+                    type: string
+                    example: team-13
+                  version:
+                    type: string
+                    example: 1.0.0
+                  status:
+                    type: string
+                    example: ok
+
+components:
+  securitySchemes:
+    adminApiKey:
+      type: apiKey
+      in: header
+      name: X-Admin-Api-Key
+
+  responses:
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: string
+              details:
+                type: string
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: string
+
+  schemas:
+    # ── Enums ──────────────────────────────────────────────────────────────────
+
+    Orientation:
+      type: string
+      enum: [portrait, landscape, square]
+
+    Medium:
+      type: string
+      enum: [digital, print, presentation, social]
+
+    LayoutStrategy:
+      type: string
+      enum:
+        - hero-content
+        - grid
+        - asymmetric
+        - magazine
+        - editorial
+        - minimal
+        - card-grid
+        - split
+        - full-bleed
+        - sidebar
+
+    ContentFlow:
+      type: string
+      enum: [vertical, horizontal, masonry]
+
+    LayoutEmphasis:
+      type: string
+      enum: [headline, image, balanced, data]
+
+    ComponentType:
+      type: string
+      enum:
+        - header
+        - footer
+        - hero
+        - cta
+        - testimonial
+        - feature-grid
+        - pricing-table
+        - image-gallery
+        - stat-block
+        - timeline
+        - team-section
+        - form
+        - nav
+        - breadcrumb
+        - divider
+        - quote
+        - icon-row
+        - map
+        - video-embed
+        - accordion
+        - tab-group
+        - badge
+        - chip
+        - avatar
+        - progress-bar
+
+    ComponentZone:
+      type: string
+      enum: [top, middle, bottom, sidebar, overlay]
+
+    PatternType:
+      type: string
+      enum:
+        - geometric
+        - organic
+        - abstract
+        - textile
+        - dot-matrix
+        - stripe
+        - wave
+        - circuit
+        - botanical
+        - none
+
+    PatternPlacement:
+      type: string
+      enum: [background, section, accent, border, overlay]
+
+    PaletteMood:
+      type: string
+      enum: [vibrant, muted, monochrome, earthy, cool, warm, neutral]
+
+    HeadingWeight:
+      type: string
+      enum: ["300", "400", "500", "600", "700", "800", "900"]
+
+    BodyWeight:
+      type: string
+      enum: ["300", "400", "500"]
+
+    TypographyStyle:
+      type: string
+      enum: [serif, sans-serif, display, monospace, mixed]
+
+    LetterSpacing:
+      type: string
+      enum: [tight, normal, wide]
+
+    BorderRadius:
+      type: string
+      enum: [none, small, medium, large, pill, circle]
+
+    BorderStyle:
+      type: string
+      enum: [none, thin, thick, dashed, double]
+
+    ShadowDepth:
+      type: string
+      enum: [none, low, medium, high, dramatic]
+
+    DividerStyle:
+      type: string
+      enum: [none, line, dash, dot, ornamental]
+
+    GradientDirection:
+      type: string
+      enum: [horizontal, vertical, diagonal, radial]
+
+    MaterialSurface:
+      type: string
+      enum: [flat, glass, neumorphic, material, frosted, metallic, matte, paper, fabric]
+
+    MaterialTexture:
+      type: string
+      enum: [smooth, grain, noise, halftone, none]
+
+    MaterialElevation:
+      type: string
+      enum: [flat, low, medium, high]
+
+    MaterialOpacity:
+      type: string
+      enum: [solid, semi-transparent, transparent]
+
+    BlendMode:
+      type: string
+      enum: [normal, multiply, screen, overlay, soft-light]
+
+    MotifTheme:
+      type: string
+      enum:
+        - nature
+        - technology
+        - human
+        - abstract
+        - geometric
+        - cultural
+        - industrial
+        - luxury
+        - playful
+        - scientific
+        - none
+
+    MotifRepetition:
+      type: string
+      enum: [single, scattered, systematic, none]
+
+    MotifScale:
+      type: string
+      enum: [micro, small, medium, large, hero]
+
+    MotifColorTreatment:
+      type: string
+      enum: [monochrome, tinted, full-color, ghost]
+
+    # ── Input schemas ──────────────────────────────────────────────────────────
+
+    BlueprintInput:
+      type: object
+      required: [name, columns, rows, gutter, maxWidth, orientation, medium]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        columns:
+          type: integer
+          minimum: 1
+          maximum: 24
+        rows:
+          type: integer
+          minimum: 0
+          maximum: 100
+        gutter:
+          type: number
+          minimum: 0
+          maximum: 96
+        maxWidth:
+          type: number
+          minimum: 320
+          maximum: 3840
+        orientation:
+          $ref: "#/components/schemas/Orientation"
+        medium:
+          $ref: "#/components/schemas/Medium"
+
+    LayoutPlanInput:
+      type: object
+      required: [name, strategy, flow, heroWeight, sectionCount, hasSidebar, emphasis]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        strategy:
+          $ref: "#/components/schemas/LayoutStrategy"
+        flow:
+          $ref: "#/components/schemas/ContentFlow"
+        heroWeight:
+          type: number
+          minimum: 0
+          maximum: 1
+        sectionCount:
+          type: integer
+          minimum: 1
+          maximum: 20
+        hasSidebar:
+          type: boolean
+        emphasis:
+          $ref: "#/components/schemas/LayoutEmphasis"
+
+    ComponentInput:
+      type: object
+      required: [type, required]
+      properties:
+        id:
+          type: string
+        type:
+          $ref: "#/components/schemas/ComponentType"
+        required:
+          type: boolean
+        zone:
+          $ref: "#/components/schemas/ComponentZone"
+        variant:
+          type: string
+
+    PatternInput:
+      type: object
+      required: [name, type, intensity, placement, tile]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          $ref: "#/components/schemas/PatternType"
+        intensity:
+          type: number
+          minimum: 0
+          maximum: 1
+        placement:
+          $ref: "#/components/schemas/PatternPlacement"
+        tile:
+          type: boolean
+
+    PaletteInput:
+      type: object
+      required: [name, primary, secondary, accent, background, surface, text, textMuted, mood]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        primary:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+          description: 6-digit hex color
+        secondary:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        accent:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        background:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        surface:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        text:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        textMuted:
+          type: string
+          pattern: "^#[0-9A-Fa-f]{6}$"
+        extras:
+          type: array
+          items:
+            type: string
+            pattern: "^#[0-9A-Fa-f]{6}$"
+          maxItems: 10
+        mood:
+          $ref: "#/components/schemas/PaletteMood"
+
+    TypographyInput:
+      type: object
+      required:
+        [name, headingFont, bodyFont, headingWeight, bodyWeight, baseSize, scaleRatio, lineHeight, letterSpacing, style]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        headingFont:
+          type: string
+        bodyFont:
+          type: string
+        accentFont:
+          type: string
+        headingWeight:
+          $ref: "#/components/schemas/HeadingWeight"
+        bodyWeight:
+          $ref: "#/components/schemas/BodyWeight"
+        baseSize:
+          type: number
+          minimum: 10
+          maximum: 24
+        scaleRatio:
+          type: number
+          minimum: 1.067
+          maximum: 2.0
+        lineHeight:
+          type: number
+          minimum: 1.0
+          maximum: 2.5
+        letterSpacing:
+          $ref: "#/components/schemas/LetterSpacing"
+        style:
+          $ref: "#/components/schemas/TypographyStyle"
+
+    DecorationInput:
+      type: object
+      required: [name, borderRadius, borderStyle, shadowDepth, dividerStyle, useGradients, overlayOpacity]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        borderRadius:
+          $ref: "#/components/schemas/BorderRadius"
+        borderStyle:
+          $ref: "#/components/schemas/BorderStyle"
+        shadowDepth:
+          $ref: "#/components/schemas/ShadowDepth"
+        dividerStyle:
+          $ref: "#/components/schemas/DividerStyle"
+        useGradients:
+          type: boolean
+        gradientDirection:
+          $ref: "#/components/schemas/GradientDirection"
+        overlayOpacity:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    MaterialInput:
+      type: object
+      required: [name, surface, texture, elevation, opacity, blendMode]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        surface:
+          $ref: "#/components/schemas/MaterialSurface"
+        texture:
+          $ref: "#/components/schemas/MaterialTexture"
+        elevation:
+          $ref: "#/components/schemas/MaterialElevation"
+        opacity:
+          $ref: "#/components/schemas/MaterialOpacity"
+        blendMode:
+          $ref: "#/components/schemas/BlendMode"
+
+    MotifInput:
+      type: object
+      required: [name, theme, repetition, scale, colorTreatment]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        theme:
+          $ref: "#/components/schemas/MotifTheme"
+        repetition:
+          $ref: "#/components/schemas/MotifRepetition"
+        scale:
+          $ref: "#/components/schemas/MotifScale"
+        colorTreatment:
+          $ref: "#/components/schemas/MotifColorTreatment"
+
+    BrandDnaInput:
+      type: object
+      description: Optional Brand DNA context to guide composition decisions
+      properties:
+        clientId:
+          type: string
+        brandPersonality:
+          type: array
+          items:
+            type: string
+          example: ["Professional", "Corporate", "Minimalist"]
+        brandVoice:
+          type: string
+          example: Formal
+        writingStyle:
+          type: string
+        photographyStyle:
+          type: string
+        illustrationStyle:
+          type: string
+        iconStyle:
+          type: string
+        layoutStyle:
+          type: string
+        visualDensity:
+          type: string
+          enum: [Dense, Airy, Balanced]
+        spacingStyle:
+          type: string
+          enum: [Compact, Generous]
+        detectedColors:
+          type: object
+          properties:
+            primary:
+              type: string
+              pattern: "^#[0-9A-Fa-f]{6}$"
+            secondary:
+              type: string
+              pattern: "^#[0-9A-Fa-f]{6}$"
+            accent:
+              type: string
+              pattern: "^#[0-9A-Fa-f]{6}$"
+            palette:
+              type: array
+              items:
+                type: string
+                pattern: "^#[0-9A-Fa-f]{6}$"
+        detectedTypography:
+          type: object
+          properties:
+            heading:
+              type: string
+            body:
+              type: string
+            style:
+              type: string
+        targetAudience:
+          type: object
+          properties:
+            primary:
+              type: string
+            secondary:
+              type: string
+            demographics:
+              type: string
+            psychographics:
+              type: string
+        industry:
+          type: string
+        riskProfile:
+          type: string
+          enum: [Conservative, Moderate, Innovative]
+        completenessScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+        confidenceScore:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    CompositionRequest:
+      type: object
+      required:
+        [blueprint, layoutPlan, components, pattern, palette, typography, decoration, material, motif]
+      properties:
+        requestId:
+          type: string
+          description: Optional idempotency key — if provided, stable compositionId derivation uses this
+        blueprint:
+          $ref: "#/components/schemas/BlueprintInput"
+        layoutPlan:
+          $ref: "#/components/schemas/LayoutPlanInput"
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComponentInput"
+          maxItems: 50
+        pattern:
+          $ref: "#/components/schemas/PatternInput"
+        palette:
+          $ref: "#/components/schemas/PaletteInput"
+        typography:
+          $ref: "#/components/schemas/TypographyInput"
+        decoration:
+          $ref: "#/components/schemas/DecorationInput"
+        material:
+          $ref: "#/components/schemas/MaterialInput"
+        motif:
+          $ref: "#/components/schemas/MotifInput"
+        brandDna:
+          $ref: "#/components/schemas/BrandDnaInput"
+        allowOverrides:
+          type: boolean
+          default: false
+          description: If true, the engine may override inputs to improve consistency
+
+    # ── Output schemas ─────────────────────────────────────────────────────────
+
+    DecisionExplanation:
+      type: object
+      required: [chosen, why, brandSignal, alternativesRejected, overridden]
+      properties:
+        chosen:
+          type: string
+          description: What was chosen
+        why:
+          type: string
+          description: Human-readable rationale for the decision
+        brandSignal:
+          type: string
+          nullable: true
+          description: Brand DNA signal that influenced this decision
+        alternativesRejected:
+          type: array
+          items:
+            type: object
+            required: [option, reason]
+            properties:
+              option:
+                type: string
+              reason:
+                type: string
+        overridden:
+          type: boolean
+          description: Whether this decision was overridden from the original input
+        originalInput:
+          type: string
+          nullable: true
+
+    ExplainabilityReport:
+      type: object
+      required:
+        [layout, palette, typography, pattern, components, decoration, material, motif, compositionRationale]
+      properties:
+        layout:
+          $ref: "#/components/schemas/DecisionExplanation"
+        palette:
+          $ref: "#/components/schemas/DecisionExplanation"
+        typography:
+          $ref: "#/components/schemas/DecisionExplanation"
+        pattern:
+          $ref: "#/components/schemas/DecisionExplanation"
+        components:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/DecisionExplanation"
+              - type: object
+                properties:
+                  componentType:
+                    type: string
+        decoration:
+          $ref: "#/components/schemas/DecisionExplanation"
+        material:
+          $ref: "#/components/schemas/DecisionExplanation"
+        motif:
+          $ref: "#/components/schemas/DecisionExplanation"
+        compositionRationale:
+          type: string
+          description: Overall paragraph summarising the composition decisions
+
+    FallbackRecord:
+      type: object
+      required: [field, reason, originalValue, fallbackValue, fallbackSource]
+      properties:
+        field:
+          type: string
+        reason:
+          type: string
+          enum: [missing, invalid, brand-conflict, compatibility-conflict]
+        originalValue:
+          nullable: true
+        fallbackValue:
+          nullable: true
+        fallbackSource:
+          type: string
+          enum: [default, brand-dna, compatibility-rule]
+
+    ComponentStyleTokens:
+      type: object
+      required: [backgroundColor, textColor, accentColor, borderRadius, padding, shadow]
+      properties:
+        backgroundColor:
+          type: string
+        textColor:
+          type: string
+        accentColor:
+          type: string
+        borderRadius:
+          type: string
+        padding:
+          type: string
+        shadow:
+          type: string
+
+    ResolvedComponent:
+      allOf:
+        - $ref: "#/components/schemas/ComponentInput"
+        - type: object
+          required: [resolvedVariant, resolvedZone, styleTokens, explanation]
+          properties:
+            resolvedVariant:
+              type: string
+            resolvedZone:
+              $ref: "#/components/schemas/ComponentZone"
+            styleTokens:
+              $ref: "#/components/schemas/ComponentStyleTokens"
+            explanation:
+              $ref: "#/components/schemas/DecisionExplanation"
+
+    BrandConsistencyColorAlignment:
+      type: object
+      required: [score, issues, suggestions]
+      properties:
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        issues:
+          type: array
+          items:
+            type: string
+        suggestions:
+          type: array
+          items:
+            type: string
+
+    BrandConsistencyReport:
+      type: object
+      required: [score, colorAlignment, typographyAlignment, layoutAlignment, personalityAlignment]
+      properties:
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Overall brand consistency score (0 = no alignment, 100 = perfect)
+        colorAlignment:
+          $ref: "#/components/schemas/BrandConsistencyColorAlignment"
+        typographyAlignment:
+          $ref: "#/components/schemas/BrandConsistencyColorAlignment"
+        layoutAlignment:
+          $ref: "#/components/schemas/BrandConsistencyColorAlignment"
+        personalityAlignment:
+          type: object
+          required: [score, traits, mismatches]
+          properties:
+            score:
+              type: integer
+              minimum: 0
+              maximum: 100
+            traits:
+              type: array
+              items:
+                type: string
+            mismatches:
+              type: array
+              items:
+                type: string
+
+    CompatibilityIssue:
+      type: object
+      required: [field, conflict, severity]
+      properties:
+        field:
+          type: string
+        conflict:
+          type: string
+        severity:
+          type: string
+          enum: [warning, error]
+
+    CompatibilityReport:
+      type: object
+      required:
+        [score, materialPatternCompatible, layoutComponentCompatible, paletteTypographyCompatible, decorationMaterialCompatible, issues]
+      properties:
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Compatibility score (100 = fully compatible, 0 = severe conflicts)
+        materialPatternCompatible:
+          type: boolean
+        layoutComponentCompatible:
+          type: boolean
+        paletteTypographyCompatible:
+          type: boolean
+        decorationMaterialCompatible:
+          type: boolean
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompatibilityIssue"
+
+    DerivedTokens:
+      type: object
+      required:
+        [spacingUnit, spacingScale, fontSizeScale, borderRadiusMap, shadowMap, zIndexLayers, breakpoints]
+      properties:
+        spacingUnit:
+          type: integer
+          description: Base spacing unit in px (4 or 8)
+        spacingScale:
+          type: array
+          items:
+            type: number
+        fontSizeScale:
+          type: object
+          additionalProperties:
+            type: string
+          description: >
+            Keys: xs, sm, base, md, lg, xl, 2xl, 3xl, 4xl.
+            Values are CSS px strings (e.g. "12.8px").
+        borderRadiusMap:
+          type: object
+          additionalProperties:
+            type: string
+        shadowMap:
+          type: object
+          additionalProperties:
+            type: string
+        zIndexLayers:
+          type: object
+          additionalProperties:
+            type: integer
+        breakpoints:
+          type: object
+          additionalProperties:
+            type: integer
+
+    DesignCompositionSpec:
+      type: object
+      required:
+        - compositionId
+        - version
+        - blueprint
+        - layout
+        - palette
+        - typography
+        - components
+        - pattern
+        - decoration
+        - material
+        - motif
+        - derivedTokens
+        - styleConsistencyScore
+        - brandConsistencyScore
+        - brandConsistency
+        - compatibility
+        - explainability
+        - fallbacksApplied
+        - hasNoAssetFallbacks
+        - composedAt
+      properties:
+        compositionId:
+          type: string
+          description: Deterministic SHA-256 hash of the normalised input
+          example: a3f2c1...
+        version:
+          type: string
+          enum: ["1.0"]
+        blueprint:
+          $ref: "#/components/schemas/BlueprintInput"
+        layout:
+          $ref: "#/components/schemas/LayoutPlanInput"
+        palette:
+          $ref: "#/components/schemas/PaletteInput"
+        typography:
+          $ref: "#/components/schemas/TypographyInput"
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResolvedComponent"
+        pattern:
+          $ref: "#/components/schemas/PatternInput"
+        decoration:
+          $ref: "#/components/schemas/DecorationInput"
+        material:
+          $ref: "#/components/schemas/MaterialInput"
+        motif:
+          $ref: "#/components/schemas/MotifInput"
+        derivedTokens:
+          $ref: "#/components/schemas/DerivedTokens"
+        styleConsistencyScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Score based on element compatibility minus fallback penalties
+        brandConsistencyScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: 100 when no Brand DNA provided, otherwise derived from BrandConsistencyReport
+        brandConsistency:
+          $ref: "#/components/schemas/BrandConsistencyReport"
+        compatibility:
+          $ref: "#/components/schemas/CompatibilityReport"
+        explainability:
+          $ref: "#/components/schemas/ExplainabilityReport"
+        fallbacksApplied:
+          type: array
+          items:
+            $ref: "#/components/schemas/FallbackRecord"
+        hasNoAssetFallbacks:
+          type: boolean
+          description: True when at least one input was missing and a default was applied
+        composedAt:
+          type: string
+          format: date-time
+
+    # ── Validation result ──────────────────────────────────────────────────────
+
+    ValidationResult:
+      type: object
+      required: [valid, fallbackPreview, summary]
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: string
+          nullable: true
+        fallbackPreview:
+          type: array
+          items:
+            $ref: "#/components/schemas/FallbackRecord"
+        summary:
+          type: object
+          properties:
+            blueprintProvided:
+              type: boolean
+            layoutProvided:
+              type: boolean
+            paletteProvided:
+              type: boolean
+            typographyProvided:
+              type: boolean
+            componentCount:
+              type: integer
+            brandDnaProvided:
+              type: boolean
+            hasBrandColors:
+              type: boolean
+            fallbackCount:
+              type: integer
+
+    # ── Compatibility check request ────────────────────────────────────────────
+
+    CompatibilityCheckRequest:
+      type: object
+      required: [material, pattern, palette, decoration]
+      properties:
+        material:
+          $ref: "#/components/schemas/MaterialInput"
+        pattern:
+          $ref: "#/components/schemas/PatternInput"
+        palette:
+          $ref: "#/components/schemas/PaletteInput"
+        decoration:
+          $ref: "#/components/schemas/DecorationInput"

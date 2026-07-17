@@ -1,0 +1,202 @@
+{
+  "team": "13",
+  "name": "Dynamic Design Composition Engine",
+  "domain": "Dynamic Design Composition",
+  "version": "1.1.0",
+  "branch": "feature/13-dynamic-composer",
+  "domainReadme": "artifacts/api-server/src/services/dynamic-design-composer/DOMAIN_README.md",
+
+  "boundary": {
+    "team12": {
+      "name": "Static Deterministic Constraint Layout Planning",
+      "provides": "LayoutPlanInput — a fully solved layout plan with strategy, flow, heroWeight, sectionCount, hasSidebar, emphasis",
+      "team13_consumes": "LayoutPlanInput verbatim — Team 13 does NOT re-solve layout constraints",
+      "rule": "Team 13 MUST NOT contain a second layout solver. Any layout strategy/flow value is accepted as-is from Team 12."
+    },
+    "team13": {
+      "name": "Composition Orchestration",
+      "responsibility": "Combines blueprint + layoutPlan + components + pattern + palette + typography + decoration + material + motif + BrandDNA into a DesignCompositionSpec JSON with full explainability",
+      "guarantees": [
+        "No image generation",
+        "No file rendering",
+        "No AI model calls",
+        "No external HTTP requests",
+        "No database writes",
+        "Pure deterministic computation — same input always produces same compositionId"
+      ],
+      "out_of_scope": [
+        "Layout constraint solving (Team 12)",
+        "PDF/PPTX/ZIP export (Team 3)",
+        "AI model selection (Team 2)",
+        "Brand DNA extraction (Team 15)",
+        "Component rendering (Team 7)"
+      ]
+    }
+  },
+
+  "ownership": {
+    "services": [
+      "artifacts/api-server/src/services/dynamic-design-composer/"
+    ],
+    "routes": [
+      "artifacts/api-server/src/routes/dynamic-design-composer/"
+    ],
+    "openapi": "integration/openapi/team-13.yaml",
+    "manifest": "integration/manifests/team-13.json"
+  },
+
+  "routesToMount": [
+    {
+      "importPath": "./dynamic-design-composer/index.js",
+      "mountIn": "artifacts/api-server/src/routes/index.ts",
+      "routerVariable": "dynamicDesignComposerRouter",
+      "mountStatement": "router.use(dynamicDesignComposerRouter);",
+      "after": "router.use(creativeMarketplaceRouter);",
+      "note": "All routes except /ai/composer/health are covered by global adminAuth middleware in app.ts. No per-route auth setup required."
+    }
+  ],
+
+  "pagesToRegister": [],
+  "schemaExportsRequested": [],
+  "dependencyRequests": [],
+
+  "integrationNotes": [
+    "Engine is pure computation — no DB tables, no migrations, no schema barrel changes required.",
+    "All admin routes are covered by global adminAuth middleware in app.ts.",
+    "No external HTTP calls — zero SSRF surface.",
+    "compositionId is SHA-256 of normalised input — safe to cache by ID indefinitely.",
+    "Zod schemas live entirely in the service layer; route file imports only from service index, never zod/v4 directly.",
+    "KNOWN LIMITATION — IN-MEMORY SESSION STORE: compositionSessionStore is an in-process Map (not a DB table, Redis, or any external store). All session state is lost when the API server process restarts, is redeployed, or is scaled to multiple instances. Callers must re-submit composition requests after a restart; they cannot rely on a previously returned compositionId surviving across server restarts. This is intentional — the engine is pure deterministic computation and sessions are cheap to recreate. If persistence across restarts is required in future, Team 24 must provision a Redis/DB-backed store and update the CompositionSessionStore interface accordingly.",
+    "Cross-tenant IDOR: session lookup key = SHA-256(tenantId NUL idempotencyKey) — different tenants never collide."
+  ],
+  "knownLimitations": [
+    {
+      "id": "KL-13-01",
+      "severity": "P4",
+      "title": "In-memory compositionSessionStore — sessions lost on restart",
+      "description": "compositionSessionStore is a Node.js in-process Map. No external store, no DB table, no Redis. Sessions do not survive server restarts, deployments, or horizontal scaling (multiple instances would have independent stores).",
+      "impact": "Callers that hold a compositionId from a previous server instance will receive 404 on GET /session/:key after a restart. Idempotency keys are invalidated. No data loss (sessions contain only computation specs, no persistent user data).",
+      "workaround": "Callers should handle 404 on session lookup by re-submitting the composition request with the same inputs — compositionId is deterministic (SHA-256 of inputs), so the result will be identical.",
+      "futureResolution": "If persistence is required: implement a Redis- or DB-backed adapter behind the CompositionSessionStore interface and inject it at startup. The interface boundary is already defined — no service logic changes needed.",
+      "detectedBy": "Team 23 independent audit",
+      "remediatedAt": "2026-07-17T00:00:00Z"
+    }
+  ],
+
+  "terminalStateRules": {
+    "completed": "Return existing DesignCompositionSpec. Never reprocess. Response includes idempotent:true.",
+    "failed": "Block unless allowRetry=true is set explicitly in the request. Retry transitions failed → pending.",
+    "cancelled": "Always blocked. Caller must create a new request with a different idempotencyKey.",
+    "processing": "Block with 409 IN_PROGRESS. Concurrent execution guard.",
+    "pending": "Proceed to composition."
+  },
+
+  "endpoints": [
+    {
+      "method": "POST",
+      "path": "/api/ai/composer/compose",
+      "operationId": "composeDesign",
+      "description": "Compose a full DesignCompositionSpec. Supports idempotency via idempotencyKey+tenantId.",
+      "auth": "adminApiKey",
+      "tenantScoping": "tenantId in body (required when idempotencyKey provided). X-Tenant-Id header takes priority."
+    },
+    {
+      "method": "POST",
+      "path": "/api/ai/composer/validate",
+      "operationId": "validateCompositionRequest",
+      "description": "Validate inputs and preview fallbacks without composing",
+      "auth": "adminApiKey"
+    },
+    {
+      "method": "POST",
+      "path": "/api/ai/composer/compatibility",
+      "operationId": "checkDesignCompatibility",
+      "description": "Check cross-element compatibility (material, pattern, palette, decoration)",
+      "auth": "adminApiKey"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ai/composer/sessions/:key",
+      "operationId": "getCompositionSession",
+      "description": "Get session by idempotency key. IDOR-protected: scoped strictly to X-Tenant-Id header.",
+      "auth": "adminApiKey",
+      "tenantScoping": "X-Tenant-Id header required. Cross-tenant lookups return 404."
+    },
+    {
+      "method": "GET",
+      "path": "/api/ai/composer/health",
+      "operationId": "composerHealth",
+      "description": "Service health probe",
+      "auth": "none"
+    }
+  ],
+
+  "outputType": "DesignCompositionSpec",
+  "capabilities": {
+    "deterministic": true,
+    "imageGeneration": false,
+    "fileRendering": false,
+    "databaseAccess": false,
+    "externalHttpCalls": false,
+    "brandDnaIntegration": true,
+    "explainability": true,
+    "fallbackHandling": true,
+    "compatibilityChecking": true,
+    "wcagContrast": true,
+    "idempotency": true,
+    "terminalStateGuards": true,
+    "tenantScopedSessions": true
+  },
+
+  "testCoverage": {
+    "testFiles": [
+      "artifacts/api-server/src/services/dynamic-design-composer/__tests__/composerEngine.test.ts",
+      "artifacts/api-server/src/services/dynamic-design-composer/__tests__/compatibilityChecker.test.ts",
+      "artifacts/api-server/src/services/dynamic-design-composer/__tests__/fallbackHandler.test.ts",
+      "artifacts/api-server/src/services/dynamic-design-composer/__tests__/brandConsistencyChecker.test.ts",
+      "artifacts/api-server/src/services/dynamic-design-composer/__tests__/explainabilityEngine.test.ts",
+      "artifacts/api-server/src/services/dynamic-design-composer/__tests__/compositionStateGuard.test.ts",
+      "artifacts/api-server/src/routes/dynamic-design-composer/__tests__/routes.test.ts"
+    ],
+    "scenarios": [
+      "deterministic composition (same input → same compositionId)",
+      "no-asset fallback (all inputs missing → defaults applied)",
+      "brand-DNA-derived fallbacks (colors, typography, layout from brand DNA)",
+      "compatibility conflicts (neumorphic + geometric, full-bleed + accordion)",
+      "WCAG contrast checking (low-contrast palette flagged)",
+      "brand consistency alignment (color, typography, layout, personality)",
+      "component zone and variant resolution",
+      "derived token generation",
+      "explainability report completeness",
+      "unauthorized request (missing key → 401)",
+      "malformed payload (invalid JSON body → 400)",
+      "missing required fields (empty body → 400)",
+      "completed → reprocess blocked / return existing (idempotent:true)",
+      "cancelled → process blocked (409 CANCELLED)",
+      "failed without allowRetry → blocked (409 FAILED_NO_RETRY)",
+      "failed with allowRetry=true → reprocess allowed (200)",
+      "processing → concurrent execution blocked (409 IN_PROGRESS)",
+      "state machine: all valid transitions allowed",
+      "state machine: completed/cancelled have no outgoing transitions",
+      "IDOR: tenant A cannot read tenant B session (404)",
+      "IDOR: X-Tenant-Id header takes priority over body tenantId",
+      "IDOR: missing tenantId with idempotencyKey → 400",
+      "IDOR: GET session cross-tenant returns 404",
+      "idempotency: same key+tenant → existing session returned",
+      "boundary: Team 13 accepts LayoutPlanInput verbatim from Team 12",
+      "boundary: all 10 layout strategies pass through unchanged",
+      "boundary: no layout solver functions exported from public API"
+    ]
+  },
+
+  "dependencies": {
+    "internal": [],
+    "external": ["zod", "node:crypto"],
+    "upstreamTeams": [
+      { "team": "12", "provides": "LayoutPlanInput", "note": "Team 13 consumes verbatim — no re-solving" }
+    ]
+  },
+
+  "registeredAt": "2026-07-16T00:00:00Z",
+  "lastRemediatedAt": "2026-07-17T00:00:00Z"
+}

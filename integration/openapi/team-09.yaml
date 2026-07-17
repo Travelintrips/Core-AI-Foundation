@@ -1,0 +1,565 @@
+openapi: "3.1.0"
+info:
+  title: "Team 09 — Design Pattern Library API Fragment"
+  version: "1.0.0"
+  description: |
+    OpenAPI fragment for Team 09's Pattern, Motif, Texture & Decorative Asset Library.
+    Mount point: /api/design-patterns
+    Team 24 merges this fragment into the root openapi.yaml.
+
+# ── Paths ──────────────────────────────────────────────────────────────────────
+paths:
+
+  /design-patterns/meta:
+    get:
+      operationId: getDesignPatternsMeta
+      summary: Get allowed enum values for the pattern registry
+      tags: [design-patterns]
+      security: []
+      responses:
+        "200":
+          description: Enum metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatternMeta"
+
+  /design-patterns/search:
+    get:
+      operationId: searchDesignPatterns
+      summary: Full-text + faceted search of the pattern library
+      tags: [design-patterns]
+      security: []
+      parameters:
+        - { name: q,               in: query, schema: { type: string, maxLength: 200 } }
+        - { name: domain,          in: query, schema: { $ref: "#/components/schemas/PatternDomain" } }
+        - { name: category,        in: query, schema: { $ref: "#/components/schemas/PatternCategory" } }
+        - { name: style,           in: query, schema: { type: string, maxLength: 80 } }
+        - { name: repeat_behavior, in: query, schema: { $ref: "#/components/schemas/RepeatBehavior" } }
+        - { name: scale,           in: query, schema: { $ref: "#/components/schemas/ScaleValue" } }
+        - { name: colorizable,     in: query, schema: { type: string, enum: ["true","false"] } }
+        - { name: source_type,     in: query, schema: { type: string } }
+        - { name: context,         in: query, schema: { type: string, maxLength: 80 }, description: Filter by compatibility context }
+        - { name: tags,            in: query, schema: { type: string }, description: Comma-separated tag list }
+        - { name: status,          in: query, schema: { type: string, default: "active" } }
+        - { name: limit,           in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 24 } }
+        - { name: offset,          in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: sort,            in: query, schema: { type: string, enum: ["name","created_at","updated_at","domain"], default: "name" } }
+        - { name: order,           in: query, schema: { type: string, enum: ["asc","desc"], default: "asc" } }
+      responses:
+        "200":
+          description: Search results with facets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatternSearchResult"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /design-patterns:
+    get:
+      operationId: listDesignPatterns
+      summary: List design patterns (simple filter, no FTS)
+      tags: [design-patterns]
+      security: []
+      parameters:
+        - { name: domain,   in: query, schema: { type: string } }
+        - { name: category, in: query, schema: { type: string } }
+        - { name: status,   in: query, schema: { type: string, default: "active" } }
+        - { name: limit,    in: query, schema: { type: integer, default: 50 } }
+        - { name: offset,   in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Pattern list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  patterns: { type: array, items: { $ref: "#/components/schemas/DesignPattern" } }
+                  total:    { type: integer }
+
+    post:
+      operationId: createDesignPattern
+      summary: Create a new design pattern (admin only)
+      tags: [design-patterns]
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePatternInput"
+      responses:
+        "201":
+          description: Created pattern
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DesignPattern"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/LicensingViolation"
+
+  /design-patterns/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string }, description: Pattern id or slug }
+
+    get:
+      operationId: getDesignPattern
+      summary: Get a pattern by id or slug
+      tags: [design-patterns]
+      security: []
+      responses:
+        "200":
+          description: Pattern record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DesignPattern"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      operationId: updateDesignPattern
+      summary: Update pattern fields (admin only)
+      tags: [design-patterns]
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePatternInput"
+      responses:
+        "200":
+          description: Updated pattern
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DesignPattern"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/LicensingViolation"
+
+    delete:
+      operationId: archiveDesignPattern
+      summary: Archive a pattern (soft delete — admin only)
+      tags: [design-patterns]
+      security:
+        - adminApiKey: []
+      responses:
+        "200":
+          description: Archived
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /design-patterns/{id}/variants:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+
+    get:
+      operationId: listPatternVariants
+      summary: List color/scale variants of a pattern
+      tags: [design-patterns]
+      security: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  variants: { type: array, items: { $ref: "#/components/schemas/DesignPatternVariant" } }
+
+    post:
+      operationId: createPatternVariant
+      summary: Add a color/scale variant (admin only)
+      tags: [design-patterns]
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVariantInput"
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DesignPatternVariant"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /design-patterns/{id}/compat:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer } }
+
+    get:
+      operationId: listPatternCompat
+      summary: List compatibility records for a pattern
+      tags: [design-patterns]
+      security: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  compat: { type: array, items: { $ref: "#/components/schemas/PatternCompat" } }
+
+    post:
+      operationId: addPatternCompat
+      summary: Add a compatibility record (admin only)
+      tags: [design-patterns]
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddCompatInput"
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatternCompat"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /design-patterns/{id}/compat/check:
+    parameters:
+      - { name: id,      in: path,  required: true,  schema: { type: integer } }
+      - { name: context, in: query, required: true,  schema: { type: string, maxLength: 80 } }
+
+    get:
+      operationId: checkPatternCompatibility
+      summary: Check if a pattern is compatible with a given context
+      tags: [design-patterns]
+      security: []
+      responses:
+        "200":
+          description: Compatibility result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompatibilityCheckResult"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+# ── Components ─────────────────────────────────────────────────────────────────
+components:
+
+  securitySchemes:
+    adminApiKey:
+      type: apiKey
+      in: header
+      name: x-admin-api-key
+
+  schemas:
+
+    PatternDomain:
+      type: string
+      enum:
+        - geometric
+        - corporate
+        - luxury
+        - marble
+        - abstract
+        - wave
+        - floral
+        - leaf
+        - batik-inspired
+        - textile
+        - interior
+        - wood
+        - stone
+        - metal
+        - fabric
+        - packaging
+
+    PatternCategory:
+      type: string
+      enum: [pattern, motif, texture, decoration]
+
+    RepeatBehavior:
+      type: string
+      enum: [tile, half-drop, mirror, brick, no-repeat]
+
+    ScaleValue:
+      type: string
+      enum: [xs, sm, md, lg, xl, full-bleed]
+
+    DesignPattern:
+      type: object
+      required:
+        - id
+        - slug
+        - name
+        - category
+        - domain
+        - style
+        - repeat_behavior
+        - scale
+        - colorizable
+        - source_type
+        - version
+        - status
+        - tags
+        - compatibility
+        - color_palette
+        - metadata
+        - created_at
+        - updated_at
+      properties:
+        id:                 { type: integer }
+        slug:               { type: string }
+        name:               { type: string }
+        category:           { $ref: "#/components/schemas/PatternCategory" }
+        domain:             { $ref: "#/components/schemas/PatternDomain" }
+        style:              { type: string }
+        description:        { type: string, nullable: true }
+        repeat_behavior:    { $ref: "#/components/schemas/RepeatBehavior" }
+        scale:              { $ref: "#/components/schemas/ScaleValue" }
+        colorizable:        { type: boolean }
+        color_palette:      { type: array, items: { type: string } }
+        preview_url:        { type: string, format: uri, nullable: true }
+        preview_thumb_url:  { type: string, format: uri, nullable: true }
+        source_type:        { type: string }
+        license:            { type: string, nullable: true }
+        source_attribution: { type: string, nullable: true }
+        cultural_origin:    { type: string, nullable: true }
+        cultural_notes:     { type: string, nullable: true }
+        compatibility:      { type: array, items: { type: string } }
+        tags:               { type: array, items: { type: string } }
+        version:            { type: string }
+        status:             { type: string }
+        created_by:         { type: string, nullable: true }
+        metadata:           { type: object }
+        created_at:         { type: string, format: date-time }
+        updated_at:         { type: string, format: date-time }
+
+    CreatePatternInput:
+      type: object
+      required: [slug, name, category, domain]
+      properties:
+        slug:               { type: string, minLength: 1, maxLength: 120, pattern: "^[a-z0-9-]+$" }
+        name:               { type: string, minLength: 1, maxLength: 200 }
+        category:           { $ref: "#/components/schemas/PatternCategory" }
+        domain:             { $ref: "#/components/schemas/PatternDomain" }
+        style:              { type: string, maxLength: 80, default: modern }
+        description:        { type: string, maxLength: 2000 }
+        repeat_behavior:    { $ref: "#/components/schemas/RepeatBehavior" }
+        scale:              { $ref: "#/components/schemas/ScaleValue" }
+        colorizable:        { type: boolean, default: true }
+        color_palette:      { type: array, items: { type: string, pattern: "^#[0-9a-fA-F]{3,8}$" } }
+        preview_url:        { type: string, format: uri }
+        preview_thumb_url:  { type: string, format: uri }
+        source_type:        { type: string, enum: [original, licensed, public-domain, creative-commons], default: original }
+        license:            { type: string, maxLength: 200, description: "Required when source_type != original" }
+        source_attribution: { type: string, maxLength: 500 }
+        cultural_origin:    { type: string, maxLength: 200, description: "Required for batik-inspired domain" }
+        cultural_notes:     { type: string, maxLength: 1000 }
+        compatibility:      { type: array, items: { type: string } }
+        tags:               { type: array, items: { type: string, maxLength: 60 } }
+        version:            { type: string, pattern: "^\\d+\\.\\d+\\.\\d+$", default: "1.0.0" }
+        status:             { type: string, enum: [active, draft, archived], default: active }
+        metadata:           { type: object }
+
+    UpdatePatternInput:
+      type: object
+      description: All fields optional except slug (not updatable)
+      properties:
+        name:               { type: string, minLength: 1, maxLength: 200 }
+        category:           { $ref: "#/components/schemas/PatternCategory" }
+        domain:             { $ref: "#/components/schemas/PatternDomain" }
+        style:              { type: string, maxLength: 80 }
+        description:        { type: string, maxLength: 2000 }
+        repeat_behavior:    { $ref: "#/components/schemas/RepeatBehavior" }
+        scale:              { $ref: "#/components/schemas/ScaleValue" }
+        colorizable:        { type: boolean }
+        color_palette:      { type: array, items: { type: string } }
+        preview_url:        { type: string, format: uri }
+        preview_thumb_url:  { type: string, format: uri }
+        source_type:        { type: string, enum: [original, licensed, public-domain, creative-commons] }
+        license:            { type: string, maxLength: 200 }
+        source_attribution: { type: string, maxLength: 500 }
+        cultural_origin:    { type: string, maxLength: 200 }
+        cultural_notes:     { type: string, maxLength: 1000 }
+        compatibility:      { type: array, items: { type: string } }
+        tags:               { type: array, items: { type: string } }
+        version:            { type: string, pattern: "^\\d+\\.\\d+\\.\\d+$" }
+        status:             { type: string, enum: [active, draft, archived] }
+        metadata:           { type: object }
+
+    DesignPatternVariant:
+      type: object
+      properties:
+        id:                { type: integer }
+        pattern_id:        { type: integer }
+        slug:              { type: string }
+        name:              { type: string }
+        color_palette:     { type: array, items: { type: string } }
+        scale:             { $ref: "#/components/schemas/ScaleValue" }
+        preview_url:       { type: string, format: uri, nullable: true }
+        preview_thumb_url: { type: string, format: uri, nullable: true }
+        status:            { type: string }
+        metadata:          { type: object }
+        created_at:        { type: string, format: date-time }
+        updated_at:        { type: string, format: date-time }
+
+    CreateVariantInput:
+      type: object
+      required: [slug, name]
+      properties:
+        slug:              { type: string, minLength: 1, maxLength: 120, pattern: "^[a-z0-9-]+$" }
+        name:              { type: string, minLength: 1, maxLength: 200 }
+        color_palette:     { type: array, items: { type: string, pattern: "^#[0-9a-fA-F]{3,8}$" } }
+        scale:             { $ref: "#/components/schemas/ScaleValue" }
+        preview_url:       { type: string, format: uri }
+        preview_thumb_url: { type: string, format: uri }
+        status:            { type: string, enum: [active, draft, archived], default: active }
+        metadata:          { type: object }
+
+    PatternCompat:
+      type: object
+      properties:
+        id:         { type: integer }
+        pattern_id: { type: integer }
+        context:    { type: string }
+        min_dpi:    { type: integer, nullable: true }
+        max_scale:  { type: string, nullable: true }
+        notes:      { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    AddCompatInput:
+      type: object
+      required: [context]
+      properties:
+        context:   { type: string, minLength: 1, maxLength: 80 }
+        min_dpi:   { type: integer, minimum: 1 }
+        max_scale: { $ref: "#/components/schemas/ScaleValue" }
+        notes:     { type: string, maxLength: 500 }
+
+    CompatibilityCheckResult:
+      type: object
+      required: [compatible, patternId, context]
+      properties:
+        compatible: { type: boolean }
+        patternId:  { type: integer }
+        context:    { type: string }
+        min_dpi:    { type: integer, nullable: true }
+        max_scale:  { type: string, nullable: true }
+        notes:      { type: string, nullable: true }
+
+    PatternSearchResult:
+      type: object
+      properties:
+        patterns:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/DesignPattern"
+              - type: object
+                properties:
+                  rank: { type: number }
+        total:
+          type: integer
+        facets:
+          type: object
+          properties:
+            domains:      { type: object, additionalProperties: { type: integer } }
+            categories:   { type: object, additionalProperties: { type: integer } }
+            styles:       { type: object, additionalProperties: { type: integer } }
+            source_types: { type: object, additionalProperties: { type: integer } }
+
+    PatternMeta:
+      type: object
+      properties:
+        domains:          { type: array, items: { type: string } }
+        categories:       { type: array, items: { type: string } }
+        repeat_behaviors: { type: array, items: { type: string } }
+        scales:           { type: array, items: { type: string } }
+        source_types:     { type: array, items: { type: string } }
+        statuses:         { type: array, items: { type: string } }
+
+  responses:
+
+    ValidationError:
+      description: Request body or query parameter validation failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:  { type: string }
+              issues: { type: array, items: { type: object } }
+
+    LicensingViolation:
+      description: Licensing compliance violation (trademark, missing license, or missing cultural metadata)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+              code:  { type: string, enum: [LICENSING_VIOLATION] }
+
+    NotFound:
+      description: Pattern not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+              code:  { type: string, enum: [PATTERN_NOT_FOUND] }
+
+    Unauthorized:
+      description: Admin API key required
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+
+    Conflict:
+      description: Slug already exists
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+              code:  { type: string, enum: [SLUG_CONFLICT] }

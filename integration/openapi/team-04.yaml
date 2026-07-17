@@ -1,0 +1,560 @@
+openapi: 3.1.0
+info:
+  title: Team 04 — Portfolio Showcase V2
+  version: 1.0.0
+  description: |
+    Enhanced portfolio gallery, inspiration feed, compare tool, and
+    portfolio-to-service CTA for the Creative AI Studio customer portal.
+    All public endpoints expose sanitized DTOs with no internal metadata.
+
+# Team 24 merges these paths into the root openapi.yaml
+paths:
+  /public/portfolio-v2/gallery:
+    get:
+      operationId: getPortfolioGalleryV2
+      summary: Enhanced portfolio gallery search
+      tags: [portfolio-v2]
+      security: []
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+          description: Free-text search
+        - name: industry
+          in: query
+          schema: { type: string }
+        - name: style
+          in: query
+          schema: { type: string }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [featured, popular, latest, rating, fastest]
+          default: featured
+        - name: colorTag
+          in: query
+          schema: { type: string }
+        - name: packageLevel
+          in: query
+          schema:
+            type: string
+            enum: [starter, standard, professional, enterprise]
+        - name: hasBeforeAfter
+          in: query
+          schema: { type: boolean }
+          description: Filter to portfolios with before/after images only
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 48, default: 24 }
+      responses:
+        '200':
+          description: Gallery search result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GalleryV2SearchResult' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /public/portfolio-v2/industries:
+    get:
+      operationId: getPortfolioIndustrySummary
+      summary: Industry list with portfolio counts
+      tags: [portfolio-v2]
+      security: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/IndustrySummary' }
+
+  /public/portfolio-v2/industries/{name}:
+    get:
+      operationId: getPortfolioIndustryDeepDive
+      summary: Deep-dive into a single industry
+      tags: [portfolio-v2]
+      security: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IndustryDeepDive' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /public/portfolio-v2/inspiration/feed:
+    get:
+      operationId: getInspirationFeed
+      summary: Curated inspiration feed grouped by mood
+      tags: [portfolio-v2]
+      security: []
+      parameters:
+        - name: moods
+          in: query
+          schema: { type: string }
+          description: Comma-separated list of mood keys
+        - name: perMood
+          in: query
+          schema: { type: integer, minimum: 2, maximum: 12, default: 6 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InspirationFeedResult' }
+
+  /public/portfolio-v2/inspiration/{mood}:
+    get:
+      operationId: getInspirationFeedByMood
+      summary: Inspiration feed for a single mood
+      tags: [portfolio-v2]
+      security: []
+      parameters:
+        - name: mood
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [minimal, luxury, bold, corporate, playful, natural]
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 24, default: 8 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MoodFeedItem' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /public/portfolio-v2/before-after:
+    get:
+      operationId: getBeforeAfterFeed
+      summary: Portfolio collection with before/after images
+      tags: [portfolio-v2]
+      security: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 24, default: 12 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PublicPortfolioCard' }
+
+  /public/portfolio-v2/compare:
+    post:
+      operationId: comparePortfoliosV2
+      summary: Compare 2–4 portfolios side by side
+      tags: [portfolio-v2]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items: { type: integer }
+                  minItems: 2
+                  maxItems: 4
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/CompareItem' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /public/portfolio-v2/{idOrSlug}:
+    get:
+      operationId: getPortfolioDetailV2
+      summary: Portfolio detail (public DTO, no internal metadata)
+      tags: [portfolio-v2]
+      security: []
+      parameters:
+        - name: idOrSlug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicPortfolioCard' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /public/portfolio-v2/{id}/similar:
+    get:
+      operationId: getSimilarPortfoliosV2
+      summary: Similar portfolios based on industry + style scoring
+      tags: [portfolio-v2]
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 12, default: 6 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PublicPortfolioCard' }
+
+  /public/portfolio-v2/{id}/cta:
+    post:
+      operationId: trackPortfolioCtaClick
+      summary: Track CTA click and return serviceId for redirect
+      tags: [portfolio-v2]
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source: { type: string, default: gallery }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  serviceId: { type: integer, nullable: true }
+
+  /public/customer/workspace/{token}/portfolio-v2/recommended:
+    get:
+      operationId: getPortfolioV2Recommended
+      summary: Brand DNA-based portfolio recommendations
+      tags: [portfolio-v2, workspace]
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 6 }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BrandDnaRecsResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /public/customer/workspace/{token}/portfolio-v2/favorite-ids:
+    get:
+      operationId: getPortfolioV2FavoriteIds
+      summary: List of favorited portfolio IDs for the workspace session
+      tags: [portfolio-v2, workspace]
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ids: { type: array, items: { type: integer } }
+
+  /public/customer/workspace/{token}/portfolio-v2/favorites:
+    get:
+      operationId: getPortfolioV2Favorites
+      summary: List favorited portfolios (full cards)
+      tags: [portfolio-v2, workspace]
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FavoritesResult' }
+    post:
+      operationId: addPortfolioV2Favorite
+      summary: Add a portfolio to favorites
+      tags: [portfolio-v2, workspace]
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [portfolioId]
+              properties:
+                portfolioId: { type: integer }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+
+  /public/customer/workspace/{token}/portfolio-v2/favorites/{portfolioId}:
+    delete:
+      operationId: removePortfolioV2Favorite
+      summary: Remove a portfolio from favorites
+      tags: [portfolio-v2, workspace]
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+        - name: portfolioId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+
+  /ai/portfolio-v2/analytics:
+    get:
+      operationId: getPortfolioV2Analytics
+      summary: Gallery V2 analytics (admin only)
+      tags: [portfolio-v2, admin]
+      security:
+        - AdminApiKey: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GalleryV2Analytics' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+components:
+  securitySchemes:
+    AdminApiKey:
+      type: apiKey
+      in: header
+      name: x-admin-api-key
+
+  schemas:
+    PublicPortfolioCard:
+      type: object
+      description: Public portfolio DTO — all internal metadata stripped
+      required: [id, serviceId, title, industry, style, views, totalReviews, completedProjects, featured, displayOrder]
+      properties:
+        id: { type: integer }
+        slug: { type: string, nullable: true }
+        serviceId: { type: integer }
+        title: { type: string }
+        shortDescription: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        industry: { type: string }
+        businessType: { type: string, nullable: true }
+        style: { type: string }
+        colorTags: { type: array, items: { type: string }, nullable: true }
+        primaryColor: { type: string, nullable: true }
+        secondaryColor: { type: string, nullable: true }
+        businessSize: { type: string, nullable: true }
+        packageLabel: { type: string, nullable: true }
+        packageLevel: { type: string, nullable: true }
+        deliveryTime: { type: string, nullable: true }
+        deliveryDays: { type: integer, nullable: true }
+        coverImage: { type: string, nullable: true }
+        galleryJson: { type: array, nullable: true }
+        beforeImage: { type: string, nullable: true }
+        afterImage: { type: string, nullable: true }
+        deliverablesJson: { type: array, items: { type: string }, nullable: true }
+        toolsUsedJson: { type: array, items: { type: string }, nullable: true }
+        workflowJson: { type: array, nullable: true }
+        rating: { type: string, nullable: true }
+        views: { type: integer }
+        totalReviews: { type: integer }
+        completedProjects: { type: integer }
+        featured: { type: boolean }
+        displayOrder: { type: integer }
+        createdAt: { type: string, format: date-time }
+
+    CompareItem:
+      allOf:
+        - $ref: '#/components/schemas/PublicPortfolioCard'
+        - type: object
+          properties:
+            deliverablesCount: { type: integer }
+            toolsCount: { type: integer }
+
+    GalleryV2SearchResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/PublicPortfolioCard' }
+        pagination:
+          type: object
+          properties:
+            page: { type: integer }
+            pageSize: { type: integer }
+            total: { type: integer }
+            totalPages: { type: integer }
+        appliedFilters:
+          type: object
+
+    IndustrySummary:
+      type: object
+      properties:
+        industry: { type: string }
+        label: { type: string }
+        totalPortfolios: { type: integer }
+        topViews: { type: integer }
+
+    IndustryDeepDive:
+      type: object
+      properties:
+        industry: { type: string }
+        label: { type: string }
+        totalPortfolios: { type: integer }
+        featured:
+          type: array
+          items: { $ref: '#/components/schemas/PublicPortfolioCard' }
+        styles: { type: array, items: { type: string } }
+        topRating: { type: string, nullable: true }
+
+    MoodFeedItem:
+      type: object
+      properties:
+        mood: { type: string }
+        label: { type: string }
+        description: { type: string }
+        emoji: { type: string }
+        portfolios:
+          type: array
+          items: { $ref: '#/components/schemas/PublicPortfolioCard' }
+        totalAvailable: { type: integer }
+
+    InspirationFeedResult:
+      type: object
+      properties:
+        moods:
+          type: array
+          items: { $ref: '#/components/schemas/MoodFeedItem' }
+        availableMoods:
+          type: array
+
+    BrandDnaRecsResult:
+      type: object
+      properties:
+        basedOnBrandDna: { type: boolean }
+        brandProfile:
+          nullable: true
+          type: object
+          properties:
+            industry: { type: string, nullable: true }
+            style: { type: string, nullable: true }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/PublicPortfolioCard' }
+
+    FavoritesResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/PublicPortfolioCard' }
+        totalFavorites: { type: integer }
+
+    GalleryV2Analytics:
+      type: object
+      properties:
+        totalSearches: { type: integer }
+        totalFavoriteEvents: { type: integer }
+        totalCompareEvents: { type: integer }
+        totalCtaClicks: { type: integer }
+        totalDetailViews: { type: integer }
+        topCtaPortfolios:
+          type: array
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }

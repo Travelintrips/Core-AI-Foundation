@@ -1,3 +1,4 @@
+- [parallel-dev-rules](parallel-dev-rules.md) — Multi-team rules: feature branches only, shared file lock, draft-only DB/OpenAPI, Team 24 wires integrations; full rules in replit.md
 - [team2-design-agents](team2-design-agents.md) — Team 2 Design Agents 4-8 built in services/design-ai/; dep-injection pattern (deps.executeAI), zod schemas, font registry validation, WCAG contrast checks, 1007 tests passing
 - [import-fix-concatenated-files](import-fix-concatenated-files.md) — GitHub import merged old+new versions of 5 files end-to-end; fix by keeping v2 and removing v1
 - [react-icons-v5-provider-icons](react-icons-v5-provider-icons.md) — SiOpenai/SiAnthropic/SiGoogle don't exist in react-icons v5.4.0; use Cpu+color or SiReplicate/SiMistralai
@@ -70,8 +71,11 @@
 - [wp08-wp11-quotation](wp08-wp11-quotation.md) — Quotation repo write+audit, soft-delete cascade, restore role guard, legacy freeze (410), vi.hoisted() test pattern
 - [cp-real-file-upload](cp-real-file-upload.md) — logo/photo/doc/video uploads now real (object storage), fixed missing adminAuth public exception; PDF still doesn't embed uploaded logo/photos
 - [design-template-blueprints](design-template-blueprints.md) — builtin templates served from code (no DB); add to BUILTIN_TEMPLATES array, no migration needed
+- [team07-blueprint-library-v2](team07-blueprint-library-v2.md) — Team 07 P0/P1/P2 remediation: repository pattern, published status, explicit auth; DbBlueprintRepository is production-only
 - [design-template-engine-phase1](design-template-engine-phase1.md) — Phase 1 foundation: 4 tables, 13 API endpoints, 46 tests, zod catalog dep, date formatter order rule, Phase 2 stub locations
 - [design-template-engine-phase2](design-template-engine-phase2.md) — Phase 2 renderer: 12 files in design-renderer/, single-render creates batch+item first, ZIP returns 501, 712 tests all pass
 - [phase5-visual-template-editor](phase5-visual-template-editor.md) — Phase 5 visual editor complete: react-konva canvas, 38 tests pass, adapter z-index normalization rule, pnpm build requires PORT env (use typecheck instead)
 - [phase3a-batch-orchestration](phase3a-batch-orchestration.md) — Phase 3A lifecycle machine, dispatcher idempotency/tenant-cap, reconcile rules, stale recovery, Team 2 snapshot contract
 - [phase4-library-integration](phase4-library-integration.md) — Phase 4 cherry-pick rules: lib/db tsc -b required, createVersion() obj-arg, PreviewResult has no renderDurationMs, "jpeg" not in RenderFormat
+- [team03-approval-gate-adapter](team03-approval-gate-adapter.md) — Use ai_commercial_gates (gate_type=admin_approval, notes JSON) instead of a parallel approval table; mapGate must handle both snake_case and camelCase column shapes
+- [team03-rbac-tenant-scope](team03-rbac-tenant-scope.md) — Aggregate endpoints filter via customer_profiles WHERE tenant_id = ? subquery; sales_funnel_events has no tenant_id column

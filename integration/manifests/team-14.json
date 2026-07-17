@@ -1,0 +1,204 @@
+{
+  "$schema": "https://schema.cstlogistic.co.id/integration-manifest/v1",
+  "team": "14",
+  "domain": "Universal Rendering Engine",
+  "version": "1.0.0",
+  "description": "Adapter-based renderer for SVG, PNG, PDF, thumbnails, watermarked previews, print-ready output, ZIP packages, and editable composition JSON.",
+
+  "ownership": {
+    "services": [
+      "artifacts/api-server/src/services/universal-renderer/"
+    ],
+    "routes": [
+      "artifacts/api-server/src/routes/universal-renderer/"
+    ],
+    "workers": [
+      "artifacts/api-server/src/workers/universal-renderer/"
+    ]
+  },
+
+  "routesToMount": {
+    "file": "artifacts/api-server/src/routes/index.ts",
+    "import": "import universalRendererRouter from \"./universal-renderer/index.js\";",
+    "use": "router.use(universalRendererRouter);",
+    "insertAfter": "router.use(creativeMarketplaceRouter);"
+  },
+
+  "publicPathExceptions": {
+    "file": "artifacts/api-server/src/middleware/adminAuth.ts",
+    "array": "PUBLIC_PATH_PREFIXES",
+    "entries": [
+      "/ai/universal-renderer/health",
+      "/ai/universal-renderer/formats"
+    ],
+    "reason": "Health probe and format-capability metadata are public; no admin key required. POST /render and POST /render/async remain admin-key protected."
+  },
+
+  "ports": [
+    {
+      "name": "SvgRendererPort",
+      "path": "artifacts/api-server/src/services/universal-renderer/ports/SvgRendererPort.ts",
+      "description": "Contract for producing a finalized, sanitised SVG string."
+    },
+    {
+      "name": "PdfRendererPort",
+      "path": "artifacts/api-server/src/services/universal-renderer/ports/PdfRendererPort.ts",
+      "description": "Contract for producing a PDF buffer from SVG, PNG, or raw PDF source."
+    },
+    {
+      "name": "PngRendererPort",
+      "path": "artifacts/api-server/src/services/universal-renderer/ports/PngRendererPort.ts",
+      "description": "Contract for rasterising an SVG or re-encoding a buffer to PNG/JPEG/WebP."
+    },
+    {
+      "name": "StoragePort",
+      "path": "artifacts/api-server/src/services/universal-renderer/ports/StoragePort.ts",
+      "description": "Contract for uploading, verifying, and addressing storage objects. redact() is mandatory before audit logging."
+    },
+    {
+      "name": "JobSchedulerPort",
+      "path": "artifacts/api-server/src/services/universal-renderer/ports/JobSchedulerPort.ts",
+      "description": "Contract for enqueuing background render jobs. Stamps _tenantId per WP-06."
+    }
+  ],
+
+  "jobTypes": [
+    {
+      "type": "universal_render",
+      "description": "Full multi-format render. Formats resolved from payload.request.formats[].",
+      "requiredCapability": "universal_render",
+      "requiresAsset": true,
+      "requiredResultFields": ["requestId", "artifacts"],
+      "maxRetry": 3,
+      "retryStrategy": "exponential",
+      "estimatedDurationMs": 30000
+    },
+    {
+      "type": "universal_render_svg",
+      "description": "Render and upload SVG output only.",
+      "requiredCapability": "universal_render",
+      "requiresAsset": true,
+      "requiredResultFields": ["requestId", "artifacts"],
+      "maxRetry": 3,
+      "retryStrategy": "exponential",
+      "estimatedDurationMs": 5000
+    },
+    {
+      "type": "universal_render_png",
+      "description": "Rasterise SVG to PNG output.",
+      "requiredCapability": "universal_render",
+      "requiresAsset": true,
+      "requiredResultFields": ["requestId", "artifacts"],
+      "maxRetry": 3,
+      "retryStrategy": "exponential",
+      "estimatedDurationMs": 8000
+    },
+    {
+      "type": "universal_render_pdf",
+      "description": "Render SVG to PDF output.",
+      "requiredCapability": "universal_render",
+      "requiresAsset": true,
+      "requiredResultFields": ["requestId", "artifacts"],
+      "maxRetry": 3,
+      "retryStrategy": "exponential",
+      "estimatedDurationMs": 10000
+    },
+    {
+      "type": "universal_render_thumbnail",
+      "description": "Generate 16:9 WebP thumbnail from SVG.",
+      "requiredCapability": "universal_render",
+      "requiresAsset": true,
+      "requiredResultFields": ["requestId", "artifacts"],
+      "maxRetry": 3,
+      "retryStrategy": "exponential",
+      "estimatedDurationMs": 5000
+    },
+    {
+      "type": "universal_render_watermarked",
+      "description": "Produce watermarked preview PDF. Fail-closed — never returns un-watermarked content.",
+      "requiredCapability": "universal_render",
+      "requiresAsset": true,
+      "requiredResultFields": ["requestId", "artifacts"],
+      "maxRetry": 3,
+      "retryStrategy": "exponential",
+      "estimatedDurationMs": 12000
+    },
+    {
+      "type": "universal_render_print_ready",
+      "description": "Produce print-ready PDF with 300 DPI target and sRGB metadata.",
+      "requiredCapability": "universal_render",
+      "requiresAsset": true,
+      "requiredResultFields": ["requestId", "artifacts"],
+      "maxRetry": 3,
+      "retryStrategy": "exponential",
+      "estimatedDurationMs": 15000
+    },
+    {
+      "type": "universal_render_zip",
+      "description": "Package SVG + PNG + PDF + thumbnail into a ZIP archive. Validates non-empty, computes checksum.",
+      "requiredCapability": "universal_render",
+      "requiresAsset": true,
+      "requiredResultFields": ["requestId", "artifacts"],
+      "maxRetry": 3,
+      "retryStrategy": "exponential",
+      "estimatedDurationMs": 45000
+    },
+    {
+      "type": "universal_render_composition",
+      "description": "Export editable composition JSON for re-import into the canvas editor.",
+      "requiredCapability": "universal_render",
+      "requiresAsset": true,
+      "requiredResultFields": ["requestId", "artifacts"],
+      "maxRetry": 2,
+      "retryStrategy": "exponential",
+      "estimatedDurationMs": 3000
+    }
+  ],
+
+  "workerCapability": "universal_render",
+
+  "sizeGuards": {
+    "maxSvgBytes":  5242880,
+    "maxPngBytes":  31457280,
+    "maxPdfBytes":  52428800,
+    "maxZipBytes":  209715200
+  },
+
+  "security": {
+    "watermarkFailClosed": true,
+    "storageRedactionRequired": true,
+    "ssrfGuard": "https-only SVG external refs",
+    "auditRequired": true,
+    "adminRoutes": [
+      "POST /ai/universal-renderer/render",
+      "POST /ai/universal-renderer/render/async"
+    ],
+    "publicRoutes": [
+      "GET /ai/universal-renderer/health",
+      "GET /ai/universal-renderer/formats"
+    ]
+  },
+
+  "routes": [
+    { "method": "GET",  "path": "/ai/universal-renderer/formats",      "auth": "public",  "description": "List supported output formats" },
+    { "method": "GET",  "path": "/ai/universal-renderer/health",       "auth": "public",  "description": "Renderer health probe" },
+    { "method": "POST", "path": "/ai/universal-renderer/render",       "auth": "admin",   "description": "Synchronous render (all formats)" },
+    { "method": "POST", "path": "/ai/universal-renderer/render/async", "auth": "admin",   "description": "Enqueue async render job" }
+  ],
+
+  "integrationNotes": [
+    "Team 24 (integration): mount universalRendererRouter in routes/index.ts (see routesToMount above).",
+    "Team 24 (integration): add /ai/universal-renderer/health and /ai/universal-renderer/formats to PUBLIC_PATH_PREFIXES in middleware/adminAuth.ts (see publicPathExceptions above).",
+    "Team 24 (integration): register 9 universal_render_* job types in jobCompletionGuard.ts with requiresAsset:true and requiredResultFields:[requestId,artifacts].",
+    "Team 24 (integration): add universal_render* dispatch case in jobWorkerService.ts calling executeUniversalRenderJob from artifacts/api-server/src/workers/universal-renderer/universalRenderWorker.ts.",
+    "Migration draft is in integration/migrations/team-14.sql — apply via Team 24 migration runner only."
+  ],
+
+  "migrations": [
+    "integration/migrations/team-14.sql"
+  ],
+
+  "openapi": [
+    "integration/openapi/team-14.yaml"
+  ]
+}

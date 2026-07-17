@@ -43,6 +43,13 @@ const WorkspaceSupportPage       = lazy(() => import('@/pages/workspace/support'
 const WorkspaceSettingsPage      = lazy(() => import('@/pages/workspace/settings'));
 const PortfolioPage              = lazy(() => import('@/pages/portfolio'));
 const CpReviewPage               = lazy(() => import('@/pages/cp-review'));
+// ── Team 04: Portfolio V2 ────────────────────────────────────────────────
+const GalleryV2Page              = lazy(() => import('@/pages/creative-portfolio/GalleryV2Page'));
+const InspirationPage            = lazy(() => import('@/pages/creative-portfolio/InspirationPage'));
+const ComparePage                = lazy(() => import('@/pages/creative-portfolio/ComparePage'));
+// ── Team 22: Vendor Directory ────────────────────────────────────────────
+const VendorDirectoryPage        = lazy(() => import('@/pages/creative-vendors/VendorDirectoryPage'));
+const VendorProfilePage          = lazy(() => import('@/pages/creative-vendors/VendorProfilePage'));
 
 /* ─── Loading fallback ─── */
 function PageLoader() {
@@ -129,6 +136,13 @@ function Router() {
         <Route path="/workspace/:token/profile" component={WorkspaceProfilePage} />
         <Route path="/workspace/:token/support" component={WorkspaceSupportPage} />
         <Route path="/workspace/:token/settings" component={WorkspaceSettingsPage} />
+        {/* ── Team 04: Portfolio V2 ───────────────────────────────────── */}
+        <Route path="/portfolio-v2" component={GalleryV2Page} />
+        <Route path="/inspiration" component={InspirationPage} />
+        <Route path="/portfolio-compare" component={ComparePage} />
+        {/* ── Team 22: Vendor Directory ───────────────────────────────── */}
+        <Route path="/vendors/:id" component={VendorProfilePage} />
+        <Route path="/vendors" component={VendorDirectoryPage} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

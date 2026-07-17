@@ -1,0 +1,1001 @@
+openapi: "3.0.3"
+info:
+  title: "Team 10 — Typography & Color Palette Engine"
+  version: "1.0.0"
+  description: |
+    OpenAPI fragment for Team 10 domain: font pair registry, typography roles,
+    color palettes, semantic color roles, WCAG contrast validation,
+    print-safe palette conversion, industry recommendations, and Brand DNA compatibility.
+    All paths are relative to the root openapi.yaml. Team 24 merges this fragment.
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PATHS
+# ══════════════════════════════════════════════════════════════════════════════
+paths:
+
+  # ── Health ──────────────────────────────────────────────────────────────────
+  /ai/design-tokens/health:
+    get:
+      operationId: designTokensHealth
+      summary: Health check for design-tokens domain
+      tags: [DesignTokens]
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  domain: { type: string }
+                  team: { type: integer }
+
+  # ── Industries ───────────────────────────────────────────────────────────────
+  /ai/design-tokens/industries:
+    get:
+      operationId: listDesignTokenIndustries
+      summary: List all supported industries
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      responses:
+        "200":
+          description: List of industry codes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { type: string }
+
+  /ai/design-tokens/industries/{industry}:
+    get:
+      operationId: getIndustryRecommendation
+      summary: Get typography + colour recommendation for an industry
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - in: path
+          name: industry
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Recommendation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryRecommendation" }
+
+  # ── Font Pairs ───────────────────────────────────────────────────────────────
+  /ai/design-tokens/font-pairs:
+    get:
+      operationId: listFontPairs
+      summary: List font pairs
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: query, name: category, schema: { $ref: "#/components/schemas/FontCategory" } }
+        - { in: query, name: mood, schema: { $ref: "#/components/schemas/FontMood" } }
+        - { in: query, name: industry, schema: { type: string } }
+        - { in: query, name: search, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer, default: 50 } }
+        - { in: query, name: offset, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Paginated font pairs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/FontPair" }
+                  total: { type: integer }
+    post:
+      operationId: createFontPair
+      summary: Create a new font pair
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateFontPairInput" }
+      responses:
+        "201":
+          description: Created font pair
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FontPair" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Duplicate font pair
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  existingId: { type: integer }
+
+  /ai/design-tokens/font-pairs/validate-hierarchy:
+    post:
+      operationId: validateTypographyHierarchy
+      summary: Validate font size hierarchy
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                required: [role, fontSize]
+                properties:
+                  role: { type: string }
+                  fontSize: { type: number }
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid: { type: boolean }
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        role: { type: string }
+                        message: { type: string }
+
+  /ai/design-tokens/font-pairs/check-duplicate:
+    post:
+      operationId: checkFontPairDuplicate
+      summary: Check if a font pair already exists
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [displayFont, bodyFont]
+              properties:
+                displayFont: { type: string }
+                bodyFont: { type: string }
+      responses:
+        "200":
+          description: Duplicate check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  isDuplicate: { type: boolean }
+                  existingPair:
+                    oneOf:
+                      - { $ref: "#/components/schemas/FontPair" }
+                      - { type: "null" }
+
+  /ai/design-tokens/font-pairs/brand-dna-compatible:
+    post:
+      operationId: getBrandDnaCompatibleFontPairs
+      summary: Score font pairs against a Brand DNA profile
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: query, name: limit, schema: { type: integer, default: 10 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BrandDnaInput" }
+      responses:
+        "200":
+          description: Compatible font pairs ranked by score
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/CompatibilityScore" }
+
+  /ai/design-tokens/font-pairs/{id}:
+    get:
+      operationId: getFontPair
+      summary: Get font pair with typography roles
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Font pair with roles
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FontPairWithRoles" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateFontPair
+      summary: Update a font pair
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateFontPairInput" }
+      responses:
+        "200":
+          description: Updated font pair
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FontPair" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Duplicate
+          content:
+            application/json:
+              schema: { type: object, properties: { error: { type: string }, existingId: { type: integer } } }
+    delete:
+      operationId: deactivateFontPair
+      summary: Deactivate a font pair
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deactivated }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ai/design-tokens/font-pairs/{id}/roles:
+    get:
+      operationId: getTypographyRoles
+      summary: Get typography roles for a font pair
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Typography roles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/TypographyRole" }
+    put:
+      operationId: upsertTypographyRoles
+      summary: Set typography roles for a font pair
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: "#/components/schemas/TypographyRoleInput" }
+      responses:
+        "200":
+          description: Upserted roles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/TypographyRole" }
+        "422":
+          description: Typography hierarchy violation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  details: { type: array, items: { type: string } }
+
+  /ai/design-tokens/font-pairs/{id}/roles/{role}:
+    delete:
+      operationId: deleteTypographyRole
+      summary: Delete a specific typography role
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+        - { in: path, name: role, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Deleted }
+
+  /ai/design-tokens/font-pairs/industry/{industry}:
+    get:
+      operationId: getFontPairIndustryRecommendation
+      summary: Get font recommendations for an industry
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: path, name: industry, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Industry recommendation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndustryRecommendation" }
+
+  # ── Color Palettes ───────────────────────────────────────────────────────────
+  /ai/design-tokens/color-palettes:
+    get:
+      operationId: listColorPalettes
+      summary: List color palettes
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: query, name: style, schema: { $ref: "#/components/schemas/PaletteStyle" } }
+        - { in: query, name: mood, schema: { $ref: "#/components/schemas/FontMood" } }
+        - { in: query, name: industry, schema: { type: string } }
+        - { in: query, name: accessible, schema: { type: boolean } }
+        - { in: query, name: printSafe, schema: { type: boolean } }
+        - { in: query, name: wcagLevel, schema: { $ref: "#/components/schemas/WcagLevel" } }
+        - { in: query, name: search, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer, default: 50 } }
+        - { in: query, name: offset, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Paginated color palettes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ColorPalette" }
+                  total: { type: integer }
+    post:
+      operationId: createColorPalette
+      summary: Create a new color palette
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateColorPaletteInput" }
+      responses:
+        "201":
+          description: Created palette
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ColorPalette" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409":
+          description: Duplicate palette
+          content:
+            application/json:
+              schema: { type: object, properties: { error: { type: string }, existingId: { type: integer } } }
+
+  /ai/design-tokens/color-palettes/contrast-check:
+    post:
+      operationId: checkContrast
+      summary: Check WCAG contrast ratio between two colours
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hex1, hex2]
+              properties:
+                hex1: { type: string, pattern: "^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$" }
+                hex2: { type: string, pattern: "^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$" }
+      responses:
+        "200":
+          description: Contrast result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContrastResult" }
+
+  /ai/design-tokens/color-palettes/contrast-check-batch:
+    post:
+      operationId: checkContrastBatch
+      summary: Check WCAG contrast for multiple foreground colours against one background
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [foregrounds, background]
+              properties:
+                foregrounds:
+                  type: array
+                  items: { type: string }
+                  minItems: 1
+                  maxItems: 20
+                background: { type: string }
+      responses:
+        "200":
+          description: Batch contrast results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ContrastResult" }
+
+  /ai/design-tokens/color-palettes/print-safe-check:
+    post:
+      operationId: checkPrintSafe
+      summary: Check and convert colours to print-safe CMYK
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [colors]
+              properties:
+                colors:
+                  type: array
+                  items: { type: string }
+                  minItems: 1
+                  maxItems: 20
+      responses:
+        "200":
+          description: Print-safe results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/PrintSafeResult" }
+                  allPrintSafe: { type: boolean }
+
+  /ai/design-tokens/color-palettes/check-duplicate:
+    post:
+      operationId: checkPaletteDuplicate
+      summary: Check if a palette with the same colours already exists
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [colors]
+              properties:
+                colors:
+                  type: array
+                  items: { type: string }
+                  minItems: 2
+      responses:
+        "200":
+          description: Duplicate check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  isDuplicate: { type: boolean }
+                  existingPalette:
+                    oneOf:
+                      - { $ref: "#/components/schemas/ColorPalette" }
+                      - { type: "null" }
+
+  /ai/design-tokens/color-palettes/brand-dna-compatible:
+    post:
+      operationId: getBrandDnaCompatiblePalettes
+      summary: Score palettes against a Brand DNA profile
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: query, name: limit, schema: { type: integer, default: 10 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BrandDnaInput" }
+      responses:
+        "200":
+          description: Compatible palettes ranked by score
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/CompatibilityScore" }
+
+  /ai/design-tokens/color-palettes/score-combination:
+    post:
+      operationId: scoreFontPaletteCombination
+      summary: Score a specific font pair + palette combination against Brand DNA
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fontPairId, colorPaletteId, brandDna]
+              properties:
+                fontPairId: { type: integer }
+                colorPaletteId: { type: integer }
+                brandDna: { $ref: "#/components/schemas/BrandDnaInput" }
+      responses:
+        "200":
+          description: Combination score
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fontPair: { $ref: "#/components/schemas/CompatibilityScore" }
+                  palette: { $ref: "#/components/schemas/CompatibilityScore" }
+                  combinedScore: { type: number }
+                  recommendation: { type: string }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ai/design-tokens/color-palettes/{id}:
+    get:
+      operationId: getColorPalette
+      summary: Get color palette with semantic roles
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Color palette with semantic roles
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ColorPaletteWithRoles" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateColorPalette
+      summary: Update a color palette
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateColorPaletteInput" }
+      responses:
+        "200":
+          description: Updated palette
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ColorPalette" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      operationId: deactivateColorPalette
+      summary: Deactivate a color palette
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Deactivated }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /ai/design-tokens/color-palettes/{id}/semantic-roles:
+    get:
+      operationId: getSemanticColorRoles
+      summary: Get semantic colour roles for a palette
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Semantic roles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/SemanticColorRole" }
+    put:
+      operationId: upsertSemanticColorRoles
+      summary: Set semantic colour roles for a palette (auto-computes contrast metadata)
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: "#/components/schemas/SemanticColorRoleInput" }
+      responses:
+        "200":
+          description: Upserted roles + updated palette accessibility flags
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/SemanticColorRole" }
+                  wcagLevel: { $ref: "#/components/schemas/WcagLevel" }
+                  accessible: { type: boolean }
+
+  /ai/design-tokens/color-palettes/color-info/{hex}:
+    get:
+      operationId: getColorInfo
+      summary: Get full metadata for a hex colour (HSL, CMYK, contrast, print-safe)
+      tags: [DesignTokens]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { in: path, name: hex, required: true, schema: { type: string }, description: "Hex without hash, e.g. 0066cc" }
+      responses:
+        "200":
+          description: Colour metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hex: { type: string }
+                  hsl: { type: string }
+                  cmyk: { $ref: "#/components/schemas/CmykColor" }
+                  cmykFormatted: { type: string }
+                  printSafe: { type: boolean }
+                  printSafeHex: { type: string }
+                  contrastOnWhite: { $ref: "#/components/schemas/ContrastResult" }
+                  contrastOnBlack: { $ref: "#/components/schemas/ContrastResult" }
+
+# ══════════════════════════════════════════════════════════════════════════════
+# COMPONENTS
+# ══════════════════════════════════════════════════════════════════════════════
+components:
+  securitySchemes:
+    adminApiKey:
+      type: apiKey
+      in: header
+      name: x-admin-api-key
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+
+  schemas:
+    FontCategory:
+      type: string
+      enum: [serif, sans-serif, display, monospace, handwriting]
+
+    FontMood:
+      type: string
+      enum: [professional, playful, elegant, modern, traditional, bold, minimal, friendly]
+
+    FontLicense:
+      type: string
+      enum: [open, commercial, custom]
+
+    WcagLevel:
+      type: string
+      enum: [AA, AAA, fail]
+
+    PaletteStyle:
+      type: string
+      enum: [monochromatic, complementary, triadic, analogous, split-complementary, tetradic, custom]
+
+    TypographyRoleName:
+      type: string
+      enum: [display, heading1, heading2, heading3, heading4, subtitle, body, bodySmall, caption, label, overline, code]
+
+    SemanticColorRoleName:
+      type: string
+      enum: [primary, primaryDark, primaryLight, secondary, secondaryDark, secondaryLight, accent, background, surface, surfaceAlt, textPrimary, textSecondary, textDisabled, error, warning, success, info, border, divider]
+
+    FontPair:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        slug: { type: string }
+        displayFont: { type: string }
+        bodyFont: { type: string }
+        accentFont: { type: string, nullable: true }
+        category: { $ref: "#/components/schemas/FontCategory" }
+        mood:
+          type: array
+          items: { $ref: "#/components/schemas/FontMood" }
+        industries:
+          type: array
+          items: { type: string }
+        displayFontWeight: { type: string }
+        bodyFontWeight: { type: string }
+        license: { $ref: "#/components/schemas/FontLicense" }
+        pairingRationale: { type: string, nullable: true }
+        sampleHeading: { type: string }
+        sampleBody: { type: string }
+        googleFontsUrl: { type: string, nullable: true }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    FontPairWithRoles:
+      allOf:
+        - { $ref: "#/components/schemas/FontPair" }
+        - type: object
+          properties:
+            typographyRoles:
+              type: array
+              items: { $ref: "#/components/schemas/TypographyRole" }
+
+    TypographyRole:
+      type: object
+      properties:
+        id: { type: integer }
+        pairId: { type: integer }
+        role: { $ref: "#/components/schemas/TypographyRoleName" }
+        fontFamily: { type: string }
+        fontSize: { type: number }
+        fontWeight: { type: string }
+        lineHeight: { type: number }
+        letterSpacing: { type: number }
+        textTransform: { type: string, nullable: true }
+
+    TypographyRoleInput:
+      type: object
+      required: [role, fontFamily, fontSize, fontWeight, lineHeight, letterSpacing]
+      properties:
+        role: { $ref: "#/components/schemas/TypographyRoleName" }
+        fontFamily: { type: string }
+        fontSize: { type: number }
+        fontWeight: { type: string }
+        lineHeight: { type: number }
+        letterSpacing: { type: number }
+        textTransform: { type: string }
+
+    CreateFontPairInput:
+      type: object
+      required: [name, displayFont, bodyFont, category, mood, industries]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        displayFont: { type: string }
+        bodyFont: { type: string }
+        accentFont: { type: string }
+        category: { $ref: "#/components/schemas/FontCategory" }
+        mood:
+          type: array
+          items: { $ref: "#/components/schemas/FontMood" }
+          minItems: 1
+        industries:
+          type: array
+          items: { type: string }
+          minItems: 1
+        displayFontWeight: { type: string }
+        bodyFontWeight: { type: string }
+        license: { $ref: "#/components/schemas/FontLicense" }
+        pairingRationale: { type: string }
+        sampleHeading: { type: string }
+        sampleBody: { type: string }
+        googleFontsUrl: { type: string, format: uri }
+
+    ColorPalette:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string, nullable: true }
+        style: { $ref: "#/components/schemas/PaletteStyle" }
+        mood:
+          type: array
+          items: { $ref: "#/components/schemas/FontMood" }
+        industries:
+          type: array
+          items: { type: string }
+        colors:
+          type: array
+          items: { type: string }
+        printSafe: { type: boolean }
+        accessible: { type: boolean }
+        wcagLevel: { $ref: "#/components/schemas/WcagLevel" }
+        tags:
+          type: array
+          items: { type: string }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ColorPaletteWithRoles:
+      allOf:
+        - { $ref: "#/components/schemas/ColorPalette" }
+        - type: object
+          properties:
+            semanticRoles:
+              type: array
+              items: { $ref: "#/components/schemas/SemanticColorRole" }
+
+    SemanticColorRole:
+      type: object
+      properties:
+        id: { type: integer }
+        paletteId: { type: integer }
+        role: { $ref: "#/components/schemas/SemanticColorRoleName" }
+        hexColor: { type: string }
+        hslColor: { type: string }
+        rgbColor: { type: string }
+        cmykColor: { type: string, nullable: true }
+        printSafeHex: { type: string, nullable: true }
+        contrastOnWhite: { type: number }
+        contrastOnBlack: { type: number }
+        wcagAAOnWhite: { type: boolean }
+        wcagAAOnBlack: { type: boolean }
+        wcagAAAOnWhite: { type: boolean }
+        wcagAAAOnBlack: { type: boolean }
+
+    SemanticColorRoleInput:
+      type: object
+      required: [role, hexColor]
+      properties:
+        role: { $ref: "#/components/schemas/SemanticColorRoleName" }
+        hexColor: { type: string, pattern: "^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$" }
+
+    CreateColorPaletteInput:
+      type: object
+      required: [name, style, mood, industries, colors]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        description: { type: string }
+        style: { $ref: "#/components/schemas/PaletteStyle" }
+        mood:
+          type: array
+          items: { $ref: "#/components/schemas/FontMood" }
+          minItems: 1
+        industries:
+          type: array
+          items: { type: string }
+          minItems: 1
+        colors:
+          type: array
+          items: { type: string }
+          minItems: 2
+          maxItems: 12
+        tags:
+          type: array
+          items: { type: string }
+
+    ContrastResult:
+      type: object
+      properties:
+        hex1: { type: string }
+        hex2: { type: string }
+        ratio: { type: number }
+        ratioFormatted: { type: string }
+        wcagAA: { type: boolean }
+        wcagAALarge: { type: boolean }
+        wcagAAA: { type: boolean }
+        wcagAAALarge: { type: boolean }
+        level: { $ref: "#/components/schemas/WcagLevel" }
+
+    CmykColor:
+      type: object
+      properties:
+        c: { type: integer, minimum: 0, maximum: 100 }
+        m: { type: integer, minimum: 0, maximum: 100 }
+        y: { type: integer, minimum: 0, maximum: 100 }
+        k: { type: integer, minimum: 0, maximum: 100 }
+
+    PrintSafeResult:
+      type: object
+      properties:
+        originalHex: { type: string }
+        cmyk: { $ref: "#/components/schemas/CmykColor" }
+        cmykFormatted: { type: string }
+        isPrintSafe: { type: boolean }
+        printSafeHex: { type: string }
+        deltaE: { type: number }
+        note: { type: string, nullable: true }
+
+    IndustryRecommendation:
+      type: object
+      properties:
+        industry: { type: string }
+        recommendedFontPairSlugs:
+          type: array
+          items: { type: string }
+        recommendedPaletteSlugs:
+          type: array
+          items: { type: string }
+        rationale: { type: string }
+        primaryMood: { $ref: "#/components/schemas/FontMood" }
+        avoidMoods:
+          type: array
+          items: { $ref: "#/components/schemas/FontMood" }
+        colorNotes: { type: string }
+        typographyNotes: { type: string }
+
+    BrandDnaInput:
+      type: object
+      required: [clientId, brandPersonality, detectedColors, confidenceScore]
+      properties:
+        clientId: { type: string }
+        brandPersonality:
+          type: array
+          items: { type: string }
+        detectedColors:
+          type: object
+          properties:
+            primary: { type: string, nullable: true }
+            palette:
+              type: array
+              items: { type: string }
+        confidenceScore:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    CompatibilityScore:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        slug: { type: string }
+        score: { type: integer, minimum: 0, maximum: 100 }
+        reasons:
+          type: array
+          items: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
