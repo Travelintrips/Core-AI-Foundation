@@ -914,3 +914,180 @@ export async function runImageDesignerPipeline(
     variations: imagePrompts.length,
   });
 }
+
+/**
+ * Regenerate a single image asset in-place.
+ * Reuses the original prompt — no LLM prompt-gen step.
+ * Marks the original asset `needs_revision`, inserts a new row as `generating`,
+ * runs Replicate + QC, then finalises the new row.
+ */
+export async function regenerateSingleAsset(
+  originalAssetId: number,
+  projectUuid: string,
+): Promise<void> {
+  const guardrails = await readGuardrails();
+
+  const [original] = await db
+    .select()
+    .from(creativeAiAssetsTable)
+    .where(eq(creativeAiAssetsTable.id, originalAssetId));
+  if (!original) throw new Error(`Asset ${originalAssetId} not found`);
+
+  const [project] = await db
+    .select()
+    .from(creativeProjectsTable)
+    .where(eq(creativeProjectsTable.projectId, projectUuid));
+  if (!project) throw new Error(`Project ${projectUuid} not found`);
+
+  const brief: Record<string, unknown> = {
+    brandName: project.brandName,
+    businessType: project.businessType,
+    targetMarket: project.targetMarket,
+    productOrService: project.productOrService,
+    stylePreference: project.stylePreference,
+    goal: project.goal,
+  };
+
+  const replicateKey = getProviderApiKey("replicate");
+  const maxRetries = Math.min(guardrails.maxRetryPerProvider, 2);
+  const timeoutMs = Math.min(guardrails.providerTimeoutMs, 120000);
+
+  // Insert new asset row immediately so UI shows "generating"
+  const imageDesignerAgent = await getAgentBySlug("image-designer");
+  const [newAsset] = await db
+    .insert(creativeAiAssetsTable)
+    .values({
+      projectId: projectUuid,
+      agentId: imageDesignerAgent?.id ?? null,
+      provider: "replicate",
+      model: original.model ?? FLUX_SCHNELL,
+      assetType: "image",
+      prompt: original.prompt,
+      negativePrompt: original.negativePrompt,
+      aspectRatio: original.aspectRatio,
+      imageUrl: null,
+      status: replicateKey ? "generating" : "failed",
+      qcScore: null,
+      qcNotes: replicateKey ? null : "Image generation requires REPLICATE_API_TOKEN.",
+      cost: "0",
+      latencyMs: 0,
+      metadata: { ...(original.metadata as object ?? {}), revisedFromAssetId: originalAssetId },
+      parentAssetId: originalAssetId,
+    })
+    .returning({ id: creativeAiAssetsTable.id });
+
+  if (!replicateKey) return;
+
+  const prompt = original.prompt ?? "";
+  const negativePrompt = original.negativePrompt ?? undefined;
+  const aspectRatio = original.aspectRatio ?? "1:1";
+  let imageUrl: string | null = null;
+  let imageLatency = 0;
+  let imageStatus = "failed";
+  let qcScore: number | null = null;
+  let qcNotes: string | null = null;
+  let generationError: string | null = null;
+  let usedModel = original.model ?? FLUX_SCHNELL;
+
+  const modelCandidates = guardrails.fallbackEnabled ? [usedModel, FLUX_DEV] : [usedModel];
+
+  outerLoop: for (const modelId of modelCandidates) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const result = await generateReplicateImage(
+          modelId,
+          { prompt, negativePrompt, aspectRatio },
+          replicateKey,
+          timeoutMs,
+        );
+        imageUrl = result.imageUrl;
+        imageLatency = result.latencyMs;
+        imageStatus = "completed";
+        usedModel = modelId;
+        generationError = null;
+        await recordCost({
+          projectId: projectUuid,
+          agentSlug: "image-designer",
+          provider: "replicate",
+          model: modelId,
+          inputTokens: 0,
+          outputTokens: 0,
+          latencyMs: imageLatency,
+          status: "success",
+        });
+        break outerLoop;
+      } catch (err) {
+        generationError = String(err);
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        }
+      }
+    }
+  }
+
+  // Persist to Supabase Storage (prevents expiring Replicate URLs)
+  let persistedUrl: string | null = null;
+  let storagePath: string | null = null;
+  if (imageUrl && imageStatus === "completed") {
+    try {
+      const raw = await fetch(imageUrl);
+      if (raw.ok) {
+        const buf = Buffer.from(await raw.arrayBuffer());
+        const ct = raw.headers.get("content-type") || "image/webp";
+        const ext = ct.includes("png") ? "png" : ct.includes("jpeg") ? "jpg" : "webp";
+        const pathKey = `creative-assets/${projectUuid}/image-concepts/revision-${newAsset.id}-${Date.now()}.${ext}`;
+        persistedUrl = await persistImageBuffer(
+          buf, ct, projectUuid, `revision-${newAsset.id}`,
+          `creative-assets/${projectUuid}/image-concepts`,
+        );
+        if (persistedUrl) storagePath = pathKey;
+      }
+    } catch (err) {
+      console.error(`[imageDesigner] Failed to persist revision asset ${newAsset.id}:`, err);
+    }
+  }
+
+  const finalImageUrl = persistedUrl ?? imageUrl;
+
+  // QC review
+  try {
+    const qc = await reviewImage(brief, prompt, finalImageUrl ?? "not generated");
+    qcScore = qc.score;
+    qcNotes = qc.notes;
+    if (qc.tokensUsed > 0) {
+      await recordCost({
+        projectId: projectUuid,
+        agentSlug: "image-qc",
+        provider: "openai",
+        model: "gpt-4o",
+        inputTokens: Math.floor(qc.tokensUsed * 0.65),
+        outputTokens: Math.floor(qc.tokensUsed * 0.35),
+        latencyMs: qc.latencyMs,
+        status: "success",
+      });
+    }
+  } catch (err) {
+    qcNotes = `QC review error: ${String(err)}`;
+  }
+
+  // Finalise new asset row
+  await db
+    .update(creativeAiAssetsTable)
+    .set({
+      model: usedModel,
+      imageUrl: finalImageUrl,
+      storagePath: storagePath ?? undefined,
+      status: imageStatus,
+      qcScore,
+      qcNotes: qcNotes ?? (generationError ? `Generation failed: ${generationError}` : null),
+      cost: String(imageStatus === "completed" ? IMAGE_COST_SCHNELL.toFixed(6) : "0"),
+      latencyMs: imageLatency,
+    })
+    .where(eq(creativeAiAssetsTable.id, newAsset.id));
+
+  await logAudit(
+    "creative-ai", "image_asset_revised", projectUuid, "creative_project",
+    imageStatus === "completed" ? "success" : "failure",
+    { originalAssetId, newAssetId: newAsset.id, status: imageStatus, qcScore },
+  );
+}

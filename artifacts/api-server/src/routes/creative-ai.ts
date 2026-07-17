@@ -28,7 +28,7 @@ import {
 } from "@workspace/api-zod";
 import { logAudit } from "../services/aiAuditService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
-import { runImageDesignerPipeline } from "../services/imageDesignerService.js";
+import { runImageDesignerPipeline, regenerateSingleAsset } from "../services/imageDesignerService.js";
 
 const router = Router();
 
@@ -268,6 +268,58 @@ router.get("/creative-ai/projects/:id/assets", async (req, res): Promise<void> =
       })),
     ),
   );
+});
+
+/** POST /creative-ai/assets/:assetId/regenerate — mark original needs_revision + fire a new generation */
+router.post("/creative-ai/assets/:assetId/regenerate", async (req, res): Promise<void> => {
+  const assetId = parseInt(req.params.assetId, 10);
+  if (isNaN(assetId)) {
+    res.status(400).json({ error: "Invalid assetId" });
+    return;
+  }
+
+  const [asset] = await db
+    .select()
+    .from(creativeAiAssetsTable)
+    .where(eq(creativeAiAssetsTable.id, assetId));
+
+  if (!asset) {
+    res.status(404).json({ error: "Asset not found" });
+    return;
+  }
+
+  // Block if another generation is already in progress for this project
+  const [{ pendingCount }] = await db
+    .select({ pendingCount: sql<number>`count(*)::int` })
+    .from(creativeAiAssetsTable)
+    .where(
+      and(
+        eq(creativeAiAssetsTable.projectId, asset.projectId),
+        eq(creativeAiAssetsTable.status, "generating"),
+      ),
+    );
+
+  if (pendingCount > 0) {
+    res.status(409).json({ error: "Image generation already in progress for this project" });
+    return;
+  }
+
+  // Mark original as needs_revision immediately
+  await db
+    .update(creativeAiAssetsTable)
+    .set({ status: "needs_revision" })
+    .where(eq(creativeAiAssetsTable.id, assetId));
+
+  // Fire regeneration in background — never await
+  regenerateSingleAsset(assetId, asset.projectId).catch(async (err) => {
+    console.error(`[image-designer] Revision failed for asset ${assetId}:`, err);
+    await logAudit(
+      "creative-ai", "image_revision_error", asset.projectId, "creative_ai_asset", "failure",
+      { assetId, error: String(err) },
+    ).catch(() => {});
+  });
+
+  res.status(202).json({ message: "Revision started — new image is generating" });
 });
 
 /** PATCH /creative-ai/assets/:assetId/status — approve / needs_revision / reject */

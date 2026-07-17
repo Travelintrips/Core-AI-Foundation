@@ -1464,8 +1464,30 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   const handleAssetApprove = (assetId: number) => {
     updateAssetStatus.mutate({ assetId, data: { status: "approved" } });
   };
-  const handleAssetRevision = (assetId: number) => {
-    updateAssetStatus.mutate({ assetId, data: { status: "needs_revision" } });
+  const handleAssetRevision = async (assetId: number) => {
+    const adminKey = import.meta.env.VITE_ADMIN_API_KEY as string | undefined;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(adminKey ? { "x-admin-api-key": adminKey } : {}),
+    };
+    try {
+      const res = await fetch(`/api/creative-ai/assets/${assetId}/regenerate`, {
+        method: "POST",
+        headers,
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error ?? "Failed to start revision");
+      }
+      queryClient.invalidateQueries({ queryKey: getListProjectAssetsQueryKey(projectId) });
+      toast({ title: "Revisi dimulai — gambar baru sedang di-generate" });
+    } catch (err: unknown) {
+      toast({
+        title: "Gagal memulai revisi",
+        description: err instanceof Error ? err.message : "Coba lagi",
+        variant: "destructive",
+      });
+    }
   };
   const handleAssetReject = (assetId: number) => {
     updateAssetStatus.mutate({ assetId, data: { status: "rejected" } });
