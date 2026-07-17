@@ -36,7 +36,7 @@ interface ServiceSeed {
   currency: string;
 }
 
-const CATEGORIES: CategorySeed[] = [
+export const CATEGORIES: CategorySeed[] = [
   { code: "creative", name: "Creative AI", description: "Brand identity, design, and content production.", icon: "palette", displayOrder: 1 },
   { code: "presentation-document", name: "Presentation & Document AI", description: "Pitch deck, proposal, laporan, dan dokumen bisnis profesional.", icon: "file-text", displayOrder: 2 },
   { code: "marketing", name: "Marketing AI", description: "Campaigns, positioning, and growth strategy.", icon: "megaphone", displayOrder: 3 },
@@ -65,7 +65,7 @@ export const CATEGORY_DISCLAIMERS: Record<string, string> = {
   creative: "AI-generated concepts dapat memerlukan penyempurnaan desainer manusia untuk kebutuhan cetak, merek dagang, dan penggunaan komersial.",
 };
 
-const SERVICES: Record<string, ServiceSeed[]> = {
+export const SERVICES: Record<string, ServiceSeed[]> = {
   "presentation-document": [
     // ── Pitch Deck ───────────────────────────────────────────────────────────
     svc("pd-pitch-deck",          "Pitch Deck Presentasi",       "Presentasi pitch deck investor-ready dengan narasi visual profesional dan storytelling berbasis data.", "one_time", "1500000", "3-5 hari",   true,  ["Creative Director AI", "Copywriter AI"], ["Pitch deck (PPTX)", "PDF export"]),

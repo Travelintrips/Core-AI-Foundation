@@ -11,7 +11,7 @@
  * - Relies on existing ai_brand_kit_assets, ai_asset_library, ai_client_memory,
  *   creative_projects, and the new ai_brand_dna table.
  */
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, isNull } from "drizzle-orm";
 import {
   db,
   aiBrandDnaTable,
@@ -20,6 +20,8 @@ import {
   aiClientMemoryTable,
   aiAssetIntelligenceTable,
   creativeProjectsTable,
+  aiServiceRequestsTable,
+  customerProfilesTable,
   type AiBrandDna,
 } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
@@ -221,10 +223,22 @@ export async function analyzeBrand(clientId: string): Promise<BrandDnaView> {
   const memMap = new Map(memoryRows.map((m) => [m.key, m.value]));
 
   // 4. Gather project history
+  // creative_projects has no clientId/emailHash column — resolve ownership via the canonical
+  // join: creative_projects.service_request_id → ai_service_requests.customer_email
+  //   → customer_profiles.client_email → customer_profiles.email_hash = clientId
+  // Legacy direct projects (service_request_id IS NULL) have no resolvable client identity
+  // and are intentionally excluded (fail-closed: no cross-customer leakage).
   const projectRows = await db
-    .select({ projectId: creativeProjectsTable.projectId, brandName: creativeProjectsTable.brandName, status: creativeProjectsTable.status, createdAt: creativeProjectsTable.createdAt })
+    .select({
+      projectId: creativeProjectsTable.projectId,
+      brandName: creativeProjectsTable.brandName,
+      status: creativeProjectsTable.status,
+      createdAt: creativeProjectsTable.createdAt,
+    })
     .from(creativeProjectsTable)
-    .where(sql`${creativeProjectsTable.clientId} = ${clientId} OR ${creativeProjectsTable.emailHash} = ${clientId}`)
+    .innerJoin(aiServiceRequestsTable, eq(creativeProjectsTable.serviceRequestId, aiServiceRequestsTable.id))
+    .innerJoin(customerProfilesTable, eq(customerProfilesTable.clientEmail, aiServiceRequestsTable.customerEmail))
+    .where(and(eq(customerProfilesTable.emailHash, clientId), isNull(creativeProjectsTable.deletedAt)))
     .orderBy(desc(creativeProjectsTable.createdAt))
     .limit(10);
 
@@ -394,7 +408,9 @@ export async function getCreativeMemory(clientId: string): Promise<CreativeMemor
       createdAt: creativeProjectsTable.createdAt,
     })
       .from(creativeProjectsTable)
-      .where(sql`${creativeProjectsTable.clientId} = ${clientId} OR ${creativeProjectsTable.emailHash} = ${clientId}`)
+      .innerJoin(aiServiceRequestsTable, eq(creativeProjectsTable.serviceRequestId, aiServiceRequestsTable.id))
+      .innerJoin(customerProfilesTable, eq(customerProfilesTable.clientEmail, aiServiceRequestsTable.customerEmail))
+      .where(and(eq(customerProfilesTable.emailHash, clientId), isNull(creativeProjectsTable.deletedAt)))
       .orderBy(desc(creativeProjectsTable.createdAt))
       .limit(20),
   ]);

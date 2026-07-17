@@ -18,9 +18,32 @@ export async function listCoupons(): Promise<AiCoupon[]> {
   return db.select().from(aiCouponsTable).orderBy(sql`created_at desc`);
 }
 
+export class DuplicateCouponError extends Error {
+  constructor(code: string) {
+    super(`Coupon code '${code}' already exists`);
+    this.name = "DuplicateCouponError";
+  }
+}
+
+/** Drizzle may wrap the pg error in a "Failed query" wrapper; walk the cause chain. */
+function isUniqueViolation(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  if ("code" in err && (err as { code?: string }).code === "23505") return true;
+  if ("cause" in err) return isUniqueViolation((err as { cause?: unknown }).cause);
+  return false;
+}
+
 export async function createCoupon(data: InsertAiCoupon): Promise<AiCoupon> {
-  const [row] = await db.insert(aiCouponsTable).values(data).returning();
-  return row;
+  try {
+    const [row] = await db.insert(aiCouponsTable).values(data).returning();
+    return row;
+  } catch (err: unknown) {
+    // Postgres unique_violation (23505) → domain error; route maps to 409
+    if (isUniqueViolation(err)) {
+      throw new DuplicateCouponError(data.code);
+    }
+    throw err;
+  }
 }
 
 export async function updateCoupon(

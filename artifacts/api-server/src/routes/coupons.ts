@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { listCoupons, createCoupon, updateCoupon, validateCoupon, redeemCoupon } from "../services/couponService";
+import { listCoupons, createCoupon, updateCoupon, validateCoupon, redeemCoupon, DuplicateCouponError } from "../services/couponService";
 
 const router = Router();
 
@@ -23,20 +23,27 @@ router.post("/ai/coupons", async (req, res): Promise<void> => {
     return;
   }
 
-  const coupon = await createCoupon({
-    code: code.toUpperCase().trim(),
-    type,
-    value: parseInt(String(value), 10),
-    minimumOrder: minimumOrder ? parseInt(String(minimumOrder), 10) : undefined,
-    maximumDiscount: maximumDiscount ? parseInt(String(maximumDiscount), 10) : undefined,
-    startDate: startDate ? new Date(startDate) : undefined,
-    endDate: endDate ? new Date(endDate) : undefined,
-    usageLimit: usageLimit ? parseInt(String(usageLimit), 10) : undefined,
-    usagePerCustomer: usagePerCustomer ? parseInt(String(usagePerCustomer), 10) : 1,
-    status: "active",
-  });
-
-  res.status(201).json(coupon);
+  try {
+    const coupon = await createCoupon({
+      code: code.toUpperCase().trim(),
+      type,
+      value: parseInt(String(value), 10),
+      minimumOrder: minimumOrder ? parseInt(String(minimumOrder), 10) : undefined,
+      maximumDiscount: maximumDiscount ? parseInt(String(maximumDiscount), 10) : undefined,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      usageLimit: usageLimit ? parseInt(String(usageLimit), 10) : undefined,
+      usagePerCustomer: usagePerCustomer ? parseInt(String(usagePerCustomer), 10) : 1,
+      status: "active",
+    });
+    res.status(201).json(coupon);
+  } catch (err) {
+    if (err instanceof DuplicateCouponError) {
+      res.status(409).json({ error: "conflict", message: err.message });
+      return;
+    }
+    throw err;
+  }
 });
 
 // PATCH /ai/coupons/:id

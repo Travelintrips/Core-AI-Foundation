@@ -1,0 +1,316 @@
+Anda adalah FINAL UAT REMEDIATION TEAM.
+
+Branch kerja:
+
+integration/creative-enterprise
+
+Status saat ini:
+
+UAT = BLOCKED
+
+JANGAN merge ke main.
+
+JANGAN membuat fitur baru di luar temuan UAT.
+
+JANGAN refactor besar.
+
+Fokus hanya pada blocker, bug minor, seed execution, dan klarifikasi scope.
+
+====================================================
+PRIORITAS 1 — CRITICAL
+BRAND INTELLIGENCE ANALYZE 500
+====================================================
+
+Lokasi utama:
+
+artifacts/api-server/src/services/creativeBrandIntelligenceService.ts
+
+Finding:
+
+Sekitar baris 227, service menggunakan:
+
+creativeProjectsTable.clientId
+creativeProjectsTable.emailHash
+
+Kedua referensi tersebut tidak ada di schema creative_projects.
+
+Akibatnya Drizzle menghasilkan SQL malformed:
+
+WHERE = $1 OR = $2
+
+Dampak:
+
+Seluruh pipeline Brand Intelligence analyze gagal 500.
+
+Tugas:
+
+1. Periksa schema canonical creative_projects yang sebenarnya.
+2. Tentukan field ownership/customer identity yang valid.
+3. Jangan menambah kolom palsu hanya untuk membuat query lolos.
+4. Gunakan resolver atau relasi canonical yang sudah dipakai Customer Workspace / Creative Workflow.
+5. Pastikan identity tidak diambil dari request body secara tidak aman.
+6. Pastikan tenant/client isolation tetap fail-closed.
+7. Perbaiki query agar:
+   - menggunakan kolom nyata,
+   - parameterized,
+   - tidak menghasilkan broad fallback,
+   - tidak membuka akses lintas customer.
+8. Tambahkan regression tests:
+   - analyze berhasil untuk project milik customer,
+   - customer A tidak bisa analyze project customer B,
+   - project tidak ditemukan menghasilkan 404/appropriate domain error,
+   - tidak ada SQL malformed,
+   - missing identity fail-closed,
+   - analyze tidak lagi 500.
+
+Target:
+
+Brand Intelligence analyze end-to-end PASS.
+
+====================================================
+PRIORITAS 2 — CRITICAL
+PRESENTATION DOCUMENT SEED BELUM MASUK DATABASE
+====================================================
+
+Finding:
+
+Kategori presentation-document dan 8 service pd-* sudah ada di seedCatalog.ts,
+tetapi belum ada di live/test database UAT.
+
+Service wajib tersedia:
+
+- pd-pitch-deck
+- pd-business-proposal
+- pd-company-profile-doc
+- pd-annual-report
+- pd-executive-summary
+- pd-product-catalog
+- pd-meeting-deck
+- pd-training-material
+
+Tugas:
+
+1. Periksa mekanisme seed canonical.
+2. Jalankan seed melalui mekanisme resmi proyek.
+3. Jangan insert manual langsung ke database kecuali memang script resmi menggunakan upsert.
+4. Pastikan seed idempotent.
+5. Pastikan creative services tidak berpindah kategori.
+6. Pastikan tidak ada duplicate serviceCode.
+7. Verifikasi:
+   - kategori presentation-document ada,
+   - displayOrder benar,
+   - seluruh 8 service aktif dan dapat dipilih customer,
+   - seluruh Graphic Design service tetap berada pada kategori yang benar.
+8. Tambahkan verification test atau seed contract test:
+   - 8 pd-* ada,
+   - serviceCode unik,
+   - rerun seed tidak menggandakan row,
+   - category assignment tidak korup.
+
+Target:
+
+Presentation Document tersedia di UI dan API UAT.
+
+====================================================
+PRIORITAS 3 — MINOR
+DUPLICATE COUPON 500
+====================================================
+
+Lokasi:
+
+routes/coupons.ts atau service terkait.
+
+Finding:
+
+Duplicate coupon menghasilkan raw database error dan HTML 500.
+
+Expected:
+
+409 Conflict dengan response JSON terkontrol.
+
+Tugas:
+
+1. Tangkap unique constraint violation secara spesifik.
+2. Jangan menangkap semua error menjadi 409.
+3. Return:
+   - HTTP 409
+   - JSON domain error yang konsisten
+   - tanpa raw SQL
+   - tanpa stack trace
+   - tanpa HTML error page
+4. Pertahankan idempotency behavior jika memang endpoint mendukung idempotent replay.
+5. Tambahkan tests:
+   - duplicate coupon → 409 JSON,
+   - error DB lain tetap 500/domain error yang sesuai,
+   - tidak ada raw DB detail bocor.
+
+====================================================
+SCOPE REVIEW — JANGAN LANGSUNG IMPLEMENTASI
+====================================================
+
+Buat keputusan tertulis untuk tiga area berikut.
+
+A. Component Library, Pattern Library, Typography & Palette
+
+UAT menemukan tidak ada standalone REST endpoint dan fitur hanya dipakai dalam Design AI pipeline.
+
+Periksa manifest, acceptance criteria, dan arsitektur.
+
+Klasifikasikan salah satu:
+
+- BY_DESIGN_INTERNAL_PIPELINE
+- MISSING_PUBLIC_API
+- MISSING_ADMIN_UI
+
+Jangan membuat endpoint baru sebelum keputusan scope terdokumentasi.
+
+B. Vendor Ecosystem
+
+UAT menemukan route yang tampil lebih menyerupai Digital Workforce dan tidak ada vendor entity yang jelas.
+
+Periksa:
+
+- route mounts,
+- menu/navigation,
+- manifest Team 22,
+- schema extension,
+- naming dan domain boundary.
+
+Klasifikasikan:
+
+- CORRECT_VENDOR_SCOPE
+- WRONG_ROUTE_MAPPING
+- INCOMPLETE_INTEGRATION
+
+Jika mapping salah, perbaiki wiring saja. Jangan menciptakan Vendor Master kedua.
+
+C. Product Design
+
+UAT menemukan:
+
+- tidak ada catalog entry,
+- tidak ada routes,
+- modul tidak tersedia.
+
+Periksa manifest Team 20 dan keputusan architecture review sebelumnya.
+
+Klasifikasikan:
+
+- DEFERRED_BY_DESIGN
+- ARCHITECTURE_ONLY_NOT_USER_FACING
+- MISSING_INTEGRATION
+- INCOMPLETE_IMPLEMENTATION
+
+Jika memang deferred, jangan memaksakan implementasi sekarang.
+Dokumentasikan bahwa modul tidak termasuk release scope.
+
+Jika seharusnya user-facing, tandai BLOCKED dan laporkan wiring/implementation yang kurang.
+
+====================================================
+VERIFIKASI SETELAH FIX
+====================================================
+
+Jalankan targeted tests terlebih dahulu:
+
+- Brand Intelligence
+- Customer isolation / IDOR
+- seedCatalog contract
+- Presentation Document API/UI
+- Coupon duplicate handling
+
+Kemudian jalankan:
+
+- API server full tests
+- frontend relevant tests
+- build
+- typecheck
+- smoke test
+
+Smoke test minimal:
+
+1. Buat project Brand Intelligence.
+2. Jalankan analyze.
+3. Pastikan hasil tersimpan.
+4. Login customer lain dan pastikan tidak dapat mengakses.
+5. Pastikan kategori Presentation Document muncul.
+6. Pilih masing-masing service pd-* minimal melalui API/catalog check.
+7. Buat duplicate coupon dan pastikan response 409 JSON.
+8. Pastikan Graphic Design category tidak berubah.
+
+====================================================
+ATURAN TEST
+====================================================
+
+Jangan mengubah test hanya agar lulus jika behavior production masih salah.
+
+Jangan menghapus security test.
+
+Jangan mengganti real path dengan mock-only path.
+
+Regression test harus menyentuh production service/route yang diperbaiki.
+
+====================================================
+OUTPUT WAJIB
+====================================================
+
+Laporkan:
+
+1. Brand Intelligence
+- root cause
+- schema canonical yang digunakan
+- file berubah
+- tests
+- hasil analyze
+- isolation verification
+
+2. Presentation Document Seed
+- cara seed dijalankan
+- jumlah kategori
+- jumlah service
+- 8 pd-* verification
+- idempotency
+- duplicate check
+- category integrity
+
+3. Coupon
+- error mapping
+- response status/body
+- tests
+
+4. Scope Decisions
+- Component Library
+- Pattern Library
+- Typography & Palette
+- Vendor Ecosystem
+- Product Design
+
+Untuk masing-masing:
+- decision
+- evidence
+- release implication
+
+5. Final test/build results
+
+6. Commit hash dan push status
+
+====================================================
+FINAL VERDICT
+====================================================
+
+Gunakan hanya:
+
+READY_FOR_UAT_RETEST
+
+atau
+
+BLOCKED
+
+READY_FOR_UAT_RETEST hanya boleh diberikan jika:
+
+- Brand Intelligence analyze tidak lagi 500,
+- customer isolation tetap aman,
+- 8 Presentation Document services tersedia di database,
+- seed idempotent,
+- duplicate coupon menghasilkan 409 JSON,
+- scope modules sudah diputuskan dan terdokumentasi,
+- tidak ada regression baru.
