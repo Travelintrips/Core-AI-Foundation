@@ -1,6 +1,10 @@
 // ============================================================
 // TEAM 12 — Layout Composer Routes
 // Mount point: /ai/layout-composer  (Team 24 wires this)
+//
+// Auth: covered globally by adminAuthWithExceptions in app.ts.
+//       All /api/* routes require ADMIN_API_KEY — no per-route
+//       middleware needed per the canonical admin-auth pattern.
 // ============================================================
 
 import { Router, type Request, type Response } from "express";
@@ -14,6 +18,13 @@ import type {
   LayoutRequest,
   ValidateRequest,
 } from "../../types/layout-composer/index.js";
+
+// ── Resource caps (P0 — DoS prevention) ──────────────────────
+const MAX_ELEMENTS = 500;
+const MAX_CONSTRAINTS = 200;
+const MAX_ZONES = 100;
+const MAX_CANVAS_DIM = 10_000;   // px
+const MAX_ITERATIONS_ALLOWED = 100;
 
 const router = Router();
 
@@ -48,12 +59,28 @@ router.post(
       res.status(400).json({ error: "canvas.height must be a positive number" });
       return;
     }
+    if (body.canvas.width > MAX_CANVAS_DIM || body.canvas.height > MAX_CANVAS_DIM) {
+      res.status(400).json({ error: `canvas dimensions must not exceed ${MAX_CANVAS_DIM}px` });
+      return;
+    }
     if (!Array.isArray(body.elements)) {
       res.status(400).json({ error: "elements must be an array" });
       return;
     }
     if (!Array.isArray(body.constraints)) {
       res.status(400).json({ error: "constraints must be an array" });
+      return;
+    }
+    if (body.elements.length > MAX_ELEMENTS) {
+      res.status(400).json({ error: `elements must not exceed ${MAX_ELEMENTS} items` });
+      return;
+    }
+    if (body.constraints.length > MAX_CONSTRAINTS) {
+      res.status(400).json({ error: `constraints must not exceed ${MAX_CONSTRAINTS} items` });
+      return;
+    }
+    if (body.zones && body.zones.length > MAX_ZONES) {
+      res.status(400).json({ error: `zones must not exceed ${MAX_ZONES} items` });
       return;
     }
 
@@ -71,7 +98,9 @@ router.post(
       elements: body.elements,
       constraints: body.constraints,
       zones: body.zones,
-      maxIterations: typeof body.maxIterations === "number" ? Math.min(body.maxIterations, 200) : undefined,
+      maxIterations: typeof body.maxIterations === "number"
+        ? Math.min(body.maxIterations, MAX_ITERATIONS_ALLOWED)
+        : undefined,
       includeResponsive: body.includeResponsive ?? false,
     };
 
@@ -91,6 +120,26 @@ router.post(
       res.status(400).json({
         error: "Missing required fields: canvas, elements, constraints",
       });
+      return;
+    }
+    if (!Array.isArray(body.elements)) {
+      res.status(400).json({ error: "elements must be an array" });
+      return;
+    }
+    if (!Array.isArray(body.constraints)) {
+      res.status(400).json({ error: "constraints must be an array" });
+      return;
+    }
+    if (body.elements.length > MAX_ELEMENTS) {
+      res.status(400).json({ error: `elements must not exceed ${MAX_ELEMENTS} items` });
+      return;
+    }
+    if (body.constraints.length > MAX_CONSTRAINTS) {
+      res.status(400).json({ error: `constraints must not exceed ${MAX_CONSTRAINTS} items` });
+      return;
+    }
+    if (body.zones && body.zones.length > MAX_ZONES) {
+      res.status(400).json({ error: `zones must not exceed ${MAX_ZONES} items` });
       return;
     }
 
@@ -118,13 +167,35 @@ router.post(
       });
       return;
     }
+    if (!Array.isArray(body.elements)) {
+      res.status(400).json({ error: "elements must be an array" });
+      return;
+    }
+    if (!Array.isArray(body.constraints)) {
+      res.status(400).json({ error: "constraints must be an array" });
+      return;
+    }
+    if (body.elements.length > MAX_ELEMENTS) {
+      res.status(400).json({ error: `elements must not exceed ${MAX_ELEMENTS} items` });
+      return;
+    }
+    if (body.constraints.length > MAX_CONSTRAINTS) {
+      res.status(400).json({ error: `constraints must not exceed ${MAX_CONSTRAINTS} items` });
+      return;
+    }
+    if (body.zones && body.zones.length > MAX_ZONES) {
+      res.status(400).json({ error: `zones must not exceed ${MAX_ZONES} items` });
+      return;
+    }
 
     const plan = await generateOperationPlan({
       canvas: body.canvas,
       elements: body.elements,
       constraints: body.constraints,
       zones: body.zones,
-      maxIterations: typeof body.maxIterations === "number" ? Math.min(body.maxIterations, 200) : undefined,
+      maxIterations: typeof body.maxIterations === "number"
+        ? Math.min(body.maxIterations, MAX_ITERATIONS_ALLOWED)
+        : undefined,
     });
 
     res.status(200).json(plan);

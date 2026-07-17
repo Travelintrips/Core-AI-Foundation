@@ -661,6 +661,10 @@ function checkViolations(
 
 // ── Main solver ───────────────────────────────────────────────
 
+// Default wall-clock budget: 5 seconds.
+// Prevents unbounded compute for adversarial or deeply-conflicting inputs.
+const SOLVER_DEADLINE_MS = 5_000;
+
 export interface SolverInput {
   id?: string;
   canvas: LayoutCanvas;
@@ -668,10 +672,17 @@ export interface SolverInput {
   constraints: Constraint[];
   zones?: LayoutZone[];
   maxIterations?: number;
+  /** Wall-clock budget in ms. Solver aborts early if exceeded. Default 5 000. */
+  deadlineMs?: number;
 }
 
 export function solve(input: SolverInput): LayoutPlan {
-  const { canvas, zones = [], maxIterations = MAX_ITERATIONS } = input;
+  const {
+    canvas,
+    zones = [],
+    maxIterations = MAX_ITERATIONS,
+    deadlineMs = SOLVER_DEADLINE_MS,
+  } = input;
 
   // Sort constraints: hard → soft → hint, then by order within tier
   const sorted = [...input.constraints].sort((a, b) => {
@@ -685,8 +696,17 @@ export function solve(input: SolverInput): LayoutPlan {
   const allOps: LayoutOperation[] = [];
   let iterations = 0;
   let converged = false;
+  let timedOut = false;
+
+  const deadline = Date.now() + deadlineMs;
 
   for (let iter = 1; iter <= maxIterations; iter++) {
+    // P0 resource cap: abort if wall-clock budget exceeded
+    if (Date.now() > deadline) {
+      timedOut = true;
+      break;
+    }
+
     iterations = iter;
     let anyChange = false;
 

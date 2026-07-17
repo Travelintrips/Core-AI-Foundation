@@ -27,10 +27,25 @@
   "workerJobTypesRequested": [],
   "sharedTypesRequested": [],
   "integrationOrder": [],
+  "authDependency": {
+    "mechanism": "adminAuthWithExceptions",
+    "mountedBy": "app.ts via app.use('/api', adminAuthWithExceptions, router)",
+    "note": "All /api/* routes (including /ai/layout-composer/*) are protected by the global admin-key middleware. Team 12 router does NOT add per-route auth middleware — this is the canonical pattern per admin-auth-canonical-pattern memory entry.",
+    "publicExceptions": []
+  },
+  "resourceCaps": {
+    "MAX_ELEMENTS": 500,
+    "MAX_CONSTRAINTS": 200,
+    "MAX_ZONES": 100,
+    "MAX_CANVAS_DIM_PX": 10000,
+    "MAX_ITERATIONS": 100,
+    "SOLVER_DEADLINE_MS": 5000
+  },
   "knownRisks": [
     "Routes are pure in-memory compute (no DB) — no migration required to enable the API.",
     "Optional persistence table ai_layout_plans is additive-only (see migration draft) and can be added independently.",
     "No shared event bus usage — fully self-contained.",
-    "Response payload can be large for complex layouts with many operations and responsive variants; consumers should paginate or filter fields as needed."
+    "Response payload can be large for complex layouts with many operations and responsive variants; consumers should paginate or filter fields as needed.",
+    "includeResponsive=true triggers up to 4 additional solver runs (one per non-current breakpoint); each is bounded by the same MAX_ITERATIONS and SOLVER_DEADLINE_MS caps."
   ]
 }
