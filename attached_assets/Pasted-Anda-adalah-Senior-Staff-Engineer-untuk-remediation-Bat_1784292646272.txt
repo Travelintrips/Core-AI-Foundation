@@ -1,0 +1,227 @@
+Anda adalah Senior Staff Engineer untuk remediation Batch A Creative Enterprise.
+
+Repository ini memiliki beberapa branch terpisah. Anda harus mengerjakan branch satu per satu dan tidak boleh mencampurkan perubahan antarbranch.
+
+BRANCH YANG DITANGANI:
+
+1. feature/01-creative-workflow
+2. feature/02-customer-workspace
+3. feature/03-commercial-automation
+4. feature/04-portfolio-showcase
+5. feature/05-brand-intelligence
+6. feature/09-pattern-library
+7. feature/12-layout-composer
+8. feature/13-dynamic-composer
+
+TUJUAN:
+
+Menyelesaikan finding audit yang tersisa agar branch siap diaudit ulang dan diintegrasikan.
+
+ATURAN KERJA WAJIB:
+
+Untuk setiap branch:
+
+1. Jalankan:
+   git fetch origin --prune
+   git switch <nama-branch>
+   git pull --ff-only origin <nama-branch>
+   git branch --show-current
+   git status
+
+2. Pastikan working tree bersih sebelum bekerja.
+
+3. Baca implementation dan test existing.
+
+4. Perbaiki hanya finding audit. Jangan menambah fitur baru.
+
+5. Jalankan test dan typecheck yang relevan.
+
+6. Commit dan push ke branch yang sedang aktif.
+
+7. Pastikan:
+   git status
+   menunjukkan working tree clean.
+
+8. Baru setelah itu pindah ke branch berikutnya.
+
+JANGAN membuat branch batch baru.
+JANGAN mencampur perubahan beberapa team dalam satu commit.
+JANGAN merge ke main atau integration branch.
+
+LOCKED FILES:
+
+Feature branch dilarang mengubah:
+
+- artifacts/api-server/src/routes/index.ts
+- App.tsx utama
+- shared layout/sidebar/navigation
+- root package.json
+- pnpm-lock.yaml
+- lib/db/src/schema/index.ts
+- shared schema barrel
+- shared adminAuth.ts
+- seedCatalog.ts
+- seedTemplates.ts
+- worker registry
+- workflow registry
+- migration registry
+- generated API client
+
+Jika branch memiliki perubahan terhadap locked file:
+
+- revert hanya perubahan milik branch
+- jangan menimpa perubahan dari main
+- catat kebutuhan wiring di integration manifest
+
+==================================================
+TEAM 01 — CREATIVE WORKFLOW
+==================================================
+
+Periksa dan selesaikan:
+
+- explicit authentication untuk seluruh admin routes
+- public execution progress harus IDOR-safe
+- token Customer A tidak boleh membaca plan Customer B
+- operationId OpenAPI harus unik dan memakai prefix cwfV2
+- migration ordering harus jelas dan additive
+- negative authentication dan ownership tests
+
+==================================================
+TEAM 02 — CUSTOMER WORKSPACE
+==================================================
+
+Pertahankan validateWorkspaceAccess sebagai canonical ownership guard.
+
+Selesaikan:
+
+- pagination untuk deliverables, revisions, notifications, history, downloads
+- maximum limit
+- stable ordering
+- invalid cursor handling
+- negative cross-customer tests
+- pastikan tidak ada perubahan App.tsx atau routes/index.ts
+
+==================================================
+TEAM 03 — COMMERCIAL AUTOMATION
+==================================================
+
+Selesaikan:
+
+- tenant-scoped attribution dan funnel data
+- platform scope hanya untuk authorized platform admin
+- gunakan approval gate existing, jangan state machine kedua
+- idempotency recovery action dan coupon issuance
+- pagination untuk events dan recommendations
+- duplicate approval/coupon tests
+
+==================================================
+TEAM 04 — PORTFOLIO SHOWCASE
+==================================================
+
+Audit menunjukkan zero unique diff terhadap main.
+
+Jangan langsung menulis kode.
+
+Lakukan:
+
+- bandingkan branch dengan origin/main
+- cari apakah implementation sudah berada di main
+- periksa commit history
+- periksa working tree lokal
+- verifikasi service, routes, UI, migration, test, dan behavior
+
+Klasifikasikan sebagai salah satu:
+
+- ALREADY_INTEGRATED
+- NO_UNIQUE_IMPLEMENTATION
+- UNCOMMITTED_WORK_FOUND
+- BRANCH_RESET_OR_LOST
+- REQUIRES_REMEDIATION
+
+Jika ALREADY_INTEGRATED, jangan membuat commit kosong.
+
+==================================================
+TEAM 05 — BRAND INTELLIGENCE
+==================================================
+
+Audit sebelumnya PASS.
+
+Jangan refactor besar.
+
+Lakukan hanya:
+
+- jalankan regression tests
+- pastikan Client A tidak bisa membaca resource Client B
+- pastikan public identity berasal dari session
+- verifikasi tidak ada locked-file violation
+- update manifest bila dibutuhkan
+
+Jika tidak ada perubahan diperlukan, jangan membuat commit kosong.
+
+==================================================
+TEAM 09 — PATTERN LIBRARY
+==================================================
+
+Selesaikan:
+
+- gunakan template service existing untuk fungsi generik
+- Pattern Library hanya menangani motif, texture, repeat, licensing, compatibility
+- jangan menjadi template engine kedua
+- public endpoint hanya mengembalikan published, approved, license-safe pattern
+- pagination dan maximum limit
+- visibility dan licensing tests
+
+==================================================
+TEAM 12 — LAYOUT COMPOSER
+==================================================
+
+Tambahkan:
+
+- maximum elements
+- maximum constraints
+- maximum iterations
+- maximum nesting depth
+- solver timeout
+- deadline check atau cancellation
+- prevalidation sebelum solver
+- tidak boleh menyimpan partial output setelah timeout
+
+Tambahkan test untuk expensive/impossible layout.
+
+==================================================
+TEAM 13 — DYNAMIC COMPOSER
+==================================================
+
+Tambahkan terminal-state guard:
+
+- completed tidak diproses ulang
+- cancelled tidak diproses
+- failed hanya melalui explicit retry
+- processing tidak boleh diklaim dua worker
+- duplicate idempotency key tidak membuat job baru
+
+State transition harus atomic menggunakan transaction, conditional update,
+optimistic lock, atau compare-and-set.
+
+==================================================
+OUTPUT AKHIR
+==================================================
+
+Berikan laporan per branch:
+
+- Branch
+- Commit sebelum perubahan
+- Finding yang diperbaiki
+- File yang diubah
+- Locked-file status
+- Hasil test
+- Hasil typecheck
+- Commit hash baru
+- Push status
+- Status:
+  READY_FOR_REAUDIT
+  NO_CHANGE_REQUIRED
+  atau NOT_READY
+
+Jangan lanjut diam-diam jika ada branch gagal.
+Catat kegagalannya dan lanjutkan branch berikutnya hanya jika working tree tetap bersih.
