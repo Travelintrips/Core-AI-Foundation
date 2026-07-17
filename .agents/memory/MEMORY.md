@@ -75,3 +75,4 @@
 - [phase5-visual-template-editor](phase5-visual-template-editor.md) — Phase 5 visual editor complete: react-konva canvas, 38 tests pass, adapter z-index normalization rule, pnpm build requires PORT env (use typecheck instead)
 - [phase3a-batch-orchestration](phase3a-batch-orchestration.md) — Phase 3A lifecycle machine, dispatcher idempotency/tenant-cap, reconcile rules, stale recovery, Team 2 snapshot contract
 - [phase4-library-integration](phase4-library-integration.md) — Phase 4 cherry-pick rules: lib/db tsc -b required, createVersion() obj-arg, PreviewResult has no renderDurationMs, "jpeg" not in RenderFormat
+- [team14-remediation](team14-remediation.md) — P0/P1/P2 fixes: SSRF bracketed-IPv6 gap, resource limits file, idempotency cache, thumbnail deduplication, render timeout; 1254 tests passing
