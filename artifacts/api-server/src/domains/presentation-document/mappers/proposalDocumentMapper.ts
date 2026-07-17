@@ -16,6 +16,8 @@ import { db, aiServiceRequestsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import type { CreativeDocumentSpec, CreativeDocumentSection } from "../../../services/creativeDocumentService.js";
 import type { DocumentDefinition } from "../../../services/creativeDocumentWorkerService.js";
+// CreativeDocumentType will include "proposal" once the integration team applies schemaExportsRequested
+import type { CreativeDocumentType } from "../../../services/creativeProjectDocumentType.js";
 import { extractBrandDnaTheme } from "../brandDnaAdapter.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -252,7 +254,7 @@ export function buildProposalSpec(
 // ── DocumentDefinition export ─────────────────────────────────────────────────
 
 export const proposalDefinition: DocumentDefinition = {
-  documentType:     "proposal",
+  documentType:     "proposal" as unknown as CreativeDocumentType,
   filenamePrefix:   "proposal",
   minimumPageCount: 4,
   requiresLogo:     false,

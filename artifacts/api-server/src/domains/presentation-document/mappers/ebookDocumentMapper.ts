@@ -14,6 +14,8 @@
 import type { CreativeProject } from "@workspace/db";
 import type { CreativeDocumentSpec, CreativeDocumentSection } from "../../../services/creativeDocumentService.js";
 import type { DocumentDefinition } from "../../../services/creativeDocumentWorkerService.js";
+// CreativeDocumentType will include "ebook" once the integration team applies schemaExportsRequested
+import type { CreativeDocumentType } from "../../../services/creativeProjectDocumentType.js";
 import { extractBrandDnaTheme } from "../brandDnaAdapter.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -251,7 +253,7 @@ export function buildEbookSpec(
 // ── DocumentDefinition export ─────────────────────────────────────────────────
 
 export const ebookDefinition: DocumentDefinition = {
-  documentType:     "ebook",
+  documentType:     "ebook" as unknown as CreativeDocumentType,
   filenamePrefix:   "ebook",
   minimumPageCount: 8,
   requiresLogo:     false,

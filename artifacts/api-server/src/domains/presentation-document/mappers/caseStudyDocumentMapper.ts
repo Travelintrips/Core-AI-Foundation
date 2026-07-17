@@ -16,6 +16,8 @@ import { db, aiServiceRequestsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import type { CreativeDocumentSpec, CreativeDocumentSection } from "../../../services/creativeDocumentService.js";
 import type { DocumentDefinition } from "../../../services/creativeDocumentWorkerService.js";
+// CreativeDocumentType will include "case_study" once the integration team applies schemaExportsRequested
+import type { CreativeDocumentType } from "../../../services/creativeProjectDocumentType.js";
 import { extractBrandDnaTheme } from "../brandDnaAdapter.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -244,7 +246,7 @@ export function buildCaseStudySpec(
 // ── DocumentDefinition export ─────────────────────────────────────────────────
 
 export const caseStudyDefinition: DocumentDefinition = {
-  documentType:     "case_study",
+  documentType:     "case_study" as unknown as CreativeDocumentType,
   filenamePrefix:   "case-study",
   minimumPageCount: 2,
   requiresLogo:     false,

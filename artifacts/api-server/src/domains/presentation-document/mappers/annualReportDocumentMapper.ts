@@ -16,6 +16,8 @@ import { db, aiServiceRequestsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import type { CreativeDocumentSpec, CreativeDocumentSection } from "../../../services/creativeDocumentService.js";
 import type { DocumentDefinition } from "../../../services/creativeDocumentWorkerService.js";
+// CreativeDocumentType will include "annual_report" once the integration team applies schemaExportsRequested
+import type { CreativeDocumentType } from "../../../services/creativeProjectDocumentType.js";
 import { extractBrandDnaTheme } from "../brandDnaAdapter.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -239,7 +241,7 @@ export function buildAnnualReportSpec(
 // ── DocumentDefinition export ─────────────────────────────────────────────────
 
 export const annualReportDefinition: DocumentDefinition = {
-  documentType:     "annual_report",
+  documentType:     "annual_report" as unknown as CreativeDocumentType,
   filenamePrefix:   "annual-report",
   minimumPageCount: 8,
   requiresLogo:     false,

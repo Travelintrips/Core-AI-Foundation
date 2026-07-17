@@ -2,42 +2,74 @@
   "team": "16",
   "domain": "presentation-document",
   "branch": "feature/16-presentation-document",
-  "version": "1.0.0",
-  "description": "Presentation and Document Creative Services — PDF and PPTX generation for proposal, product catalog, annual report, whitepaper, case study, and ebook service types.",
+  "version": "1.1.0",
+  "description": "Presentation and Document Creative Services — PDF generation for proposal, product catalog, annual report, whitepaper, case study, and ebook service types.",
   "ownership": {
     "backend": [
       "artifacts/api-server/src/domains/presentation-document/"
-    ],
-    "customerPortal": [
-      "artifacts/customer-portal/src/pages/presentation-document/"
-    ],
-    "adminPlatform": [
-      "artifacts/ai-platform/src/pages/presentation-document/"
     ],
     "integration": [
       "integration/openapi/team-16.yaml",
       "integration/manifests/team-16.json"
     ]
   },
+
+  "routesToMount": [],
+
+  "pagesToRegister": [],
+
+  "schemaExportsRequested": [
+    {
+      "targetFile": "artifacts/api-server/src/services/creativeProjectDocumentType.ts",
+      "action": "extend_union",
+      "field": "CreativeDocumentType",
+      "addValues": [
+        "proposal",
+        "product_catalog",
+        "annual_report",
+        "whitepaper",
+        "case_study",
+        "ebook"
+      ],
+      "note": "Add 6 new document type literals to the shared CreativeDocumentType union."
+    },
+    {
+      "targetFile": "artifacts/api-server/src/services/creativeProjectDocumentType.ts",
+      "action": "extend_record",
+      "field": "SERVICE_CODE_TO_DOCUMENT_TYPE",
+      "addEntries": {
+        "proposal":       "proposal",
+        "product-catalog":"product_catalog",
+        "annual-report":  "annual_report",
+        "whitepaper":     "whitepaper",
+        "case-study":     "case_study",
+        "ebook":          "ebook"
+      },
+      "note": "Map the 6 new service codes to their document types in the shared routing record."
+    }
+  ],
+
+  "dependencyRequests": [
+    {
+      "targetFile": "artifacts/api-server/src/services/creativeDocumentRegistry.ts",
+      "action": "add_import_and_call",
+      "import": "import { initPresentationDocumentDomain } from '../domains/presentation-document/index.js';",
+      "callSite": "inside initDocumentRegistry() — append after the last existing registerDocument() call",
+      "callStatement": "initPresentationDocumentDomain();",
+      "note": "Registers all 6 Team 16 document definitions into the generic Document Engine at startup. Safe to call multiple times (idempotent)."
+    }
+  ],
+
+  "integrationNotes": [
+    "All 6 document types use the existing generic Document Engine (creativeDocumentWorkerService). No new engine or parallel runner is introduced.",
+    "briefJson must be fetched from ai_service_requests via project.serviceRequestId inside each mapper's generateContent — it is NOT a column on creative_projects.",
+    "The domain self-registers via initPresentationDocumentDomain() which calls registerDocument() for each type. This function MUST be called from initDocumentRegistry() to activate routing.",
+    "schemaExportsRequested above must be applied to creativeProjectDocumentType.ts (locked file) by the integration team before merging this branch.",
+    "seedCatalog.ts already includes the 6 new service entries (proposal, product-catalog, annual-report, whitepaper, case-study, ebook) — no further seed changes needed.",
+    "No new DB tables, no migrations, no changes to lib/db/src/schema/."
+  ],
+
   "serviceTypes": [
-    {
-      "serviceType": "company_profile",
-      "serviceCode": "company-profile",
-      "status": "existing_stable",
-      "renderEngine": "document",
-      "deliveryFormat": "pdf",
-      "minimumPageCount": 10,
-      "note": "Existing stable implementation — not modified by Team 16"
-    },
-    {
-      "serviceType": "pitch_deck",
-      "serviceCode": "pitch-deck",
-      "status": "existing_stable",
-      "renderEngine": "presentation",
-      "deliveryFormat": "pptx",
-      "minimumSlideCount": 7,
-      "note": "Existing stable implementation — not modified by Team 16"
-    },
     {
       "serviceType": "proposal",
       "serviceCode": "proposal",
@@ -105,23 +137,21 @@
       "mapper": "artifacts/api-server/src/domains/presentation-document/mappers/ebookDocumentMapper.ts"
     }
   ],
+
   "domainInfrastructure": {
-    "domainIndex":             "artifacts/api-server/src/domains/presentation-document/index.ts",
-    "types":                   "artifacts/api-server/src/domains/presentation-document/types.ts",
-    "sectionMapping":          "artifacts/api-server/src/domains/presentation-document/sectionMapping.ts",
-    "packageRules":            "artifacts/api-server/src/domains/presentation-document/packageRules.ts",
-    "qcProfile":               "artifacts/api-server/src/domains/presentation-document/qcProfile.ts",
-    "templateCompatibility":   "artifacts/api-server/src/domains/presentation-document/templateCompatibility.ts",
-    "brandDnaAdapter":         "artifacts/api-server/src/domains/presentation-document/brandDnaAdapter.ts",
-    "universalAdapter":        "artifacts/api-server/src/domains/presentation-document/adapters/presentationDocumentAdapter.ts"
+    "domainIndex":           "artifacts/api-server/src/domains/presentation-document/index.ts",
+    "types":                 "artifacts/api-server/src/domains/presentation-document/types.ts",
+    "sectionMapping":        "artifacts/api-server/src/domains/presentation-document/sectionMapping.ts",
+    "packageRules":          "artifacts/api-server/src/domains/presentation-document/packageRules.ts",
+    "qcProfile":             "artifacts/api-server/src/domains/presentation-document/qcProfile.ts",
+    "templateCompatibility": "artifacts/api-server/src/domains/presentation-document/templateCompatibility.ts",
+    "brandDnaAdapter":       "artifacts/api-server/src/domains/presentation-document/brandDnaAdapter.ts",
+    "universalAdapter":      "artifacts/api-server/src/domains/presentation-document/adapters/presentationDocumentAdapter.ts"
   },
-  "registrationHooks": {
-    "documentRegistry": "artifacts/api-server/src/services/creativeDocumentRegistry.ts",
-    "typeMapping":       "artifacts/api-server/src/services/creativeProjectDocumentType.ts",
-    "note":              "initPresentationDocumentDomain() is called from initDocumentRegistry() at startup"
-  },
+
   "tests": {
-    "suite":  "artifacts/api-server/src/domains/presentation-document/__tests__/presentationDocument.test.ts",
+    "suite": "artifacts/api-server/src/domains/presentation-document/__tests__/presentationDocument.test.ts",
+    "count": 68,
     "covers": [
       "domain init — all 6 types registered",
       "proposal mapper — sections, anti-fabrication, timeline skip, Brand DNA",
@@ -138,6 +168,7 @@
       "adapter routing — pdf vs pptx"
     ]
   },
+
   "antiFabricationPolicy": {
     "rule": "All content must originate from project.result (AI workflow outputs), project.briefJson (client-provided data), or direct project fields. Sections requiring data not present in any of these sources are SKIPPED — never padded with placeholders, invented figures, or lorem ipsum text.",
     "neverFabricated": [
@@ -155,5 +186,6 @@
       "testimonials_without_brief_data"
     ]
   },
+
   "openApiSpec": "integration/openapi/team-16.yaml"
 }

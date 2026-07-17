@@ -19,8 +19,6 @@ import { creativeConsultationDefinition }    from "./mappers/creativeConsultatio
 import { brandIdentityGuidelineDefinition }  from "./mappers/brandIdentityGuidelineDocumentMapper.js";
 import { fashionDesignDefinition }           from "./mappers/fashionDesignDocumentMapper.js";
 import { interiorDesignDefinition }          from "./mappers/interiorDesignDocumentMapper.js";
-// Team 16: Presentation & Document Creative Services
-import { initPresentationDocumentDomain }    from "../domains/presentation-document/index.js";
 
 /** Call once at startup to register all document type definitions. */
 export function initDocumentRegistry(): void {
@@ -31,7 +29,4 @@ export function initDocumentRegistry(): void {
   registerDocument(brandIdentityGuidelineDefinition);
   registerDocument(fashionDesignDefinition);
   registerDocument(interiorDesignDefinition);
-  // Team 16 document types: proposal, product_catalog, annual_report,
-  // whitepaper, case_study, ebook
-  initPresentationDocumentDomain();
 }

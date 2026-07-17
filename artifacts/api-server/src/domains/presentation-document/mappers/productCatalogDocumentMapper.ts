@@ -14,6 +14,8 @@
 import type { CreativeProject } from "@workspace/db";
 import type { CreativeDocumentSpec, CreativeDocumentSection } from "../../../services/creativeDocumentService.js";
 import type { DocumentDefinition } from "../../../services/creativeDocumentWorkerService.js";
+// CreativeDocumentType will include "product_catalog" once the integration team applies schemaExportsRequested
+import type { CreativeDocumentType } from "../../../services/creativeProjectDocumentType.js";
 import { extractBrandDnaTheme } from "../brandDnaAdapter.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -217,7 +219,7 @@ export function buildProductCatalogSpec(
 // ── DocumentDefinition export ─────────────────────────────────────────────────
 
 export const productCatalogDefinition: DocumentDefinition = {
-  documentType:     "product_catalog",
+  documentType:     "product_catalog" as unknown as CreativeDocumentType,
   filenamePrefix:   "product-catalog",
   minimumPageCount: 4,
   requiresLogo:     false,

@@ -26,14 +26,7 @@ export type CreativeDocumentType =
   | "creative_consultation"
   | "brand_identity_guideline"
   | "fashion_design"
-  | "interior_design"
-  // ── Team 16: Presentation & Document Creative Services ──────────────────────
-  | "proposal"
-  | "product_catalog"
-  | "annual_report"
-  | "whitepaper"
-  | "case_study"
-  | "ebook";
+  | "interior_design";
 
 /**
  * Maps a catalog `serviceCode` to the document type its PDF export worker
@@ -49,13 +42,6 @@ export const SERVICE_CODE_TO_DOCUMENT_TYPE: Readonly<Record<string, CreativeDocu
   "brand-identity":         "brand_identity_guideline",
   "fashion-design":         "fashion_design",
   "interior-design":        "interior_design",
-  // ── Team 16: Presentation & Document Creative Services ────────────────────
-  "proposal":               "proposal",
-  "product-catalog":        "product_catalog",
-  "annual-report":          "annual_report",
-  "whitepaper":             "whitepaper",
-  "case-study":             "case_study",
-  "ebook":                  "ebook",
 };
 
 /**
