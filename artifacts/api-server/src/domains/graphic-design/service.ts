@@ -1,15 +1,23 @@
 /**
  * graphic-design/service.ts — Team 15
  *
- * Domain service layer.
+ * Domain service layer — ADAPTER pattern.
  *
- * All business logic for creating, processing, and completing Graphic Design
- * orders lives here. External dependencies are injected via port interfaces
- * (ports.ts) — this keeps the core logic testable without real DB or AI calls.
+ * This module is a domain adapter, not a rendering engine. It:
+ *   1. Validates and stores graphic design briefs.
+ *   2. Maps brief parameters → canvas dimensions (from blueprints).
+ *   3. Dispatches creation via the canonical CanonicalJobAdapter
+ *      (backed by designStudioService.createDesignProject — the
+ *      existing canvas engine, not a second one).
+ *   4. Runs domain-specific QC rules on renderer output.
+ *   5. Builds deliverable manifests per service/tier/format.
  *
- * Adapter wiring:
- *   resolveAdapters() builds the concrete GraphicDesignPorts by importing
- *   the real Team 7-14 service modules. Call it once at startup (in routes.ts).
+ * There is ONE execution path: approveBriefAndDispatch → CanonicalJobAdapter.
+ * No code path may directly render or mutate status outside this adapter.
+ *
+ * Route mounting: NOT self-mounted. Routes are declared in
+ * integration/manifests/team-15.json → routesToMount and must be
+ * applied by the integration layer (Team 24).
  */
 
 import { randomUUID } from "crypto";
@@ -17,30 +25,77 @@ import { logAudit } from "../../services/aiAuditService.js";
 import { publishSafe } from "../../services/aiEventBusService.js";
 
 import type { GraphicDesignBrief, GdServiceCode, GdStatus, PackageTier, OutputFormat } from "./schema.js";
-import type { GraphicDesignPorts, GraphicDesignJobPayload, JobPriority, TemplateMatchRequest } from "./ports.js";
 import { buildDeliverableManifest, getRequiredFormats } from "./manifest.js";
-import { getBlueprint } from "./blueprints.js";
+import { getBlueprint, isPrintSpec } from "./blueprints.js";
 import { getPackagePolicy } from "./packagePolicy.js";
-import { runQc, type QcInput } from "./qc.js";
+import { runQc, type QcInput, type RenderedDeliverable } from "./qc.js";
+import {
+  sanitizeFileFormats,
+  sanitizeVariantKey,
+  sanitizeColorMode,
+} from "./sanitize.js";
+
+// ── Canonical job adapter ─────────────────────────────────────────────────────
+
+/**
+ * The ONE adapter all execution paths go through.
+ *
+ * Backed by designStudioService.createDesignProject (the existing canvas
+ * engine). Any future wiring to a batch-render queue also goes here.
+ *
+ * Tests inject a mock to avoid hitting the DB.
+ */
+export interface CanonicalJobAdapter {
+  createProject(input: {
+    name:           string;
+    description?:   string;
+    canvasWidthPx:  number;
+    canvasHeightPx: number;
+    tags?:          string[];
+  }): Promise<{ projectId: string }>;
+}
+
+/**
+ * Build the default adapter backed by designStudioService.
+ * Imported lazily so the heavy service module is not loaded in tests.
+ */
+export async function makeDefaultAdapter(): Promise<CanonicalJobAdapter> {
+  const { createDesignProject } = await import(
+    "../../services/designStudioService.js"
+  );
+  return {
+    async createProject(input) {
+      const project = await createDesignProject({
+        name:         input.name,
+        description:  input.description,
+        canvasWidth:  input.canvasWidthPx,
+        canvasHeight: input.canvasHeightPx,
+        tags:         input.tags,
+      });
+      return { projectId: String(project.id) };
+    },
+  };
+}
 
 // ── In-memory brief store (replaced by DB once migration runs) ────────────────
-// The graphic-design tables (team-15.sql) may not exist yet in all environments.
-// Until then we use a Map so routes work immediately. The service layer is
-// the ONLY place that touches this store — routes never access it directly.
+// team-15.sql creates ai_platform.gd_briefs and ai_platform.gd_qc_runs.
+// Until that migration is applied the Map keeps routes functional.
+// The service layer is the ONLY consumer of this store.
 
 interface BriefRecord {
-  id:          string;
-  serviceCode: GdServiceCode;
-  status:      GdStatus;
-  packageTier: PackageTier;
+  id:           string;
+  serviceCode:  GdServiceCode;
+  status:       GdStatus;
+  packageTier:  PackageTier;
   outputFormat: OutputFormat;
-  brief:       GraphicDesignBrief;
-  manifest:    ReturnType<typeof buildDeliverableManifest>;
-  jobs:        string[];        // job IDs dispatched
-  qcResult?:   ReturnType<typeof runQc>;
-  note?:       string;
-  createdAt:   string;
-  updatedAt:   string;
+  brief:        GraphicDesignBrief;
+  manifest:     ReturnType<typeof buildDeliverableManifest>;
+  /** Design-studio project IDs (one per concept variant). */
+  jobs:         string[];
+  qcResult?:    ReturnType<typeof runQc>;
+  note?:        string;
+  createdAt:    string;
+  updatedAt:    string;
 }
 
 const BRIEF_STORE = new Map<string, BriefRecord>();
@@ -57,136 +112,41 @@ function assertBrief(id: string): BriefRecord {
   return r;
 }
 
-/** Terminal statuses — cannot be advanced further. */
 const TERMINAL: GdStatus[] = ["completed", "cancelled"];
 
-// ── Adapters ──────────────────────────────────────────────────────────────────
-
-/**
- * Build the concrete port adapters from real Team 7-14 services.
- * Import lazily so tests can avoid loading heavy service modules.
- */
-export async function resolveAdapters(): Promise<GraphicDesignPorts> {
-  // Team 7-8: Design Renderer
-  // Wraps imageDesignerService / designStudioService
-  const renderer = {
-    async render(spec: import("./ports.js").RenderSpec): Promise<import("./ports.js").RenderResult> {
-      try {
-        // Adapter: translate RenderSpec → designStudioService.saveDesignCanvas call
-        // and trigger an export. For now we call the export endpoint internally.
-        // Real integration: import { exportDesign } from "../../services/designStudioService.js"
-        // and pass the canvas state. Stub returns a structured result.
-        return {
-          success:     true,
-          deliverable: {
-            variant:        spec.variant,
-            canvasWidthPx:  spec.canvasWidthPx,
-            canvasHeightPx: spec.canvasHeightPx,
-            resolutionDpi:  spec.resolutionDpi,
-            colorMode:      spec.colorMode === "CMYK" ? "CMYK" : "sRGB",
-            elements:       [],
-            fileFormats:    spec.formats,
-          },
-          fileUrls:    Object.fromEntries(spec.formats.map((f) => [`${spec.variant}_${f}`, `https://placeholder/${spec.serviceCode}/${f}`])),
-          durationMs:  0,
-        };
-      } catch (err) {
-        return { success: false, fileUrls: {}, error: String(err), durationMs: 0 };
-      }
-    },
-  };
-
-  // Team 9-10: Template Matcher
-  // Wraps templateAiService.generateTemplateFromPrompt
-  const matcher = {
-    async matchTemplate(req: TemplateMatchRequest): Promise<import("./ports.js").TemplateMatchResult> {
-      try {
-        // Real integration: import { generateTemplateFromPrompt } from "../../services/design-ai/templateAiService.js"
-        // Adapter maps brief summary → system prompt → ranked template matches.
-        return {
-          matches: [
-            {
-              templateId:  "builtin-default",
-              templateCode: `${req.serviceCode}-DEFAULT`,
-              score:        0.75,
-              canvasState:  { width: 1000, height: 1000, background: req.colorPalette[0] ?? "#ffffff", elements: [] },
-            },
-          ],
-          usedFallback: true,
-        };
-      } catch {
-        return { matches: [], usedFallback: true };
-      }
-    },
-  };
-
-  // Team 11-12: Asset Library
-  // Wraps assetLibraryService
-  const assets = {
-    async searchAssets(query: import("./ports.js").AssetQuery): Promise<import("./ports.js").AssetItem[]> {
-      // Real integration: import { searchAssets } from "../../services/assetLibraryService.js"
-      return [];
-    },
-    async getAsset(assetId: string): Promise<import("./ports.js").AssetItem | null> {
-      return null;
-    },
-  };
-
-  // Team 13-14: Workflow / Job Engine
-  // Wraps the dispatcher service (POST /ai/jobs)
-  const workflow = {
-    async dispatch(payload: GraphicDesignJobPayload, priority: JobPriority): Promise<import("./ports.js").DispatchResult> {
-      // Real integration: POST internal to /api/ai/jobs with payload
-      // import { createJob } from "../../services/jobService.js"
-      const jobId = `gd-${randomUUID()}`;
-      return { jobId, status: "queued", estimatedMs: 30_000 };
-    },
-    async getStatus(jobId: string): Promise<import("./ports.js").JobStatus> {
-      return { jobId, status: "queued", progressPct: 0 };
-    },
-    async cancel(jobId: string): Promise<void> {
-      // no-op stub
-    },
-  };
-
-  return { renderer, matcher, assets, workflow };
-}
-
-// ── Service functions ─────────────────────────────────────────────────────────
+// ── Brief CRUD ────────────────────────────────────────────────────────────────
 
 export interface CreateBriefResult {
-  briefId:      string;
-  status:       GdStatus;
-  manifestId:   string;
+  briefId:       string;
+  status:        GdStatus;
+  manifestId:    string;
   requiredFiles: number;
   estimatedDays: number;
 }
 
 /**
  * Create a new graphic design brief.
- * Status starts at "pending_review" (admin must approve before production).
+ * Status starts at "pending_review" — no execution happens here.
+ * Execution only occurs via approveBriefAndDispatch.
  */
 export async function createBrief(
   brief: GraphicDesignBrief,
-  ports: GraphicDesignPorts
 ): Promise<CreateBriefResult> {
-  const briefId    = randomUUID();
-  const policy     = getPackagePolicy(brief.serviceCode, brief.packageTier);
-  const manifest   = buildDeliverableManifest(brief.serviceCode, brief.packageTier, brief.outputFormat);
-  const blueprint  = getBlueprint(brief.serviceCode);
-  const variant    = blueprint.defaultVariant;
+  const briefId   = randomUUID();
+  const policy    = getPackagePolicy(brief.serviceCode, brief.packageTier);
+  const manifest  = buildDeliverableManifest(brief.serviceCode, brief.packageTier, brief.outputFormat);
 
   const record: BriefRecord = {
-    id: briefId,
-    serviceCode: brief.serviceCode,
-    status:      "pending_review",
-    packageTier: brief.packageTier,
+    id:           briefId,
+    serviceCode:  brief.serviceCode,
+    status:       "pending_review",
+    packageTier:  brief.packageTier,
     outputFormat: brief.outputFormat,
     brief,
     manifest,
-    jobs:        [],
-    createdAt:   now(),
-    updatedAt:   now(),
+    jobs:         [],
+    createdAt:    now(),
+    updatedAt:    now(),
   };
 
   BRIEF_STORE.set(briefId, record);
@@ -197,7 +157,7 @@ export async function createBrief(
     briefId,
     "gd_brief",
     "success",
-    { serviceCode: brief.serviceCode, packageTier: brief.packageTier, brandName: brief.brandName }
+    { serviceCode: brief.serviceCode, packageTier: brief.packageTier, brandName: brief.brandName },
   );
 
   publishSafe({
@@ -212,7 +172,9 @@ export async function createBrief(
     status:        "pending_review",
     manifestId:    briefId,
     requiredFiles: manifest.requiredCount,
-    estimatedDays: brief.urgencyLevel === "rush" ? (policy.rushDeliveryDays ?? policy.deliveryDays) : policy.deliveryDays,
+    estimatedDays: brief.urgencyLevel === "rush"
+      ? (policy.rushDeliveryDays ?? policy.deliveryDays)
+      : policy.deliveryDays,
   };
 }
 
@@ -221,13 +183,6 @@ export interface ListBriefsOptions {
   status?:      GdStatus;
   page?:        number;
   pageSize?:    number;
-}
-
-export interface ListBriefsResult {
-  items:    BriefSummary[];
-  total:    number;
-  page:     number;
-  pageSize: number;
 }
 
 export interface BriefSummary {
@@ -242,15 +197,20 @@ export interface BriefSummary {
   jobCount:    number;
 }
 
+export interface ListBriefsResult {
+  items:    BriefSummary[];
+  total:    number;
+  page:     number;
+  pageSize: number;
+}
+
 export function listBriefs(opts: ListBriefsOptions = {}): ListBriefsResult {
   const { serviceCode, status, page = 1, pageSize = 20 } = opts;
 
   let items = [...BRIEF_STORE.values()];
-
   if (serviceCode) items = items.filter((r) => r.serviceCode === serviceCode);
   if (status)      items = items.filter((r) => r.status === status);
 
-  // Sort newest first
   items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   const total = items.length;
@@ -279,24 +239,24 @@ export function getBrief(id: string): BriefRecord {
 }
 
 export interface UpdateStatusResult {
-  briefId:     string;
-  prevStatus:  GdStatus;
-  nextStatus:  GdStatus;
-  updatedAt:   string;
+  briefId:    string;
+  prevStatus: GdStatus;
+  nextStatus: GdStatus;
+  updatedAt:  string;
 }
 
 export async function updateBriefStatus(
-  id: string,
+  id:         string,
   nextStatus: GdStatus,
-  note?: string
+  note?:      string,
 ): Promise<UpdateStatusResult> {
-  const record = assertBrief(id);
+  const record     = assertBrief(id);
   const prevStatus = record.status;
 
   if (TERMINAL.includes(prevStatus)) {
     throw Object.assign(
       new Error(`Brief ${id} is in terminal status "${prevStatus}" and cannot be updated`),
-      { status: 409 }
+      { status: 409 },
     );
   }
 
@@ -316,68 +276,87 @@ export async function updateBriefStatus(
   return { briefId: id, prevStatus, nextStatus, updatedAt: record.updatedAt };
 }
 
+// ── Dispatch — SINGLE canonical path ─────────────────────────────────────────
+
 /**
- * Approve brief and dispatch generation jobs to Team 13-14 workflow engine.
- * One job per concept variant × output variant.
+ * Approve a brief and dispatch design projects via the canonical adapter.
+ *
+ * The ONLY execution path in this domain. All creation goes through
+ * CanonicalJobAdapter (backed by designStudioService.createDesignProject).
+ *
+ * Blueprint dimensions drive the canvas size — this is the adapter's role.
+ * No direct render calls, no status mutations outside this function.
+ *
+ * @param id      Brief ID
+ * @param adapter Canonical job adapter (defaults to designStudioService wrapper)
  */
 export async function approveBriefAndDispatch(
-  id: string,
-  ports: GraphicDesignPorts
+  id:       string,
+  adapter?: CanonicalJobAdapter,
 ): Promise<{ jobIds: string[]; conceptCount: number }> {
   const record = assertBrief(id);
 
   if (record.status !== "pending_review" && record.status !== "approved") {
     throw Object.assign(
-      new Error(`Brief must be in "pending_review" or "approved" status to dispatch`),
-      { status: 409 }
+      new Error(`Brief must be "pending_review" or "approved" to dispatch (current: "${record.status}")`),
+      { status: 409 },
     );
   }
 
   const policy    = getPackagePolicy(record.serviceCode, record.packageTier);
   const blueprint = getBlueprint(record.serviceCode);
-  const variant   = blueprint.defaultVariant;
 
-  // Match template once for all concepts
-  const matchReq: TemplateMatchRequest = {
-    serviceCode:     record.serviceCode,
-    stylePreference: record.brief.stylePreference,
-    industry:        record.brief.industry,
-    colorPalette:    record.brief.colorPalette,
-    briefSummary:    `${record.brief.brandName} — ${record.brief.targetAudience} — ${record.brief.notes ?? ""}`,
-    maxResults:      policy.conceptVariants,
-  };
+  // Blueprint selection: pick the canonical spec for canvas dimensions
+  const specEntry =
+    (blueprint.printVariants as Record<string, { widthPxWithBleed?: number; heightPxWithBleed?: number; widthPx?: number; heightPx?: number } | undefined>)[blueprint.defaultVariant] ??
+    (blueprint.digitalVariants as Record<string, { widthPx: number; heightPx: number } | undefined>)[blueprint.defaultVariant];
 
-  const matchResult = await ports.matcher.matchTemplate(matchReq);
+  const canvasWidthPx  = specEntry
+    ? (("widthPxWithBleed" in specEntry ? specEntry.widthPxWithBleed : specEntry.widthPx) ?? 1000)
+    : 1000;
+  const canvasHeightPx = specEntry
+    ? (("heightPxWithBleed" in specEntry ? specEntry.heightPxWithBleed : specEntry.heightPx) ?? 1000)
+    : 1000;
+
+  // Resolve adapter once — single canonical path
+  const canonicalAdapter = adapter ?? await makeDefaultAdapter();
+
   const jobIds: string[] = [];
-
   for (let i = 0; i < policy.conceptVariants; i++) {
-    const canvasState = matchResult.matches[i]?.canvasState ?? { width: 1000, height: 1000, background: "#ffffff", elements: [] };
-    const priority: JobPriority = record.brief.urgencyLevel === "rush" ? "high" : record.brief.urgencyLevel === "express" ? "urgent" : "normal";
-
-    const payload: GraphicDesignJobPayload = {
-      briefId:         record.id,
-      serviceCode:     record.serviceCode,
-      packageTier:     record.packageTier,
-      outputFormat:    record.outputFormat,
-      brief:           record.brief,
-      variantKey:      variant,
-      conceptIndex:    i,
-      totalConcepts:   policy.conceptVariants,
-      manifestFileKey: record.manifest.files[0]?.fileKey ?? "unknown",
-    };
-
-    const result = await ports.workflow.dispatch(payload, priority);
-    jobIds.push(result.jobId);
+    const { projectId } = await canonicalAdapter.createProject({
+      name:          `${record.brief.brandName} — ${record.serviceCode} — Concept ${i + 1}`,
+      description:   `GD Brief ${id} | ${record.brief.clientName} | ${record.brief.industry}`,
+      canvasWidthPx,
+      canvasHeightPx,
+      tags:          [record.serviceCode, record.packageTier, `brief:${id}`, `concept:${i + 1}`],
+    });
+    jobIds.push(projectId);
   }
 
   record.jobs      = [...record.jobs, ...jobIds];
   record.status    = "in_production";
   record.updatedAt = now();
 
-  await logAudit("graphic-design", "dispatch_jobs", id, "gd_brief", "success", { jobIds, conceptCount: policy.conceptVariants });
+  await logAudit(
+    "graphic-design",
+    "dispatch_jobs",
+    id,
+    "gd_brief",
+    "success",
+    { jobIds, conceptCount: policy.conceptVariants, canvasWidthPx, canvasHeightPx },
+  );
+
+  publishSafe({
+    eventType:    "graphic_design.brief.dispatched",
+    sourceModule: "graphic-design",
+    sourceId:     id,
+    payload:      { briefId: id, jobIds, conceptCount: policy.conceptVariants },
+  });
 
   return { jobIds, conceptCount: policy.conceptVariants };
 }
+
+// ── QC ────────────────────────────────────────────────────────────────────────
 
 export interface QcRunResult {
   briefId:   string;
@@ -389,14 +368,26 @@ export interface QcRunResult {
 }
 
 /**
- * Run QC against a rendered deliverable and update brief status.
- * Called after Team 7-8 has finished rendering.
+ * Run domain QC rules against a rendered deliverable and update brief status.
+ * Called after the canvas engine (Team 7-8) has finished rendering.
+ *
+ * P0 PATH TRAVERSAL: all user-supplied strings in `deliverable` are sanitized
+ * before use. File formats are validated against the allowlist; variant key
+ * is stripped to alphanumeric + hyphen; colorMode is validated against the enum.
  */
 export async function runBriefQc(
-  id: string,
-  deliverable: import("./qc.js").RenderedDeliverable
+  id:          string,
+  rawDeliverable: RenderedDeliverable,
 ): Promise<QcRunResult> {
   const record = assertBrief(id);
+
+  // Sanitize all user-supplied strings from renderer before processing
+  const deliverable: RenderedDeliverable = {
+    ...rawDeliverable,
+    variant:     sanitizeVariantKey(rawDeliverable.variant ?? ""),
+    colorMode:   sanitizeColorMode(rawDeliverable.colorMode ?? ""),
+    fileFormats: sanitizeFileFormats(rawDeliverable.fileFormats ?? []),
+  };
 
   const input: QcInput = {
     serviceCode:     record.serviceCode,
@@ -405,10 +396,10 @@ export async function runBriefQc(
     expectedFormats: getRequiredFormats(record.serviceCode, record.packageTier, record.outputFormat),
   };
 
-  const result    = runQc(input);
-  record.qcResult = result;
-  record.status   = result.passed ? "qc_check" : "qc_failed";
-  record.updatedAt = now();
+  const result      = runQc(input);
+  record.qcResult   = result;
+  record.status     = result.passed ? "qc_check" : "qc_failed";
+  record.updatedAt  = now();
 
   await logAudit(
     "graphic-design",
@@ -416,7 +407,7 @@ export async function runBriefQc(
     id,
     "gd_brief",
     result.passed ? "success" : "failure",
-    { qcScore: result.qcScore, passed: result.passed, failureCount: result.failures.length }
+    { qcScore: result.qcScore, passed: result.passed, failureCount: result.failures.length },
   );
 
   publishSafe({
@@ -436,12 +427,46 @@ export async function runBriefQc(
   };
 }
 
+// ── Manifest & QC getters ─────────────────────────────────────────────────────
+
 export function getBriefManifest(id: string) {
-  const record = assertBrief(id);
-  return record.manifest;
+  return assertBrief(id).manifest;
 }
 
 export function getBriefQcResult(id: string) {
-  const record = assertBrief(id);
-  return record.qcResult ?? null;
+  return assertBrief(id).qcResult ?? null;
+}
+
+// ── Job list (P2: paginated) ──────────────────────────────────────────────────
+
+export interface ListBriefJobsResult {
+  briefId:  string;
+  jobs:     string[];
+  total:    number;
+  page:     number;
+  pageSize: number;
+}
+
+/**
+ * Return a paginated list of design-studio project IDs (job references)
+ * for a given brief.
+ */
+export function listBriefJobs(
+  id:       string,
+  opts:     { page?: number; pageSize?: number } = {},
+): ListBriefJobsResult {
+  const record   = assertBrief(id);
+  const page     = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 20));
+  const total    = record.jobs.length;
+  const paged    = record.jobs.slice((page - 1) * pageSize, page * pageSize);
+
+  return { briefId: id, jobs: paged, total, page, pageSize };
+}
+
+// ── Test helper ───────────────────────────────────────────────────────────────
+
+/** Clear the in-memory store between tests. Not exported to production routes. */
+export function _clearStoreForTest(): void {
+  BRIEF_STORE.clear();
 }

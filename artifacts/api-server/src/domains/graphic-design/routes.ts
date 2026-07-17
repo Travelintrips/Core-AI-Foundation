@@ -1,23 +1,24 @@
 /**
  * graphic-design/routes.ts — Team 15
  *
- * Express router for the Graphic Design domain.
- * All routes are prefixed /ai/graphic-design (the /api prefix is added by app.ts).
+ * Config-only Express router for the Graphic Design domain.
  *
- * Routes:
- *   POST   /ai/graphic-design/briefs              — create brief
- *   GET    /ai/graphic-design/briefs              — list briefs (?serviceCode=&status=&page=&pageSize=)
- *   GET    /ai/graphic-design/briefs/:id          — get brief detail
- *   PATCH  /ai/graphic-design/briefs/:id/status   — update status
- *   POST   /ai/graphic-design/briefs/:id/approve  — approve + dispatch jobs
- *   POST   /ai/graphic-design/briefs/:id/qc       — run QC (renderer callback)
- *   GET    /ai/graphic-design/briefs/:id/manifest — deliverable manifest
- *   GET    /ai/graphic-design/briefs/:id/qc       — last QC result
- *   GET    /ai/graphic-design/blueprints          — list all blueprints
- *   GET    /ai/graphic-design/blueprints/:serviceCode — single blueprint
- *   GET    /ai/graphic-design/packages            — package policies for all services
- *   GET    /ai/graphic-design/packages/:serviceCode — policies for one service
- *   GET    /ai/graphic-design/services            — service catalog summary
+ * This router exposes:
+ *   (a) Adapter config routes — static blueprint/package/catalog data
+ *   (b) Brief state management routes — brief CRUD + job list
+ *
+ * EXECUTION routes (approve + QC callback) are intentionally NOT here.
+ * They are declared in integration/manifests/team-15.json → routesToMount
+ * and must be applied by Team 24 after wiring the canonical adapter to
+ * the designStudioService export pipeline.
+ *
+ * PATH TRAVERSAL PROTECTION:
+ *   - :serviceCode params are sanitized before any lookup.
+ *   - No user-supplied filenames or paths are accepted anywhere.
+ *   - File format strings from request bodies are validated in service.ts.
+ *
+ * NOTE: This router is NOT mounted in routes/index.ts (locked file).
+ *       See integration/manifests/team-15.json → routesToMount.
  */
 
 import { Router } from "express";
@@ -27,24 +28,16 @@ import {
   listBriefs,
   getBrief,
   updateBriefStatus,
-  approveBriefAndDispatch,
-  runBriefQc,
   getBriefManifest,
   getBriefQcResult,
-  resolveAdapters,
+  listBriefJobs,
 } from "./service.js";
 import { getAllBlueprints, getBlueprint } from "./blueprints.js";
 import { getAllPolicies, getPackagePolicy, getEffectivePrice, BASE_PRICES_IDR } from "./packagePolicy.js";
-import type { GdServiceCode } from "./schema.js";
+import { sanitizeServiceCode } from "./sanitize.js";
+import type { GdServiceCode, GdStatus } from "./schema.js";
 
 const router = Router();
-
-// Resolve adapters once at module load (lazy async init on first request)
-let _ports: Awaited<ReturnType<typeof resolveAdapters>> | null = null;
-async function getPorts() {
-  if (!_ports) _ports = await resolveAdapters();
-  return _ports;
-}
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
@@ -52,9 +45,9 @@ function sendError(res: import("express").Response, status: number, message: str
   res.status(status).json({ error: message });
 }
 
-// ── Briefs ────────────────────────────────────────────────────────────────────
+// ── Briefs — state management (no execution) ──────────────────────────────────
 
-/** POST /ai/graphic-design/briefs */
+/** POST /ai/graphic-design/briefs — create brief */
 router.post("/ai/graphic-design/briefs", async (req, res): Promise<void> => {
   const parsed = GraphicDesignBriefSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -63,8 +56,8 @@ router.post("/ai/graphic-design/briefs", async (req, res): Promise<void> => {
   }
 
   try {
-    const ports  = await getPorts();
-    const result = await createBrief(parsed.data, ports);
+    // No ports/adapter needed — createBrief is pure state management
+    const result = await createBrief(parsed.data);
     res.status(201).json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Internal error";
@@ -72,25 +65,24 @@ router.post("/ai/graphic-design/briefs", async (req, res): Promise<void> => {
   }
 });
 
-/** GET /ai/graphic-design/briefs */
+/** GET /ai/graphic-design/briefs — list briefs (paginated) */
 router.get("/ai/graphic-design/briefs", (req, res): void => {
-  const serviceCode = typeof req.query["serviceCode"] === "string" ? req.query["serviceCode"] as GdServiceCode : undefined;
-  const status      = typeof req.query["status"]      === "string" ? req.query["status"]      as import("./schema.js").GdStatus : undefined;
-  const page        = parseInt(String(req.query["page"] ?? "1"), 10);
-  const pageSize    = Math.min(parseInt(String(req.query["pageSize"] ?? "20"), 10), 100);
+  const serviceCode = typeof req.query["serviceCode"] === "string"
+    ? sanitizeServiceCode(req.query["serviceCode"]) as GdServiceCode
+    : undefined;
+  const status   = typeof req.query["status"]   === "string" ? req.query["status"]   as GdStatus : undefined;
+  const page     = Math.max(1, parseInt(String(req.query["page"]     ?? "1"),  10));
+  const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query["pageSize"] ?? "20"), 10)));
 
-  const result = listBriefs({ serviceCode, status, page, pageSize });
-  res.json(result);
+  res.json(listBriefs({ serviceCode, status, page, pageSize }));
 });
 
 /** GET /ai/graphic-design/briefs/:id */
 router.get("/ai/graphic-design/briefs/:id", (req, res): void => {
   try {
-    const record = getBrief(req.params["id"] ?? "");
-    res.json(record);
+    res.json(getBrief(req.params["id"] ?? ""));
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Not found";
-    sendError(res, (err as { status?: number }).status ?? 500, msg);
+    sendError(res, (err as { status?: number }).status ?? 500, err instanceof Error ? err.message : "Not found");
   }
 });
 
@@ -106,31 +98,7 @@ router.patch("/ai/graphic-design/briefs/:id/status", async (req, res): Promise<v
     const result = await updateBriefStatus(req.params["id"] ?? "", parsed.data.status, parsed.data.note);
     res.json(result);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Internal error";
-    sendError(res, (err as { status?: number }).status ?? 500, msg);
-  }
-});
-
-/** POST /ai/graphic-design/briefs/:id/approve */
-router.post("/ai/graphic-design/briefs/:id/approve", async (req, res): Promise<void> => {
-  try {
-    const ports  = await getPorts();
-    const result = await approveBriefAndDispatch(req.params["id"] ?? "", ports);
-    res.json(result);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Internal error";
-    sendError(res, (err as { status?: number }).status ?? 500, msg);
-  }
-});
-
-/** POST /ai/graphic-design/briefs/:id/qc  — called by renderer (Team 7-8) after render */
-router.post("/ai/graphic-design/briefs/:id/qc", async (req, res): Promise<void> => {
-  try {
-    const result = await runBriefQc(req.params["id"] ?? "", req.body);
-    res.json(result);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Internal error";
-    sendError(res, (err as { status?: number }).status ?? 500, msg);
+    sendError(res, (err as { status?: number }).status ?? 500, err instanceof Error ? err.message : "Internal error");
   }
 });
 
@@ -139,24 +107,34 @@ router.get("/ai/graphic-design/briefs/:id/manifest", (req, res): void => {
   try {
     res.json(getBriefManifest(req.params["id"] ?? ""));
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Not found";
-    sendError(res, (err as { status?: number }).status ?? 404, msg);
+    sendError(res, (err as { status?: number }).status ?? 404, err instanceof Error ? err.message : "Not found");
   }
 });
 
-/** GET /ai/graphic-design/briefs/:id/qc */
+/** GET /ai/graphic-design/briefs/:id/qc — last QC result (read-only) */
 router.get("/ai/graphic-design/briefs/:id/qc", (req, res): void => {
   try {
     const result = getBriefQcResult(req.params["id"] ?? "");
     if (!result) { sendError(res, 404, "No QC result yet for this brief"); return; }
     res.json(result);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Not found";
-    sendError(res, (err as { status?: number }).status ?? 404, msg);
+    sendError(res, (err as { status?: number }).status ?? 404, err instanceof Error ? err.message : "Not found");
   }
 });
 
-// ── Blueprints ────────────────────────────────────────────────────────────────
+/** GET /ai/graphic-design/briefs/:id/jobs — paginated job list (P2) */
+router.get("/ai/graphic-design/briefs/:id/jobs", (req, res): void => {
+  const page     = Math.max(1, parseInt(String(req.query["page"]     ?? "1"),  10));
+  const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query["pageSize"] ?? "20"), 10)));
+
+  try {
+    res.json(listBriefJobs(req.params["id"] ?? "", { page, pageSize }));
+  } catch (err) {
+    sendError(res, (err as { status?: number }).status ?? 404, err instanceof Error ? err.message : "Not found");
+  }
+});
+
+// ── Blueprints — adapter config (static) ─────────────────────────────────────
 
 /** GET /ai/graphic-design/blueprints */
 router.get("/ai/graphic-design/blueprints", (_req, res): void => {
@@ -165,7 +143,7 @@ router.get("/ai/graphic-design/blueprints", (_req, res): void => {
 
 /** GET /ai/graphic-design/blueprints/:serviceCode */
 router.get("/ai/graphic-design/blueprints/:serviceCode", (req, res): void => {
-  const code = req.params["serviceCode"] as GdServiceCode;
+  const code = sanitizeServiceCode(req.params["serviceCode"] ?? "") as GdServiceCode;
   try {
     res.json(getBlueprint(code));
   } catch {
@@ -173,7 +151,7 @@ router.get("/ai/graphic-design/blueprints/:serviceCode", (req, res): void => {
   }
 });
 
-// ── Packages ──────────────────────────────────────────────────────────────────
+// ── Packages — adapter config (static) ───────────────────────────────────────
 
 /** GET /ai/graphic-design/packages */
 router.get("/ai/graphic-design/packages", (_req, res): void => {
@@ -186,7 +164,7 @@ router.get("/ai/graphic-design/packages", (_req, res): void => {
 
 /** GET /ai/graphic-design/packages/:serviceCode */
 router.get("/ai/graphic-design/packages/:serviceCode", (req, res): void => {
-  const code = req.params["serviceCode"] as GdServiceCode;
+  const code = sanitizeServiceCode(req.params["serviceCode"] ?? "") as GdServiceCode;
   if (!(GD_SERVICE_CODES as readonly string[]).includes(code)) {
     sendError(res, 404, `Unknown service code: ${code}`);
     return;
@@ -194,14 +172,14 @@ router.get("/ai/graphic-design/packages/:serviceCode", (req, res): void => {
   res.json(getAllPolicies(code));
 });
 
-// ── Service catalog summary ───────────────────────────────────────────────────
+// ── Service catalog summary — adapter config (static) ────────────────────────
 
 /** GET /ai/graphic-design/services */
 router.get("/ai/graphic-design/services", (_req, res): void => {
   const services = GD_SERVICE_CODES.map((code) => ({
-    serviceCode:   code,
-    serviceName:   GD_SERVICE_LABELS[code],
-    basePriceIdr:  BASE_PRICES_IDR[code],
+    serviceCode:  code,
+    serviceName:  GD_SERVICE_LABELS[code],
+    basePriceIdr: BASE_PRICES_IDR[code],
     packages: {
       basic:    { price: getEffectivePrice(code, "basic"),    ...getPackagePolicy(code, "basic") },
       standard: { price: getEffectivePrice(code, "standard"), ...getPackagePolicy(code, "standard") },
