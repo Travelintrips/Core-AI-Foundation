@@ -195,7 +195,7 @@ export async function submitRating(opts: {
   rating: number;
   review?: string;
 }): Promise<{ ok: boolean; reason?: string }> {
-  if (opts.rating < 1 || opts.rating > 5) {
+  if (!Number.isFinite(opts.rating) || opts.rating < 1 || opts.rating > 5) {
     return { ok: false, reason: "rating must be between 1 and 5" };
   }
   const row = await repo.dbGetListingPublic(opts.listingId);
@@ -207,6 +207,10 @@ export async function submitRating(opts: {
 export async function getListingRatings(listingId: number): Promise<CM2RatingDTO[]> {
   const rows = await repo.dbGetRatings(listingId);
   return rows.map(toRatingDTO);
+}
+
+export async function getDistinctCategories(itemType?: string): Promise<string[]> {
+  return repo.dbGetDistinctCategories(itemType);
 }
 
 export async function listCreatorsPublic(): Promise<CM2CreatorSummaryDTO[]> {
@@ -354,22 +358,15 @@ export async function adminToggleCreatorVerified(id: number): Promise<CM2Creator
 
 // ── Workspace service methods (token-authenticated) ────────────────────────────
 
+/** Uses a single JOIN query — no N+1. Only approved+active listings included. */
 export async function getFavorites(customerEmail: string): Promise<CM2FavoriteDTO[]> {
-  const favRows = await repo.dbGetFavorites(customerEmail);
-  const result: CM2FavoriteDTO[] = [];
-
-  for (const fav of favRows) {
-    const listing = await repo.dbGetListingPublic(fav.listing_id);
-    if (listing) {
-      result.push({
-        id: fav.id,
-        listingId: fav.listing_id,
-        listing: toPublicDTO(listing),
-        createdAt: fav.created_at instanceof Date ? fav.created_at.toISOString() : String(fav.created_at),
-      });
-    }
-  }
-  return result;
+  const rows = await repo.dbGetFavoritesWithListings(customerEmail);
+  return rows.map((r) => ({
+    id: r.fav_id,
+    listingId: r.listing.id,
+    listing: toPublicDTO(r.listing),
+    createdAt: r.fav_created_at instanceof Date ? r.fav_created_at.toISOString() : String(r.fav_created_at),
+  }));
 }
 
 export async function addFavorite(

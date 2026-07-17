@@ -67,18 +67,13 @@ router.get(
   },
 );
 
-// Distinct categories (from approved listings)
+// Distinct categories (from approved listings) — uses dedicated SQL, not full scan
 router.get(
   "/public/cm2/categories",
   async (req: Request, res: Response): Promise<void> => {
     try {
       const q = req.query as Record<string, string>;
-      const filter: CM2ListFilter = {
-        itemType: q["itemType"],
-        limit: 200,
-      };
-      const items = await svc.browseListings(filter);
-      const categories = [...new Set(items.map((i) => i.category))].sort();
+      const categories = await svc.getDistinctCategories(q["itemType"]);
       res.json({ categories });
     } catch (e) {
       res.status(500).json({ error: e instanceof Error ? e.message : "internal error" });
@@ -123,28 +118,10 @@ router.post(
   },
 );
 
-// Submit rating (1-5 stars)
-router.post(
-  "/public/cm2/listings/:id/rate",
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const id = parseInt(req.params["id"] as string, 10);
-      if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-      const { customerEmail, rating, review } = req.body as {
-        customerEmail: string; rating: number; review?: string;
-      };
-      if (!customerEmail || typeof customerEmail !== "string") {
-        res.status(400).json({ error: "customerEmail required" });
-        return;
-      }
-      const result = await svc.submitRating({ customerEmail, listingId: id, rating, review });
-      if (!result.ok) { res.status(400).json({ error: result.reason }); return; }
-      res.json({ ok: true });
-    } catch (e) {
-      res.status(500).json({ error: e instanceof Error ? e.message : "internal error" });
-    }
-  },
-);
+// NOTE: Public unauthenticated rating submission is intentionally removed.
+// Ratings must be submitted through the token-authenticated workspace route:
+//   POST /public/customer/workspace/:token/cm2/listings/:id/rate
+// This prevents identity spoofing (customerEmail from body as ownership source of truth).
 
 // Get ratings for a listing
 router.get(

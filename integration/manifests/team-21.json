@@ -59,7 +59,7 @@
     "public": {
       "prefix": "/public/cm2",
       "auth": "none",
-      "note": "Always filters moderation_state='approved' AND is_active=true. fileUrl never returned.",
+      "note": "Always filters moderation_state='approved' AND is_active=true. fileUrl never returned. Unauthenticated POST /rate was removed — use workspace route instead.",
       "endpoints": [
         "GET  /public/cm2/listings",
         "GET  /public/cm2/listings/featured",
@@ -67,10 +67,16 @@
         "GET  /public/cm2/categories",
         "GET  /public/cm2/listings/:id",
         "POST /public/cm2/listings/:id/download",
-        "POST /public/cm2/listings/:id/rate",
         "GET  /public/cm2/listings/:id/ratings",
         "GET  /public/cm2/creators",
         "GET  /public/cm2/creators/:code"
+      ],
+      "removedEndpoints": [
+        {
+          "was": "POST /public/cm2/listings/:id/rate",
+          "reason": "Remediation P0: customerEmail from request body was source of truth for ownership identity. Ratings now only accepted through workspace token-authenticated route.",
+          "replacement": "POST /public/customer/workspace/:token/cm2/listings/:id/rate"
+        }
       ]
     },
     "workspace": {
@@ -153,7 +159,15 @@
     "idor": "Workspace routes resolve session from token via resolveWorkspaceSession; all queries scoped to session.clientEmail.",
     "moderationGate": "Pending/rejected/suspended listings are invisible on all public routes.",
     "noPayoutImpl": "No automatic payout or subscription logic. Payment reuse via adapters only.",
-    "noNewSubscriptions": "Domain never creates subscription records or payment intents."
+    "noNewSubscriptions": "Domain never creates subscription records or payment intents.",
+    "ownershipIdentityRule": "No endpoint accepts customerEmail from body/query as ownership source of truth. Workspace routes derive identity from token. Public download recording allows nullable anonymous email — not a security gate.",
+    "remediationNotes": {
+      "P0_fixed": "Removed POST /public/cm2/listings/:id/rate — unauthenticated rating submission allowed identity spoofing via body email.",
+      "P1_perf_fixed_1": "getFavorites() replaced N+1 loop with single JOIN query (dbGetFavoritesWithListings).",
+      "P1_perf_fixed_2": "GET /public/cm2/categories replaced full 200-row scan with dedicated SELECT DISTINCT category SQL query.",
+      "P1_rating_guard": "submitRating() now uses Number.isFinite() guard to reject NaN/Infinity in addition to range check.",
+      "P2_tests_added": "Added 16 new tests: malformed payload, NaN/Infinity rating, pagination pass-through, cross-customer IDOR (getFavorites/removeFavorite/getCustomerDownloads), public rate removal documentation."
+    }
   },
   "itemTypes": [
     "blueprint", "template", "pattern", "icon", "illustration", "layout",

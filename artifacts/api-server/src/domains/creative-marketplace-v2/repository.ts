@@ -463,8 +463,63 @@ export async function dbSyncCreatorStats(creatorId: number): Promise<void> {
   );
 }
 
+// ── Distinct categories (dedicated query — no full scan) ──────────────────────
+
+export async function dbGetDistinctCategories(itemType?: string): Promise<string[]> {
+  const params: unknown[] = [];
+  const clauses = [
+    `moderation_state = 'approved'`,
+    `is_active = true`,
+  ];
+  if (itemType) { clauses.push(`item_type = $1`); params.push(itemType); }
+  const { rows } = await pool.query<{ category: string }>(
+    `SELECT DISTINCT category FROM ${SCHEMA}.cm2_listings
+     WHERE ${clauses.join(" AND ")}
+     ORDER BY category`,
+    params,
+  );
+  return rows.map((r) => r.category);
+}
+
 // ── Favorites ─────────────────────────────────────────────────────────────────
 
+/**
+ * Single JOIN query — avoids N+1 per-favorite listing fetch.
+ * Only returns favorites whose listing is still approved + active.
+ */
+export async function dbGetFavoritesWithListings(customerEmail: string): Promise<
+  { fav_id: number; fav_created_at: Date; listing: CM2ListingRow }[]
+> {
+  const { rows } = await pool.query(
+    `SELECT
+       f.id        AS fav_id,
+       f.created_at AS fav_created_at,
+       l.*,
+       cp.creator_code,
+       cp.display_name   AS creator_display_name,
+       cp.avatar_url     AS creator_avatar_url,
+       cp.is_verified    AS creator_is_verified,
+       cp.total_listings AS creator_total_listings,
+       cp.avg_rating     AS creator_avg_rating
+     FROM ${SCHEMA}.cm2_favorites f
+     JOIN ${SCHEMA}.cm2_listings l
+       ON l.id = f.listing_id
+      AND l.moderation_state = 'approved'
+      AND l.is_active = true
+     LEFT JOIN ${SCHEMA}.cm2_creator_profiles cp ON l.creator_id = cp.id
+     WHERE f.customer_email = $1
+     ORDER BY f.created_at DESC
+     LIMIT 100`,
+    [customerEmail],
+  );
+  return rows.map((r: Record<string, unknown>) => ({
+    fav_id: r["fav_id"] as number,
+    fav_created_at: r["fav_created_at"] as Date,
+    listing: r as unknown as CM2ListingRow,
+  }));
+}
+
+/** @deprecated Use dbGetFavoritesWithListings for production paths */
 export async function dbGetFavorites(customerEmail: string): Promise<
   { id: number; listing_id: number; created_at: Date }[]
 > {
