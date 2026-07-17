@@ -73,12 +73,16 @@ function handleError(res: any, err: unknown, context: string): void {
 
 // ── Query schemas ─────────────────────────────────────────────────────────────
 
+// BLUEPRINT_LIST_MAX_LIMIT — hard cap enforced by Zod schema on all list endpoints.
+// Regression guard: do not raise without updating tests and reviewing memory usage.
+const BLUEPRINT_LIST_MAX_LIMIT = 100;
+
 const listFilterSchema = z.object({
   domain:      z.enum(BLUEPRINT_DOMAINS).optional(),
   status:      z.enum(BLUEPRINT_STATUSES).optional(),
   industryTag: z.string().max(60).optional(),
   styleTag:    z.string().max(60).optional(),
-  limit:       z.coerce.number().int().min(1).max(200).default(50),
+  limit:       z.coerce.number().int().min(1).max(BLUEPRINT_LIST_MAX_LIMIT).default(50),
   offset:      z.coerce.number().int().min(0).default(0),
 });
 
