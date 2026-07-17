@@ -3,7 +3,7 @@
 
 import { Router } from "express";
 import { z } from "zod";
-import { adminAuth } from "../../middleware/adminAuth.js";
+import { adminAuth, adminAuthWithExceptions } from "../../middleware/adminAuth.js";
 import {
   listFontPairs,
   getFontPairWithRoles,
@@ -32,7 +32,7 @@ const router = Router();
 // ── Auth — explicit at router level (P0 audit) ────────────────────────────────
 // Belt-and-suspenders on top of the global adminAuthWithExceptions in app.ts.
 // All routes in this router require admin authentication.
-router.use(adminAuth);
+router.use(adminAuthWithExceptions);
 
 // ── Validation schemas ────────────────────────────────────────────────────────
 

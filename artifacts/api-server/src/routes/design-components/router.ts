@@ -27,7 +27,7 @@
 
 import { Router } from "express";
 import { z } from "zod";
-import { adminAuth } from "../../middleware/adminAuth.js";
+import { adminAuth, adminAuthWithExceptions } from "../../middleware/adminAuth.js";
 import { resolveAuthenticatedTenantContext } from "../../security/tenantResolution.js";
 import { logger } from "../../lib/logger.js";
 import {
@@ -63,7 +63,7 @@ const router = Router();
 // This is defence-in-depth on top of the global adminAuthWithExceptions; it
 // ensures the router cannot be mounted without auth even in test or edge
 // contexts where the global middleware is not applied.
-router.use(adminAuth);
+router.use(adminAuthWithExceptions);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

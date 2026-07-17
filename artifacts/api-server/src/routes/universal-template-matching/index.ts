@@ -19,7 +19,7 @@
 
 import { Router } from "express";
 import type { Request, Response, NextFunction } from "express";
-import { adminAuth } from "../../middleware/adminAuth.js";
+import { adminAuth, adminAuthWithExceptions } from "../../middleware/adminAuth.js";
 import { getDefaultMatcher } from "../../services/universal-template-matching/index.js";
 import type { MatchInput } from "../../services/universal-template-matching/index.js";
 
@@ -33,7 +33,9 @@ router.use((req: Request, res: Response, next: NextFunction): void => {
     next();
     return;
   }
-  void adminAuth(req, res, next);
+  // Use adminAuthWithExceptions so /public/* routes mounted after this
+  // router in the global stack are not blocked by this belt-and-suspenders guard.
+  void adminAuthWithExceptions(req, res, next);
 });
 
 // ── In-memory rate limiter (P2 Security) ─────────────────────────────────────

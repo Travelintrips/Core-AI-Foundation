@@ -60,7 +60,7 @@ import { BLUEPRINT_DOMAINS, BLUEPRINT_STATUSES } from "../../services/design-blu
 import { logger } from "../../lib/logger.js";
 // P0: Explicit admin auth import.  Applied at router level AND individually on
 // each mutation route so the requirement is visible at point of declaration.
-import { adminAuth } from "../../middleware/adminAuth.js";
+import { adminAuth, adminAuthWithExceptions } from "../../middleware/adminAuth.js";
 
 const router = Router();
 
@@ -124,7 +124,7 @@ router.get("/ai/design-blueprints/public", async (req, res) => {
 // ADMIN AUTH — applies to all routes declared after this line
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.use(adminAuth);
+router.use(adminAuthWithExceptions);
 
 // ── GET /ai/design-blueprints/stats ──────────────────────────────────────────
 // Static route — must come before /:id to avoid param capture

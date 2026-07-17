@@ -16,16 +16,17 @@
  */
 
 import { Router } from "express";
-import { adminAuth } from "../../middleware/adminAuth.js";
+import { adminAuth, adminAuthWithExceptions } from "../../middleware/adminAuth.js";
 import recommendationsRouter from "./recommendations.js";
 import funnelRouter from "./funnel.js";
 import attributionRouter from "./attribution.js";
 
 const router = Router();
 
-// Explicit admin auth at router level — belt-and-suspenders over the global mount.
-// adminAuth checks x-admin-api-key / x-admin-key headers and fails closed.
-router.use(adminAuth);
+// Belt-and-suspenders auth — use adminAuthWithExceptions so that /public/* routes
+// that are mounted AFTER this barrel in the global router are not blocked.
+// adminAuth is still applied for all /ai/* routes via the exception logic.
+router.use(adminAuthWithExceptions);
 
 // All sub-routes share the /ai/creative-commercial prefix
 router.use(recommendationsRouter);
