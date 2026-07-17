@@ -14,6 +14,26 @@
     "openapi": "integration/openapi/team-13.yaml",
     "manifest": "integration/manifests/team-13.json"
   },
+  "routesToMount": [
+    {
+      "importPath": "./dynamic-design-composer/index.js",
+      "mountIn": "artifacts/api-server/src/routes/index.ts",
+      "routerVariable": "dynamicDesignComposerRouter",
+      "mountStatement": "router.use(dynamicDesignComposerRouter);",
+      "after": "router.use(creativeMarketplaceRouter);",
+      "note": "All 4 routes are protected by the global adminAuth middleware already applied in app.ts. No per-route middleware required."
+    }
+  ],
+  "pagesToRegister": [],
+  "schemaExportsRequested": [],
+  "dependencyRequests": [],
+  "integrationNotes": [
+    "Engine is pure computation — no DB tables, no migrations, no schema barrel changes required.",
+    "All routes are covered by global adminAuth middleware in app.ts; no shared auth middleware changes needed.",
+    "No external HTTP calls — no SSRF surface.",
+    "compositionId is deterministic SHA-256 of normalised input — safe to cache by ID.",
+    "Zod schemas live entirely in the service layer; route file imports only from service index, never zod/v4 directly."
+  ],
   "endpoints": [
     {
       "method": "POST",
@@ -49,6 +69,8 @@
     "deterministic": true,
     "imageGeneration": false,
     "fileRendering": false,
+    "databaseAccess": false,
+    "externalHttpCalls": false,
     "brandDnaIntegration": true,
     "explainability": true,
     "fallbackHandling": true,
@@ -88,7 +110,8 @@
       "artifacts/api-server/src/services/dynamic-design-composer/__tests__/compatibilityChecker.test.ts",
       "artifacts/api-server/src/services/dynamic-design-composer/__tests__/fallbackHandler.test.ts",
       "artifacts/api-server/src/services/dynamic-design-composer/__tests__/brandConsistencyChecker.test.ts",
-      "artifacts/api-server/src/services/dynamic-design-composer/__tests__/explainabilityEngine.test.ts"
+      "artifacts/api-server/src/services/dynamic-design-composer/__tests__/explainabilityEngine.test.ts",
+      "artifacts/api-server/src/routes/dynamic-design-composer/__tests__/routes.test.ts"
     ],
     "scenarios": [
       "deterministic composition (same input → same compositionId)",
@@ -100,7 +123,11 @@
       "style consistency scoring",
       "component zone and variant resolution",
       "derived token generation",
-      "explainability report completeness"
+      "explainability report completeness",
+      "unauthorized request (missing admin key → 401)",
+      "malformed payload (invalid JSON body → 400 with details)",
+      "missing required fields (empty body → 400)",
+      "extra unknown fields (stripped, not rejected)"
     ]
   },
   "dependencies": {
