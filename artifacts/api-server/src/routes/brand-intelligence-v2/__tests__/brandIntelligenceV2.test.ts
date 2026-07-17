@@ -8,8 +8,9 @@
  *   4. Memory reuse — stored memories drive creative memory extraction
  *   5. Public redaction — exact hex, avoidWords, avoidPatterns stripped
  *   6. Route layer — HTTP responses for admin and public endpoints
+ *   7. Cross-client isolation — session emailHash gates access; Client A ≠ Client B
  */
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -80,6 +81,9 @@ import {
 import { redactForPublic } from "../../../services/brand-intelligence-v2/brandIntelligenceV2Service.js";
 import type { BrandDnaAdapterInput, BrandIntelligenceV2 } from "../../../services/brand-intelligence-v2/types.js";
 import brandIntelligenceV2Router from "../index.js";
+// Cross-client isolation tests need access to the already-mocked modules
+import { resolveWorkspaceSession } from "../../../services/customerWorkspaceService.js";
+import { getBrandIntelligenceV2 } from "../../../services/brand-intelligence-v2/index.js";
 
 // ── Test fixtures ─────────────────────────────────────────────────────────────
 
@@ -586,5 +590,108 @@ describe("7. Route layer — HTTP responses", () => {
   it("GET /ai/brand-intelligence-v2/:clientId returns 404 when no profile", async () => {
     const res = await request(app).get("/ai/brand-intelligence-v2/nonexistent-client");
     expect(res.status).toBe(404);
+  });
+});
+
+// ── 7. Cross-client isolation — session-derived clientId prevents IDOR ────────
+//
+// Public routes resolve clientId SERVER-SIDE from resolveWorkspaceSession(token).
+// An attacker holding token-B cannot access Client A's profile — they receive
+// Client B's emailHash regardless of any query parameter or body field.
+//
+// Test strategy: let getBrandIntelligenceV2 return null (default mock) so the route
+// falls through to analyzeAndPersistV2 (already fully mocked), then track which
+// clientId was passed to the service layer.
+
+describe("7. Cross-client isolation — session emailHash gates public access", () => {
+  const rwsMock = vi.mocked(resolveWorkspaceSession);
+  const getBiv2Mock = vi.mocked(getBrandIntelligenceV2);
+
+  const CLIENT_A_HASH = "email-hash-client-a";
+  const CLIENT_B_HASH = "email-hash-client-b";
+
+  // Fresh Express app per describe so no state bleeds between tests
+  const buildApp2 = () => {
+    const a = express();
+    a.use(express.json());
+    a.use(brandIntelligenceV2Router);
+    return a;
+  };
+
+  // Each test sets its own mockResolvedValueOnce overrides on top of the section-6
+  // route-layer mock (which keeps the default getBrandIntelligenceV2 → null,
+  // analyzeAndPersistV2 → full profile). We only clear call counts between tests,
+  // not mock implementations (which would break analyzeAndPersistV2's return value).
+
+  it("Client A's token resolves to Client A's emailHash — service queried with A's hash", async () => {
+    getBiv2Mock.mockClear();
+    rwsMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      session: { emailHash: CLIENT_A_HASH },
+    } as never);
+    // getBrandIntelligenceV2 returns null → route calls analyzeAndPersistV2 (already mocked)
+    getBiv2Mock.mockResolvedValueOnce(null as never);
+
+    const res = await request(buildApp2()).get(
+      "/public/customer/workspace/token-a/brand-intelligence-v2",
+    );
+    expect(res.status).toBe(200);
+    // Route must have queried the service with A's session hash, not a client-supplied value
+    expect(getBiv2Mock).toHaveBeenCalledWith(CLIENT_A_HASH);
+    expect(getBiv2Mock).not.toHaveBeenCalledWith(CLIENT_B_HASH);
+  });
+
+  it("Client B's token resolves to Client B's emailHash — service never called with A's hash", async () => {
+    getBiv2Mock.mockClear();
+    rwsMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      session: { emailHash: CLIENT_B_HASH },
+    } as never);
+    getBiv2Mock.mockResolvedValueOnce(null as never);
+
+    const res = await request(buildApp2()).get(
+      "/public/customer/workspace/token-b/brand-intelligence-v2",
+    );
+    expect(res.status).toBe(200);
+    // Route used B's hash — Client A's data was never touched
+    expect(getBiv2Mock).toHaveBeenCalledWith(CLIENT_B_HASH);
+    expect(getBiv2Mock).not.toHaveBeenCalledWith(CLIENT_A_HASH);
+  });
+
+  it("Invalid token → 401 — profile service is never called", async () => {
+    getBiv2Mock.mockClear();
+    rwsMock.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      error: "Invalid or expired token",
+    } as never);
+
+    const res = await request(buildApp2()).get(
+      "/public/customer/workspace/bad-token/brand-intelligence-v2",
+    );
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBeTruthy();
+    // Auth failed fast — service layer must never have been reached
+    expect(getBiv2Mock).not.toHaveBeenCalled();
+  });
+
+  it("Refresh endpoint: invalid token → 401 before any service call", async () => {
+    // POST /refresh: calls resolveWorkspaceSession first; on failure returns 401
+    getBiv2Mock.mockClear();
+    rwsMock.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      error: "Invalid or expired token",
+    } as never);
+
+    const res = await request(buildApp2()).post(
+      "/public/customer/workspace/bad-token/brand-intelligence-v2/refresh",
+    );
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBeTruthy();
+    // Service never reached before auth check
+    expect(getBiv2Mock).not.toHaveBeenCalled();
   });
 });

@@ -10,7 +10,6 @@ import {
   db,
   aiBrandDnaTable,
   aiClientMemoryTable,
-  creativeProjectsTable,
   type AiBrandDna,
 } from "@workspace/db";
 import type { BrandDnaAdapterInput } from "./types.js";
@@ -83,10 +82,11 @@ export async function adaptBrandDnaForV2(
     .limit(1);
 
   // Read memories for this client
+  // aiClientMemoryTable columns: key, value (not memoryKey / memoryValue)
   const memories = await db
     .select({
-      key: aiClientMemoryTable.memoryKey,
-      value: aiClientMemoryTable.memoryValue,
+      key: aiClientMemoryTable.key,
+      value: aiClientMemoryTable.value,
       category: aiClientMemoryTable.category,
       source: aiClientMemoryTable.source,
       confidence: aiClientMemoryTable.confidence,
@@ -95,16 +95,16 @@ export async function adaptBrandDnaForV2(
     .from(aiClientMemoryTable)
     .where(eq(aiClientMemoryTable.clientId, clientId));
 
-  // Read project history
-  const projects = await db
-    .select({
-      projectId: creativeProjectsTable.id,
-      brandName: creativeProjectsTable.brandName,
-      status: creativeProjectsTable.status,
-      createdAt: creativeProjectsTable.createdAt,
-    })
-    .from(creativeProjectsTable)
-    .where(eq(creativeProjectsTable.clientId, clientId));
+  // Project history — creative_projects has no clientId column; it links customers
+  // through service_request_id → ai_service_requests. Brand DNA V2 enrichment does
+  // not require project history (optional); return empty and let the Brand DNA + memories
+  // provide the data. A future migration can add a clientId index to creative_projects.
+  const projects: Array<{
+    projectId: string;
+    brandName: string | null;
+    status: string | null;
+    createdAt: Date | null | undefined;
+  }> = [];
 
   const input: BrandDnaAdapterInput = {
     clientId,
