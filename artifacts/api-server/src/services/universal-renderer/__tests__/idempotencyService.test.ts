@@ -13,7 +13,7 @@ import {
   _flushIdempotencyCache,
   idempotencyCacheSize,
 } from "../idempotencyService.js";
-import type { UniversalRenderRequest, UniversalRenderResult } from "../universalRendererService.js";
+import type { UniversalRenderRequest, UniversalRenderResult, OutputFormat } from "../universalRendererService.js";
 
 const BASE_REQ: UniversalRenderRequest = {
   source: { kind: "svg", svgContent: "<svg/>", canvasWidth: 800, canvasHeight: 600 },
@@ -53,9 +53,9 @@ describe("computeRenderHash", () => {
   });
 
   it("is order-insensitive for formats (sorted)", () => {
-    const a = { ...BASE_REQ, formats: ["png", "svg"] as const };
-    const b = { ...BASE_REQ, formats: ["svg", "png"] as const };
-    expect(computeRenderHash(a as UniversalRenderRequest)).toBe(computeRenderHash(b as UniversalRenderRequest));
+    const a: UniversalRenderRequest = { ...BASE_REQ, formats: ["png", "svg"] as unknown as OutputFormat[] };
+    const b: UniversalRenderRequest = { ...BASE_REQ, formats: ["svg", "png"] as unknown as OutputFormat[] };
+    expect(computeRenderHash(a)).toBe(computeRenderHash(b));
   });
 
   it("differs for previewMode true vs false", () => {
