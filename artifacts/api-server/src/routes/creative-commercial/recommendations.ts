@@ -258,8 +258,8 @@ router.get("/approvals", async (req, res): Promise<void> => {
   const customerProfileId = parsePositiveInt(req.query["customerProfileId"]) ?? undefined;
 
   try {
-    const approvals = await listPendingApprovals(customerProfileId);
-    res.json(approvals);
+    const result = await listPendingApprovals(customerProfileId);
+    res.json(result);
   } catch (err) {
     logger.error({ err }, "[creative-commercial] list approvals error");
     res.status(500).json({ error: "Failed to load approvals" });

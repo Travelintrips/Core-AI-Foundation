@@ -240,25 +240,47 @@ export async function getApproval(approvalId: number): Promise<PendingApproval |
 
 // ── listPendingApprovals ──────────────────────────────────────────────────────
 
+// Hard cap: maximum rows returned by listPendingApprovals regardless of caller input.
+// Regression guard: do not remove or raise without updating tests.
+const LIST_APPROVALS_MAX_LIMIT  = 100;
+const LIST_APPROVALS_DEFAULT_LIMIT = 50;
+
 export async function listPendingApprovals(
   customerProfileId?: number,
-): Promise<PendingApproval[]> {
+  opts: { limit?: number; offset?: number } = {},
+): Promise<{ items: PendingApproval[]; total: number; limit: number; offset: number }> {
+  const limit  = Math.min(Math.max(opts.limit  ?? LIST_APPROVALS_DEFAULT_LIMIT, 1), LIST_APPROVALS_MAX_LIMIT);
+  const offset = Math.max(opts.offset ?? 0, 0);
+
   const customerFilter = customerProfileId
     ? sql`AND (notes->>'customerProfileId')::int = ${customerProfileId}`
     : sql``;
 
-  const result = await db.execute<RawGateRow>(sql`
-    SELECT *
-    FROM ai_platform.ai_commercial_gates
-    WHERE gate_type = 'admin_approval'
-      AND status = 'pending'
-      AND notes->>'source' = 'creative-commercial'
-      ${customerFilter}
-    ORDER BY created_at DESC
-    LIMIT 100
-  `);
-  const rows = (result as unknown as { rows: RawGateRow[] }).rows ?? [];
-  return rows.map(mapGate);
+  const [result, countResult] = await Promise.all([
+    db.execute<RawGateRow>(sql`
+      SELECT *
+      FROM ai_platform.ai_commercial_gates
+      WHERE gate_type = 'admin_approval'
+        AND status = 'pending'
+        AND notes->>'source' = 'creative-commercial'
+        ${customerFilter}
+      ORDER BY created_at DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `),
+    db.execute<{ total: number }>(sql`
+      SELECT count(*)::int AS total
+      FROM ai_platform.ai_commercial_gates
+      WHERE gate_type = 'admin_approval'
+        AND status = 'pending'
+        AND notes->>'source' = 'creative-commercial'
+        ${customerFilter}
+    `),
+  ]);
+
+  const resultRows = (result as unknown as { rows: RawGateRow[] }).rows ?? [];
+  const total = (countResult as unknown as { rows: Array<{ total: number }> }).rows?.[0]?.total ?? 0;
+
+  return { items: resultRows.map(mapGate), total: Number(total), limit, offset };
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -271,6 +293,7 @@ async function loadGate(approvalId: number): Promise<RawGateRow | null> {
     WHERE id = ${approvalId}
       AND gate_type = 'admin_approval'
       AND notes->>'source' = 'creative-commercial'
+    LIMIT 1
   `);
   const rows = (result as unknown as { rows: RawGateRow[] }).rows ?? [];
   return rows[0] ?? null;

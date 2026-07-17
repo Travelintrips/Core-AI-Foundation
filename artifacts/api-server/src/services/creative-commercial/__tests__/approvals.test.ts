@@ -301,21 +301,72 @@ describe("getApproval", () => {
 
 describe("listPendingApprovals", () => {
   it("returns all pending gates when no customerProfileId filter", async () => {
-    mockExecute.mockResolvedValueOnce(execResult([makeGateRow({ id: 1 }), makeGateRow({ id: 2 })]));
-    const results = await listPendingApprovals();
-    expect(results).toHaveLength(2);
+    // data query + count query
+    mockExecute
+      .mockResolvedValueOnce(execResult([makeGateRow({ id: 1 }), makeGateRow({ id: 2 })]))
+      .mockResolvedValueOnce(execResult([{ total: 2 }]));
+    const result = await listPendingApprovals();
+    expect(result.items).toHaveLength(2);
+    expect(result.total).toBe(2);
   });
 
   it("returns filtered results when customerProfileId is provided", async () => {
-    mockExecute.mockResolvedValueOnce(execResult([makeGateRow({ id: 5 })]));
-    const results = await listPendingApprovals(10);
-    expect(results).toHaveLength(1);
-    expect(results[0]!.customerProfileId).toBe(10);
+    mockExecute
+      .mockResolvedValueOnce(execResult([makeGateRow({ id: 5 })]))
+      .mockResolvedValueOnce(execResult([{ total: 1 }]));
+    const result = await listPendingApprovals(10);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]!.customerProfileId).toBe(10);
   });
 
-  it("returns empty array on DB failure without throwing (graceful)", async () => {
-    // listPendingApprovals propagates errors — callers should handle
+  it("propagates DB errors", async () => {
     mockExecute.mockRejectedValueOnce(new Error("DB down"));
     await expect(listPendingApprovals()).rejects.toThrow("DB down");
+  });
+
+  // ── Pagination regression guard (P2 remediation) ────────────────────────────
+  // These must break if MAX_LIMIT or pagination is removed from listPendingApprovals.
+
+  it("returns pagination metadata — limit, offset, total", async () => {
+    mockExecute
+      .mockResolvedValueOnce(execResult([makeGateRow({ id: 1 })]))
+      .mockResolvedValueOnce(execResult([{ total: 5 }]));
+    const result = await listPendingApprovals(undefined, { limit: 1, offset: 0 });
+    expect(result).toHaveProperty("limit");
+    expect(result).toHaveProperty("offset");
+    expect(result).toHaveProperty("total");
+    expect(result.total).toBe(5);
+  });
+
+  it("clamps limit to MAX of 100 — unbounded queries are never allowed", async () => {
+    mockExecute
+      .mockResolvedValueOnce(execResult([]))
+      .mockResolvedValueOnce(execResult([{ total: 0 }]));
+    const result = await listPendingApprovals(undefined, { limit: 99999 });
+    expect(result.limit).toBe(100);
+  });
+
+  it("clamps limit to minimum of 1", async () => {
+    mockExecute
+      .mockResolvedValueOnce(execResult([]))
+      .mockResolvedValueOnce(execResult([{ total: 0 }]));
+    const result = await listPendingApprovals(undefined, { limit: 0 });
+    expect(result.limit).toBe(1);
+  });
+
+  it("defaults limit to 50 when not specified", async () => {
+    mockExecute
+      .mockResolvedValueOnce(execResult([]))
+      .mockResolvedValueOnce(execResult([{ total: 0 }]));
+    const result = await listPendingApprovals();
+    expect(result.limit).toBe(50);
+  });
+
+  it("clamps negative offset to 0", async () => {
+    mockExecute
+      .mockResolvedValueOnce(execResult([]))
+      .mockResolvedValueOnce(execResult([{ total: 0 }]));
+    const result = await listPendingApprovals(undefined, { offset: -10 });
+    expect(result.offset).toBe(0);
   });
 });
