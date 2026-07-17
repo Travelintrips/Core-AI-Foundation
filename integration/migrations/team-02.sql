@@ -1,0 +1,23 @@
+-- Team 02 Migration Draft — Customer Creative Workspace
+-- Status: DRAFT — NOT executed. Team 24 merges + executes.
+--
+-- Team 2 does NOT require any new tables.
+-- All features are implemented as read-only adapters over existing tables:
+--   - creative_projects          (read)
+--   - ai_service_requests        (read briefJson)
+--   - creative_project_steps     (read status/name/timestamps only)
+--   - creative_ai_assets         (read id/assetType/category/version/status/revisionNotes/createdAt)
+--   - ai_zip_deliveries          (read id/projectId/status/manifestJson/createdAt)
+--   - creative_ai_client_reviews (read id/projectId/status/reviewTokenPlain/timestamps)
+--   - customer_dashboard_tokens  (read via existing resolveWorkspaceSession)
+--   - customer_profiles          (read via existing getWorkspaceProfile)
+--   - customer_notification_reads (read/insert — already exists)
+--   - customer_support_tickets   (read/insert — already exists via support endpoints)
+--
+-- No DROP, TRUNCATE, or destructive rename.
+-- No changes to any other team's tables.
+--
+-- If future phases require new tables, they will be additive DDL added here
+-- using CREATE TABLE IF NOT EXISTS and CREATE INDEX CONCURRENTLY IF NOT EXISTS.
+
+-- (No DDL needed for Phase 1)
