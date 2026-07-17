@@ -113,7 +113,8 @@ describe("validateBlueprint — malformed top-level", () => {
   });
 
   it("rejects unknown status", () => {
-    const result = validateBlueprint(makeMinimalBlueprint({ status: "published" as any }));
+    // "published" is now a valid status; use a genuinely unknown value
+    const result = validateBlueprint(makeMinimalBlueprint({ status: "super_active" as any }));
     expect(result.valid).toBe(false);
     expect(result.issues.some((i) => i.code === "INVALID_STATUS")).toBe(true);
   });

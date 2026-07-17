@@ -1,27 +1,43 @@
 /**
  * Universal Design Blueprint Library — Service Layer (Team 7)
  *
- * Provides CRUD over the in-memory blueprint registry (built-ins) and an
- * in-process custom blueprint store (no DB required — Team 7 owns no shared
- * tables until the migration draft is applied by Team 24).
+ * Architecture
+ * ────────────
+ * Built-in blueprints:  live entirely in code (blueprints/index.ts).
+ *                       Always available; never persisted to DB.
+ * Custom blueprints:    persisted via IBlueprintRepository.
+ *                       Production uses DbBlueprintRepository.
+ *                       Tests inject InMemoryBlueprintRepository.
  *
- * Public surface:
- *   listBlueprints(filter)
- *   getBlueprintById(id)
- *   getBlueprintBySlug(slug)
- *   getBlueprintsByDomain(domain)
- *   createCustomBlueprint(input)
- *   updateCustomBlueprint(id, input)
- *   deprecateCustomBlueprint(id)
- *   validateBlueprintPayload(payload)
- *   checkBlueprintCompatibility(request)
- *   normalizeBlueprintPayload(payload)
+ * Storage rule
+ * ────────────
+ * The production service MUST NOT default to in-memory storage.
+ * `createBlueprintService()` accepts any IBlueprintRepository;
+ * the module-level singleton is wired to DbBlueprintRepository.
+ *
+ * Visibility rules
+ * ────────────────
+ *   published → visible on public (unauthenticated) listing endpoint
+ *   active    → visible to admins only
+ *   draft     → visible to admins only
+ *   deprecated→ visible to admins only
+ *
+ * Public surface (exported)
+ * ─────────────────────────
+ *   createBlueprintService(repo)  — factory (for tests)
+ *   listBlueprints, getBlueprintById, getBlueprintBySlug, getBlueprintsByDomain,
+ *   listPublicBlueprints,
+ *   createCustomBlueprint, updateCustomBlueprint,
+ *   publishBlueprint, archiveBlueprint, deprecateCustomBlueprint,
+ *   validateBlueprintPayload, checkBlueprintCompatibility, normalizeBlueprintPayload,
+ *   getBlueprintStats
  */
 
 import { randomUUID } from "crypto";
 import type {
   Blueprint,
   BlueprintDomain,
+  BlueprintStatus,
   CreateBlueprintInput,
   UpdateBlueprintInput,
   ListBlueprintsFilter,
@@ -39,15 +55,9 @@ import {
 import { validateBlueprint } from "./blueprintValidator.js";
 import { checkCompatibility } from "./compatibilityChecker.js";
 import { normalizeBlueprint } from "./blueprintNormalizer.js";
-import { BLUEPRINT_SCHEMA_VERSION } from "./types.js";
-
-// ── In-process custom blueprint store ────────────────────────────────────────
-// Replaces DB until Team 24 mounts the migration draft.
-// P1-B: Maintain a secondary slug index so getBlueprintBySlug is O(1) on custom blueprints,
-// not O(N).
-
-const customBlueprintStore = new Map<string, Blueprint>();
-const customSlugIndex      = new Map<string, string>();  // slug → id
+import { BLUEPRINT_SCHEMA_VERSION, PUBLIC_BLUEPRINT_STATUSES } from "./types.js";
+import type { IBlueprintRepository, CustomBlueprintFilter } from "./repository/IBlueprintRepository.js";
+import { DbBlueprintRepository } from "./repository/DbBlueprintRepository.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -63,97 +73,12 @@ function makeUniqueSlug(base: string): string {
   return `custom-${base}-${randomUUID().slice(0, 8)}`;
 }
 
-function matchesTags(bp: Blueprint, industryTag?: string, styleTag?: string): boolean {
-  if (industryTag && !bp.industryTags.includes(industryTag)) return false;
-  if (styleTag && !bp.styleTags.includes(styleTag)) return false;
-  return true;
-}
-
-// ── List ──────────────────────────────────────────────────────────────────────
-
-export function listBlueprints(filter: ListBlueprintsFilter = {}): Blueprint[] {
-  const all: Blueprint[] = [
-    ...BUILTIN_BLUEPRINTS,
-    ...customBlueprintStore.values(),
-  ];
-
-  let result = all.filter((bp) => {
-    if (filter.domain && bp.domain !== filter.domain) return false;
-    if (filter.status && bp.status !== filter.status) return false;
-    if (!matchesTags(bp, filter.industryTag, filter.styleTag)) return false;
-    return true;
-  });
-
-  const offset = filter.offset ?? 0;
-  const limit  = filter.limit  ?? 100;
-  result = result.slice(offset, offset + limit);
-  return result;
-}
-
-// ── Get by ID ─────────────────────────────────────────────────────────────────
-
-export function getBlueprintById(id: string): Blueprint | null {
-  return BUILTIN_BLUEPRINT_MAP.get(id) ?? customBlueprintStore.get(id) ?? null;
-}
-
-// ── Get by slug ───────────────────────────────────────────────────────────────
-
-export function getBlueprintBySlug(slug: string): Blueprint | null {
-  // P1-B fix: use the slug index for O(1) lookup instead of O(N) scan
-  const customId = customSlugIndex.get(slug);
-  const custom   = customId ? customBlueprintStore.get(customId) : undefined;
-  return BUILTIN_BLUEPRINT_BY_SLUG.get(slug) ?? custom ?? null;
-}
-
-// ── Get by domain ─────────────────────────────────────────────────────────────
-
-export function getBlueprintsByDomain(domain: BlueprintDomain): Blueprint[] {
-  const builtins = BUILTIN_BLUEPRINT_BY_DOMAIN.get(domain) ?? [];
-  const customs  = [...customBlueprintStore.values()].filter((bp) => bp.domain === domain);
-  return [...builtins, ...customs];
-}
-
-// ── Create custom blueprint ───────────────────────────────────────────────────
+// ── Service factory ───────────────────────────────────────────────────────────
 
 export interface CreateBlueprintResult {
   blueprint: Blueprint | null;
   validation: ValidationResult;
 }
-
-export function createCustomBlueprint(input: CreateBlueprintInput): CreateBlueprintResult {
-  const now = new Date().toISOString();
-  const id  = `bp-custom-${randomUUID()}`;
-  // Guard: name may be absent/non-string on a malformed payload; let the validator surface the error.
-  const safeName = typeof input.name === "string" ? input.name : "";
-  const slug = makeUniqueSlug(slugify(safeName));
-
-  const draft: Blueprint = {
-    ...input,
-    id,
-    slug,
-    schemaVersion: BLUEPRINT_SCHEMA_VERSION,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  // Validate before normalizing — the normalizer expects structurally sound
-  // arrays; calling it on a malformed payload crashes instead of returning
-  // a clean validation error.
-  const prelimValidation = validateBlueprint(draft);
-  if (!prelimValidation.valid) {
-    return { blueprint: null, validation: prelimValidation };
-  }
-
-  // Now safe to normalize (payload has passed structural checks).
-  const { blueprint: normalized } = normalizeBlueprint(draft, now);
-  const validation = validateBlueprint(normalized);
-
-  customBlueprintStore.set(id, normalized);
-  customSlugIndex.set(normalized.slug, id);  // P1-B: keep slug index in sync
-  return { blueprint: normalized, validation };
-}
-
-// ── Update custom blueprint ───────────────────────────────────────────────────
 
 export interface UpdateBlueprintResult {
   blueprint: Blueprint | null;
@@ -161,121 +86,256 @@ export interface UpdateBlueprintResult {
   notFound?: boolean;
 }
 
-export function updateCustomBlueprint(id: string, input: UpdateBlueprintInput): UpdateBlueprintResult {
-  // Built-ins are immutable
-  if (BUILTIN_BLUEPRINT_MAP.has(id)) {
+export class BlueprintService {
+  constructor(private readonly repo: IBlueprintRepository) {}
+
+  // ── List (admin: all statuses) ──────────────────────────────────────────────
+
+  async listBlueprints(filter: ListBlueprintsFilter = {}): Promise<Blueprint[]> {
+    const { rows: customs } = await this.repo.findAll(filter as CustomBlueprintFilter);
+
+    const builtins = BUILTIN_BLUEPRINTS.filter((bp) => {
+      if (filter.domain && bp.domain !== filter.domain) return false;
+      if (filter.status && bp.status !== filter.status) return false;
+      if (filter.industryTag && !bp.industryTags.includes(filter.industryTag)) return false;
+      if (filter.styleTag && !bp.styleTags.includes(filter.styleTag)) return false;
+      return true;
+    });
+
+    const all = [...builtins, ...customs];
+    const offset = filter.offset ?? 0;
+    const limit  = filter.limit  ?? 100;
+    return all.slice(offset, offset + limit);
+  }
+
+  // ── Public list (unauthenticated: published only) ───────────────────────────
+
+  async listPublicBlueprints(filter: Omit<ListBlueprintsFilter, "status"> = {}): Promise<Blueprint[]> {
+    // Public endpoint MUST filter to published status only — never expose draft/active.
+    return this.listBlueprints({ ...filter, status: "published" });
+  }
+
+  // ── Get by ID ───────────────────────────────────────────────────────────────
+
+  async getBlueprintById(id: string): Promise<Blueprint | null> {
+    return BUILTIN_BLUEPRINT_MAP.get(id) ?? (await this.repo.findById(id));
+  }
+
+  // ── Get by slug ─────────────────────────────────────────────────────────────
+
+  async getBlueprintBySlug(slug: string): Promise<Blueprint | null> {
+    return BUILTIN_BLUEPRINT_BY_SLUG.get(slug) ?? (await this.repo.findBySlug(slug));
+  }
+
+  // ── Get by domain ────────────────────────────────────────────────────────────
+
+  async getBlueprintsByDomain(domain: BlueprintDomain): Promise<Blueprint[]> {
+    const builtins = BUILTIN_BLUEPRINT_BY_DOMAIN.get(domain) ?? [];
+    const { rows: customs } = await this.repo.findAll({ domain });
+    return [...builtins, ...customs];
+  }
+
+  // ── Create custom blueprint ─────────────────────────────────────────────────
+
+  async createCustomBlueprint(input: CreateBlueprintInput): Promise<CreateBlueprintResult> {
+    const now      = new Date().toISOString();
+    const id       = `bp-custom-${randomUUID()}`;
+    const safeName = typeof input.name === "string" ? input.name : "";
+    const slug     = input.slug ?? makeUniqueSlug(slugify(safeName));
+
+    const draft: Blueprint = {
+      ...input,
+      id,
+      slug,
+      schemaVersion: BLUEPRINT_SCHEMA_VERSION,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // Validate before normalizing — normalizer assumes structurally sound input.
+    const prelimValidation = validateBlueprint(draft);
+    if (!prelimValidation.valid) {
+      return { blueprint: null, validation: prelimValidation };
+    }
+
+    const { blueprint: normalized } = normalizeBlueprint(draft, now);
+    const validation = validateBlueprint(normalized);
+    if (!validation.valid) {
+      return { blueprint: null, validation };
+    }
+
+    const saved = await this.repo.create(normalized);
+    return { blueprint: saved, validation };
+  }
+
+  // ── Update custom blueprint ─────────────────────────────────────────────────
+
+  async updateCustomBlueprint(id: string, input: UpdateBlueprintInput): Promise<UpdateBlueprintResult> {
+    if (BUILTIN_BLUEPRINT_MAP.has(id)) {
+      return {
+        blueprint: null,
+        validation: {
+          valid: false,
+          issues: [{
+            severity: "error",
+            code:     "BUILTIN_IMMUTABLE",
+            path:     "id",
+            message:  "Built-in blueprints cannot be updated",
+          }],
+        },
+      };
+    }
+
+    const existing = await this.repo.findById(id);
+    if (!existing) {
+      return { blueprint: null, validation: { valid: false, issues: [] }, notFound: true };
+    }
+
+    const now    = new Date().toISOString();
+    const merged: Blueprint = { ...existing, ...input, id, slug: existing.slug, updatedAt: now };
+
+    const { blueprint: normalized } = normalizeBlueprint(merged, now);
+    const validation = validateBlueprint(normalized);
+    if (!validation.valid) {
+      return { blueprint: null, validation };
+    }
+
+    const saved = await this.repo.update(id, normalized);
+    return { blueprint: saved, validation };
+  }
+
+  // ── Publish (status → published) ────────────────────────────────────────────
+
+  async publishBlueprint(id: string): Promise<{ success: boolean; blueprint?: Blueprint; notFound?: boolean; builtin?: boolean }> {
+    if (BUILTIN_BLUEPRINT_MAP.has(id)) return { success: false, builtin: true };
+    const updated = await this.repo.setStatus(id, "published");
+    if (!updated) return { success: false, notFound: true };
+    return { success: true, blueprint: updated };
+  }
+
+  // ── Archive (status → active, reverting from published/draft) ───────────────
+
+  async archiveBlueprint(id: string): Promise<{ success: boolean; blueprint?: Blueprint; notFound?: boolean; builtin?: boolean }> {
+    if (BUILTIN_BLUEPRINT_MAP.has(id)) return { success: false, builtin: true };
+    const updated = await this.repo.setStatus(id, "active");
+    if (!updated) return { success: false, notFound: true };
+    return { success: true, blueprint: updated };
+  }
+
+  // ── Deprecate (status → deprecated) ─────────────────────────────────────────
+
+  async deprecateCustomBlueprint(id: string): Promise<{ success: boolean; notFound?: boolean; builtin?: boolean }> {
+    if (BUILTIN_BLUEPRINT_MAP.has(id)) return { success: false, builtin: true };
+    const updated = await this.repo.setStatus(id, "deprecated");
+    if (!updated) return { success: false, notFound: true };
+    return { success: true };
+  }
+
+  // ── Validate ─────────────────────────────────────────────────────────────────
+
+  validateBlueprintPayload(payload: unknown): ValidationResult {
+    return validateBlueprint(payload);
+  }
+
+  // ── Compatibility check ───────────────────────────────────────────────────────
+
+  async checkBlueprintCompatibility(
+    request: CompatibilityRequest
+  ): Promise<CompatibilityResult & { blueprintNotFound?: boolean }> {
+    const blueprint = await this.getBlueprintById(request.blueprintId);
+    if (!blueprint) {
+      return {
+        compatible: false,
+        issues: [{ code: "BLUEPRINT_NOT_FOUND", message: `Blueprint "${request.blueprintId}" not found` }],
+        warnings: [],
+        blueprintNotFound: true,
+      };
+    }
+    return checkCompatibility(request, blueprint);
+  }
+
+  // ── Normalize ─────────────────────────────────────────────────────────────────
+
+  normalizeBlueprintPayload(payload: unknown): NormalizationResult & { valid: boolean; validationIssues: ValidationResult["issues"] } {
+    if (!payload || typeof payload !== "object") {
+      return {
+        blueprint: null as any,
+        changes: [],
+        valid: false,
+        validationIssues: [{ severity: "error", code: "NOT_AN_OBJECT", path: "", message: "Payload must be a non-null object" }],
+      };
+    }
+    const { blueprint, changes } = normalizeBlueprint(payload as Blueprint);
+    const validation = validateBlueprint(blueprint);
+    return { blueprint, changes, valid: validation.valid, validationIssues: validation.issues };
+  }
+
+  // ── Stats ─────────────────────────────────────────────────────────────────────
+
+  async getBlueprintStats(): Promise<{
+    total: number; builtin: number; custom: number;
+    byDomain: Record<string, number>;
+    byStatus: Record<BlueprintStatus, number>;
+  }> {
+    // Count custom blueprints directly from repository (no pagination limit).
+    const { rows: allCustom, total: customTotal } = await this.repo.findAll({ limit: 10_000 });
+
+    const byDomain: Record<string, number> = {};
+    for (const [d, bps] of BUILTIN_BLUEPRINT_BY_DOMAIN.entries()) byDomain[d] = bps.length;
+    for (const bp of allCustom) byDomain[bp.domain] = (byDomain[bp.domain] ?? 0) + 1;
+
+    const builtinCount = BUILTIN_BLUEPRINTS.length;
+    const all          = [...BUILTIN_BLUEPRINTS, ...allCustom];
+
     return {
-      blueprint: null,
-      validation: { valid: false, issues: [{ severity: "error", code: "BUILTIN_IMMUTABLE", path: "id", message: "Built-in blueprints cannot be updated" }] },
+      total:   builtinCount + customTotal,
+      builtin: builtinCount,
+      custom:  customTotal,
+      byDomain,
+      byStatus: {
+        published:  all.filter((b) => b.status === "published").length,
+        active:     all.filter((b) => b.status === "active").length,
+        draft:      all.filter((b) => b.status === "draft").length,
+        deprecated: all.filter((b) => b.status === "deprecated").length,
+      },
     };
   }
-  const existing = customBlueprintStore.get(id);
-  if (!existing) {
-    return { blueprint: null, validation: { valid: false, issues: [] }, notFound: true };
-  }
-
-  const now = new Date().toISOString();
-  const merged: Blueprint = { ...existing, ...input, id, updatedAt: now };
-
-  const { blueprint: normalized } = normalizeBlueprint(merged, now);
-  const validation = validateBlueprint(normalized);
-
-  if (!validation.valid) {
-    return { blueprint: null, validation };
-  }
-
-  // P1-B: if slug changed during update, re-index (old slug → new slug)
-  if (existing.slug !== normalized.slug) {
-    customSlugIndex.delete(existing.slug);
-  }
-  customBlueprintStore.set(id, normalized);
-  customSlugIndex.set(normalized.slug, id);
-  return { blueprint: normalized, validation };
 }
 
-// ── Deprecate custom blueprint ────────────────────────────────────────────────
+// ── Production singleton ──────────────────────────────────────────────────────
+// DbBlueprintRepository is the only legal default in production.
+// Tests must inject InMemoryBlueprintRepository via createBlueprintService().
 
-export function deprecateCustomBlueprint(id: string): { success: boolean; notFound?: boolean; builtin?: boolean } {
-  if (BUILTIN_BLUEPRINT_MAP.has(id)) return { success: false, builtin: true };
-  const bp = customBlueprintStore.get(id);
-  if (!bp) return { success: false, notFound: true };
-  customBlueprintStore.set(id, { ...bp, status: "deprecated", updatedAt: new Date().toISOString() });
-  return { success: true };
+let _productionService: BlueprintService | null = null;
+
+/** Factory — use this in tests by passing InMemoryBlueprintRepository. */
+export function createBlueprintService(repo: IBlueprintRepository): BlueprintService {
+  return new BlueprintService(repo);
 }
 
-// ── Validate ──────────────────────────────────────────────────────────────────
-
-export function validateBlueprintPayload(payload: unknown): ValidationResult {
-  return validateBlueprint(payload);
-}
-
-// ── Compatibility check ───────────────────────────────────────────────────────
-
-export function checkBlueprintCompatibility(
-  request: CompatibilityRequest
-): CompatibilityResult & { blueprintNotFound?: boolean } {
-  const blueprint = getBlueprintById(request.blueprintId);
-  if (!blueprint) {
-    return {
-      compatible: false,
-      issues: [{ code: "BLUEPRINT_NOT_FOUND", message: `Blueprint "${request.blueprintId}" not found` }],
-      warnings: [],
-      blueprintNotFound: true,
-    };
+function getService(): BlueprintService {
+  if (!_productionService) {
+    _productionService = new BlueprintService(new DbBlueprintRepository());
   }
-  return checkCompatibility(request, blueprint);
+  return _productionService;
 }
 
-// ── Normalize ─────────────────────────────────────────────────────────────────
+// ── Named exports (routes import these) ──────────────────────────────────────
 
-export function normalizeBlueprintPayload(payload: unknown): NormalizationResult & { valid: boolean; validationIssues: ValidationResult["issues"] } {
-  if (!payload || typeof payload !== "object") {
-    return {
-      blueprint: null as any,
-      changes: [],
-      valid: false,
-      validationIssues: [{ severity: "error", code: "NOT_AN_OBJECT", path: "", message: "Payload must be a non-null object" }],
-    };
-  }
+export async function listBlueprints(filter?: ListBlueprintsFilter):  Promise<Blueprint[]>      { return getService().listBlueprints(filter); }
+export async function listPublicBlueprints(filter?: Omit<ListBlueprintsFilter, "status">): Promise<Blueprint[]> { return getService().listPublicBlueprints(filter); }
+export async function getBlueprintById(id: string):                   Promise<Blueprint | null>  { return getService().getBlueprintById(id); }
+export async function getBlueprintBySlug(slug: string):               Promise<Blueprint | null>  { return getService().getBlueprintBySlug(slug); }
+export async function getBlueprintsByDomain(domain: BlueprintDomain): Promise<Blueprint[]>       { return getService().getBlueprintsByDomain(domain); }
+export async function createCustomBlueprint(input: CreateBlueprintInput): Promise<CreateBlueprintResult>          { return getService().createCustomBlueprint(input); }
+export async function updateCustomBlueprint(id: string, input: UpdateBlueprintInput): Promise<UpdateBlueprintResult> { return getService().updateCustomBlueprint(id, input); }
+export async function publishBlueprint(id: string)                    { return getService().publishBlueprint(id); }
+export async function archiveBlueprint(id: string)                    { return getService().archiveBlueprint(id); }
+export async function deprecateCustomBlueprint(id: string)            { return getService().deprecateCustomBlueprint(id); }
+export function validateBlueprintPayload(payload: unknown): ValidationResult                     { return getService().validateBlueprintPayload(payload); }
+export async function checkBlueprintCompatibility(request: CompatibilityRequest)                 { return getService().checkBlueprintCompatibility(request); }
+export function normalizeBlueprintPayload(payload: unknown)                                       { return getService().normalizeBlueprintPayload(payload); }
+export async function getBlueprintStats()                                                         { return getService().getBlueprintStats(); }
 
-  const { blueprint, changes } = normalizeBlueprint(payload as Blueprint);
-  const validation = validateBlueprint(blueprint);
-  return {
-    blueprint,
-    changes,
-    valid: validation.valid,
-    validationIssues: validation.issues,
-  };
-}
-
-// ── Stats ─────────────────────────────────────────────────────────────────────
-
-export function getBlueprintStats() {
-  // P1-A fix: do NOT use listBlueprints() for counts — it applies a default
-  // limit of 100 and would undercount once custom blueprints grow beyond that.
-  // Count directly from the source stores instead.
-  const allCustom   = [...customBlueprintStore.values()];
-  const allBuiltins = BUILTIN_BLUEPRINTS;
-  const all         = [...allBuiltins, ...allCustom];
-
-  // byDomain: builtins from the index + custom grouped by domain
-  const byDomain: Record<string, number> = {};
-  for (const [d, bps] of BUILTIN_BLUEPRINT_BY_DOMAIN.entries()) {
-    byDomain[d] = bps.length;
-  }
-  for (const bp of allCustom) {
-    byDomain[bp.domain] = (byDomain[bp.domain] ?? 0) + 1;
-  }
-
-  return {
-    total:   all.length,
-    builtin: allBuiltins.length,
-    custom:  customBlueprintStore.size,
-    byDomain,
-    byStatus: {
-      active:     all.filter((b) => b.status === "active").length,
-      draft:      all.filter((b) => b.status === "draft").length,
-      deprecated: all.filter((b) => b.status === "deprecated").length,
-    },
-  };
-}
+// Re-export PUBLIC_BLUEPRINT_STATUSES for route use
+export { PUBLIC_BLUEPRINT_STATUSES };

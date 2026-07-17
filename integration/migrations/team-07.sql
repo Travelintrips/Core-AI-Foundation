@@ -12,7 +12,14 @@ SET search_path TO ai_platform, public;
 
 -- ---------------------------------------------------------------------------
 -- Table: ai_design_blueprints
--- Stores custom (user-created) blueprints. Built-in blueprints live in code.
+-- Stores CUSTOM (user-created) blueprints.
+-- Built-in blueprints live in code (services/design-blueprints/blueprints/).
+--
+-- Status vocabulary:
+--   draft      — work-in-progress; admin-only
+--   active     — enabled for internal/admin use; NOT surfaced publicly
+--   published  — intentionally public-facing; returned by the public listing endpoint
+--   deprecated — no longer recommended; kept for historical reference
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ai_design_blueprints (
   id             SERIAL PRIMARY KEY,
@@ -26,8 +33,9 @@ CREATE TABLE IF NOT EXISTS ai_design_blueprints (
   name           TEXT        NOT NULL,
   description    TEXT        NOT NULL DEFAULT '',
   version        TEXT        NOT NULL DEFAULT '1.0.0',
+  -- published = intentionally public; active = admin-only; draft = WIP; deprecated = retired
   status         TEXT        NOT NULL DEFAULT 'draft'
-                   CHECK (status IN ('draft', 'active', 'deprecated')),
+                   CHECK (status IN ('draft', 'active', 'published', 'deprecated')),
 
   -- JSON columns (validated by blueprintValidator before insert)
   dimensions_json     JSONB NOT NULL DEFAULT '{}',
@@ -45,10 +53,17 @@ CREATE TABLE IF NOT EXISTS ai_design_blueprints (
   updated_by     TEXT,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  deleted_at     TIMESTAMPTZ
+  deleted_at     TIMESTAMPTZ  -- soft-delete; NULL = live record
 );
 
-COMMENT ON TABLE ai_design_blueprints IS 'Custom blueprint records for the Universal Design Blueprint Library (Team 7). Built-in blueprints live in code (services/design-blueprints/blueprints/).';
+COMMENT ON TABLE ai_design_blueprints IS
+  'Custom blueprint records for the Universal Design Blueprint Library (Team 7). '
+  'Built-in blueprints live in code (services/design-blueprints/blueprints/). '
+  'status=published means the blueprint is surfaced on the public listing endpoint.';
+
+COMMENT ON COLUMN ai_design_blueprints.public_id IS
+  'UUID used as the application-level ID (Blueprint.id). '
+  'The serial PK is internal to the DB; never exposed via API.';
 
 -- ---------------------------------------------------------------------------
 -- Table: ai_blueprint_validation_log
@@ -67,7 +82,9 @@ CREATE TABLE IF NOT EXISTS ai_blueprint_validation_log (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE ai_blueprint_validation_log IS 'Audit log for blueprint validation, compatibility check, and normalize operations (Team 7). Append-only.';
+COMMENT ON TABLE ai_blueprint_validation_log IS
+  'Audit log for blueprint validation, compatibility check, and normalize operations (Team 7). '
+  'Append-only — never UPDATE or DELETE rows.';
 
 -- ---------------------------------------------------------------------------
 -- Indexes
@@ -79,6 +96,11 @@ CREATE INDEX IF NOT EXISTS idx_ai_design_blueprints_domain
 CREATE INDEX IF NOT EXISTS idx_ai_design_blueprints_status
   ON ai_design_blueprints (status)
   WHERE deleted_at IS NULL;
+
+-- Partial index optimised for the public listing endpoint (status = 'published')
+CREATE INDEX IF NOT EXISTS idx_ai_design_blueprints_published
+  ON ai_design_blueprints (domain, created_at)
+  WHERE status = 'published' AND deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_ai_design_blueprints_industry_tags
   ON ai_design_blueprints USING gin (industry_tags)
@@ -98,7 +120,7 @@ CREATE INDEX IF NOT EXISTS idx_ai_blueprint_validation_log_operation
 -- ---------------------------------------------------------------------------
 -- Trigger: auto-update updated_at
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION ai_platform.update_updated_at_column()
+CREATE OR REPLACE FUNCTION ai_platform.update_blueprint_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
   NEW.updated_at = now();
@@ -114,7 +136,7 @@ BEGIN
   ) THEN
     CREATE TRIGGER trg_ai_design_blueprints_updated_at
       BEFORE UPDATE ON ai_design_blueprints
-      FOR EACH ROW EXECUTE FUNCTION ai_platform.update_updated_at_column();
+      FOR EACH ROW EXECUTE FUNCTION ai_platform.update_blueprint_updated_at();
   END IF;
 END;
 $$;

@@ -38,8 +38,15 @@ export type BlueprintDomain = (typeof BLUEPRINT_DOMAINS)[number];
 
 // ── Status ────────────────────────────────────────────────────────────────────
 
-export const BLUEPRINT_STATUSES = ["draft", "active", "deprecated"] as const;
+// "published" = intentionally public-facing (appears on public listing endpoints).
+// "active"    = enabled for internal/admin use but not surfaced publicly.
+// "draft"     = work-in-progress; not visible outside admin routes.
+// "deprecated" = no longer recommended; kept for historical reference.
+export const BLUEPRINT_STATUSES = ["draft", "active", "published", "deprecated"] as const;
 export type BlueprintStatus = (typeof BLUEPRINT_STATUSES)[number];
+
+/** Statuses visible on the public (unauthenticated) listing endpoint. */
+export const PUBLIC_BLUEPRINT_STATUSES: BlueprintStatus[] = ["published"];
 
 // ── Dimensions ────────────────────────────────────────────────────────────────
 
