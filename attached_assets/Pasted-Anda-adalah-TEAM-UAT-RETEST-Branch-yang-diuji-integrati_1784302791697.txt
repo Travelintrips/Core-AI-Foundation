@@ -1,0 +1,272 @@
+Anda adalah TEAM UAT RETEST.
+
+Branch yang diuji:
+
+integration/creative-enterprise
+
+Commit remediation yang wajib ada:
+
+e45a06e
+
+Tujuan:
+
+Verifikasi ulang hanya area yang sebelumnya FAIL, PARTIAL, atau INCONCLUSIVE.
+
+JANGAN memperbaiki kode.
+
+JANGAN merge ke main.
+
+JANGAN mengubah database secara manual.
+
+Jika ditemukan masalah:
+
+- dokumentasikan
+- berikan langkah reproduksi
+- expected result
+- actual result
+- severity
+- bukti log/screenshot
+
+====================================================
+PRE-CHECK
+====================================================
+
+1. git fetch origin --prune
+2. checkout integration/creative-enterprise
+3. pastikan commit e45a06e ada di HEAD/history
+4. pastikan working tree bersih
+5. pastikan API server memakai database UAT yang benar
+6. restart API server sebelum pengujian
+
+====================================================
+RETEST 1 — BRAND INTELLIGENCE
+====================================================
+
+Uji skenario berikut:
+
+A. Analyze customer valid
+
+- buat atau gunakan customer profile valid
+- pastikan customer memiliki service request dan creative project
+- jalankan Brand Intelligence analyze
+- expected:
+  - HTTP 200
+  - tidak ada malformed SQL
+  - projectCount sesuai
+  - BrandDnaView lengkap
+  - hasil dapat dibaca ulang
+
+B. Customer tanpa project
+
+- jalankan analyze untuk client valid tanpa project
+- expected:
+  - HTTP 200
+  - projectCount = 0
+  - tidak 500
+
+C. Isolation
+
+- Customer A memiliki project
+- Customer B tidak boleh membaca atau menganalisis project Customer A
+- expected:
+  - tidak ada data lintas customer
+  - fail-closed
+  - tidak ada OR fallback
+
+D. Legacy project
+
+- project tanpa service_request_id tidak boleh bocor ke customer lain
+- expected:
+  - tidak ikut dihitung
+  - tidak menyebabkan 500
+
+Verdict modul:
+
+PASS atau FAIL
+
+====================================================
+RETEST 2 — PRESENTATION DOCUMENT
+====================================================
+
+Pastikan kategori:
+
+presentation-document
+
+tersedia di live database dan customer-facing catalog.
+
+Wajib ada tepat 8 layanan:
+
+- pd-pitch-deck
+- pd-business-proposal
+- pd-company-profile-doc
+- pd-annual-report
+- pd-executive-summary
+- pd-product-catalog
+- pd-meeting-deck
+- pd-training-material
+
+Uji:
+
+1. kategori muncul di API
+2. kategori muncul di UI customer
+3. setiap layanan dapat dipilih
+4. project dapat dibuat menggunakan minimal:
+   - Pitch Deck
+   - Company Profile Document
+   - Business Proposal
+5. service code tidak duplikat
+6. Graphic Design services tetap berada di kategori Creative
+7. jalankan seed ulang
+8. pastikan tidak ada row ganda atau perubahan kategori
+
+Verdict modul:
+
+PASS atau FAIL
+
+====================================================
+RETEST 3 — COUPON DUPLICATE
+====================================================
+
+1. buat coupon baru
+2. kirim ulang coupon code yang sama
+
+Expected:
+
+- HTTP 409
+- Content-Type JSON
+- body:
+  {
+    "error": "conflict",
+    "message": "..."
+  }
+
+Pastikan response tidak mengandung:
+
+- raw SQL
+- stack trace
+- PostgreSQL code 23505
+- HTML error page
+
+Uji juga:
+
+- coupon baru tetap menghasilkan 201
+- error database selain duplicate tidak salah dipetakan menjadi 409
+
+Verdict modul:
+
+PASS atau FAIL
+
+====================================================
+RETEST 4 — SCOPE CONFIRMATION
+====================================================
+
+Verifikasi keputusan produk berikut diterapkan dalam laporan rilis:
+
+A. Component Library
+BY_DESIGN_INTERNAL_PIPELINE
+
+B. Pattern Library
+BY_DESIGN_INTERNAL_PIPELINE
+
+C. Typography & Palette
+BY_DESIGN_INTERNAL_PIPELINE
+
+D. Vendor Ecosystem
+CORRECT_VENDOR_SCOPE
+
+Catatan:
+Istilah produk yang tampil kepada pengguna adalah AI Workforce.
+Jangan membuat Vendor Master kedua.
+
+E. Product Design
+DEFERRED_BY_DESIGN
+
+Pastikan Product Design tidak diklaim sebagai fitur aktif pada release notes atau UI customer.
+
+Jika masih muncul sebagai modul aktif tetapi tidak dapat digunakan:
+
+FAIL.
+
+====================================================
+REGRESSION CHECK
+====================================================
+
+Lakukan smoke test singkat pada modul yang sebelumnya PASS:
+
+- Creative Workflow
+- Customer Workspace
+- Asset Intelligence
+- Template Matching
+- Layout Composer
+- Rendering
+- Graphic Design
+- Creative Marketplace
+
+Tujuan:
+
+memastikan remediation tidak merusak flow yang sebelumnya lulus.
+
+====================================================
+OUTPUT PER MODUL
+====================================================
+
+Tuliskan:
+
+Module
+Test Cases
+Expected
+Actual
+Evidence
+Status
+
+Gunakan:
+
+PASS
+FAIL
+NOT_IN_RELEASE_SCOPE
+
+====================================================
+FINAL REPORT
+====================================================
+
+Buat tabel:
+
+Area
+Status
+Evidence
+Remaining Issue
+Severity
+
+Kemudian ringkas:
+
+- Total PASS
+- Total FAIL
+- Critical
+- Major
+- Minor
+- Regression ditemukan atau tidak
+- Database seed integrity
+- Security isolation
+
+====================================================
+FINAL VERDICT
+====================================================
+
+Gunakan hanya:
+
+READY_FOR_MAIN_MERGE
+
+atau
+
+BLOCKED
+
+READY_FOR_MAIN_MERGE hanya boleh diberikan jika:
+
+- Brand Intelligence PASS
+- Presentation Document PASS
+- Coupon duplicate PASS
+- Tidak ada cross-customer leakage
+- Tidak ada seed corruption
+- Tidak ada Critical atau Major bug
+- Tidak ada regression yang memengaruhi pengguna
+- Product Design tidak salah diklaim sebagai fitur aktif
