@@ -1,0 +1,168 @@
+{
+  "team": "10",
+  "branch": "feature/10-typography-palette",
+  "domain": "Typography Pairing & Color Palette Engine",
+  "remediationStatus": "POST_AUDIT_REMEDIATION — Team 23 findings applied",
+  "ownedFolders": [
+    "artifacts/api-server/src/services/design-tokens/",
+    "artifacts/api-server/src/routes/design-tokens/",
+    "artifacts/ai-platform/src/pages/design-tokens/",
+    "integration/openapi/team-10.yaml",
+    "integration/migrations/team-10.sql",
+    "integration/manifests/team-10.json"
+  ],
+  "routesToMount": [
+    {
+      "method": "use",
+      "path": "/api/ai/design-tokens",
+      "routerFile": "artifacts/api-server/src/routes/design-tokens/index.ts",
+      "exportName": "designTokensRouter",
+      "middleware": ["adminAuth"],
+      "note": "Import and mount: app.use('/api/ai/design-tokens', adminAuth, designTokensRouter). The router is also exported as default."
+    }
+  ],
+  "pagesToRegister": [
+    {
+      "path": "/design-tokens",
+      "component": "DesignTokensPage",
+      "importFrom": "./pages/design-tokens/index.tsx",
+      "note": "Hub page — index overview with contrast checker widget"
+    },
+    {
+      "path": "/design-tokens/font-pairs",
+      "component": "FontPairsPage",
+      "importFrom": "./pages/design-tokens/font-pairs.tsx",
+      "note": "Font pair CRUD management page"
+    },
+    {
+      "path": "/design-tokens/color-palettes",
+      "component": "ColorPalettesPage",
+      "importFrom": "./pages/design-tokens/color-palettes.tsx",
+      "note": "Color palette CRUD with WCAG + print-safe checker"
+    }
+  ],
+  "sidebarItems": [
+    {
+      "label": "Typography & Colour",
+      "icon": "Type",
+      "href": "/design-tokens",
+      "section": "Design",
+      "children": [
+        { "label": "Font Pairs", "href": "/design-tokens/font-pairs" },
+        { "label": "Color Palettes", "href": "/design-tokens/color-palettes" }
+      ]
+    }
+  ],
+  "openapiFragment": "integration/openapi/team-10.yaml",
+  "migrationDrafts": [
+    "integration/migrations/team-10.sql"
+  ],
+  "seedDrafts": [],
+  "dependenciesRequested": [
+    {
+      "package": "slugify",
+      "version": "^1.6.9",
+      "scope": "@workspace/api-server",
+      "reason": "P0 REMEDIATION: slugify was removed from api-server/package.json and pnpm-lock.yaml reverted (both locked files). Team 10 now uses a local slug function and no longer needs this. Dependency request is CANCELLED — no installation required.",
+      "status": "CANCELLED — replaced by local implementation"
+    }
+  ],
+  "eventsPublished": [],
+  "eventsConsumed": [],
+  "workerJobTypesRequested": [],
+  "sharedTypesRequested": [
+    {
+      "type": "BrandDnaView",
+      "source": "artifacts/api-server/src/services/creativeBrandIntelligenceService.ts",
+      "usedIn": "artifacts/api-server/src/services/design-tokens/brandDnaCompatibilityService.ts",
+      "note": "Team 10 defines a local BrandDnaInput interface that mirrors BrandDnaView. Full integration would consume the shared type directly. No changes requested to shared file — local type is sufficient."
+    }
+  ],
+  "integrationOrder": [
+    "1. Run migration: integration/migrations/team-10.sql",
+    "2. Mount router: artifacts/api-server/src/routes/design-tokens/index.ts → /api/ai/design-tokens",
+    "3. Register pages: /design-tokens, /design-tokens/font-pairs, /design-tokens/color-palettes",
+    "4. Add sidebar item under 'Design' section"
+  ],
+  "p2AdapterBoundary": {
+    "existingService": "artifacts/api-server/src/services/design-renderer/fontRegistry.ts",
+    "boundary": "Team 10 does NOT reimplement font-family sanitisation. fontPairService.ts delegates to safeFontFamily() from the existing design-renderer/fontRegistry. The existing registry resolves platform fonts for SVG/render output; Team 10's registry stores metadata for font pair curation. These are different concerns — no parallel engine duplication.",
+    "adapterNote": "resolveFont() from design-renderer/fontRegistry is intentionally NOT used in Team 10 — it resolves to system-installed fonts for rendering, which is irrelevant to font pair metadata storage. safeFontFamily() IS used for input sanitisation (shared concern)."
+  },
+  "auditRemediationLog": {
+    "auditedBy": "Team 23",
+    "remediationDate": "2026-07-17",
+    "findings": [
+      {
+        "id": "P0-LOCKED-DEPENDENCY",
+        "severity": "P0",
+        "finding": "Branch modified pnpm-lock.yaml (locked file) by adding slugify",
+        "fix": "Removed slugify from artifacts/api-server/package.json. Reverted pnpm-lock.yaml to main branch version (git checkout main -- pnpm-lock.yaml). Replaced slugify with a local makeSlug() function (lowercase, diacritic-strip, alphanumeric-only, hyphenate spaces, 80-char limit). No shared package manifests were modified by Team 10.",
+        "filesChanged": [
+          "artifacts/api-server/package.json — slugify removed",
+          "pnpm-lock.yaml — reverted to main",
+          "artifacts/api-server/src/services/design-tokens/fontPairService.ts — local makeSlug()",
+          "artifacts/api-server/src/services/design-tokens/colorPaletteService.ts — local makeSlug()"
+        ],
+        "status": "FIXED"
+      },
+      {
+        "id": "P1-SSRF-FONT-URL",
+        "severity": "P1",
+        "finding": "Font URL field accepted arbitrary URLs — SSRF risk if any consumer fetches stored URLs",
+        "fix": "Created fontUrlGuard.ts with: (1) allowlist — only fonts.googleapis.com and fonts.gstatic.com; (2) HTTPS-only enforcement; (3) private IP blocking — 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16, IPv6 loopback/link-local/unique-local; (4) raw IP literal rejection; (5) CSS endpoint pattern match — rejects .woff2, icon endpoints, non-css paths; (6) family identifier extraction + canonical URL reconstruction; (7) FONT_FETCH_CONSTRAINTS constant (maxRedirects:0, timeoutMs:10000, maxResponseBytes:512KiB, allowedMimeTypes:[text/css]) for consumer guidance. fontPairService.createFontPair() now calls validateGoogleFontsUrl() before storing any URL. Font family strings sanitised via safeFontFamily() (P2 adapter).",
+        "filesChanged": [
+          "artifacts/api-server/src/services/design-tokens/fontUrlGuard.ts — new file",
+          "artifacts/api-server/src/services/design-tokens/fontPairService.ts — guard applied on create",
+          "artifacts/api-server/src/services/design-tokens/__tests__/fontUrlGuard.test.ts — new test suite"
+        ],
+        "status": "FIXED"
+      },
+      {
+        "id": "P1-WCAG-ACCURACY",
+        "severity": "P1",
+        "finding": "Accessibility scores not labelled by computation method; scores could be misread as WCAG certification",
+        "fix": "Added ACCESSIBILITY_DISCLAIMER constant and ScoreMethod union type to types.ts. ContrastResult now carries method:'wcag_contrast_ratio' and disclaimer fields. CompatibilityScore now carries scoreMethod:'estimated_compatibility' and disclaimer fields. All three CompatibilityScore construction sites in brandDnaCompatibilityService.ts updated. colorUtils.checkContrast() updated. Disclaimer text explicitly states 'Automated estimate, not formal accessibility certification' and separates exact WCAG formula from heuristic estimates.",
+        "filesChanged": [
+          "artifacts/api-server/src/services/design-tokens/types.ts — ACCESSIBILITY_DISCLAIMER, ScoreMethod, ContrastResult.method, ContrastResult.disclaimer, CompatibilityScore.scoreMethod, CompatibilityScore.disclaimer",
+          "artifacts/api-server/src/services/design-tokens/colorUtils.ts — method + disclaimer added to checkContrast()",
+          "artifacts/api-server/src/services/design-tokens/brandDnaCompatibilityService.ts — scoreMethod + disclaimer on all three CompatibilityScore returns"
+        ],
+        "status": "FIXED"
+      },
+      {
+        "id": "P2-DUPLICATION",
+        "severity": "P2",
+        "finding": "Possible parallel font registry alongside existing design-renderer/fontRegistry",
+        "fix": "Analysed boundary: design-renderer/fontRegistry resolves system fonts for SVG rendering (platform concern); Team 10's font pair registry stores curated metadata (design-token concern). Different domains — not a parallel engine. However, safeFontFamily() from the existing registry is now used in fontPairService.ts for font name sanitisation, making the relationship an explicit adapter. Boundary documented in p2AdapterBoundary above.",
+        "filesChanged": [
+          "artifacts/api-server/src/services/design-tokens/fontPairService.ts — imports safeFontFamily from design-renderer/fontRegistry, uses it on create"
+        ],
+        "status": "FIXED — adapter relationship established and documented"
+      }
+    ]
+  },
+  "knownRisks": [
+    {
+      "risk": "DB tables not yet created",
+      "detail": "All four dt_* tables must exist before any route is hit. Run integration/migrations/team-10.sql against the target database first.",
+      "severity": "high"
+    },
+    {
+      "risk": "Brand DNA service interface",
+      "detail": "brandDnaCompatibilityService.ts reads from the font pair and palette registries only — it does NOT query aiBrandDnaTable directly. The caller passes BrandDnaInput. This avoids any dependency on the shared Brand DNA service.",
+      "severity": "none"
+    },
+    {
+      "risk": "No font files stored",
+      "detail": "Only font identifiers (name strings), weights, and validated Google Fonts canonical URLs are stored. No binary font assets. URL validation enforced at write time via fontUrlGuard.ts.",
+      "severity": "none"
+    },
+    {
+      "risk": "updateFontPair googleFontsUrl not re-validated",
+      "detail": "PATCH updates to googleFontsUrl on existing pairs pass the URL through fontUrlGuard only if explicitly provided in the patch. This is intentional — stored URLs were already validated at creation time.",
+      "severity": "low",
+      "recommendation": "Team 24 may choose to also call validateGoogleFontsUrl() on PATCH updates in the route layer for defence-in-depth."
+    }
+  ]
+}
