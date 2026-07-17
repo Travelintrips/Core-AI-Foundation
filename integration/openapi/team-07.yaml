@@ -1,0 +1,906 @@
+openapi: "3.0.3"
+info:
+  title: "Universal Design Blueprint Library — Team 7 Fragment"
+  version: "1.0.0"
+  description: >
+    OpenAPI fragment for Team 7's Universal Design Blueprint Library domain.
+    Routes are prefixed /ai/design-blueprints and mounted under /api by the
+    root api-server router (Team 24 integration responsibility).
+
+tags:
+  - name: design-blueprints
+    description: Universal Design Blueprint Library (Team 7)
+
+paths:
+  /ai/design-blueprints:
+    get:
+      operationId: listDesignBlueprints
+      tags: [design-blueprints]
+      summary: List design blueprints
+      description: Returns all blueprints (built-in + custom) optionally filtered by domain, status, or tags.
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: domain
+          in: query
+          schema:
+            $ref: "#/components/schemas/BlueprintDomain"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/BlueprintStatus"
+        - name: industryTag
+          in: query
+          schema:
+            type: string
+            maxLength: 60
+        - name: styleTag
+          in: query
+          schema:
+            type: string
+            maxLength: 60
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Blueprint list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [blueprints, total]
+                properties:
+                  blueprints:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Blueprint"
+                  total:
+                    type: integer
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      operationId: createDesignBlueprint
+      tags: [design-blueprints]
+      summary: Create a custom blueprint
+      description: Create a custom (non-built-in) blueprint. Automatically validated and normalized before storage.
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBlueprintRequest"
+      responses:
+        "201":
+          description: Blueprint created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [blueprint, validation]
+                properties:
+                  blueprint:
+                    $ref: "#/components/schemas/Blueprint"
+                  validation:
+                    $ref: "#/components/schemas/ValidationResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /ai/design-blueprints/stats:
+    get:
+      operationId: getDesignBlueprintStats
+      tags: [design-blueprints]
+      summary: Registry statistics
+      security:
+        - adminApiKey: []
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlueprintStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /ai/design-blueprints/validate:
+    post:
+      operationId: validateDesignBlueprint
+      tags: [design-blueprints]
+      summary: Validate a blueprint JSON payload
+      description: Validates structure, constraints, and domain rules. Does not persist.
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Raw blueprint payload to validate
+      responses:
+        "200":
+          description: Valid blueprint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResult"
+        "422":
+          description: Invalid blueprint — validation issues returned in body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /ai/design-blueprints/check-compatibility:
+    post:
+      operationId: checkDesignBlueprintCompatibility
+      tags: [design-blueprints]
+      summary: Check component and schema version compatibility with a blueprint
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompatibilityRequest"
+      responses:
+        "200":
+          description: Compatible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompatibilityResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: Not compatible — issues returned in body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompatibilityResult"
+
+  /ai/design-blueprints/normalize:
+    post:
+      operationId: normalizeDesignBlueprint
+      tags: [design-blueprints]
+      summary: Normalize a blueprint payload (deterministic, idempotent)
+      description: >
+        Applies deterministic normalization (tag dedup/sort, zone/slot sort, DPI clamp, etc.)
+        and returns the normalized blueprint alongside a list of changes applied.
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Normalized blueprint (valid)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NormalizationResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          description: Normalized but still invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NormalizationResult"
+
+  /ai/design-blueprints/domain/{domain}:
+    get:
+      operationId: listDesignBlueprintsByDomain
+      tags: [design-blueprints]
+      summary: List blueprints for a specific domain
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/BlueprintDomain"
+      responses:
+        "200":
+          description: Blueprints for domain
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [domain, blueprints, total]
+                properties:
+                  domain:
+                    $ref: "#/components/schemas/BlueprintDomain"
+                  blueprints:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Blueprint"
+                  total:
+                    type: integer
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /ai/design-blueprints/{id}:
+    get:
+      operationId: getDesignBlueprint
+      tags: [design-blueprints]
+      summary: Get a blueprint by ID or slug
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Blueprint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Blueprint"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      operationId: updateDesignBlueprint
+      tags: [design-blueprints]
+      summary: Update a custom blueprint (built-ins are immutable)
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBlueprintRequest"
+      responses:
+        "200":
+          description: Updated blueprint
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  blueprint:
+                    $ref: "#/components/schemas/Blueprint"
+                  validation:
+                    $ref: "#/components/schemas/ValidationResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Built-in blueprint cannot be modified
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /ai/design-blueprints/{id}/deprecate:
+    post:
+      operationId: deprecateDesignBlueprint
+      tags: [design-blueprints]
+      summary: Deprecate a custom blueprint
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deprecated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Built-in blueprint cannot be deprecated
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    adminApiKey:
+      type: apiKey
+      in: header
+      name: x-admin-api-key
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              details:
+                type: array
+                items:
+                  type: object
+    Unauthorized:
+      description: Missing or invalid admin API key
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              issues:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ValidationIssue"
+
+  schemas:
+    BlueprintDomain:
+      type: string
+      enum: [graphic_design, presentation, interior, fashion, packaging, product_design]
+
+    BlueprintStatus:
+      type: string
+      enum: [draft, active, deprecated]
+
+    BlueprintSchemaVersion:
+      type: string
+      enum: ["1.0"]
+
+    BlueprintDimensions:
+      type: object
+      required: [width, height, unit]
+      properties:
+        width:
+          type: number
+          exclusiveMinimum: 0
+        height:
+          type: number
+          exclusiveMinimum: 0
+        unit:
+          type: string
+          enum: [px, mm, cm, in, pt]
+        dpi:
+          type: integer
+          minimum: 72
+          maximum: 2400
+        aspectRatio:
+          type: string
+
+    SlotConstraints:
+      type: object
+      properties:
+        minWidth:
+          type: number
+        maxWidth:
+          type: number
+        minHeight:
+          type: number
+        maxHeight:
+          type: number
+        aspectRatio:
+          type: string
+        minFontSize:
+          type: number
+        maxFontSize:
+          type: number
+        maxChars:
+          type: integer
+        minChars:
+          type: integer
+        allowedFormats:
+          type: array
+          items:
+            type: string
+        maxFileSizeMb:
+          type: number
+        unit:
+          type: string
+        maxRows:
+          type: integer
+        maxColumns:
+          type: integer
+
+    BlueprintSlot:
+      type: object
+      required: [id, name, type, required, constraints]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [text, image, shape, video, icon, data_table, component, color_swatch, measurement, annotation]
+        required:
+          type: boolean
+        maxItems:
+          type: integer
+          minimum: 1
+        constraints:
+          $ref: "#/components/schemas/SlotConstraints"
+        defaultValue:
+          type: string
+        allowsOverflow:
+          type: boolean
+
+    BlueprintZone:
+      type: object
+      required: [id, name, x, y, width, height, required, slotRefs]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        x:
+          type: number
+        y:
+          type: number
+        width:
+          type: number
+          exclusiveMinimum: 0
+        height:
+          type: number
+          exclusiveMinimum: 0
+        required:
+          type: boolean
+        slotRefs:
+          type: array
+          items:
+            type: string
+        zIndex:
+          type: integer
+
+    SupportedComponent:
+      type: object
+      required: [type, versionRange, required, fillsSlotTypes]
+      properties:
+        type:
+          type: string
+        versionRange:
+          type: string
+        required:
+          type: boolean
+        fillsSlotTypes:
+          type: array
+          items:
+            type: string
+        config:
+          type: object
+          additionalProperties: true
+
+    RequiredDataField:
+      type: object
+      required: [key, label, type, required]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+          enum: [string, number, boolean, image_url, color, date, enum, string_array, object]
+        required:
+          type: boolean
+        description:
+          type: string
+        allowedValues:
+          type: array
+          items:
+            type: string
+        pattern:
+          type: string
+        maxLength:
+          type: integer
+        min:
+          type: number
+        max:
+          type: number
+
+    OutputCapability:
+      type: object
+      required: [format]
+      properties:
+        format:
+          type: string
+          enum: [pdf, png, jpg, svg, pptx, ai, sketch, figma, dxf, obj]
+        maxDpi:
+          type: integer
+        multiPage:
+          type: boolean
+        colorSpace:
+          type: string
+          enum: [rgb, cmyk, pantone, lab]
+        iccProfile:
+          type: string
+        bleedMm:
+          type: number
+          minimum: 0
+
+    BlueprintConstraints:
+      type: object
+      properties:
+        maxZones:
+          type: integer
+        maxSlots:
+          type: integer
+        allowZoneOverlap:
+          type: boolean
+        minContentCoverage:
+          type: number
+          minimum: 0
+          maximum: 1
+        maxContentCoverage:
+          type: number
+          minimum: 0
+          maximum: 1
+        requiredZoneIds:
+          type: array
+          items:
+            type: string
+        mutuallyExclusiveSlots:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+        domainSpecific:
+          type: object
+          additionalProperties: true
+
+    Blueprint:
+      type: object
+      required:
+        - id
+        - slug
+        - schemaVersion
+        - domain
+        - name
+        - description
+        - version
+        - status
+        - dimensions
+        - zones
+        - slots
+        - constraints
+        - supportedComponents
+        - requiredData
+        - outputCapabilities
+        - industryTags
+        - styleTags
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        slug:
+          type: string
+        schemaVersion:
+          $ref: "#/components/schemas/BlueprintSchemaVersion"
+        domain:
+          $ref: "#/components/schemas/BlueprintDomain"
+        name:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+          description: Semver string e.g. "1.0.0"
+        status:
+          $ref: "#/components/schemas/BlueprintStatus"
+        dimensions:
+          $ref: "#/components/schemas/BlueprintDimensions"
+        zones:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlueprintZone"
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlueprintSlot"
+        constraints:
+          $ref: "#/components/schemas/BlueprintConstraints"
+        supportedComponents:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupportedComponent"
+        requiredData:
+          type: array
+          items:
+            $ref: "#/components/schemas/RequiredDataField"
+        outputCapabilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/OutputCapability"
+        industryTags:
+          type: array
+          items:
+            type: string
+        styleTags:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateBlueprintRequest:
+      type: object
+      required: [domain, name, description, version, status, dimensions, zones, slots, constraints, supportedComponents, requiredData, outputCapabilities, industryTags, styleTags]
+      properties:
+        domain:
+          $ref: "#/components/schemas/BlueprintDomain"
+        name:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+        status:
+          $ref: "#/components/schemas/BlueprintStatus"
+        dimensions:
+          $ref: "#/components/schemas/BlueprintDimensions"
+        zones:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlueprintZone"
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlueprintSlot"
+        constraints:
+          $ref: "#/components/schemas/BlueprintConstraints"
+        supportedComponents:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupportedComponent"
+        requiredData:
+          type: array
+          items:
+            $ref: "#/components/schemas/RequiredDataField"
+        outputCapabilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/OutputCapability"
+        industryTags:
+          type: array
+          items:
+            type: string
+        styleTags:
+          type: array
+          items:
+            type: string
+
+    UpdateBlueprintRequest:
+      type: object
+      description: Partial update — omit fields to keep unchanged.
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+        status:
+          $ref: "#/components/schemas/BlueprintStatus"
+        dimensions:
+          $ref: "#/components/schemas/BlueprintDimensions"
+        zones:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlueprintZone"
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlueprintSlot"
+        constraints:
+          $ref: "#/components/schemas/BlueprintConstraints"
+        supportedComponents:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupportedComponent"
+        requiredData:
+          type: array
+          items:
+            $ref: "#/components/schemas/RequiredDataField"
+        outputCapabilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/OutputCapability"
+        industryTags:
+          type: array
+          items:
+            type: string
+        styleTags:
+          type: array
+          items:
+            type: string
+
+    ValidationIssue:
+      type: object
+      required: [severity, code, path, message]
+      properties:
+        severity:
+          type: string
+          enum: [error, warning, info]
+        code:
+          type: string
+        path:
+          type: string
+        message:
+          type: string
+
+    ValidationResult:
+      type: object
+      required: [valid, issues]
+      properties:
+        valid:
+          type: boolean
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
+
+    CompatibilityRequest:
+      type: object
+      required: [blueprintId, schemaVersion]
+      properties:
+        blueprintId:
+          type: string
+        schemaVersion:
+          type: string
+        componentTypes:
+          type: array
+          items:
+            type: string
+        slotTypesFilled:
+          type: object
+          additionalProperties:
+            type: integer
+
+    CompatibilityIssue:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        component:
+          type: string
+        slotType:
+          type: string
+        expected:
+          type: string
+        actual:
+          type: string
+        message:
+          type: string
+
+    CompatibilityResult:
+      type: object
+      required: [compatible, issues, warnings]
+      properties:
+        compatible:
+          type: boolean
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompatibilityIssue"
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompatibilityIssue"
+
+    NormalizationResult:
+      type: object
+      required: [blueprint, changes, valid, validationIssues]
+      properties:
+        blueprint:
+          $ref: "#/components/schemas/Blueprint"
+        changes:
+          type: array
+          items:
+            type: string
+        valid:
+          type: boolean
+        validationIssues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
+
+    BlueprintStats:
+      type: object
+      required: [total, builtin, custom, byDomain, byStatus]
+      properties:
+        total:
+          type: integer
+        builtin:
+          type: integer
+        custom:
+          type: integer
+        byDomain:
+          type: object
+          additionalProperties:
+            type: integer
+        byStatus:
+          type: object
+          required: [active, draft, deprecated]
+          properties:
+            active:
+              type: integer
+            draft:
+              type: integer
+            deprecated:
+              type: integer
