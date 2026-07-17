@@ -1,183 +1,133 @@
 {
   "$schema": "https://creative-ai-studio.internal/integration-manifest/v1",
   "team": "21",
-  "domain": "Creative Marketplace V2",
+  "domain": "Creative Marketplace — Category Extension & Licensing Adapter",
   "branch": "feature/21-creative-marketplace",
+  "status": "BLOCKED_PENDING_MARKETPLACE_CONSOLIDATION",
+  "integrationReadiness": "NOT_READY_FOR_INTEGRATION",
+  "architectureReadiness": "READY_FOR_ARCHITECTURE_REVIEW",
+  "blockingReason": "Team 21 originally built a parallel marketplace engine (creative-marketplace-v2) that duplicated V4.7 creativeMarketplaceService. Per consolidation review, the duplicate engine has been reverted. Team 21's unique contributions (item type vocabulary extension, license metadata contract, compat metadata extension, category taxonomy) are preserved as a pure adapter. Integration is blocked pending architecture decision on unified marketplace with Teams 04, 06, 07–14.",
+
   "ownership": {
-    "backend": [
-      "artifacts/api-server/src/domains/creative-marketplace-v2/"
-    ],
-    "frontend_customer": [
-      "artifacts/customer-portal/src/pages/creative-marketplace-v2/"
-    ],
-    "frontend_admin": [
-      "artifacts/ai-platform/src/pages/creative-marketplace-v2/"
+    "adapter": [
+      "artifacts/api-server/src/services/creative-marketplace/creativeAssetListingAdapter.ts"
     ],
     "integration": [
       "integration/openapi/team-21.yaml",
       "integration/migrations/team-21.sql",
       "integration/manifests/team-21.json"
+    ],
+    "reverted": [
+      "artifacts/api-server/src/domains/creative-marketplace-v2/",
+      "artifacts/ai-platform/src/pages/creative-marketplace-v2/",
+      "artifacts/customer-portal/src/pages/creative-marketplace-v2/"
     ]
   },
+
+  "dependencies": {
+    "mustResolveFirst": [
+      {
+        "team": "04",
+        "domain": "Portfolio Showcase",
+        "reason": "Portfolio may already expose creator profiles and asset browsing — Team 21 adapter must defer creator profile ownership to Team 04."
+      },
+      {
+        "team": "06",
+        "domain": "Asset Intelligence",
+        "reason": "Asset metadata, tagging, and search may already be solved by Team 06. License/compat metadata should extend, not duplicate."
+      },
+      {
+        "team": "07-14",
+        "domain": "Design Asset Teams (Blueprint, Component, Pattern, Typography, Layout, Rendering)",
+        "reason": "Item type vocabulary and category taxonomy proposed by Team 21 must be validated against the actual asset types built by Teams 07-14."
+      },
+      {
+        "team": "EXISTING_V47",
+        "domain": "V4.7 Creative Marketplace (creativeMarketplaceService)",
+        "reason": "Source of truth for all listing/creator/favorites/ratings/downloads/moderation. Team 21 adapter wraps this service — never replaces it."
+      }
+    ]
+  },
+
+  "adapterContract": {
+    "file": "artifacts/api-server/src/services/creative-marketplace/creativeAssetListingAdapter.ts",
+    "exports": {
+      "itemTypeExtension": {
+        "CM2_EXTENDED_ITEM_TYPES": ["blueprint", "template", "pattern", "typography_pairing", "palette", "interior_material", "furniture_reference", "fashion_motif"],
+        "ALL_ITEM_TYPES": "V4.7 native types + Team 21 extensions",
+        "isExtendedItemType": "type guard"
+      },
+      "licenseMetadata": {
+        "CM2LicenseType": "standard | extended | exclusive",
+        "CM2LicenseMetadata": "interface — stored in marketplace_assets.metadata JSONB",
+        "defaultLicenseMeta": "pure function — no side effects",
+        "licenseSummary": "human-readable one-liner",
+        "extractLicenseMeta": "safe extractor from metadata blob"
+      },
+      "compatMetadata": {
+        "CM2CompatMetadata": "interface — stored in marketplace_assets.metadata JSONB",
+        "COMPAT_USE_CONTEXTS": ["print", "digital", "textile", "packaging", "interior", "web", "branding", "motion"],
+        "defaultCompatMeta": "pure function by item type",
+        "checkCompatibility": "validator — returns { compatible, reason? }",
+        "extractCompatMeta": "safe extractor from metadata blob"
+      },
+      "categoryExtension": {
+        "MARKETPLACE_CATEGORY_EXTENSION": "Record<CM2ExtendedItemType, string[]> — category taxonomy per extended type",
+        "categoriesForItemType": "lookup helper"
+      }
+    },
+    "storageStrategy": "All metadata stored in existing marketplace_assets.metadata JSONB column. No new tables required.",
+    "noPersistence": true,
+    "noRoutes": true,
+    "noPayment": true,
+    "noSubscription": true,
+    "noCreatorWallet": true
+  },
+
   "database": {
-    "schema": "ai_platform",
-    "newTables": [
-      "cm2_creator_profiles",
-      "cm2_listings",
-      "cm2_favorites",
-      "cm2_ratings",
-      "cm2_downloads",
-      "cm2_moderation_log",
-      "cm2_analytics_snapshots"
-    ],
+    "status": "DEFERRED",
+    "reason": "The 7 cm2_* tables in the original migration were part of the duplicate engine (now reverted). License and compat metadata can be stored in existing marketplace_assets.metadata JSONB — no new columns or tables required. If Team 24 architecture review determines a separate schema is needed, Team 21 can provide DDL proposals at that time.",
     "migrationFile": "integration/migrations/team-21.sql",
-    "note": "Hand-written DDL only. Never drizzle-kit push. All tables use cm2_ prefix to avoid conflicts with V4.7 marketplace_ tables."
+    "migrationStatus": "DRAFT_DEFERRED — see file for additive-only column proposals (not to be applied until architecture review)"
   },
-  "routes": {
-    "admin": {
-      "prefix": "/ai/cm2",
-      "auth": "x-admin-api-key header (global adminAuthWithExceptions middleware)",
-      "endpoints": [
-        "GET  /ai/cm2/listings",
-        "POST /ai/cm2/listings",
-        "GET  /ai/cm2/listings/:id",
-        "PATCH /ai/cm2/listings/:id",
-        "POST /ai/cm2/listings/:id/moderate",
-        "POST /ai/cm2/listings/:id/feature",
-        "GET  /ai/cm2/listings/:id/moderation-log",
-        "GET  /ai/cm2/moderation-queue",
-        "GET  /ai/cm2/creators",
-        "POST /ai/cm2/creators",
-        "GET  /ai/cm2/creators/:id",
-        "PATCH /ai/cm2/creators/:id",
-        "POST /ai/cm2/creators/:id/verify",
-        "GET  /ai/cm2/analytics",
-        "GET  /ai/cm2/analytics/listings/:id",
-        "GET  /ai/cm2/downloads"
-      ]
-    },
-    "public": {
-      "prefix": "/public/cm2",
-      "auth": "none",
-      "note": "Always filters moderation_state='approved' AND is_active=true. fileUrl never returned. Unauthenticated POST /rate was removed — use workspace route instead.",
-      "endpoints": [
-        "GET  /public/cm2/listings",
-        "GET  /public/cm2/listings/featured",
-        "GET  /public/cm2/item-types",
-        "GET  /public/cm2/categories",
-        "GET  /public/cm2/listings/:id",
-        "POST /public/cm2/listings/:id/download",
-        "GET  /public/cm2/listings/:id/ratings",
-        "GET  /public/cm2/creators",
-        "GET  /public/cm2/creators/:code"
-      ],
-      "removedEndpoints": [
-        {
-          "was": "POST /public/cm2/listings/:id/rate",
-          "reason": "Remediation P0: customerEmail from request body was source of truth for ownership identity. Ratings now only accepted through workspace token-authenticated route.",
-          "replacement": "POST /public/customer/workspace/:token/cm2/listings/:id/rate"
-        }
-      ]
-    },
-    "workspace": {
-      "prefix": "/public/customer/workspace/:token/cm2",
-      "auth": "workspace token via resolveWorkspaceSession — falls under PUBLIC_PATH_PREFIXES exception",
-      "note": "All queries scoped to session.clientEmail — IDOR protected.",
-      "endpoints": [
-        "GET    /public/customer/workspace/:token/cm2/favorites",
-        "POST   /public/customer/workspace/:token/cm2/favorites/:listingId",
-        "DELETE /public/customer/workspace/:token/cm2/favorites/:listingId",
-        "GET    /public/customer/workspace/:token/cm2/downloads",
-        "POST   /public/customer/workspace/:token/cm2/listings/:id/rate"
-      ]
-    }
-  },
-  "routerMount": {
-    "instruction": "Team 24 must import cm2Router and register it in artifacts/api-server/src/routes/index.ts",
-    "importStatement": "import cm2Router from '../domains/creative-marketplace-v2/routes/index.js';",
-    "mountStatement": "router.use(cm2Router);",
-    "position": "After creativeMarketplaceRouter (V4.7) — no ordering constraint otherwise"
-  },
-  "frontend": {
-    "customerPortal": {
-      "pages": [
-        {
-          "path": "/creative-marketplace-v2",
-          "component": "artifacts/customer-portal/src/pages/creative-marketplace-v2/index.tsx",
-          "description": "Browse/search/filter marketplace — public, no auth needed"
-        },
-        {
-          "path": "/creative-marketplace-v2/listing/:id",
-          "component": "artifacts/customer-portal/src/pages/creative-marketplace-v2/listing.tsx",
-          "description": "Listing detail, preview, license info, ratings"
-        },
-        {
-          "path": "/creative-marketplace-v2/favorites",
-          "component": "artifacts/customer-portal/src/pages/creative-marketplace-v2/favorites.tsx",
-          "description": "Workspace favorites — requires workspace token in URL or query"
-        }
-      ],
-      "sidebarEntry": {
-        "label": "Creative Marketplace",
-        "icon": "ShoppingBag",
-        "href": "/creative-marketplace-v2"
-      }
-    },
-    "aiPlatform": {
-      "pages": [
-        {
-          "path": "/creative-marketplace-v2",
-          "component": "artifacts/ai-platform/src/pages/creative-marketplace-v2/index.tsx",
-          "description": "Admin listing management — CRUD, moderate, feature"
-        },
-        {
-          "path": "/creative-marketplace-v2/moderation",
-          "component": "artifacts/ai-platform/src/pages/creative-marketplace-v2/moderation.tsx",
-          "description": "Moderation queue — pending listings for review"
-        },
-        {
-          "path": "/creative-marketplace-v2/analytics",
-          "component": "artifacts/ai-platform/src/pages/creative-marketplace-v2/analytics.tsx",
-          "description": "Platform-wide and per-listing usage analytics"
-        },
-        {
-          "path": "/creative-marketplace-v2/creators",
-          "component": "artifacts/ai-platform/src/pages/creative-marketplace-v2/creators.tsx",
-          "description": "Creator profile management and verification"
-        }
-      ],
-      "sidebarEntry": {
-        "label": "Marketplace V2",
-        "icon": "ShoppingBag",
-        "href": "/creative-marketplace-v2"
-      }
-    }
-  },
-  "security": {
-    "fileUrlNeverPublic": "fileUrl column is excluded in toPublicDTO(). All public endpoints call getListingPublic() which delegates to dbGetListingPublic — only approved+active listings.",
-    "emailMasking": "Customer email masked in public rating DTOs (jo***@domain.com).",
-    "idor": "Workspace routes resolve session from token via resolveWorkspaceSession; all queries scoped to session.clientEmail.",
-    "moderationGate": "Pending/rejected/suspended listings are invisible on all public routes.",
-    "noPayoutImpl": "No automatic payout or subscription logic. Payment reuse via adapters only.",
-    "noNewSubscriptions": "Domain never creates subscription records or payment intents.",
-    "ownershipIdentityRule": "No endpoint accepts customerEmail from body/query as ownership source of truth. Workspace routes derive identity from token. Public download recording allows nullable anonymous email — not a security gate.",
-    "remediationNotes": {
-      "P0_fixed": "Removed POST /public/cm2/listings/:id/rate — unauthenticated rating submission allowed identity spoofing via body email.",
-      "P1_perf_fixed_1": "getFavorites() replaced N+1 loop with single JOIN query (dbGetFavoritesWithListings).",
-      "P1_perf_fixed_2": "GET /public/cm2/categories replaced full 200-row scan with dedicated SELECT DISTINCT category SQL query.",
-      "P1_rating_guard": "submitRating() now uses Number.isFinite() guard to reject NaN/Infinity in addition to range check.",
-      "P2_tests_added": "Added 16 new tests: malformed payload, NaN/Infinity rating, pagination pass-through, cross-customer IDOR (getFavorites/removeFavorite/getCustomerDownloads), public rate removal documentation."
-    }
-  },
-  "itemTypes": [
-    "blueprint", "template", "pattern", "icon", "illustration", "layout",
-    "typography_pairing", "palette", "interior_material",
-    "furniture_reference", "fashion_motif", "brand_pack"
+
+  "routesToMount": [],
+  "pagesToRegister": [],
+
+  "integrationNotes": [
+    "Team 21 adapter is pure TypeScript — zero runtime side effects, no DB access.",
+    "When Team 24 builds unified marketplace: import creativeAssetListingAdapter.ts for item type/license/compat contract.",
+    "V4.7 creativeMarketplaceService remains the sole source of truth for all marketplace persistence.",
+    "Category taxonomy in MARKETPLACE_CATEGORY_EXTENSION is the canonical proposal — Teams 07-14 must validate against their actual asset categories before Team 24 wires it.",
+    "No routes mounted — removed from index.ts instruction. Route mounting deferred to architecture review."
   ],
-  "licenseTypes": ["standard", "extended", "exclusive"],
-  "moderationStates": ["pending", "approved", "rejected", "suspended"],
-  "conflicts": {
-    "withV47": "Completely separate tables (cm2_* vs marketplace_*). Routes use /cm2/ prefix vs /creative-marketplace/ prefix. No shared DB writes.",
-    "withPhase8": "Phase 8 AI Skills marketplace is at /marketplace/* — no overlap."
+
+  "dependencyRequests": [
+    "REQUEST to Team 04: Confirm whether creator profile schema supports extended item types.",
+    "REQUEST to Team 06: Confirm whether asset metadata JSONB supports license_metadata and compat_metadata keys without schema change.",
+    "REQUEST to Team 24: Architecture review required before any routes are mounted or tables created."
+  ],
+
+  "schemaExportsRequested": [],
+
+  "revertLog": {
+    "reverted": [
+      "artifacts/api-server/src/domains/creative-marketplace-v2/service.ts — duplicate of creativeMarketplaceService",
+      "artifacts/api-server/src/domains/creative-marketplace-v2/repository.ts — duplicate DB queries over separate cm2_* tables",
+      "artifacts/api-server/src/domains/creative-marketplace-v2/routes/admin.ts — duplicate admin endpoints",
+      "artifacts/api-server/src/domains/creative-marketplace-v2/routes/public.ts — duplicate public endpoints",
+      "artifacts/api-server/src/domains/creative-marketplace-v2/routes/workspace.ts — duplicate workspace endpoints",
+      "artifacts/api-server/src/domains/creative-marketplace-v2/types.ts — merged into adapter",
+      "artifacts/api-server/src/domains/creative-marketplace-v2/__tests__/marketplace-v2.test.ts — tests for reverted engine",
+      "artifacts/ai-platform/src/pages/creative-marketplace-v2/*.tsx — duplicate admin frontend",
+      "artifacts/customer-portal/src/pages/creative-marketplace-v2/*.tsx — duplicate customer frontend"
+    ],
+    "lockedFilesViolated": "None — routes/index.ts was NOT modified by Team 21 (cm2Router was never mounted).",
+    "kept": [
+      "artifacts/api-server/src/services/creative-marketplace/creativeAssetListingAdapter.ts — NEW slim adapter",
+      "integration/manifests/team-21.json — updated to BLOCKED status",
+      "integration/migrations/team-21.sql — updated to DEFERRED/additive-only proposals",
+      "integration/openapi/team-21.yaml — reduced to adapter contract only"
+    ]
   }
 }
