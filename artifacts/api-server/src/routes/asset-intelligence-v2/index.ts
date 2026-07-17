@@ -14,6 +14,7 @@
  */
 
 import { Router } from "express";
+import { adminAuth } from "../../middleware/adminAuth.js";
 import {
   analyzeAssetV2,
   batchAnalyzeAssetsV2,
@@ -80,7 +81,7 @@ async function withSession(req: import("express").Request, res: import("express"
 // ════════════════════════════════════════════════════════════════════════════
 
 // ── POST /ai/asset-intelligence/v2/analyze/:assetId ──────────────────────────
-router.post("/ai/asset-intelligence/v2/analyze/:assetId", async (req, res): Promise<void> => {
+router.post("/ai/asset-intelligence/v2/analyze/:assetId", adminAuth, async (req, res): Promise<void> => {
   const assetId = parseAssetId(req.params["assetId"]);
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
 
@@ -108,7 +109,7 @@ router.post("/ai/asset-intelligence/v2/analyze/:assetId", async (req, res): Prom
 });
 
 // ── POST /ai/asset-intelligence/v2/analyze-batch ─────────────────────────────
-router.post("/ai/asset-intelligence/v2/analyze-batch", async (req, res): Promise<void> => {
+router.post("/ai/asset-intelligence/v2/analyze-batch", adminAuth, async (req, res): Promise<void> => {
   const { assets, clientId, options } = req.body as {
     assets?: Array<{ assetId: number; assetSource: string }>;
     clientId?: string;
@@ -215,7 +216,7 @@ router.get("/ai/asset-intelligence/v2/version-chain/:chainId", async (req, res):
 });
 
 // POST /ai/asset-intelligence/v2/version-chains/auto-group
-router.post("/ai/asset-intelligence/v2/version-chains/auto-group", async (req, res): Promise<void> => {
+router.post("/ai/asset-intelligence/v2/version-chains/auto-group", adminAuth, async (req, res): Promise<void> => {
   const { clientId } = req.body as { clientId?: string };
   if (!clientId) { res.status(400).json({ error: "clientId is required" }); return; }
   const result = await autoGroupVersionChains(clientId);
@@ -223,7 +224,7 @@ router.post("/ai/asset-intelligence/v2/version-chains/auto-group", async (req, r
 });
 
 // POST /ai/asset-intelligence/v2/version-chains
-router.post("/ai/asset-intelligence/v2/version-chains", async (req, res): Promise<void> => {
+router.post("/ai/asset-intelligence/v2/version-chains", adminAuth, async (req, res): Promise<void> => {
   const { clientId, primaryAssetId } = req.body as { clientId?: string; primaryAssetId?: number };
   if (!clientId) { res.status(400).json({ error: "clientId is required" }); return; }
   const chainId = await createVersionChain(clientId, primaryAssetId ?? null);
@@ -231,7 +232,7 @@ router.post("/ai/asset-intelligence/v2/version-chains", async (req, res): Promis
 });
 
 // POST /ai/asset-intelligence/v2/version-chains/:chainId/members
-router.post("/ai/asset-intelligence/v2/version-chains/:chainId/members", async (req, res): Promise<void> => {
+router.post("/ai/asset-intelligence/v2/version-chains/:chainId/members", adminAuth, async (req, res): Promise<void> => {
   const chainId = parseAssetId(req.params["chainId"]);
   if (!chainId) { res.status(400).json({ error: "Invalid chainId" }); return; }
 
@@ -266,7 +267,7 @@ router.get("/ai/asset-intelligence/v2/licensing/:assetId", async (req, res): Pro
 });
 
 // PUT /ai/asset-intelligence/v2/licensing/:assetId
-router.put("/ai/asset-intelligence/v2/licensing/:assetId", async (req, res): Promise<void> => {
+router.put("/ai/asset-intelligence/v2/licensing/:assetId", adminAuth, async (req, res): Promise<void> => {
   const assetId = parseAssetId(req.params["assetId"]);
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
 
@@ -335,7 +336,7 @@ router.get("/ai/asset-intelligence/v2/knowledge-tags", async (req, res): Promise
 });
 
 // POST /ai/asset-intelligence/v2/tags/normalize
-router.post("/ai/asset-intelligence/v2/tags/normalize", async (req, res): Promise<void> => {
+router.post("/ai/asset-intelligence/v2/tags/normalize", adminAuth, async (req, res): Promise<void> => {
   const { tags, mimeType, fileName } = req.body as {
     tags?: string[]; mimeType?: string; fileName?: string;
   };

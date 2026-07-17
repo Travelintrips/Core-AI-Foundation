@@ -6,6 +6,7 @@
  * No zod imports — manual validation per convention.
  */
 import { Router } from "express";
+import { adminAuth } from "../middleware/adminAuth.js";
 import {
   analyzeAsset,
   getAssetIntelligence,
@@ -17,7 +18,7 @@ import { resolveWorkspaceSession } from "../services/customerWorkspaceService.js
 const router = Router();
 
 // ── Admin: POST /ai/asset-intelligence/analyze ───────────────────────────────
-router.post("/ai/asset-intelligence/analyze", async (req, res): Promise<void> => {
+router.post("/ai/asset-intelligence/analyze", adminAuth, async (req, res): Promise<void> => {
   const { assetId, assetSource, clientId } = req.body as {
     assetId?: number;
     assetSource?: string;
@@ -36,7 +37,7 @@ router.post("/ai/asset-intelligence/analyze", async (req, res): Promise<void> =>
 });
 
 // ── Admin: POST /ai/asset-intelligence/analyze/:assetId ─────────────────────
-router.post("/ai/asset-intelligence/analyze/:assetId", async (req, res): Promise<void> => {
+router.post("/ai/asset-intelligence/analyze/:assetId", adminAuth, async (req, res): Promise<void> => {
   const assetId = parseInt(req.params["assetId"] ?? "0", 10);
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
   const { assetSource, clientId } = req.body as { assetSource?: string; clientId?: string };
@@ -69,10 +70,13 @@ router.get("/ai/asset-intelligence/duplicates/:clientId", async (req, res): Prom
 });
 
 // ── Admin: GET /ai/asset-intelligence/client/:clientId ───────────────────────
-router.get("/ai/asset-intelligence/client/:clientId", async (req, res): Promise<void> => {
+router.get("/ai/asset-intelligence/client/:clientId", adminAuth, async (req, res): Promise<void> => {
   const { clientId } = req.params as { clientId: string };
-  const items = await listAssetIntelligenceForClient(clientId);
-  res.json({ items, total: items.length });
+  const q = req.query as Record<string, string | undefined>;
+  const page  = Math.max(1, parseInt(q["page"]  ?? "1",  10) || 1);
+  const limit = Math.min(Math.max(1, parseInt(q["limit"] ?? "20", 10) || 20), 100);
+  const result = await listAssetIntelligenceForClient(clientId, { page, limit });
+  res.json(result);
 });
 
 // ── Public: GET /public/customer/workspace/:token/asset-intelligence ──────────
@@ -81,9 +85,9 @@ router.get("/public/customer/workspace/:token/asset-intelligence", async (req, r
   const result = await resolveWorkspaceSession(token);
   if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
   const { session } = result;
-  const items = await listAssetIntelligenceForClient(session.emailHash);
-  const duplicates = await getDuplicateReport(session.emailHash);
-  res.json({ items, total: items.length, duplicates });
+  const listResult = await listAssetIntelligenceForClient(session.emailHash);
+  const duplicates  = await getDuplicateReport(session.emailHash);
+  res.json({ items: listResult.items, total: listResult.total, duplicates });
 });
 
 // ── Public: POST /public/customer/workspace/:token/asset-intelligence/analyze/:assetId ─

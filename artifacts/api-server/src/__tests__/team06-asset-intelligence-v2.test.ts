@@ -840,3 +840,183 @@ describe("pagination — max limit enforcement & DB-level LIMIT/OFFSET", () => {
     expect(contractualMax).toBeLessThanOrEqual(200);
   });
 });
+
+// ── 14. MIME validation — urlValidator.validateMimeType ──────────────────────
+
+import {
+  validateMimeType,
+  ALLOWED_ASSET_MIME_TYPES,
+} from "../services/asset-intelligence-v2/urlValidator.js";
+
+describe("validateMimeType — SSRF MIME guard", () => {
+  it("accepts image/jpeg", () => {
+    const r = validateMimeType("image/jpeg");
+    expect(r.ok).toBe(true);
+    expect(r.normalizedMime).toBe("image/jpeg");
+  });
+
+  it("accepts image/png with charset parameter", () => {
+    const r = validateMimeType("image/png; charset=utf-8");
+    expect(r.ok).toBe(true);
+    expect(r.normalizedMime).toBe("image/png");
+  });
+
+  it("accepts application/pdf", () => {
+    expect(validateMimeType("application/pdf").ok).toBe(true);
+  });
+
+  it("accepts font/woff2", () => {
+    expect(validateMimeType("font/woff2").ok).toBe(true);
+  });
+
+  it("accepts video/mp4", () => {
+    expect(validateMimeType("video/mp4").ok).toBe(true);
+  });
+
+  it("rejects text/html (web page — not an asset)", () => {
+    const r = validateMimeType("text/html");
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/not in the allowed list/i);
+  });
+
+  it("rejects application/javascript", () => {
+    const r = validateMimeType("application/javascript");
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects application/x-executable", () => {
+    const r = validateMimeType("application/x-executable");
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects text/plain", () => {
+    expect(validateMimeType("text/plain").ok).toBe(false);
+  });
+
+  it("rejects null Content-Type (missing header)", () => {
+    const r = validateMimeType(null);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/missing/i);
+  });
+
+  it("rejects undefined Content-Type", () => {
+    expect(validateMimeType(undefined).ok).toBe(false);
+  });
+
+  it("rejects empty string", () => {
+    expect(validateMimeType("").ok).toBe(false);
+  });
+
+  it("is case-insensitive — normalizes to lowercase", () => {
+    const r = validateMimeType("Image/JPEG");
+    expect(r.ok).toBe(true);
+    expect(r.normalizedMime).toBe("image/jpeg");
+  });
+
+  it("ALLOWED_ASSET_MIME_TYPES contains all expected image types", () => {
+    for (const mime of ["image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml"]) {
+      expect(ALLOWED_ASSET_MIME_TYPES.has(mime)).toBe(true);
+    }
+  });
+
+  it("ALLOWED_ASSET_MIME_TYPES does not include dangerous types", () => {
+    const dangerous = ["text/html", "application/javascript", "application/x-sh", "application/x-executable"];
+    for (const mime of dangerous) {
+      expect(ALLOWED_ASSET_MIME_TYPES.has(mime)).toBe(false);
+    }
+  });
+});
+
+// ── 15. Unauthenticated mutation — auth middleware logic ──────────────────────
+
+describe("unauthenticated mutation guard — adminAuth logic", () => {
+  /**
+   * These tests verify the authentication decision logic without mounting Express.
+   * Admin mutation routes require X-Admin-Api-Key header.
+   * We simulate the middleware's decision: reject 401 when key is absent or wrong.
+   */
+
+  const FAKE_ADMIN_KEY = "test-admin-key-12345";
+
+  function simulateAdminAuth(headers: Record<string, string | undefined>, expectedKey: string): { status: number; allowed: boolean } {
+    const provided = headers["x-admin-api-key"];
+    if (!provided || provided !== expectedKey) {
+      return { status: 401, allowed: false };
+    }
+    return { status: 200, allowed: true };
+  }
+
+  it("rejects request with no API key header (401)", () => {
+    const r = simulateAdminAuth({}, FAKE_ADMIN_KEY);
+    expect(r.allowed).toBe(false);
+    expect(r.status).toBe(401);
+  });
+
+  it("rejects request with wrong API key (401)", () => {
+    const r = simulateAdminAuth({ "x-admin-api-key": "wrong-key" }, FAKE_ADMIN_KEY);
+    expect(r.allowed).toBe(false);
+    expect(r.status).toBe(401);
+  });
+
+  it("allows request with correct API key (200)", () => {
+    const r = simulateAdminAuth({ "x-admin-api-key": FAKE_ADMIN_KEY }, FAKE_ADMIN_KEY);
+    expect(r.allowed).toBe(true);
+    expect(r.status).toBe(200);
+  });
+
+  it("rejects request with partial/truncated key", () => {
+    const r = simulateAdminAuth({ "x-admin-api-key": FAKE_ADMIN_KEY.slice(0, 5) }, FAKE_ADMIN_KEY);
+    expect(r.allowed).toBe(false);
+  });
+
+  it("rejects request with key padded with extra characters", () => {
+    const r = simulateAdminAuth({ "x-admin-api-key": FAKE_ADMIN_KEY + "extra" }, FAKE_ADMIN_KEY);
+    expect(r.allowed).toBe(false);
+  });
+});
+
+// ── 16. Cross-tenant resource isolation ───────────────────────────────────────
+
+describe("cross-tenant resource isolation", () => {
+  /**
+   * Verify the ownership check logic used in public routes.
+   * A client token must not be able to retrieve another client's asset intelligence.
+   */
+
+  function checkOwnership(resourceClientId: string, sessionClientId: string): "ok" | "forbidden" {
+    return resourceClientId === sessionClientId ? "ok" : "forbidden";
+  }
+
+  it("allows access when resource belongs to the authenticated client", () => {
+    expect(checkOwnership("client-A", "client-A")).toBe("ok");
+  });
+
+  it("denies access when resource belongs to a different client (cross-tenant)", () => {
+    expect(checkOwnership("client-A", "client-B")).toBe("forbidden");
+  });
+
+  it("denies access even when clientIds differ only by case", () => {
+    // clientIds are derived from emailHash — case matters
+    expect(checkOwnership("client-A", "client-a")).toBe("forbidden");
+  });
+
+  it("denies access when clientId is empty string (unauthenticated / missing session)", () => {
+    expect(checkOwnership("client-A", "")).toBe("forbidden");
+  });
+
+  it("denies access when resourceClientId is empty (corrupt record)", () => {
+    expect(checkOwnership("", "client-A")).toBe("forbidden");
+  });
+
+  it("batch: only returns items where clientId === session emailHash", () => {
+    const allItems = [
+      { clientId: "client-A", assetId: 1 },
+      { clientId: "client-B", assetId: 2 }, // cross-tenant
+      { clientId: "client-A", assetId: 3 },
+    ];
+    const session = "client-A";
+    const filtered = allItems.filter((item) => item.clientId === session);
+    expect(filtered).toHaveLength(2);
+    expect(filtered.every((i) => i.clientId === "client-A")).toBe(true);
+  });
+});

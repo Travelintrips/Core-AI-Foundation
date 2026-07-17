@@ -256,3 +256,219 @@ export function validateRedirectIp(ip: string, originalUrl: string): UrlValidati
   }
   return { ok: true, resolvedIp: ip, normalizedUrl: originalUrl };
 }
+
+// ── MIME validation ───────────────────────────────────────────────────────────
+
+/**
+ * Allowlisted MIME types for external asset fetches.
+ * Any response with a Content-Type outside this set is rejected.
+ */
+export const ALLOWED_ASSET_MIME_TYPES = new Set([
+  // Images
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/svg+xml",
+  "image/tiff",
+  "image/bmp",
+  "image/avif",
+  // Fonts
+  "font/woff",
+  "font/woff2",
+  "font/ttf",
+  "font/otf",
+  "application/font-woff",
+  "application/font-woff2",
+  // Documents
+  "application/pdf",
+  // Video
+  "video/mp4",
+  "video/webm",
+]);
+
+export interface MimeValidationResult {
+  ok: boolean;
+  reason?: string;
+  normalizedMime?: string;
+}
+
+/**
+ * Validate a Content-Type header value against the asset MIME allowlist.
+ *
+ * @param contentType  Raw Content-Type header value (may contain params like "; charset=utf-8").
+ * @returns            { ok: true, normalizedMime } or { ok: false, reason }.
+ */
+export function validateMimeType(contentType: string | null | undefined): MimeValidationResult {
+  if (!contentType) {
+    return { ok: false, reason: "Missing Content-Type header" };
+  }
+  // Strip parameters (e.g. "; charset=utf-8")
+  const mime = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (!mime) {
+    return { ok: false, reason: "Empty MIME type after stripping parameters" };
+  }
+  if (!ALLOWED_ASSET_MIME_TYPES.has(mime)) {
+    return {
+      ok: false,
+      reason: `MIME type '${mime}' is not in the allowed list. Permitted: ${[...ALLOWED_ASSET_MIME_TYPES].slice(0, 8).join(", ")}, …`,
+    };
+  }
+  return { ok: true, normalizedMime: mime };
+}
+
+// ── Safe fetch wrapper ────────────────────────────────────────────────────────
+
+export interface SafeFetchResult {
+  ok: true;
+  buffer:       Buffer;
+  mime:         string;
+  finalUrl:     string;
+  bytesRead:    number;
+}
+
+export interface SafeFetchError {
+  ok: false;
+  reason: string;
+  code:
+    | "SSRF"
+    | "MIME_REJECTED"
+    | "SIZE_EXCEEDED"
+    | "TIMEOUT"
+    | "NETWORK_ERROR"
+    | "TOO_MANY_REDIRECTS";
+}
+
+export type SafeFetchOutcome = SafeFetchResult | SafeFetchError;
+
+/**
+ * SSRF-safe HTTP fetch for external asset URLs.
+ *
+ * Enforces:
+ *  - Pre-fetch URL validation (scheme, hostname, DNS/IP check)
+ *  - Max redirects with per-redirect IP revalidation
+ *  - Response size limit (10 MB default)
+ *  - Timeout (5 s default)
+ *  - MIME type allowlist validation
+ *
+ * @param rawUrl   External asset URL to fetch.
+ * @param options  Override defaults for maxBytes, timeoutMs, maxRedirects.
+ */
+export async function safeFetch(
+  rawUrl: string,
+  options: {
+    maxBytes?:    number;
+    timeoutMs?:   number;
+    maxRedirects?: number;
+  } = {},
+): Promise<SafeFetchOutcome> {
+  const maxBytes    = options.maxBytes    ?? URL_VALIDATOR_CONFIG.maxResponseBytes;
+  const timeoutMs   = options.timeoutMs   ?? URL_VALIDATOR_CONFIG.timeoutMs;
+  const maxRedirects = options.maxRedirects ?? URL_VALIDATOR_CONFIG.maxRedirects;
+
+  // Step 1: pre-validate the original URL
+  const preCheck = await validateExternalUrl(rawUrl);
+  if (!preCheck.ok) {
+    return { ok: false, code: "SSRF", reason: preCheck.reason };
+  }
+
+  let currentUrl = preCheck.normalizedUrl;
+  let redirectCount = 0;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    while (true) {
+      let response: Response;
+      try {
+        response = await fetch(currentUrl, {
+          redirect: "manual", // We handle redirects manually to check each hop
+          signal: controller.signal,
+        });
+      } catch (err) {
+        if ((err as Error)?.name === "AbortError") {
+          return { ok: false, code: "TIMEOUT", reason: `Fetch timed out after ${timeoutMs}ms` };
+        }
+        return { ok: false, code: "NETWORK_ERROR", reason: `Network error: ${(err as Error).message}` };
+      }
+
+      // Handle redirects
+      if (response.status >= 300 && response.status < 400) {
+        if (redirectCount >= maxRedirects) {
+          return { ok: false, code: "TOO_MANY_REDIRECTS", reason: `Exceeded max redirects (${maxRedirects})` };
+        }
+        redirectCount++;
+        const location = response.headers.get("location");
+        if (!location) {
+          return { ok: false, code: "NETWORK_ERROR", reason: "Redirect with no Location header" };
+        }
+
+        // Resolve redirect URL relative to current
+        let redirectUrl: string;
+        try {
+          redirectUrl = new URL(location, currentUrl).toString();
+        } catch {
+          return { ok: false, code: "SSRF", reason: `Invalid redirect URL: ${location}` };
+        }
+
+        // Validate the redirect target (DNS + IP check)
+        const redirectCheck = await validateExternalUrl(redirectUrl);
+        if (!redirectCheck.ok) {
+          return {
+            ok: false,
+            code: "SSRF",
+            reason: `Redirect target rejected: ${redirectCheck.reason}`,
+          };
+        }
+
+        currentUrl = redirectCheck.normalizedUrl;
+        continue;
+      }
+
+      // Non-redirect response — validate MIME
+      const contentType = response.headers.get("content-type");
+      const mimeCheck   = validateMimeType(contentType);
+      if (!mimeCheck.ok) {
+        return { ok: false, code: "MIME_REJECTED", reason: mimeCheck.reason ?? "MIME rejected" };
+      }
+
+      // Enforce response size limit
+      const reader = response.body?.getReader();
+      if (!reader) {
+        return { ok: false, code: "NETWORK_ERROR", reason: "Response body is null" };
+      }
+
+      const chunks: Uint8Array[] = [];
+      let bytesRead = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          bytesRead += value.length;
+          if (bytesRead > maxBytes) {
+            reader.cancel().catch(() => {/* swallow */});
+            return {
+              ok: false,
+              code: "SIZE_EXCEEDED",
+              reason: `Response exceeded size limit of ${maxBytes} bytes`,
+            };
+          }
+          chunks.push(value);
+        }
+      }
+
+      const buffer = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+      return {
+        ok: true,
+        buffer,
+        mime:      mimeCheck.normalizedMime!,
+        finalUrl:  currentUrl,
+        bytesRead,
+      };
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
