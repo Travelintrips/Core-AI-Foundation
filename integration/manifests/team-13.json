@@ -66,8 +66,21 @@
     "No external HTTP calls — zero SSRF surface.",
     "compositionId is SHA-256 of normalised input — safe to cache by ID indefinitely.",
     "Zod schemas live entirely in the service layer; route file imports only from service index, never zod/v4 directly.",
-    "Session store is in-memory and ephemeral — does not persist across server restarts. This is intentional for a pure-computation engine.",
+    "KNOWN LIMITATION — IN-MEMORY SESSION STORE: compositionSessionStore is an in-process Map (not a DB table, Redis, or any external store). All session state is lost when the API server process restarts, is redeployed, or is scaled to multiple instances. Callers must re-submit composition requests after a restart; they cannot rely on a previously returned compositionId surviving across server restarts. This is intentional — the engine is pure deterministic computation and sessions are cheap to recreate. If persistence across restarts is required in future, Team 24 must provision a Redis/DB-backed store and update the CompositionSessionStore interface accordingly.",
     "Cross-tenant IDOR: session lookup key = SHA-256(tenantId NUL idempotencyKey) — different tenants never collide."
+  ],
+  "knownLimitations": [
+    {
+      "id": "KL-13-01",
+      "severity": "P4",
+      "title": "In-memory compositionSessionStore — sessions lost on restart",
+      "description": "compositionSessionStore is a Node.js in-process Map. No external store, no DB table, no Redis. Sessions do not survive server restarts, deployments, or horizontal scaling (multiple instances would have independent stores).",
+      "impact": "Callers that hold a compositionId from a previous server instance will receive 404 on GET /session/:key after a restart. Idempotency keys are invalidated. No data loss (sessions contain only computation specs, no persistent user data).",
+      "workaround": "Callers should handle 404 on session lookup by re-submitting the composition request with the same inputs — compositionId is deterministic (SHA-256 of inputs), so the result will be identical.",
+      "futureResolution": "If persistence is required: implement a Redis- or DB-backed adapter behind the CompositionSessionStore interface and inject it at startup. The interface boundary is already defined — no service logic changes needed.",
+      "detectedBy": "Team 23 independent audit",
+      "remediatedAt": "2026-07-17T00:00:00Z"
+    }
   ],
 
   "terminalStateRules": {
