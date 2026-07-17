@@ -1,0 +1,422 @@
+Anda adalah TEAM UAT (User Acceptance Testing).
+
+Status proyek saat ini:
+
+✅ Seluruh 22 feature branch telah terintegrasi.
+✅ Seluruh blocker Team 23 telah selesai.
+✅ Integration Branch:
+integration/creative-enterprise
+
+Tugas Anda adalah memverifikasi bahwa seluruh sistem Creative Enterprise berjalan dengan benar dari perspektif pengguna.
+
+====================================================
+ATURAN
+====================================================
+
+JANGAN memperbaiki kode.
+
+JANGAN merge.
+
+JANGAN melakukan refactor.
+
+JANGAN mengubah database manual.
+
+Jika menemukan bug:
+
+- dokumentasikan
+- sertakan langkah reproduksi
+- sertakan screenshot/log bila ada
+- tandai severity
+
+====================================================
+TARGET
+====================================================
+
+Verifikasi seluruh Creative Enterprise bekerja secara end-to-end.
+
+Lakukan pengujian seperti pengguna asli.
+
+====================================================
+AREA YANG WAJIB DITES
+====================================================
+
+1.
+Creative Workflow
+
+- membuat project baru
+- memilih service
+- upload brief
+- AI workflow berjalan
+- status berubah sesuai workflow
+- artefak tersimpan
+- project selesai
+
+====================================================
+
+2.
+Customer Workspace
+
+- login customer
+- melihat project sendiri
+- customer A tidak dapat melihat project customer B
+- pagination
+- history
+- notification
+- deliverables
+- revisions
+
+====================================================
+
+3.
+Commercial Automation
+
+- quotation
+- approval
+- coupon
+- recommendation
+- pagination
+- duplicate approval
+- idempotency
+
+====================================================
+
+4.
+Brand Intelligence
+
+- membuat brand profile
+
+- update
+
+- snapshot
+
+- brand DNA
+
+====================================================
+
+5.
+Asset Intelligence
+
+- upload asset
+
+- duplicate detection
+
+- safety report
+
+- pagination
+
+====================================================
+
+6.
+Blueprint Library
+
+- create
+
+- edit
+
+- publish
+
+- list
+
+- pagination
+
+====================================================
+
+7.
+Component Library
+
+- CRUD
+
+- search
+
+- slug uniqueness
+
+====================================================
+
+8.
+Pattern Library
+
+- create
+
+- licensing
+
+- compatibility
+
+- public listing
+
+====================================================
+
+9.
+Typography & Palette
+
+- create palette
+
+- edit palette
+
+- create font pair
+
+- validation
+
+====================================================
+
+10.
+Template Matching
+
+- recommendation
+
+- template selection
+
+====================================================
+
+11.
+Layout Composer
+
+- valid layout
+
+- invalid layout
+
+- timeout handling
+
+====================================================
+
+12.
+Dynamic Composer
+
+- submit
+
+- retry
+
+- completed
+
+- cancelled
+
+====================================================
+
+13.
+Rendering Engine
+
+- render
+
+- thumbnail
+
+- export
+
+- timeout
+
+====================================================
+
+14.
+Graphic Design
+
+- create design
+
+- save
+
+- export
+
+====================================================
+
+15.
+Presentation Document
+
+- Pitch Deck
+
+- Company Profile
+
+- Proposal
+
+- Executive Summary
+
+- Product Catalog
+
+- Meeting Deck
+
+- Training Material
+
+Pastikan semua service baru tersedia.
+
+====================================================
+
+16.
+Interior Design
+
+- project
+
+- recommendation
+
+====================================================
+
+17.
+Fashion Design
+
+- project
+
+- recommendation
+
+====================================================
+
+18.
+Packaging Design
+
+- project
+
+- export
+
+====================================================
+
+19.
+Product Design
+
+- CMF
+
+- variant
+
+- manufacturer brief
+
+====================================================
+
+20.
+Creative Marketplace
+
+- publish
+
+- browse
+
+- detail
+
+- pagination
+
+====================================================
+
+21.
+Vendor Ecosystem
+
+- vendor profile
+
+- capability
+
+- certification
+
+====================================================
+
+22.
+Seed Verification
+
+Pastikan kategori baru tersedia:
+
+Presentation Document
+
+berisi:
+
+- Pitch Deck Presentasi
+- Proposal Bisnis
+- Company Profile Dokumen
+- Laporan Tahunan
+- Executive Summary
+- Katalog Produk
+- Deck Rapat
+- Materi Pelatihan
+
+====================================================
+SECURITY
+====================================================
+
+Pastikan:
+
+✓ authentication
+
+✓ authorization
+
+✓ tenant isolation
+
+✓ customer isolation
+
+✓ IDOR
+
+✓ pagination
+
+✓ upload validation
+
+✓ SSRF protection
+
+====================================================
+PERFORMANCE
+====================================================
+
+Pastikan:
+
+- tidak ada loading tanpa akhir
+
+- pagination bekerja
+
+- tidak ada duplicate render
+
+- timeout sesuai
+
+====================================================
+OUTPUT
+====================================================
+
+Untuk setiap modul tuliskan:
+
+Nama Modul
+
+Status
+
+PASS
+
+atau
+
+FAIL
+
+Jika FAIL:
+
+- langkah reproduksi
+- expected
+- actual
+- severity
+- screenshot/log (bila ada)
+
+====================================================
+LAPORAN AKHIR
+====================================================
+
+Buat tabel:
+
+Modul
+
+PASS
+
+FAIL
+
+Catatan
+
+Jumlah PASS
+
+Jumlah FAIL
+
+Critical Bug
+
+Major Bug
+
+Minor Bug
+
+====================================================
+VERDICT
+====================================================
+
+Gunakan hanya salah satu:
+
+READY_FOR_MAIN_MERGE
+
+atau
+
+BLOCKED
+
+READY_FOR_MAIN_MERGE hanya boleh diberikan apabila:
+
+- tidak ada Critical Bug
+- tidak ada Major Bug
+- seluruh workflow utama berhasil
+- seluruh fitur baru dapat digunakan
+- tidak ada kehilangan data
+- tidak ada regression yang memengaruhi pengguna
