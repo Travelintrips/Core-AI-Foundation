@@ -52,6 +52,7 @@ const CATEGORIES: CategorySeed[] = [
   { code: "data-analytics", name: "Data Analytics AI", description: "Dashboards, insights, and reporting.", icon: "bar-chart", displayOrder: 13 },
   { code: "executive", name: "Executive AI", description: "Strategic decision support for leadership.", icon: "briefcase", displayOrder: 14 },
   { code: "customer-service", name: "Customer Service AI", description: "Support automation and client communication.", icon: "headset", displayOrder: 15 },
+  { code: "graphic-design", name: "Graphic Design AI", description: "Professional print and digital design: logos, cards, flyers, banners, brochures, social kits, and more — AI-generated, brand-consistent, print-ready.", icon: "palette", displayOrder: 16 },
 ];
 
 // Category-level disclaimers shown next to any service/quotation in that
@@ -196,6 +197,18 @@ const SERVICES: Record<string, ServiceSeed[]> = {
     svc("copywriting",          "Copywriting",                 "Copy on-brand untuk caption, landing page, atau kampanye.", "one_time", "350000",  "30-60 menit", false, ["Copywriter AI"], ["Copy document"]),
     svc("image-generation",     "Image Generation",            "Gambar AI untuk kampanye dan konten.", "one_time", "75000",   "15-30 menit", false, ["Designer AI"], ["Image set"]),
     svc("creative-consultation","Creative Consultation",        "Sesi konsultasi kreatif strategis dengan human review.", "one_time", "500000",  "4-8 jam",     true,  ["Creative Director AI"], ["Consultation notes"]),
+  ],
+  "graphic-design": [
+    svc("GD-LOGO",       "Logo Concept",       "AI-generated logo concepts: wordmark, lettermark, combination, emblem, or mascot styles.",                  "one_time", "2500000",  "3-7 hari",   false, ["Designer AI", "Creative Director AI"], ["Primary logo (SVG/PDF/PNG)", "Dark & monochrome variants", "Favicon set"]),
+    svc("GD-BCARD",      "Business Card",      "Print-ready business card design with full bleed, CMYK color profile, and all standard sizes.",              "one_time",  "500000",  "2-4 hari",   false, ["Designer AI"],                        ["Print-ready PDF (CMYK+bleed)", "PNG preview", "Digital PDF"]),
+    svc("GD-LTRHEAD",    "Letterhead",         "Professional A4/Letter letterhead with optional envelope, complimentary slip, and second-page variant.",     "one_time",  "750000",  "2-3 hari",   false, ["Designer AI"],                        ["Letterhead PDF (print-ready)", "Digital PDF", "PNG preview"]),
+    svc("GD-FLYER",      "Flyer",              "Eye-catching A4/A5/A6 flyers for events, promotions, menus, and product launches. Print-ready + digital.",  "one_time",  "500000",  "1-3 hari",   false, ["Designer AI"],                        ["Print-ready PDF", "PNG preview", "JPG social share"]),
+    svc("GD-POSTER",     "Poster",             "Large-format A0–A4 posters at 300dpi. Events, advertising, informational, and artistic styles.",            "one_time",  "750000",  "2-5 hari",   false, ["Designer AI"],                        ["Print-ready PDF", "PNG preview", "JPG web share", "Digital PDF"]),
+    svc("GD-BANNER",     "Banner",             "Roll-up, X-banner, backdrop, digital leaderboard, and billboard banners. Indoor and outdoor specs.",        "one_time", "1000000",  "2-4 hari",   false, ["Designer AI"],                        ["Print-ready PDF", "PNG preview", "Digital JPG"]),
+    svc("GD-BROCHURE",   "Brochure",           "Trifold, bifold, gatefold, and accordion brochures. A4/A5/DL sizes. Company profile to product catalogs.", "one_time", "1500000",  "3-5 hari",   false, ["Designer AI", "Copywriter AI"],       ["Print-ready PDF (CMYK+bleed)", "Cover PNG preview", "Digital flat PDF"]),
+    svc("GD-SOCIAL",     "Social Media Kit",   "Branded social media design sets for Instagram, Facebook, LinkedIn, Twitter, YouTube, and TikTok.",         "one_time", "1500000",  "2-4 hari",   false, ["Designer AI"],                        ["Platform-specific PNGs (all sizes)", "Story variants", "Highlight icons", "ZIP archive"]),
+    svc("GD-CERT",       "Certificate",        "Achievement, completion, and appreciation certificates with signatures, seals, and optional security.",     "one_time",  "500000",  "1-3 hari",   false, ["Designer AI"],                        ["Print-ready PDF", "Digital PDF", "PNG preview", "JPG social share"]),
+    svc("GD-STATIONERY", "Stationery Suite",   "Complete brand stationery: letterhead, envelope, business card, notepad, folder, ID card — all consistent.", "one_time", "3000000", "4-7 hari",   false, ["Designer AI", "Creative Director AI"], ["All stationery PDFs (print-ready)", "PNG previews", "ZIP archive"]),
   ],
 };
 
