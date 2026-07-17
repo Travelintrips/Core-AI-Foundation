@@ -132,15 +132,22 @@ export async function getColorPaletteBySlug(
 
 // ── Duplicate Detection ───────────────────────────────────────────────────────
 
+/** Max rows fetched for in-memory signature comparison in duplicate detection. */
+const DUPLICATE_SCAN_LIMIT = 500;
+
 export async function findDuplicatePalette(
   colors: string[],
   excludeId?: number
 ): Promise<ColorPaletteRow | null> {
   const sig = paletteSignature(colors);
+  // FIX: cap the candidate query so we never do an unbounded full-table scan.
+  // 500 is well above any realistic palette library size while preventing OOM
+  // in adversarial conditions.
   const rows = await db
     .select()
     .from(dtColorPalettesTable)
-    .where(eq(dtColorPalettesTable.active, true));
+    .where(eq(dtColorPalettesTable.active, true))
+    .limit(DUPLICATE_SCAN_LIMIT);
 
   for (const row of rows) {
     if (excludeId && row.id === excludeId) continue;

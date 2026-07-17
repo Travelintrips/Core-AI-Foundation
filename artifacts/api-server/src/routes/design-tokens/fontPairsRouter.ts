@@ -3,6 +3,7 @@
 
 import { Router } from "express";
 import { z } from "zod";
+import { adminAuth } from "../../middleware/adminAuth.js";
 import {
   listFontPairs,
   getFontPairWithRoles,
@@ -27,6 +28,11 @@ import { validateTypographyHierarchy } from "../../services/design-tokens/colorU
 import { logAudit } from "../../services/aiAuditService.js";
 
 const router = Router();
+
+// ── Auth — explicit at router level (P0 audit) ────────────────────────────────
+// Belt-and-suspenders on top of the global adminAuthWithExceptions in app.ts.
+// All routes in this router require admin authentication.
+router.use(adminAuth);
 
 // ── Validation schemas ────────────────────────────────────────────────────────
 
@@ -101,7 +107,7 @@ router.get("/:id", async (req, res): Promise<void> => {
 
 // ── POST /font-pairs ──────────────────────────────────────────────────────────
 
-router.post("/", async (req, res): Promise<void> => {
+router.post("/", adminAuth, async (req, res): Promise<void> => {
   const parsed = CreateFontPairSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
   try {
@@ -119,7 +125,7 @@ router.post("/", async (req, res): Promise<void> => {
 
 // ── PATCH /font-pairs/:id ─────────────────────────────────────────────────────
 
-router.patch("/:id", async (req, res): Promise<void> => {
+router.patch("/:id", adminAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = CreateFontPairSchema.partial().safeParse(req.body);
@@ -137,7 +143,7 @@ router.patch("/:id", async (req, res): Promise<void> => {
 
 // ── DELETE /font-pairs/:id ────────────────────────────────────────────────────
 
-router.delete("/:id", async (req, res): Promise<void> => {
+router.delete("/:id", adminAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
@@ -165,7 +171,7 @@ router.get("/:id/roles", async (req, res): Promise<void> => {
 
 // ── PUT /font-pairs/:id/roles ─────────────────────────────────────────────────
 
-router.put("/:id/roles", async (req, res): Promise<void> => {
+router.put("/:id/roles", adminAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = z.array(TypographyRoleSchema).safeParse(req.body);
@@ -185,7 +191,7 @@ router.put("/:id/roles", async (req, res): Promise<void> => {
 
 // ── DELETE /font-pairs/:id/roles/:role ───────────────────────────────────────
 
-router.delete("/:id/roles/:role", async (req, res): Promise<void> => {
+router.delete("/:id/roles/:role", adminAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {

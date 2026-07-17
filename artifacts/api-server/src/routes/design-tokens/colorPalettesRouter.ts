@@ -3,6 +3,7 @@
 
 import { Router } from "express";
 import { z } from "zod";
+import { adminAuth } from "../../middleware/adminAuth.js";
 import {
   listColorPalettes,
   getColorPaletteWithRoles,
@@ -31,6 +32,11 @@ import {
 import { logAudit } from "../../services/aiAuditService.js";
 
 const router = Router();
+
+// ── Auth — explicit at router level (P0 audit) ────────────────────────────────
+// Belt-and-suspenders on top of the global adminAuthWithExceptions in app.ts.
+// All routes in this router require admin authentication.
+router.use(adminAuth);
 
 // ── Validation schemas ────────────────────────────────────────────────────────
 
@@ -108,7 +114,7 @@ router.get("/:id", async (req, res): Promise<void> => {
 
 // ── POST /color-palettes ──────────────────────────────────────────────────────
 
-router.post("/", async (req, res): Promise<void> => {
+router.post("/", adminAuth, async (req, res): Promise<void> => {
   const parsed = CreatePaletteSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
   try {
@@ -123,7 +129,7 @@ router.post("/", async (req, res): Promise<void> => {
 
 // ── PATCH /color-palettes/:id ─────────────────────────────────────────────────
 
-router.patch("/:id", async (req, res): Promise<void> => {
+router.patch("/:id", adminAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = CreatePaletteSchema.partial().safeParse(req.body);
@@ -141,7 +147,7 @@ router.patch("/:id", async (req, res): Promise<void> => {
 
 // ── DELETE /color-palettes/:id ────────────────────────────────────────────────
 
-router.delete("/:id", async (req, res): Promise<void> => {
+router.delete("/:id", adminAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
@@ -169,7 +175,7 @@ router.get("/:id/semantic-roles", async (req, res): Promise<void> => {
 
 // ── PUT /color-palettes/:id/semantic-roles ────────────────────────────────────
 
-router.put("/:id/semantic-roles", async (req, res): Promise<void> => {
+router.put("/:id/semantic-roles", adminAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = z.array(SemanticRoleSchema).min(1).safeParse(req.body);
