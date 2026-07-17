@@ -46,7 +46,9 @@ import { clampToSafeZone, innerRect } from "./safeZones.js";
 import { checkTextFit, shrinkFontToFit, expandHeightToFit } from "./textFitting.js";
 import { findZoneById, clampElementsToZones } from "./zoneLayouts.js";
 
-const MAX_ITERATIONS = 50;
+import { LAYOUT_LIMITS } from "./constants.js";
+
+const MAX_ITERATIONS = LAYOUT_LIMITS.MAX_ITERATIONS;
 const PRIORITY_ORDER: ConstraintPriority[] = ["hard", "soft", "hint"];
 const EPSILON = 0.5; // sub-pixel change threshold for convergence
 
@@ -661,9 +663,8 @@ function checkViolations(
 
 // ── Main solver ───────────────────────────────────────────────
 
-// Default wall-clock budget: 5 seconds.
-// Prevents unbounded compute for adversarial or deeply-conflicting inputs.
-const SOLVER_DEADLINE_MS = 5_000;
+// Wall-clock budget sourced from centralized domain limits.
+const SOLVER_DEADLINE_MS = LAYOUT_LIMITS.SOLVER_DEADLINE_MS;
 
 export interface SolverInput {
   id?: string;

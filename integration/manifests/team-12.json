@@ -11,9 +11,71 @@
     {
       "importPath": "./routes/layout-composer/index.js",
       "mountPrefix": "/",
-      "note": "Router internally uses /ai/layout-composer/* paths. No additional prefix needed."
+      "note": "Router internally uses /ai/layout-composer/* paths. No additional prefix needed. Final mount path is Team 24's decision."
     }
   ],
+  "routeCollisionAudit": {
+    "auditedOn": "2026-07-17",
+    "ourPrefix": "/ai/layout-composer/*",
+    "existingConflicts": [],
+    "closestExisting": [
+      {
+        "route": "GET /ai/design/projects/:id/canvas",
+        "file": "artifacts/api-server/src/routes/design-studio.ts",
+        "collision": false,
+        "reason": "Prefix /ai/design/... does not overlap /ai/layout-composer/..."
+      },
+      {
+        "route": "PUT /ai/design/projects/:id/canvas",
+        "file": "artifacts/api-server/src/routes/design-studio.ts",
+        "collision": false,
+        "reason": "Prefix /ai/design/... does not overlap /ai/layout-composer/..."
+      }
+    ],
+    "proposedRoutes": [
+      { "method": "GET",  "path": "/ai/layout-composer/operations" },
+      { "method": "POST", "path": "/ai/layout-composer/solve" },
+      { "method": "POST", "path": "/ai/layout-composer/validate" },
+      { "method": "POST", "path": "/ai/layout-composer/plan" }
+    ]
+  },
+  "authDependency": {
+    "mechanism": "adminAuth (explicit per-router middleware)",
+    "appliedTo": [
+      "POST /ai/layout-composer/solve",
+      "POST /ai/layout-composer/validate",
+      "POST /ai/layout-composer/plan"
+    ],
+    "exempt": [
+      {
+        "route": "GET /ai/layout-composer/operations",
+        "reason": "Read-only static list; no compute or data mutation"
+      }
+    ],
+    "note": "Auth middleware is applied at the Team 12 router level (not delegated to global adminAuthWithExceptions) so the module is self-contained when Team 24 mounts it."
+  },
+  "resourceCaps": {
+    "source": "artifacts/api-server/src/services/layout-composer/constants.ts",
+    "MAX_ELEMENTS": 500,
+    "MAX_CONSTRAINTS": 200,
+    "MAX_ZONES": 100,
+    "MAX_CANVAS_DIM_PX": 10000,
+    "MAX_ITERATIONS": 100,
+    "MAX_NESTING_DEPTH": 5,
+    "SOLVER_DEADLINE_MS": 5000,
+    "MAX_PAYLOAD_BYTES": 524288
+  },
+  "prevalidation": {
+    "runs": "before solver, after size caps",
+    "checks": [
+      "All constraint elementIds reference existing elements",
+      "No duplicate constraint IDs",
+      "No cyclic parent-child (children[]) references",
+      "Nesting depth <= MAX_NESTING_DEPTH (5)",
+      "No self-referential align_to_element / spacing constraints"
+    ],
+    "returnCode": 422
+  },
   "pagesToRegister": [],
   "sidebarItems": [],
   "openapiFragment": "integration/openapi/team-12.yaml",
@@ -27,25 +89,12 @@
   "workerJobTypesRequested": [],
   "sharedTypesRequested": [],
   "integrationOrder": [],
-  "authDependency": {
-    "mechanism": "adminAuthWithExceptions",
-    "mountedBy": "app.ts via app.use('/api', adminAuthWithExceptions, router)",
-    "note": "All /api/* routes (including /ai/layout-composer/*) are protected by the global admin-key middleware. Team 12 router does NOT add per-route auth middleware — this is the canonical pattern per admin-auth-canonical-pattern memory entry.",
-    "publicExceptions": []
-  },
-  "resourceCaps": {
-    "MAX_ELEMENTS": 500,
-    "MAX_CONSTRAINTS": 200,
-    "MAX_ZONES": 100,
-    "MAX_CANVAS_DIM_PX": 10000,
-    "MAX_ITERATIONS": 100,
-    "SOLVER_DEADLINE_MS": 5000
-  },
   "knownRisks": [
     "Routes are pure in-memory compute (no DB) — no migration required to enable the API.",
     "Optional persistence table ai_layout_plans is additive-only (see migration draft) and can be added independently.",
     "No shared event bus usage — fully self-contained.",
     "Response payload can be large for complex layouts with many operations and responsive variants; consumers should paginate or filter fields as needed.",
-    "includeResponsive=true triggers up to 4 additional solver runs (one per non-current breakpoint); each is bounded by the same MAX_ITERATIONS and SOLVER_DEADLINE_MS caps."
+    "includeResponsive=true triggers up to 4 additional solver runs (one per non-current breakpoint); each is bounded by the same MAX_ITERATIONS and SOLVER_DEADLINE_MS caps.",
+    "Content-Length header pre-check (MAX_PAYLOAD_BYTES) can be bypassed by clients that omit the header. Body has already been parsed by app-level express.json(10mb) — pre-check is a defense-in-depth measure, not a hard parse limit."
   ]
 }
