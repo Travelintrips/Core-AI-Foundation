@@ -70,6 +70,7 @@
 - [wp08-wp11-quotation](wp08-wp11-quotation.md) — Quotation repo write+audit, soft-delete cascade, restore role guard, legacy freeze (410), vi.hoisted() test pattern
 - [cp-real-file-upload](cp-real-file-upload.md) — logo/photo/doc/video uploads now real (object storage), fixed missing adminAuth public exception; PDF still doesn't embed uploaded logo/photos
 - [design-template-blueprints](design-template-blueprints.md) — builtin templates served from code (no DB); add to BUILTIN_TEMPLATES array, no migration needed
+- [team07-blueprint-library-v2](team07-blueprint-library-v2.md) — Team 07 P0/P1/P2 remediation: repository pattern, published status, explicit auth; DbBlueprintRepository is production-only
 - [design-template-engine-phase1](design-template-engine-phase1.md) — Phase 1 foundation: 4 tables, 13 API endpoints, 46 tests, zod catalog dep, date formatter order rule, Phase 2 stub locations
 - [design-template-engine-phase2](design-template-engine-phase2.md) — Phase 2 renderer: 12 files in design-renderer/, single-render creates batch+item first, ZIP returns 501, 712 tests all pass
 - [phase5-visual-template-editor](phase5-visual-template-editor.md) — Phase 5 visual editor complete: react-konva canvas, 38 tests pass, adapter z-index normalization rule, pnpm build requires PORT env (use typecheck instead)
