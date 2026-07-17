@@ -1,0 +1,190 @@
+Anda adalah TEAM UAT FINAL RETEST.
+
+Branch:
+integration/creative-enterprise
+
+Commit fix yang wajib tersedia:
+10d0ba2
+
+Tujuan:
+Memverifikasi fix terakhir untuk Presentation Document dan menentukan apakah branch siap merge ke main.
+
+JANGAN memperbaiki kode.
+JANGAN mengubah seed atau database manual.
+JANGAN merge ke main.
+
+====================================================
+PRE-CHECK
+====================================================
+
+1. git fetch origin --prune
+2. checkout integration/creative-enterprise
+3. pastikan commit 10d0ba2 ada di HEAD/history
+4. pastikan working tree bersih
+5. restart API server
+6. pastikan menggunakan database UAT yang benar
+
+====================================================
+TEST 1 — PUBLIC CATEGORY
+====================================================
+
+Panggil:
+
+GET /api/ai/catalog/public
+
+Expected:
+
+- HTTP 200
+- terdapat kategori creative
+- terdapat kategori presentation-document
+- presentation-document visibility = public
+- tidak ada kategori internal lain yang ikut menjadi public secara tidak sengaja
+
+====================================================
+TEST 2 — PRESENTATION SERVICES
+====================================================
+
+Pastikan tepat 8 layanan berikut tersedia:
+
+- pd-pitch-deck
+- pd-business-proposal
+- pd-company-profile-doc
+- pd-annual-report
+- pd-executive-summary
+- pd-product-catalog
+- pd-meeting-deck
+- pd-training-material
+
+Expected:
+
+- tepat 8 layanan
+- semuanya aktif
+- tidak ada duplicate serviceCode
+- semuanya berada pada kategori presentation-document
+
+====================================================
+TEST 3 — CUSTOMER UI
+====================================================
+
+Buka halaman customer services.
+
+Expected:
+
+- kategori Presentation & Document AI tampil
+- kategori dapat dibuka
+- delapan layanan tampil
+- tidak ada blank state
+- tidak ada console error
+- service card dapat dipilih
+
+====================================================
+TEST 4 — SERVICE REQUEST
+====================================================
+
+Buat request customer minimal untuk:
+
+1. pd-pitch-deck
+2. pd-company-profile-doc
+3. pd-business-proposal
+
+Expected:
+
+- HTTP 201
+- request tersimpan
+- tidak ada HTTP 403
+- serviceCode benar
+- project/request dapat dibuka kembali oleh customer yang sama
+
+====================================================
+TEST 5 — CUSTOMER ISOLATION
+====================================================
+
+Customer A membuat Presentation Document request.
+
+Customer B mencoba membaca request Customer A.
+
+Expected:
+
+- Customer B tidak mendapat data Customer A
+- tidak ada cross-customer leakage
+- response mengikuti pola 403 atau 404 sesuai kontrak API
+
+====================================================
+TEST 6 — SEED IDEMPOTENCY
+====================================================
+
+Jalankan seed dua kali:
+
+pnpm --filter @workspace/api-server run seed
+
+Expected:
+
+- tidak ada error
+- jumlah kategori public tetap 2
+- jumlah pd-* tetap 8
+- tidak ada row ganda
+- kategori internal lain tetap internal
+- creative tetap public
+
+====================================================
+REGRESSION SMOKE TEST
+====================================================
+
+Verifikasi singkat:
+
+- Brand Intelligence analyze → 200
+- Coupon duplicate → 409 JSON
+- Creative catalog tetap tampil
+- Graphic Design tetap dapat dipilih
+- full test suite tetap lulus
+
+====================================================
+FINAL OUTPUT
+====================================================
+
+Buat tabel:
+
+Area
+Expected
+Actual
+Evidence
+Status
+
+Gunakan status:
+
+PASS
+FAIL
+
+Kemudian laporkan:
+
+- total PASS
+- total FAIL
+- Critical
+- Major
+- Minor
+- regression ditemukan atau tidak
+- seed integrity
+- customer isolation
+
+====================================================
+FINAL VERDICT
+====================================================
+
+Gunakan hanya salah satu:
+
+READY_FOR_MAIN_MERGE
+
+atau
+
+BLOCKED
+
+READY_FOR_MAIN_MERGE hanya jika:
+
+- public category PASS
+- 8 pd-* services PASS
+- customer UI PASS
+- 3 service request PASS
+- customer isolation PASS
+- seed idempotency PASS
+- tidak ada Critical atau Major issue
+- tidak ada regression pengguna
