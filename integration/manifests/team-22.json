@@ -1,0 +1,179 @@
+{
+  "team": "22",
+  "branch": "feature/22-vendor-ecosystem",
+  "domain": "Creative Vendor Ecosystem",
+  "ownedFolders": [
+    "artifacts/api-server/src/domains/creative-vendors/",
+    "artifacts/customer-portal/src/pages/creative-vendors/",
+    "artifacts/customer-portal/src/hooks/use-vendors.ts",
+    "artifacts/ai-platform/src/pages/creative-vendors/",
+    "integration/openapi/team-22.yaml",
+    "integration/migrations/team-22.sql",
+    "integration/manifests/team-22.json"
+  ],
+
+  "routesToMount": [
+    {
+      "file": "artifacts/api-server/src/domains/creative-vendors/index.ts",
+      "export": "vendorRouter",
+      "mountNote": "Import as vendorRouter and call app.use('/', vendorRouter) in artifacts/api-server/src/app.ts (after adminAuthWithExceptions is applied). All paths self-prefix (/public/creative-vendors/*, /ai/creative-vendors/*).",
+      "mountAfter": "portfolioGalleryRouter"
+    }
+  ],
+
+  "pagesToRegister": [
+    {
+      "path": "/vendors",
+      "component": "@/pages/creative-vendors/VendorDirectoryPage",
+      "artifact": "customer-portal",
+      "lazy": true,
+      "note": "Browse and search creative vendors with filters by type, province, availability."
+    },
+    {
+      "path": "/vendors/:id",
+      "component": "@/pages/creative-vendors/VendorProfilePage",
+      "artifact": "customer-portal",
+      "lazy": true,
+      "note": "Full vendor profile: portfolio (approved), capabilities, certifications, contact form. Contact request requires workspace token."
+    },
+    {
+      "path": "/creative-vendors",
+      "component": "@/pages/creative-vendors/VendorAdminPage",
+      "artifact": "ai-platform",
+      "lazy": false,
+      "note": "Admin vendor list with moderation (approve/reject) and analytics summary."
+    },
+    {
+      "path": "/creative-vendors/:id",
+      "component": "@/pages/creative-vendors/VendorAdminDetailPage",
+      "artifact": "ai-platform",
+      "lazy": false,
+      "note": "Admin vendor detail: portfolio moderation (per-item approve/reject) and contact request management."
+    }
+  ],
+
+  "sidebarItems": [
+    {
+      "artifact": "ai-platform",
+      "label": "Creative Vendors",
+      "path": "/creative-vendors",
+      "icon": "Users",
+      "note": "Add to ai-platform sidebar nav after Creative Marketplace entry."
+    }
+  ],
+
+  "openapiFragment": "integration/openapi/team-22.yaml",
+  "migrationDrafts": ["integration/migrations/team-22.sql"],
+
+  "dbChanges": {
+    "newTables": [
+      "creative_vendors",
+      "creative_vendor_service_areas",
+      "creative_vendor_capabilities",
+      "creative_vendor_certifications",
+      "creative_vendor_portfolio_items",
+      "creative_vendor_ratings",
+      "creative_vendor_contact_requests"
+    ],
+    "sharedFilesToUpdate": [
+      {
+        "file": "lib/db/src/schema/index.ts",
+        "change": "Add: export * from './creative-vendors';",
+        "note": "Copy artifacts/api-server/src/domains/creative-vendors/schema.ts to lib/db/src/schema/creative-vendors.ts first."
+      }
+    ],
+    "noExistingTableTouched": true
+  },
+
+  "endpoints": [
+    "GET  /public/creative-vendors                                   — browse/search (public)",
+    "GET  /public/creative-vendors/categories                        — category counts (public)",
+    "GET  /public/creative-vendors/recommend                         — compatibility recs (public)",
+    "GET  /public/creative-vendors/:id                               — vendor detail public DTO (public)",
+    "GET  /public/creative-vendors/:id/portfolio                     — approved portfolio (public)",
+    "GET  /public/creative-vendors/:id/ratings                       — approved ratings (public)",
+    "POST /public/creative-vendors/:id/ratings                       — submit rating (public)",
+    "POST /public/customer/workspace/:token/creative-vendors/:id/contact   — contact request (workspace)",
+    "GET  /public/customer/workspace/:token/creative-vendors/my-requests   — my requests (workspace)",
+    "GET  /ai/creative-vendors                                        — admin list (admin)",
+    "POST /ai/creative-vendors                                        — admin create (admin)",
+    "GET  /ai/creative-vendors/analytics                              — analytics (admin)",
+    "GET  /ai/creative-vendors/contact-requests                       — all contact requests (admin)",
+    "GET  /ai/creative-vendors/:id                                    — admin full detail (admin)",
+    "PATCH /ai/creative-vendors/:id                                   — admin update (admin)",
+    "POST /ai/creative-vendors/:id/approve                            — approve vendor (admin)",
+    "POST /ai/creative-vendors/:id/reject                             — reject vendor (admin)",
+    "GET  /ai/creative-vendors/:id/portfolio                          — all portfolio items (admin)",
+    "POST /ai/creative-vendors/:id/portfolio                          — add portfolio item (admin)",
+    "PATCH /ai/creative-vendors/:id/portfolio/:itemId/approve         — approve item (admin)",
+    "PATCH /ai/creative-vendors/:id/portfolio/:itemId/reject          — reject item (admin)",
+    "PATCH /ai/creative-vendors/contact-requests/:id                  — accept/decline request (admin)"
+  ],
+
+  "eventsPublished": [],
+  "eventsConsumed": [],
+
+  "designDecisions": [
+    {
+      "decision": "Tables defined locally in domain schema.ts using local drizzle instance",
+      "reason": "Avoids touching shared lib/db/src/schema/index.ts during parallel development. Team 24 promotes to shared on merge."
+    },
+    {
+      "decision": "Contact info always masked in public DTO (whatsapp: first 5 chars + *****, email: 3 chars + *** + @domain)",
+      "reason": "Privacy protection — full contact only revealed to requester after vendor accepts contact request."
+    },
+    {
+      "decision": "Portfolio items require admin moderation (pending → approved/rejected) before public visibility",
+      "reason": "Quality gate to prevent spam/inappropriate content in the public directory."
+    },
+    {
+      "decision": "Pricing fields are display-only (minPrice/maxPrice), not wired to any checkout or RAB system",
+      "reason": "As specified: prices are optional and not used for procurement or payment payout."
+    },
+    {
+      "decision": "Compatibility scoring: category(30) + area(25) + availability(20) + rating(15) + verification(10) = 100",
+      "reason": "Weighted scoring ensures category and proximity are most important, with rating and trust signals secondary."
+    },
+    {
+      "decision": "No procurement, payment payout, or automatic messaging implemented",
+      "reason": "Explicitly excluded per specification."
+    }
+  ],
+
+  "knownRisks": [
+    {
+      "risk": "resolveWorkspaceSession API may change — vendorRouter uses same pattern as team-04/creative-marketplace",
+      "severity": "low",
+      "mitigation": "Monitor customerWorkspaceService.ts for interface changes."
+    },
+    {
+      "risk": "If lib/db/src/schema/index.ts is not updated by Team 24, other teams cannot import vendor tables from @workspace/db",
+      "severity": "medium",
+      "mitigation": "Domain is fully self-contained; only affects cross-team imports."
+    },
+    {
+      "risk": "avgRating recalculation happens after rating moderation; before approval, avgRating stays at 0",
+      "severity": "low",
+      "mitigation": "Expected behavior — ratings only count when approved."
+    }
+  ],
+
+  "testCoverage": {
+    "files": [
+      "artifacts/api-server/src/domains/creative-vendors/__tests__/vendorService.test.ts",
+      "artifacts/api-server/src/domains/creative-vendors/__tests__/vendorPortfolioService.test.ts",
+      "artifacts/api-server/src/domains/creative-vendors/__tests__/vendorContactService.test.ts",
+      "artifacts/api-server/src/domains/creative-vendors/__tests__/vendorRecommendationService.test.ts"
+    ],
+    "covers": [
+      "vendor ownership (vendor code uniqueness, CRUD)",
+      "recommendation scoring (category, area, availability, rating, verification)",
+      "area filtering (province match, remote fallback)",
+      "portfolio moderation (approve clears note, reject stores reason, pending not in public view)",
+      "public data redaction (whatsapp masked, email masked, moderationNote absent)",
+      "contact terminal state guard (accepted/declined → throws on re-update)",
+      "contact reveal (full info only when status=accepted)",
+      "17 vendor types defined and exhaustive"
+    ]
+  }
+}
