@@ -461,6 +461,40 @@ function DetailPanel({ req, onClose }: { req: ServiceRequest; onClose: () => voi
                 Hasil Proyek — Tampil ke Customer
               </h3>
 
+              {/* Customer results URL — for sharing */}
+              {(() => {
+                const resultsUrl = `${window.location.origin}/request-service/${req.requestId}/results`;
+                return (
+                  <div className="bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700 rounded-lg px-3 py-2.5">
+                    <p className="text-xs text-green-700 dark:text-green-300 font-medium mb-1.5 flex items-center gap-1.5">
+                      <Link2 className="w-3 h-3" /> Link Hasil untuk Customer
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-xs text-green-800 dark:text-green-200 truncate font-mono">{resultsUrl}</code>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(resultsUrl);
+                          toast({ title: "Link disalin!", description: "Bagikan ke customer agar mereka bisa melihat hasil proyek." });
+                        }}
+                        className="shrink-0 p-1.5 rounded hover:bg-green-200 dark:hover:bg-green-800 transition-colors"
+                        title="Salin link"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-green-700 dark:text-green-300" />
+                      </button>
+                      <a
+                        href={resultsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="shrink-0 p-1.5 rounded hover:bg-green-200 dark:hover:bg-green-800 transition-colors"
+                        title="Buka di tab baru"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-green-700 dark:text-green-300" />
+                      </a>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Notes */}
               <div>
                 <label className="text-xs text-muted-foreground mb-1.5 block">Catatan untuk Customer</label>

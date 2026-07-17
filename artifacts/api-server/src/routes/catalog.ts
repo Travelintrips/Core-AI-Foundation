@@ -1074,7 +1074,11 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
 
   // P0-2: completionLinks are only visible once files are unlocked.
   // Before that, customer sees the lock state + remaining balance.
-  const safeCompletionLinks = filesUnlocked ? (row.completionLinks ?? null) : null;
+  // Exception: if no creative project was created from this request (createdProjectId is
+  // null), there is no payment gate to enforce — show links unconditionally.
+  const safeCompletionLinks = (filesUnlocked || !row.createdProjectId)
+    ? (row.completionLinks ?? null)
+    : null;
 
   // Return customer-safe fields only (no margin/cost/internal pricing)
   const snapshot = row.pricingSnapshotJson as Record<string, unknown> | null;
