@@ -13,14 +13,13 @@
  */
 
 import { randomUUID } from "crypto";
-import { db } from "@workspace/db";
 import { logAudit } from "../../services/aiAuditService.js";
 import { publishSafe } from "../../services/aiEventBusService.js";
 
 import type { GraphicDesignBrief, GdServiceCode, GdStatus, PackageTier, OutputFormat } from "./schema.js";
 import type { GraphicDesignPorts, GraphicDesignJobPayload, JobPriority, TemplateMatchRequest } from "./ports.js";
 import { buildDeliverableManifest, getRequiredFormats } from "./manifest.js";
-import { getBlueprint, getVariantSpec } from "./blueprints.js";
+import { getBlueprint } from "./blueprints.js";
 import { getPackagePolicy } from "./packagePolicy.js";
 import { runQc, type QcInput } from "./qc.js";
 

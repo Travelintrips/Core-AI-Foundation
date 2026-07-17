@@ -96,6 +96,71 @@
     "GET    /api/ai/graphic-design/packages/:serviceCode",
     "GET    /api/ai/graphic-design/services"
   ],
+  "routesToMount": [
+    {
+      "importPath": "../domains/graphic-design/index.js",
+      "exportName": "graphicDesignRouter",
+      "mountIn": "artifacts/api-server/src/routes/index.ts",
+      "mountCall": "router.use(graphicDesignRouter)",
+      "note": "Add after creativeMarketplaceRouter. Route is locked — Team 24 must apply this mount."
+    }
+  ],
+  "pagesToRegister": [
+    {
+      "artifact": "artifacts/ai-platform",
+      "routePath": "/graphic-design",
+      "componentPath": "src/pages/graphic-design/index.tsx",
+      "label": "Graphic Design",
+      "icon": "palette",
+      "note": "Add to admin sidebar nav and App.tsx route list. App.tsx is a locked file — Team 24 must register this page."
+    },
+    {
+      "artifact": "artifacts/customer-portal",
+      "routePath": "/graphic-design",
+      "componentPath": "src/pages/graphic-design/index.tsx",
+      "label": "Graphic Design",
+      "note": "Customer-facing service browser. Must be wired into the customer portal App.tsx router by Team 24. IMPORTANT: The customer portal page currently posts directly to /api/ai/graphic-design/briefs (admin route). Before registration, Team 24 must either: (a) expose a public brief-creation endpoint that derives tenantId from session, or (b) route customer submissions through the existing service-request / quotation flow. Do NOT register the customer portal page until auth boundary is resolved."
+    }
+  ],
+  "schemaExportsRequested": [],
+  "dependencyRequests": [
+    {
+      "from": "team-15",
+      "to": "team-7-8",
+      "interface": "DesignRendererPort",
+      "currentState": "stub-adapter in service.ts resolveAdapters()",
+      "requiredWiring": "Replace stub renderer.render() with real call to designStudioService or imageDesignerService export"
+    },
+    {
+      "from": "team-15",
+      "to": "team-9-10",
+      "interface": "TemplateMatcherPort",
+      "currentState": "stub-adapter in service.ts resolveAdapters()",
+      "requiredWiring": "Replace stub matcher.matchTemplate() with real call to templateAiService.generateTemplateFromPrompt"
+    },
+    {
+      "from": "team-15",
+      "to": "team-11-12",
+      "interface": "AssetLibraryPort",
+      "currentState": "stub-adapter returns empty arrays",
+      "requiredWiring": "Replace stub assets.searchAssets() with real call to assetLibraryService.searchAssets"
+    },
+    {
+      "from": "team-15",
+      "to": "team-13-14",
+      "interface": "WorkflowEnginePort",
+      "currentState": "stub-adapter generates random jobId",
+      "requiredWiring": "Replace stub workflow.dispatch() with real job creation via jobService or dispatcher"
+    }
+  ],
+  "integrationNotes": [
+    "routes/index.ts is a LOCKED FILE. Team 15 reverted its change. routesToMount above must be applied by Team 24 (integration layer).",
+    "App.tsx files are LOCKED FILES. pagesToRegister above must be applied by Team 24.",
+    "gd_briefs and gd_qc_runs tables must be created via integration/migrations/team-15.sql before routes are mounted. Until then the service layer uses an in-memory Map (correct fallback behavior).",
+    "seedCatalog.ts was modified to add the 'graphic-design' category and 10 GD-* service codes — this file is NOT in the locked list and the change is intentional.",
+    "Customer portal page MUST NOT be mounted until the auth boundary is resolved. See pagesToRegister note above.",
+    "All /ai/graphic-design/* routes are covered by the global adminAuthWithExceptions middleware already mounted in app.ts — no per-route auth needed."
+  ],
   "dbTables": [
     "ai_platform.gd_briefs",
     "ai_platform.gd_qc_runs"
