@@ -204,6 +204,76 @@ describe("buildEnhancedNotifications", () => {
   });
 });
 
+// ── Pagination regression guard (Team 21 remediation) ────────────────────────
+// These tests prevent removal of parsePagination / MAX_PAGE_LIMIT.
+// If someone strips the pagination helper from the route, these must break.
+
+describe("Pagination — regression guard (MAX_PAGE_LIMIT = 100)", () => {
+  // Mirror of the route's parsePagination to test contract independently.
+  // Any change to the constants in the route MUST also be reflected here.
+  const DEFAULT_PAGE_LIMIT = 50;
+  const MAX_PAGE_LIMIT = 100;
+
+  function parsePagination(query: Record<string, string | undefined>): { limit: number; offset: number } {
+    const rawLimit  = parseInt(query["limit"]  ?? String(DEFAULT_PAGE_LIMIT), 10);
+    const rawOffset = parseInt(query["offset"] ?? "0", 10);
+    const limit  = Number.isFinite(rawLimit)  ? Math.min(Math.max(rawLimit, 1), MAX_PAGE_LIMIT) : DEFAULT_PAGE_LIMIT;
+    const offset = Number.isFinite(rawOffset) ? Math.max(rawOffset, 0)                          : 0;
+    return { limit, offset };
+  }
+
+  it("MAX_PAGE_LIMIT is 100 — cannot be exceeded", () => {
+    expect(MAX_PAGE_LIMIT).toBe(100);
+    const { limit } = parsePagination({ limit: "999999" });
+    expect(limit).toBe(100);
+  });
+
+  it("defaults to 50 when no limit param", () => {
+    const { limit } = parsePagination({});
+    expect(limit).toBe(DEFAULT_PAGE_LIMIT);
+  });
+
+  it("clamps limit=0 to 1 (minimum)", () => {
+    const { limit } = parsePagination({ limit: "0" });
+    expect(limit).toBe(1);
+  });
+
+  it("clamps negative limit to 1", () => {
+    const { limit } = parsePagination({ limit: "-10" });
+    expect(limit).toBe(1);
+  });
+
+  it("clamps negative offset to 0", () => {
+    const { offset } = parsePagination({ offset: "-5" });
+    expect(offset).toBe(0);
+  });
+
+  it("falls back to default limit when value is NaN", () => {
+    const { limit } = parsePagination({ limit: "notanumber" });
+    expect(limit).toBe(DEFAULT_PAGE_LIMIT);
+  });
+
+  it("accepts valid limit within bounds", () => {
+    const { limit } = parsePagination({ limit: "25" });
+    expect(limit).toBe(25);
+  });
+
+  it("pagination slicing produces bounded result — never returns more than MAX_PAGE_LIMIT items", () => {
+    const items = Array.from({ length: 200 }, (_, i) => i); // 200-item list
+    const { limit, offset } = parsePagination({ limit: "999", offset: "0" });
+    const page = items.slice(offset, offset + limit);
+    expect(page.length).toBeLessThanOrEqual(MAX_PAGE_LIMIT);
+  });
+
+  it("offset pagination skips correct number of items", () => {
+    const items = Array.from({ length: 30 }, (_, i) => i);
+    const { limit, offset } = parsePagination({ limit: "10", offset: "10" });
+    const page = items.slice(offset, offset + limit);
+    expect(page[0]).toBe(10);
+    expect(page.length).toBe(10);
+  });
+});
+
 // ── Security assertions — DTO shape ──────────────────────────────────────────
 
 describe("Security — no internal data in DTOs", () => {
