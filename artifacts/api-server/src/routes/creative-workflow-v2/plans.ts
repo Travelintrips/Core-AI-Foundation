@@ -24,12 +24,17 @@ import {
   markNodeReady,
   calculateProgress,
 } from "../../services/creative-workflow-v2/index.js";
-
-// In-memory store for definitions — shared reference with definitions.ts
-// via the module that mounts both routers. Team 24 replaces with a repository.
 import type { WorkflowDefinition } from "../../types/creative-workflow-v2/index.js";
+import { adminAuth } from "../../middleware/adminAuth.js";
 
 export const plansRouter = Router();
+
+// ── Explicit admin auth guard ──────────────────────────────────────────────────
+// Belt-and-suspenders: enforces auth even if the global mount-point middleware
+// (adminAuthWithExceptions in app.ts) is misconfigured or omitted.
+// All plan mutation endpoints are admin-only — no public exceptions on this router.
+// The public progress endpoint lives in publicProgress.ts with its own token auth.
+plansRouter.use(adminAuth);
 
 // ── In-memory stores ──────────────────────────────────────────────────────────
 

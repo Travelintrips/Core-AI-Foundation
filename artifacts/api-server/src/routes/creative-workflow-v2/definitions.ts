@@ -20,8 +20,15 @@ import type {
   UpdateWorkflowDefinitionInput,
 } from "../../types/creative-workflow-v2/index.js";
 import { validateWorkflowDefinition } from "../../services/creative-workflow-v2/index.js";
+import { adminAuth } from "../../middleware/adminAuth.js";
 
 export const definitionsRouter = Router();
+
+// ── Explicit admin auth guard ──────────────────────────────────────────────────
+// Belt-and-suspenders: enforces auth even if the global mount-point middleware
+// (adminAuthWithExceptions in app.ts) is misconfigured or omitted.
+// All definition endpoints are admin-only — no public exceptions on this router.
+definitionsRouter.use(adminAuth);
 
 // ── In-memory store (replaced by DB adapter in Team 24 integration) ───────────
 
