@@ -1,0 +1,760 @@
+Anda adalah Lead AI Architect dan Knowledge Engineer untuk Creative Enterprise Platform.
+
+Tugas Anda BUKAN hanya membuat beberapa template.
+
+Tugas Anda adalah membangun sebuah ENTERPRISE TEMPLATE KNOWLEDGE LIBRARY yang akan menjadi fondasi seluruh Creative AI Platform.
+
+=========================================================
+OBJECTIVE
+=========================================================
+
+Bangun sistem Template Knowledge Library yang:
+
+- scalable
+- searchable
+- AI-friendly
+- reusable
+- versioned
+- extensible
+- multi-domain
+- production-ready
+
+Library ini akan digunakan oleh seluruh AI Agent:
+
+- Brand Strategy AI
+- Creative Director AI
+- Graphic Designer AI
+- Interior Designer AI
+- Fashion Designer AI
+- Packaging AI
+- Presentation AI
+- Product Design AI
+- Website AI
+- Copywriting AI
+
+JANGAN membuat sistem hardcoded.
+
+JANGAN membuat template statis.
+
+Bangun knowledge library.
+
+=========================================================
+CORE CONCEPT
+=========================================================
+
+Template ≠ hanya layout.
+
+Template adalah KNOWLEDGE.
+
+Setiap template harus memiliki:
+
+- visual language
+- business context
+- industry context
+- audience
+- psychology
+- typography
+- color system
+- image style
+- composition
+- section hierarchy
+- AI prompt guidance
+- quality rules
+
+=========================================================
+DESIGN TEMPLATE MODEL
+=========================================================
+
+Setiap template minimal memiliki:
+
+General
+
+- id
+- code
+- slug
+- name
+- description
+- category
+- subCategory
+- status
+- version
+- createdAt
+- updatedAt
+
+Business
+
+- industry
+- businessType
+- market
+- targetAudience
+- customerPersona
+- pricePositioning
+
+Brand DNA
+
+- personalities[]
+- emotions[]
+- archetypes[]
+- voice
+- tone
+- keywords[]
+
+Visual DNA
+
+- designStyle
+- layoutStyle
+- spacingStyle
+- illustrationStyle
+- photographyStyle
+- iconStyle
+
+Typography
+
+- headingFont
+- bodyFont
+- fontMood
+- hierarchyRules
+
+Color System
+
+- primary
+- secondary
+- accent
+- neutral
+- contrastRules
+- accessibilityScore
+
+Composition
+
+- heroLayout
+- sectionOrder[]
+- gridSystem
+- whitespaceRules
+
+Output Support
+
+- PDF
+- PPTX
+- PNG
+- SVG
+- HTML
+- Social Media
+
+Prompt Guidance
+
+- systemPrompt
+- designerPrompt
+- artDirectionPrompt
+- imagePrompt
+- negativePrompt
+
+Quality
+
+- checklist[]
+- designRules[]
+- prohibitedPatterns[]
+
+Marketplace
+
+- popularity
+- rating
+- usageCount
+
+=========================================================
+KNOWLEDGE HIERARCHY
+=========================================================
+
+Bangun hierarchy berikut.
+
+Industry
+
+↓
+
+Business Type
+
+↓
+
+Brand Position
+
+↓
+
+Audience
+
+↓
+
+Style
+
+↓
+
+Template
+
+=========================================================
+INDUSTRY LIBRARY
+=========================================================
+
+Minimal support:
+
+Fashion
+
+Luxury Fashion
+
+Fast Fashion
+
+Modest Fashion
+
+Streetwear
+
+Sportswear
+
+Kids Fashion
+
+Wedding
+
+Boutique
+
+Jewelry
+
+Shoes
+
+Bag
+
+Beauty
+
+Cosmetics
+
+Lifestyle
+
+Retail
+
+Food
+
+Beverage
+
+Coffee
+
+Restaurant
+
+Hotel
+
+Travel
+
+Logistics
+
+Manufacturing
+
+Healthcare
+
+Education
+
+Finance
+
+Technology
+
+Real Estate
+
+Construction
+
+Automotive
+
+Mining
+
+Energy
+
+Agriculture
+
+Government
+
+NGO
+
+Entertainment
+
+Media
+
+Sports
+
+dan industri lain yang umum.
+
+=========================================================
+STYLE LIBRARY
+=========================================================
+
+Minimal:
+
+Modern
+
+Minimalist
+
+Luxury
+
+Elegant
+
+Premium
+
+Industrial
+
+Scandinavian
+
+Japandi
+
+Classic
+
+Contemporary
+
+Retro
+
+Vintage
+
+Bold
+
+Playful
+
+Corporate
+
+Editorial
+
+Organic
+
+Feminine
+
+Masculine
+
+High Fashion
+
+Luxury Editorial
+
+Modern Luxury
+
+Neo Minimalism
+
+Brutalism
+
+Glassmorphism
+
+Claymorphism
+
+Dark Mode
+
+Light Mode
+
+=========================================================
+COLOR KNOWLEDGE
+=========================================================
+
+Bangun Color Knowledge.
+
+Setiap style mempunyai:
+
+recommended palette
+
+forbidden palette
+
+contrast
+
+emotion
+
+industry suitability
+
+=========================================================
+TYPOGRAPHY KNOWLEDGE
+=========================================================
+
+Bangun pairing typography.
+
+Contoh:
+
+Luxury
+
+↓
+
+Serif
+
+↓
+
+Body Sans
+
+Corporate
+
+↓
+
+Geometric Sans
+
+↓
+
+Humanist Sans
+
+Fashion
+
+↓
+
+Editorial Serif
+
+↓
+
+Minimal Sans
+
+=========================================================
+SECTION LIBRARY
+=========================================================
+
+Bangun reusable section.
+
+Contoh:
+
+Hero
+
+About
+
+Mission
+
+Vision
+
+Timeline
+
+Portfolio
+
+Products
+
+Services
+
+Pricing
+
+Testimonial
+
+Awards
+
+Team
+
+Gallery
+
+FAQ
+
+Contact
+
+Footer
+
+CTA
+
+Statistics
+
+Partners
+
+Certificates
+
+Case Study
+
+=========================================================
+TEMPLATE LIBRARY
+=========================================================
+
+Bangun minimal:
+
+Graphic Design
+
+100+
+
+Company Profile
+
+100+
+
+Presentation
+
+100+
+
+Pitch Deck
+
+100+
+
+Packaging
+
+100+
+
+Interior
+
+100+
+
+Fashion
+
+100+
+
+Social Media
+
+100+
+
+Landing Page
+
+100+
+
+Website
+
+100+
+
+Brand Identity
+
+100+
+
+Marketing
+
+100+
+
+TOTAL
+
+Minimal
+
+1.200+
+
+template knowledge.
+
+=========================================================
+AI MATCHING
+=========================================================
+
+Upgrade matching engine.
+
+JANGAN hanya:
+
+Industry
+
+↓
+
+Category
+
+↓
+
+Done.
+
+Gunakan weighted semantic scoring.
+
+Contoh bobot:
+
+Industry
+
+20%
+
+Audience
+
+15%
+
+Brand Personality
+
+15%
+
+Style
+
+10%
+
+Color
+
+5%
+
+Typography
+
+5%
+
+Layout
+
+10%
+
+Business Position
+
+10%
+
+Keywords
+
+5%
+
+Popularity
+
+5%
+
+Output Support
+
+5%
+
+Jika exact template tidak ada:
+
+AI harus:
+
+1.
+
+cari nearest template
+
+2.
+
+jelaskan GAP
+
+3.
+
+generate hybrid template
+
+4.
+
+simpan sebagai recommendation
+
+=========================================================
+AUTO TEMPLATE GENERATION
+=========================================================
+
+Jika score <70
+
+AI menawarkan:
+
+Generate New Template
+
+AI akan:
+
+- membuat Template Knowledge baru
+
+- membuat Brand DNA
+
+- membuat Color System
+
+- membuat Typography
+
+- membuat Layout
+
+- membuat Section
+
+- membuat Prompt
+
+- membuat Quality Rules
+
+Status:
+
+Draft
+
+Admin Review
+
+Approve
+
+Publish
+
+=========================================================
+LEARNING
+=========================================================
+
+Setiap project selesai:
+
+AI belajar.
+
+Tambahkan:
+
+usageCount
+
+rating
+
+successRate
+
+conversionRate
+
+revisionRate
+
+favoriteCount
+
+AI menggunakan data tersebut untuk ranking berikutnya.
+
+=========================================================
+SEARCH
+=========================================================
+
+Support:
+
+semantic search
+
+keyword search
+
+industry search
+
+personality search
+
+audience search
+
+color search
+
+style search
+
+brand DNA search
+
+=========================================================
+ADMIN
+=========================================================
+
+Buat halaman:
+
+Template Knowledge Library
+
+Fitur:
+
+Dashboard
+
+Industry Browser
+
+Style Browser
+
+Brand DNA Browser
+
+Template Explorer
+
+Diff Version
+
+Approval Queue
+
+AI Recommendation
+
+Generate Template
+
+Publish
+
+Archive
+
+Analytics
+
+=========================================================
+OUTPUT
+=========================================================
+
+JANGAN langsung coding.
+
+Pertama lakukan:
+
+1.
+
+Audit arsitektur saat ini.
+
+2.
+
+Cari semua service/template existing.
+
+3.
+
+Reuse semaksimal mungkin.
+
+4.
+
+Hindari duplicate engine.
+
+5.
+
+Identifikasi migration yang diperlukan.
+
+6.
+
+Susun Implementation Plan.
+
+7.
+
+Baru implementasi bertahap.
+
+=========================================================
+SUCCESS CRITERIA
+=========================================================
+
+- Tidak ada duplicate template engine.
+- Compatible dengan seluruh AI Agent yang ada.
+- Mendukung minimal 1.200 template knowledge.
+- Fully searchable.
+- AI dapat melakukan semantic matching.
+- AI dapat membuat template baru jika belum tersedia.
+- Admin dapat mengelola seluruh knowledge library.
+- Seluruh perubahan backward compatible.
+- Seluruh test lama tetap PASS.
+- Tambahkan test baru untuk matching, generation, approval, versioning, dan semantic search.

@@ -94,6 +94,7 @@ interface MatchResult {
   offerGeneration: boolean;
   hybridSuggestion?: string;
   inputSummary: Record<string, unknown>;
+  nearestMatch?: Template;
 }
 
 type Tab = "dashboard" | "styles" | "industries" | "sections" | "templates" | "match" | "queue" | "analytics";
