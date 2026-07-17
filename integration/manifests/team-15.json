@@ -1,7 +1,65 @@
 {
   "team": 15,
   "domain": "graphic-design",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "_remediationNote": "v1.1.0: locked-file routes/index.ts reverted; registration moved here per Global Remediation Rules",
+
+  "routesToMount": [
+    {
+      "importFrom": "src/domains/graphic-design/index.js",
+      "exportName": "graphicDesignRouter",
+      "mountPoint": "router.use(graphicDesignRouter)",
+      "fileToEdit": "artifacts/api-server/src/routes/index.ts",
+      "requiredBy": "Team 24 integration sprint"
+    }
+  ],
+
+  "pagesToRegister": [
+    {
+      "app": "customer-portal",
+      "path": "/graphic-design",
+      "component": "src/pages/graphic-design/index.tsx",
+      "label": "Graphic Design Services"
+    },
+    {
+      "app": "customer-portal",
+      "path": "/graphic-design/brief",
+      "component": "src/pages/graphic-design/brief.tsx",
+      "label": "Graphic Design Brief"
+    },
+    {
+      "app": "ai-platform",
+      "path": "/graphic-design",
+      "component": "src/pages/graphic-design/index.tsx",
+      "label": "GD Blueprint Registry (Admin)"
+    },
+    {
+      "app": "ai-platform",
+      "path": "/graphic-design/review",
+      "component": "src/pages/graphic-design/review.tsx",
+      "label": "GD QC Review (Admin)"
+    }
+  ],
+
+  "schemaExportsRequested": [],
+
+  "dependencyRequests": [
+    {
+      "type": "env",
+      "key": "ADMIN_API_KEY",
+      "note": "Already set globally. Required by POST /ai/graphic-design/manifest/build and POST /ai/graphic-design/qc/score (admin-key guard)."
+    }
+  ],
+
+  "integrationNotes": [
+    "Routes are currently NOT registered in routes/index.ts. Team 24 must add the import+mount from routesToMount above.",
+    "POST /ai/graphic-design/manifest/build requires x-admin-api-key header AND x-tenant-id header (tenantId is NEVER accepted from body — IDOR rule).",
+    "POST /ai/graphic-design/qc/score requires x-admin-api-key header. Called by Team 13 (QC orchestration) only.",
+    "All GET routes and POST brief/print-spec routes are public (static reference data, pure computation, no DB).",
+    "Migration draft is at integration/migrations/team-15.sql — additive only, IF NOT EXISTS, not yet applied.",
+    "No lib/db/src/schema changes. Domain uses inline table definitions only."
+  ],
+
   "services": [
     {
       "code": "logo",
@@ -192,6 +250,7 @@
       ]
     }
   ],
+
   "portInterfaces": {
     "team7":  { "role": "brand-dna",          "contract": "BrandDnaContext" },
     "team8":  { "role": "asset-intelligence", "contract": "AssetIntelligenceResult" },

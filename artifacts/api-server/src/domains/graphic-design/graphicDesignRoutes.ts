@@ -2,14 +2,19 @@
  * graphicDesignRoutes.ts — Graphic Design Domain (Team 15)
  *
  * REST routes for the Graphic Design domain.
- * Prefix: /ai/graphic-design  (no /api prefix — that's applied in routes/index.ts)
+ * Prefix: /ai/graphic-design  (registered via integration/manifests/team-15.json → routesToMount)
  *
- * Pattern: follows creative-ai.ts and catalog.ts conventions.
- * Auth:    admin routes require adminAuth middleware (injected via app.ts).
- *          Public/client routes use the tenant resolution pattern.
+ * Auth strategy (per Global Remediation Rules):
+ *  - Public reference routes (GET services, print-spec, packages, manifest, components;
+ *    POST brief/score, brief/validate, print-spec/validate): no auth required — pure
+ *    static/computation data, no ownership, no DB writes.
+ *  - Engine-internal mutation routes (POST manifest/build, POST qc/score): require
+ *    ADMIN_API_KEY via `x-admin-api-key` header checked at route level.
+ *    tenantId is NEVER trusted from request body — must come from `x-tenant-id` header
+ *    set by the calling engine team.
  */
 
-import { Router, type Request, type Response, type NextFunction } from "express";
+import { Router, type Request, type Response } from "express";
 import { GRAPHIC_DESIGN_SERVICES, GD_PACKAGE_TIERS } from "./types.js";
 import {
   scoreGraphicDesignBrief,
@@ -27,7 +32,7 @@ import type { GraphicDesignServiceCode, GdPackageTier } from "./types.js";
 
 const router = Router();
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Domain-local helpers ──────────────────────────────────────────────────────
 
 function isValidServiceCode(code: unknown): code is GraphicDesignServiceCode {
   return typeof code === "string" && (GRAPHIC_DESIGN_SERVICES as readonly string[]).includes(code);
@@ -41,11 +46,37 @@ function badRequest(res: Response, message: string, details?: unknown) {
   return res.status(400).json({ error: message, details });
 }
 
+/**
+ * Domain-local admin key guard (P1 security fix).
+ * Checks `x-admin-api-key` header against ADMIN_API_KEY env var.
+ * Returns true if authorised; sends 401 and returns false otherwise.
+ * Does NOT import shared auth middleware (per locked-files rule).
+ */
+function requireAdminKey(req: Request, res: Response): boolean {
+  const adminKey = process.env.ADMIN_API_KEY;
+  const provided = req.headers["x-admin-api-key"];
+  if (!adminKey || !provided || provided !== adminKey) {
+    res.status(401).json({ error: "Unauthorized: valid x-admin-api-key required" });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Resolve tenantId from trusted `x-tenant-id` header only.
+ * NEVER accept tenantId from request body (IDOR rule).
+ */
+function resolveTenantId(req: Request): string | null {
+  const t = req.headers["x-tenant-id"];
+  return typeof t === "string" && t.trim().length > 0 ? t.trim() : null;
+}
+
 // ── Service catalogue ─────────────────────────────────────────────────────────
 
 /**
  * GET /ai/graphic-design/services
  * List all available Graphic Design services with blueprint and print spec.
+ * Public reference data — no auth required.
  */
 router.get("/ai/graphic-design/services", (_req: Request, res: Response) => {
   const services = GRAPHIC_DESIGN_SERVICES.map((code) => ({
@@ -59,6 +90,7 @@ router.get("/ai/graphic-design/services", (_req: Request, res: Response) => {
 /**
  * GET /ai/graphic-design/services/:serviceCode
  * Detail for a single service including components and package policies.
+ * Public reference data — no auth required.
  */
 router.get("/ai/graphic-design/services/:serviceCode", (req: Request, res: Response) => {
   const { serviceCode } = req.params;
@@ -81,6 +113,7 @@ router.get("/ai/graphic-design/services/:serviceCode", (req: Request, res: Respo
 /**
  * POST /ai/graphic-design/brief/score
  * Score a brief for readiness without persisting anything.
+ * Pure computation — no auth, no DB, no ownership.
  * Body: { serviceCode, briefJson }
  */
 router.post("/ai/graphic-design/brief/score", (req: Request, res: Response) => {
@@ -103,6 +136,7 @@ router.post("/ai/graphic-design/brief/score", (req: Request, res: Response) => {
 /**
  * POST /ai/graphic-design/brief/validate
  * Validate whether brief is production-ready (throws-style check as JSON).
+ * Pure computation — no auth, no DB, no ownership.
  * Body: { serviceCode, briefJson }
  */
 router.post("/ai/graphic-design/brief/validate", (req: Request, res: Response) => {
@@ -136,6 +170,7 @@ router.post("/ai/graphic-design/brief/validate", (req: Request, res: Response) =
 /**
  * GET /ai/graphic-design/print-spec/:serviceCode
  * Return standard print specification for a service.
+ * Public reference data — no auth required.
  */
 router.get("/ai/graphic-design/print-spec/:serviceCode", (req: Request, res: Response) => {
   const { serviceCode } = req.params;
@@ -148,6 +183,7 @@ router.get("/ai/graphic-design/print-spec/:serviceCode", (req: Request, res: Res
 /**
  * POST /ai/graphic-design/print-spec/:serviceCode/validate
  * Validate custom print dimension overrides against service bounds.
+ * Pure computation — no auth, no DB, no ownership.
  * Body: { widthMm?, heightMm?, bleedMm? }
  */
 router.post("/ai/graphic-design/print-spec/:serviceCode/validate", (req: Request, res: Response) => {
@@ -177,6 +213,7 @@ router.post("/ai/graphic-design/print-spec/:serviceCode/validate", (req: Request
 /**
  * GET /ai/graphic-design/packages
  * List all package tiers and their global policies.
+ * Public reference data — no auth required.
  */
 router.get("/ai/graphic-design/packages", (_req: Request, res: Response) => {
   return res.json({ packages: GD_PACKAGE_POLICIES });
@@ -185,6 +222,7 @@ router.get("/ai/graphic-design/packages", (_req: Request, res: Response) => {
 /**
  * GET /ai/graphic-design/packages/:tier/:serviceCode
  * Effective policy for a specific tier × service combination.
+ * Public reference data — no auth required.
  */
 router.get("/ai/graphic-design/packages/:tier/:serviceCode", (req: Request, res: Response) => {
   const { tier, serviceCode } = req.params;
@@ -205,6 +243,7 @@ router.get("/ai/graphic-design/packages/:tier/:serviceCode", (req: Request, res:
 /**
  * GET /ai/graphic-design/manifest/:serviceCode/:tier
  * Return expected file names for a service at a given tier.
+ * Public reference data — no auth required.
  */
 router.get("/ai/graphic-design/manifest/:serviceCode/:tier", (req: Request, res: Response) => {
   const { serviceCode, tier } = req.params;
@@ -222,17 +261,25 @@ router.get("/ai/graphic-design/manifest/:serviceCode/:tier", (req: Request, res:
 /**
  * POST /ai/graphic-design/manifest/build
  * Build a deliverable manifest from a completed job's produced files.
- * Body: { gdRequestId, serviceCode, packageTier, tenantId, producedFiles, qcSummary }
+ * Body: { gdRequestId, serviceCode, packageTier, producedFiles, qcSummary }
  *
- * Admin-only: validates admin key presence.
+ * SECURITY (P1 fix):
+ *  - Requires `x-admin-api-key` header — engine team internal route only.
+ *  - tenantId is resolved from `x-tenant-id` header ONLY — never from body (IDOR rule).
  */
 router.post("/ai/graphic-design/manifest/build", (req: Request, res: Response) => {
-  const { gdRequestId, serviceCode, packageTier, tenantId, producedFiles, qcSummary } =
+  if (!requireAdminKey(req, res)) return res.end();
+
+  const tenantId = resolveTenantId(req);
+  if (!tenantId) {
+    return res.status(400).json({ error: "Missing x-tenant-id header" });
+  }
+
+  const { gdRequestId, serviceCode, packageTier, producedFiles, qcSummary } =
     req.body as {
       gdRequestId?: unknown;
       serviceCode?: unknown;
       packageTier?: unknown;
-      tenantId?: unknown;
       producedFiles?: unknown;
       qcSummary?: unknown;
     };
@@ -240,7 +287,6 @@ router.post("/ai/graphic-design/manifest/build", (req: Request, res: Response) =
   if (typeof gdRequestId !== "number") return badRequest(res, "gdRequestId must be a number");
   if (!isValidServiceCode(serviceCode)) return badRequest(res, "Invalid serviceCode");
   if (!isValidTier(packageTier)) return badRequest(res, "Invalid packageTier");
-  if (typeof tenantId !== "string") return badRequest(res, "tenantId must be a string");
   if (!Array.isArray(producedFiles)) return badRequest(res, "producedFiles must be an array");
   if (typeof qcSummary !== "object" || !qcSummary) return badRequest(res, "qcSummary must be an object");
 
@@ -248,7 +294,7 @@ router.post("/ai/graphic-design/manifest/build", (req: Request, res: Response) =
     gdRequestId,
     serviceCode,
     packageTier,
-    tenantId,
+    tenantId,                             // ← sourced from header, not body
     producedFiles: producedFiles as Array<{ fileName: string; storagePath?: string }>,
     qcSummary: qcSummary as { score: number; passed: boolean; warnings: string[] },
   });
@@ -262,8 +308,14 @@ router.post("/ai/graphic-design/manifest/build", (req: Request, res: Response) =
  * POST /ai/graphic-design/qc/score
  * Score a generation report for QC. Pure function — no DB writes.
  * Body: { generationReport, serviceCode, packageTier }
+ *
+ * SECURITY (P1 fix):
+ *  - Requires `x-admin-api-key` — invoked by Team 13 (QC orchestration) only.
+ *    Not a customer-facing endpoint.
  */
 router.post("/ai/graphic-design/qc/score", (req: Request, res: Response) => {
+  if (!requireAdminKey(req, res)) return res.end();
+
   const { generationReport, serviceCode, packageTier } = req.body as {
     generationReport?: unknown;
     serviceCode?: unknown;
@@ -290,6 +342,7 @@ router.post("/ai/graphic-design/qc/score", (req: Request, res: Response) => {
 /**
  * GET /ai/graphic-design/components/:serviceCode
  * Return component checklist for a service.
+ * Public reference data — no auth required.
  */
 router.get("/ai/graphic-design/components/:serviceCode", (req: Request, res: Response) => {
   const { serviceCode } = req.params;
@@ -299,4 +352,5 @@ router.get("/ai/graphic-design/components/:serviceCode", (req: Request, res: Res
   return res.json({ serviceCode, components: getGdComponents(serviceCode) });
 });
 
+export { router as graphicDesignRouter };
 export default router;
