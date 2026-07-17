@@ -13,6 +13,7 @@ interface CategorySeed {
   description: string;
   icon: string;
   displayOrder: number;
+  visibility?: string; // "public" | "internal" | "disabled" — defaults to "internal" in DB
 }
 
 interface ServiceSeed {
@@ -37,8 +38,8 @@ interface ServiceSeed {
 }
 
 export const CATEGORIES: CategorySeed[] = [
-  { code: "creative", name: "Creative AI", description: "Brand identity, design, and content production.", icon: "palette", displayOrder: 1 },
-  { code: "presentation-document", name: "Presentation & Document AI", description: "Pitch deck, proposal, laporan, dan dokumen bisnis profesional.", icon: "file-text", displayOrder: 2 },
+  { code: "creative", name: "Creative AI", description: "Brand identity, design, and content production.", icon: "palette", displayOrder: 1, visibility: "public" },
+  { code: "presentation-document", name: "Presentation & Document AI", description: "Pitch deck, proposal, laporan, dan dokumen bisnis profesional.", icon: "file-text", displayOrder: 2, visibility: "public" },
   { code: "marketing", name: "Marketing AI", description: "Campaigns, positioning, and growth strategy.", icon: "megaphone", displayOrder: 3 },
   { code: "sales", name: "Sales AI", description: "Lead qualification, proposals, and pipeline support.", icon: "handshake", displayOrder: 4 },
   { code: "finance", name: "Finance AI", description: "Financial analysis, forecasting, and reporting.", icon: "line-chart", displayOrder: 5 },
@@ -292,6 +293,7 @@ async function upsertCategory(seed: CategorySeed) {
         description: seed.description,
         icon: seed.icon,
         displayOrder: seed.displayOrder,
+        ...(seed.visibility !== undefined ? { visibility: seed.visibility } : {}),
         updatedAt: new Date(),
       })
       .where(eq(aiServiceCategoriesTable.id, existing.id))
