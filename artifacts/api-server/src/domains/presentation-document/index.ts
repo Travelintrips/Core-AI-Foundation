@@ -66,6 +66,25 @@ export {
   checkTemplateCompatibility,
   validateAntiFabrication,
   buildPipelineSummary,
+  // Resource limits
+  RESOURCE_LIMITS,
+  ResourceLimitError,
+  enforcePageLimit,
+  enforceSlideLimit,
+  enforceImageCount,
+  enforceSourceAssetBytes,
+  enforceOutputBytes,
+  checkDocumentResourceLimits,
+  checkPresentationResourceLimits,
+  // Image validation
+  validateImageUrl,
+} from "./adapters/presentationDocumentAdapter.js";
+export type {
+  ResourceLimitCode,
+  DocumentResourceCheck,
+  PresentationResourceCheck,
+  ImageValidationResult,
+  ImageValidationCode,
 } from "./adapters/presentationDocumentAdapter.js";
 
 // ── Individual mapper exports (for direct use in tests) ───────────────────────

@@ -30,6 +30,21 @@ import { SERVICE_FORMAT_MAP }          from "../types.js";
 import { evaluateQc, scoreSectionCoverage, scoreDataCompleteness, scorePageCount } from "../qcProfile.js";
 import { getTemplateCompatibility, isStyleCompatible } from "../templateCompatibility.js";
 import { getPackageRule, resolvePackageTier, type PackageTier } from "../packageRules.js";
+import {
+  RESOURCE_LIMITS,
+  ResourceLimitError,
+  enforcePageLimit,
+  enforceSlideLimit,
+  enforceImageCount,
+  enforceSourceAssetBytes,
+  enforceOutputBytes,
+  checkDocumentResourceLimits,
+  checkPresentationResourceLimits,
+  type ResourceLimitCode,
+  type DocumentResourceCheck,
+  type PresentationResourceCheck,
+} from "../resourceLimits.js";
+import { validateImageUrl, type ImageValidationResult, type ImageValidationCode } from "../imageValidator.js";
 
 // ── Routing ────────────────────────────────────────────────────────────────────
 
@@ -198,3 +213,22 @@ export function buildPipelineSummary(
     qcResult,
   };
 }
+
+// ── Resource limit + image validation re-exports ──────────────────────────────
+// These are re-exported here so callers only need to import from the adapter.
+
+export {
+  RESOURCE_LIMITS,
+  ResourceLimitError,
+  enforcePageLimit,
+  enforceSlideLimit,
+  enforceImageCount,
+  enforceSourceAssetBytes,
+  enforceOutputBytes,
+  checkDocumentResourceLimits,
+  checkPresentationResourceLimits,
+};
+export type { ResourceLimitCode, DocumentResourceCheck, PresentationResourceCheck };
+
+export { validateImageUrl };
+export type { ImageValidationResult, ImageValidationCode };

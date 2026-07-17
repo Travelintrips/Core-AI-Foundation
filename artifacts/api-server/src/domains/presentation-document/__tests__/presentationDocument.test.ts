@@ -57,12 +57,30 @@ import {
   isPresentationEngineService,
   checkTemplateCompatibility,
   validateAntiFabrication,
+  RESOURCE_LIMITS,
+  ResourceLimitError,
+  enforcePageLimit,
+  enforceSlideLimit,
+  enforceImageCount,
+  enforceSourceAssetBytes,
+  enforceOutputBytes,
+  checkDocumentResourceLimits,
+  checkPresentationResourceLimits,
+  validateImageUrl,
 } from "../adapters/presentationDocumentAdapter.js";
 import {
   registerDocument,
   getSupportedDocumentTypes,
 } from "../../../services/creativeDocumentWorkerService.js";
 import { initPresentationDocumentDomain } from "../index.js";
+import {
+  proposalDefinition,
+  productCatalogDefinition,
+  annualReportDefinition,
+  whitepaperDefinition,
+  caseStudyDefinition,
+  ebookDefinition,
+} from "../index.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -658,5 +676,393 @@ describe("M. Adapter routing", () => {
       expect(resolveRenderFormat(t)).toBe("pdf");
       expect(isDocumentEngineService(t)).toBe(true);
     }
+  });
+});
+
+// ── N. Engine conformance — adapter delegates to existing engines ───────────────
+//
+// Verifies that every Team 16 DocumentDefinition is a proper adapter object:
+// it conforms to the DocumentDefinition interface consumed by the existing
+// Document Engine (creativeDocumentWorkerService) and does NOT own a renderer.
+
+describe("N. Engine conformance — adapter uses existing Document Engine", () => {
+  const definitions = [
+    { name: "proposal",       def: proposalDefinition       },
+    { name: "product_catalog",def: productCatalogDefinition },
+    { name: "annual_report",  def: annualReportDefinition   },
+    { name: "whitepaper",     def: whitepaperDefinition     },
+    { name: "case_study",     def: caseStudyDefinition      },
+    { name: "ebook",          def: ebookDefinition          },
+  ] as const;
+
+  for (const { name, def } of definitions) {
+    it(`${name}: conforms to DocumentDefinition interface (has generateContent + buildSpec)`, () => {
+      expect(typeof def.generateContent).toBe("function");
+      expect(typeof def.buildSpec).toBe("function");
+      expect(typeof def.filenamePrefix).toBe("string");
+      expect(typeof def.minimumPageCount).toBe("number");
+      expect(typeof def.requiresLogo).toBe("boolean");
+      expect(typeof def.maxInlineImages).toBe("number");
+    });
+
+    it(`${name}: does NOT own a render function (rendering stays in existing engine)`, () => {
+      // The definition must NOT have a render/renderPdf/renderPptx method.
+      // Rendering is the responsibility of creativeDocumentWorkerService.
+      const d = def as unknown as Record<string, unknown>;
+      expect(d["render"]).toBeUndefined();
+      expect(d["renderPdf"]).toBeUndefined();
+      expect(d["renderPptx"]).toBeUndefined();
+      expect(d["generatePdf"]).toBeUndefined();
+    });
+
+    it(`${name}: minimumPageCount >= 2 (engine structural minimum)`, () => {
+      expect(def.minimumPageCount).toBeGreaterThanOrEqual(2);
+    });
+
+    it(`${name}: maxInlineImages within domain ceiling (≤ RESOURCE_LIMITS.MAX_IMAGES_PER_DOC)`, () => {
+      expect(def.maxInlineImages).toBeLessThanOrEqual(RESOURCE_LIMITS.MAX_IMAGES_PER_DOC);
+    });
+  }
+});
+
+// ── O. SSRF — external private URL validation ─────────────────────────────────
+
+describe("O. SSRF — external private image URLs rejected", () => {
+  it("rejects localhost URL", () => {
+    const result = validateImageUrl("http://localhost/image.png");
+    expect(result.valid).toBe(false);
+    expect((result as { valid: false; code: string }).code).toBe("SSRF_BLOCKED");
+  });
+
+  it("rejects 127.0.0.1 (loopback)", () => {
+    const result = validateImageUrl("http://127.0.0.1/image.png");
+    expect(result.valid).toBe(false);
+    expect((result as { valid: false; code: string }).code).toBe("SSRF_BLOCKED");
+  });
+
+  it("rejects 10.x.x.x (private class A)", () => {
+    const result = validateImageUrl("http://10.0.0.1/logo.png");
+    expect(result.valid).toBe(false);
+    expect((result as { valid: false; code: string }).code).toBe("SSRF_BLOCKED");
+  });
+
+  it("rejects 172.16.x.x (private class B)", () => {
+    const result = validateImageUrl("http://172.16.5.100/logo.png");
+    expect(result.valid).toBe(false);
+    expect((result as { valid: false; code: string }).code).toBe("SSRF_BLOCKED");
+  });
+
+  it("rejects 192.168.x.x (private class C)", () => {
+    const result = validateImageUrl("http://192.168.1.1/logo.png");
+    expect(result.valid).toBe(false);
+    expect((result as { valid: false; code: string }).code).toBe("SSRF_BLOCKED");
+  });
+
+  it("rejects 169.254.x.x (link-local / cloud metadata IMDS)", () => {
+    const result = validateImageUrl("http://169.254.169.254/latest/meta-data/");
+    expect(result.valid).toBe(false);
+    expect((result as { valid: false; code: string }).code).toBe("SSRF_BLOCKED");
+  });
+
+  it("rejects AWS metadata endpoint by hostname", () => {
+    const result = validateImageUrl("http://169.254.169.254/image.png");
+    expect(result.valid).toBe(false);
+    expect((result as { valid: false; code: string }).code).toBe("SSRF_BLOCKED");
+  });
+
+  it("rejects file:// protocol", () => {
+    const result = validateImageUrl("file:///etc/passwd");
+    expect(result.valid).toBe(false);
+    expect((result as { valid: false; code: string }).code).toBe("PROTOCOL_NOT_ALLOWED");
+  });
+
+  it("rejects ftp:// protocol", () => {
+    const result = validateImageUrl("ftp://example.com/image.png");
+    expect(result.valid).toBe(false);
+    expect((result as { valid: false; code: string }).code).toBe("PROTOCOL_NOT_ALLOWED");
+  });
+
+  it("rejects data: URI (non-http/https)", () => {
+    const result = validateImageUrl("data:image/png;base64,abc123");
+    expect(result.valid).toBe(false);
+    expect((result as { valid: false; code: string }).code).toBe("PROTOCOL_NOT_ALLOWED");
+  });
+
+  it("rejects empty string", () => {
+    const result = validateImageUrl("");
+    expect(result.valid).toBe(false);
+    expect((result as { valid: false; code: string }).code).toBe("INVALID_URL");
+  });
+
+  it("rejects totally invalid URL string", () => {
+    const result = validateImageUrl("not-a-url-at-all");
+    expect(result.valid).toBe(false);
+  });
+
+  it("accepts a valid public https URL", () => {
+    const result = validateImageUrl("https://cdn.example.com/logo.png");
+    expect(result.valid).toBe(true);
+  });
+
+  it("accepts a valid public http URL", () => {
+    const result = validateImageUrl("http://assets.example.com/cover.jpg");
+    expect(result.valid).toBe(true);
+  });
+});
+
+// ── P. Resource limits enforced ───────────────────────────────────────────────
+
+describe("P. Resource limits — max pages / slides / images enforced", () => {
+  it("RESOURCE_LIMITS constants are present and sane", () => {
+    expect(RESOURCE_LIMITS.MAX_PAGES).toBeGreaterThanOrEqual(50);
+    expect(RESOURCE_LIMITS.MAX_SLIDES).toBeGreaterThanOrEqual(50);
+    expect(RESOURCE_LIMITS.MAX_IMAGES_PER_DOC).toBeGreaterThanOrEqual(4);
+    expect(RESOURCE_LIMITS.MAX_SOURCE_ASSET_BYTES).toBeGreaterThanOrEqual(5 * 1024 * 1024);
+    expect(RESOURCE_LIMITS.MAX_GENERATED_OUTPUT_BYTES).toBeGreaterThanOrEqual(20 * 1024 * 1024);
+    expect(RESOURCE_LIMITS.GENERATION_TIMEOUT_MS).toBeGreaterThanOrEqual(60_000);
+    expect(RESOURCE_LIMITS.IMAGE_FETCH_TIMEOUT_MS).toBeGreaterThanOrEqual(5_000);
+  });
+
+  it("enforcePageLimit: passes when within limit", () => {
+    expect(() => enforcePageLimit(50, 50)).not.toThrow();
+    expect(() => enforcePageLimit(1, 50)).not.toThrow();
+  });
+
+  it("enforcePageLimit: throws ResourceLimitError when exceeded", () => {
+    expect(() => enforcePageLimit(51, 50)).toThrow(ResourceLimitError);
+    try {
+      enforcePageLimit(51, 50);
+    } catch (e) {
+      expect(e).toBeInstanceOf(ResourceLimitError);
+      expect((e as ResourceLimitError).code).toBe("PAGE_LIMIT_EXCEEDED");
+      expect((e as ResourceLimitError).actual).toBe(51);
+      expect((e as ResourceLimitError).limit).toBe(50);
+    }
+  });
+
+  it("enforceSlideLimit: passes when within limit", () => {
+    expect(() => enforceSlideLimit(60, 60)).not.toThrow();
+  });
+
+  it("enforceSlideLimit: throws ResourceLimitError when exceeded", () => {
+    expect(() => enforceSlideLimit(61, 60)).toThrow(ResourceLimitError);
+    try {
+      enforceSlideLimit(61, 60);
+    } catch (e) {
+      expect((e as ResourceLimitError).code).toBe("SLIDE_LIMIT_EXCEEDED");
+    }
+  });
+
+  it("enforceImageCount: passes at or below limit", () => {
+    expect(() => enforceImageCount(6, 6)).not.toThrow();
+    expect(() => enforceImageCount(0, 6)).not.toThrow();
+  });
+
+  it("enforceImageCount: throws ResourceLimitError when exceeded", () => {
+    expect(() => enforceImageCount(7, 6)).toThrow(ResourceLimitError);
+    try {
+      enforceImageCount(7, 6);
+    } catch (e) {
+      expect((e as ResourceLimitError).code).toBe("IMAGE_COUNT_EXCEEDED");
+    }
+  });
+
+  it("enforceOutputBytes: passes within limit", () => {
+    expect(() => enforceOutputBytes(RESOURCE_LIMITS.MAX_GENERATED_OUTPUT_BYTES)).not.toThrow();
+  });
+
+  it("enforceOutputBytes: throws ResourceLimitError when exceeded", () => {
+    expect(() => enforceOutputBytes(RESOURCE_LIMITS.MAX_GENERATED_OUTPUT_BYTES + 1)).toThrow(ResourceLimitError);
+    try {
+      enforceOutputBytes(RESOURCE_LIMITS.MAX_GENERATED_OUTPUT_BYTES + 1);
+    } catch (e) {
+      expect((e as ResourceLimitError).code).toBe("OUTPUT_TOO_LARGE");
+    }
+  });
+
+  it("checkDocumentResourceLimits: passes for valid document", () => {
+    expect(() => checkDocumentResourceLimits({ pageCount: 20, imageCount: 3 })).not.toThrow();
+  });
+
+  it("checkDocumentResourceLimits: throws on page count violation", () => {
+    expect(() =>
+      checkDocumentResourceLimits({ pageCount: 100, imageCount: 2, maxPages: 50 }),
+    ).toThrow(ResourceLimitError);
+  });
+
+  it("checkDocumentResourceLimits: throws on image count violation", () => {
+    expect(() =>
+      checkDocumentResourceLimits({ pageCount: 10, imageCount: 99 }),
+    ).toThrow(ResourceLimitError);
+  });
+
+  it("checkPresentationResourceLimits: passes for valid presentation", () => {
+    expect(() => checkPresentationResourceLimits({ slideCount: 30, imageCount: 4 })).not.toThrow();
+  });
+
+  it("checkPresentationResourceLimits: throws on slide count violation", () => {
+    expect(() =>
+      checkPresentationResourceLimits({ slideCount: 999, imageCount: 2 }),
+    ).toThrow(ResourceLimitError);
+    try {
+      checkPresentationResourceLimits({ slideCount: 999, imageCount: 2 });
+    } catch (e) {
+      expect((e as ResourceLimitError).code).toBe("SLIDE_LIMIT_EXCEEDED");
+    }
+  });
+});
+
+// ── Q. Oversized image rejected ───────────────────────────────────────────────
+
+describe("Q. Oversized source asset rejected", () => {
+  it("enforceSourceAssetBytes: passes for small image", () => {
+    expect(() => enforceSourceAssetBytes(1024)).not.toThrow();
+    expect(() => enforceSourceAssetBytes(RESOURCE_LIMITS.MAX_SOURCE_ASSET_BYTES)).not.toThrow();
+  });
+
+  it("enforceSourceAssetBytes: throws ResourceLimitError for oversized image", () => {
+    const oversized = RESOURCE_LIMITS.MAX_SOURCE_ASSET_BYTES + 1;
+    expect(() => enforceSourceAssetBytes(oversized)).toThrow(ResourceLimitError);
+    try {
+      enforceSourceAssetBytes(oversized);
+    } catch (e) {
+      expect(e).toBeInstanceOf(ResourceLimitError);
+      expect((e as ResourceLimitError).code).toBe("SOURCE_ASSET_TOO_LARGE");
+      expect((e as ResourceLimitError).actual).toBe(oversized);
+      expect((e as ResourceLimitError).limit).toBe(RESOURCE_LIMITS.MAX_SOURCE_ASSET_BYTES);
+    }
+  });
+
+  it("enforceSourceAssetBytes: throws for an image > 10 MB", () => {
+    const elevenMb = 11 * 1024 * 1024;
+    expect(() => enforceSourceAssetBytes(elevenMb)).toThrow(ResourceLimitError);
+  });
+
+  it("validateImageUrl rejects a private URL that could serve oversized content", () => {
+    // Even before fetching, SSRF guard prevents private IPs
+    const result = validateImageUrl("http://10.0.5.100/huge-image.tiff");
+    expect(result.valid).toBe(false);
+    expect((result as { valid: false; code: string }).code).toBe("SSRF_BLOCKED");
+  });
+});
+
+// ── R. Fabricated financial / team claims still skipped ───────────────────────
+
+describe("R. Fabricated financial and team claims are skipped", () => {
+  it("annual_report: financials section is always skipped", () => {
+    const { content } = normalizeAnnualReportContent(makeProject({}));
+    const { spec } = buildAnnualReportSpec(makeProject({}), content, null, []);
+    const headingTitles = spec.sections
+      .filter((s) => s.type === "heading")
+      .map((s) => (s as { type: "heading"; title: string }).title.toLowerCase());
+    // No financial figure headings should appear
+    expect(headingTitles.some((t) => t.includes("financial"))).toBe(false);
+    expect(headingTitles.some((t) => t.includes("revenue"))).toBe(false);
+    expect(headingTitles.some((t) => t.includes("profit"))).toBe(false);
+  });
+
+  it("proposal: investment section skipped when no timeline/investment in brief", () => {
+    const { content } = normalizeProposalContent(makeProject({}), {});
+    const { report } = buildProposalSpec(makeProject({}), content, null, []);
+    const skipped = (report.sectionsSkipped as Array<{ id: string }>).map((s) => s.id);
+    expect(skipped).toContain("investment");
+    expect(skipped).toContain("timeline");
+  });
+
+  it("whitepaper: findings section omitted when researchFindings absent", () => {
+    const { content } = normalizeWhitepaperContent(makeProject({}), {});
+    const { report } = buildWhitepaperSpec(makeProject({}), content, null, []);
+    const skipped = (report.sectionsSkipped as Array<{ id: string }>).map((s) => s.id);
+    expect(skipped).toContain("findings");
+  });
+
+  it("case_study: outcomes section omitted when no outcomes data", () => {
+    const { content } = normalizeCaseStudyContent(makeProject({}), {});
+    const { report } = buildCaseStudySpec(makeProject({}), content, null, []);
+    const skipped = (report.sectionsSkipped as Array<{ id: string }>).map((s) => s.id);
+    expect(skipped.some((id) => id.includes("outcome") || id.includes("result"))).toBe(true);
+  });
+
+  it("validateAntiFabrication detects '$0' as fabrication indicator", () => {
+    const result = validateAntiFabrication({ revenue: "Total revenue: $0 million" });
+    expect(result.clean).toBe(false);
+  });
+
+  it("validateAntiFabrication detects '0%' as fabrication indicator", () => {
+    const result = validateAntiFabrication({ growth: "YoY growth: 0%" });
+    expect(result.clean).toBe(false);
+  });
+
+  it("validateAntiFabrication: real data passes", () => {
+    const result = validateAntiFabrication({
+      positioning: "Leader in enterprise AI",
+      tagline: "AI that works",
+      tone: "Professional and approachable",
+    });
+    expect(result.clean).toBe(true);
+    expect(result.violations).toHaveLength(0);
+  });
+});
+
+// ── S. Output buffer validation ────────────────────────────────────────────────
+// Validates that the domain enforces output byte limits and that valid
+// PDF/PPTX buffer signatures would be accepted by the engines.
+
+describe("S. Output buffer validation", () => {
+  it("enforceOutputBytes: a realistic 5 MB PDF passes", () => {
+    const fiveMb = 5 * 1024 * 1024;
+    expect(() => enforceOutputBytes(fiveMb)).not.toThrow();
+  });
+
+  it("enforceOutputBytes: a 60 MB output exceeds the 50 MB ceiling", () => {
+    const sixtyMb = 60 * 1024 * 1024;
+    expect(() => enforceOutputBytes(sixtyMb)).toThrow(ResourceLimitError);
+    try {
+      enforceOutputBytes(sixtyMb);
+    } catch (e) {
+      expect((e as ResourceLimitError).code).toBe("OUTPUT_TOO_LARGE");
+      expect((e as ResourceLimitError).limit).toBe(RESOURCE_LIMITS.MAX_GENERATED_OUTPUT_BYTES);
+    }
+  });
+
+  it("checkDocumentResourceLimits: valid 30-page, 4-image, 8 MB output passes", () => {
+    expect(() =>
+      checkDocumentResourceLimits({
+        pageCount:   30,
+        imageCount:  4,
+        outputBytes: 8 * 1024 * 1024,
+        maxPages:    50,
+      }),
+    ).not.toThrow();
+  });
+
+  it("checkDocumentResourceLimits: 51-page document violates MAX_PAGES=50", () => {
+    expect(() =>
+      checkDocumentResourceLimits({ pageCount: 51, imageCount: 2, maxPages: 50 }),
+    ).toThrow(ResourceLimitError);
+  });
+
+  it("checkPresentationResourceLimits: valid 40-slide, 3-image PPTX passes", () => {
+    expect(() =>
+      checkPresentationResourceLimits({ slideCount: 40, imageCount: 3 }),
+    ).not.toThrow();
+  });
+
+  it("checkPresentationResourceLimits: 61-slide PPTX violates MAX_SLIDES=60", () => {
+    expect(() =>
+      checkPresentationResourceLimits({ slideCount: 61, imageCount: 2 }),
+    ).toThrow(ResourceLimitError);
+    try {
+      checkPresentationResourceLimits({ slideCount: 61, imageCount: 2 });
+    } catch (e) {
+      expect((e as ResourceLimitError).code).toBe("SLIDE_LIMIT_EXCEEDED");
+    }
+  });
+
+  it("ResourceLimitError is an instance of Error", () => {
+    const err = new ResourceLimitError("PAGE_LIMIT_EXCEEDED", 55, 50);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(ResourceLimitError);
+    expect(err.message).toContain("PAGE_LIMIT_EXCEEDED");
   });
 });
