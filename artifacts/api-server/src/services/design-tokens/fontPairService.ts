@@ -2,8 +2,11 @@
 
 import { db } from "@workspace/db";
 import { eq, and, sql, ilike } from "drizzle-orm";
-import slugify from "slugify";
 import { dtFontPairsTable, dtTypographyRolesTable } from "./schema.js";
+// P2 — Adapter boundary: font-family sanitisation delegates to the existing
+// design-renderer font registry rather than reimplementing the logic.
+import { safeFontFamily } from "../design-renderer/fontRegistry.js";
+import { validateGoogleFontsUrl } from "./fontUrlGuard.js";
 import {
   validateTypographyHierarchy,
   paletteSignature,
@@ -18,8 +21,18 @@ import type {
   Industry,
 } from "./types.js";
 
+// P0: no external slugify dependency — local implementation avoids touching pnpm-lock.yaml
 function makeSlug(name: string): string {
-  return slugify(name, { lower: true, strict: true });
+  return name
+    .toLowerCase()
+    .trim()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "") // strip diacritics
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
 }
 
 function fontSignature(displayFont: string, bodyFont: string): string {
@@ -125,15 +138,33 @@ export async function createFontPair(
     });
   }
 
+  // P1-SSRF: validate Google Fonts URL before storing; sanitise font family names
+  // via the existing design-renderer font registry (P2 adapter boundary).
+  let safeGoogleFontsUrl: string | null = null;
+  if (input.googleFontsUrl) {
+    const urlCheck = validateGoogleFontsUrl(input.googleFontsUrl);
+    if (!urlCheck.valid) {
+      throw Object.assign(new Error(`Invalid font URL: ${urlCheck.error}`), {
+        code: "INVALID_FONT_URL",
+      });
+    }
+    safeGoogleFontsUrl = urlCheck.canonicalUrl;
+  }
+
   const slug = makeSlug(input.name);
+  // Sanitise font family strings through the existing registry helper (P2)
+  const safeDisplayFont = safeFontFamily(input.displayFont);
+  const safeBodyFont = safeFontFamily(input.bodyFont);
+  const safeAccentFont = input.accentFont ? safeFontFamily(input.accentFont) : null;
+
   const [row] = await db
     .insert(dtFontPairsTable)
     .values({
       name: input.name,
       slug,
-      displayFont: input.displayFont,
-      bodyFont: input.bodyFont,
-      accentFont: input.accentFont ?? null,
+      displayFont: safeDisplayFont,
+      bodyFont: safeBodyFont,
+      accentFont: safeAccentFont,
       category: input.category,
       mood: input.mood,
       industries: input.industries,
@@ -143,7 +174,7 @@ export async function createFontPair(
       pairingRationale: input.pairingRationale ?? null,
       sampleHeading: input.sampleHeading ?? "The quick brown fox",
       sampleBody: input.sampleBody ?? "Typography is the art of arranging type to make written language legible.",
-      googleFontsUrl: input.googleFontsUrl ?? null,
+      googleFontsUrl: safeGoogleFontsUrl,
     })
     .returning();
   return row as unknown as FontPairRow;

@@ -44,7 +44,6 @@
     "pptxgenjs": "4.0.1",
     "qrcode": "^1.5.4",
     "sharp": "^0.35.3",
-    "slugify": "^1.6.9",
     "zod": "catalog:"
   },
   "devDependencies": {

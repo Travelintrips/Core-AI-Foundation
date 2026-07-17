@@ -1,6 +1,37 @@
 // Team 10 — Typography & Color Palette Engine
 // All types local to this domain. No edits to shared barrels.
 
+// ── Accessibility Disclaimer ───────────────────────────────────────────────────
+//
+// REQUIRED by P1-WCAG remediation: all scoring surfaces must carry this.
+// Contrast ratio values are computed exactly per WCAG 2.1 § 1.4.3.
+// Typography readability and brand compatibility are heuristic estimates only.
+
+/**
+ * Mandatory disclaimer attached to every automated accessibility estimate.
+ * Must be surfaced in all API responses that expose a score or ratio.
+ */
+export const ACCESSIBILITY_DISCLAIMER =
+  "Automated estimate, not formal accessibility certification. " +
+  "Contrast ratios follow the WCAG 2.1 relative luminance formula (exact). " +
+  "Typography readability and brand compatibility scores are heuristic estimates " +
+  "based on font-size hierarchy and mood matching — they do not constitute WCAG conformance. " +
+  "Formal certification requires a manual audit by a qualified accessibility specialist.";
+
+/**
+ * Describes how a numeric score was produced.
+ *
+ * - `wcag_contrast_ratio`     — Mathematically exact per WCAG 2.1 § 1.4.3. Deterministic.
+ * - `heuristic_readability`   — Rule-based estimate (font-size order, weight, line-height).
+ *                               Not a WCAG conformance metric.
+ * - `estimated_compatibility` — Heuristic mood/colour match against brand DNA.
+ *                               Subjective and confidence-weighted.
+ */
+export type ScoreMethod =
+  | "wcag_contrast_ratio"
+  | "heuristic_readability"
+  | "estimated_compatibility";
+
 export type FontCategory = "serif" | "sans-serif" | "display" | "monospace" | "handwriting";
 export type FontMood =
   | "professional"
@@ -205,6 +236,10 @@ export interface ContrastResult {
   wcagAAA: boolean;
   wcagAAALarge: boolean;
   level: WcagLevel;
+  /** How this value was computed — always wcag_contrast_ratio for contrast checks. */
+  method: "wcag_contrast_ratio";
+  /** Mandatory disclaimer — not a formal accessibility certification. */
+  disclaimer: string;
 }
 
 // ── Print Safe ───────────────────────────────────────────────────────────────
@@ -258,6 +293,14 @@ export interface CompatibilityScore {
   name: string;
   slug: string;
   score: number;
+  /**
+   * How the score was produced.
+   * Always "estimated_compatibility" — heuristic mood + colour matching.
+   * This is NOT a WCAG conformance score.
+   */
+  scoreMethod: "estimated_compatibility";
   reasons: string[];
   warnings: string[];
+  /** Mandatory disclaimer — not a formal accessibility certification. */
+  disclaimer: string;
 }

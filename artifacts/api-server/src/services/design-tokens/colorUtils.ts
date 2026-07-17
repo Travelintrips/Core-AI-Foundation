@@ -2,6 +2,7 @@
 // Pure functions — no DB dependency.
 
 import type { CmykColor, ContrastResult, WcagLevel } from "./types.js";
+import { ACCESSIBILITY_DISCLAIMER } from "./types.js";
 
 // ── Hex Parsing ───────────────────────────────────────────────────────────────
 
@@ -66,6 +67,9 @@ export function checkContrast(hex1: string, hex2: string): ContrastResult {
     wcagAAA: ratio >= 7,
     wcagAAALarge: ratio >= 4.5,
     level: wcagLevel(ratio),
+    // P1-WCAG: label the computation method and attach mandatory disclaimer
+    method: "wcag_contrast_ratio" as const,
+    disclaimer: ACCESSIBILITY_DISCLAIMER,
   };
 }
 

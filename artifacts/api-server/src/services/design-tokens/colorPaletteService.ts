@@ -2,7 +2,6 @@
 
 import { db } from "@workspace/db";
 import { eq, sql, ilike } from "drizzle-orm";
-import slugify from "slugify";
 import { dtColorPalettesTable, dtSemanticColorRolesTable } from "./schema.js";
 import {
   checkContrast,
@@ -26,8 +25,18 @@ import type {
   PaletteStyle,
 } from "./types.js";
 
+// P0: no external slugify dependency — local implementation avoids touching pnpm-lock.yaml
 function makeSlug(name: string): string {
-  return slugify(name, { lower: true, strict: true });
+  return name
+    .toLowerCase()
+    .trim()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "") // strip diacritics
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
 }
 
 function deriveWcagLevel(roles: UpsertSemanticRoleInput[]): WcagLevel {

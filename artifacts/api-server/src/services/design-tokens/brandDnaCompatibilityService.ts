@@ -13,6 +13,7 @@ import type {
   FontMood,
   Industry,
 } from "./types.js";
+import { ACCESSIBILITY_DISCLAIMER } from "./types.js";
 
 // Personality → mood mapping (based on Brand DNA personality tags)
 const PERSONALITY_TO_MOOD: Record<string, FontMood[]> = {
@@ -137,8 +138,10 @@ export async function getCompatibleFontPairs(
       name: pair.name,
       slug: pair.slug,
       score: finalScore,
+      scoreMethod: "estimated_compatibility" as const,
       reasons: moodResult.reasons,
       warnings,
+      disclaimer: ACCESSIBILITY_DISCLAIMER,
     };
   });
 
@@ -182,8 +185,10 @@ export async function getCompatiblePalettes(
       name: palette.name,
       slug: palette.slug,
       score: finalScore,
+      scoreMethod: "estimated_compatibility" as const,
       reasons: [...moodResult.reasons, ...colourResult.reasons],
       warnings,
+      disclaimer: ACCESSIBILITY_DISCLAIMER,
     };
   });
 
@@ -219,8 +224,10 @@ export async function scoreSpecificCombination(
     name: pair.name,
     slug: pair.slug,
     score: pairMood.score,
+    scoreMethod: "estimated_compatibility" as const,
     reasons: pairMood.reasons,
     warnings: [],
+    disclaimer: ACCESSIBILITY_DISCLAIMER,
   };
 
   const paletteMoods = (palette.mood as FontMood[]) ?? [];
@@ -231,8 +238,10 @@ export async function scoreSpecificCombination(
     name: palette.name,
     slug: palette.slug,
     score: Math.round(palMood.score * 0.4 + palColour.score * 0.6),
+    scoreMethod: "estimated_compatibility" as const,
     reasons: [...palMood.reasons, ...palColour.reasons],
     warnings: palette.accessible ? [] : ["Palette does not meet WCAG AA"],
+    disclaimer: ACCESSIBILITY_DISCLAIMER,
   };
 
   const combinedScore = Math.round(
