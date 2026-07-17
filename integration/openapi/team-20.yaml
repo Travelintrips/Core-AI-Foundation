@@ -1,0 +1,296 @@
+openapi: "3.1.0"
+info:
+  title: "Product Concept Design — Team 20"
+  version: "0.0.0-blocked"
+  description: |
+    STATUS: BLOCKED_PENDING_FOUNDATION
+
+    This OpenAPI fragment is a STUB ONLY.
+    No routes are currently registered or mountable from this domain.
+
+    Routes will be defined here when the following teams pass audit
+    and are integrated:
+      - Team 07: AI Model Routing
+      - Team 08: Universal Component Library
+      - Team 11: Blueprint Engine
+      - Team 12: Composition / Rendering Engine
+      - Team 13: QC Pipeline
+      - Team 14: Deliverable Manifest Service
+
+    See integration/manifests/team-20.json for full dependency and
+    future integration point documentation.
+
+paths: {}
+
+components:
+  schemas:
+    ProductDesignRequirements:
+      type: object
+      description: |
+        Design requirements captured in a product concept.
+        Source of truth for all downstream engine integrations (Teams 11-14).
+      required: [conceptId, conceptName, formDirection, materialDirection, cmf, estimatedDimensions, disclaimer, version]
+      properties:
+        conceptId:
+          type: string
+        conceptName:
+          type: string
+        formDirection:
+          $ref: "#/components/schemas/FormDirection"
+        materialDirection:
+          $ref: "#/components/schemas/MaterialDirection"
+        cmf:
+          $ref: "#/components/schemas/CMFSpec"
+        estimatedDimensions:
+          $ref: "#/components/schemas/DimensionsMm"
+        disclaimer:
+          type: string
+          description: Mandatory disclaimer — must accompany every output.
+        version:
+          type: integer
+          minimum: 1
+
+    ProductDesignBrief:
+      type: object
+      description: |
+        Concept-level communication package for early-stage manufacturer conversations.
+        NOT a technical specification, engineering drawing, or procurement contract.
+      required: [briefId, conceptId, conceptName, processHints, requirements, disclaimer, generatedAt]
+      properties:
+        briefId:
+          type: string
+        conceptId:
+          type: string
+        conceptName:
+          type: string
+        processHints:
+          type: array
+          items:
+            type: string
+        requirements:
+          type: array
+          items:
+            $ref: "#/components/schemas/RequirementEntry"
+        logisticsNotes:
+          type: string
+        disclaimer:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+
+    ProductDesignCompositionMapping:
+      type: object
+      description: |
+        Maps a product concept to a layered composition spec for Team 12 rendering engine.
+        Declarative only — does not perform rendering.
+      required: [conceptId, viewAngle, format, widthPx, heightPx, layers, backgroundColor, finalised, disclaimer]
+      properties:
+        conceptId:
+          type: string
+        viewAngle:
+          type: string
+          enum: [front, back, left, right, top, isometric_left, isometric_right]
+        format:
+          type: string
+          enum: [png, svg, pdf, jpg]
+        widthPx:
+          type: integer
+          minimum: 1
+        heightPx:
+          type: integer
+          minimum: 1
+        layers:
+          type: array
+          description: Populated by Team 11 blueprint engine. Empty until integrated.
+          items:
+            $ref: "#/components/schemas/MockupLayer"
+        backgroundColor:
+          type: string
+        finalised:
+          type: boolean
+          description: Must be false until Team 11 provides the layer stack.
+        disclaimer:
+          type: string
+
+    ProductDesignQcProfile:
+      type: object
+      description: Quality criteria enforced by Team 13 QC pipeline.
+      required: [conceptId, checks, minimumQcScore]
+      properties:
+        conceptId:
+          type: string
+        checks:
+          type: array
+          items:
+            type: object
+            required: [checkId, description, severity, validatorRef]
+            properties:
+              checkId:
+                type: string
+              description:
+                type: string
+              severity:
+                type: string
+                enum: [blocker, warning]
+              validatorRef:
+                type: string
+                enum:
+                  - validateDimensions
+                  - validateCmf
+                  - validatePlacements
+                  - assertDisclaimerPresent
+                  - assertNoUnsupportedClaims
+        minimumQcScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+    ProductDesignDeliverableManifest:
+      type: object
+      description: Declares deliverable artifacts for Team 14 asset management.
+      required: [conceptId, conceptName, deliverables, disclaimer]
+      properties:
+        conceptId:
+          type: string
+        conceptName:
+          type: string
+        deliverables:
+          type: array
+          items:
+            type: object
+            required: [deliverableId, name, mimeType, producedBy, status]
+            properties:
+              deliverableId:
+                type: string
+              name:
+                type: string
+              mimeType:
+                type: string
+              producedBy:
+                type: string
+                enum: [team-11-blueprint, team-12-composition, team-20-brief-builder]
+              assetKey:
+                type: string
+                nullable: true
+              status:
+                type: string
+                enum: [pending, generating, ready, failed]
+        disclaimer:
+          type: string
+
+    # ── Supporting schemas ──────────────────────────────────────────────────────
+
+    DimensionsMm:
+      type: object
+      required: [height, width]
+      properties:
+        height:
+          type: number
+          description: Height in millimetres (concept estimate only).
+        width:
+          type: number
+          description: Width or outer diameter in millimetres.
+        depth:
+          type: number
+        wallThickness:
+          type: number
+        fillVolumeMl:
+          type: number
+
+    FormDirection:
+      type: object
+      required: [category, dimensions]
+      properties:
+        category:
+          type: string
+          enum: [bottle, tube, jar, sachet, pouch, compact, spray, dispenser, custom]
+        shapeNotes:
+          type: string
+          maxLength: 500
+        dimensions:
+          $ref: "#/components/schemas/DimensionsMm"
+        ergonomicNotes:
+          type: string
+
+    MaterialDirection:
+      type: object
+      required: [primaryMaterial]
+      properties:
+        primaryMaterial:
+          type: string
+          enum: [glass, pet_plastic, hdpe_plastic, pp_plastic, aluminum, stainless_steel, paperboard, bioplastic, custom]
+        secondaryMaterial:
+          type: string
+          enum: [glass, pet_plastic, hdpe_plastic, pp_plastic, aluminum, stainless_steel, paperboard, bioplastic, custom]
+        sustainabilityNotes:
+          type: string
+        compatibilityNotes:
+          type: string
+
+    CMFSpec:
+      type: object
+      required: [entries, isComplete]
+      properties:
+        entries:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [colorCode, colorName, material, finish, zone]
+            properties:
+              colorCode:
+                type: string
+                description: "Hex (#RRGGBB), Pantone (Pantone NNN C), or RAL (RAL NNNN)"
+              colorName:
+                type: string
+              material:
+                type: string
+              finish:
+                type: string
+                enum: [matte, gloss, satin, metallic, frosted, textured, soft_touch, chrome]
+              zone:
+                type: string
+        isComplete:
+          type: boolean
+        processNotes:
+          type: string
+
+    RequirementEntry:
+      type: object
+      required: [category, requirement, priority]
+      properties:
+        category:
+          type: string
+          enum: [dimension, material, finish, label, feature, logistics, other]
+        requirement:
+          type: string
+        value:
+          type: string
+        priority:
+          type: string
+          enum: [must, prefer, optional]
+
+    MockupLayer:
+      type: object
+      required: [id, type, label, zIndex, opacity, visible]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [background, form_silhouette, cmf_overlay, feature, label, annotation, shadow]
+        label:
+          type: string
+        zIndex:
+          type: integer
+        opacity:
+          type: number
+          minimum: 0
+          maximum: 1
+        sourceRef:
+          type: string
+        visible:
+          type: boolean
+        assetKey:
+          type: string
