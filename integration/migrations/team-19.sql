@@ -81,6 +81,9 @@ CREATE TABLE IF NOT EXISTS ai_platform.packaging_design_orders (
   print_ready_at            TIMESTAMPTZ,
   print_ready_by            TEXT,
 
+  -- Artwork resolution (optional, validated: 72–1200 dpi; 300+ recommended for print)
+  resolution_dpi            INTEGER,
+
   -- Pricing
   currency                  TEXT        NOT NULL DEFAULT 'IDR',
   quoted_price              NUMERIC(14,2),

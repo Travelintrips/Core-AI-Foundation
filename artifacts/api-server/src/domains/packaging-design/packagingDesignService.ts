@@ -93,6 +93,8 @@ export interface CreateOrderInput {
   referenceLinks?: string | null;
   additionalNotes?: string | null;
   briefJson?: Record<string, unknown> | null;
+  /** Artwork resolution in DPI. Validated against PACKAGING_BOUNDS (72–1200). */
+  resolutionDpi?: number | null;
 }
 
 export async function createOrder(input: CreateOrderInput): Promise<PackagingDesignOrder> {
@@ -138,6 +140,7 @@ export async function createOrder(input: CreateOrderInput): Promise<PackagingDes
       referenceLinks: input.referenceLinks ?? null,
       additionalNotes: input.additionalNotes ?? null,
       briefJson: input.briefJson ?? null,
+      resolutionDpi: input.resolutionDpi ?? null,
       status: "draft",
     })
     .returning();

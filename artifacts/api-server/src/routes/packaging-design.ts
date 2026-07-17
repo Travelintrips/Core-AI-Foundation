@@ -24,6 +24,7 @@ import { Router, type Request, type Response } from "express";
 import { adminAuth } from "../middleware/adminAuth.js";
 import * as svc from "../domains/packaging-design/packagingDesignService.js";
 import { REGULATED_SERVICE_TYPES, PACKAGING_SERVICE_TYPES } from "../domains/packaging-design/schema.js";
+import { validateDimensions, withDisclaimer } from "../domains/packaging-design/validators.js";
 
 const router = Router();
 
@@ -88,8 +89,27 @@ router.post(
         res.status(400).json({ error: `Invalid serviceType. Must be one of: ${PACKAGING_SERVICE_TYPES.join(", ")}` });
         return;
       }
+
+      // Strict dimension / dieline bounds validation — reject before DB write
+      const body = req.body as Record<string, unknown>;
+      function strField(v: unknown): string | null { return (v === null || v === undefined) ? null : String(v); }
+      const dimResult = validateDimensions({
+        widthMm:       strField(body.widthMm),
+        heightMm:      strField(body.heightMm),
+        depthMm:       strField(body.depthMm),
+        bleedMm:       strField(body.bleedMm),
+        safeAreaMm:    strField(body.safeAreaMm),
+        resolutionDpi: typeof body.resolutionDpi === "number" ? body.resolutionDpi : null,
+        panelsRequired: Array.isArray(body.panelsRequired) ? (body.panelsRequired as string[]) : undefined,
+        serviceType:   String(serviceType),
+      });
+      if (!dimResult.valid) {
+        res.status(400).json({ error: "Dimension validation failed", errors: dimResult.errors, warnings: dimResult.warnings });
+        return;
+      }
+
       const order = await svc.createOrder(req.body as svc.CreateOrderInput);
-      res.status(201).json(order);
+      res.status(201).json({ ...withDisclaimer(order), _warnings: dimResult.warnings.length ? dimResult.warnings : undefined });
     } catch (err) {
       res.status(500).json({ error: "Failed to create order", details: String(err) });
     }
@@ -307,6 +327,23 @@ router.post(
         }
       }
 
+      // Strict dimension / dieline bounds validation — reject before DB write
+      function strField2(v: unknown): string | null { return (v === null || v === undefined) ? null : String(v); }
+      const dimResult = validateDimensions({
+        widthMm:       strField2(body.widthMm),
+        heightMm:      strField2(body.heightMm),
+        depthMm:       strField2(body.depthMm),
+        bleedMm:       strField2(body.bleedMm),
+        safeAreaMm:    strField2(body.safeAreaMm),
+        resolutionDpi: typeof body.resolutionDpi === "number" ? body.resolutionDpi : null,
+        panelsRequired: Array.isArray(body.panelsRequired) ? (body.panelsRequired as string[]) : undefined,
+        serviceType,
+      });
+      if (!dimResult.valid) {
+        res.status(400).json({ error: "Dimension validation failed", errors: dimResult.errors, warnings: dimResult.warnings });
+        return;
+      }
+
       const order = await svc.createOrder({
         ...body,
         serviceType,
@@ -325,6 +362,8 @@ router.post(
         ok: true,
         orderId: order.orderId,
         message: "Pesanan desain kemasan Anda berhasil dikirim. Kami akan menghubungi Anda segera.",
+        _disclaimer: "Pesanan Anda belum print-ready. Prepress/technical validation akan dilakukan oleh tim kami sebelum file siap untuk produksi.",
+        _warnings: dimResult.warnings.length ? dimResult.warnings : undefined,
       });
     } catch (err) {
       res.status(500).json({ error: "Failed to submit order", details: String(err) });

@@ -125,6 +125,11 @@ export const packagingDesignOrdersTable = appSchema.table(
     printReadyAt: timestamp("print_ready_at", { withTimezone: true }),
     printReadyBy: text("print_ready_by"),
 
+    // ── Artwork resolution ────────────────────────────────────────────────────
+    // Optional target resolution in DPI (e.g. 300 for print, 72 for digital preview).
+    // Validated against PACKAGING_BOUNDS at creation time.
+    resolutionDpi: integer("resolution_dpi"),
+
     currency: text("currency").notNull().default("IDR"),
     quotedPrice: numeric("quoted_price", { precision: 14, scale: 2 }),
     finalPrice: numeric("final_price", { precision: 14, scale: 2 }),
