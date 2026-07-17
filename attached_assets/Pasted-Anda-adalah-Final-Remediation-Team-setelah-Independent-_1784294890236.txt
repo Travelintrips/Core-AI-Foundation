@@ -1,0 +1,248 @@
+Anda adalah Final Remediation Team setelah Independent Audit Team 23.
+
+JANGAN membuat fitur baru.
+
+JANGAN melakukan refactor besar.
+
+JANGAN mengubah arsitektur.
+
+Tujuan Anda hanya menyelesaikan seluruh finding Team 23 sehingga seluruh branch siap diintegrasikan oleh Team 24.
+
+====================================================
+ATURAN
+====================================================
+
+Kerjakan satu branch pada satu waktu.
+
+Untuk setiap branch:
+
+1. git fetch origin --prune
+2. git switch <branch>
+3. git pull --ff-only origin <branch>
+4. git status
+
+Pastikan working tree bersih.
+
+Setelah selesai:
+
+- jalankan test
+- jalankan typecheck terkait
+- commit
+- push
+
+baru pindah branch berikutnya.
+
+Jangan merge.
+
+Jangan squash.
+
+Jangan membuat batch branch.
+
+====================================================
+PRIORITAS 1 (WAJIB)
+====================================================
+
+BRANCH
+
+feature/21-creative-marketplace
+
+STATUS
+
+FAIL (P1)
+
+ROOT CAUSE
+
+Branch ini mengandung salinan customer-workspace route yang lebih lama sehingga menghapus:
+
+- parsePagination()
+- MAX_PAGE_LIMIT = 100
+
+Akibatnya endpoint:
+
+/public/customer/creative-workspace/:token/projects
+
+menjadi unbounded.
+
+====================================================
+
+PERBAIKI
+
+====================================================
+
+Kembalikan implementasi Team 02:
+
+- parsePagination()
+
+- MAX_PAGE_LIMIT = 100
+
+- stable ordering
+
+- bounded pageSize
+
+- invalid cursor handling
+
+Pastikan seluruh endpoint customer workspace tetap identik dengan Team 02.
+
+JANGAN overwrite implementasi marketplace.
+
+Lakukan merge logic secara manual bila diperlukan.
+
+Tambahkan regression test agar Team 21 tidak dapat menghapus pagination lagi.
+
+Target:
+
+READY_FOR_REAUDIT
+
+====================================================
+PRIORITAS 2
+====================================================
+
+feature/03-commercial-automation
+
+Temuan:
+
+SELECT *
+
+tanpa LIMIT pada commercial gates.
+
+Perbaiki:
+
+- LIMIT
+
+- pagination
+
+- bounded query
+
+- maksimum page size
+
+Tambahkan regression test.
+
+====================================================
+
+feature/06-asset-intelligence
+
+Temuan:
+
+query safety flags per client
+
+masih unbounded.
+
+Tambahkan:
+
+LIMIT
+
+pagination
+
+pageSize cap
+
+regression test.
+
+====================================================
+
+feature/07-blueprint-library
+
+Temuan:
+
+satu jalur query blueprint
+
+belum memakai LIMIT.
+
+Tambahkan:
+
+LIMIT
+
+pagination
+
+maximum page size
+
+regression test.
+
+====================================================
+PRIORITAS 3
+====================================================
+
+feature/15-graphic-design
+
+feature/16-presentation-document
+
+Tidak ada bug.
+
+Tidak ada security issue.
+
+Hanya:
+
+seedCatalog.ts
+
+akan conflict ketika merge.
+
+JANGAN merge sekarang.
+
+Lakukan:
+
+- dokumentasikan perubahan seed masing-masing
+
+- buat integration manifest
+
+- tandai bagian yang harus digabung Team 24
+
+Jangan mengubah file lain.
+
+====================================================
+PRIORITAS 4
+====================================================
+
+feature/13-dynamic-composer
+
+Tidak perlu migration.
+
+Tidak perlu database.
+
+Tambahkan dokumentasi:
+
+Known Limitation:
+
+compositionSessionStore
+
+bersifat in-memory.
+
+Jika server restart,
+
+session akan hilang.
+
+Tambahkan pada:
+
+README
+
+atau
+
+integration manifest.
+
+Tidak perlu mengubah arsitektur.
+
+====================================================
+OUTPUT
+====================================================
+
+Untuk setiap branch laporkan:
+
+Branch
+
+Commit sebelum
+
+Perubahan
+
+Test
+
+Typecheck
+
+Commit sesudah
+
+Push
+
+Status
+
+READY_FOR_REAUDIT
+
+atau
+
+PASS
