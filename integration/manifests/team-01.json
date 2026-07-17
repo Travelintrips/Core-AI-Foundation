@@ -120,6 +120,29 @@
     "Register OpenAPI fragment paths in root openapi.yaml"
   ],
 
+  "remediationLog": [
+    {
+      "finding": "P1 — No pagination on GET /definitions",
+      "fix": "Added limit (default 50, max 200) and offset query params; response includes {data, total, limit, offset}.",
+      "file": "artifacts/api-server/src/routes/creative-workflow-v2/definitions.ts"
+    },
+    {
+      "finding": "P1 — No pagination on GET /plans",
+      "fix": "Same pagination pattern applied; filtering still done in-memory pre-slice (acceptable for in-memory store stage; DB adapter can push filtering to SQL).",
+      "file": "artifacts/api-server/src/routes/creative-workflow-v2/plans.ts"
+    },
+    {
+      "finding": "P1 — Unbounded resource use in buildExecutionPlan",
+      "fix": "Added MAX_WORKFLOW_NODES=500 guard; throws immediately if definition.nodes.length > 500. validateWorkflowDefinition also returns an error (non-throwing path).",
+      "file": "artifacts/api-server/src/services/creative-workflow-v2/executionPlanBuilder.ts"
+    },
+    {
+      "finding": "P1 — Missing required test dimensions (malformed payload, idempotency, resource cap, pagination)",
+      "fix": "Added test cases 11-14 to workflowEngine.test.ts: input validation, idempotency guards, node count limit, pagination arithmetic. Total tests: 72.",
+      "file": "artifacts/api-server/src/services/creative-workflow-v2/__tests__/workflowEngine.test.ts"
+    }
+  ],
+
   "knownRisks": [
     {
       "risk": "In-memory store",

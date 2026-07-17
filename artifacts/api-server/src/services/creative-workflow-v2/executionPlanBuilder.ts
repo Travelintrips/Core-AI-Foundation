@@ -166,12 +166,20 @@ function buildExecutionNode(
  *
  * @throws if the graph contains a cycle, invalid references, or bad milestones.
  */
+/** Maximum nodes allowed in a single workflow — prevents O(N²) abuse. */
+export const MAX_WORKFLOW_NODES = 500;
+
 export function buildExecutionPlan(
   definition: WorkflowDefinition,
   context: BuildPlanContext,
 ): ExecutionPlan {
   if (definition.nodes.length === 0) {
     throw new Error("WorkflowDefinition must contain at least one node");
+  }
+  if (definition.nodes.length > MAX_WORKFLOW_NODES) {
+    throw new Error(
+      `WorkflowDefinition exceeds maximum node limit (${definition.nodes.length} > ${MAX_WORKFLOW_NODES})`,
+    );
   }
 
   const nodeIds = new Set(definition.nodes.map((n) => n.id));
@@ -252,6 +260,9 @@ export function validateWorkflowDefinition(
   if (!definition.id) errors.push("id is required");
   if (!definition.name) errors.push("name is required");
   if (definition.nodes.length === 0) errors.push("at least one node is required");
+  if (definition.nodes.length > MAX_WORKFLOW_NODES) {
+    errors.push(`node count ${definition.nodes.length} exceeds limit of ${MAX_WORKFLOW_NODES}`);
+  }
 
   try {
     const nodeIds = new Set(definition.nodes.map((n) => n.id));

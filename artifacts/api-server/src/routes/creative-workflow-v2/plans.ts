@@ -49,19 +49,35 @@ export function setDefinitionResolver(
   _definitionResolver = fn;
 }
 
+// ── Pagination constants ───────────────────────────────────────────────────────
+
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT     = 200;
+
+function parsePagination(query: Record<string, unknown>): { limit: number; offset: number } {
+  const rawLimit  = parseInt(String(query.limit  ?? DEFAULT_LIMIT), 10);
+  const rawOffset = parseInt(String(query.offset ?? 0),             10);
+  const limit  = Math.min(Math.max(Number.isFinite(rawLimit)  ? rawLimit  : DEFAULT_LIMIT, 1), MAX_LIMIT);
+  const offset = Math.max(Number.isFinite(rawOffset) ? rawOffset : 0, 0);
+  return { limit, offset };
+}
+
 // ── GET /plans ────────────────────────────────────────────────────────────────
 
 plansRouter.get("/", (req, res) => {
-  let items = [...planStore.values()];
+  let filtered = [...planStore.values()];
 
   // Optional filters
   const { contextId, contextType, status } = req.query as Record<string, string>;
-  if (contextId)   items = items.filter((p) => p.contextId === contextId);
-  if (contextType) items = items.filter((p) => p.contextType === contextType);
-  if (status)      items = items.filter((p) => p.status === status);
+  if (contextId)   filtered = filtered.filter((p) => p.contextId === contextId);
+  if (contextType) filtered = filtered.filter((p) => p.contextType === contextType);
+  if (status)      filtered = filtered.filter((p) => p.status === status);
 
-  items.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-  res.json({ data: items, total: items.length });
+  filtered.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
+  const { limit, offset } = parsePagination(req.query as Record<string, unknown>);
+  const data = filtered.slice(offset, offset + limit);
+  res.json({ data, total: filtered.length, limit, offset });
 });
 
 // ── GET /plans/:id ────────────────────────────────────────────────────────────

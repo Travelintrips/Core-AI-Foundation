@@ -8,7 +8,7 @@
  */
 
 // ── Core engine ───────────────────────────────────────────────────────────────
-export { buildExecutionPlan, validateWorkflowDefinition } from "./executionPlanBuilder.js";
+export { buildExecutionPlan, validateWorkflowDefinition, MAX_WORKFLOW_NODES } from "./executionPlanBuilder.js";
 
 // ── Graph algorithms ──────────────────────────────────────────────────────────
 export { detectCycle, assertAcyclic } from "./cycleDetector.js";

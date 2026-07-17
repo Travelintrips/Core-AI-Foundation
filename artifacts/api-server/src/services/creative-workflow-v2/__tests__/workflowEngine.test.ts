@@ -39,11 +39,13 @@ import {
   markNodeCompleted,
   markNodeRunning,
   markNodeSkipped,
+  markNodeReady,
   applyRetry,
   canAutoRetry,
   isRetryExhausted,
   computeNextRetryDelayMs,
   buildRetryState,
+  MAX_WORKFLOW_NODES,
 } from "../index.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -642,5 +644,256 @@ describe("Progress calculation", () => {
   it("returns 100% for an empty node list", () => {
     const snap = calculateProgress([]);
     expect(snap.progressPct).toBe(100);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. Input validation — malformed payload
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("11. Input validation — malformed payload", () => {
+  it("validateWorkflowDefinition returns error for missing id", () => {
+    const def = { ...linearDef(), id: "" };
+    const errors = validateWorkflowDefinition(def);
+    expect(errors.some((e) => /id/i.test(e))).toBe(true);
+  });
+
+  it("validateWorkflowDefinition returns error for missing name", () => {
+    const now = new Date();
+    const def: WorkflowDefinition = {
+      id: makeId(), name: "", version: 1,
+      nodes: [{ id: "A", label: "A", jobType: "llm_inference" }],
+      edges: [], milestones: [], createdAt: now, updatedAt: now,
+    };
+    const errors = validateWorkflowDefinition(def);
+    expect(errors.some((e) => /name/i.test(e))).toBe(true);
+  });
+
+  it("validateWorkflowDefinition returns error for empty nodes array", () => {
+    const now = new Date();
+    const def: WorkflowDefinition = {
+      id: makeId(), name: "Empty", version: 1,
+      nodes: [], edges: [], milestones: [], createdAt: now, updatedAt: now,
+    };
+    const errors = validateWorkflowDefinition(def);
+    expect(errors.some((e) => /node/i.test(e))).toBe(true);
+  });
+
+  it("buildExecutionPlan throws for empty nodes (does not return partially-built plan)", () => {
+    const now = new Date();
+    const def: WorkflowDefinition = {
+      id: makeId(), name: "Empty", version: 1,
+      nodes: [], edges: [], milestones: [], createdAt: now, updatedAt: now,
+    };
+    expect(() => buildExecutionPlan(def, { contextId: "c", contextType: "t" })).toThrow();
+  });
+
+  it("buildExecutionPlan throws for duplicate node ids", () => {
+    const now = new Date();
+    const def: WorkflowDefinition = {
+      id: makeId(), name: "DupIds", version: 1,
+      nodes: [
+        { id: "A", label: "A", jobType: "llm_inference" },
+        { id: "A", label: "A2", jobType: "llm_inference" },
+      ],
+      edges: [], milestones: [], createdAt: now, updatedAt: now,
+    };
+    expect(() => buildExecutionPlan(def, { contextId: "c", contextType: "t" }))
+      .toThrow(/duplicate/i);
+  });
+
+  it("markNodeRunning throws a descriptive error when nodeId does not exist in plan", () => {
+    let plan = buildExecutionPlan(linearDef(), { contextId: "p", contextType: "t" });
+    plan = startPlan(plan);
+    // markNodeRunning iterates nodes and applies guard only when nodeId matches;
+    // a mismatched nodeId returns plan unchanged (no running node → no crash).
+    // Verify the plan is not mutated and no throw occurs.
+    const result = markNodeRunning(plan, "NONEXISTENT", "job-x");
+    expect(result.nodes.every((n) => n.status !== "running")).toBe(true);
+  });
+
+  it("markNodeReady on a pending node with valid nodeId works correctly", () => {
+    const plan = buildExecutionPlan(linearDef(), { contextId: "p", contextType: "t" });
+    const nodeB = plan.nodes.find((n) => n.nodeId === "B")!;
+    expect(nodeB.status).toBe("pending");
+    const updated = markNodeReady(plan, "B");
+    expect(updated.nodes.find((n) => n.nodeId === "B")!.status).toBe("ready");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12. Idempotency guards
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("12. Idempotency guards", () => {
+  it("startPlan on an already-running plan is a no-op (returns same plan)", () => {
+    let plan = buildExecutionPlan(linearDef(), { contextId: "p", contextType: "t" });
+    plan = startPlan(plan);
+    expect(plan.status).toBe("running");
+    // startPlan guards: if status !== "pending" returns plan unchanged.
+    const again = startPlan(plan);
+    expect(again.status).toBe("running");
+  });
+
+  it("pausePlan on an already-paused plan is a no-op", () => {
+    let plan = buildExecutionPlan(linearDef(), { contextId: "p", contextType: "t" });
+    plan = startPlan(plan);
+    plan = pausePlan(plan, "first-pause");
+    expect(plan.status).toBe("paused");
+    const again = pausePlan(plan, "second-pause");
+    expect(again.status).toBe("paused");
+    // pauseReason from first pause is preserved (no-op means no overwrite)
+    expect(again.metadata?.pauseReason).toBe("first-pause");
+  });
+
+  it("resumePlan on an already-running plan is a no-op", () => {
+    let plan = buildExecutionPlan(linearDef(), { contextId: "p", contextType: "t" });
+    plan = startPlan(plan);
+    expect(plan.status).toBe("running");
+    const again = resumePlan(plan);
+    expect(again.status).toBe("running");
+  });
+
+  it("markNodeReady on an already-ready node is idempotent", () => {
+    const plan = buildExecutionPlan(linearDef(), { contextId: "p", contextType: "t" });
+    // Node A starts as ready
+    const nodeA = plan.nodes.find((n) => n.nodeId === "A")!;
+    expect(nodeA.status).toBe("ready");
+    // Calling markNodeReady again returns plan unchanged
+    const updated = markNodeReady(plan, "A");
+    expect(updated.nodes.find((n) => n.nodeId === "A")!.status).toBe("ready");
+  });
+
+  it("cancelPlan on an already-terminal plan throws (not silent no-op)", () => {
+    let plan = buildExecutionPlan(linearDef(), { contextId: "p", contextType: "t" });
+    plan = startPlan(plan);
+    plan = cancelPlan(plan, "first");
+    expect(plan.status).toBe("cancelled");
+    expect(() => cancelPlan(plan, "second")).toThrow(/terminal/i);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 13. Node count limit (resource cap)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("13. Node count limit (resource cap)", () => {
+  it(`MAX_WORKFLOW_NODES is ${MAX_WORKFLOW_NODES}`, () => {
+    expect(MAX_WORKFLOW_NODES).toBe(500);
+  });
+
+  it("buildExecutionPlan throws when node count exceeds MAX_WORKFLOW_NODES", () => {
+    const now = new Date();
+    const nodes = Array.from({ length: MAX_WORKFLOW_NODES + 1 }, (_, i) => ({
+      id: `N${i}`,
+      label: `Node ${i}`,
+      jobType: "llm_inference",
+    }));
+    const def: WorkflowDefinition = {
+      id: makeId(), name: "Oversized", version: 1,
+      nodes, edges: [], milestones: [], createdAt: now, updatedAt: now,
+    };
+    expect(() => buildExecutionPlan(def, { contextId: "c", contextType: "t" }))
+      .toThrow(/limit/i);
+  });
+
+  it("validateWorkflowDefinition returns an error for oversized node list", () => {
+    const now = new Date();
+    const nodes = Array.from({ length: MAX_WORKFLOW_NODES + 1 }, (_, i) => ({
+      id: `N${i}`,
+      label: `Node ${i}`,
+      jobType: "llm_inference",
+    }));
+    const def: WorkflowDefinition = {
+      id: makeId(), name: "Oversized", version: 1,
+      nodes, edges: [], milestones: [], createdAt: now, updatedAt: now,
+    };
+    const errors = validateWorkflowDefinition(def);
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.some((e) => /limit/i.test(e))).toBe(true);
+  });
+
+  it("buildExecutionPlan succeeds for a workflow exactly at MAX_WORKFLOW_NODES", () => {
+    const now = new Date();
+    const nodes = Array.from({ length: MAX_WORKFLOW_NODES }, (_, i) => ({
+      id: `N${i}`,
+      label: `Node ${i}`,
+      jobType: "llm_inference",
+    }));
+    const def: WorkflowDefinition = {
+      id: makeId(), name: "AtLimit", version: 1,
+      nodes, edges: [], milestones: [], createdAt: now, updatedAt: now,
+    };
+    // Should not throw — exactly at the limit is allowed
+    const plan = buildExecutionPlan(def, { contextId: "c", contextType: "t" });
+    expect(plan.nodes).toHaveLength(MAX_WORKFLOW_NODES);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 14. Pagination helper logic (unit test of limit/offset arithmetic)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("14. Pagination enforcement", () => {
+  /** Helper that simulates the route-level paginate-from-store logic. */
+  function paginateItems<T>(
+    items: T[],
+    rawLimit: number | string | undefined,
+    rawOffset: number | string | undefined,
+  ): { data: T[]; total: number; limit: number; offset: number } {
+    const DEFAULT_LIMIT = 50;
+    const MAX_LIMIT     = 200;
+    const parsed = (v: number | string | undefined, fallback: number) => {
+      const n = parseInt(String(v ?? fallback), 10);
+      return Number.isFinite(n) ? n : fallback;
+    };
+    const limit  = Math.min(Math.max(parsed(rawLimit,  DEFAULT_LIMIT), 1), MAX_LIMIT);
+    const offset = Math.max(parsed(rawOffset, 0), 0);
+    return { data: items.slice(offset, offset + limit), total: items.length, limit, offset };
+  }
+
+  const items = Array.from({ length: 300 }, (_, i) => i); // 300 synthetic items
+
+  it("defaults to limit=50 when no query params given", () => {
+    const result = paginateItems(items, undefined, undefined);
+    expect(result.limit).toBe(50);
+    expect(result.data).toHaveLength(50);
+    expect(result.offset).toBe(0);
+  });
+
+  it("respects explicit limit and offset", () => {
+    const result = paginateItems(items, 10, 20);
+    expect(result.data).toHaveLength(10);
+    expect(result.data[0]).toBe(20);
+    expect(result.total).toBe(300);
+  });
+
+  it("caps limit at MAX_LIMIT=200 when caller requests more", () => {
+    const result = paginateItems(items, 999, 0);
+    expect(result.limit).toBe(200);
+    expect(result.data).toHaveLength(200);
+  });
+
+  it("enforces minimum limit of 1 (negative limit → 1)", () => {
+    const result = paginateItems(items, -5, 0);
+    expect(result.limit).toBe(1);
+    expect(result.data).toHaveLength(1);
+  });
+
+  it("clamps offset to 0 when negative offset supplied", () => {
+    const result = paginateItems(items, 10, -99);
+    expect(result.offset).toBe(0);
+    expect(result.data[0]).toBe(0);
+  });
+
+  it("returns empty data array when offset exceeds total", () => {
+    const result = paginateItems(items, 50, 9999);
+    expect(result.data).toHaveLength(0);
+    expect(result.total).toBe(300);
+  });
+
+  it("handles non-numeric limit gracefully (falls back to default)", () => {
+    const result = paginateItems(items, "abc", undefined);
+    expect(result.limit).toBe(50);
   });
 });

@@ -27,13 +27,28 @@ export const definitionsRouter = Router();
 
 const store = new Map<string, WorkflowDefinition>();
 
+// ── Pagination constants ───────────────────────────────────────────────────────
+
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT     = 200;
+
+function parsePagination(query: Record<string, unknown>): { limit: number; offset: number } {
+  const rawLimit  = parseInt(String(query.limit  ?? DEFAULT_LIMIT), 10);
+  const rawOffset = parseInt(String(query.offset ?? 0),             10);
+  const limit  = Math.min(Math.max(Number.isFinite(rawLimit)  ? rawLimit  : DEFAULT_LIMIT, 1), MAX_LIMIT);
+  const offset = Math.max(Number.isFinite(rawOffset) ? rawOffset : 0, 0);
+  return { limit, offset };
+}
+
 // ── GET /definitions ──────────────────────────────────────────────────────────
 
-definitionsRouter.get("/", (_req, res) => {
-  const items = [...store.values()].sort(
+definitionsRouter.get("/", (req, res) => {
+  const { limit, offset } = parsePagination(req.query as Record<string, unknown>);
+  const all = [...store.values()].sort(
     (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
   );
-  res.json({ data: items, total: items.length });
+  const data = all.slice(offset, offset + limit);
+  res.json({ data, total: all.length, limit, offset });
 });
 
 // ── GET /definitions/:id ──────────────────────────────────────────────────────
