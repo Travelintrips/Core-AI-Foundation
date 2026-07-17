@@ -1,0 +1,169 @@
+{
+  "$schema": "https://creative-ai-studio.internal/integration-manifest/v1",
+  "team": "21",
+  "domain": "Creative Marketplace V2",
+  "branch": "feature/21-creative-marketplace",
+  "ownership": {
+    "backend": [
+      "artifacts/api-server/src/domains/creative-marketplace-v2/"
+    ],
+    "frontend_customer": [
+      "artifacts/customer-portal/src/pages/creative-marketplace-v2/"
+    ],
+    "frontend_admin": [
+      "artifacts/ai-platform/src/pages/creative-marketplace-v2/"
+    ],
+    "integration": [
+      "integration/openapi/team-21.yaml",
+      "integration/migrations/team-21.sql",
+      "integration/manifests/team-21.json"
+    ]
+  },
+  "database": {
+    "schema": "ai_platform",
+    "newTables": [
+      "cm2_creator_profiles",
+      "cm2_listings",
+      "cm2_favorites",
+      "cm2_ratings",
+      "cm2_downloads",
+      "cm2_moderation_log",
+      "cm2_analytics_snapshots"
+    ],
+    "migrationFile": "integration/migrations/team-21.sql",
+    "note": "Hand-written DDL only. Never drizzle-kit push. All tables use cm2_ prefix to avoid conflicts with V4.7 marketplace_ tables."
+  },
+  "routes": {
+    "admin": {
+      "prefix": "/ai/cm2",
+      "auth": "x-admin-api-key header (global adminAuthWithExceptions middleware)",
+      "endpoints": [
+        "GET  /ai/cm2/listings",
+        "POST /ai/cm2/listings",
+        "GET  /ai/cm2/listings/:id",
+        "PATCH /ai/cm2/listings/:id",
+        "POST /ai/cm2/listings/:id/moderate",
+        "POST /ai/cm2/listings/:id/feature",
+        "GET  /ai/cm2/listings/:id/moderation-log",
+        "GET  /ai/cm2/moderation-queue",
+        "GET  /ai/cm2/creators",
+        "POST /ai/cm2/creators",
+        "GET  /ai/cm2/creators/:id",
+        "PATCH /ai/cm2/creators/:id",
+        "POST /ai/cm2/creators/:id/verify",
+        "GET  /ai/cm2/analytics",
+        "GET  /ai/cm2/analytics/listings/:id",
+        "GET  /ai/cm2/downloads"
+      ]
+    },
+    "public": {
+      "prefix": "/public/cm2",
+      "auth": "none",
+      "note": "Always filters moderation_state='approved' AND is_active=true. fileUrl never returned.",
+      "endpoints": [
+        "GET  /public/cm2/listings",
+        "GET  /public/cm2/listings/featured",
+        "GET  /public/cm2/item-types",
+        "GET  /public/cm2/categories",
+        "GET  /public/cm2/listings/:id",
+        "POST /public/cm2/listings/:id/download",
+        "POST /public/cm2/listings/:id/rate",
+        "GET  /public/cm2/listings/:id/ratings",
+        "GET  /public/cm2/creators",
+        "GET  /public/cm2/creators/:code"
+      ]
+    },
+    "workspace": {
+      "prefix": "/public/customer/workspace/:token/cm2",
+      "auth": "workspace token via resolveWorkspaceSession — falls under PUBLIC_PATH_PREFIXES exception",
+      "note": "All queries scoped to session.clientEmail — IDOR protected.",
+      "endpoints": [
+        "GET    /public/customer/workspace/:token/cm2/favorites",
+        "POST   /public/customer/workspace/:token/cm2/favorites/:listingId",
+        "DELETE /public/customer/workspace/:token/cm2/favorites/:listingId",
+        "GET    /public/customer/workspace/:token/cm2/downloads",
+        "POST   /public/customer/workspace/:token/cm2/listings/:id/rate"
+      ]
+    }
+  },
+  "routerMount": {
+    "instruction": "Team 24 must import cm2Router and register it in artifacts/api-server/src/routes/index.ts",
+    "importStatement": "import cm2Router from '../domains/creative-marketplace-v2/routes/index.js';",
+    "mountStatement": "router.use(cm2Router);",
+    "position": "After creativeMarketplaceRouter (V4.7) — no ordering constraint otherwise"
+  },
+  "frontend": {
+    "customerPortal": {
+      "pages": [
+        {
+          "path": "/creative-marketplace-v2",
+          "component": "artifacts/customer-portal/src/pages/creative-marketplace-v2/index.tsx",
+          "description": "Browse/search/filter marketplace — public, no auth needed"
+        },
+        {
+          "path": "/creative-marketplace-v2/listing/:id",
+          "component": "artifacts/customer-portal/src/pages/creative-marketplace-v2/listing.tsx",
+          "description": "Listing detail, preview, license info, ratings"
+        },
+        {
+          "path": "/creative-marketplace-v2/favorites",
+          "component": "artifacts/customer-portal/src/pages/creative-marketplace-v2/favorites.tsx",
+          "description": "Workspace favorites — requires workspace token in URL or query"
+        }
+      ],
+      "sidebarEntry": {
+        "label": "Creative Marketplace",
+        "icon": "ShoppingBag",
+        "href": "/creative-marketplace-v2"
+      }
+    },
+    "aiPlatform": {
+      "pages": [
+        {
+          "path": "/creative-marketplace-v2",
+          "component": "artifacts/ai-platform/src/pages/creative-marketplace-v2/index.tsx",
+          "description": "Admin listing management — CRUD, moderate, feature"
+        },
+        {
+          "path": "/creative-marketplace-v2/moderation",
+          "component": "artifacts/ai-platform/src/pages/creative-marketplace-v2/moderation.tsx",
+          "description": "Moderation queue — pending listings for review"
+        },
+        {
+          "path": "/creative-marketplace-v2/analytics",
+          "component": "artifacts/ai-platform/src/pages/creative-marketplace-v2/analytics.tsx",
+          "description": "Platform-wide and per-listing usage analytics"
+        },
+        {
+          "path": "/creative-marketplace-v2/creators",
+          "component": "artifacts/ai-platform/src/pages/creative-marketplace-v2/creators.tsx",
+          "description": "Creator profile management and verification"
+        }
+      ],
+      "sidebarEntry": {
+        "label": "Marketplace V2",
+        "icon": "ShoppingBag",
+        "href": "/creative-marketplace-v2"
+      }
+    }
+  },
+  "security": {
+    "fileUrlNeverPublic": "fileUrl column is excluded in toPublicDTO(). All public endpoints call getListingPublic() which delegates to dbGetListingPublic — only approved+active listings.",
+    "emailMasking": "Customer email masked in public rating DTOs (jo***@domain.com).",
+    "idor": "Workspace routes resolve session from token via resolveWorkspaceSession; all queries scoped to session.clientEmail.",
+    "moderationGate": "Pending/rejected/suspended listings are invisible on all public routes.",
+    "noPayoutImpl": "No automatic payout or subscription logic. Payment reuse via adapters only.",
+    "noNewSubscriptions": "Domain never creates subscription records or payment intents."
+  },
+  "itemTypes": [
+    "blueprint", "template", "pattern", "icon", "illustration", "layout",
+    "typography_pairing", "palette", "interior_material",
+    "furniture_reference", "fashion_motif", "brand_pack"
+  ],
+  "licenseTypes": ["standard", "extended", "exclusive"],
+  "moderationStates": ["pending", "approved", "rejected", "suspended"],
+  "conflicts": {
+    "withV47": "Completely separate tables (cm2_* vs marketplace_*). Routes use /cm2/ prefix vs /creative-marketplace/ prefix. No shared DB writes.",
+    "withPhase8": "Phase 8 AI Skills marketplace is at /marketplace/* — no overlap."
+  }
+}

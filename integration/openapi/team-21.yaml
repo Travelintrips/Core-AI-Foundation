@@ -1,0 +1,693 @@
+openapi: "3.1.0"
+info:
+  title: "Creative Marketplace V2 — Team 21"
+  version: "2.0.0"
+  description: |
+    Team 21 Creative Marketplace V2. Adds 12 item types (blueprint, template,
+    pattern, icon, illustration, layout, typography_pairing, palette,
+    interior_material, furniture_reference, fashion_motif, brand_pack).
+    Features: browse, filter, search, preview, favorite, licensing metadata,
+    free/premium placeholder, creator profiles, moderation, ratings, usage analytics.
+    No payout or subscription logic.
+
+servers:
+  - url: /api
+    description: All routes are mounted at /api by app.ts
+
+# ── Shared components ─────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    adminApiKey:
+      type: apiKey
+      in: header
+      name: x-admin-api-key
+
+  schemas:
+    CM2LicenseMetadata:
+      type: object
+      properties:
+        allowedUses:        { type: array, items: { type: string } }
+        requiresAttribution:{ type: boolean }
+        commercialUse:      { type: boolean }
+        editorialUse:       { type: boolean }
+        printUse:           { type: boolean }
+        digitalUse:         { type: boolean }
+        resellAllowed:      { type: boolean }
+        modificationAllowed:{ type: boolean }
+        numberOfSeats:      { type: integer, nullable: true }
+        geographicRestrictions: { type: array, items: { type: string } }
+        notes:              { type: string, nullable: true }
+
+    CM2CreatorSummary:
+      type: object
+      required: [id, creatorCode, displayName, isVerified, totalListings, avgRating]
+      properties:
+        id:            { type: integer }
+        creatorCode:   { type: string }
+        displayName:   { type: string }
+        avatarUrl:     { type: string, nullable: true }
+        isVerified:    { type: boolean }
+        totalListings: { type: integer }
+        avgRating:     { type: string }
+
+    CM2ListingPublic:
+      type: object
+      required:
+        - id, listingCode, itemType, title, category, tags, priceType,
+          priceAmount, currency, licenseType, licenseSummary, licenseMetadata,
+          previewUrls, isFeatured, downloadsCount, viewsCount, favoritesCount,
+          avgRating, ratingsCount, createdAt, updatedAt
+      properties:
+        id:              { type: integer }
+        listingCode:     { type: string }
+        itemType:
+          type: string
+          enum: [blueprint, template, pattern, icon, illustration, layout,
+                 typography_pairing, palette, interior_material,
+                 furniture_reference, fashion_motif, brand_pack]
+        title:           { type: string }
+        description:     { type: string, nullable: true }
+        category:        { type: string }
+        tags:            { type: array, items: { type: string } }
+        creator:
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/CM2CreatorSummary" }]
+        priceType:       { type: string, enum: [free, premium] }
+        priceAmount:     { type: string }
+        currency:        { type: string }
+        licenseType:     { type: string, enum: [standard, extended, exclusive] }
+        licenseSummary:  { type: string }
+        licenseMetadata: { $ref: "#/components/schemas/CM2LicenseMetadata" }
+        previewUrls:     { type: array, items: { type: string } }
+        thumbnailUrl:    { type: string, nullable: true }
+        fileFormat:      { type: string, nullable: true }
+        fileSizeBytes:   { type: integer, nullable: true }
+        isFeatured:      { type: boolean }
+        downloadsCount:  { type: integer }
+        viewsCount:      { type: integer }
+        favoritesCount:  { type: integer }
+        avgRating:       { type: string }
+        ratingsCount:    { type: integer }
+        createdAt:       { type: string, format: date-time }
+        updatedAt:       { type: string, format: date-time }
+      # NOTE: fileUrl is intentionally absent from this schema.
+
+    CM2ListingAdmin:
+      allOf:
+        - { $ref: "#/components/schemas/CM2ListingPublic" }
+        - type: object
+          properties:
+            fileUrl:         { type: string, nullable: true }
+            moderationState: { type: string, enum: [pending, approved, rejected, suspended] }
+            moderationNote:  { type: string, nullable: true }
+            isActive:        { type: boolean }
+            metadata:        { type: object }
+
+    CM2RatingDTO:
+      type: object
+      properties:
+        id:                  { type: integer }
+        customerEmailMasked: { type: string, description: "Partially masked, e.g. jo***@example.com" }
+        rating:              { type: integer, minimum: 1, maximum: 5 }
+        review:              { type: string, nullable: true }
+        createdAt:           { type: string, format: date-time }
+
+    CM2FavoriteDTO:
+      type: object
+      properties:
+        id:        { type: integer }
+        listingId: { type: integer }
+        listing:   { $ref: "#/components/schemas/CM2ListingPublic" }
+        createdAt: { type: string, format: date-time }
+
+    CM2CreatorProfile:
+      allOf:
+        - { $ref: "#/components/schemas/CM2CreatorSummary" }
+        - type: object
+          properties:
+            bio:            { type: string, nullable: true }
+            websiteUrl:     { type: string, nullable: true }
+            socialLinks:    { type: object }
+            totalDownloads: { type: integer }
+            isActive:       { type: boolean }
+            listings:
+              type: array
+              items: { $ref: "#/components/schemas/CM2ListingPublic" }
+
+    CM2ModerationLog:
+      type: object
+      properties:
+        id:          { type: integer }
+        listingId:   { type: integer }
+        fromState:   { type: string }
+        toState:     { type: string }
+        reason:      { type: string, nullable: true }
+        adminNote:   { type: string, nullable: true }
+        performedBy: { type: string, nullable: true }
+        createdAt:   { type: string, format: date-time }
+
+    CM2Analytics:
+      type: object
+      properties:
+        totalListings:     { type: integer }
+        totalAll:          { type: integer }
+        byItemType:        { type: object }
+        byModerationState: { type: object }
+        totalCreators:     { type: integer }
+        verifiedCreators:  { type: integer }
+        totalDownloads:    { type: integer }
+        totalViews:        { type: integer }
+        totalFavorites:    { type: integer }
+        avgRating:         { type: string }
+        freeListings:      { type: integer }
+        premiumListings:   { type: integer }
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+paths:
+
+  # ── Public: Browse ──────────────────────────────────────────────────────────
+
+  /public/cm2/listings:
+    get:
+      summary: Browse marketplace listings
+      operationId: cm2BrowseListings
+      tags: [CM2 Public]
+      parameters:
+        - { name: itemType,     in: query, schema: { type: string } }
+        - { name: category,     in: query, schema: { type: string } }
+        - { name: priceType,    in: query, schema: { type: string, enum: [free, premium] } }
+        - { name: licenseType,  in: query, schema: { type: string } }
+        - { name: search,       in: query, schema: { type: string } }
+        - { name: tags,         in: query, schema: { type: string }, description: "Comma-separated tags" }
+        - { name: featured,     in: query, schema: { type: boolean } }
+        - { name: creatorId,    in: query, schema: { type: integer } }
+        - { name: sortBy,       in: query, schema: { type: string, enum: [newest, popular, rating, downloads] } }
+        - { name: limit,        in: query, schema: { type: integer, default: 24, maximum: 100 } }
+        - { name: offset,       in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Listing page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:  { type: array, items: { $ref: "#/components/schemas/CM2ListingPublic" } }
+                  total:  { type: integer }
+
+  /public/cm2/listings/featured:
+    get:
+      summary: Featured listings
+      operationId: cm2GetFeatured
+      tags: [CM2 Public]
+      responses:
+        "200":
+          description: Featured listings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/CM2ListingPublic" } }
+
+  /public/cm2/item-types:
+    get:
+      summary: Get available item type taxonomy
+      operationId: cm2GetItemTypes
+      tags: [CM2 Public]
+      responses:
+        "200":
+          description: Item type list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  itemTypes: { type: array, items: { type: string } }
+
+  /public/cm2/categories:
+    get:
+      summary: Get distinct categories (optionally filtered by itemType)
+      operationId: cm2GetCategories
+      tags: [CM2 Public]
+      parameters:
+        - { name: itemType, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  categories: { type: array, items: { type: string } }
+
+  /public/cm2/listings/{id}:
+    get:
+      summary: Get listing detail (records a view)
+      operationId: cm2GetListing
+      tags: [CM2 Public]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Listing detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CM2ListingPublic" }
+        "404": { description: Not found or not approved }
+
+  /public/cm2/listings/{id}/download:
+    post:
+      summary: Record download intent
+      operationId: cm2RecordDownload
+      tags: [CM2 Public]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                customerEmail: { type: string, format: email }
+      responses:
+        "200": { description: Recorded }
+        "404": { description: Listing not available }
+
+  /public/cm2/listings/{id}/rate:
+    post:
+      summary: Submit or update a rating
+      operationId: cm2SubmitRating
+      tags: [CM2 Public]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customerEmail, rating]
+              properties:
+                customerEmail: { type: string, format: email }
+                rating:        { type: integer, minimum: 1, maximum: 5 }
+                review:        { type: string }
+      responses:
+        "200": { description: Rating submitted }
+        "400": { description: Invalid rating or listing not available }
+
+  /public/cm2/listings/{id}/ratings:
+    get:
+      summary: Get ratings for a listing
+      operationId: cm2GetRatings
+      tags: [CM2 Public]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Ratings list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/CM2RatingDTO" } }
+                  total: { type: integer }
+
+  /public/cm2/creators:
+    get:
+      summary: List creator profiles
+      operationId: cm2ListCreators
+      tags: [CM2 Public]
+      responses:
+        "200":
+          description: Creators
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/CM2CreatorSummary" } }
+                  total: { type: integer }
+
+  /public/cm2/creators/{code}:
+    get:
+      summary: Get creator profile with their listings
+      operationId: cm2GetCreator
+      tags: [CM2 Public]
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Creator profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CM2CreatorProfile" }
+        "404": { description: Creator not found }
+
+  # ── Workspace: Favorites & Downloads ────────────────────────────────────────
+
+  /public/customer/workspace/{token}/cm2/favorites:
+    get:
+      summary: Get customer favorites
+      operationId: cm2GetFavorites
+      tags: [CM2 Workspace]
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Favorites
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/CM2FavoriteDTO" } }
+                  total: { type: integer }
+        "401": { description: Invalid token }
+
+  /public/customer/workspace/{token}/cm2/favorites/{listingId}:
+    post:
+      summary: Add to favorites
+      operationId: cm2AddFavorite
+      tags: [CM2 Workspace]
+      parameters:
+        - { name: token,     in: path, required: true, schema: { type: string } }
+        - { name: listingId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "201": { description: Added }
+        "401": { description: Invalid token }
+        "404": { description: Listing not available }
+    delete:
+      summary: Remove from favorites
+      operationId: cm2RemoveFavorite
+      tags: [CM2 Workspace]
+      parameters:
+        - { name: token,     in: path, required: true, schema: { type: string } }
+        - { name: listingId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Removed }
+        "401": { description: Invalid token }
+
+  /public/customer/workspace/{token}/cm2/downloads:
+    get:
+      summary: Get customer download history
+      operationId: cm2GetCustomerDownloads
+      tags: [CM2 Workspace]
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Download history }
+        "401": { description: Invalid token }
+
+  /public/customer/workspace/{token}/cm2/listings/{id}/rate:
+    post:
+      summary: Rate from workspace (token-authenticated)
+      operationId: cm2WorkspaceRate
+      tags: [CM2 Workspace]
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+        - { name: id,    in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating]
+              properties:
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                review: { type: string }
+      responses:
+        "200": { description: Rated }
+        "401": { description: Invalid token }
+
+  # ── Admin ────────────────────────────────────────────────────────────────────
+
+  /ai/cm2/listings:
+    get:
+      summary: "[Admin] List all listings"
+      operationId: cm2AdminListListings
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: itemType,         in: query, schema: { type: string } }
+        - { name: category,         in: query, schema: { type: string } }
+        - { name: moderationState,  in: query, schema: { type: string } }
+        - { name: search,           in: query, schema: { type: string } }
+        - { name: sortBy,           in: query, schema: { type: string } }
+        - { name: limit,            in: query, schema: { type: integer } }
+        - { name: offset,           in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Listings (admin view)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/CM2ListingAdmin" } }
+                  total: { type: integer }
+    post:
+      summary: "[Admin] Create listing"
+      operationId: cm2AdminCreateListing
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [listingCode, itemType, title, category]
+              properties:
+                listingCode:    { type: string }
+                itemType:       { type: string }
+                title:          { type: string }
+                category:       { type: string }
+                description:    { type: string }
+                tags:           { type: array, items: { type: string } }
+                creatorId:      { type: integer }
+                priceType:      { type: string, enum: [free, premium] }
+                priceAmount:    { type: string }
+                licenseType:    { type: string, enum: [standard, extended, exclusive] }
+                licenseMetadata: { $ref: "#/components/schemas/CM2LicenseMetadata" }
+                fileUrl:        { type: string }
+                previewUrls:    { type: array, items: { type: string } }
+                thumbnailUrl:   { type: string }
+                fileFormat:     { type: string }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CM2ListingAdmin" }
+        "409": { description: Duplicate listingCode }
+
+  /ai/cm2/listings/{id}:
+    get:
+      summary: "[Admin] Get listing (full)"
+      operationId: cm2AdminGetListing
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Listing (admin)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CM2ListingAdmin" }
+        "404": { description: Not found }
+    patch:
+      summary: "[Admin] Update listing"
+      operationId: cm2AdminUpdateListing
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Updated }
+        "404": { description: Not found }
+
+  /ai/cm2/listings/{id}/moderate:
+    post:
+      summary: "[Admin] Moderate listing (approve/reject/suspend)"
+      operationId: cm2AdminModerate
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state]
+              properties:
+                state:     { type: string, enum: [pending, approved, rejected, suspended] }
+                reason:    { type: string }
+                adminNote: { type: string }
+      responses:
+        "200": { description: Moderated }
+        "409": { description: Already in that state }
+        "404": { description: Not found }
+
+  /ai/cm2/listings/{id}/feature:
+    post:
+      summary: "[Admin] Toggle featured status"
+      operationId: cm2AdminFeature
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Toggled }
+
+  /ai/cm2/listings/{id}/moderation-log:
+    get:
+      summary: "[Admin] Get moderation history for listing"
+      operationId: cm2AdminModerationLog
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Moderation log
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/CM2ModerationLog" } }
+
+  /ai/cm2/moderation-queue:
+    get:
+      summary: "[Admin] All pending listings"
+      operationId: cm2AdminModerationQueue
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      responses:
+        "200":
+          description: Pending queue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/CM2ListingAdmin" } }
+                  total: { type: integer }
+
+  /ai/cm2/creators:
+    get:
+      summary: "[Admin] List creators"
+      operationId: cm2AdminListCreators
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      responses:
+        "200": { description: Creators }
+    post:
+      summary: "[Admin] Create creator profile"
+      operationId: cm2AdminCreateCreator
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [creatorCode, displayName]
+              properties:
+                creatorCode:  { type: string }
+                displayName:  { type: string }
+                bio:          { type: string }
+                email:        { type: string }
+      responses:
+        "201": { description: Created }
+        "409": { description: Duplicate creatorCode }
+
+  /ai/cm2/creators/{id}:
+    get:
+      summary: "[Admin] Get creator"
+      operationId: cm2AdminGetCreator
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Creator }
+    patch:
+      summary: "[Admin] Update creator"
+      operationId: cm2AdminUpdateCreator
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Updated }
+
+  /ai/cm2/creators/{id}/verify:
+    post:
+      summary: "[Admin] Toggle creator verified status"
+      operationId: cm2AdminVerifyCreator
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Toggled }
+
+  /ai/cm2/analytics:
+    get:
+      summary: "[Admin] Platform analytics"
+      operationId: cm2AdminAnalytics
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      responses:
+        "200":
+          description: Analytics
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CM2Analytics" }
+
+  /ai/cm2/analytics/listings/{id}:
+    get:
+      summary: "[Admin] Per-listing analytics with daily snapshots"
+      operationId: cm2AdminListingAnalytics
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Listing analytics }
+        "404": { description: Not found }
+
+  /ai/cm2/downloads:
+    get:
+      summary: "[Admin] Download event log"
+      operationId: cm2AdminDownloads
+      tags: [CM2 Admin]
+      security: [{ adminApiKey: [] }]
+      parameters:
+        - { name: listingId, in: query, schema: { type: integer } }
+        - { name: limit,     in: query, schema: { type: integer } }
+      responses:
+        "200": { description: Download log }
