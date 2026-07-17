@@ -282,7 +282,7 @@ function useRegistry() {
 
   useState(() => {
     const adminKey = import.meta.env.VITE_ADMIN_API_KEY ?? "";
-    fetch(`${import.meta.env.BASE_URL}api/ai/design-components/registry`, {
+    fetch(`/api/ai/design-components/registry`, {
       headers: adminKey ? { "X-Admin-Api-Key": adminKey } : {},
     })
       .then((r) => {

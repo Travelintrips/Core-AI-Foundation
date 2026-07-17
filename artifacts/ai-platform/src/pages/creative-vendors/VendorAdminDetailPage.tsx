@@ -10,7 +10,7 @@ import {
   ImageIcon, MessageSquare, Edit3,
 } from 'lucide-react';
 
-const BASE = import.meta.env.BASE_URL?.replace(/\/$/, '') ?? '';
+const BASE = "";
 const ADMIN_KEY = import.meta.env.VITE_ADMIN_API_KEY ?? '';
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {

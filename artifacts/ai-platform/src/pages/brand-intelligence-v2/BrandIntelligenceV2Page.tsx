@@ -67,7 +67,7 @@ export default function BrandIntelligenceV2Page() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "dimensions" | "memory" | "recommendations">("overview");
 
-  const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+  const BASE = "";
 
   const analyze = async () => {
     if (!clientId.trim()) return;

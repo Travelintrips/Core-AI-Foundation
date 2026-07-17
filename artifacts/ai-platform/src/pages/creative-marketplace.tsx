@@ -50,7 +50,7 @@ import { useToast } from "@/hooks/use-toast";
 // ── API helpers ──────────────────────────────────────────────────────────────
 
 const ADMIN_KEY = import.meta.env.VITE_ADMIN_API_KEY ?? "";
-const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+const BASE = "";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}/api${path}`, {
