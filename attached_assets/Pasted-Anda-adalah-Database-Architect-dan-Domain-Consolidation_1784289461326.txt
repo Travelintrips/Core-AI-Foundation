@@ -1,0 +1,266 @@
+Anda adalah Database Architect dan Domain Consolidation Lead untuk Batch D.
+
+BRANCH YANG DITANGANI:
+
+1. feature/17-interior-design
+2. feature/18-fashion-design
+3. feature/19-packaging-design
+4. feature/20-product-design
+5. feature/21-creative-marketplace
+6. feature/22-vendor-ecosystem
+
+Kerjakan branch satu per satu.
+
+Untuk setiap branch:
+
+git fetch origin --prune
+git switch <branch>
+git pull --ff-only origin <branch>
+git branch --show-current
+git status
+
+Setelah branch selesai:
+
+- test
+- typecheck terkait
+- commit
+- push
+- working tree clean
+- baru pindah branch
+
+DILARANG:
+
+- merge
+- membuat branch batch
+- mengubah routes/index.ts
+- mengubah App.tsx
+- mengubah shared adminAuth.ts
+- mengubah lib/db/src/schema/index.ts
+- menambah file langsung ke shared schema directory
+- menjalankan migration
+- membuat source of truth kedua
+
+==================================================
+ATURAN MIGRATION UNTUK TEAM 17–19
+==================================================
+
+Semua migration wajib:
+
+- additive only
+- idempotent
+- IF NOT EXISTS bila memungkinkan
+- tanpa DROP TABLE
+- tanpa DROP TRIGGER
+- tanpa DROP FUNCTION
+- tanpa TRUNCATE
+- tanpa destructive ALTER
+- tanpa override shared function
+- tidak dijalankan oleh feature team
+
+Schema requirement harus menjadi:
+
+- domain-local table definition
+- migration draft
+- integration manifest export request
+
+==================================================
+TEAM 17 — INTERIOR DESIGN
+==================================================
+
+Perbaiki:
+
+- hapus/revert perubahan shared schema
+- hapus seluruh destructive migration
+- gunakan Brand Intelligence V2 sebagai source of truth
+- jangan membuat materialStyleInterior master kedua
+- simpan hanya selected snapshot, source profile ID/version, dan project override
+- seluruh project harus customer/client scoped
+
+TEST:
+
+- migration tidak mengandung DROP
+- no shared schema diff
+- cross-client project access ditolak
+- Brand Intelligence adapter digunakan
+
+==================================================
+TEAM 18 — FASHION DESIGN
+==================================================
+
+Perbaiki:
+
+- revert locked files
+- migration tidak boleh override shared function atau trigger
+- auth harus fail closed
+- jangan mengubah shared adminAuth.ts
+- gunakan existing budget/cost service
+- rate limit AI generation
+- token/budget cap
+- idempotency
+- cancellation
+- gunakan motif/style dari Brand Intelligence V2 melalui adapter
+- file/URL validation dan SSRF protection
+
+TEST:
+
+- missing auth configuration tidak fail open
+- budget exceeded blocked
+- rate limit
+- duplicate request idempotent
+- migration tidak override shared function
+- malicious URL/file ditolak
+
+==================================================
+TEAM 19 — PACKAGING DESIGN
+==================================================
+
+Perbaiki:
+
+- revert routes/index.ts
+- revert schema/index.ts
+- gunakan domain-local schema/migration draft
+- migration additive
+- strict dimensional validation
+
+Validasi:
+
+- width
+- height
+- depth
+- bleed
+- safe area
+- resolution
+- panel count
+- negative/zero values
+- unrealistic dimensions
+- malformed dieline
+
+Tambahkan disclaimer bahwa hasil belum print-ready tanpa prepress validation.
+
+TEST:
+
+- locked files clean
+- negative dimension ditolak
+- excessive dimension ditolak
+- invalid bleed ditolak
+- mandatory legal/barcode zone validation
+
+==================================================
+TEAM 20 — PRODUCT DESIGN
+==================================================
+
+Status sebelumnya BLOCKED.
+
+Jangan melanjutkan feature development penuh.
+
+Lakukan architecture consolidation:
+
+- inventarisasi code branch
+- bandingkan dengan design studio, mockup, blueprint, composer dan renderer existing
+- hapus duplicate engine
+- revert locked files
+- sisakan hanya domain contracts dan adapters
+
+Boleh menyisakan:
+
+- ProductDesignBrief
+- ProductDesignRequirements
+- ProductDesignQcProfile
+- ProductDesignDeliverableManifest
+- ExistingEngineAdapter
+
+Manifest harus menyatakan dependency Team 07–14.
+
+Status akhir Team 20:
+
+READY_FOR_ARCHITECTURE_REVIEW
+bukan READY_FOR_INTEGRATION.
+
+==================================================
+TEAM 21 — CREATIVE MARKETPLACE
+==================================================
+
+Status sebelumnya BLOCKED.
+
+Jangan membuat marketplace kedua.
+
+Audit marketplace existing dan gunakan sebagai source of truth.
+
+Hapus/revert duplicate:
+
+- listing
+- favorites
+- rating
+- moderation
+- payment
+- payout
+- subscriptions
+- creator wallet
+- product catalog
+
+Sisakan hanya extension contract:
+
+- creative category
+- licensing metadata
+- compatibility metadata
+- CreativeAssetListingAdapter
+
+Status akhir:
+
+READY_FOR_ARCHITECTURE_REVIEW
+bukan READY_FOR_INTEGRATION.
+
+==================================================
+TEAM 22 — VENDOR ECOSYSTEM
+==================================================
+
+Status sebelumnya BLOCKED.
+
+Jangan membuat vendor master kedua.
+
+Gunakan existing supplier/vendor system sebagai source of truth.
+
+Creative vendor harus menjadi extension terhadap vendor existing.
+
+Sisakan:
+
+- creative capability tags
+- service categories
+- material/fashion/interior capabilities
+- compatibility metadata
+- lead time extension
+- creative portfolio association
+- verification metadata
+
+Hapus/revert duplicate:
+
+- vendor table
+- vendor profile
+- rating
+- portfolio
+- contact request
+- procurement/payment master
+
+Status akhir:
+
+READY_FOR_ARCHITECTURE_REVIEW
+bukan READY_FOR_INTEGRATION.
+
+==================================================
+OUTPUT
+==================================================
+
+Laporkan per branch:
+
+- destructive migration removed
+- locked files cleaned
+- duplicate masters removed
+- canonical source of truth
+- files changed
+- tests
+- typecheck
+- commit hash
+- push status
+- READY_FOR_REAUDIT
+- READY_FOR_ARCHITECTURE_REVIEW
+- atau NOT_READY

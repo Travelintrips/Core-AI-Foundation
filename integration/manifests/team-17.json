@@ -1,0 +1,96 @@
+{
+  "team": "17",
+  "domain": "Interior Design Planning",
+  "branch": "feature/17-interior-design",
+  "version": "2.0.0",
+  "remediationVersion": "P0+P1 compliant",
+
+  "ownership": {
+    "domainRoot": "artifacts/api-server/src/domains/interior-design/",
+    "openapi": "integration/openapi/team-17.yaml",
+    "migration": "integration/migrations/team-17.sql",
+    "domainLocalSchema": "artifacts/api-server/src/domains/interior-design/schema.ts"
+  },
+
+  "routesToMount": [
+    {
+      "importPath": "src/domains/interior-design/router",
+      "mountVia": "router.use(interiorDesignRouter)",
+      "note": "Mount AFTER existing routes in artifacts/api-server/src/routes/index.ts. Public paths /public/interior-design/* already covered by PUBLIC_PATH_PREFIXES. Admin paths /ai/interior-design/* covered by global adminAuth."
+    }
+  ],
+
+  "pagesToRegister": [
+    {
+      "artifact": "customer-portal",
+      "pages": [
+        { "path": "/interior-design",    "lazyImport": "@/pages/interior-design/index" },
+        { "path": "/interior-design/:id", "lazyImport": "@/pages/interior-design/project",
+          "note": "id here is accessToken (UUID) — not numeric project ID" }
+      ]
+    },
+    {
+      "artifact": "ai-platform",
+      "pages": [
+        { "path": "/interior-design",     "import": "@/pages/interior-design/index" },
+        { "path": "/interior-design/:id", "import": "@/pages/interior-design/detail" }
+      ],
+      "navItem": {
+        "section": "Creative",
+        "label": "Interior Design",
+        "href": "/interior-design",
+        "icon": "LayoutGrid"
+      }
+    }
+  ],
+
+  "schemaExportsRequested": [
+    {
+      "requestedBy": "team-17",
+      "exportNames": ["idProjectsTable", "idBriefsTable", "idOutputsTable"],
+      "sourceFile": "artifacts/api-server/src/domains/interior-design/schema.ts",
+      "targetBarrel": "lib/db/src/schema/index.ts",
+      "note": "Currently defined as domain-local schema. Request barrel registration from Team 24 / platform team via this manifest."
+    }
+  ],
+
+  "dependencyRequests": [
+    {
+      "dependency": "Brand Intelligence V2",
+      "service": "artifacts/api-server/src/services/creativeBrandIntelligenceService.ts",
+      "accessPattern": "read-only via brandIntelligenceAdapter.ts",
+      "note": "Interior Design reads BrandDnaView and CreativeDirectorRecommendation. It does NOT write to or duplicate brand data. Source of truth remains Brand Intelligence V2."
+    }
+  ],
+
+  "integrationNotes": [
+    "Public routes use UUID accessToken in URL path — NOT numeric projectId — for IDOR prevention.",
+    "accessToken is returned once on POST /public/interior-design/projects. Customer must store it.",
+    "accessToken is never returned in subsequent GET responses to prevent enumeration.",
+    "Admin routes use numeric id — protected by global adminAuth middleware (not per-route).",
+    "Brand Intelligence adapter is best-effort: if unavailable, falls back to brief preferences silently.",
+    "No RAB/pricing logic anywhere in this domain.",
+    "Migration is additive-only: IF NOT EXISTS, no DROP/TRUNCATE/RENAME."
+  ],
+
+  "tables": [
+    "ai_platform.id_projects",
+    "ai_platform.id_briefs",
+    "ai_platform.id_outputs"
+  ],
+
+  "apiRoutes": {
+    "public": [
+      "POST /api/public/interior-design/projects                  (returns accessToken)",
+      "POST /api/public/interior-design/projects/:token/brief",
+      "GET  /api/public/interior-design/projects/:token/outputs"
+    ],
+    "admin": [
+      "GET    /api/ai/interior-design/projects",
+      "GET    /api/ai/interior-design/projects/:id",
+      "PATCH  /api/ai/interior-design/projects/:id",
+      "POST   /api/ai/interior-design/projects/:id/generate",
+      "GET    /api/ai/interior-design/projects/:id/outputs"
+    ]
+  }
+}
