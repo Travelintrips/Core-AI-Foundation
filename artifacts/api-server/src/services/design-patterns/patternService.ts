@@ -1,14 +1,25 @@
 /**
  * patternService.ts — Team 09: Pattern, Motif, Texture & Decorative Asset Library
  *
- * Core CRUD and lifecycle management for design_patterns, design_pattern_variants,
- * and design_pattern_compat tables (defined in integration/migrations/team-09.sql).
+ * Thin persistence layer. Domain validation is delegated to patternAdapter.ts
+ * (mirrors the templateService.ts + adapter split pattern used elsewhere in the platform).
  *
- * Uses raw pool queries — Drizzle schema integration is deferred to Team 24.
+ * Uses raw pool queries — Drizzle schema integration deferred to Team 24.
  */
 
 import { pool } from "@workspace/db";
 import { z } from "zod/v4";
+import {
+  LicensingAdapter,
+  LicensingError,
+  PUBLIC_STATUSES,
+  isPublicStatus,
+} from "./patternAdapter.js";
+
+// Re-export adapter errors for use in routes (single import path)
+export { LicensingError, MotifCulturalError, RepeatBehaviorError } from "./patternAdapter.js";
+export { PUBLIC_STATUSES, isPublicStatus } from "./patternAdapter.js";
+export type { PatternGalleryFilter } from "./patternAdapter.js";
 
 // ── Domain enums ──────────────────────────────────────────────────────────────
 
@@ -18,37 +29,45 @@ export const PATTERN_DOMAINS = [
   "interior", "wood", "stone", "metal", "fabric", "packaging",
 ] as const;
 
-export const PATTERN_CATEGORIES = ["pattern", "motif", "texture", "decoration"] as const;
-export const REPEAT_BEHAVIORS   = ["tile", "half-drop", "mirror", "brick", "no-repeat"] as const;
-export const SCALE_VALUES       = ["xs", "sm", "md", "lg", "xl", "full-bleed"] as const;
-export const SOURCE_TYPES       = ["original", "licensed", "public-domain", "creative-commons"] as const;
-export const PATTERN_STATUSES   = ["active", "draft", "archived"] as const;
+export const PATTERN_CATEGORIES  = ["pattern", "motif", "texture", "decoration"] as const;
+export const REPEAT_BEHAVIORS    = ["tile", "half-drop", "mirror", "brick", "no-repeat"] as const;
+export const SCALE_VALUES        = ["xs", "sm", "md", "lg", "xl", "full-bleed"] as const;
+export const SOURCE_TYPES        = ["original", "licensed", "public-domain", "creative-commons"] as const;
+
+/**
+ * Full status lifecycle.
+ * PUBLIC_STATUSES (["published","approved"]) is the subset visible to unauthenticated callers.
+ */
+export const PATTERN_STATUSES = ["draft", "active", "published", "approved", "archived"] as const;
+
+/** Maximum rows per page for any paginated pattern endpoint. */
+export const MAX_PATTERN_LIMIT = 100;
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
 export const CreatePatternSchema = z.object({
-  slug:              z.string().min(1).max(120).regex(/^[a-z0-9-]+$/, "slug must be lowercase kebab-case"),
-  name:              z.string().min(1).max(200),
-  category:          z.enum(PATTERN_CATEGORIES),
-  domain:            z.enum(PATTERN_DOMAINS),
-  style:             z.string().min(1).max(80).default("modern"),
-  description:       z.string().max(2000).optional(),
-  repeat_behavior:   z.enum(REPEAT_BEHAVIORS).default("tile"),
-  scale:             z.enum(SCALE_VALUES).default("md"),
-  colorizable:       z.boolean().default(true),
-  color_palette:     z.array(z.string().regex(/^#[0-9a-fA-F]{3,8}$/, "must be hex color")).default([]),
-  preview_url:       z.string().url().optional(),
-  preview_thumb_url: z.string().url().optional(),
-  source_type:       z.enum(SOURCE_TYPES).default("original"),
-  license:           z.string().max(200).optional(),
-  source_attribution:z.string().max(500).optional(),
-  cultural_origin:   z.string().max(200).optional(),
-  cultural_notes:    z.string().max(1000).optional(),
-  compatibility:     z.array(z.string()).default([]),
-  tags:              z.array(z.string().max(60)).default([]),
-  version:           z.string().regex(/^\d+\.\d+\.\d+$/, "semver required").default("1.0.0"),
-  status:            z.enum(PATTERN_STATUSES).default("active"),
-  metadata:          z.record(z.string(), z.unknown()).default({}),
+  slug:               z.string().min(1).max(120).regex(/^[a-z0-9-]+$/, "slug must be lowercase kebab-case"),
+  name:               z.string().min(1).max(200),
+  category:           z.enum(PATTERN_CATEGORIES),
+  domain:             z.enum(PATTERN_DOMAINS),
+  style:              z.string().min(1).max(80).default("modern"),
+  description:        z.string().max(2000).optional(),
+  repeat_behavior:    z.enum(REPEAT_BEHAVIORS).default("tile"),
+  scale:              z.enum(SCALE_VALUES).default("md"),
+  colorizable:        z.boolean().default(true),
+  color_palette:      z.array(z.string().regex(/^#[0-9a-fA-F]{3,8}$/, "must be hex color")).default([]),
+  preview_url:        z.string().url().optional(),
+  preview_thumb_url:  z.string().url().optional(),
+  source_type:        z.enum(SOURCE_TYPES).default("original"),
+  license:            z.string().max(200).optional(),
+  source_attribution: z.string().max(500).optional(),
+  cultural_origin:    z.string().max(200).optional(),
+  cultural_notes:     z.string().max(1000).optional(),
+  compatibility:      z.array(z.string()).default([]),
+  tags:               z.array(z.string().max(60)).default([]),
+  version:            z.string().regex(/^\d+\.\d+\.\d+$/, "semver required").default("1.0.0"),
+  status:             z.enum(PATTERN_STATUSES).default("draft"),
+  metadata:           z.record(z.string(), z.unknown()).default({}),
 });
 
 export const UpdatePatternSchema = CreatePatternSchema.partial().omit({ slug: true });
@@ -60,7 +79,7 @@ export const CreateVariantSchema = z.object({
   scale:             z.enum(SCALE_VALUES).default("md"),
   preview_url:       z.string().url().optional(),
   preview_thumb_url: z.string().url().optional(),
-  status:            z.enum(PATTERN_STATUSES).default("active"),
+  status:            z.enum(PATTERN_STATUSES).default("draft"),
   metadata:          z.record(z.string(), z.unknown()).default({}),
 });
 
@@ -132,62 +151,37 @@ export interface DesignPatternCompat {
   created_at: string;
 }
 
-// ── Licensing guard ───────────────────────────────────────────────────────────
-
-/**
- * Validates that the pattern submission does not bypass licensing rules.
- * - Non-original patterns require a license field.
- * - Batik-inspired patterns require cultural_origin to be set.
- * - No trademarks / brand names in slug or name (basic heuristic list).
- */
-export function assertLicensingCompliance(input: CreatePatternInput | UpdatePatternInput): void {
-  const isBatik = "domain" in input && input.domain === "batik-inspired";
-  const sourceType = "source_type" in input ? input.source_type : undefined;
-
-  if (sourceType && sourceType !== "original" && !input.license) {
-    throw new LicensingError(
-      `Patterns with source_type "${sourceType}" must include a license identifier.`,
-    );
-  }
-
-  if (isBatik && !input.cultural_origin) {
-    throw new LicensingError(
-      "batik-inspired patterns must include cultural_origin (e.g. 'Central Java, Indonesia').",
-    );
-  }
-
-  // Rudimentary trademark word list — extend as needed
-  const BLOCKED_TERMS = ["louis vuitton", "lv", "gucci", "hermes", "hermès", "chanel", "burberry",
-                         "prada", "versace", "fendi", "dior", "balenciaga", "supreme"];
-  const lower = ((input.name ?? "") + " " + ((input as CreatePatternInput).slug ?? "")).toLowerCase();
-  for (const term of BLOCKED_TERMS) {
-    if (lower.includes(term)) {
-      throw new LicensingError(
-        `Pattern name/slug contains a potentially trademarked term: "${term}". ` +
-        "Remove brand references or obtain a valid license before submitting.",
-      );
-    }
-  }
-}
-
-export class LicensingError extends Error {
-  readonly code = "LICENSING_VIOLATION";
-  constructor(message: string) { super(message); this.name = "LicensingError"; }
-}
+// ── Error classes ─────────────────────────────────────────────────────────────
 
 export class PatternNotFoundError extends Error {
   readonly code = "PATTERN_NOT_FOUND";
   constructor(id: string | number) { super(`Pattern not found: ${id}`); this.name = "PatternNotFoundError"; }
 }
 
+export class DuplicateSlugError extends Error {
+  readonly code = "SLUG_CONFLICT";
+  constructor(slug: string) { super(`A pattern with slug "${slug}" already exists.`); this.name = "DuplicateSlugError"; }
+}
+
+// ── Backward-compat re-export (adapter now owns the logic) ───────────────────
+
+/**
+ * @deprecated Use LicensingAdapter.assertCompliance() directly.
+ * Kept for backward compatibility with existing callers.
+ */
+export function assertLicensingCompliance(input: CreatePatternInput | UpdatePatternInput): void {
+  LicensingAdapter.assertCompliance(input);
+}
+
 // ── Service functions ─────────────────────────────────────────────────────────
 
-/** Create a new design pattern entry */
+/** Create a new design pattern entry. */
 export async function createPattern(
   input: CreatePatternInput,
   createdBy?: string,
 ): Promise<DesignPattern> {
-  assertLicensingCompliance(input);
+  // Domain validation via adapter
+  LicensingAdapter.assertCompliance(input);
   const validated = CreatePatternSchema.parse(input);
 
   const client = await pool.connect();
@@ -218,12 +212,17 @@ export async function createPattern(
       ],
     );
     return rows[0]!;
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.includes("unique")) {
+      throw new DuplicateSlugError(validated.slug);
+    }
+    throw err;
   } finally {
     client.release();
   }
 }
 
-/** Get a single pattern by id or slug */
+/** Get a single pattern by id or slug. Does NOT apply public visibility filter — route layer decides. */
 export async function getPattern(idOrSlug: number | string): Promise<DesignPattern> {
   const client = await pool.connect();
   try {
@@ -239,20 +238,42 @@ export async function getPattern(idOrSlug: number | string): Promise<DesignPatte
   }
 }
 
-/** List patterns with optional filters */
+/** List patterns with optional filters.
+ *
+ * @param publicOnly — when true, restricts status to PUBLIC_STATUSES and filters
+ *                     out license-unsafe patterns (mirrors templateService gallery mode).
+ */
 export async function listPatterns(opts: {
-  domain?:   string;
-  category?: string;
-  status?:   string;
-  limit?:    number;
-  offset?:   number;
+  domain?:    string;
+  category?:  string;
+  status?:    string;
+  limit?:     number;
+  offset?:    number;
+  publicOnly?: boolean;
 }): Promise<{ patterns: DesignPattern[]; total: number }> {
-  const { domain, category, status = "active", limit = 50, offset = 0 } = opts;
+  const {
+    domain, category,
+    limit  = 50,
+    offset = 0,
+    publicOnly = false,
+  } = opts;
+
+  const safeLimit  = Math.min(limit, MAX_PATTERN_LIMIT);
   const conditions: string[] = [];
   const params: unknown[]    = [];
   let   idx = 1;
 
-  if (status)   { conditions.push(`status = $${idx++}`);   params.push(status); }
+  if (publicOnly) {
+    // Lock to public-visible statuses — caller cannot override
+    conditions.push(`status = ANY($${idx++}::text[])`);
+    params.push(PUBLIC_STATUSES);
+    // License safety: original/public-domain always safe; others need license field
+    conditions.push(`(source_type IN ('original','public-domain') OR license IS NOT NULL)`);
+  } else if (opts.status) {
+    conditions.push(`status = $${idx++}`);
+    params.push(opts.status);
+  }
+
   if (domain)   { conditions.push(`domain = $${idx++}`);   params.push(domain); }
   if (category) { conditions.push(`category = $${idx++}`); params.push(category); }
 
@@ -264,7 +285,7 @@ export async function listPatterns(opts: {
       client.query<DesignPattern>(
         `SELECT * FROM ai_platform.design_patterns ${where}
          ORDER BY name ASC LIMIT $${idx} OFFSET $${idx + 1}`,
-        [...params, limit, offset],
+        [...params, safeLimit, offset],
       ),
       client.query<{ total: string }>(
         `SELECT COUNT(*)::text AS total FROM ai_platform.design_patterns ${where}`,
@@ -277,12 +298,12 @@ export async function listPatterns(opts: {
   }
 }
 
-/** Update a pattern by id */
+/** Update a pattern by id. */
 export async function updatePattern(
   id: number,
   input: UpdatePatternInput,
 ): Promise<DesignPattern> {
-  assertLicensingCompliance(input);
+  LicensingAdapter.assertCompliance(input);
   const validated = UpdatePatternSchema.parse(input);
   const fields    = Object.entries(validated).filter(([, v]) => v !== undefined);
   if (!fields.length) throw new Error("No fields to update");
@@ -309,7 +330,7 @@ export async function updatePattern(
   }
 }
 
-/** Archive a pattern (soft delete) */
+/** Archive a pattern (soft delete). */
 export async function archivePattern(id: number): Promise<void> {
   const client = await pool.connect();
   try {

@@ -3,11 +3,15 @@
  *
  * Full-text + faceted search for the design pattern library.
  * Uses PostgreSQL tsvector index (defined in team-09.sql migration).
+ *
+ * Public search is always locked to PUBLIC_STATUSES and license-safe patterns.
+ * Admin search (publicOnly=false) may pass any status.
  */
 
 import { pool } from "@workspace/db";
 import type { DesignPattern } from "./patternService.js";
-import { PATTERN_DOMAINS, PATTERN_CATEGORIES, REPEAT_BEHAVIORS, SCALE_VALUES } from "./patternService.js";
+import { PATTERN_DOMAINS, PATTERN_CATEGORIES, REPEAT_BEHAVIORS, SCALE_VALUES, MAX_PATTERN_LIMIT } from "./patternService.js";
+import { PUBLIC_STATUSES } from "./patternAdapter.js";
 import { z } from "zod/v4";
 
 // ── Query schema ──────────────────────────────────────────────────────────────
@@ -19,12 +23,13 @@ export const PatternSearchQuerySchema = z.object({
   style:           z.string().max(80).optional(),
   repeat_behavior: z.enum(REPEAT_BEHAVIORS).optional(),
   scale:           z.enum(SCALE_VALUES).optional(),
-  colorizable:     z.string().optional(),  // "true" | "false" — converted in service
+  colorizable:     z.string().optional(),   // "true" | "false" — converted in query builder
   source_type:     z.string().optional(),
   context:         z.string().max(80).optional(),   // filter by compat context
   tags:            z.string().optional(),            // comma-separated
-  status:          z.string().optional().default("active"),
-  limit:           z.coerce.number().int().min(1).max(100).default(24),
+  // status is intentionally NOT exposed in the public schema.
+  // Route layer injects publicOnly=true for public callers.
+  limit:           z.coerce.number().int().min(1).max(MAX_PATTERN_LIMIT).default(24),
   offset:          z.coerce.number().int().min(0).default(0),
   sort:            z.enum(["name", "created_at", "updated_at", "domain"]).default("name"),
   order:           z.enum(["asc", "desc"]).default("asc"),
@@ -36,17 +41,25 @@ export interface PatternSearchResult {
   patterns: (DesignPattern & { rank?: number })[];
   total:    number;
   facets:   {
-    domains:    Record<string, number>;
-    categories: Record<string, number>;
-    styles:     Record<string, number>;
+    domains:      Record<string, number>;
+    categories:   Record<string, number>;
+    styles:       Record<string, number>;
     source_types: Record<string, number>;
   };
 }
 
 // ── Search ────────────────────────────────────────────────────────────────────
 
-export async function searchPatterns(raw: PatternSearchQuery): Promise<PatternSearchResult> {
-  const query = PatternSearchQuerySchema.parse(raw);
+/**
+ * @param raw    — validated query params (from PatternSearchQuerySchema)
+ * @param publicOnly — when true (default), locks to PUBLIC_STATUSES + license-safe only.
+ *                     Set false for admin/internal callers who need to see all statuses.
+ */
+export async function searchPatterns(
+  raw: PatternSearchQuery,
+  publicOnly = true,
+): Promise<PatternSearchResult> {
+  const query  = PatternSearchQuerySchema.parse(raw);
   const client = await pool.connect();
 
   try {
@@ -54,55 +67,56 @@ export async function searchPatterns(raw: PatternSearchQuery): Promise<PatternSe
     const params: unknown[]    = [];
     let   idx = 1;
 
-    // Status filter (default "active")
-    if (query.status) {
-      conditions.push(`p.status = $${idx++}`);
-      params.push(query.status);
+    // ── Visibility filter (PUBLIC_STATUSES + license-safe) ────────────────────
+    if (publicOnly) {
+      conditions.push(`p.status = ANY($${idx++}::text[])`);
+      params.push(PUBLIC_STATUSES);
+      conditions.push(`(p.source_type IN ('original','public-domain') OR p.license IS NOT NULL)`);
     }
 
-    // Domain
+    // ── Domain ────────────────────────────────────────────────────────────────
     if (query.domain) {
       conditions.push(`p.domain = $${idx++}`);
       params.push(query.domain);
     }
 
-    // Category
+    // ── Category ──────────────────────────────────────────────────────────────
     if (query.category) {
       conditions.push(`p.category = $${idx++}`);
       params.push(query.category);
     }
 
-    // Style
+    // ── Style ─────────────────────────────────────────────────────────────────
     if (query.style) {
       conditions.push(`p.style ILIKE $${idx++}`);
       params.push(`%${query.style}%`);
     }
 
-    // Repeat behavior
+    // ── Repeat behavior ───────────────────────────────────────────────────────
     if (query.repeat_behavior) {
       conditions.push(`p.repeat_behavior = $${idx++}`);
       params.push(query.repeat_behavior);
     }
 
-    // Scale
+    // ── Scale ─────────────────────────────────────────────────────────────────
     if (query.scale) {
       conditions.push(`p.scale = $${idx++}`);
       params.push(query.scale);
     }
 
-    // Colorizable — query string "true"/"false" → boolean
+    // ── Colorizable — query string "true"/"false" → boolean ──────────────────
     if (query.colorizable !== undefined) {
-      conditions.push(`p.colorizable = ${idx++}`);
+      conditions.push(`p.colorizable = $${idx++}`);    // FIX: was missing the `$`
       params.push(query.colorizable === "true");
     }
 
-    // Source type
+    // ── Source type ───────────────────────────────────────────────────────────
     if (query.source_type) {
       conditions.push(`p.source_type = $${idx++}`);
       params.push(query.source_type);
     }
 
-    // Tags (comma-separated → overlap with array)
+    // ── Tags (comma-separated → overlap with array) ───────────────────────────
     if (query.tags) {
       const tagList = query.tags.split(",").map((t) => t.trim()).filter(Boolean);
       if (tagList.length > 0) {
@@ -111,14 +125,14 @@ export async function searchPatterns(raw: PatternSearchQuery): Promise<PatternSe
       }
     }
 
-    // Compatibility context join
+    // ── Compatibility context join ────────────────────────────────────────────
     let compatJoin = "";
     if (query.context) {
       compatJoin = `JOIN ai_platform.design_pattern_compat c ON c.pattern_id = p.id AND c.context = $${idx++}`;
       params.push(query.context);
     }
 
-    // Full-text search
+    // ── Full-text search ──────────────────────────────────────────────────────
     let rankSelect = "";
     if (query.q) {
       conditions.push(
@@ -131,11 +145,11 @@ export async function searchPatterns(raw: PatternSearchQuery): Promise<PatternSe
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
-    // Allowed sort columns (whitelist to prevent injection)
+    // ── Sort — whitelisted column map (prevents SQL injection) ────────────────
     const SORT_COL_MAP: Record<string, string> = {
       name: "p.name", created_at: "p.created_at", updated_at: "p.updated_at", domain: "p.domain",
     };
-    const sortCol = SORT_COL_MAP[query.sort] ?? "p.name";
+    const sortCol  = SORT_COL_MAP[query.sort] ?? "p.name";
     const orderDir = query.order === "desc" ? "DESC" : "ASC";
 
     const mainSql = `
@@ -152,18 +166,21 @@ export async function searchPatterns(raw: PatternSearchQuery): Promise<PatternSe
       ${compatJoin}
       ${where}
     `;
+    // Facets always use public statuses for consistency
     const facetSql = `
-      SELECT
-        domain, category, style, source_type, COUNT(*)::int AS cnt
+      SELECT domain, category, style, source_type, COUNT(*)::int AS cnt
       FROM ai_platform.design_patterns p
-      WHERE status = 'active'
+      WHERE status = ANY($1::text[])
+        AND (source_type IN ('original','public-domain') OR license IS NOT NULL)
       GROUP BY domain, category, style, source_type
     `;
 
     const [mainRes, countRes, facetRes] = await Promise.all([
       client.query<DesignPattern & { rank?: number }>(mainSql, [...params, query.limit, query.offset]),
       client.query<{ total: string }>(countSql, params),
-      client.query<{ domain: string; category: string; style: string; source_type: string; cnt: number }>(facetSql),
+      client.query<{ domain: string; category: string; style: string; source_type: string; cnt: number }>(
+        facetSql, [PUBLIC_STATUSES],
+      ),
     ]);
 
     // Build facet maps
@@ -203,7 +220,7 @@ export interface CompatibilityCheckResult {
 
 /**
  * Check whether a specific pattern is explicitly compatible with a given context.
- * Returns { compatible: false } if no matching compat record exists.
+ * Returns { compatible: false } when no matching compat record exists.
  */
 export async function checkCompatibility(
   patternId: number,
