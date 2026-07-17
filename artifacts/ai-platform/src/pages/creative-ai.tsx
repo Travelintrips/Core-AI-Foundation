@@ -812,7 +812,7 @@ function ClientReviewSection({ projectId }: { projectId: string }) {
   const handleOpenCreate = async () => {
     setShowCreate(true);
     try {
-      const res = await fetch(`${apiBase}/api/creative-ai/projects/${projectId}/customer-info`, {
+      const res = await fetch(`/api/creative-ai/projects/${projectId}/customer-info`, {
         headers: adminHeaders,
       });
       if (res.ok) {
@@ -855,7 +855,7 @@ function ClientReviewSection({ projectId }: { projectId: string }) {
   const handleResend = async (reviewId: number, clientEmail?: string | null) => {
     setResendingId(reviewId);
     try {
-      const res = await fetch(`${apiBase}/api/creative-ai/client-reviews/${reviewId}/resend`, {
+      const res = await fetch(`/api/creative-ai/client-reviews/${reviewId}/resend`, {
         method: "PATCH",
         headers: adminHeaders,
       });
