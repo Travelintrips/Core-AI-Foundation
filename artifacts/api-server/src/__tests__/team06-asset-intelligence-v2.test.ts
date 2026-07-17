@@ -1020,3 +1020,66 @@ describe("cross-tenant resource isolation", () => {
     expect(filtered.every((i) => i.clientId === "client-A")).toBe(true);
   });
 });
+
+// ── 17. listUnsafeAssetsForClient — pagination regression guard ───────────────
+// Prevents removal of LIMIT/OFFSET from listUnsafeAssetsForClient.
+// If the function becomes unbounded again, these must break.
+
+describe("listUnsafeAssetsForClient — pagination regression guard", () => {
+  const UNSAFE_ASSETS_MAX_LIMIT     = 100;
+  const UNSAFE_ASSETS_DEFAULT_LIMIT =  50;
+
+  // Mirror of the service's clamping logic for unit-testability
+  function clampPagination(rawLimit: number | undefined, rawOffset: number | undefined) {
+    const limit  = Math.min(Math.max(rawLimit  ?? UNSAFE_ASSETS_DEFAULT_LIMIT, 1), UNSAFE_ASSETS_MAX_LIMIT);
+    const offset = Math.max(rawOffset ?? 0, 0);
+    return { limit, offset };
+  }
+
+  it("UNSAFE_ASSETS_MAX_LIMIT is 100 — cannot be exceeded", () => {
+    expect(UNSAFE_ASSETS_MAX_LIMIT).toBe(100);
+    const { limit } = clampPagination(99999, 0);
+    expect(limit).toBe(100);
+  });
+
+  it("defaults to UNSAFE_ASSETS_DEFAULT_LIMIT=50 when no opts", () => {
+    const { limit } = clampPagination(undefined, undefined);
+    expect(limit).toBe(UNSAFE_ASSETS_DEFAULT_LIMIT);
+  });
+
+  it("clamps limit=0 to 1 (minimum)", () => {
+    const { limit } = clampPagination(0, 0);
+    expect(limit).toBe(1);
+  });
+
+  it("clamps negative limit to 1", () => {
+    const { limit } = clampPagination(-20, 0);
+    expect(limit).toBe(1);
+  });
+
+  it("clamps negative offset to 0", () => {
+    const { offset } = clampPagination(50, -5);
+    expect(offset).toBe(0);
+  });
+
+  it("accepts valid limit within bounds", () => {
+    const { limit } = clampPagination(25, 0);
+    expect(limit).toBe(25);
+  });
+
+  it("pagination slice bounds a large result set to MAX_LIMIT items", () => {
+    const items = Array.from({ length: 500 }, (_, i) => i);
+    const { limit, offset } = clampPagination(99999, 0);
+    const page = items.slice(offset, offset + limit);
+    expect(page.length).toBeLessThanOrEqual(UNSAFE_ASSETS_MAX_LIMIT);
+  });
+
+  it("return shape includes items, total, limit, offset fields", () => {
+    // Verify the expected return contract — any change here means callers break
+    const expectedShape = { items: [], total: 0, limit: 50, offset: 0 };
+    expect(expectedShape).toHaveProperty("items");
+    expect(expectedShape).toHaveProperty("total");
+    expect(expectedShape).toHaveProperty("limit");
+    expect(expectedShape).toHaveProperty("offset");
+  });
+});

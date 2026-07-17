@@ -172,24 +172,41 @@ export async function getAssetSafety(assetId: number, assetSource: string): Prom
   };
 }
 
-export async function listUnsafeAssetsForClient(clientId: string): Promise<AssetSafetyResult[]> {
-  const res = await pool.query<{
+// Hard cap for listUnsafeAssetsForClient — prevents full-table scans on large clients.
+// Regression guard: do not remove or raise without updating tests.
+export const UNSAFE_ASSETS_MAX_LIMIT     = 100;
+export const UNSAFE_ASSETS_DEFAULT_LIMIT =  50;
+
+export async function listUnsafeAssetsForClient(
+  clientId: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<{ items: AssetSafetyResult[]; total: number; limit: number; offset: number }> {
+  const limit  = Math.min(Math.max(opts.limit  ?? UNSAFE_ASSETS_DEFAULT_LIMIT, 1), UNSAFE_ASSETS_MAX_LIMIT);
+  const offset = Math.max(opts.offset ?? 0, 0);
+
+  type SafetyRow = {
     asset_id: number; asset_source: string; client_id: string;
     safety_level: string; brand_safety_score: number;
     flags: string[]; review_required: boolean; auto_approved: boolean;
     notes: string | null; classified_at: Date;
-  }>(
-    `SELECT * FROM ai_platform.ai_asset_safety
-     WHERE client_id = $1 AND safety_level != 'safe'
-     ORDER BY brand_safety_score ASC`,
-    [clientId],
-  );
-  return res.rows.map((r: {
-    asset_id: number; asset_source: string; client_id: string;
-    safety_level: string; brand_safety_score: number;
-    flags: string[]; review_required: boolean; auto_approved: boolean;
-    notes: string | null; classified_at: Date;
-  }) => ({
+  };
+
+  const [res, countRes] = await Promise.all([
+    pool.query<SafetyRow>(
+      `SELECT * FROM ai_platform.ai_asset_safety
+       WHERE client_id = $1 AND safety_level != 'safe'
+       ORDER BY brand_safety_score ASC
+       LIMIT $2 OFFSET $3`,
+      [clientId, limit, offset],
+    ),
+    pool.query<{ total: string }>(
+      `SELECT count(*)::int AS total FROM ai_platform.ai_asset_safety
+       WHERE client_id = $1 AND safety_level != 'safe'`,
+      [clientId],
+    ),
+  ]);
+
+  const items = res.rows.map((r) => ({
     assetId: r.asset_id,
     assetSource: r.asset_source,
     clientId: r.client_id,
@@ -201,4 +218,7 @@ export async function listUnsafeAssetsForClient(clientId: string): Promise<Asset
     notes: r.notes,
     classifiedAt: r.classified_at.toISOString(),
   }));
+
+  const total = Number(countRes.rows[0]?.total ?? 0);
+  return { items, total, limit, offset };
 }

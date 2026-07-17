@@ -310,8 +310,19 @@ router.get("/ai/asset-intelligence/v2/safety/:assetId", async (req, res): Promis
 // GET /ai/asset-intelligence/v2/safety-report/:clientId
 router.get("/ai/asset-intelligence/v2/safety-report/:clientId", async (req, res): Promise<void> => {
   const { clientId } = req.params as { clientId: string };
-  const unsafe = await listUnsafeAssetsForClient(clientId);
-  res.json({ clientId, flaggedAssets: unsafe, total: unsafe.length });
+  const rawLimit  = parseInt((req.query["limit"]  as string) ?? "50", 10);
+  const rawOffset = parseInt((req.query["offset"] as string) ?? "0",  10);
+  const result = await listUnsafeAssetsForClient(clientId, {
+    limit:  Number.isFinite(rawLimit)  ? rawLimit  : undefined,
+    offset: Number.isFinite(rawOffset) ? rawOffset : undefined,
+  });
+  res.json({
+    clientId,
+    flaggedAssets: result.items,
+    total:  result.total,
+    limit:  result.limit,
+    offset: result.offset,
+  });
 });
 
 // ── Knowledge tags ────────────────────────────────────────────────────────────
