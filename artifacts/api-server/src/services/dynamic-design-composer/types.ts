@@ -241,6 +241,53 @@ export type CompositionRequest = {
   brandDna?: BrandDnaInput;
   /** Allow the engine to override inputs to improve brand/style consistency */
   allowOverrides?: boolean;
+  /**
+   * Idempotency key — scoped to tenantId.
+   * If provided, the engine returns the existing result for completed sessions
+   * without reprocessing. Requires tenantId to prevent cross-tenant collisions.
+   */
+  idempotencyKey?: string;
+  /**
+   * Tenant identifier for ownership scoping.
+   * Required when idempotencyKey is provided. The session store never allows
+   * cross-tenant lookup — a mismatched tenantId returns 404.
+   */
+  tenantId?: string;
+  /**
+   * Set to true to allow re-execution of a previously failed session.
+   * Must be an explicit caller decision — never automatic.
+   */
+  allowRetry?: boolean;
+};
+
+// ── Composition state machine ──────────────────────────────────────────────────
+
+/**
+ * Lifecycle states for a composition session.
+ *
+ *   pending → processing → completed  (terminal)
+ *                        → failed     (terminal, unless retried explicitly)
+ *             cancelled               (terminal)
+ */
+export type CompositionState =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type CompositionSession = {
+  /** SHA-256 of `tenantId\0idempotencyKey` — never expose raw key parts */
+  sessionId: string;
+  tenantId: string;
+  idempotencyKey: string;
+  state: CompositionState;
+  /** Present when state === "completed" */
+  result?: DesignCompositionSpec;
+  /** Present when state === "failed" */
+  failureReason?: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 // ── Output types ──────────────────────────────────────────────────────────────

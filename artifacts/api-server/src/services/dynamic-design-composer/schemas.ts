@@ -243,20 +243,50 @@ export const brandDnaSchema = z.object({
 
 // ── Composition Request ───────────────────────────────────────────────────────
 
-export const compositionRequestSchema = z.object({
-  requestId: z.string().optional(),
-  blueprint: blueprintSchema,
-  layoutPlan: layoutPlanSchema,
-  components: z.array(componentSchema).min(0).max(50),
-  pattern: patternSchema,
-  palette: paletteSchema,
-  typography: typographySchema,
-  decoration: decorationSchema,
-  material: materialSchema,
-  motif: motifSchema,
-  brandDna: brandDnaSchema.optional(),
-  allowOverrides: z.boolean().default(false),
-});
+export const compositionRequestSchema = z
+  .object({
+    requestId: z.string().optional(),
+    blueprint: blueprintSchema,
+    layoutPlan: layoutPlanSchema,
+    components: z.array(componentSchema).min(0).max(50),
+    pattern: patternSchema,
+    palette: paletteSchema,
+    typography: typographySchema,
+    decoration: decorationSchema,
+    material: materialSchema,
+    motif: motifSchema,
+    brandDna: brandDnaSchema.optional(),
+    allowOverrides: z.boolean().default(false),
+    /**
+     * Idempotency key (scoped to tenantId).
+     * When present, a matching completed session returns the cached result
+     * without reprocessing. tenantId is required alongside it.
+     */
+    idempotencyKey: z
+      .string()
+      .min(1)
+      .max(255)
+      .regex(/^[a-zA-Z0-9_\-:.]+$/, "idempotencyKey must be alphanumeric with _ - : . only")
+      .optional(),
+    /**
+     * Tenant identifier — used for session ownership scoping.
+     * Required when idempotencyKey is provided.
+     */
+    tenantId: z.string().min(1).max(128).optional(),
+    /**
+     * Set true to allow re-execution of a previously FAILED session.
+     * Must be an explicit caller decision — failed sessions are never
+     * automatically retried.
+     */
+    allowRetry: z.boolean().default(false),
+  })
+  .refine(
+    (data) => !data.idempotencyKey || !!data.tenantId,
+    {
+      message: "tenantId is required when idempotencyKey is provided",
+      path: ["tenantId"],
+    },
+  );
 
 export type CompositionRequestInput = z.infer<typeof compositionRequestSchema>;
 

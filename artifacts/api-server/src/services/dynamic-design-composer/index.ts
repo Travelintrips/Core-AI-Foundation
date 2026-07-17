@@ -17,6 +17,28 @@ export {
   compatibilityCheckSchema,
 } from "./schemas.js";
 
+// ── State machine + session store ─────────────────────────────────────────────
+
+export {
+  guardCompositionState,
+  validateTransition,
+  ALLOWED_TRANSITIONS,
+  TERMINAL_STATES,
+} from "./compositionStateGuard.js";
+export type { TerminalStateError } from "./compositionStateGuard.js";
+
+export {
+  getSession,
+  createSession,
+  transitionSession,
+  deleteSession,
+  sessionCount,
+  clearStore,
+  SESSION_TTL_MS,
+} from "./compositionSessionStore.js";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 export type {
   CompositionRequest,
   DesignCompositionSpec,
@@ -36,4 +58,6 @@ export type {
   FallbackRecord,
   BrandConsistencyReport,
   CompatibilityReport,
+  CompositionState,
+  CompositionSession,
 } from "./types.js";
