@@ -29,6 +29,11 @@ CREATE TABLE IF NOT EXISTS ai_platform.ai_design_components (
     deleted_at      TIMESTAMPTZ
 );
 
+-- Unique constraint: one slug per tenant (active or soft-deleted)
+-- Ensures slug uniqueness within a tenant's namespace regardless of status.
+ALTER TABLE ai_platform.ai_design_components
+    ADD CONSTRAINT uq_ai_design_components_tenant_slug UNIQUE (tenant_id, slug);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_ai_design_components_tenant_id
     ON ai_platform.ai_design_components(tenant_id);

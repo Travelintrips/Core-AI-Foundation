@@ -7,7 +7,6 @@
     "artifacts/api-server/src/services/design-components/",
     "artifacts/api-server/src/routes/design-components/",
     "artifacts/ai-platform/src/pages/design-components/",
-    "lib/db/src/schema/ai-design-components.ts",
     "integration/openapi/team-08.yaml",
     "integration/migrations/team-08.sql",
     "integration/manifests/team-08.json"
@@ -15,20 +14,21 @@
 
   "routesToMount": [
     {
-      "importPath": "./routes/design-components/router",
-      "exportName": "default",
       "mountAt": "/ai/design-components",
-      "file": "artifacts/api-server/src/routes/index.ts",
-      "instruction": "import designComponentsRouter from './design-components/router'; then add app.use('/ai/design-components', designComponentsRouter); after existing route mounts"
+      "importFrom": "./routes/design-components/router",
+      "exportName": "default",
+      "method": "use",
+      "requiresAuth": true
     }
   ],
 
   "pagesToRegister": [
     {
-      "importPath": "@/pages/design-components",
       "routePath": "/design-components",
-      "file": "artifacts/ai-platform/src/App.tsx",
-      "instruction": "Add <Route path='/design-components' component={DesignComponentsPage} /> inside the authenticated admin routes"
+      "importFrom": "@/pages/design-components",
+      "exportName": "default",
+      "authRequired": true,
+      "layout": "admin"
     }
   ],
 
@@ -38,25 +38,29 @@
       "path": "/design-components",
       "icon": "Layers",
       "group": "Design Tools",
-      "file": "artifacts/ai-platform/src/components/layout/Sidebar.tsx",
-      "instruction": "Add sidebar entry under the 'Design Tools' group (or create the group if absent)"
+      "authRequired": true
     }
   ],
 
-  "dbSchemaToBarrel": [
+  "schemaExportsRequested": [
     {
-      "exportFrom": "lib/db/src/schema/ai-design-components.ts",
-      "exports": ["designComponentsTable", "DesignComponent", "NewDesignComponent"],
-      "addToBarrel": "lib/db/src/schema/index.ts",
-      "instruction": "Add: export { designComponentsTable, type DesignComponent, type NewDesignComponent } from './ai-design-components.js';"
+      "sourceFile": "integration/migrations/team-08.sql",
+      "drizzleDefinitionIn": "artifacts/api-server/src/services/design-components/designComponentService.ts",
+      "note": "The domain-local table definition lives inside the service file. Team 24 should promote it to lib/db/src/schema/ai-design-components.ts and export from the barrel (lib/db/src/schema/index.ts) when ready. The service will then update its import to @workspace/db.",
+      "exports": ["designComponentsTable", "DesignComponent", "NewDesignComponent"]
+    }
+  ],
+
+  "migrations": [
+    {
+      "file": "integration/migrations/team-08.sql",
+      "description": "Creates ai_platform.ai_design_components table with indexes and unique constraint on (tenant_id, slug). Additive only.",
+      "status": "draft",
+      "applyOrder": 1
     }
   ],
 
   "openapiFragment": "integration/openapi/team-08.yaml",
-
-  "migrationDrafts": [
-    "integration/migrations/team-08.sql"
-  ],
 
   "seedDrafts": [],
 
@@ -70,26 +74,23 @@
 
   "sharedTypesRequested": [],
 
-  "integrationOrder": [
-    "1. Apply migration: integration/migrations/team-08.sql",
-    "2. Add schema exports to lib/db barrel (see dbSchemaToBarrel above)",
-    "3. Run tsc -b in lib/db to rebuild types",
-    "4. Mount router in artifacts/api-server/src/routes/index.ts",
-    "5. Register page and sidebar in ai-platform"
+  "integrationNotes": [
+    "Apply migration/team-08.sql before starting the API server to ensure the ai_design_components table exists.",
+    "Mount the router under the /api prefix that the api-server already uses (result: /api/ai/design-components/*).",
+    "The router uses adminAuth middleware at router-level; no additional auth wiring is needed in routes/index.ts.",
+    "After barrel promotion (schemaExportsRequested above), update the import in designComponentService.ts from the local pgSchema definition to '@workspace/db'.",
+    "The frontend page (pagesToRegister) fetches from /api/ai/design-components/registry. It degrades gracefully (shows error state) if the router is not yet mounted.",
+    "Do NOT pass tenantId from client body/query to any route — tenantId is resolved server-side via resolveAuthenticatedTenantContext."
   ],
 
   "knownRisks": [
     {
-      "risk": "designComponentService.ts imports lib/db schema via relative path (not barrel) until Team 24 adds barrel export. If the barrel is updated first, update the import path in designComponentService.ts accordingly.",
+      "risk": "designComponentService.ts uses a domain-local pgSchema definition. If the barrel is promoted before this service is updated, ensure imports are swapped to avoid duplicate table definitions.",
       "severity": "low"
     },
     {
       "risk": "The ai_design_components table must be created before the API server starts or POST/GET/PATCH/DELETE instance routes will fail with 'relation does not exist'. Registry and validate routes are stateless and safe regardless.",
       "severity": "medium"
-    },
-    {
-      "risk": "The frontend page fetches from /api/ai/design-components/registry at runtime — it shows an error state if the router is not yet mounted. The page is gracefully degraded (error message shown, not a crash).",
-      "severity": "low"
     }
   ]
 }

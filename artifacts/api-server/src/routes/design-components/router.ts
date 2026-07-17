@@ -2,10 +2,11 @@
  * Universal Creative Component Library — REST Routes (Team 8)
  *
  * Route prefix: /ai/design-components  (relative to the /api mount in app.ts)
- * Auth: global adminAuthWithExceptions in app.ts — no per-route middleware needed.
+ * Auth: adminAuth middleware applied at router-level (explicit, not relying
+ *       solely on global adminAuthWithExceptions in app.ts — P1 audit fix).
  *
  * IMPORTANT: This router is NOT registered in routes/index.ts.
- * Team 24 will mount it during integration.
+ * Team 24 will mount it during integration (see integration/manifests/team-08.json).
  *
  * Routes provided:
  *   GET    /ai/design-components/registry              — full static registry
@@ -26,6 +27,7 @@
 
 import { Router } from "express";
 import { z } from "zod";
+import { adminAuth } from "../../middleware/adminAuth.js";
 import { resolveAuthenticatedTenantContext } from "../../security/tenantResolution.js";
 import { logger } from "../../lib/logger.js";
 import {
@@ -50,10 +52,18 @@ import {
   ComponentValidationError,
   ComponentNotFoundError,
   ComponentTenantError,
+  ComponentSlugConflictError,
 } from "../../services/design-components/index.js";
 import type { ComponentType, ComponentDomain } from "../../services/design-components/index.js";
 
 const router = Router();
+
+// ── Auth — explicit at router level (P1 audit) ────────────────────────────────
+// All routes in this router require admin authentication.
+// This is defence-in-depth on top of the global adminAuthWithExceptions; it
+// ensures the router cannot be mounted without auth even in test or edge
+// contexts where the global middleware is not applied.
+router.use(adminAuth);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -70,6 +80,9 @@ function handleError(res: any, err: unknown) {
   }
   if (err instanceof ComponentValidationError) {
     return res.status(422).json({ error: "Validation failed", errors: err.errors });
+  }
+  if (err instanceof ComponentSlugConflictError) {
+    return res.status(409).json({ error: err.message });
   }
   const msg = err instanceof Error ? err.message : "Unexpected error";
   logger.error({ err }, "[design-components] Route error");

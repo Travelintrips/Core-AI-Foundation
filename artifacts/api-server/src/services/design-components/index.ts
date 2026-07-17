@@ -72,6 +72,7 @@ export {
   ComponentValidationError,
   ComponentNotFoundError,
   ComponentTenantError,
+  ComponentSlugConflictError,
 } from "./designComponentService.js";
 
 export type { ListDesignComponentsOptions, UpdateDesignComponentInput } from "./designComponentService.js";

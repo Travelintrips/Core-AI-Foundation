@@ -10,7 +10,7 @@
  */
 
 import { eq, and, isNull, desc, sql } from "drizzle-orm";
-import { text, jsonb, timestamp, serial, pgSchema } from "drizzle-orm/pg-core";
+import { text, jsonb, timestamp, serial, pgSchema, unique } from "drizzle-orm/pg-core";
 import { randomUUID } from "crypto";
 import { db } from "@workspace/db";
 
@@ -21,21 +21,28 @@ import { db } from "@workspace/db";
 // Must stay in sync with lib/db/src/schema/ai-design-components.ts.
 
 const _localSchema = pgSchema("ai_platform");
-const designComponentsTable = _localSchema.table("ai_design_components", {
-  id: serial("id").primaryKey(),
-  tenantId: text("tenant_id").notNull(),
-  name: text("name").notNull(),
-  slug: text("slug").notNull(),
-  type: text("type").notNull(),
-  domain: text("domain").notNull(),
-  fieldValues: jsonb("field_values").$type<Record<string, unknown>>().notNull().default({}),
-  blueprintId: text("blueprint_id"),
-  status: text("status").notNull().default("active"),
-  createdBy: text("created_by"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
+const designComponentsTable = _localSchema.table(
+  "ai_design_components",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    type: text("type").notNull(),
+    domain: text("domain").notNull(),
+    fieldValues: jsonb("field_values").$type<Record<string, unknown>>().notNull().default({}),
+    blueprintId: text("blueprint_id"),
+    status: text("status").notNull().default("active"),
+    createdBy: text("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => ({
+    // P2: unique slug per tenant (mirrors uq_ai_design_components_tenant_slug in migration)
+    tenantSlugUniq: unique("uq_ai_design_components_tenant_slug").on(t.tenantId, t.slug),
+  }),
+);
 
 type DesignComponent = typeof designComponentsTable.$inferSelect;
 type NewDesignComponent = typeof designComponentsTable.$inferInsert;
@@ -82,6 +89,23 @@ export class ComponentTenantError extends Error {
   }
 }
 
+export class ComponentSlugConflictError extends Error {
+  constructor(slug: string) {
+    super(`A component with slug "${slug}" already exists in this tenant.`);
+    this.name = "ComponentSlugConflictError";
+  }
+}
+
+/** Detect PostgreSQL unique-constraint violation (code 23505). */
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: string }).code === "23505"
+  );
+}
+
 // ── Create ────────────────────────────────────────────────────────────────────
 
 export async function createDesignComponent(
@@ -98,22 +122,27 @@ export async function createDesignComponent(
     throw new ComponentValidationError(validation.errors);
   }
 
-  const [row] = await db
-    .insert(designComponentsTable)
-    .values({
-      tenantId: input.tenantId,
-      name: input.name,
-      slug: makeSlug(input.name),
-      type: input.type,
-      domain: input.domain,
-      fieldValues,
-      blueprintId: input.blueprintId ?? null,
-      status: "active",
-      createdBy: input.createdBy ?? null,
-    } satisfies NewDesignComponent)
-    .returning();
-
-  return row!;
+  const slug = makeSlug(input.name);
+  try {
+    const [row] = await db
+      .insert(designComponentsTable)
+      .values({
+        tenantId: input.tenantId,
+        name: input.name,
+        slug,
+        type: input.type,
+        domain: input.domain,
+        fieldValues,
+        blueprintId: input.blueprintId ?? null,
+        status: "active",
+        createdBy: input.createdBy ?? null,
+      } satisfies NewDesignComponent)
+      .returning();
+    return row!;
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new ComponentSlugConflictError(slug);
+    throw err;
+  }
 }
 
 // ── Read ──────────────────────────────────────────────────────────────────────
@@ -274,22 +303,27 @@ export async function duplicateDesignComponent(
   if (!source) throw new ComponentNotFoundError(id);
 
   const name = newName ?? `${source.name} (copy)`;
-  const [row] = await db
-    .insert(designComponentsTable)
-    .values({
-      tenantId: source.tenantId,
-      name,
-      slug: makeSlug(name),
-      type: source.type,
-      domain: source.domain,
-      fieldValues: source.fieldValues ?? {},
-      blueprintId: source.blueprintId,
-      status: "active",
-      createdBy: source.createdBy,
-    } satisfies NewDesignComponent)
-    .returning();
-
-  return row!;
+  const slug = makeSlug(name);
+  try {
+    const [row] = await db
+      .insert(designComponentsTable)
+      .values({
+        tenantId: source.tenantId,
+        name,
+        slug,
+        type: source.type,
+        domain: source.domain,
+        fieldValues: source.fieldValues ?? {},
+        blueprintId: source.blueprintId,
+        status: "active",
+        createdBy: source.createdBy,
+      } satisfies NewDesignComponent)
+      .returning();
+    return row!;
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new ComponentSlugConflictError(slug);
+    throw err;
+  }
 }
 
 // ── Component definition lookup ───────────────────────────────────────────────
