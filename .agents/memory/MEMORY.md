@@ -76,3 +76,5 @@
 - [phase5-visual-template-editor](phase5-visual-template-editor.md) — Phase 5 visual editor complete: react-konva canvas, 38 tests pass, adapter z-index normalization rule, pnpm build requires PORT env (use typecheck instead)
 - [phase3a-batch-orchestration](phase3a-batch-orchestration.md) — Phase 3A lifecycle machine, dispatcher idempotency/tenant-cap, reconcile rules, stale recovery, Team 2 snapshot contract
 - [phase4-library-integration](phase4-library-integration.md) — Phase 4 cherry-pick rules: lib/db tsc -b required, createVersion() obj-arg, PreviewResult has no renderDurationMs, "jpeg" not in RenderFormat
+- [team03-approval-gate-adapter](team03-approval-gate-adapter.md) — Use ai_commercial_gates (gate_type=admin_approval, notes JSON) instead of a parallel approval table; mapGate must handle both snake_case and camelCase column shapes
+- [team03-rbac-tenant-scope](team03-rbac-tenant-scope.md) — Aggregate endpoints filter via customer_profiles WHERE tenant_id = ? subquery; sales_funnel_events has no tenant_id column
