@@ -12,9 +12,9 @@
  *   GET  /health          — Liveness check for this domain (no auth required)
  *
  * Security:
- *   All routes except /health are protected by router-level adminAuth.
- *   The global adminAuthWithExceptions in app.ts also covers these routes,
- *   but explicit router-level auth is required by the remediation protocol.
+ *   - All routes except /health are protected by router-level adminAuth.
+ *   - POST /match and POST /score/:id are additionally rate-limited.
+ *   - Response strips private/commercial template fields (via Blueprint projection).
  */
 
 import { Router } from "express";
@@ -36,54 +36,99 @@ router.use((req: Request, res: Response, next: NextFunction): void => {
   void adminAuth(req, res, next);
 });
 
+// ── In-memory rate limiter (P2 Security) ─────────────────────────────────────
+// Simple sliding-window limiter. No external package required.
+// Key = caller IP; value = timestamps of requests within the window.
+//
+// Limits:
+//   POST /match    — 20 req / min per IP (scoring is CPU-bound)
+//   POST /score/:id — 30 req / min per IP
+//
+// In production, consider replacing with Redis-backed rate limiting when
+// multi-instance deployment is needed. Documented in integration manifest.
+
+const _rlStore = new Map<string, number[]>();
+const RL_WINDOW_MS = 60_000; // 1 minute sliding window
+
+function checkRateLimit(key: string, max: number): boolean {
+  const now = Date.now();
+  const times = (_rlStore.get(key) ?? []).filter((t) => now - t < RL_WINDOW_MS);
+  if (times.length >= max) {
+    _rlStore.set(key, times); // keep pruned list, don't push
+    return false;
+  }
+  times.push(now);
+  _rlStore.set(key, times);
+  return true;
+}
+
+function getCallerKey(req: Request, prefix: string): string {
+  const ip = req.ip ?? req.socket?.remoteAddress ?? "unknown";
+  return `${prefix}:${ip}`;
+}
+
+function rateLimitMiddleware(prefix: string, max: number) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!checkRateLimit(getCallerKey(req, prefix), max)) {
+      res.status(429).json({
+        error: "Too many requests. Please wait before retrying.",
+        retryAfterMs: RL_WINDOW_MS,
+      });
+      return;
+    }
+    next();
+  };
+}
+
+// ── Input size limits (DoS prevention) ───────────────────────────────────────
+const MAX_BRIEF_LENGTH      = 2_000;
+const MAX_CONSTRAINTS_COUNT = 20;
+const MAX_ARRAY_ITEMS       = 50;
+
 // ── POST /match ──────────────────────────────────────────────────────────────
 
 /**
  * Run universal template matching.
  *
- * Body (all optional, but at least one of serviceType/domain/category recommended):
+ * Body (all optional, but at least one signal recommended):
  * {
  *   serviceType?: string,
  *   domain?: string,
  *   category?: string,
- *   brief?: string,
+ *   brief?: string (max 2000 chars),
  *   brandDna?: { personalities?, voice?, writingStyle?, primaryColorHex?, ... },
  *   industry?: string,
- *   audience?: string[],
- *   output?: string[],
+ *   audience?: string[] (max 50),
+ *   output?: string[] (max 50),
  *   package?: string,
- *   style?: string[],
- *   constraints?: string[],
+ *   style?: string[] (max 50),
+ *   constraints?: string[] (max 20),
  *   limit?: number (1–20, default 5)
  * }
  *
- * Response 200:
- * {
- *   topRecommendation: MatchRecommendation | null,
- *   alternatives: MatchRecommendation[],
- *   rejected: RejectedBlueprint[],
- *   confidence: number,
- *   explanation: string,
- *   candidatesEvaluated: number,
- *   signalsUsed: string[],
- *   signalsMissing: string[]
- * }
+ * Response 200: MatchResult
+ * Response 400: { error: string }
+ * Response 429: { error: string, retryAfterMs: number }
  */
-router.post("/match", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const input = parseMatchInput(req.body);
-    const validationError = validateMatchInput(input);
-    if (validationError) {
-      return res.status(400).json({ error: validationError });
-    }
+router.post(
+  "/match",
+  rateLimitMiddleware("match", 20),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = parseMatchInput(req.body);
+      const validationError = validateMatchInput(input);
+      if (validationError) {
+        return res.status(400).json({ error: validationError });
+      }
 
-    const matcher = getDefaultMatcher();
-    const result = await matcher.match(input);
-    return res.json(result);
-  } catch (err) {
-    return next(err);
-  }
-});
+      const matcher = getDefaultMatcher();
+      const result = await matcher.match(input);
+      return res.json(result);
+    } catch (err) {
+      return next(err);
+    }
+  },
+);
 
 // ── POST /score/:id ───────────────────────────────────────────────────────────
 
@@ -95,28 +140,34 @@ router.post("/match", async (req: Request, res: Response, next: NextFunction) =>
  * Body:   same as /match
  *
  * Response 200: MatchResult (with only that blueprint evaluated)
- * Response 404: { error: "Blueprint not found" }
+ * Response 400: { error: "Blueprint id must be a numeric string." }
+ * Response 404: { error: "Blueprint not found or not published." }
+ * Response 429: { error: string, retryAfterMs: number }
  */
-router.post("/score/:id", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const rawId = req.params["id"];
-    const id = Array.isArray(rawId) ? rawId[0] : rawId;
-    if (!id || !/^\d+$/.test(id)) {
-      return res.status(400).json({ error: "Blueprint id must be a numeric string." });
-    }
+router.post(
+  "/score/:id",
+  rateLimitMiddleware("score", 30),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const rawId = req.params["id"];
+      const id = Array.isArray(rawId) ? rawId[0] : rawId;
+      if (!id || !/^\d+$/.test(id)) {
+        return res.status(400).json({ error: "Blueprint id must be a numeric string." });
+      }
 
-    const input = parseMatchInput(req.body);
-    const matcher = getDefaultMatcher();
-    const result = await matcher.scoreSingle(id, input);
+      const input = parseMatchInput(req.body);
+      const matcher = getDefaultMatcher();
+      const result = await matcher.scoreSingle(id, input);
 
-    if (!result) {
-      return res.status(404).json({ error: "Blueprint not found or not published." });
+      if (!result) {
+        return res.status(404).json({ error: "Blueprint not found or not published." });
+      }
+      return res.json(result);
+    } catch (err) {
+      return next(err);
     }
-    return res.json(result);
-  } catch (err) {
-    return next(err);
-  }
-});
+  },
+);
 
 // ── GET /health ───────────────────────────────────────────────────────────────
 
@@ -163,14 +214,12 @@ function parseBrandDna(raw: unknown): MatchInput["brandDna"] {
 
 function arrayOfStrings(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const arr = value.filter((v) => typeof v === "string").map((v) => (v as string).trim()).filter(Boolean);
+  const arr = value
+    .filter((v) => typeof v === "string")
+    .map((v) => (v as string).trim())
+    .filter(Boolean);
   return arr.length > 0 ? arr : undefined;
 }
-
-// ── Input size limits (DoS prevention) ───────────────────────────────────────
-const MAX_BRIEF_LENGTH      = 2_000;  // characters
-const MAX_CONSTRAINTS_COUNT = 20;     // array items
-const MAX_ARRAY_ITEMS       = 50;     // generic array cap (audience, output, style)
 
 function validateMatchInput(input: MatchInput): string | null {
   const hasAnySignal = [
@@ -189,7 +238,7 @@ function validateMatchInput(input: MatchInput): string | null {
     return "At least one matching signal must be provided (serviceType, domain, category, industry, brief, brandDna, audience, output, or style).";
   }
 
-  // Size guards
+  // Size guards (DoS prevention)
   if (input.brief && input.brief.length > MAX_BRIEF_LENGTH) {
     return `brief must not exceed ${MAX_BRIEF_LENGTH} characters.`;
   }

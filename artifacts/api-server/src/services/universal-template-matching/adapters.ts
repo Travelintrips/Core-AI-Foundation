@@ -1,19 +1,27 @@
 /**
  * Universal Template Matching — Default Port Adapters
  *
- * These adapters implement the port interfaces using the existing database
- * tables. The scoring engine never imports from @workspace/db — only the
- * adapters do. This keeps the scoring logic testable with in-memory fakes.
+ * DUPLICATION RULE (remediation): This adapter is the ONLY place that reads
+ * from the template data store. It delegates ALL data access to the existing
+ * `templateService` (templateService.ts) which owns `ai_templates`. The
+ * scoring engine (scoring.ts) never touches the DB directly.
  *
- * Rules:
- * - Never query domain-specific tables (e.g. creative_projects, ai_jobs).
- * - Read only ai_templates and ai_template_* tables via the ports.
- * - Map DB rows to Blueprint / Component / Pattern / TokenLibraryEntry shapes.
+ * Source of truth: templateService.listTemplates() / templateService.getTemplate()
+ * Team 11 adds: scoring intelligence, explanation, confidence — not persistence.
+ *
+ * PERFORMANCE RULE: Candidate fetching uses DB-level filtering (category,
+ * industry via templateService SQL WHERE clauses). The hard row cap is 50
+ * (max 100) — never a full table scan.
+ *
+ * SECURITY RULE: templateToBlueprint() strips all private/commercial fields:
+ * pricePoints, pdfPreviewUrl, pptPreviewUrl, templateCode, sortOrder.
+ * getById() returns null for non-published templates (fail-closed).
  */
 
-import { eq, and, lte } from "drizzle-orm";
-import { db, aiTemplatesTable } from "@workspace/db";
-import type { AiTemplate } from "@workspace/db";
+import {
+  listTemplates as listTemplatesFromService,
+  getTemplate as getTemplateFromService,
+} from "../templateService.js";
 import type {
   Blueprint,
   Component,
@@ -25,8 +33,15 @@ import type {
   TokenLibraryPort,
   MatchingDeps,
 } from "./ports.js";
+import type { AiTemplate } from "@workspace/db";
 
 // ── AI Template → Blueprint mapper ───────────────────────────────────────────
+// SECURITY: Only safe/public fields are copied. Private fields are excluded:
+//   - templateCode (internal identifier, not needed by scoring)
+//   - pricePoints  (commercial pricing data)
+//   - pdfPreviewUrl / pptPreviewUrl (direct asset URLs — not for API consumers)
+//   - sortOrder    (internal admin sorting)
+//   - previewImages.gallery (only thumbnail used, if needed)
 
 function templateToBlueprint(row: AiTemplate): Blueprint {
   const dna = (row.brandDnaTags ?? {}) as {
@@ -36,7 +51,7 @@ function templateToBlueprint(row: AiTemplate): Blueprint {
     industries?: string[];
   };
 
-  // Build keyword list from name + description
+  // Build keyword list from name + description only (not templateCode — internal)
   const rawText = [row.name, row.description ?? "", row.category, row.style].join(" ");
   const keywords = rawText
     .toLowerCase()
@@ -48,28 +63,31 @@ function templateToBlueprint(row: AiTemplate): Blueprint {
     id: String(row.id),
     name: row.name,
     category: row.category,
-    // ai_templates.serviceTypes not stored — derive from category conventions
     serviceTypes: categoryToServiceTypes(row.category),
     domains: categoryToDomains(row.category),
-    industries: row.industry ? [row.industry] : (dna.industries ?? []),
+    // row.industry is the single DB value; dna.industries is the JSONB array
+    industries: row.industry
+      ? [row.industry, ...(dna.industries ?? [])]
+      : (dna.industries ?? []),
     audiences: dna.audiences ?? [],
     styles: row.style ? [row.style] : [],
     outputFormats: categoryToOutputFormats(row.category),
     supportedPackages: (row.supportedPackages ?? []) as string[],
     personalities: dna.personalities ?? [],
     voices: dna.voices ?? [],
+    // colorTheme.primary is safe to expose (visual metadata, not commercial)
     primaryColorHex: (row.colorTheme as { primary?: string } | null)?.primary ?? null,
     published: row.status === "published",
     featured: row.featured,
     usageCount: row.conversions ?? 0,
-    unsupportedConstraints: [], // ai_templates has no explicit deny-list; adapts generically
+    unsupportedConstraints: [],
     keywords: [...new Set(keywords)],
   };
 }
 
 /**
  * Derive service type codes from category names.
- * Kept here so the mapping is centralised; extend as new categories are added.
+ * Centralised here so the heuristic can be extended without touching scoring.
  */
 function categoryToServiceTypes(category: string): string[] {
   const cat = category.toLowerCase();
@@ -92,7 +110,7 @@ function categoryToDomains(category: string): string[] {
   if (cat.includes("legal") || cat.includes("contract")) domains.push("legal");
   if (cat.includes("finance") || cat.includes("report") || cat.includes("laporan")) domains.push("finance");
   if (cat.includes("pitch") || cat.includes("investor") || cat.includes("proposal")) domains.push("sales");
-  if (domains.length === 0) domains.push("creative"); // default
+  if (domains.length === 0) domains.push("creative");
   return domains;
 }
 
@@ -100,51 +118,68 @@ function categoryToOutputFormats(category: string): string[] {
   const cat = category.toLowerCase();
   if (cat.includes("social") || cat.includes("post") || cat.includes("banner")) return ["png", "jpg", "webp"];
   if (cat.includes("pitch") || cat.includes("presentation")) return ["pptx", "pdf"];
-  return ["pdf"]; // default: most blueprints produce PDF
+  return ["pdf"];
 }
 
-// ── Blueprint Port (DB-backed) ────────────────────────────────────────────────
+// ── Blueprint Port (delegates to templateService) ─────────────────────────────
+//
+// ARCHITECTURE: DbBlueprintPort is the adapter that bridges templateService
+// (source of truth for template persistence) with Team 11's scoring engine.
+// It does NOT re-implement query logic — it calls templateService and maps rows.
+//
+// PERFORMANCE: DB-level filtering via templateService.listTemplates():
+//   - status: "published" → SQL WHERE clause (never returns draft/archived)
+//   - category → SQL WHERE = (exact match, uses B-tree index on category)
+//   - industry → SQL WHERE = OR IS NULL (includes cross-industry templates)
+// Hard row limit: 50 default, 100 max. Never a full table scan.
 
 export class DbBlueprintPort implements BlueprintPort {
   async listCandidates(opts?: {
     category?: string;
     serviceType?: string;
+    industry?: string;
     limit?: number;
   }): Promise<Blueprint[]> {
-    const limit = Math.min(opts?.limit ?? 200, 500);
+    // Hard cap: never fetch more than 100 candidates.
+    // templateService.listTemplates() enforces its own limit too (max 200 there),
+    // but we impose a stricter domain cap here.
+    const limit = Math.min(opts?.limit ?? 50, 100);
 
-    const conditions = [eq(aiTemplatesTable.status, "published")];
-    if (opts?.category) {
-      conditions.push(eq(aiTemplatesTable.category, opts.category));
-    }
+    const { items } = await listTemplatesFromService({
+      status: "published",          // DB-level: never return draft/archived
+      category: opts?.category,     // DB-level: exact match on category column
+      industry: opts?.industry,     // DB-level: eq OR IS NULL (cross-industry)
+      // style intentionally NOT used as pre-filter: style is a soft signal
+      // that may have multiple valid values; let the scoring engine handle it
+      // to avoid excluding good candidates. Documented: design decision.
+      limit,
+    });
 
-    const rows = await db
-      .select()
-      .from(aiTemplatesTable)
-      .where(and(...conditions))
-      .limit(limit);
-
-    return rows.map(templateToBlueprint);
+    // Map to Blueprint (public-safe projection — private fields excluded)
+    return items
+      .filter((row) => row.status === "published") // belt-and-suspenders guard
+      .map(templateToBlueprint);
   }
 
   async getById(id: string): Promise<Blueprint | null> {
     const numId = parseInt(id, 10);
     if (isNaN(numId)) return null;
 
-    const rows = await db
-      .select()
-      .from(aiTemplatesTable)
-      .where(and(eq(aiTemplatesTable.id, numId), eq(aiTemplatesTable.status, "published")))
-      .limit(1);
+    // Delegate to templateService (single source of truth for template reads)
+    const row = await getTemplateFromService(numId);
 
-    return rows.length > 0 ? templateToBlueprint(rows[0]!) : null;
+    // SECURITY: fail-closed — only return published templates.
+    // Draft/archived templates must NOT appear in recommendations.
+    if (!row || row.status !== "published") return null;
+
+    return templateToBlueprint(row);
   }
 }
 
 // ── Component Port (static fallback — no dedicated table yet) ────────────────
 
 /**
- * Stub implementation: returns a minimal set of generic components.
+ * Stub: returns a minimal set of generic components.
  * Replace with a DB-backed version when an ai_components table exists.
  * The scoring engine uses this only for enrichment — empty lists degrade
  * gracefully without breaking the score.
@@ -234,8 +269,8 @@ export class StaticTokenLibraryPort implements TokenLibraryPort {
 // ── Default dependency container ──────────────────────────────────────────────
 
 /**
- * Production default: DB-backed blueprints, static components/patterns/tokens.
- * Swap individual ports for testing by passing a custom container.
+ * Production default: templateService-backed blueprints, static stubs for
+ * components/patterns/tokens (replace with DB-backed versions when tables exist).
  */
 export function createDefaultDeps(): MatchingDeps {
   return {

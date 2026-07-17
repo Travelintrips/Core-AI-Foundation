@@ -15,9 +15,13 @@
  * A Blueprint is the abstract representation of a template/design that the
  * scoring engine can evaluate. It carries enough metadata for all scoring
  * dimensions but hides the underlying DB row shape.
+ *
+ * Private/commercial fields (pricePoints, pdfPreviewUrl, pptPreviewUrl,
+ * templateCode, sortOrder) are intentionally excluded — Blueprint is a
+ * public-safe projection.
  */
 export interface Blueprint {
-  /** Stable identifier (e.g. template code or UUID) */
+  /** Stable identifier (numeric id as string, sourced from ai_templates.id). */
   id: string;
   /** Human-readable name */
   name: string;
@@ -116,17 +120,30 @@ export interface TokenLibraryEntry {
 /** Provides Blueprint candidates for scoring. */
 export interface BlueprintPort {
   /**
-   * List published blueprints optionally filtered by category or service type.
-   * Must return only published (non-archived) blueprints.
-   * @param limit Max candidates to return (default 200).
+   * List published blueprints pre-filtered by DB-level attributes.
+   *
+   * Implementations MUST:
+   * - Apply status = "published" filter in SQL (never return drafts/archived)
+   * - Apply category/industry/style as WHERE clauses, not post-fetch filters
+   * - Enforce a hard row limit (never unbounded table scan)
+   * - Include cross-industry templates (industry IS NULL) when industry is given
+   *
+   * @param opts.category  Exact category match (SQL WHERE)
+   * @param opts.industry  Industry pre-filter; must also include cross-industry (NULL) rows
+   * @param opts.limit     Max rows from DB. Hard cap: 100. Default: 50.
    */
   listCandidates(opts?: {
     category?: string;
-    serviceType?: string;
-    limit?: number;
+    serviceType?: string;   // hint only — used by engine, not necessarily SQL-filterable
+    industry?: string;      // DB-level pre-filter (includes NULL/cross-industry rows)
+    limit?: number;         // HARD CAP: implementations must enforce ≤ 100
   }): Promise<Blueprint[]>;
 
-  /** Get a single blueprint by ID. Returns null if not found/unpublished. */
+  /**
+   * Get a single published blueprint by ID.
+   * Returns null if not found OR if status !== "published".
+   * Never returns draft or archived blueprints.
+   */
   getById(id: string): Promise<Blueprint | null>;
 }
 

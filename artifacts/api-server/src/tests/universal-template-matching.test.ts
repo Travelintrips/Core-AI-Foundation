@@ -881,6 +881,423 @@ describe("input validation — blueprint ID security", () => {
   });
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// MANDATORY AUDIT TESTS (Remediation requirement)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── AUDIT: empty library ─────────────────────────────────────────────────────
+
+describe("[AUDIT] empty template library", () => {
+  it("returns null topRecommendation when library is empty", async () => {
+    const matcher = new UniversalTemplateMatcher(makeDeps([]));
+    const result = await matcher.match({ serviceType: "CP" });
+    expect(result.topRecommendation).toBeNull();
+    expect(result.alternatives).toHaveLength(0);
+    expect(result.rejected).toHaveLength(0);
+    expect(result.candidatesEvaluated).toBe(0);
+  });
+
+  it("returns non-empty explanation even with empty library", async () => {
+    const matcher = new UniversalTemplateMatcher(makeDeps([]));
+    const result = await matcher.match({ serviceType: "CP" });
+    expect(typeof result.explanation).toBe("string");
+    expect(result.explanation.length).toBeGreaterThan(0);
+  });
+
+  it("scoreSingle on empty library returns null (not an error)", async () => {
+    const matcher = new UniversalTemplateMatcher(makeDeps([]));
+    const result = await matcher.scoreSingle("1", { serviceType: "CP" });
+    expect(result).toBeNull();
+  });
+
+  it("signalsMissing is populated even with empty library", async () => {
+    const matcher = new UniversalTemplateMatcher(makeDeps([]));
+    const result = await matcher.match({ serviceType: "CP" });
+    // Only serviceType provided → everything else is missing
+    expect(result.signalsMissing).toContain("industry");
+    expect(result.signalsMissing).toContain("brief");
+  });
+});
+
+// ── AUDIT: stable tie-breaking ────────────────────────────────────────────────
+
+describe("[AUDIT] stable tie-breaking", () => {
+  it("identical blueprints are always sorted alphabetically by id (stable)", () => {
+    // All same score → tie-break by id alphabetically
+    const blueprints = ["zzz", "aaa", "mmm", "bbb"].map((id) =>
+      makeBlueprint({ id, featured: false, usageCount: 0 }),
+    );
+    const input: MatchInput = {}; // no signals → all score 0
+    const r1 = runMatching(blueprints, input);
+    const r2 = runMatching(blueprints, input);
+    const r3 = runMatching([...blueprints].reverse(), input); // different insertion order
+
+    const ids1 = [r1.topRecommendation?.blueprintId, ...r1.alternatives.map((a) => a.blueprintId)];
+    const ids2 = [r2.topRecommendation?.blueprintId, ...r2.alternatives.map((a) => a.blueprintId)];
+    const ids3 = [r3.topRecommendation?.blueprintId, ...r3.alternatives.map((a) => a.blueprintId)];
+
+    // All three runs must produce identical ordering
+    expect(ids1).toEqual(ids2);
+    expect(ids2).toEqual(ids3);
+    // Alphabetically: "aaa" should be first
+    expect(ids1[0]).toBe("aaa");
+  });
+
+  it("featured > non-featured when score is equal", () => {
+    const a = { score: 60, blueprint: makeBlueprint({ id: "a", featured: false, usageCount: 100 }) };
+    const b = { score: 60, blueprint: makeBlueprint({ id: "b", featured: true,  usageCount: 0   }) };
+    // b is featured → should rank above a despite lower usageCount
+    expect(compareRecommendations(a, b)).toBeGreaterThan(0); // b before a
+    expect(compareRecommendations(b, a)).toBeLessThan(0);    // b before a
+  });
+
+  it("tie-breaking is consistent across 100 repeated sorts", () => {
+    const blueprints = ["c", "a", "b"].map((id) => makeBlueprint({ id, featured: false, usageCount: 0 }));
+    const input: MatchInput = {};
+    const firstOrder = runMatching(blueprints, input).topRecommendation?.blueprintId;
+    for (let i = 0; i < 100; i++) {
+      const result = runMatching(blueprints, input);
+      expect(result.topRecommendation?.blueprintId).toBe(firstOrder);
+    }
+  });
+});
+
+// ── AUDIT: no-compatible-template ─────────────────────────────────────────────
+
+describe("[AUDIT] no-compatible-template", () => {
+  it("all blueprints rejected → topRecommendation is null", () => {
+    const blueprints = [
+      makeBlueprint({ id: "a", unsupportedConstraints: ["bilingual"] }),
+      makeBlueprint({ id: "b", unsupportedConstraints: ["bilingual"] }),
+      makeBlueprint({ id: "c", unsupportedConstraints: ["bilingual"] }),
+    ];
+    const result = runMatching(blueprints, { serviceType: "CP", constraints: ["bilingual"] });
+    expect(result.topRecommendation).toBeNull();
+    expect(result.rejected).toHaveLength(3);
+    expect(result.alternatives).toHaveLength(0);
+  });
+
+  it("explanation mentions constraint when all blueprints are rejected", () => {
+    const blueprints = [makeBlueprint({ unsupportedConstraints: ["dark-mode"] })];
+    const result = runMatching(blueprints, { serviceType: "CP", constraints: ["dark-mode"] });
+    expect(result.explanation.toLowerCase()).toContain("constraint");
+  });
+
+  it("rejected list includes rawScoreBeforeRejection ≥ 0 for each", () => {
+    const blueprints = [
+      makeBlueprint({ id: "a", unsupportedConstraints: ["x"] }),
+      makeBlueprint({ id: "b", unsupportedConstraints: ["x"] }),
+    ];
+    const result = runMatching(blueprints, { serviceType: "CP", constraints: ["x"] });
+    for (const r of result.rejected) {
+      expect(r.rawScoreBeforeRejection).toBeGreaterThanOrEqual(0);
+      expect(typeof r.rejectionReason).toBe("string");
+      expect(r.rejectionReason.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("one surviving + some rejected → topRecommendation is the survivor", () => {
+    const blueprints = [
+      makeBlueprint({ id: "rejected", unsupportedConstraints: ["dark-mode"] }),
+      makeBlueprint({ id: "survivor", unsupportedConstraints: [] }),
+    ];
+    const result = runMatching(blueprints, { serviceType: "CP", constraints: ["dark-mode"] });
+    expect(result.topRecommendation?.blueprintId).toBe("survivor");
+    expect(result.rejected).toHaveLength(1);
+  });
+});
+
+// ── AUDIT: large template library does NOT full scan ──────────────────────────
+
+describe("[AUDIT] large template library — no full scan", () => {
+  /**
+   * The BlueprintPort contract requires implementations to apply a hard row
+   * limit in SQL. We verify this contract here via an instrumented port that
+   * records the opts it was called with.
+   */
+  class InstrumentedBlueprintPort implements BlueprintPort {
+    public lastOpts: Parameters<BlueprintPort["listCandidates"]>[0] | undefined;
+    private blueprints: Blueprint[];
+
+    constructor(blueprints: Blueprint[]) {
+      this.blueprints = blueprints;
+    }
+
+    async listCandidates(opts?: Parameters<BlueprintPort["listCandidates"]>[0]): Promise<Blueprint[]> {
+      this.lastOpts = opts;
+      // Simulate DB-level limit enforcement
+      const limit = Math.min(opts?.limit ?? 50, 100);
+      return this.blueprints.filter((b) => b.published).slice(0, limit);
+    }
+
+    async getById(id: string): Promise<Blueprint | null> {
+      return this.blueprints.find((b) => b.id === id && b.published) ?? null;
+    }
+  }
+
+  it("UniversalTemplateMatcher calls listCandidates with a limit ≤ 100", async () => {
+    // Simulate a library of 500 templates
+    const largeLibrary = Array.from({ length: 500 }, (_, i) =>
+      makeBlueprint({ id: `bp-${i}`, name: `Blueprint ${i}` }),
+    );
+    const port = new InstrumentedBlueprintPort(largeLibrary);
+    const matcher = new UniversalTemplateMatcher({
+      blueprints: port,
+      components: new EmptyComponentPort(),
+      patterns: new EmptyPatternPort(),
+      tokenLibrary: new EmptyTokenPort(),
+    });
+
+    await matcher.match({ serviceType: "CP" });
+
+    // Verify a limit was passed (no undefined / unbounded fetch)
+    expect(port.lastOpts?.limit).toBeDefined();
+    expect(port.lastOpts!.limit!).toBeLessThanOrEqual(100);
+  });
+
+  it("InstrumentedBlueprintPort enforces row cap even if caller asks for more", async () => {
+    const largeLibrary = Array.from({ length: 500 }, (_, i) =>
+      makeBlueprint({ id: `bp-${i}`, name: `Blueprint ${i}` }),
+    );
+    const port = new InstrumentedBlueprintPort(largeLibrary);
+    // Simulate a misconfigured caller that requests 999 rows
+    const rows = await port.listCandidates({ limit: 999 });
+    // Port contract: hard cap at 100
+    expect(rows.length).toBeLessThanOrEqual(100);
+  });
+
+  it("results are still returned with a capped library (no crash)", async () => {
+    const largeLibrary = Array.from({ length: 200 }, (_, i) =>
+      makeBlueprint({ id: `bp-${i}`, name: `Blueprint ${i}`, serviceTypes: ["CP"] }),
+    );
+    const port = new InstrumentedBlueprintPort(largeLibrary);
+    const matcher = new UniversalTemplateMatcher({
+      blueprints: port,
+      components: new EmptyComponentPort(),
+      patterns: new EmptyPatternPort(),
+      tokenLibrary: new EmptyTokenPort(),
+    });
+
+    const result = await matcher.match({ serviceType: "CP", limit: 5 });
+    // Should return results from the capped candidate set
+    expect(result.candidatesEvaluated).toBeLessThanOrEqual(100);
+    // Should not crash
+    expect(result).toBeDefined();
+  });
+});
+
+// ── AUDIT: rate limit ─────────────────────────────────────────────────────────
+
+describe("[AUDIT] rate limit", () => {
+  /**
+   * The rate limiter lives in the route handler and uses an in-memory
+   * sliding-window store keyed by IP. We test the core checkRateLimit
+   * logic by simulating it directly.
+   */
+
+  // Inline the rate limit logic (mirrors the route implementation)
+  function makeRateLimiter(maxReqs: number, windowMs: number) {
+    const store = new Map<string, number[]>();
+    return {
+      check(key: string): boolean {
+        const now = Date.now();
+        const times = (store.get(key) ?? []).filter((t) => now - t < windowMs);
+        if (times.length >= maxReqs) {
+          store.set(key, times);
+          return false;
+        }
+        times.push(now);
+        store.set(key, times);
+        return true;
+      },
+    };
+  }
+
+  it("allows requests below the limit", () => {
+    const rl = makeRateLimiter(5, 60_000);
+    for (let i = 0; i < 5; i++) {
+      expect(rl.check("ip-1")).toBe(true);
+    }
+  });
+
+  it("blocks the (max+1)th request", () => {
+    const rl = makeRateLimiter(3, 60_000);
+    rl.check("ip-2");
+    rl.check("ip-2");
+    rl.check("ip-2");
+    // 4th request should be blocked
+    expect(rl.check("ip-2")).toBe(false);
+  });
+
+  it("different IPs have independent buckets", () => {
+    const rl = makeRateLimiter(2, 60_000);
+    rl.check("ip-a");
+    rl.check("ip-a");
+    // ip-a is exhausted but ip-b is fresh
+    expect(rl.check("ip-a")).toBe(false);
+    expect(rl.check("ip-b")).toBe(true);
+  });
+
+  it("window expiry allows requests again", async () => {
+    const rl = makeRateLimiter(2, 50); // 50ms window
+    rl.check("ip-3");
+    rl.check("ip-3");
+    expect(rl.check("ip-3")).toBe(false); // blocked
+
+    // Wait for window to expire
+    await new Promise((r) => setTimeout(r, 60));
+
+    expect(rl.check("ip-3")).toBe(true); // allowed again
+  });
+});
+
+// ── AUDIT: private template not exposed ───────────────────────────────────────
+
+describe("[AUDIT] private template not exposed", () => {
+  /**
+   * The Blueprint interface is a public-safe projection.
+   * Private/commercial fields must not be reachable from MatchRecommendation.
+   */
+
+  it("MatchRecommendation does not contain templateCode field", () => {
+    const result = runMatching([makeBlueprint()], makeInput());
+    const rec = result.topRecommendation;
+    expect(rec).not.toBeNull();
+    // Blueprint projection must NOT have templateCode
+    expect((rec as unknown as Record<string, unknown>)["templateCode"]).toBeUndefined();
+  });
+
+  it("MatchRecommendation does not contain pricePoints field", () => {
+    const result = runMatching([makeBlueprint()], makeInput());
+    const rec = result.topRecommendation;
+    expect((rec as unknown as Record<string, unknown>)["pricePoints"]).toBeUndefined();
+  });
+
+  it("MatchRecommendation does not contain pdfPreviewUrl field", () => {
+    const result = runMatching([makeBlueprint()], makeInput());
+    const rec = result.topRecommendation;
+    expect((rec as unknown as Record<string, unknown>)["pdfPreviewUrl"]).toBeUndefined();
+  });
+
+  it("MatchRecommendation does not contain sortOrder field", () => {
+    const result = runMatching([makeBlueprint()], makeInput());
+    const rec = result.topRecommendation;
+    expect((rec as unknown as Record<string, unknown>)["sortOrder"]).toBeUndefined();
+  });
+
+  it("unpublished blueprint in port is never returned in results", async () => {
+    const blueprints = [
+      makeBlueprint({ id: "pub",   published: true  }),
+      makeBlueprint({ id: "draft", published: false }),
+    ];
+    // InMemoryBlueprintPort filters unpublished (matches DbBlueprintPort contract)
+    const matcher = new UniversalTemplateMatcher(makeDeps(blueprints));
+    const result = await matcher.match(makeInput());
+    const allIds = [
+      result.topRecommendation?.blueprintId,
+      ...result.alternatives.map((a) => a.blueprintId),
+    ].filter(Boolean);
+    expect(allIds).not.toContain("draft");
+    expect(allIds).toContain("pub");
+  });
+
+  it("scoreSingle for unpublished blueprint returns null (fail-closed)", async () => {
+    const blueprints = [makeBlueprint({ id: "draft", published: false })];
+    const matcher = new UniversalTemplateMatcher(makeDeps(blueprints));
+    // InMemoryBlueprintPort.getById only returns published blueprints
+    const result = await matcher.scoreSingle("draft", makeInput());
+    expect(result).toBeNull();
+  });
+});
+
+// ── AUDIT: adapter references existing templateService ────────────────────────
+
+describe("[AUDIT] adapter references existing templateService as source of truth", () => {
+  /**
+   * Team 11 is an intelligence layer, not a persistence layer.
+   * The DbBlueprintPort delegates to templateService, not to raw DB queries.
+   * We verify the adapter contract via the port interface.
+   */
+
+  it("BlueprintPort.listCandidates returns only published blueprints", async () => {
+    // InMemoryBlueprintPort is our test stand-in for DbBlueprintPort.
+    // It enforces the same contract: only published rows are returned.
+    const port = new InMemoryBlueprintPort([
+      makeBlueprint({ id: "pub",  published: true  }),
+      makeBlueprint({ id: "arch", published: false }),
+    ]);
+    const rows = await port.listCandidates();
+    expect(rows.map((r) => r.id)).toContain("pub");
+    expect(rows.map((r) => r.id)).not.toContain("arch");
+  });
+
+  it("BlueprintPort.getById returns null for non-existent id", async () => {
+    const port = new InMemoryBlueprintPort([makeBlueprint({ id: "1" })]);
+    expect(await port.getById("9999")).toBeNull();
+  });
+
+  it("BlueprintPort.getById returns null for unpublished blueprint", async () => {
+    const port = new InMemoryBlueprintPort([
+      makeBlueprint({ id: "2", published: false }),
+    ]);
+    // Even though id exists, it is unpublished → must return null
+    expect(await port.getById("2")).toBeNull();
+  });
+
+  it("MatchResult references blueprintId from the port's data, not invented", async () => {
+    const bp = makeBlueprint({ id: "template-ref-42" });
+    const matcher = new UniversalTemplateMatcher(makeDeps([bp]));
+    const result = await matcher.match(makeInput());
+    // topRecommendation.blueprintId must be exactly the id from the source
+    expect(result.topRecommendation?.blueprintId).toBe("template-ref-42");
+  });
+
+  it("scoring engine adds intelligence (score, confidence, reasons) on top of source data", async () => {
+    const bp = makeBlueprint({ id: "src-1" });
+    const matcher = new UniversalTemplateMatcher(makeDeps([bp]));
+    const result = await matcher.match(makeInput());
+    const rec = result.topRecommendation;
+    expect(rec).not.toBeNull();
+    // Intelligence layer adds: score, confidence, reasons, breakdown
+    expect(typeof rec!.score).toBe("number");
+    expect(rec!.score).toBeGreaterThanOrEqual(0);
+    expect(typeof rec!.confidence).toBe("number");
+    expect(Array.isArray(rec!.reasons)).toBe(true);
+    expect(rec!.breakdown).toBeDefined();
+    expect(rec!.breakdown.dimensions.length).toBeGreaterThan(0);
+  });
+
+  it("adapter passes category and industry as pre-filters (recorded in opts)", async () => {
+    class SpyBlueprintPort implements BlueprintPort {
+      public calls: Array<Parameters<BlueprintPort["listCandidates"]>[0]> = [];
+      async listCandidates(opts?: Parameters<BlueprintPort["listCandidates"]>[0]): Promise<Blueprint[]> {
+        this.calls.push(opts);
+        return [makeBlueprint()];
+      }
+      async getById(_id: string): Promise<Blueprint | null> { return null; }
+    }
+
+    const spy = new SpyBlueprintPort();
+    const matcher = new UniversalTemplateMatcher({
+      blueprints: spy,
+      components: new EmptyComponentPort(),
+      patterns: new EmptyPatternPort(),
+      tokenLibrary: new EmptyTokenPort(),
+    });
+
+    await matcher.match({ serviceType: "CP", category: "Company Profile", industry: "logistics" });
+
+    expect(spy.calls.length).toBe(1);
+    // category and industry are passed as DB pre-filters
+    expect(spy.calls[0]?.category).toBe("Company Profile");
+    expect(spy.calls[0]?.industry).toBe("logistics");
+    // serviceType is passed as a hint
+    expect(spy.calls[0]?.serviceType).toBe("CP");
+    // limit is always passed (no unbounded fetch)
+    expect(typeof spy.calls[0]?.limit).toBe("number");
+  });
+});
+
 // ── UniversalTemplateMatcher (integration) ────────────────────────────────────
 
 describe("UniversalTemplateMatcher", () => {

@@ -32,15 +32,36 @@
   "sharedTypesRequested": [
     "BrandDnaView from creativeBrandIntelligenceService — callers may pass brandDna fields from this shape"
   ],
+  "sourceOfTruth": {
+    "service": "templateService.ts",
+    "function": "listTemplates(GalleryFilter) / getTemplate(id)",
+    "table": "ai_templates (via @workspace/db aiTemplatesTable)",
+    "note": "Team 11 is an intelligence/adapter layer only. DbBlueprintPort delegates ALL data reads to templateService. Team 11 adds: scoring, explanation, confidence. Team 11 does NOT own template persistence."
+  },
+  "performanceProfile": {
+    "candidateFetchLimit": 50,
+    "hardCap": 100,
+    "dbPreFilters": ["status = 'published'", "category (exact)", "industry (eq OR IS NULL)"],
+    "stylePreFilter": "intentionally NOT used as DB pre-filter — style is a soft signal, scoring engine handles it to avoid excluding good candidates",
+    "scoringComplexity": "O(N × 13) where N ≤ 50 (hard cap)"
+  },
+  "rateLimiting": {
+    "matchEndpoint": "20 req/min per IP",
+    "scoreEndpoint": "30 req/min per IP",
+    "implementation": "in-memory sliding window (single-instance safe)",
+    "note": "Replace with Redis-backed rate limiting for multi-instance deployments"
+  },
   "integrationOrder": [
     "Routes must be mounted AFTER adminAuthWithExceptions middleware is applied in app.ts (already global — no change needed)",
+    "templateService.ts must be available (it is — existing service, no new dependency)",
     "No dependency on other teams' features",
-    "No migration required for MVP — uses existing ai_templates table via port abstraction"
+    "No migration required for MVP — uses existing ai_templates table via templateService adapter"
   ],
   "knownRisks": [
     "ai_templates table must be seeded (pnpm seed) for matching to return results — empty table returns topRecommendation: null",
     "categoryToServiceTypes mapper in adapters.ts is a best-effort heuristic — extend when new categories are added",
     "StaticComponentPort / StaticPatternPort / StaticTokenLibraryPort are stubs — replace with DB-backed versions when dedicated tables exist",
-    "Confidence will be low when callers omit brand DNA or industry — expected behaviour, not a bug"
+    "Confidence will be low when callers omit brand DNA or industry — expected behaviour, not a bug",
+    "In-memory rate limiter resets on process restart — acceptable for single-instance; use Redis for multi-instance"
   ]
 }
