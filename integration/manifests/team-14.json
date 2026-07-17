@@ -17,6 +17,23 @@
     ]
   },
 
+  "routesToMount": {
+    "file": "artifacts/api-server/src/routes/index.ts",
+    "import": "import universalRendererRouter from \"./universal-renderer/index.js\";",
+    "use": "router.use(universalRendererRouter);",
+    "insertAfter": "router.use(creativeMarketplaceRouter);"
+  },
+
+  "publicPathExceptions": {
+    "file": "artifacts/api-server/src/middleware/adminAuth.ts",
+    "array": "PUBLIC_PATH_PREFIXES",
+    "entries": [
+      "/ai/universal-renderer/health",
+      "/ai/universal-renderer/formats"
+    ],
+    "reason": "Health probe and format-capability metadata are public; no admin key required. POST /render and POST /render/async remain admin-key protected."
+  },
+
   "ports": [
     {
       "name": "SvgRendererPort",
@@ -151,14 +168,30 @@
     "watermarkFailClosed": true,
     "storageRedactionRequired": true,
     "ssrfGuard": "https-only SVG external refs",
-    "auditRequired": true
+    "auditRequired": true,
+    "adminRoutes": [
+      "POST /ai/universal-renderer/render",
+      "POST /ai/universal-renderer/render/async"
+    ],
+    "publicRoutes": [
+      "GET /ai/universal-renderer/health",
+      "GET /ai/universal-renderer/formats"
+    ]
   },
 
   "routes": [
-    { "method": "GET",  "path": "/ai/universal-renderer/formats",      "description": "List supported output formats" },
-    { "method": "GET",  "path": "/ai/universal-renderer/health",       "description": "Renderer health probe" },
-    { "method": "POST", "path": "/ai/universal-renderer/render",       "description": "Synchronous render (all formats)" },
-    { "method": "POST", "path": "/ai/universal-renderer/render/async", "description": "Enqueue async render job" }
+    { "method": "GET",  "path": "/ai/universal-renderer/formats",      "auth": "public",  "description": "List supported output formats" },
+    { "method": "GET",  "path": "/ai/universal-renderer/health",       "auth": "public",  "description": "Renderer health probe" },
+    { "method": "POST", "path": "/ai/universal-renderer/render",       "auth": "admin",   "description": "Synchronous render (all formats)" },
+    { "method": "POST", "path": "/ai/universal-renderer/render/async", "auth": "admin",   "description": "Enqueue async render job" }
+  ],
+
+  "integrationNotes": [
+    "Team 24 (integration): mount universalRendererRouter in routes/index.ts (see routesToMount above).",
+    "Team 24 (integration): add /ai/universal-renderer/health and /ai/universal-renderer/formats to PUBLIC_PATH_PREFIXES in middleware/adminAuth.ts (see publicPathExceptions above).",
+    "Team 24 (integration): register 9 universal_render_* job types in jobCompletionGuard.ts with requiresAsset:true and requiredResultFields:[requestId,artifacts].",
+    "Team 24 (integration): add universal_render* dispatch case in jobWorkerService.ts calling executeUniversalRenderJob from artifacts/api-server/src/workers/universal-renderer/universalRenderWorker.ts.",
+    "Migration draft is in integration/migrations/team-14.sql — apply via Team 24 migration runner only."
   ],
 
   "migrations": [

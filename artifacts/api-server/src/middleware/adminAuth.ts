@@ -75,8 +75,6 @@ const PUBLIC_PATH_PREFIXES = [
   "/storage/objects", // serves back the same public brief uploads for preview/generation
   "/ai/catalog/public", // customer-facing catalog — must never require the admin key
   "/internal/auth/login", // internal staff login — must be reachable before a session exists
-  "/ai/universal-renderer/health",  // Team 14 — monitoring health check
-  "/ai/universal-renderer/formats", // Team 14 — public format capability metadata
 ];
 
 /**
