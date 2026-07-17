@@ -1,0 +1,437 @@
+openapi: "3.1.0"
+info:
+  title: "Team 12 — Constraint-Based AI Layout Composer"
+  version: "1.0.0"
+  description: |
+    OpenAPI fragment for the Layout Composer domain.
+    Mount point prefix: /ai/layout-composer
+    Team 24 will merge this into root openapi.yaml.
+
+# ── Paths ──────────────────────────────────────────────────────
+
+paths:
+  /ai/layout-composer/operations:
+    get:
+      operationId: layoutComposer_listOperations
+      summary: List supported layout operation types
+      tags: [LayoutComposer]
+      security:
+        - adminApiKey: []
+      responses:
+        "200":
+          description: List of supported operations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupportedOperationsResponse"
+
+  /ai/layout-composer/solve:
+    post:
+      operationId: layoutComposer_solve
+      summary: Run constraint solver — returns full LayoutPlan
+      tags: [LayoutComposer]
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LayoutRequest"
+      responses:
+        "200":
+          description: Solved layout plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LayoutPlan"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /ai/layout-composer/validate:
+    post:
+      operationId: layoutComposer_validate
+      summary: Validate current element positions against constraints (no solving)
+      tags: [LayoutComposer]
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateRequest"
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidateResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /ai/layout-composer/plan:
+    post:
+      operationId: layoutComposer_plan
+      summary: Dry-run solver — returns operation list only
+      tags: [LayoutComposer]
+      security:
+        - adminApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LayoutRequest"
+      responses:
+        "200":
+          description: Operation plan (no element state)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationPlan"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+# ── Components ─────────────────────────────────────────────────
+
+components:
+  securitySchemes:
+    adminApiKey:
+      type: apiKey
+      in: header
+      name: x-admin-api-key
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: string
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: string
+
+  schemas:
+
+    # ── Geometry ─────────────────────────────────────────────
+
+    Point:
+      type: object
+      required: [x, y]
+      properties:
+        x: { type: number }
+        y: { type: number }
+
+    Rect:
+      type: object
+      required: [x, y, width, height]
+      properties:
+        x:      { type: number }
+        y:      { type: number }
+        width:  { type: number, minimum: 0 }
+        height: { type: number, minimum: 0 }
+
+    Padding:
+      type: object
+      properties:
+        top:    { type: number, minimum: 0 }
+        right:  { type: number, minimum: 0 }
+        bottom: { type: number, minimum: 0 }
+        left:   { type: number, minimum: 0 }
+
+    TextStyle:
+      type: object
+      required: [fontSize, lineHeight]
+      properties:
+        fontSize:       { type: number, minimum: 1 }
+        lineHeight:     { type: number, minimum: 1 }
+        letterSpacing:  { type: number }
+        charWidthRatio: { type: number, minimum: 0.1, maximum: 1 }
+        maxLines:       { type: integer, minimum: 1 }
+
+    # ── Elements ─────────────────────────────────────────────
+
+    ElementType:
+      type: string
+      enum: [box, text, image, group, furniture, panel]
+
+    LayoutElement:
+      type: object
+      required: [id, type, x, y, width, height]
+      properties:
+        id:        { type: string, minLength: 1 }
+        type:      { $ref: "#/components/schemas/ElementType" }
+        x:         { type: number }
+        y:         { type: number }
+        width:     { type: number, minimum: 0 }
+        height:    { type: number, minimum: 0 }
+        rotation:  { type: number }
+        zIndex:    { type: integer }
+        content:   { type: string }
+        textStyle: { $ref: "#/components/schemas/TextStyle" }
+        zone:      { type: string }
+        children:  { type: array, items: { type: string } }
+        locked:    { type: boolean }
+        meta:      { type: object, additionalProperties: true }
+
+    # ── Canvas ───────────────────────────────────────────────
+
+    LayoutCanvas:
+      type: object
+      required: [width, height]
+      properties:
+        width:    { type: number, minimum: 1 }
+        height:   { type: number, minimum: 1 }
+        padding:  { $ref: "#/components/schemas/Padding" }
+        safeZone: { $ref: "#/components/schemas/Rect" }
+
+    # ── Zones ────────────────────────────────────────────────
+
+    ZoneCategory:
+      type: string
+      enum: [room, garment, generic]
+
+    SeamLine:
+      type: object
+      required: [id, from, to]
+      properties:
+        id:   { type: string }
+        from: { $ref: "#/components/schemas/Point" }
+        to:   { $ref: "#/components/schemas/Point" }
+
+    LayoutZone:
+      type: object
+      required: [id, label, category, rect]
+      properties:
+        id:                  { type: string }
+        label:               { type: string }
+        category:            { $ref: "#/components/schemas/ZoneCategory" }
+        rect:                { $ref: "#/components/schemas/Rect" }
+        seamLines:
+          type: array
+          items: { $ref: "#/components/schemas/SeamLine" }
+        allowedElementTypes:
+          type: array
+          items: { $ref: "#/components/schemas/ElementType" }
+
+    # ── Constraints ──────────────────────────────────────────
+
+    ConstraintType:
+      type: string
+      enum:
+        - fixed_position
+        - align_left
+        - align_right
+        - align_top
+        - align_bottom
+        - align_center_x
+        - align_center_y
+        - align_to_element
+        - fixed_size
+        - min_width
+        - max_width
+        - min_height
+        - max_height
+        - aspect_ratio
+        - spacing_min
+        - spacing_exact
+        - padding
+        - distribute_horizontal
+        - distribute_vertical
+        - hierarchy_above
+        - hierarchy_below
+        - text_fit
+        - text_min_size
+        - text_max_size
+        - no_collision
+        - safe_zone
+        - responsive
+        - room_zone
+        - garment_panel
+
+    ConstraintPriority:
+      type: string
+      enum: [hard, soft, hint]
+
+    Constraint:
+      type: object
+      required: [id, type, elementIds, priority]
+      properties:
+        id:         { type: string }
+        type:       { $ref: "#/components/schemas/ConstraintType" }
+        elementIds:
+          type: array
+          items: { type: string }
+          minItems: 1
+        params:     { type: object, additionalProperties: true }
+        priority:   { $ref: "#/components/schemas/ConstraintPriority" }
+        order:      { type: integer }
+
+    # ── Operations ───────────────────────────────────────────
+
+    OperationType:
+      type: string
+      enum: [place, move, resize, align, distribute, reorder, text_reflow, clamp, push_apart, zone_assign]
+
+    LayoutOperation:
+      type: object
+      required: [type, elementId, constraintId, before, after, reason, iteration]
+      properties:
+        type:         { $ref: "#/components/schemas/OperationType" }
+        elementId:    { type: string }
+        constraintId: { type: string }
+        before:       { type: object, additionalProperties: true }
+        after:        { type: object, additionalProperties: true }
+        reason:       { type: string }
+        iteration:    { type: integer, minimum: 0 }
+
+    # ── Violations ───────────────────────────────────────────
+
+    ViolationSeverity:
+      type: string
+      enum: [error, warning, info]
+
+    ConstraintViolation:
+      type: object
+      required: [constraintId, constraintType, elementIds, message, severity]
+      properties:
+        constraintId:   { type: string }
+        constraintType: { $ref: "#/components/schemas/ConstraintType" }
+        elementIds:
+          type: array
+          items: { type: string }
+        message:  { type: string }
+        severity: { $ref: "#/components/schemas/ViolationSeverity" }
+        detail:   { type: object, additionalProperties: true }
+
+    # ── Plan ─────────────────────────────────────────────────
+
+    LayoutPlan:
+      type: object
+      required:
+        - id
+        - operations
+        - elements
+        - violations
+        - satisfactionScore
+        - iterations
+        - converged
+        - deterministic
+        - solvedAt
+      properties:
+        id:                { type: string }
+        operations:
+          type: array
+          items: { $ref: "#/components/schemas/LayoutOperation" }
+        elements:
+          type: array
+          items: { $ref: "#/components/schemas/LayoutElement" }
+        violations:
+          type: array
+          items: { $ref: "#/components/schemas/ConstraintViolation" }
+        satisfactionScore: { type: number, minimum: 0, maximum: 1 }
+        iterations:        { type: integer, minimum: 0 }
+        converged:         { type: boolean }
+        deterministic:     { type: boolean }
+        responsiveVariants:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/LayoutPlan" }
+        solvedAt:          { type: string, format: date-time }
+
+    OperationPlan:
+      type: object
+      required: [id, operations, iterations, converged]
+      properties:
+        id:         { type: string }
+        operations:
+          type: array
+          items: { $ref: "#/components/schemas/LayoutOperation" }
+        iterations: { type: integer }
+        converged:  { type: boolean }
+
+    # ── Requests ─────────────────────────────────────────────
+
+    LayoutRequest:
+      type: object
+      required: [canvas, elements, constraints]
+      properties:
+        id: { type: string }
+        canvas:
+          $ref: "#/components/schemas/LayoutCanvas"
+        elements:
+          type: array
+          items: { $ref: "#/components/schemas/LayoutElement" }
+          minItems: 0
+        constraints:
+          type: array
+          items: { $ref: "#/components/schemas/Constraint" }
+        zones:
+          type: array
+          items: { $ref: "#/components/schemas/LayoutZone" }
+        maxIterations:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+        includeResponsive:
+          type: boolean
+          default: false
+
+    ValidateRequest:
+      type: object
+      required: [canvas, elements, constraints]
+      properties:
+        canvas:
+          $ref: "#/components/schemas/LayoutCanvas"
+        elements:
+          type: array
+          items: { $ref: "#/components/schemas/LayoutElement" }
+        constraints:
+          type: array
+          items: { $ref: "#/components/schemas/Constraint" }
+        zones:
+          type: array
+          items: { $ref: "#/components/schemas/LayoutZone" }
+
+    ValidateResult:
+      type: object
+      required: [valid, violations, warnings]
+      properties:
+        valid:
+          type: boolean
+        violations:
+          type: array
+          items: { $ref: "#/components/schemas/ConstraintViolation" }
+        warnings:
+          type: array
+          items: { type: string }
+
+    SupportedOperationsResponse:
+      type: object
+      required: [operations]
+      properties:
+        operations:
+          type: array
+          items:
+            type: object
+            required: [type, description]
+            properties:
+              type:        { $ref: "#/components/schemas/OperationType" }
+              description: { type: string }
+              params:      { type: string }
