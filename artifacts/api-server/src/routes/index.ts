@@ -112,6 +112,9 @@ import fashionDesignRouter from "./fashion-design.js";
 import packagingDesignRouter from "./packaging-design.js";
 // ── Team 22: Creative Vendor Ecosystem ───────────────────────────────────
 import { vendorRouter } from "../domains/creative-vendors/index.js";
+// ── V5.0: Enterprise Template Knowledge Library ───────────────────────────
+import templateKnowledgeRouter from "./template-knowledge.js";
+import seedKnowledgeRouter from "./seedKnowledge.js";
 
 const router: IRouter = Router();
 
@@ -227,5 +230,8 @@ router.use(fashionDesignRouter);
 router.use(packagingDesignRouter);
 // ── Team 22: Creative Vendor Ecosystem — after portfolioGalleryRouter ─────
 router.use(vendorRouter);
+// ── V5.0: Enterprise Template Knowledge Library ───────────────────────────
+router.use("/template-knowledge", templateKnowledgeRouter);
+router.use("/seed", seedKnowledgeRouter);
 
 export default router;
