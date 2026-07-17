@@ -1,12 +1,17 @@
 /**
  * thumbnailService — Universal Renderer Team 14
  *
- * Generates 16:9 WebP thumbnails from SVG content.
- * Reuses the existing Sharp pipeline from presentationThumbnailService
- * rather than duplicating it.
+ * Generates 16:9 WebP thumbnails.
+ *
+ * P1 DUPLICATION fix:
+ *   SVG → WebP now delegates to encodeSvg() from the existing design-renderer
+ *   (services/design-renderer/outputEncoder.ts) instead of duplicating the
+ *   Sharp pipeline. Buffer → WebP re-encode still uses Sharp directly since
+ *   encodeSvg() only accepts SVG source.
  */
 
 import sharp from "sharp";
+import { encodeSvg } from "../design-renderer/outputEncoder.js";
 import { computeChecksum } from "./checksumService.js";
 import { RenderError } from "./errors.js";
 
@@ -36,26 +41,39 @@ export async function generateThumbnail(input: ThumbnailInput): Promise<Thumbnai
   const outW = input.width  ?? THUMB_W;
   const outH = input.height ?? THUMB_H;
 
-  let pipeline: ReturnType<typeof sharp>;
+  let buf: Buffer;
 
   if (input.source.kind === "svg") {
-    const svgBuf = Buffer.from(input.source.svgString, "utf8");
-    pipeline = sharp(svgBuf, { density: 72 });
+    // ── Delegate to design-renderer encodeSvg (reuse, no duplication) ───────
+    try {
+      const result = await encodeSvg(
+        input.source.svgString,
+        "webp",
+        input.source.canvasWidth,
+        input.source.canvasHeight,
+        { outputWidth: outW, outputHeight: outH },
+      );
+      buf = result.buffer;
+    } catch (err) {
+      if (err instanceof RenderError) throw err;
+      throw new RenderError(
+        "SHARP_RENDER_FAILED",
+        `Thumbnail generation failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   } else {
-    pipeline = sharp(input.source.buffer);
-  }
-
-  let buf: Buffer;
-  try {
-    buf = await pipeline
-      .resize(outW, outH, { fit: "cover", position: "centre" })
-      .webp({ quality: 82 })
-      .toBuffer();
-  } catch (err) {
-    throw new RenderError(
-      "SHARP_RENDER_FAILED",
-      `Thumbnail generation failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    // ── Buffer source — re-encode via Sharp (no design-renderer equivalent) ─
+    try {
+      buf = await sharp(input.source.buffer)
+        .resize(outW, outH, { fit: "cover", position: "centre" })
+        .webp({ quality: 82 })
+        .toBuffer();
+    } catch (err) {
+      throw new RenderError(
+        "SHARP_RENDER_FAILED",
+        `Thumbnail re-encode failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   return {

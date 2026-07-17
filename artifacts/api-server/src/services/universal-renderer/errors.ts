@@ -18,7 +18,19 @@ export type UniversalRenderErrorCode =
   | "SHARP_RENDER_FAILED"
   | "PDF_RENDER_FAILED"
   | "COMPOSITION_INVALID"
-  | "UNSUPPORTED_FORMAT";
+  | "UNSUPPORTED_FORMAT"
+  // P0 — SSRF
+  | "SSRF_BLOCKED"
+  | "ASSET_FETCH_TIMEOUT"
+  | "ASSET_FETCH_FAILED"
+  | "ASSET_TOO_LARGE"
+  | "ASSET_TYPE_INVALID"
+  | "ASSET_NOT_FOUND"
+  | "ASSET_CORRUPTED"
+  // P1 — Resource limits
+  | "PAYLOAD_TOO_LARGE"
+  | "ASSET_COUNT_EXCEEDED"
+  | "RENDER_TIMEOUT";
 
 export class RenderError extends Error {
   readonly code: UniversalRenderErrorCode | string;
@@ -32,11 +44,12 @@ export class RenderError extends Error {
 
 export function isRetryable(err: unknown): boolean {
   if (!(err instanceof RenderError)) return false;
-  // Transient errors that benefit from a retry
   const retryable: Array<UniversalRenderErrorCode | string> = [
     "STORAGE_VERIFY_FAILED",
     "SHARP_RENDER_FAILED",
     "PDF_RENDER_FAILED",
+    "ASSET_FETCH_TIMEOUT",
+    "ASSET_FETCH_FAILED",
   ];
   return retryable.includes(err.code);
 }

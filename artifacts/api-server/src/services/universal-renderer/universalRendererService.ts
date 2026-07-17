@@ -1,28 +1,40 @@
 /**
  * universalRendererService — Universal Renderer Team 14
  *
- * Main orchestration layer.  Accepts a UniversalRenderRequest, routes to the
- * appropriate adapter(s), applies post-processing (watermark, thumbnail,
- * print-ready, ZIP), uploads to storage, and returns a rich result.
+ * Main orchestration layer. Changes in this version (remediation):
  *
- * Dependency injection via constructor — all ports are swappable in tests.
+ *   P1 IDEMPOTENCY:
+ *     Before rendering, compute a canonical content hash and return the
+ *     cached result if one exists. After rendering, record in the cache.
+ *
+ *   P1 RESOURCE LIMIT:
+ *     Wrap the full render in Promise.race with MAX_RENDER_DURATION_MS.
+ *     Format count is capped at 10.
+ *
+ * All port interfaces remain unchanged — tests can inject mocks freely.
  */
 
 import { randomUUID } from "crypto";
-import { computeChecksum } from "./checksumService.js";
+import { computeChecksum }          from "./checksumService.js";
 import { stampWatermarkBuffer, stampWatermarkSvg } from "./watermarkService.js";
-import { generateThumbnail }  from "./thumbnailService.js";
-import { makePrintReady }     from "./printReadyService.js";
-import { buildZipPackage }    from "./zipPackageService.js";
-import { buildComposition }   from "./compositionService.js";
-import { RenderError }        from "./errors.js";
-import type { SvgRendererPort }  from "./ports/SvgRendererPort.js";
-import type { PdfRendererPort }  from "./ports/PdfRendererPort.js";
-import type { PngRendererPort, RasterFormat }  from "./ports/PngRendererPort.js";
-import type { StoragePort }      from "./ports/StoragePort.js";
-import type { JobSchedulerPort } from "./ports/JobSchedulerPort.js";
-import type { ZipEntry }         from "./zipPackageService.js";
-import type { CompositionLayer } from "./compositionService.js";
+import { generateThumbnail }        from "./thumbnailService.js";
+import { makePrintReady }           from "./printReadyService.js";
+import { buildZipPackage }          from "./zipPackageService.js";
+import { buildComposition }         from "./compositionService.js";
+import { RenderError }              from "./errors.js";
+import {
+  computeRenderHash,
+  checkIdempotency,
+  recordIdempotencyResult,
+} from "./idempotencyService.js";
+import { UNIVERSAL_RENDER_LIMITS }  from "./resourceLimits.js";
+import type { SvgRendererPort }     from "./ports/SvgRendererPort.js";
+import type { PdfRendererPort }     from "./ports/PdfRendererPort.js";
+import type { PngRendererPort, RasterFormat } from "./ports/PngRendererPort.js";
+import type { StoragePort }         from "./ports/StoragePort.js";
+import type { JobSchedulerPort }    from "./ports/JobSchedulerPort.js";
+import type { ZipEntry }            from "./zipPackageService.js";
+import type { CompositionLayer }    from "./compositionService.js";
 
 // ── Request & Result types ────────────────────────────────────────────────────
 
@@ -32,11 +44,11 @@ export type OutputFormat =
   | "jpg"
   | "webp"
   | "pdf"
-  | "pdf-print"      // print-ready PDF
-  | "thumbnail"      // 1280×720 WebP
-  | "watermarked"    // watermarked preview PDF
-  | "zip"            // ZIP package of all requested formats
-  | "composition";   // editable JSON
+  | "pdf-print"
+  | "thumbnail"
+  | "watermarked"
+  | "zip"
+  | "composition";
 
 export interface RenderSource {
   kind:         "svg";
@@ -46,22 +58,16 @@ export interface RenderSource {
 }
 
 export interface UniversalRenderRequest {
-  /** Unique render request ID — generated if not provided. */
-  requestId?:    string;
-  source:        RenderSource;
-  formats:       OutputFormat[]; // at least one
-  /** When true, preview outputs are watermarked. */
-  previewMode?:  boolean;
-  /** Where to upload results in storage (prefix). */
+  requestId?:     string;
+  source:         RenderSource;
+  formats:        OutputFormat[];
+  previewMode?:   boolean;
   storagePrefix?: string;
-  /** Package name for ZIP outputs. */
-  packageName?:  string;
-  /** Title / creator for PDF metadata. */
+  packageName?:   string;
   metadata?: {
     title?:   string;
     creator?: string;
   };
-  /** Tenant ID (WP-06). */
   tenantId?: string;
 }
 
@@ -72,18 +78,18 @@ export interface RenderArtifact {
   fileSizeBytes: number;
   checksum:      string;
   mimeType:      string;
-  /** Only set for raster outputs. */
   width?:        number;
   height?:       number;
-  /** Only set for PDF outputs. */
   pageCount?:    number;
 }
 
 export interface UniversalRenderResult {
-  requestId:  string;
-  artifacts:  RenderArtifact[];
-  warnings:   string[];
-  durationMs: number;
+  requestId:     string;
+  artifacts:     RenderArtifact[];
+  warnings:      string[];
+  durationMs:    number;
+  /** True when served from the idempotency cache (no re-render). */
+  cached?:       boolean;
 }
 
 // ── Deps interface ────────────────────────────────────────────────────────────
@@ -93,7 +99,18 @@ export interface UniversalRendererDeps {
   pdfRenderer:   PdfRendererPort;
   pngRenderer:   PngRendererPort;
   storage:       StoragePort;
-  jobScheduler?: JobSchedulerPort; // optional — only needed for async dispatch
+  jobScheduler?: JobSchedulerPort;
+}
+
+// ── Timeout helper ────────────────────────────────────────────────────────────
+
+function renderTimeout(ms: number): Promise<never> {
+  return new Promise((_, reject) =>
+    setTimeout(
+      () => reject(new RenderError("RENDER_TIMEOUT", `Render exceeded ${ms}ms limit`)),
+      ms,
+    ),
+  );
 }
 
 // ── Service class ─────────────────────────────────────────────────────────────
@@ -102,19 +119,49 @@ export class UniversalRendererService {
   constructor(private readonly deps: UniversalRendererDeps) {}
 
   async render(req: UniversalRenderRequest): Promise<UniversalRenderResult> {
-    const startMs   = Date.now();
-    const requestId = req.requestId ?? randomUUID();
-    const warnings:  string[] = [];
-
+    // ── Guard: at least one format ──────────────────────────────────────────
     if (!req.formats || req.formats.length === 0) {
       throw new RenderError("UNSUPPORTED_FORMAT", "At least one output format must be requested");
     }
 
-    const prefix   = (req.storagePrefix ?? `universal-renders/${requestId}`).replace(/\/$/, "");
-    const metadata = req.metadata ?? {};
+    // ── Guard: format count cap ─────────────────────────────────────────────
+    const MAX_FORMATS = 10;
+    if (req.formats.length > MAX_FORMATS) {
+      throw new RenderError(
+        "UNSUPPORTED_FORMAT",
+        `Too many output formats requested (${req.formats.length} > ${MAX_FORMATS})`,
+      );
+    }
+
+    // ── P1 IDEMPOTENCY: return cached result if available ──────────────────
+    const contentHash = computeRenderHash(req);
+    const cached = checkIdempotency(contentHash);
+    if (cached) {
+      return { ...cached, cached: true };
+    }
+
+    // ── P1 RESOURCE LIMIT: race against wall-clock timeout ─────────────────
+    const result = await Promise.race([
+      this._doRender(req),
+      renderTimeout(UNIVERSAL_RENDER_LIMITS.MAX_RENDER_DURATION_MS),
+    ]);
+
+    // ── Record in idempotency cache after success ───────────────────────────
+    recordIdempotencyResult(contentHash, result);
+
+    return result;
+  }
+
+  private async _doRender(req: UniversalRenderRequest): Promise<UniversalRenderResult> {
+    const startMs   = Date.now();
+    const requestId = req.requestId ?? randomUUID();
+    const warnings:  string[] = [];
+
+    const prefix     = (req.storagePrefix ?? `universal-renders/${requestId}`).replace(/\/$/, "");
+    const metadata   = req.metadata ?? {};
     const artifacts: RenderArtifact[] = [];
 
-    // ── Step 1: Render SVG from source ──────────────────────────────────────
+    // ── Step 1: Render / sanitise SVG ──────────────────────────────────────
     const svgOut = await this.deps.svgRenderer.render({
       svgContent:   req.source.svgContent,
       canvasWidth:  req.source.canvasWidth,
@@ -122,87 +169,72 @@ export class UniversalRendererService {
     });
     warnings.push(...svgOut.warnings);
 
-    let svgString = svgOut.svgString;
-
-    // Apply SVG watermark before rasterising if in preview mode and SVG output requested
+    const svgString      = svgOut.svgString;
     const needsWatermark = req.previewMode === true;
-
-    // ── Step 2: Produce each requested format ────────────────────────────────
-
     const zipEntries: ZipEntry[] = [];
 
+    // ── Step 2: Produce each requested format ───────────────────────────────
     for (const format of req.formats) {
       const artifact = await this.renderOneFormat({
         format,
         svgString,
-        source: req.source,
+        source:       req.source,
         metadata,
         needsWatermark,
         prefix,
-        packageName: req.packageName ?? `render-${requestId}`,
+        packageName:  req.packageName ?? `render-${requestId}`,
         zipEntries,
         warnings,
         requestId,
       });
-      if (artifact) {
-        artifacts.push(artifact);
-      }
+      if (artifact) artifacts.push(artifact);
     }
 
-    // ── Step 3: Build ZIP if requested ───────────────────────────────────────
+    // ── Step 3: Build ZIP if requested ─────────────────────────────────────
     if (req.formats.includes("zip")) {
       if (zipEntries.length === 0) {
-        throw new RenderError("ZIP_EMPTY", "ZIP format requested but no render outputs were produced");
+        throw new RenderError("ZIP_EMPTY", "ZIP requested but no render outputs were produced");
       }
-      const pkg = await buildZipPackage({
+      const pkg  = await buildZipPackage({
         entries:     zipEntries,
         packageName: req.packageName ?? `render-${requestId}`,
       });
-
-      const zipPath   = `${prefix}/package.zip`;
-      const uploaded  = await this.deps.storage.upload({
+      const zipPath = `${prefix}/package.zip`;
+      const up      = await this.deps.storage.upload({
         buffer:      pkg.buffer,
         storagePath: zipPath,
         contentType: "application/zip",
         checksum:    pkg.checksum,
       });
-
       artifacts.push({
         format:        "zip",
-        storagePath:   uploaded.storagePath,
-        publicUrl:     uploaded.publicUrl,
+        storagePath:   up.storagePath,
+        publicUrl:     up.publicUrl,
         fileSizeBytes: pkg.fileSizeBytes,
         checksum:      pkg.checksum,
         mimeType:      "application/zip",
       });
     }
 
-    return {
-      requestId,
-      artifacts,
-      warnings,
-      durationMs: Date.now() - startMs,
-    };
+    return { requestId, artifacts, warnings, durationMs: Date.now() - startMs };
   }
 
-  // ── Private: produce one format ────────────────────────────────────────────
-
   private async renderOneFormat(ctx: {
-    format:      OutputFormat;
-    svgString:   string;
-    source:      RenderSource;
-    metadata:    { title?: string; creator?: string };
+    format:         OutputFormat;
+    svgString:      string;
+    source:         RenderSource;
+    metadata:       { title?: string; creator?: string };
     needsWatermark: boolean;
-    prefix:      string;
-    packageName: string;
-    zipEntries:  ZipEntry[];
-    warnings:    string[];
-    requestId:   string;
+    prefix:         string;
+    packageName:    string;
+    zipEntries:     ZipEntry[];
+    warnings:       string[];
+    requestId:      string;
   }): Promise<RenderArtifact | null> {
     const { format, svgString, source, metadata, needsWatermark, prefix, zipEntries, warnings } = ctx;
 
     switch (format) {
-      // ── SVG ───────────────────────────────────────────────────────────────
+
       case "svg": {
         const finalSvg = needsWatermark ? stampWatermarkSvg(svgString) : svgString;
         const buf      = Buffer.from(finalSvg, "utf8");
@@ -213,24 +245,24 @@ export class UniversalRendererService {
         return { format, storagePath: up.storagePath, publicUrl: up.publicUrl, fileSizeBytes: buf.length, checksum, mimeType: "image/svg+xml" };
       }
 
-      // ── PNG / JPG / WebP ─────────────────────────────────────────────────
       case "png":
       case "jpg":
       case "webp": {
+        // Delegates to existing design-renderer via PngRendererAdapter → encodeSvg()
         const rasterFormat: RasterFormat = format;
         const pngOut = await this.deps.pngRenderer.render({
           source: { kind: "svg", svgString, canvasWidth: source.canvasWidth, canvasHeight: source.canvasHeight },
           format: rasterFormat,
         });
-        const ext    = format === "jpg" ? "jpg" : format;
-        const path   = `${prefix}/output.${ext}`;
-        const up     = await this.deps.storage.upload({ buffer: pngOut.buffer, storagePath: path, contentType: pngOut.mimeType, checksum: pngOut.checksum });
+        const ext  = format;
+        const path = `${prefix}/output.${ext}`;
+        const up   = await this.deps.storage.upload({ buffer: pngOut.buffer, storagePath: path, contentType: pngOut.mimeType, checksum: pngOut.checksum });
         zipEntries.push({ filename: `output.${ext}`, buffer: pngOut.buffer, mimeType: pngOut.mimeType });
         return { format, storagePath: up.storagePath, publicUrl: up.publicUrl, fileSizeBytes: pngOut.fileSizeBytes, checksum: pngOut.checksum, mimeType: pngOut.mimeType, width: pngOut.width, height: pngOut.height };
       }
 
-      // ── PDF ───────────────────────────────────────────────────────────────
       case "pdf": {
+        // Delegates to existing design-renderer via PdfRendererAdapter → encodeSvg()
         const pdfOut = await this.deps.pdfRenderer.render({
           source: { kind: "svg", svgString, width: source.canvasWidth, height: source.canvasHeight },
           metadata,
@@ -243,27 +275,25 @@ export class UniversalRendererService {
         return { format, storagePath: up.storagePath, publicUrl: up.publicUrl, fileSizeBytes: finalBuf.length, checksum, mimeType: "application/pdf", pageCount: pdfOut.pageCount };
       }
 
-      // ── Print-ready PDF ───────────────────────────────────────────────────
       case "pdf-print": {
-        const pdfOut  = await this.deps.pdfRenderer.render({
+        const pdfOut = await this.deps.pdfRenderer.render({
           source: { kind: "svg", svgString, width: source.canvasWidth, height: source.canvasHeight },
           metadata,
           printReady: true,
         });
-        const prOut   = await makePrintReady({ pdfBuffer: pdfOut.buffer, title: metadata.title, creator: metadata.creator });
-        const path    = `${prefix}/output-print-ready.pdf`;
-        const up      = await this.deps.storage.upload({ buffer: prOut.buffer, storagePath: path, contentType: "application/pdf", checksum: prOut.checksum });
+        const prOut  = await makePrintReady({ pdfBuffer: pdfOut.buffer, title: metadata.title, creator: metadata.creator });
+        const path   = `${prefix}/output-print-ready.pdf`;
+        const up     = await this.deps.storage.upload({ buffer: prOut.buffer, storagePath: path, contentType: "application/pdf", checksum: prOut.checksum });
         zipEntries.push({ filename: "output-print-ready.pdf", buffer: prOut.buffer, mimeType: "application/pdf" });
         return { format, storagePath: up.storagePath, publicUrl: up.publicUrl, fileSizeBytes: prOut.fileSizeBytes, checksum: prOut.checksum, mimeType: "application/pdf", pageCount: pdfOut.pageCount };
       }
 
-      // ── Watermarked preview ───────────────────────────────────────────────
       case "watermarked": {
         const pdfOut  = await this.deps.pdfRenderer.render({
           source: { kind: "svg", svgString, width: source.canvasWidth, height: source.canvasHeight },
           metadata,
         });
-        // Fail-closed: watermark MUST succeed or we refuse to upload
+        // Fail-closed: must succeed or refuse to upload un-watermarked content
         const wBuf    = await stampWatermarkBuffer(pdfOut.buffer);
         const checksum = computeChecksum(wBuf);
         const path    = `${prefix}/preview-watermarked.pdf`;
@@ -272,18 +302,17 @@ export class UniversalRendererService {
         return { format, storagePath: up.storagePath, publicUrl: up.publicUrl, fileSizeBytes: wBuf.length, checksum, mimeType: "application/pdf", pageCount: pdfOut.pageCount };
       }
 
-      // ── Thumbnail ─────────────────────────────────────────────────────────
       case "thumbnail": {
+        // thumbnailService now delegates SVG→WebP to encodeSvg() (design-renderer)
         const thumbOut = await generateThumbnail({
           source: { kind: "svg", svgString, canvasWidth: source.canvasWidth, canvasHeight: source.canvasHeight },
         });
-        const path     = `${prefix}/thumbnail.webp`;
-        const up       = await this.deps.storage.upload({ buffer: thumbOut.buffer, storagePath: path, contentType: "image/webp", checksum: thumbOut.checksum });
+        const path = `${prefix}/thumbnail.webp`;
+        const up   = await this.deps.storage.upload({ buffer: thumbOut.buffer, storagePath: path, contentType: "image/webp", checksum: thumbOut.checksum });
         zipEntries.push({ filename: "thumbnail.webp", buffer: thumbOut.buffer, mimeType: "image/webp" });
         return { format, storagePath: up.storagePath, publicUrl: up.publicUrl, fileSizeBytes: thumbOut.fileSizeBytes, checksum: thumbOut.checksum, mimeType: "image/webp", width: thumbOut.width, height: thumbOut.height };
       }
 
-      // ── Composition JSON ──────────────────────────────────────────────────
       case "composition": {
         const layer: Omit<CompositionLayer, "id"> = {
           kind:    "svg",
@@ -306,9 +335,8 @@ export class UniversalRendererService {
         return { format, storagePath: up.storagePath, publicUrl: up.publicUrl, fileSizeBytes: buf.length, checksum, mimeType: "application/json" };
       }
 
-      // ── ZIP — handled after the loop ──────────────────────────────────────
       case "zip":
-        return null;
+        return null; // handled after loop
 
       default:
         warnings.push(`Unknown output format "${format as string}" — skipped`);
@@ -316,10 +344,6 @@ export class UniversalRendererService {
     }
   }
 
-  /**
-   * Enqueue an asynchronous render job via the JobSchedulerPort.
-   * The worker picks this up and calls render() internally.
-   */
   async enqueueRender(req: UniversalRenderRequest): Promise<{ jobId: number; jobCode: string }> {
     if (!this.deps.jobScheduler) {
       throw new RenderError("UNSUPPORTED_FORMAT", "JobScheduler not configured — cannot enqueue async render");

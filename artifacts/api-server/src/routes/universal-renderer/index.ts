@@ -8,6 +8,10 @@
  *
  * Auth: all routes are protected by the global adminAuth middleware (app.ts).
  * No zod import — manual validation per project convention for api-server routes.
+ *
+ * P1 RESOURCE LIMIT:
+ *   • Max request body: 10 MB (UNIVERSAL_RENDER_LIMITS.MAX_PAYLOAD_BYTES)
+ *   • Max canvas width/height: validated against UNIVERSAL_RENDER_LIMITS
  */
 
 import { Router } from "express";
@@ -22,10 +26,11 @@ import type {
   OutputFormat,
 } from "../../services/universal-renderer/index.js";
 import { StorageAdapter } from "../../services/universal-renderer/adapters/StorageAdapter.js";
+import { UNIVERSAL_RENDER_LIMITS } from "../../services/universal-renderer/resourceLimits.js";
 
 const router = Router();
 
-// ── Supported formats list ────────────────────────────────────────────────────
+// ── Supported formats ─────────────────────────────────────────────────────────
 
 const SUPPORTED_FORMATS: OutputFormat[] = [
   "svg", "png", "jpg", "webp", "pdf", "pdf-print",
@@ -35,6 +40,31 @@ const SUPPORTED_FORMATS: OutputFormat[] = [
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const storage = new StorageAdapter();
+
+/** Enforce request body size limit before any processing. */
+function assertPayloadSize(req: import("express").Request): void {
+  const cl = parseInt(
+    (req.headers["content-length"] as string | undefined) ?? "0",
+    10,
+  );
+  if (cl > UNIVERSAL_RENDER_LIMITS.MAX_PAYLOAD_BYTES) {
+    throw new RenderError(
+      "PAYLOAD_TOO_LARGE",
+      `Request body (${cl} bytes) exceeds ${UNIVERSAL_RENDER_LIMITS.MAX_PAYLOAD_BYTES} byte limit`,
+    );
+  }
+  // Belt-and-suspenders: also check body byteLength if express already parsed it
+  const body = req.body as Record<string, unknown> | undefined;
+  if (body) {
+    const serialised = JSON.stringify(body);
+    if (Buffer.byteLength(serialised, "utf8") > UNIVERSAL_RENDER_LIMITS.MAX_PAYLOAD_BYTES) {
+      throw new RenderError(
+        "PAYLOAD_TOO_LARGE",
+        `Parsed request body exceeds ${UNIVERSAL_RENDER_LIMITS.MAX_PAYLOAD_BYTES} byte limit`,
+      );
+    }
+  }
+}
 
 function parseFormats(raw: unknown): OutputFormat[] {
   if (Array.isArray(raw)) {
@@ -69,6 +99,18 @@ function parseSource(body: Record<string, unknown>): UniversalRenderRequest["sou
   if (!Number.isFinite(w) || !Number.isFinite(h) || w < 1 || h < 1) {
     throw new RenderError("CANVAS_LIMIT_EXCEEDED", "source.canvasWidth and canvasHeight must be positive numbers");
   }
+  if (w > UNIVERSAL_RENDER_LIMITS.MAX_CANVAS_WIDTH || h > UNIVERSAL_RENDER_LIMITS.MAX_CANVAS_HEIGHT) {
+    throw new RenderError(
+      "CANVAS_LIMIT_EXCEEDED",
+      `Canvas ${w}×${h} exceeds maximum ${UNIVERSAL_RENDER_LIMITS.MAX_CANVAS_WIDTH}×${UNIVERSAL_RENDER_LIMITS.MAX_CANVAS_HEIGHT}`,
+    );
+  }
+  if (w * h > UNIVERSAL_RENDER_LIMITS.MAX_CANVAS_PIXELS) {
+    throw new RenderError(
+      "CANVAS_LIMIT_EXCEEDED",
+      `Canvas total pixels ${w * h} exceeds limit ${UNIVERSAL_RENDER_LIMITS.MAX_CANVAS_PIXELS}`,
+    );
+  }
   return {
     kind:         "svg",
     svgContent:   s["svgContent"] as string,
@@ -83,19 +125,28 @@ router.get("/ai/universal-renderer/formats", (_req, res): void => {
   res.json({ formats: SUPPORTED_FORMATS });
 });
 
-// ── GET /ai/universal-renderer/health ────────────────────────────────────────
+// ── GET /ai/universal-renderer/health ─────────────────────────────────────────
 
 router.get("/ai/universal-renderer/health", (_req, res): void => {
-  res.json({ status: "ok", renderer: "universal-renderer-v1" });
+  res.json({
+    status:      "ok",
+    renderer:    "universal-renderer-v1",
+    limits: {
+      maxPayloadMB:  UNIVERSAL_RENDER_LIMITS.MAX_PAYLOAD_BYTES / (1024 * 1024),
+      maxCanvasW:    UNIVERSAL_RENDER_LIMITS.MAX_CANVAS_WIDTH,
+      maxCanvasH:    UNIVERSAL_RENDER_LIMITS.MAX_CANVAS_HEIGHT,
+      maxRenderMs:   UNIVERSAL_RENDER_LIMITS.MAX_RENDER_DURATION_MS,
+    },
+  });
 });
 
 // ── POST /ai/universal-renderer/render ───────────────────────────────────────
 
 router.post("/ai/universal-renderer/render", async (req, res): Promise<void> => {
-  const body = req.body as Record<string, unknown>;
-
   let renderReq: UniversalRenderRequest;
   try {
+    assertPayloadSize(req);
+    const body    = req.body as Record<string, unknown>;
     const source  = parseSource(body);
     const formats = parseFormats(body["formats"]);
     renderReq = {
@@ -110,8 +161,9 @@ router.post("/ai/universal-renderer/render", async (req, res): Promise<void> => 
       },
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    res.status(400).json({ error: msg });
+    const msg  = err instanceof Error ? err.message : String(err);
+    const code = err instanceof RenderError ? err.code : "VALIDATION_ERROR";
+    res.status(400).json({ error: msg, code });
     return;
   }
 
@@ -127,10 +179,10 @@ router.post("/ai/universal-renderer/render", async (req, res): Promise<void> => 
       entityId:   result.requestId,
       status:     "success",
       details: {
-        formats:      renderReq.formats,
+        formats:       renderReq.formats,
         artifactCount: result.artifacts.length,
-        durationMs:   result.durationMs,
-        // Redact storage paths before audit log
+        durationMs:    result.durationMs,
+        cached:        result.cached ?? false,
         artifacts: result.artifacts.map((a) => ({
           format:    a.format,
           mimeType:  a.mimeType,
@@ -147,17 +199,20 @@ router.post("/ai/universal-renderer/render", async (req, res): Promise<void> => 
     logger.error({ err, code }, "[universal-renderer] Render failed");
 
     await logAudit({
-      actorType: "system",
-      actorId:   "api",
-      action:    "universal_render",
+      actorType:  "system",
+      actorId:    "api",
+      action:     "universal_render",
       entityType: "render",
-      entityId:  "unknown",
-      status:    "failure",
-      details:   { error: msg, code },
+      entityId:   "unknown",
+      status:     "failure",
+      details:    { error: msg, code },
     });
 
-    const status = code === "CANVAS_LIMIT_EXCEEDED" || code === "SVG_CONTENT_MISSING" ||
-                   code === "UNSUPPORTED_FORMAT" || code === "SVG_SANITISE_FAILED" ? 400 : 500;
+    const clientErrors = new Set([
+      "CANVAS_LIMIT_EXCEEDED", "SVG_CONTENT_MISSING", "UNSUPPORTED_FORMAT",
+      "SVG_SANITISE_FAILED", "SVG_TOO_LARGE", "PAYLOAD_TOO_LARGE", "SSRF_BLOCKED",
+    ]);
+    const status = clientErrors.has(code) ? 400 : 500;
     res.status(status).json({ error: msg, code });
   }
 });
@@ -165,10 +220,10 @@ router.post("/ai/universal-renderer/render", async (req, res): Promise<void> => 
 // ── POST /ai/universal-renderer/render/async ─────────────────────────────────
 
 router.post("/ai/universal-renderer/render/async", async (req, res): Promise<void> => {
-  const body = req.body as Record<string, unknown>;
-
   let renderReq: UniversalRenderRequest;
   try {
+    assertPayloadSize(req);
+    const body    = req.body as Record<string, unknown>;
     const source  = parseSource(body);
     const formats = parseFormats(body["formats"]);
     renderReq = {
@@ -183,8 +238,9 @@ router.post("/ai/universal-renderer/render/async", async (req, res): Promise<voi
       },
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    res.status(400).json({ error: msg });
+    const msg  = err instanceof Error ? err.message : String(err);
+    const code = err instanceof RenderError ? err.code : "VALIDATION_ERROR";
+    res.status(400).json({ error: msg, code });
     return;
   }
 

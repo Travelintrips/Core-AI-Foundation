@@ -28,6 +28,10 @@ export {
 export { RenderError, isRetryable } from "./errors.js";
 export type { UniversalRenderErrorCode } from "./errors.js";
 
+export { UNIVERSAL_RENDER_LIMITS } from "./resourceLimits.js";
+export { computeRenderHash, checkIdempotency, recordIdempotencyResult } from "./idempotencyService.js";
+export { validateAssetUrl, scanSvgForBlockedUrls, secureFetch } from "./ssrfFetchValidator.js";
+
 export { computeChecksum, verifyChecksum } from "./checksumService.js";
 export { stampWatermarkBuffer, stampWatermarkSvg } from "./watermarkService.js";
 export { generateThumbnail } from "./thumbnailService.js";
