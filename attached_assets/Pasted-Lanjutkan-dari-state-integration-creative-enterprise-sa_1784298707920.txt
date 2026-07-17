@@ -1,0 +1,128 @@
+Lanjutkan dari state integration/creative-enterprise saat ini.
+
+JANGAN mengulang merge.
+
+JANGAN membuat branch baru.
+
+Fokus hanya pada dua blocker yang masih tersisa.
+
+====================================================
+BLOCKER 1
+====================================================
+
+File:
+
+artifacts/api-server/src/seedCatalog.ts
+
+Audit menunjukkan:
+
+Graphic Design entries sudah ada.
+
+Presentation Document entries belum seluruhnya ikut ter-merge.
+
+Bandingkan dengan:
+
+feature/16-presentation-document
+
+Pastikan seluruh Presentation Document seed ikut masuk TANPA menghapus seluruh Graphic Design seed.
+
+Verifikasi:
+
+- seluruh Graphic Design entries tetap ada
+- seluruh Presentation Document entries ada
+- tidak ada duplicate key
+- tidak ada entry hilang
+
+====================================================
+BLOCKER 2
+====================================================
+
+Team 22 migration
+
+Audit menunjukkan ada migration yang diduga tidak idempotent.
+
+Periksa seluruh migration Team 22.
+
+Pastikan:
+
+- IF NOT EXISTS
+- IF EXISTS bila diperlukan
+- aman dijalankan berulang
+- tidak menghapus object existing
+- tidak mengubah shared schema secara destruktif
+
+Jika memang ada migration yang tidak idempotent:
+
+perbaiki seminimal mungkin.
+
+====================================================
+TEST
+====================================================
+
+Jangan jalankan full test suite dulu.
+
+Jalankan:
+
+- migration verification
+- seed verification
+- targeted tests untuk Team 16
+- targeted tests untuk Team 22
+
+====================================================
+TEST YANG GAGAL
+====================================================
+
+4 test Team 17 & Team 19
+
+Pastikan penyebabnya benar karena:
+
+"feature sekarang memang sudah diintegrasikan"
+
+Jika benar:
+
+update test agar sesuai kondisi integrated system.
+
+JANGAN mengubah production code hanya untuk membuat test lulus.
+
+====================================================
+OUTPUT
+====================================================
+
+Laporkan:
+
+1.
+seedCatalog
+
+✓ Graphic Design entries
+
+✓ Presentation entries
+
+✓ total entries
+
+2.
+
+Migration Team 22
+
+PASS
+
+atau
+
+FAIL
+
+3.
+
+4 failing tests
+
+Root cause
+
+Perbaikan
+
+4.
+
+Final Verdict
+
+READY_FOR_UAT
+
+atau
+
+BLOCKED

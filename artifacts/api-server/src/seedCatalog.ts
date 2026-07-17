@@ -38,20 +38,21 @@ interface ServiceSeed {
 
 const CATEGORIES: CategorySeed[] = [
   { code: "creative", name: "Creative AI", description: "Brand identity, design, and content production.", icon: "palette", displayOrder: 1 },
-  { code: "marketing", name: "Marketing AI", description: "Campaigns, positioning, and growth strategy.", icon: "megaphone", displayOrder: 2 },
-  { code: "sales", name: "Sales AI", description: "Lead qualification, proposals, and pipeline support.", icon: "handshake", displayOrder: 3 },
-  { code: "finance", name: "Finance AI", description: "Financial analysis, forecasting, and reporting.", icon: "line-chart", displayOrder: 4 },
-  { code: "accounting", name: "Accounting AI", description: "Bookkeeping, ledgers, and closing support.", icon: "book-open", displayOrder: 5 },
-  { code: "tax", name: "Tax AI", description: "Indonesian tax compliance and planning.", icon: "receipt", displayOrder: 6 },
-  { code: "hr", name: "HR & Payroll AI", description: "People operations and workforce support.", icon: "users", displayOrder: 7 },
-  { code: "legal", name: "Legal AI", description: "Contracts, agreements, and due diligence.", icon: "scale", displayOrder: 8 },
-  { code: "logistics", name: "Logistics AI", description: "Freight, shipment, and vendor coordination.", icon: "truck", displayOrder: 9 },
-  { code: "customs", name: "Customs & PPJK AI", description: "Import/export compliance and classification.", icon: "ship", displayOrder: 10 },
-  { code: "procurement", name: "Procurement AI", description: "Sourcing and purchasing support.", icon: "shopping-cart", displayOrder: 11 },
-  { code: "trading", name: "Trading AI", description: "Market analysis and trading support.", icon: "trending-up", displayOrder: 12 },
-  { code: "data-analytics", name: "Data Analytics AI", description: "Dashboards, insights, and reporting.", icon: "bar-chart", displayOrder: 13 },
-  { code: "executive", name: "Executive AI", description: "Strategic decision support for leadership.", icon: "briefcase", displayOrder: 14 },
-  { code: "customer-service", name: "Customer Service AI", description: "Support automation and client communication.", icon: "headset", displayOrder: 15 },
+  { code: "presentation-document", name: "Presentation & Document AI", description: "Pitch deck, proposal, laporan, dan dokumen bisnis profesional.", icon: "file-text", displayOrder: 2 },
+  { code: "marketing", name: "Marketing AI", description: "Campaigns, positioning, and growth strategy.", icon: "megaphone", displayOrder: 3 },
+  { code: "sales", name: "Sales AI", description: "Lead qualification, proposals, and pipeline support.", icon: "handshake", displayOrder: 4 },
+  { code: "finance", name: "Finance AI", description: "Financial analysis, forecasting, and reporting.", icon: "line-chart", displayOrder: 5 },
+  { code: "accounting", name: "Accounting AI", description: "Bookkeeping, ledgers, and closing support.", icon: "book-open", displayOrder: 6 },
+  { code: "tax", name: "Tax AI", description: "Indonesian tax compliance and planning.", icon: "receipt", displayOrder: 7 },
+  { code: "hr", name: "HR & Payroll AI", description: "People operations and workforce support.", icon: "users", displayOrder: 8 },
+  { code: "legal", name: "Legal AI", description: "Contracts, agreements, and due diligence.", icon: "scale", displayOrder: 9 },
+  { code: "logistics", name: "Logistics AI", description: "Freight, shipment, and vendor coordination.", icon: "truck", displayOrder: 10 },
+  { code: "customs", name: "Customs & PPJK AI", description: "Import/export compliance and classification.", icon: "ship", displayOrder: 11 },
+  { code: "procurement", name: "Procurement AI", description: "Sourcing and purchasing support.", icon: "shopping-cart", displayOrder: 12 },
+  { code: "trading", name: "Trading AI", description: "Market analysis and trading support.", icon: "trending-up", displayOrder: 13 },
+  { code: "data-analytics", name: "Data Analytics AI", description: "Dashboards, insights, and reporting.", icon: "bar-chart", displayOrder: 14 },
+  { code: "executive", name: "Executive AI", description: "Strategic decision support for leadership.", icon: "briefcase", displayOrder: 15 },
+  { code: "customer-service", name: "Customer Service AI", description: "Support automation and client communication.", icon: "headset", displayOrder: 16 },
 ];
 
 // Category-level disclaimers shown next to any service/quotation in that
@@ -65,6 +66,24 @@ export const CATEGORY_DISCLAIMERS: Record<string, string> = {
 };
 
 const SERVICES: Record<string, ServiceSeed[]> = {
+  "presentation-document": [
+    // ── Pitch Deck ───────────────────────────────────────────────────────────
+    svc("pd-pitch-deck",          "Pitch Deck Presentasi",       "Presentasi pitch deck investor-ready dengan narasi visual profesional dan storytelling berbasis data.", "one_time", "1500000", "3-5 hari",   true,  ["Creative Director AI", "Copywriter AI"], ["Pitch deck (PPTX)", "PDF export"]),
+    // ── Business Proposal ────────────────────────────────────────────────────
+    svc("pd-business-proposal",   "Proposal Bisnis",             "Proposal bisnis profesional dengan analisis kebutuhan, solusi terstruktur, dan estimasi anggaran.", "one_time", "850000",  "2-4 hari",   true,  ["Copywriter AI"], ["Business proposal PDF"]),
+    // ── Company Profile Document ─────────────────────────────────────────────
+    svc("pd-company-profile-doc", "Company Profile Dokumen",     "Dokumen company profile lengkap dengan profil perusahaan, portofolio, dan pencapaian untuk klien & mitra.", "one_time", "950000",  "4-6 hari",   true,  ["Copywriter AI", "Designer AI"], ["Company profile PDF (32+ halaman)"]),
+    // ── Annual Report ────────────────────────────────────────────────────────
+    svc("pd-annual-report",       "Laporan Tahunan",             "Laporan tahunan perusahaan dengan ringkasan kinerja, highlight finansial, dan narasi strategis.", "one_time", "2500000", "7-10 hari",  true,  ["Copywriter AI", "Finance Analyst AI"], ["Annual report PDF"]),
+    // ── Executive Summary ────────────────────────────────────────────────────
+    svc("pd-executive-summary",   "Executive Summary",           "Ringkasan eksekutif proyek atau strategi bisnis untuk presentasi kepemimpinan.", "one_time", "450000",  "1-2 hari",   true,  ["Copywriter AI"], ["Executive summary PDF"]),
+    // ── Product Catalog ──────────────────────────────────────────────────────
+    svc("pd-product-catalog",     "Katalog Produk",              "Katalog produk profesional dengan deskripsi, spesifikasi, dan harga — siap cetak dan digital.", "one_time", "1250000", "4-6 hari",   false, ["Designer AI", "Copywriter AI"], ["Product catalog PDF"]),
+    // ── Meeting Deck ─────────────────────────────────────────────────────────
+    svc("pd-meeting-deck",        "Deck Rapat / Presentasi Internal", "Presentasi rapat internal yang rapi: update proyek, status laporan, atau review bulanan.", "one_time", "350000",  "1-2 hari",   false, ["Copywriter AI"], ["Meeting deck (PPTX/PDF)"]),
+    // ── Training Material ────────────────────────────────────────────────────
+    svc("pd-training-material",   "Materi Pelatihan",            "Slide dan materi pelatihan internal untuk onboarding karyawan atau program training.", "one_time", "750000",  "3-5 hari",   true,  ["Copywriter AI", "Designer AI"], ["Training deck (PPTX)", "Handout PDF"]),
+  ],
   creative: [
     svc("logo-design", "Konsep Logo AI", "3 konsep logo awal dengan arah warna, siap dikembangkan lebih lanjut.", "one_time", "299000", "1-2 hari", false, ["Creative Director AI", "Designer AI"], ["3 konsep logo", "1 arah warna", "PNG/JPG concept"]),
     svc("brand-identity", "Paket Identitas Brand", "Sistem identitas visual lengkap: logo, warna, tipografi, dan panduan pakai.", "one_time", "1750000", "5-7 hari", true, ["Creative Director AI", "Designer AI", "Brand Strategist AI"], ["Brand guideline", "Logo suite", "Color & type system"]),
@@ -185,17 +204,6 @@ const SERVICES: Record<string, ServiceSeed[]> = {
     svc("vendor-agreement", "Perjanjian Vendor", "Penyusunan/review perjanjian vendor.", "one_time", "2000000", "2-4 hari", true, ["Legal AI"], ["Vendor agreement draft"]),
     svc("contract-summary", "Ringkasan Kontrak", "Ringkasan poin-poin utama kontrak.", "one_time", "500000", "1 hari", false, ["Legal AI"], ["Contract summary document"]),
     svc("legal-ai-monthly", "Legal AI Bulanan", "Subscription dukungan legal bulanan (fair usage 10 dokumen).", "monthly_subscription", "3500000", "Ongoing, bulanan", true, ["Legal AI"], ["Monthly legal support"]),
-    svc("brand-identity",       "Brand Identity Package",      "Sistem identitas visual lengkap: logo, warna, tipografi, dan panduan pakai.", "one_time", "1750000", "2-3 hari",    true,  ["Creative Director AI", "Designer AI", "Brand Strategist AI"], ["Brand guideline", "Logo suite", "Color & type system"]),
-    svc("brand-strategy",       "Brand Strategy",              "Positioning, target audience, USP, dan tone of voice untuk brand Anda.", "one_time", "750000",  "2-3 hari",    true,  ["Brand Strategist AI"], ["Brand strategy document", "Messaging framework"]),
-    svc("social-media-design",  "Social Media Design",         "Desain konten sosial media on-brand per batch.", "one_time", "75000",   "30-60 menit", false, ["Designer AI"], ["Desain feed", "Headline/copy pendek"]),
-    svc("social-media-content", "Social Media Content Monthly","Konten sosial media bulanan: ide, caption, visual, dan kalender konten.", "monthly_subscription", "999000",  "Ongoing, bulanan", false, ["Designer AI", "Copywriter AI"], ["Content ideas", "Captions", "Content calendar"]),
-    svc("company-profile",      "Company Profile",             "Dokumen company profile profesional dengan struktur dan copy.", "one_time", "750000",  "1-2 hari",    true,  ["Designer AI", "Copywriter AI"], ["Company profile PDF"]),
-    svc("pitch-deck",           "Pitch Deck / Presentation",   "Pitch deck investor-ready dengan storytelling dan arah visual.", "one_time", "1250000", "2-3 hari",    true,  ["Creative Director AI", "Copywriter AI"], ["Pitch deck (PDF/PPTX)"]),
-    svc("packaging-design",     "Packaging Concept",           "Konsep desain kemasan produk sesuai brand Anda.", "one_time", "750000",  "2-3 hari",    true,  ["Designer AI"], ["Visual concept kemasan"]),
-    svc("poster-banner",        "Poster / Banner / Brochure",  "Desain poster, banner digital, atau brosur.", "one_time", "150000",  "30-60 menit", false, ["Designer AI"], ["Poster/banner file"]),
-    svc("copywriting",          "Copywriting",                 "Copy on-brand untuk caption, landing page, atau kampanye.", "one_time", "350000",  "30-60 menit", false, ["Copywriter AI"], ["Copy document"]),
-    svc("image-generation",     "Image Generation",            "Gambar AI untuk kampanye dan konten.", "one_time", "75000",   "15-30 menit", false, ["Designer AI"], ["Image set"]),
-    svc("creative-consultation","Creative Consultation",        "Sesi konsultasi kreatif strategis dengan human review.", "one_time", "500000",  "4-8 jam",     true,  ["Creative Director AI"], ["Consultation notes"]),
   ],
 };
 
