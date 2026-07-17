@@ -110,9 +110,22 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
   // Design ZIP export download — signed-token-protected; token is the sole credential.
   // Only the download sub-path is public; admin CRUD routes on the same mount remain protected.
   { method: "GET", pattern: /^\/ai\/design-zip-exports\/\d+\/download$/ },
+  // Team 17 — Interior Design public routes (token-gated, no admin key).
+  // Create project (returns accessToken once — customer must store it).
+  { method: "POST", pattern: /^\/public\/interior-design\/projects$/ },
+  // Submit / update brief by accessToken.
+  { method: "POST", pattern: /^\/public\/interior-design\/projects\/[^/]+\/brief$/ },
+  // View outputs by accessToken.
+  { method: "GET",  pattern: /^\/public\/interior-design\/projects\/[^/]+\/outputs$/ },
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {
+  // Fast-path: all /public/* routes bypass admin key (they use their own token-based auth).
+  // Explicit check avoids any array-iteration ordering issue in the loop below.
+  if (req.path === "/public" || req.path.startsWith("/public/")) {
+    next();
+    return;
+  }
   for (const prefix of PUBLIC_PATH_PREFIXES) {
     if (req.path === prefix || req.path.startsWith(prefix + "/")) {
       next();
