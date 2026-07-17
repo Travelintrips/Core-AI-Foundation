@@ -1,0 +1,185 @@
+GLOBAL REMEDIATION RULES — WAJIB
+
+Anda sedang melakukan REMEDIASI hasil audit Team 23.
+
+Jangan menambah fitur baru.
+Jangan memperluas scope.
+Jangan melakukan refactor besar yang tidak diperlukan.
+Fokus hanya pada finding audit P0 dan P1, lalu P2 jika aman.
+
+Sebelum bekerja, jalankan:
+
+git branch --show-current
+git status
+git diff main...HEAD --name-only
+
+Pastikan branch aktif adalah branch team Anda.
+
+Jika branch salah:
+STOP. Jangan mengubah file apa pun.
+
+==================================================
+LOCKED FILES
+==================================================
+
+DILARANG mengubah:
+
+- artifacts/api-server/src/routes/index.ts
+- seluruh App.tsx utama
+- sidebar/layout/navigation utama
+- root package.json
+- pnpm-lock.yaml
+- lib/db/src/schema/index.ts
+- shared schema barrel
+- root openapi.yaml
+- Orval configuration
+- generated API clients
+- jobWorkerService.ts
+- creativeWorkflowRunner.ts
+- worker registry
+- workflow registry
+- migration registry
+- seedTemplates.ts
+- shared authentication middleware
+- shared database functions
+- shared event/status registry
+
+Jika branch sebelumnya mengubah file tersebut:
+
+1. Revert perubahan milik branch terhadap file locked.
+2. Jangan menghapus perubahan yang berasal dari main.
+3. Pindahkan kebutuhan integrasi ke:
+   integration/manifests/<team-code>.json
+4. Tuliskan routesToMount, pagesToRegister, schemaExportsRequested,
+   dependencyRequests, dan integrationNotes.
+
+==================================================
+DATABASE RULES
+==================================================
+
+Migration harus:
+
+- additive only
+- tidak DROP
+- tidak TRUNCATE
+- tidak destructive rename
+- menggunakan IF NOT EXISTS bila memungkinkan
+- tidak override shared function/trigger
+- tidak langsung diterapkan ke database
+- hanya berupa draft integration/migrations/<team-code>.sql
+
+Feature team tidak boleh menambah file langsung ke:
+
+lib/db/src/schema/
+
+Gunakan salah satu:
+
+- inline table definition dalam domain service
+- domain-local schema definition
+- migration draft untuk Team 24
+- integration manifest untuk barrel registration
+
+==================================================
+SECURITY RULES
+==================================================
+
+Semua admin route wajib memiliki auth eksplisit pada router-level.
+
+Semua customer/public resource wajib:
+
+- resolve session/token
+- derive customerId/tenantId dari session
+- tidak menerima ownership identity dari body/query sebagai source of truth
+- melakukan ownership filter di SQL/service layer
+- memiliki negative IDOR tests
+- fail closed
+
+Semua external URL wajib:
+
+- allowlist protocol http/https
+- block localhost
+- block 127.0.0.0/8
+- block 10.0.0.0/8
+- block 172.16.0.0/12
+- block 192.168.0.0/16
+- block 169.254.0.0/16
+- block IPv6 loopback/link-local/private
+- batasi redirect
+- batasi response size
+- timeout
+
+==================================================
+PERFORMANCE RULES
+==================================================
+
+Tidak boleh:
+
+- load seluruh tabel ke memory
+- O(N) scan tanpa limit untuk data produksi
+- endpoint list tanpa pagination
+- solver/render tanpa batas resource
+- AI generation tanpa budget/rate limit
+
+==================================================
+DUPLICATION RULES
+==================================================
+
+Jika audit menyatakan implementasi menduplikasi engine existing:
+
+- jangan mempertahankan parallel engine
+- cari implementation existing
+- buat adapter/wrapper
+- gunakan existing service sebagai source of truth
+- dokumentasikan boundary
+- hapus atau deprecate logic duplikat dari branch
+
+==================================================
+TESTING
+==================================================
+
+Tambahkan test untuk:
+
+- unauthorized request
+- expired/invalid token
+- cross-customer/tenant IDOR
+- malformed payload
+- pagination limits
+- terminal state
+- timeout/resource cap
+- SSRF URL
+- duplicate/idempotency
+- error handling
+
+==================================================
+OUTPUT WAJIB
+==================================================
+
+Setelah selesai:
+
+1. Jalankan test domain.
+2. Jalankan typecheck package/domain.
+3. Jalankan lint hanya file yang diubah.
+4. Jangan menjalankan global codegen.
+5. Jangan menjalankan migration.
+6. Commit dan push ke branch sendiri.
+
+Laporan akhir harus berisi:
+
+- branch
+- commit hash
+- audit findings fixed
+- files reverted
+- files changed
+- locked file violations removed
+- security fixes
+- test results
+- typecheck results
+- remaining P2/P3
+- integration manifest changes
+- statement:
+
+READY_FOR_REAUDIT
+
+atau
+
+NOT_READY_FOR_REAUDIT

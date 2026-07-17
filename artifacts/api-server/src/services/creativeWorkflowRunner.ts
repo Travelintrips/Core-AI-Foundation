@@ -719,6 +719,7 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
   // project with no deliverable yet.
   // documentType was resolved at the top of this function; reuse it here.
   // If any step failed we treat it as no-document so the project goes to "failed".
+  const effectiveDocumentType = anyFailed ? null : documentType;
   const finalDocumentType = anyFailed ? null : await resolveProjectDocumentType(project);
   const isDocumentProject = finalDocumentType !== null;
   const presentationType = anyFailed || isDocumentProject ? null : await resolveProjectPresentationType(project);
