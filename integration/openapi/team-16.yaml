@@ -1,0 +1,315 @@
+openapi: "3.0.3"
+info:
+  title: "Team 16 — Presentation & Document Creative Services"
+  version: "1.0.0"
+  description: |
+    OpenAPI specification for Team 16's Presentation and Document domain.
+
+    Owned service types: company_profile (existing), pitch_deck (existing),
+    proposal, product_catalog, annual_report, whitepaper, case_study, ebook.
+
+    Document (PDF) types are processed by the generic Document Engine
+    (executeGenericPdfExportJob). The pitch_deck type uses the Presentation
+    Engine (executeGenericPresentationExportJob). Company Profile is unchanged.
+
+    Service codes registered in SERVICE_CODE_TO_DOCUMENT_TYPE:
+      proposal        → "proposal"
+      product-catalog → "product_catalog"
+      annual-report   → "annual_report"
+      whitepaper      → "whitepaper"
+      case-study      → "case_study"
+      ebook           → "ebook"
+
+tags:
+  - name: "presentation-document"
+    description: "Presentation and Document Creative Services"
+
+paths:
+  /ai/presentation-document/domain-info:
+    get:
+      tags: ["presentation-document"]
+      summary: "Get Team 16 domain info and registered service types"
+      operationId: "getPresentationDocumentDomainInfo"
+      security:
+        - adminApiKey: []
+      responses:
+        "200":
+          description: "Domain info retrieved successfully"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DomainInfo"
+
+  /ai/presentation-document/qc-profile/{serviceType}:
+    get:
+      tags: ["presentation-document"]
+      summary: "Get QC scoring profile for a service type"
+      operationId: "getQcProfile"
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: serviceType
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/PresentationDocumentServiceType"
+      responses:
+        "200":
+          description: "QC profile"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QcProfileResponse"
+        "404":
+          description: "No QC profile registered for this service type"
+
+  /ai/presentation-document/package-rules/{serviceType}:
+    get:
+      tags: ["presentation-document"]
+      summary: "Get package rules for a service type"
+      operationId: "getPackageRules"
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: serviceType
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/PresentationDocumentServiceType"
+        - name: tier
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/PackageTier"
+      responses:
+        "200":
+          description: "Package rules"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackageRulesResponse"
+
+  /ai/presentation-document/template-compatibility/{serviceType}:
+    get:
+      tags: ["presentation-document"]
+      summary: "Get template compatibility for a service type"
+      operationId: "getTemplateCompatibility"
+      parameters:
+        - name: serviceType
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/PresentationDocumentServiceType"
+        - name: style
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: "Template compatibility result"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateCompatibilityResponse"
+
+  /ai/presentation-document/preview/{projectId}:
+    get:
+      tags: ["presentation-document"]
+      summary: "Get document preview info for a creative project"
+      operationId: "getDocumentPreview"
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: "Document preview info"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentPreviewResponse"
+        "404":
+          description: "Project not found"
+
+components:
+  securitySchemes:
+    adminApiKey:
+      type: apiKey
+      in: header
+      name: x-admin-api-key
+
+  schemas:
+    PresentationDocumentServiceType:
+      type: string
+      enum:
+        - company_profile
+        - pitch_deck
+        - proposal
+        - product_catalog
+        - annual_report
+        - whitepaper
+        - case_study
+        - ebook
+
+    PackageTier:
+      type: string
+      enum: [essential, professional, enterprise]
+      default: professional
+
+    DeliveryFormat:
+      type: string
+      enum: [pdf, pptx, pdf_and_pptx]
+
+    DomainInfo:
+      type: object
+      required: [domain, version, serviceTypes, documentEngineTypes, presentationEngineTypes]
+      properties:
+        domain:
+          type: string
+          example: "presentation-document"
+        version:
+          type: string
+          example: "1.0.0"
+        team:
+          type: string
+          example: "Team 16"
+        serviceTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/PresentationDocumentServiceType"
+        documentEngineTypes:
+          type: array
+          items:
+            type: string
+          description: "Service types handled by the PDF Document Engine"
+        presentationEngineTypes:
+          type: array
+          items:
+            type: string
+          description: "Service types handled by the PPTX Presentation Engine"
+
+    QcDimension:
+      type: object
+      required: [id, label, weight, minValue]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        weight:
+          type: number
+          format: float
+        minValue:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+    QcProfileResponse:
+      type: object
+      required: [serviceType, passingScore, dimensions]
+      properties:
+        serviceType:
+          $ref: "#/components/schemas/PresentationDocumentServiceType"
+        passingScore:
+          type: integer
+        dimensions:
+          type: array
+          items:
+            $ref: "#/components/schemas/QcDimension"
+
+    PageLimits:
+      type: object
+      required: [min, target, max]
+      properties:
+        min:
+          type: integer
+        target:
+          type: integer
+        max:
+          type: integer
+
+    PackageRulesResponse:
+      type: object
+      required: [serviceType, packageTier, pageLimits, deliverables, requiresBrandDna, qcGated]
+      properties:
+        serviceType:
+          $ref: "#/components/schemas/PresentationDocumentServiceType"
+        packageTier:
+          $ref: "#/components/schemas/PackageTier"
+        pageLimits:
+          $ref: "#/components/schemas/PageLimits"
+        deliverables:
+          type: array
+          items:
+            type: string
+        requiresBrandDna:
+          type: boolean
+        qcGated:
+          type: boolean
+
+    TemplateCompatibilityResponse:
+      type: object
+      required: [serviceType, compatible, resolvedStyle, supportedStyles]
+      properties:
+        serviceType:
+          $ref: "#/components/schemas/PresentationDocumentServiceType"
+        compatible:
+          type: boolean
+        resolvedStyle:
+          type: string
+        supportedStyles:
+          type: array
+          items:
+            type: string
+        defaultStyle:
+          type: string
+        reason:
+          type: string
+          description: "Present only when the requested style is incompatible"
+
+    DocumentPreviewResponse:
+      type: object
+      required: [projectId, serviceType, deliveryFormat]
+      properties:
+        projectId:
+          type: string
+        serviceType:
+          $ref: "#/components/schemas/PresentationDocumentServiceType"
+        deliveryFormat:
+          $ref: "#/components/schemas/DeliveryFormat"
+        documentAsset:
+          type: object
+          properties:
+            assetId:
+              type: integer
+            storagePath:
+              type: string
+            permanentUrl:
+              type: string
+            pageCount:
+              type: integer
+            fileSizeBytes:
+              type: integer
+            version:
+              type: integer
+            status:
+              type: string
+        pdfPreview:
+          type: object
+          nullable: true
+          properties:
+            permanentUrl:
+              type: string
+            pageCount:
+              type: integer
+        thumbnail:
+          type: object
+          nullable: true
+          properties:
+            permanentUrl:
+              type: string
