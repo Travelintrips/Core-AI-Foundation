@@ -1,0 +1,778 @@
+openapi: 3.1.0
+info:
+  title: "Team 20 — Product Concept Design (fragment)"
+  description: >
+    OpenAPI fragment for the Product Concept Design domain.
+    Team 24 merges this into the root openapi.yaml.
+    All endpoints mount under /api/ai/product-design.
+
+    ⚠️ SCOPE BOUNDARY: This API supports concept-stage product design only.
+    It does not provide engineering drawings, safety certifications,
+    regulatory approvals, or manufacturing-ready CAD output.
+  version: "1.0.0"
+
+tags:
+  - name: product-design-concepts
+    description: Product concept CRUD and validation
+  - name: product-design-mockups
+    description: Mockup composition via blueprint + composition engine ports
+  - name: product-design-variants
+    description: Concept variant management with consistency checking
+  - name: product-design-manufacturer
+    description: Manufacturer requirement brief generation
+
+# ── Paths ──────────────────────────────────────────────────────────────────────
+# All paths are relative to /api/ai/product-design (prefix added by Team 24)
+
+paths:
+
+  # ── Health ──────────────────────────────────────────────────────────────────
+
+  /health:
+    get:
+      operationId: productDesignHealth
+      tags: [product-design-concepts]
+      summary: Domain health check
+      responses:
+        "200":
+          description: Domain is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [domain, status, team]
+                properties:
+                  domain:  { type: string, example: product-design }
+                  status:  { type: string, example: ok }
+                  team:    { type: string, example: "20" }
+
+  # ── Concepts ────────────────────────────────────────────────────────────────
+
+  /concepts/validate:
+    post:
+      operationId: validateProductConcept
+      tags: [product-design-concepts]
+      summary: Validate a concept payload without saving
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductConceptInput"
+      responses:
+        "200":
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResult"
+
+  /concepts:
+    get:
+      operationId: listProductConcepts
+      tags: [product-design-concepts]
+      summary: List product concepts
+      parameters:
+        - name: projectId
+          in: query
+          schema: { type: string }
+          description: Filter by project id
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/ConceptStatus"
+          description: Filter by status
+      responses:
+        "200":
+          description: List of concepts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [concepts, total]
+                properties:
+                  concepts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ProductConcept"
+                  total: { type: integer }
+
+    post:
+      operationId: createProductConcept
+      tags: [product-design-concepts]
+      summary: Create a product concept
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductConceptInput"
+      responses:
+        "201":
+          description: Concept created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [concept]
+                properties:
+                  concept:
+                    $ref: "#/components/schemas/ProductConcept"
+                  warnings:
+                    type: array
+                    items: { type: string }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "422":
+          $ref: "#/components/responses/UnsupportedClaimError"
+
+  /concepts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+
+    get:
+      operationId: getProductConcept
+      tags: [product-design-concepts]
+      summary: Get a concept by id
+      responses:
+        "200":
+          description: Concept found
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [concept]
+                properties:
+                  concept:
+                    $ref: "#/components/schemas/ProductConcept"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      operationId: updateProductConcept
+      tags: [product-design-concepts]
+      summary: Update a concept (increments version)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductConceptInput"
+      responses:
+        "200":
+          description: Concept updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [concept]
+                properties:
+                  concept:
+                    $ref: "#/components/schemas/ProductConcept"
+                  warnings:
+                    type: array
+                    items: { type: string }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/TerminalStateError"
+
+    delete:
+      operationId: archiveProductConcept
+      tags: [product-design-concepts]
+      summary: Archive a concept (soft delete)
+      responses:
+        "200":
+          description: Concept archived
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [concept]
+                properties:
+                  concept:
+                    $ref: "#/components/schemas/ProductConcept"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/TerminalStateError"
+
+  # ── Mockups ──────────────────────────────────────────────────────────────────
+
+  /mockups:
+    get:
+      operationId: listProductMockups
+      tags: [product-design-mockups]
+      summary: List mockups for a concept
+      parameters:
+        - name: conceptId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Mockup list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mockups, total]
+                properties:
+                  mockups:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ProductMockup"
+                  total: { type: integer }
+
+    post:
+      operationId: composeMockup
+      tags: [product-design-mockups]
+      summary: Compose a mockup via blueprint + composition ports
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ComposeMockupInput"
+      responses:
+        "201":
+          description: Mockup composed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mockup]
+                properties:
+                  mockup:
+                    $ref: "#/components/schemas/ProductMockup"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /mockups/{id}:
+    get:
+      operationId: getProductMockup
+      tags: [product-design-mockups]
+      summary: Get a mockup by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Mockup found
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mockup]
+                properties:
+                  mockup:
+                    $ref: "#/components/schemas/ProductMockup"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Variants ─────────────────────────────────────────────────────────────────
+
+  /variants:
+    get:
+      operationId: listConceptVariants
+      tags: [product-design-variants]
+      summary: List variants for a base concept
+      parameters:
+        - name: baseConceptId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Variant list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [variants, total]
+                properties:
+                  variants:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ConceptVariant"
+                  total: { type: integer }
+
+    post:
+      operationId: createConceptVariant
+      tags: [product-design-variants]
+      summary: Create a concept variant (auto-checks consistency)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConceptVariantInput"
+      responses:
+        "201":
+          description: Variant created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [variant]
+                properties:
+                  variant:
+                    $ref: "#/components/schemas/ConceptVariant"
+                  notes:
+                    type: array
+                    items: { type: string }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "422":
+          description: Variant failed consistency check
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, issues]
+                properties:
+                  error:  { type: string }
+                  issues: { type: array, items: { type: string } }
+                  notes:  { type: array, items: { type: string } }
+
+  /variants/{id}:
+    get:
+      operationId: getConceptVariant
+      tags: [product-design-variants]
+      summary: Get a variant by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Variant found
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [variant]
+                properties:
+                  variant:
+                    $ref: "#/components/schemas/ConceptVariant"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /variants/{id}/check:
+    post:
+      operationId: recheckVariantConsistency
+      tags: [product-design-variants]
+      summary: Re-run consistency check without mutating
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Consistency check result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [variantId, consistencyCheck]
+                properties:
+                  variantId:
+                    type: string
+                  consistencyCheck:
+                    $ref: "#/components/schemas/VariantConsistencyResult"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Manufacturer Brief ────────────────────────────────────────────────────────
+
+  /manufacturer/brief:
+    post:
+      operationId: generateManufacturerBrief
+      tags: [product-design-manufacturer]
+      summary: Generate a manufacturer requirement brief for a concept
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [conceptId]
+              properties:
+                conceptId:
+                  type: string
+                logisticsNotes:
+                  type: string
+                  description: >
+                    Optional logistics notes (MOQ, packaging, etc.).
+                    Must not contain unsupported manufacturing claims.
+      responses:
+        "201":
+          description: Brief generated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [brief]
+                properties:
+                  brief:
+                    $ref: "#/components/schemas/ManufacturerBrief"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnsupportedClaimError"
+
+  /manufacturer/brief/{id}:
+    get:
+      operationId: getManufacturerBrief
+      tags: [product-design-manufacturer]
+      summary: Get a generated manufacturer brief by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Brief found
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [brief]
+                properties:
+                  brief:
+                    $ref: "#/components/schemas/ManufacturerBrief"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+# ── Components ─────────────────────────────────────────────────────────────────
+
+components:
+
+  schemas:
+
+    ConceptStatus:
+      type: string
+      enum: [draft, in_review, approved, archived]
+
+    FormCategory:
+      type: string
+      enum: [bottle, tube, jar, sachet, pouch, compact, spray, dispenser, custom]
+
+    MaterialClass:
+      type: string
+      enum: [glass, pet_plastic, hdpe_plastic, pp_plastic, aluminum, stainless_steel, paperboard, bioplastic, custom]
+
+    FinishType:
+      type: string
+      enum: [matte, gloss, satin, metallic, frosted, textured, soft_touch, chrome]
+
+    PlacementAnchor:
+      type: string
+      enum: [top, bottom, front, back, left, right, wrap, full]
+
+    DimensionsMm:
+      type: object
+      required: [height, width]
+      properties:
+        height:        { type: number, minimum: 0.1, description: "mm — concept estimate" }
+        width:         { type: number, minimum: 0.1, description: "mm — concept estimate" }
+        depth:         { type: number, minimum: 0 }
+        wallThickness: { type: number, minimum: 0.1 }
+        fillVolumeMl:  { type: number, minimum: 0.1, description: "mL fill volume — indicative" }
+
+    FormDirection:
+      type: object
+      required: [category, dimensions]
+      properties:
+        category:       { $ref: "#/components/schemas/FormCategory" }
+        dimensions:     { $ref: "#/components/schemas/DimensionsMm" }
+        shapeNotes:     { type: string, maxLength: 500 }
+        ergonomicNotes: { type: string, maxLength: 500 }
+
+    MaterialDirection:
+      type: object
+      required: [primaryMaterial]
+      properties:
+        primaryMaterial:     { $ref: "#/components/schemas/MaterialClass" }
+        secondaryMaterial:   { $ref: "#/components/schemas/MaterialClass" }
+        sustainabilityNotes: { type: string, maxLength: 500 }
+        compatibilityNotes:  { type: string, maxLength: 500 }
+
+    CMFEntry:
+      type: object
+      required: [colorCode, colorName, material, finish, zone]
+      properties:
+        colorCode:  { type: string, description: "Hex (#RRGGBB), Pantone, or RAL code" }
+        colorName:  { type: string }
+        material:   { $ref: "#/components/schemas/MaterialClass" }
+        finish:     { $ref: "#/components/schemas/FinishType" }
+        zone:       { type: string, description: "Application zone (e.g. body, cap)" }
+
+    CMFSpec:
+      type: object
+      required: [entries, isComplete]
+      properties:
+        entries:      { type: array, items: { $ref: "#/components/schemas/CMFEntry" }, minItems: 1 }
+        isComplete:   { type: boolean }
+        processNotes: { type: string }
+
+    FeaturePlacement:
+      type: object
+      required: [id, label, anchor, relativePosition, footprintMm]
+      properties:
+        id:               { type: string }
+        label:            { type: string }
+        anchor:           { $ref: "#/components/schemas/PlacementAnchor" }
+        relativePosition:
+          type: object
+          required: [x, y]
+          properties:
+            x: { type: number, minimum: 0, maximum: 1 }
+            y: { type: number, minimum: 0, maximum: 1 }
+            z: { type: number, minimum: 0, maximum: 1 }
+        footprintMm:
+          type: object
+          required: [width, height]
+          properties:
+            width:  { type: number, minimum: 0.1 }
+            height: { type: number, minimum: 0.1 }
+
+    LabelArea:
+      type: object
+      required: [id, name, anchor, printAreaMm, safeMarginMm]
+      properties:
+        id:           { type: string }
+        name:         { type: string }
+        anchor:       { $ref: "#/components/schemas/PlacementAnchor" }
+        printAreaMm:
+          type: object
+          required: [width, height]
+          properties:
+            width:  { type: number, minimum: 0.1 }
+            height: { type: number, minimum: 0.1 }
+        safeMarginMm: { type: number, minimum: 0 }
+        wrapFraction: { type: number, minimum: 0, maximum: 1 }
+
+    ProductConceptInput:
+      type: object
+      required: [name, projectId, formDirection, materialDirection, cmf]
+      properties:
+        name:              { type: string }
+        projectId:         { type: string }
+        formDirection:     { $ref: "#/components/schemas/FormDirection" }
+        materialDirection: { $ref: "#/components/schemas/MaterialDirection" }
+        cmf:               { $ref: "#/components/schemas/CMFSpec" }
+        featurePlacements:
+          type: array
+          items: { $ref: "#/components/schemas/FeaturePlacement" }
+          default: []
+        labelAreas:
+          type: array
+          items: { $ref: "#/components/schemas/LabelArea" }
+          default: []
+
+    ProductConcept:
+      allOf:
+        - $ref: "#/components/schemas/ProductConceptInput"
+        - type: object
+          required: [id, status, disclaimer, createdAt, updatedAt, version]
+          properties:
+            id:         { type: string }
+            status:     { $ref: "#/components/schemas/ConceptStatus" }
+            disclaimer: { type: string, description: "Mandatory concept disclaimer — always present" }
+            createdAt:  { type: string, format: date-time }
+            updatedAt:  { type: string, format: date-time }
+            version:    { type: integer, minimum: 1 }
+
+    MockupLayer:
+      type: object
+      required: [id, type, label, zIndex, opacity, visible]
+      properties:
+        id:        { type: string }
+        type:
+          type: string
+          enum: [background, form_silhouette, cmf_overlay, feature, label, annotation, shadow]
+        label:     { type: string }
+        zIndex:    { type: integer }
+        opacity:   { type: number, minimum: 0, maximum: 1 }
+        sourceRef: { type: string }
+        visible:   { type: boolean }
+        assetKey:  { type: string }
+
+    ComposeMockupInput:
+      type: object
+      required: [conceptId]
+      properties:
+        conceptId:       { type: string }
+        viewAngle:
+          type: string
+          enum: [front, back, left, right, top, isometric_left, isometric_right]
+          default: front
+        widthPx:         { type: integer, minimum: 100, default: 800 }
+        heightPx:        { type: integer, minimum: 100, default: 1200 }
+        format:
+          type: string
+          enum: [png, svg, pdf, jpg]
+          default: png
+        render:          { type: boolean, default: false }
+        backgroundColor: { type: string, default: "#FFFFFF" }
+
+    ProductMockup:
+      type: object
+      required: [id, conceptId, viewAngle, format, widthPx, heightPx, layers, rendered, disclaimer, createdAt, updatedAt]
+      properties:
+        id:               { type: string }
+        conceptId:        { type: string }
+        viewAngle:        { type: string }
+        format:           { type: string }
+        widthPx:          { type: integer }
+        heightPx:         { type: integer }
+        layers:
+          type: array
+          items: { $ref: "#/components/schemas/MockupLayer" }
+        renderedAssetKey: { type: string }
+        rendered:         { type: boolean }
+        disclaimer:       { type: string }
+        createdAt:        { type: string, format: date-time }
+        updatedAt:        { type: string, format: date-time }
+
+    VariantDelta:
+      type: object
+      required: [axis, description, patch]
+      properties:
+        axis:
+          type: string
+          enum: [cmf, form, material, feature, label]
+        description: { type: string }
+        patch:
+          type: object
+          additionalProperties: true
+          description: "Dot-notation field patches on the base concept"
+
+    ConceptVariantInput:
+      type: object
+      required: [baseConceptId, name, deltas]
+      properties:
+        baseConceptId: { type: string }
+        name:          { type: string }
+        deltas:
+          type: array
+          items: { $ref: "#/components/schemas/VariantDelta" }
+          minItems: 1
+
+    VariantConsistencyResult:
+      type: object
+      required: [consistent, issues, notes, axesChanged, multipleStructuralAxes]
+      properties:
+        consistent:            { type: boolean }
+        issues:                { type: array, items: { type: string } }
+        notes:                 { type: array, items: { type: string } }
+        axesChanged:           { type: array, items: { type: string } }
+        multipleStructuralAxes: { type: boolean }
+
+    ConceptVariant:
+      allOf:
+        - $ref: "#/components/schemas/ConceptVariantInput"
+        - type: object
+          required: [id, disclaimer, createdAt]
+          properties:
+            id:               { type: string }
+            disclaimer:       { type: string }
+            consistencyCheck: { $ref: "#/components/schemas/VariantConsistencyResult" }
+            createdAt:        { type: string, format: date-time }
+
+    RequirementEntry:
+      type: object
+      required: [category, requirement, priority]
+      properties:
+        category:
+          type: string
+          enum: [dimension, material, finish, label, feature, logistics, other]
+        requirement: { type: string }
+        value:       { type: string }
+        priority:
+          type: string
+          enum: [must, prefer, optional]
+
+    ManufacturerBrief:
+      type: object
+      required: [id, conceptId, conceptName, processHints, requirements, disclaimer, generatedAt]
+      properties:
+        id:             { type: string }
+        conceptId:      { type: string }
+        conceptName:    { type: string }
+        processHints:
+          type: array
+          items:
+            type: string
+            enum: [injection_molding, blow_molding, extrusion_blow, glass_molding, die_casting, screen_printing, hot_stamping, pad_printing, digital_printing, labeling, custom]
+        requirements:
+          type: array
+          items: { $ref: "#/components/schemas/RequirementEntry" }
+        logisticsNotes: { type: string }
+        disclaimer:     { type: string, description: "Mandatory disclaimer — always present on brief output" }
+        generatedAt:    { type: string, format: date-time }
+
+    ValidationResult:
+      type: object
+      required: [valid, errors, warnings]
+      properties:
+        valid:    { type: boolean }
+        errors:   { type: array, items: { type: string } }
+        warnings: { type: array, items: { type: string } }
+
+  responses:
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string }
+
+    ValidationError:
+      description: Request body failed validation
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error, errors]
+            properties:
+              error:    { type: string }
+              errors:   { type: array, items: { type: string } }
+              warnings: { type: array, items: { type: string } }
+
+    TerminalStateError:
+      description: Resource is in a terminal state and cannot be modified
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string }
+
+    UnsupportedClaimError:
+      description: Request contains unsupported manufacturing claims
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: { type: string, description: "Describes which fields contain the unsupported claim" }

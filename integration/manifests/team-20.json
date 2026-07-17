@@ -1,0 +1,182 @@
+{
+  "team": "20",
+  "branch": "feature/20-product-design",
+  "description": "Product Concept Design domain — form direction, material direction, CMF, feature/label placement, mockup composition, concept variants, manufacturer brief.",
+
+  "scopeBoundary": "Concept-stage design only. This domain does NOT provide engineering drawings, safety certifications, regulatory approvals, or manufacturing-ready CAD specifications. Any client-facing output must carry the CONCEPT_DISCLAIMER string.",
+
+  "ownedFolders": [
+    "artifacts/api-server/src/domains/product-design/",
+    "artifacts/customer-portal/src/pages/product-design/",
+    "artifacts/ai-platform/src/pages/product-design/",
+    "integration/openapi/team-20.yaml",
+    "integration/migrations/team-20.sql",
+    "integration/manifests/team-20.json"
+  ],
+
+  "routesToMount": [
+    {
+      "importPath": "artifacts/api-server/src/domains/product-design/routes/index.js",
+      "export": "productDesignRouter",
+      "mountPoint": "/api/ai/product-design",
+      "middleware": ["adminAuthWithExceptions"],
+      "publicExceptions": ["/api/ai/product-design/health"],
+      "note": "After mounting, call integration hooks below to wire DB and real ports."
+    }
+  ],
+
+  "integrationHooks": [
+    {
+      "import": "setConceptStore",
+      "from": "artifacts/api-server/src/domains/product-design/routes/index.js",
+      "signature": "setConceptStore(store: Map<string, ProductConcept>)",
+      "note": "Swap in-memory store for a DB-backed Map or repository implementation."
+    },
+    {
+      "import": "setConceptResolver",
+      "from": "artifacts/api-server/src/domains/product-design/routes/index.js",
+      "signature": "setConceptResolver(fn: (id: string) => Promise<ProductConcept | null>)",
+      "note": "Required for /mockups and /manufacturer routes to look up concepts by id."
+    },
+    {
+      "import": "setManufacturerConceptResolver",
+      "from": "artifacts/api-server/src/domains/product-design/routes/index.js",
+      "signature": "setManufacturerConceptResolver(fn: (id: string) => Promise<ProductConcept | null>)",
+      "note": "Same resolver pattern as setConceptResolver — wire the same function."
+    },
+    {
+      "import": "setPortRegistry",
+      "from": "artifacts/api-server/src/domains/product-design/routes/index.js",
+      "signature": "setPortRegistry(registry: ProductDesignPortRegistry)",
+      "note": "Inject real BlueprintPort and CompositionPort. Until wired, NullBlueprintPort + NullCompositionPort are used (no rendering occurs)."
+    }
+  ],
+
+  "pagesToRegister": [
+    {
+      "artifact": "customer-portal",
+      "componentPath": "artifacts/customer-portal/src/pages/product-design/index.tsx",
+      "export": "default",
+      "route": "/product-design",
+      "note": "Customer-facing read-only concept viewer. Register in customer portal router."
+    },
+    {
+      "artifact": "ai-platform",
+      "componentPath": "artifacts/ai-platform/src/pages/product-design/index.tsx",
+      "export": "default",
+      "route": "/admin/product-design",
+      "note": "Admin concept management panel. Register in ai-platform admin router."
+    }
+  ],
+
+  "sidebarItems": [
+    {
+      "artifact": "ai-platform",
+      "section": "Product Design",
+      "label": "Concept Manager",
+      "href": "/product-design",
+      "icon": "Package",
+      "note": "Admin sidebar entry for product concept management."
+    },
+    {
+      "artifact": "customer-portal",
+      "section": "My Project",
+      "label": "Product Concepts",
+      "href": "/product-design",
+      "icon": "Package",
+      "note": "Customer portal sidebar entry — show only when concepts exist for the project."
+    }
+  ],
+
+  "openapiFragment": "integration/openapi/team-20.yaml",
+
+  "migrationDrafts": [
+    {
+      "file": "integration/migrations/team-20.sql",
+      "tables": [
+        "ai_platform.pcd_product_concepts",
+        "ai_platform.pcd_product_mockups",
+        "ai_platform.pcd_concept_variants",
+        "ai_platform.pcd_manufacturer_briefs"
+      ],
+      "indexes": 8,
+      "additive": true,
+      "runCommand": "DO NOT run directly — review with Team 24, run in transaction with ROLLBACK test."
+    }
+  ],
+
+  "eventsPublished": [
+    {
+      "eventType": "product_design.concept.created",
+      "payload": "{ conceptId, projectId, name, formCategory, status }",
+      "note": "Emitted after a concept is successfully created."
+    },
+    {
+      "eventType": "product_design.concept.updated",
+      "payload": "{ conceptId, version, status }",
+      "note": "Emitted after a concept is updated (version bumped)."
+    },
+    {
+      "eventType": "product_design.concept.archived",
+      "payload": "{ conceptId }",
+      "note": "Emitted when a concept is soft-archived."
+    },
+    {
+      "eventType": "product_design.mockup.composed",
+      "payload": "{ mockupId, conceptId, viewAngle, rendered }",
+      "note": "Emitted after mockup composition (whether or not render was requested)."
+    },
+    {
+      "eventType": "product_design.variant.created",
+      "payload": "{ variantId, baseConceptId, axesChanged, consistent }",
+      "note": "Emitted after a variant passes consistency check and is saved."
+    },
+    {
+      "eventType": "product_design.brief.generated",
+      "payload": "{ briefId, conceptId, processHints }",
+      "note": "Emitted after a manufacturer brief is successfully generated."
+    }
+  ],
+
+  "portAdaptersRequired": [
+    {
+      "port": "BlueprintPort",
+      "interface": "artifacts/api-server/src/domains/product-design/types/ports.ts",
+      "nullStub": "artifacts/api-server/src/domains/product-design/services/ports/nullBlueprintPort.ts",
+      "note": "Generates ordered MockupLayer stacks from a ProductConcept. Real adapter connects to the blueprint rendering service."
+    },
+    {
+      "port": "CompositionPort",
+      "interface": "artifacts/api-server/src/domains/product-design/types/ports.ts",
+      "nullStub": "artifacts/api-server/src/domains/product-design/services/ports/nullCompositionPort.ts",
+      "note": "Renders a finalised CompositionSpec to object storage. Real adapter connects to the image/SVG rendering pipeline."
+    }
+  ],
+
+  "knownRisks": [
+    {
+      "risk": "In-memory stores reset on server restart",
+      "mitigation": "Wire DB-backed stores via setConceptStore() and setConceptResolver() integration hooks.",
+      "severity": "medium"
+    },
+    {
+      "risk": "Null ports do not produce real rendered images",
+      "mitigation": "Wire real BlueprintPort and CompositionPort via setPortRegistry() before going to production.",
+      "severity": "medium"
+    },
+    {
+      "risk": "Disclaimer suppression in downstream rendering",
+      "mitigation": "All output objects carry disclaimer field. assertDisclaimerPresent() is available for enforcement. Never strip disclaimer before client delivery.",
+      "severity": "high"
+    },
+    {
+      "risk": "Unsupported manufacturing claims in free-text fields",
+      "mitigation": "guardAgainstUnsupportedClaims() is called on all free-text inputs in routes and brief builder. UNSUPPORTED_MANUFACTURING_CLAIMS list is maintained in manufacturer.ts.",
+      "severity": "high"
+    }
+  ],
+
+  "integrationOrder": 20,
+  "dependsOn": [],
+  "blockedBy": "NONE"
+}
