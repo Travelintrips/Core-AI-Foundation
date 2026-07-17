@@ -4,48 +4,115 @@
   "domain": "Packaging Design",
   "description": "End-to-end packaging design ordering, prepress technical validation, variant tracking, and print-ready certification for box, pouch, label, cup, sleeve, food, and cosmetic packaging.",
   "ownership": {
-    "apiDomain": "artifacts/api-server/src/domains/packaging-design/",
-    "apiRoutes": "artifacts/api-server/src/routes/packaging-design.ts",
+    "apiDomain":      "artifacts/api-server/src/domains/packaging-design/",
+    "apiRoutes":      "artifacts/api-server/src/routes/packaging-design.ts",
+    "domainSchema":   "artifacts/api-server/src/domains/packaging-design/schema.ts",
     "customerPortal": "artifacts/customer-portal/src/pages/packaging-design/",
-    "adminPlatform": "artifacts/ai-platform/src/pages/packaging-design/",
-    "dbSchema": "lib/db/src/schema/packaging-design.ts",
-    "migration": "integration/migrations/team-19.sql",
-    "openapi": "integration/openapi/team-19.yaml"
+    "adminPlatform":  "artifacts/ai-platform/src/pages/packaging-design/",
+    "migration":      "integration/migrations/team-19.sql",
+    "openapi":        "integration/openapi/team-19.yaml"
   },
-  "services": [
-    "box",
-    "pouch",
-    "bottle_label",
-    "jar_label",
-    "cup",
-    "sleeve",
-    "food_packaging",
-    "cosmetic_packaging"
+
+  "routesToMount": [
+    {
+      "file":   "artifacts/api-server/src/routes/packaging-design.ts",
+      "import": "packagingDesignRouter",
+      "mountIn": "artifacts/api-server/src/routes/index.ts",
+      "statement": "router.use(packagingDesignRouter);",
+      "note": "Mount after creativeMarketplaceRouter. Router self-registers /ai/packaging-design/* (admin) and /public/packaging-design/* (public) prefixes."
+    }
   ],
-  "blueprint": {
-    "panels": ["front", "back", "side", "top", "bottom"],
-    "zones": ["dieline", "bleed", "safe_area", "barcode", "ingredients_legal_block", "logo", "product_image", "variant_label"],
-    "validationChecks": [
-      "bleed_check",
-      "safe_area_check",
-      "barcode_zone_check",
-      "mandatory_info_check",
-      "variant_consistency_check",
-      "color_mode_check",
-      "print_warnings"
+
+  "pagesToRegister": [
+    {
+      "app":       "customer-portal",
+      "file":      "artifacts/customer-portal/src/pages/packaging-design/index.tsx",
+      "lazyImport": "const PackagingDesignPage = lazy(() => import('@/pages/packaging-design'));",
+      "route":     "<Route path=\"/packaging-design\" component={PackagingDesignPage} />",
+      "mountIn":   "artifacts/customer-portal/src/App.tsx",
+      "note":      "Add lazy import after CpReviewPage. Add Route before the NotFound catch-all."
+    },
+    {
+      "app":       "ai-platform",
+      "file":      "artifacts/ai-platform/src/pages/packaging-design/index.tsx",
+      "import":    "import PackagingDesign from \"@/pages/packaging-design\";",
+      "route":     "<Route path=\"/packaging-design\" component={PackagingDesign} />",
+      "mountIn":   "artifacts/ai-platform/src/App.tsx (AdminRouter)",
+      "note":      "Add import after CreativeMarketplace. Add Route inside AdminRouter before the NotFound fallback."
+    }
+  ],
+
+  "schemaExportsRequested": {
+    "sourceFile": "artifacts/api-server/src/domains/packaging-design/schema.ts",
+    "targetBarrel": "lib/db/src/schema/index.ts",
+    "note": "Domain-local schema defines all three tables using pgSchema('ai_platform') locally. If Team 24 decides to centralise schema for cross-domain queries, copy schema.ts content into lib/db/src/schema/packaging-design.ts and add 'export * from \"./packaging-design\"' to index.ts.",
+    "exports": [
+      "packagingDesignOrdersTable",
+      "packagingDesignVariantsTable",
+      "packagingDesignValidationLogTable",
+      "PACKAGING_SERVICE_TYPES",
+      "PACKAGING_PANELS",
+      "PACKAGING_ORDER_STATUSES",
+      "REGULATED_SERVICE_TYPES",
+      "PackagingDesignOrder",
+      "PackagingDesignVariant",
+      "PackagingDesignValidationLog",
+      "PrepressValidationResult",
+      "PrepressCheck",
+      "PrintWarning",
+      "PackagingServiceType",
+      "PackagingOrderStatus"
     ]
   },
+
+  "dependencyRequests": [
+    {
+      "package": "drizzle-orm",
+      "alreadyPresent": true,
+      "note": "Already a direct dependency of artifacts/api-server."
+    }
+  ],
+
+  "integrationNotes": [
+    "Admin routes require x-admin-api-key (handled by global adminAuthWithExceptions middleware — no per-route duplication needed).",
+    "Public routes /public/packaging-design/* do NOT require auth — customer-facing submission and UUID order tracking.",
+    "Migration draft at integration/migrations/team-19.sql — additive only, no DROP/TRUNCATE, all IF NOT EXISTS.",
+    "print_ready status gate is enforced in updateOrderStatus(): blocked unless prepressValidationJson.blockerCount === 0 AND all active variants have consistencyStatus === 'consistent'.",
+    "Regulated service types (food_packaging, cosmetic_packaging, bottle_label, jar_label) require hasIngredientsBlock AND hasLegalBlock — enforced at both submit (public route) and prepress validation."
+  ],
+
+  "services": [
+    "box", "pouch", "bottle_label", "jar_label",
+    "cup", "sleeve", "food_packaging", "cosmetic_packaging"
+  ],
+
+  "blueprint": {
+    "panels": ["front", "back", "side", "top", "bottom"],
+    "zones": [
+      "dieline", "bleed", "safe_area", "barcode",
+      "ingredients_legal_block", "logo", "product_image", "variant_label"
+    ],
+    "validationChecks": [
+      "bleed_check", "safe_area_check", "safe_area_layout_check",
+      "barcode_type_check", "barcode_variant_check",
+      "mandatory_info_check", "variant_exists_check",
+      "color_mode_check", "dimension_check", "panels_check"
+    ]
+  },
+
   "invariants": [
     "print_ready status MUST NOT be set before prepress validation passes with zero error-severity blockers",
-    "Regulated service types (food_packaging, cosmetic_packaging, bottle_label, jar_label) MUST have hasIngredientsBlock AND hasLegalBlock",
+    "Regulated service types MUST have hasIngredientsBlock AND hasLegalBlock",
     "Barcode zone MUST NOT overlap bleed or safe-area margins",
-    "All active variants MUST pass consistency validation before the order reaches print_ready"
+    "All active variants MUST pass consistency validation before print_ready"
   ],
+
   "tables": [
     "ai_platform.packaging_design_orders",
     "ai_platform.packaging_design_variants",
     "ai_platform.packaging_design_validation_log"
   ],
+
   "routes": {
     "admin": [
       "GET    /ai/packaging-design/orders",
@@ -57,8 +124,8 @@
       "POST   /ai/packaging-design/orders/:id/validate",
       "GET    /ai/packaging-design/orders/:id/variants",
       "POST   /ai/packaging-design/orders/:id/variants",
-      "PATCH  /ai/packaging-design/variants/:variantId",
-      "DELETE /ai/packaging-design/variants/:variantId",
+      "PATCH  /ai/packaging-design/variants/:vid",
+      "DELETE /ai/packaging-design/variants/:vid",
       "GET    /ai/packaging-design/analytics"
     ],
     "public": [

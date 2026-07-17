@@ -9,13 +9,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   isTransitionAllowed,
 } from "../domains/packaging-design/packagingDesignService.js";
-import type { PackagingDesignOrder } from "@workspace/db";
 import {
   REGULATED_SERVICE_TYPES,
   PACKAGING_SERVICE_TYPES,
   PACKAGING_PANELS,
   PACKAGING_ORDER_STATUSES,
-} from "@workspace/db";
+  type PackagingDesignOrder,
+} from "../domains/packaging-design/schema.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers

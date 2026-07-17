@@ -23,7 +23,7 @@
 import { Router, type Request, type Response } from "express";
 import { adminAuth } from "../middleware/adminAuth.js";
 import * as svc from "../domains/packaging-design/packagingDesignService.js";
-import { REGULATED_SERVICE_TYPES, PACKAGING_SERVICE_TYPES } from "@workspace/db";
+import { REGULATED_SERVICE_TYPES, PACKAGING_SERVICE_TYPES } from "../domains/packaging-design/schema.js";
 
 const router = Router();
 

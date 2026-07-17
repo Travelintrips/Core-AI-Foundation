@@ -26,7 +26,7 @@ import {
   type PrepressValidationResult,
   type PackagingDesignOrder,
   type PackagingDesignVariant,
-} from "@workspace/db";
+} from "./schema.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Status transition guard
