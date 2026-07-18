@@ -30,7 +30,15 @@ vi.mock("../../middleware/adminAuth.js", () => ({
     if (authHeader === "Bearer test-key") return next();
     return res.status(401).json({ error: "Unauthorized: invalid or missing admin API key" });
   }),
-  adminAuthWithExceptions: vi.fn((_req: express.Request, _res: express.Response, next: express.NextFunction) => next()),
+  // adminAuthWithExceptions mirrors the real function behaviour for test routes:
+  // it blocks unauthenticated requests (same as adminAuth) except on explicitly
+  // public paths.  Using a pass-through here would silently skip auth checks on
+  // GET routes that the router protects via router.use(adminAuthWithExceptions).
+  adminAuthWithExceptions: vi.fn((req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers["authorization"] as string | undefined;
+    if (authHeader === "Bearer test-key") return next();
+    return res.status(401).json({ error: "Unauthorized: invalid or missing admin API key" });
+  }),
   requireAdminApiKey: vi.fn((_req: express.Request, _res: express.Response, next: express.NextFunction) => next()),
 }));
 

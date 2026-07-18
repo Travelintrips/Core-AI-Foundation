@@ -57,7 +57,13 @@ const mocks = vi.hoisted(() => ({
   logWarn: vi.fn(),
 }));
 
-vi.mock("../../../middleware/adminAuth.js",                                () => ({ adminAuth: mocks.adminAuth }));
+// adminAuthWithExceptions must also be exported: creative-commercial/index.ts does
+// router.use(adminAuthWithExceptions) and Vitest throws if the export is missing.
+// Delegate to mocks.adminAuth so per-test mockImplementation changes propagate.
+vi.mock("../../../middleware/adminAuth.js",                                () => ({
+  adminAuth: mocks.adminAuth,
+  adminAuthWithExceptions: vi.fn((req: unknown, res: unknown, next: () => void) => mocks.adminAuth(req, res, next)),
+}));
 vi.mock("../../../services/creative-commercial/index.js",                 () => mocks);
 vi.mock("../../../services/creative-commercial/attributionService.js",    () => mocks);
 vi.mock("../../../services/creative-commercial/funnelProjectionService.js", () => mocks);

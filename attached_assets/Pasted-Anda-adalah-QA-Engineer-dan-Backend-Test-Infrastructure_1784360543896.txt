@@ -1,0 +1,160 @@
+Anda adalah QA Engineer dan Backend Test Infrastructure Engineer.
+
+Tugas Anda adalah mengaudit 9 kegagalan full test suite yang disebut sebagai pre-existing:
+
+- adminAuth mock pada design-blueprints
+- adminAuth mock pada designComponentSecurity
+
+JANGAN mengubah fitur Template Knowledge Library.
+
+JANGAN mengubah business logic produksi kecuali terbukti ada defect nyata.
+
+JANGAN menonaktifkan test.
+
+JANGAN memakai skip, only, todo, atau mengurangi assertion.
+
+====================================================
+OBJECTIVE
+====================================================
+
+Buktikan apakah 9 failure tersebut benar-benar pre-existing atau merupakan regression akibat remediation Template Knowledge Library.
+
+====================================================
+PHASE 1 — BASELINE COMPARISON
+====================================================
+
+Identifikasi:
+
+1. commit sebelum remediation
+2. commit setelah remediation
+3. daftar file yang berubah selama remediation
+4. hasil full test pada kedua commit
+
+Jalankan test yang sama pada:
+
+- baseline commit
+- remediation commit
+
+Gunakan environment, dependency lockfile, database fixture, dan command yang identik.
+
+Laporkan:
+
+- jumlah test
+- nama test gagal
+- error message
+- stack trace
+- apakah failure identik pada kedua commit
+
+Jika failure tidak muncul di baseline:
+anggap sebagai regression.
+
+====================================================
+PHASE 2 — ROOT CAUSE
+====================================================
+
+Audit file terkait:
+
+- design-blueprints tests
+- designComponentSecurity tests
+- adminAuth mock
+- auth middleware
+- test setup
+- module mock ordering
+- hoisting
+- resetModules
+- clearMocks
+- restoreMocks
+- environment initialization
+
+Cari root cause pasti.
+
+Periksa khusus:
+
+- mock adminAuth tidak mengikuti API terbaru
+- mock di-load setelah module under test
+- shared mock state bocor antar-test
+- vi.mock / jest.mock hoisting problem
+- fixture user/admin tidak lengkap
+- middleware signature berubah
+- test bergantung urutan eksekusi
+- perbedaan saat test tunggal vs full suite
+
+====================================================
+PHASE 3 — ISOLATION TEST
+====================================================
+
+Jalankan:
+
+1. masing-masing file test secara individual
+2. kedua file bersamaan
+3. full suite
+4. urutan test dibalik jika memungkinkan
+
+Catat apakah failure:
+
+- selalu terjadi
+- hanya saat full suite
+- bergantung urutan
+- akibat state leakage
+
+====================================================
+PHASE 4 — REMEDIATION
+====================================================
+
+Jika root cause hanya test infrastructure:
+
+Perbaiki:
+
+- mock
+- fixture
+- cleanup
+- module isolation
+- test setup
+
+Jangan mengubah production authorization behavior agar test lulus.
+
+Jika ditemukan production defect:
+
+STOP dan laporkan sebelum mengubah business logic.
+
+====================================================
+PHASE 5 — VERIFICATION
+====================================================
+
+Expected:
+
+- 9 failure menjadi 0
+- targeted Template Knowledge tests tetap 62/62
+- seluruh test lama PASS
+- tidak ada test di-skip
+- tidak ada assertion dikurangi
+- build PASS
+- typecheck tidak menambah error baru
+
+====================================================
+FINAL OUTPUT
+====================================================
+
+Laporkan:
+
+- baseline commit
+- remediation commit
+- bukti apakah pre-existing
+- root cause
+- file yang diperbaiki
+- jumlah test sebelum/sesudah
+- full suite result
+- Template Knowledge targeted tests
+- build result
+- typecheck result
+
+Jika seluruh test lulus, tulis:
+
+FULL REGRESSION: PASS
+READY FOR MAIN MERGE
+
+Jika masih gagal, tulis:
+
+FULL REGRESSION: BLOCKED
+
+dan sebutkan blocker secara spesifik.

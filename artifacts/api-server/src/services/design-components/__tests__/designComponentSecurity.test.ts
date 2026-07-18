@@ -23,9 +23,21 @@ import path from "node:path";
 
 // ── Module mocks (must come before any imports of the mocked modules) ─────────
 
-vi.mock("../../../middleware/adminAuth.js", () => ({
-  adminAuth: vi.fn((_req: any, _res: any, next: any) => next()),
-}));
+// adminAuthWithExceptions must also be exported from the mock because
+// src/routes/design-components/router.ts does:
+//   router.use(adminAuthWithExceptions);
+// Without this export Vitest throws "No adminAuthWithExceptions export is defined".
+//
+// Implementation: adminAuthWithExceptions delegates to adminAuth so that
+// buildApp(isAuthed)'s authMock.mockImplementation() propagates to every
+// request routed through adminAuthWithExceptions — no separate control point needed.
+vi.mock("../../../middleware/adminAuth.js", () => {
+  const adminAuth = vi.fn((_req: any, _res: any, next: any) => next());
+  return {
+    adminAuth,
+    adminAuthWithExceptions: vi.fn((req: any, res: any, next: any) => adminAuth(req, res, next)),
+  };
+});
 
 vi.mock("@workspace/db", () => ({
   db: {
