@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ArrowRight, Menu, X, Diamond, Twitter, Linkedin, Github, Mail, Shield, FileText, Globe } from "lucide-react";
+import { ArrowRight, Menu, X, Diamond, Twitter, Linkedin, Github, Mail, Shield, FileText, Globe, Hash } from "lucide-react";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation, type Lang } from "@/lib/i18n";
