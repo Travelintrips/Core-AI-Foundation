@@ -98,11 +98,107 @@ const PACKAGE_TIERS = [
 
 const WIZARD_STEPS = [
   { id: 1, label: "Apa yang dibuat" },
-  { id: 2, label: "Bisnis Anda" },
-  { id: 3, label: "Target Market" },
-  { id: 4, label: "Tujuan Project" },
+  { id: 2, label: "Profil Anda" },
+  { id: 3, label: "Konteks" },
+  { id: 4, label: "Tujuan" },
   { id: 5, label: "Referensi" },
 ];
+
+/* Category-adaptive content for steps 1–5 */
+const CATEGORY_DESC_PLACEHOLDER: Record<string, string> = {
+  interior:          'Contoh: "Saya ingin mendesain ulang ruang makan keluarga, konsep Japandi, sekitar 4x5 meter, untuk 6 orang."',
+  branding:          'Contoh: "Saya ingin membuat brand fashion wanita premium untuk target usia 25–35 tahun, nuansa minimalis dan elegan."',
+  packaging:         'Contoh: "Produk skincare saya butuh kemasan yang mewah, warna hitam & emas, untuk segmen premium."',
+  fashion:           'Contoh: "Ingin membuat koleksi ready-to-wear casual wanita dengan sentuhan batik modern untuk pasar millennial."',
+  company_profile:   'Contoh: "Perusahaan logistik 10 tahun, butuh company profile baru untuk pitching investor & klien korporat."',
+  pitch_deck:        'Contoh: "Startup fintech tahap seed, butuh pitch deck untuk fundraising Series A, target investor Asia Tenggara."',
+  social_media:      'Contoh: "Kafe baru di Jakarta Selatan, butuh konten Instagram yang konsisten — feed, Reels, Stories — selama 3 bulan."',
+  website:           'Contoh: "Butuh landing page untuk kursus online desain grafis, target peserta mahasiswa dan fresh graduate."',
+  ai_image:          'Contoh: "Butuh 20 foto editorial produk tas kulit premium, background studio, mood elegan dan modern."',
+  creative_marketing:'Contoh: "Campaign Ramadan untuk brand makanan, butuh konsep kreatif, visual, dan copy untuk semua platform digital."',
+};
+
+const CATEGORY_STYLE_PLACEHOLDER: Record<string, string> = {
+  interior:          'Contoh: Konsep Japandi — kayu natural, linen krem, tanpa ornamen berlebihan. Hindari warna mencolok.',
+  branding:          'Contoh: Warna dominan hitam dan emas, nuansa premium dan minimalis, menghindari warna cerah.',
+  packaging:         'Contoh: Clean & premium, tipografi serif, warna earth tone. Referensi: Aesop, Le Labo.',
+  fashion:           'Contoh: Modern-feminine, palet pastel dan nude, siluet bersih. Referensi: COS, Theory.',
+  company_profile:   'Contoh: Profesional dan modern, warna biru navy & abu-abu, layout portrait A4.',
+  pitch_deck:        'Contoh: Minimalis modern, dark mode, highlight kuning. Jangan terlalu banyak teks per slide.',
+  social_media:      'Contoh: Mood hangat & cozy, preset filter keemasan, tipografi rounded. Referensi: @kompas.com.',
+  website:           'Contoh: Bersih, whitespace luas, accent purple. Referensi: Stripe.com, Linear.app.',
+  ai_image:          'Contoh: Editorial — pencahayaan studio lembut, background putih bersih, shadow dramatis.',
+  creative_marketing:'Contoh: Bold & playful, warna kontras tinggi, headline besar. Inspirasi: Nike, Tokopedia campaign.',
+};
+
+const CATEGORY_STEP2: Record<string, {
+  profileLabel: string;
+  profilePlaceholder: string;
+  industryOptions: string[];
+  stageLabel: string;
+  stageOptions: string[];
+}> = {
+  interior: {
+    profileLabel: "Nama / brand studio (opsional)",
+    profilePlaceholder: "Contoh: Keluarga Santoso atau Studio Interior ABC",
+    industryOptions: ["Hunian Pribadi", "Hospitality (Hotel/Villa)", "F&B (Kafe/Restoran)", "Kantor / Korporat", "Retail / Showroom", "Lainnya"],
+    stageLabel: "Jenis proyek interior",
+    stageOptions: ["Proyek baru (belum ada ruangan)", "Renovasi (sudah ada ruangan)", "Dekorasi ulang (struktur tidak berubah)", "Showroom / display"],
+  },
+  website: {
+    profileLabel: "Nama bisnis / brand *",
+    profilePlaceholder: "Contoh: Kursus Desain Pak Budi",
+    industryOptions: ["E-commerce / Toko Online", "Jasa & Konsultasi", "Teknologi / SaaS", "Pendidikan", "Media / Blog", "F&B", "Lainnya"],
+    stageLabel: "Status website saat ini",
+    stageOptions: ["Belum punya website", "Punya website, ingin redesign", "Menambahkan halaman baru", "Buat versi baru dari awal"],
+  },
+  social_media: {
+    profileLabel: "Nama brand / akun *",
+    profilePlaceholder: "Contoh: @kopi.nusantara",
+    industryOptions: ["F&B", "Fashion & Beauty", "Teknologi", "Pendidikan", "Lifestyle", "Retail", "Lainnya"],
+    stageLabel: "Status akun saat ini",
+    stageOptions: ["Akun baru (0–1k followers)", "Sedang tumbuh (1k–10k)", "Sudah established (10k+)", "Akun brand besar / korporat"],
+  },
+  pitch_deck: {
+    profileLabel: "Nama startup / perusahaan *",
+    profilePlaceholder: "Contoh: Finku Technologies",
+    industryOptions: ["Fintech", "Healthtech", "Edtech", "E-commerce", "SaaS / B2B", "Consumer Brand", "Lainnya"],
+    stageLabel: "Tahap pendanaan",
+    stageOptions: ["Pre-seed / bootstrapped", "Seed", "Series A", "Series B+", "Perusahaan mapan"],
+  },
+  default: {
+    profileLabel: "Nama bisnis / brand *",
+    profilePlaceholder: "Contoh: Aurora Fashion Studio",
+    industryOptions: ["Fashion", "Retail", "F&B", "Teknologi", "Healthcare", "Property", "Pendidikan", "Jasa", "Lainnya"],
+    stageLabel: "Tahap bisnis",
+    stageOptions: ["Baru mulai (0–1 tahun)", "Berkembang (1–3 tahun)", "Mapan (3+ tahun)", "Enterprise"],
+  },
+};
+
+const CATEGORY_STEP3: Record<string, { title: string; subtitle: string; audienceLabel: string; audiencePlaceholder: string }> = {
+  interior: {
+    title: "Tentang ruangan & pengguna",
+    subtitle: "Detail ini membantu AI memahami skala dan fungsi ruangan yang akan didesain.",
+    audienceLabel: "Siapa pengguna utama ruangan ini?",
+    audiencePlaceholder: "Contoh: Keluarga dengan 2 anak, sering makan bersama, butuh meja 6 orang. Gaya hidup semi-formal.",
+  },
+  default: {
+    title: "Siapa target market Anda?",
+    subtitle: "Memahami audiens Anda membantu AI membuat konten yang beresonansi.",
+    audienceLabel: "Deskripsi target audiens *",
+    audiencePlaceholder: "Contoh: Wanita urban usia 25–35 tahun, berpenghasilan menengah-atas, peduli gaya hidup dan fashion premium.",
+  },
+};
+
+const CATEGORY_GOALS: Record<string, string[]> = {
+  interior:           ["Desain hunian baru", "Renovasi ruangan", "Dekorasi ulang", "Desain kantor / komersial", "Showroom / display", "Lainnya"],
+  website:            ["Buat website baru", "Redesign website lama", "Tambah fitur / halaman", "Optimalkan konversi", "Meningkatkan SEO", "Lainnya"],
+  social_media:       ["Konsistensi konten", "Tingkatkan engagement", "Peluncuran produk / brand", "Bangun komunitas", "Lead generation", "Lainnya"],
+  pitch_deck:         ["Fundraising investor", "Partnership / MOU", "Presentasi internal", "Demo Day / kompetisi", "IPO / go public", "Lainnya"],
+  ai_image:           ["Foto produk katalog", "Campaign editorial", "Konten media sosial", "Iklan digital", "Lookbook / portofolio", "Lainnya"],
+  company_profile:    ["Presentasi ke investor", "Pitching klien korporat", "Rekrutmen & employer branding", "Rebranding perusahaan", "Anniversary / milestone", "Lainnya"],
+  default:            ["Membangun brand baru", "Rebranding", "Meningkatkan penjualan", "Ekspansi pasar", "Peluncuran produk", "Meningkatkan awareness", "Lainnya"],
+};
 
 /* ─────────────────────────────────────────────────────────
    ANIMATION VARIANTS
@@ -416,7 +512,7 @@ function Step1({ data, onChange }: { data: WizardData; onChange: (k: keyof Wizar
         <Textarea
           value={data.projectDesc || data.query}
           onChange={(v) => onChange("projectDesc", v)}
-          placeholder={`Contoh: "Saya ingin membuat brand fashion wanita premium untuk target usia 25-35 tahun, dengan nuansa minimalis dan elegan."`}
+          placeholder={CATEGORY_DESC_PLACEHOLDER[data.categoryId] ?? CATEGORY_DESC_PLACEHOLDER.branding}
           rows={4}
         />
       </div>
@@ -424,37 +520,60 @@ function Step1({ data, onChange }: { data: WizardData; onChange: (k: keyof Wizar
   );
 }
 
+/* ── Shared context strip shown at top of steps 2-5 ── */
+function ContextStrip({ data }: { data: WizardData }) {
+  const cat = PROJECT_CATEGORIES.find((c) => c.id === data.categoryId);
+  const desc = (data.projectDesc || data.query).trim();
+  if (!cat || !desc) return null;
+  return (
+    <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl mb-1"
+      style={{ background: `${cat.color}0D`, border: `1px solid ${cat.color}28` }}>
+      <span className="text-base shrink-0">{cat.emoji}</span>
+      <div className="flex-1 min-w-0">
+        <span className="text-xs font-semibold" style={{ color: cat.color }}>{cat.label}</span>
+        <span className="text-xs mx-1.5" style={{ color: "#243352" }}>·</span>
+        <span className="text-xs truncate" style={{ color: "#6B7FA8" }}>{desc.length > 60 ? desc.slice(0, 60) + "…" : desc}</span>
+      </div>
+    </div>
+  );
+}
+
 function Step2({ data, onChange }: { data: WizardData; onChange: (k: keyof WizardData, v: string) => void }) {
+  const cfg = CATEGORY_STEP2[data.categoryId] ?? CATEGORY_STEP2.default;
+  const isRequired = cfg.profileLabel.includes("*");
   return (
     <motion.div key="step2" variants={slideIn} initial="hidden" animate="show" exit="exit" className="space-y-6">
+      <ContextStrip data={data} />
       <div>
         <h2 className="text-2xl font-bold mb-2" style={{ color: "#F0F4FF", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          Ceritakan bisnis Anda
+          {data.categoryId === "interior" ? "Profil proyek Anda" : "Ceritakan bisnis Anda"}
         </h2>
         <p className="text-sm" style={{ color: "#6B7FA8" }}>
-          AI kami menyesuaikan workflow berdasarkan profil bisnis Anda.
+          AI kami menyesuaikan workflow berdasarkan profil{data.categoryId === "interior" ? " dan skala proyek" : " bisnis"} Anda.
         </p>
       </div>
 
       <div className="space-y-4">
         <div>
-          <FieldLabel>Nama bisnis / brand *</FieldLabel>
-          <Input value={data.businessName} onChange={(v) => onChange("businessName", v)} placeholder="Contoh: Aurora Fashion Studio" />
+          <FieldLabel>{cfg.profileLabel}</FieldLabel>
+          <Input value={data.businessName} onChange={(v) => onChange("businessName", v)} placeholder={cfg.profilePlaceholder} />
         </div>
         <div>
-          <FieldLabel>Industri</FieldLabel>
+          <FieldLabel>
+            {data.categoryId === "interior" ? "Tipe klien / lingkungan" : "Industri"}
+          </FieldLabel>
           <SelectChip
             value={data.industry}
             onChange={(v) => onChange("industry", v)}
-            options={["Fashion", "Retail", "F&B", "Teknologi", "Healthcare", "Property", "Pendidikan", "Jasa", "Lainnya"]}
+            options={cfg.industryOptions}
           />
         </div>
         <div>
-          <FieldLabel>Tahap bisnis</FieldLabel>
+          <FieldLabel>{cfg.stageLabel}</FieldLabel>
           <SelectChip
             value={data.stage}
             onChange={(v) => onChange("stage", v)}
-            options={["Baru mulai (0–1 tahun)", "Berkembang (1–3 tahun)", "Mapan (3+ tahun)", "Enterprise"]}
+            options={cfg.stageOptions}
           />
         </div>
       </div>
@@ -463,43 +582,58 @@ function Step2({ data, onChange }: { data: WizardData; onChange: (k: keyof Wizar
 }
 
 function Step3({ data, onChange }: { data: WizardData; onChange: (k: keyof WizardData, v: string) => void }) {
+  const cfg = CATEGORY_STEP3[data.categoryId] ?? CATEGORY_STEP3.default;
+  const showGeo = data.categoryId !== "interior";
   return (
     <motion.div key="step3" variants={slideIn} initial="hidden" animate="show" exit="exit" className="space-y-6">
+      <ContextStrip data={data} />
       <div>
         <h2 className="text-2xl font-bold mb-2" style={{ color: "#F0F4FF", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          Siapa target market Anda?
+          {cfg.title}
         </h2>
-        <p className="text-sm" style={{ color: "#6B7FA8" }}>
-          Memahami audiens Anda membantu AI membuat konten yang beresonansi.
-        </p>
+        <p className="text-sm" style={{ color: "#6B7FA8" }}>{cfg.subtitle}</p>
       </div>
 
       <div className="space-y-4">
         <div>
-          <FieldLabel>Deskripsi target audiens *</FieldLabel>
+          <FieldLabel>{cfg.audienceLabel}</FieldLabel>
           <Textarea
             value={data.targetMarket}
             onChange={(v) => onChange("targetMarket", v)}
-            placeholder="Contoh: Wanita urban usia 25-35 tahun, berpenghasilan menengah-atas, peduli gaya hidup dan fashion premium."
+            placeholder={cfg.audiencePlaceholder}
             rows={3}
           />
         </div>
-        <div>
-          <FieldLabel>Jangkauan geografis</FieldLabel>
-          <SelectChip
-            value={data.geography}
-            onChange={(v) => onChange("geography", v)}
-            options={["Lokal (Kota)", "Nasional", "Regional (ASEAN)", "Global"]}
-          />
-        </div>
+        {showGeo && (
+          <div>
+            <FieldLabel>Jangkauan geografis</FieldLabel>
+            <SelectChip
+              value={data.geography}
+              onChange={(v) => onChange("geography", v)}
+              options={["Lokal (Kota)", "Nasional", "Regional (ASEAN)", "Global"]}
+            />
+          </div>
+        )}
+        {!showGeo && (
+          <div>
+            <FieldLabel>Lokasi proyek</FieldLabel>
+            <SelectChip
+              value={data.geography}
+              onChange={(v) => onChange("geography", v)}
+              options={["Jakarta", "Bandung", "Surabaya", "Bali", "Kota lain di Indonesia", "Luar negeri"]}
+            />
+          </div>
+        )}
       </div>
     </motion.div>
   );
 }
 
 function Step4({ data, onChange }: { data: WizardData; onChange: (k: keyof WizardData, v: string) => void }) {
+  const goals = CATEGORY_GOALS[data.categoryId] ?? CATEGORY_GOALS.default;
   return (
     <motion.div key="step4" variants={slideIn} initial="hidden" animate="show" exit="exit" className="space-y-6">
+      <ContextStrip data={data} />
       <div>
         <h2 className="text-2xl font-bold mb-2" style={{ color: "#F0F4FF", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
           Apa tujuan project ini?
@@ -514,17 +648,11 @@ function Step4({ data, onChange }: { data: WizardData; onChange: (k: keyof Wizar
           <FieldLabel>Tujuan utama *</FieldLabel>
           <SelectChip
             value={data.goals}
-            onChange={(v) => onChange("goals", v)}
-            options={[
-              "Membangun brand baru",
-              "Rebranding",
-              "Meningkatkan penjualan",
-              "Ekspansi pasar",
-              "Peluncuran produk",
-              "Fundraising / investor",
-              "Meningkatkan awareness",
-              "Lainnya",
-            ]}
+            onChange={(v) => {
+              // Clear goals if user switches to a different category that changed options
+              onChange("goals", v);
+            }}
+            options={goals}
           />
         </div>
         <div>
@@ -541,24 +669,37 @@ function Step4({ data, onChange }: { data: WizardData; onChange: (k: keyof Wizar
 }
 
 function Step5({ data, onChange }: { data: WizardData; onChange: (k: keyof WizardData, v: string) => void }) {
+  const cat = PROJECT_CATEGORIES.find((c) => c.id === data.categoryId);
+  const uploadHint = data.categoryId === "interior"
+    ? "Upload foto kondisi ruangan saat ini, moodboard, atau denah bisa dilakukan setelah project dibuat, di halaman brief Anda."
+    : data.categoryId === "website"
+    ? "Upload logo, aset brand, atau screenshot website lama bisa dilakukan setelah project dibuat, di halaman brief Anda."
+    : "Upload logo, aset visual, atau file referensi bisa dilakukan setelah project dibuat, di halaman brief Anda.";
+
   return (
     <motion.div key="step5" variants={slideIn} initial="hidden" animate="show" exit="exit" className="space-y-6">
+      <ContextStrip data={data} />
       <div>
         <h2 className="text-2xl font-bold mb-2" style={{ color: "#F0F4FF", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
           Referensi & preferensi gaya
         </h2>
         <p className="text-sm" style={{ color: "#6B7FA8" }}>
-          Opsional — bagikan referensi visual atau brand yang Anda sukai.
+          Opsional — bagikan referensi visual atau{" "}
+          {data.categoryId === "interior" ? "desainer interior" : "brand"} yang Anda sukai.
         </p>
       </div>
 
       <div className="space-y-4">
         <div>
-          <FieldLabel>Link referensi (website, Instagram, Behance, dll.)</FieldLabel>
+          <FieldLabel>
+            {data.categoryId === "interior"
+              ? "Link referensi (Pinterest, Houzz, Instagram, dll.)"
+              : "Link referensi (website, Instagram, Behance, dll.)"}
+          </FieldLabel>
           <Textarea
             value={data.references}
             onChange={(v) => onChange("references", v)}
-            placeholder="Paste link referensi, satu per baris. Contoh:&#10;https://www.behance.net/...&#10;https://www.instagram.com/..."
+            placeholder="Paste link referensi, satu per baris. Contoh:&#10;https://www.pinterest.com/...&#10;https://www.instagram.com/..."
             rows={3}
           />
         </div>
@@ -567,17 +708,17 @@ function Step5({ data, onChange }: { data: WizardData; onChange: (k: keyof Wizar
           <Textarea
             value={data.styleNotes}
             onChange={(v) => onChange("styleNotes", v)}
-            placeholder="Contoh: Warna dominan hitam dan emas, nuansa premium dan minimalis, menghindari warna cerah."
+            placeholder={CATEGORY_STYLE_PLACEHOLDER[data.categoryId] ?? CATEGORY_STYLE_PLACEHOLDER.branding}
             rows={3}
           />
         </div>
 
         {/* Upload hint */}
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl"
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
           style={{ background: "rgba(124,110,250,0.06)", border: "1px dashed rgba(124,110,250,0.25)" }}>
-          <Upload className="w-4 h-4 shrink-0" style={{ color: "#7C6EFA" }} />
-          <p className="text-xs" style={{ color: "#8B9BC4" }}>
-            Upload logo dan aset brand bisa dilakukan setelah project dibuat, di halaman brief Anda.
+          <Upload className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "#7C6EFA" }} />
+          <p className="text-xs leading-relaxed" style={{ color: "#8B9BC4" }}>
+            {uploadHint}
           </p>
         </div>
       </div>
