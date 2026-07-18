@@ -34,6 +34,7 @@ import {
   LayoutTemplate,
   Layers,
   FileStack,
+  PackageSearch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -122,6 +123,12 @@ const NAV_SECTIONS = [
       { href: "/creative-marketplace", label: "Creative Marketplace", icon: Store },
       { href: "/design-render-batches", label: "Bulk Render", icon: Layers },
       { href: "/design-templates/ai-create", label: "AI Template Assistant", icon: Sparkles },
+    ],
+  },
+  {
+    label: "Trade Tools",
+    items: [
+      { href: "/customs-tariff", label: "Tarif BTKI & HS Code", icon: PackageSearch },
     ],
   },
   {

@@ -117,6 +117,8 @@ import templateKnowledgeRouter from "./template-knowledge.js";
 import seedKnowledgeRouter from "./seedKnowledge.js";
 // ── Two-Stage Image Preview Pipeline ─────────────────────────────────────
 import imagePreviewPipelineRouter from "./image-preview-pipeline.js";
+// ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
+import customsRouter from "./customs.js";
 
 const router: IRouter = Router();
 
@@ -237,5 +239,7 @@ router.use("/template-knowledge", templateKnowledgeRouter);
 router.use("/seed", seedKnowledgeRouter);
 // ── Two-Stage Image Preview Pipeline ─────────────────────────────────────
 router.use(imagePreviewPipelineRouter);
+// ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
+router.use(customsRouter);
 
 export default router;

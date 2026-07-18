@@ -89,6 +89,8 @@ import PackagingDesignPage from "@/pages/packaging-design";
 // ── Team 22: Vendor Ecosystem ─────────────────────────────────────────────
 import VendorAdminPage from "@/pages/creative-vendors/VendorAdminPage";
 import VendorAdminDetailPage from "@/pages/creative-vendors/VendorAdminDetailPage";
+// ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
+import CustomsTariff from "@/pages/customs-tariff";
 
 const queryClient = new QueryClient();
 
@@ -172,6 +174,8 @@ function AdminRouter() {
         {/* ── Team 22: Vendor Ecosystem ───────────────────────────────── */}
         <Route path="/creative-vendors/:id" component={VendorAdminDetailPage} />
         <Route path="/creative-vendors" component={VendorAdminPage} />
+        {/* ── Customs Tariff (BTKI) ───────────────────────────────────── */}
+        <Route path="/customs-tariff" component={CustomsTariff} />
         <Route path="/design-render-batches/new" component={DesignRenderBatchesNew} />
         <Route path="/design-render-batches/:id" component={DesignRenderBatchDetail} />
         <Route path="/design-render-batches" component={DesignRenderBatches} />
