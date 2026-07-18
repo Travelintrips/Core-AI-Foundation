@@ -7,7 +7,7 @@ import {
   Scale, Truck, Package, TrendingUp, Briefcase, Headphones, BarChart2,
   RotateCcw, Filter, ChevronDown, Zap, Shield, X, Eye, Building2,
   Globe, LayoutGrid, ChevronRight, Award, Flame, BadgeCheck, Lock,
-  ChevronUp, SlidersHorizontal, History, Hash, Cpu, ArrowLeft,
+  ChevronUp, SlidersHorizontal, History, Hash, Cpu, ArrowLeft, Calculator,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -1073,6 +1073,19 @@ export default function ServicesPage() {
                       {cat.name}
                     </button>
                   ))}
+                  {/* PPJK Tariff Calculator shortcut */}
+                  <Link
+                    href="/tarif-kalkulator"
+                    className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border transition-all duration-150"
+                    style={{ borderColor: "rgba(34,211,238,0.40)", color: "#22D3EE", background: "rgba(34,211,238,0.06)" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(34,211,238,0.14)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(34,211,238,0.06)"; }}
+                  >
+                    <Calculator className="w-3 h-3" />
+                    Customs &amp; PPJK AI
+                    <span className="ml-0.5 text-[9px] font-bold px-1 py-0.5 rounded-full"
+                      style={{ background: "rgba(34,211,238,0.18)", color: "#22D3EE" }}>Baru</span>
+                  </Link>
                 </>
               )}
             </motion.div>
@@ -1125,6 +1138,35 @@ export default function ServicesPage() {
                       </button>
                     );
                   })}
+
+              {/* ── Customs & PPJK AI — special tab linking to tariff calculator ── */}
+              {!loadingCategories && (
+                <Link
+                  href="/tarif-kalkulator"
+                  className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-all duration-200 hover:scale-105"
+                  style={{
+                    borderColor: "rgba(34,211,238,0.45)",
+                    color: "#22D3EE",
+                    background: "rgba(34,211,238,0.07)",
+                    boxShadow: "0 0 12px rgba(34,211,238,0.08)",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "rgba(34,211,238,0.16)";
+                    (e.currentTarget as HTMLElement).style.borderColor = "rgba(34,211,238,0.70)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "rgba(34,211,238,0.07)";
+                    (e.currentTarget as HTMLElement).style.borderColor = "rgba(34,211,238,0.45)";
+                  }}
+                >
+                  <Calculator className="w-3.5 h-3.5" />
+                  Customs &amp; PPJK AI
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                    style={{ background: "rgba(34,211,238,0.20)", color: "#22D3EE", lineHeight: 1 }}>
+                    Baru
+                  </span>
+                </Link>
+              )}
             </div>
           </div>
         </section>
