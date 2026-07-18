@@ -76,6 +76,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/ai/catalog/public", // customer-facing catalog — must never require the admin key
   "/internal/auth/login", // internal staff login — must be reachable before a session exists
   "/customs", // BTKI tariff search — public reference data, no auth needed
+  "/cargo",   // Cargo Rate Finder proxy — public rate lookup, no admin key needed
 ];
 
 /**
