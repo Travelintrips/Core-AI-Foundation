@@ -79,3 +79,4 @@
 - [phase4-library-integration](phase4-library-integration.md) — Phase 4 cherry-pick rules: lib/db tsc -b required, createVersion() obj-arg, PreviewResult has no renderDurationMs, "jpeg" not in RenderFormat
 - [team03-approval-gate-adapter](team03-approval-gate-adapter.md) — Use ai_commercial_gates (gate_type=admin_approval, notes JSON) instead of a parallel approval table; mapGate must handle both snake_case and camelCase column shapes
 - [team03-rbac-tenant-scope](team03-rbac-tenant-scope.md) — Aggregate endpoints filter via customer_profiles WHERE tenant_id = ? subquery; sales_funnel_events has no tenant_id column
+- [knowledge-library-v50-normalization](knowledge-library-v50-normalization.md) — Canonical normalizer + backfill complete; isCanonicalX bug, duplicate properti key, styleKnowledgeSeed spacingStyle fix, DB gap=0

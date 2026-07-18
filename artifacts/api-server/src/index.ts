@@ -1,5 +1,31 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+
+// ── Production database safety guard — must run before any DB operation ───────
+// If NODE_ENV=production but SUPABASE_PROD_DATABASE_URL is not set, the app
+// would silently fall back to the SUPABASE_DATABASE_URL alias or throw an
+// opaque error at query time. We fail closed here instead.
+if (process.env["NODE_ENV"] === "production") {
+  const prodUrl = process.env["SUPABASE_PROD_DATABASE_URL"];
+  const legacyAlias = process.env["SUPABASE_DATABASE_URL"]; // alias used by some envs
+  if (!prodUrl && !legacyAlias) {
+    // eslint-disable-next-line no-console
+    console.error(
+      "[startup] FATAL: NODE_ENV=production but SUPABASE_PROD_DATABASE_URL is not set. " +
+      "The application refuses to start in production without an explicit production " +
+      "database URL. Set SUPABASE_PROD_DATABASE_URL before deploying.",
+    );
+    process.exit(1);
+  }
+  if (!prodUrl && legacyAlias) {
+    // Allow the legacy alias but warn loudly so operators notice
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[startup] WARNING: SUPABASE_PROD_DATABASE_URL is not set; falling back to " +
+      "SUPABASE_DATABASE_URL. Set the canonical production variable to silence this warning.",
+    );
+  }
+}
 import * as jobDispatcher from "./services/jobDispatcherService.js";
 import * as scheduler from "./services/aiSchedulerService.js";
 import * as sseManager from "./services/sseManager.js";

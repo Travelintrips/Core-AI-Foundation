@@ -1,0 +1,388 @@
+Anda adalah Senior Backend Engineer dan Data Migration Engineer.
+
+Tugas Anda adalah memperbaiki seluruh gap yang ditemukan dalam audit Template Knowledge Library.
+
+Audit menemukan:
+
+1. 300 row di ai_platform.ai_templates belum memiliki pasangan di:
+   ai_platform.ai_template_knowledge
+
+2. 90 template memakai style label lama / Title Case yang belum cocok dengan canonical style knowledge.
+
+Contoh:
+
+Bold
+Classic
+Corporate
+Creative
+Elegant
+Minimalist
+Modern
+Natural
+Professional
+Promotional
+
+3. 55 template memakai industry label lama, bebas, singkatan, atau Bahasa Indonesia.
+
+Contoh:
+
+Construction
+Education
+Export
+F&B
+Finance
+Healthcare
+Legal
+Logistics
+Manufacturing
+Property
+Retail
+Technology
+Teknologi
+Trading
+
+4. Database production belum dikonfigurasi.
+
+====================================================
+BATASAN KERJA
+====================================================
+
+Backend dan database only.
+
+Boleh menyentuh:
+
+- repository
+- service
+- migration
+- seed
+- normalization utility
+- validation
+- tests
+- scripts audit/backfill
+
+Tidak boleh menyentuh:
+
+- frontend
+- UI
+- screenshot
+- visual QA
+- unrelated modules
+- business logic di luar Template Knowledge Library
+
+JANGAN menghapus template lama.
+
+JANGAN mengubah ID template lama.
+
+JANGAN membuat template duplikat.
+
+JANGAN menimpa rich payload yang sudah valid.
+
+JANGAN menyentuh Production.
+
+Gunakan hanya SUPABASE_DEV_DATABASE_URL selama implementasi dan verifikasi.
+
+====================================================
+PHASE 1 — AUDIT SOURCE DATA
+====================================================
+
+Lakukan audit read-only terlebih dahulu.
+
+Identifikasi dengan pasti:
+
+- 300 template tanpa rich payload
+- semua style legacy
+- semua industry legacy
+- jumlah row per kategori
+- status template
+- category
+- output formats
+- package level
+- existing metadata yang dapat dipakai untuk membuat rich payload
+
+Simpan laporan baseline sebelum perubahan.
+
+====================================================
+PHASE 2 — CANONICAL NORMALIZATION
+====================================================
+
+Buat normalisasi terpusat dan reusable.
+
+Contoh canonical style:
+
+"Modern"       → "modern"
+"Minimalist"   → "minimalist"
+"Elegant"      → "elegant"
+"Professional" → "professional"
+"Promotional"  → "promotional"
+
+Contoh canonical industry:
+
+"Technology" → "technology"
+"Teknologi"  → "technology"
+"F&B"        → "food_beverage"
+"Property"   → "real_estate"
+"Export"     → "trading"
+"Trading"    → "trading"
+"Logistics"  → "logistics"
+
+Aturan:
+
+1. Buat canonical alias map terpusat.
+2. Jangan membuat mapping tersebar di banyak file.
+3. Normalizer harus:
+   - trim whitespace
+   - lowercase
+   - normalize separator
+   - mendukung alias
+   - fail safely untuk nilai tidak dikenal
+4. Nilai tidak dikenal tidak boleh diam-diam dipetakan secara asal.
+5. Laporkan unresolved values.
+
+Gunakan normalizer yang sama untuk:
+
+- seed
+- matching
+- filter
+- backfill
+- future template creation
+
+====================================================
+PHASE 3 — LEGACY TEMPLATE NORMALIZATION
+====================================================
+
+Normalisasi style dan industry pada template lama.
+
+Persyaratan:
+
+- idempotent
+- transaction-safe
+- auditable
+- tidak mengubah row yang sudah canonical
+- tidak mengubah template hasil seed baru yang sudah benar
+- tidak membuat row baru secara tidak perlu
+
+Sebelum update:
+
+- buat dry-run report
+- tampilkan old value → canonical value
+- tampilkan jumlah affected rows
+
+Jalankan update hanya setelah dry-run tervalidasi.
+
+====================================================
+PHASE 4 — BACKFILL 300 RICH PAYLOAD
+====================================================
+
+Buat backfill untuk semua ai_templates yang belum memiliki pasangan di ai_template_knowledge.
+
+Untuk setiap template lama, hasilkan rich payload minimal:
+
+- brand_dna
+- visual_dna
+- composition
+- prompt_guidance
+- quality_rules
+- business_context
+- output_support
+
+Gunakan data existing sebanyak mungkin:
+
+- template name
+- description
+- category
+- subcategory
+- style
+- industry
+- output formats
+- supported packages
+- tags
+- metadata
+- layout information
+
+JANGAN menghasilkan payload generik yang identik untuk semua template.
+
+Setiap payload harus relevan dengan:
+
+- category
+- industry
+- style
+- target audience
+- output type
+
+Jika data template kurang:
+
+- gunakan deterministic fallback dari canonical knowledge tables
+- jangan mengarang klaim bisnis spesifik
+- tandai provenance/source dalam metadata bila schema mendukung
+
+Insert harus memakai aturan:
+
+- hanya insert jika pasangan belum ada
+- ON CONFLICT tidak boleh merusak data existing
+- rerun harus menghasilkan 0 duplicate
+- rich payload existing tidak boleh tertimpa
+
+====================================================
+PHASE 5 — MATCHING ENGINE COMPATIBILITY
+====================================================
+
+Pastikan matching engine:
+
+1. menggunakan canonical style dan industry
+2. tetap kompatibel dengan template lama
+3. mempertimbangkan seluruh template yang sudah memiliki rich payload
+4. tidak kehilangan 1.310 template existing
+5. tidak melakukan full table scan yang tidak perlu
+6. tetap menggunakan repository/service existing
+7. tidak menambah raw SQL jika repository abstraction sudah tersedia
+
+Verifikasi candidate retrieval untuk:
+
+- fashion
+- technology
+- food_beverage
+- logistics
+- real_estate
+- trading
+- elegant
+- modern
+- minimalist
+- professional
+
+====================================================
+PHASE 6 — DATA INTEGRITY
+====================================================
+
+Setelah remediation, expected result:
+
+ai_templates:
+1.610
+
+ai_template_knowledge:
+1.610
+
+Gap:
+0
+
+Template knowledge orphan:
+0
+
+Unknown canonical style:
+0
+
+Unknown canonical industry:
+0
+
+Duplicate template code:
+0
+
+Duplicate template knowledge:
+0
+
+Null / empty rich payload:
+0
+
+====================================================
+PHASE 7 — TESTS
+====================================================
+
+Tambahkan test untuk:
+
+1. style normalization
+2. industry normalization
+3. alias Bahasa Indonesia
+4. abbreviation seperti F&B
+5. unknown value handling
+6. backfill idempotency
+7. existing rich payload tidak tertimpa
+8. duplicate prevention
+9. matching legacy template setelah normalisasi
+10. matching seeded template tetap berjalan
+11. transaction rollback jika backfill gagal
+12. candidate retrieval lintas style dan industry
+
+Jalankan:
+
+- targeted tests
+- typecheck
+- build
+- full test suite
+
+Seluruh test lama wajib tetap PASS.
+
+====================================================
+PHASE 8 — PRODUCTION READINESS
+====================================================
+
+JANGAN membuat atau menebak Production database URL.
+
+Hanya lakukan:
+
+- verifikasi aplikasi mendukung SUPABASE_PROD_DATABASE_URL
+- pastikan tidak ada fallback berbahaya dari production ke development
+- tambahkan startup guard:
+
+Jika NODE_ENV=production dan SUPABASE_PROD_DATABASE_URL tidak tersedia:
+application harus fail closed.
+
+JANGAN mengubah Production database.
+
+JANGAN menjalankan seed ke Production.
+
+====================================================
+FINAL VERIFICATION
+====================================================
+
+Jalankan audit ulang dan tampilkan:
+
+- before count
+- after count
+- normalized style rows
+- normalized industry rows
+- backfilled knowledge rows
+- unresolved style
+- unresolved industry
+- orphan count
+- duplicate count
+- empty payload count
+- matching engine verification
+- targeted test result
+- full test result
+- build result
+- typecheck result
+
+Expected final:
+
+ai_templates                     = 1.610
+ai_template_knowledge            = 1.610
+templates without rich payload   = 0
+unknown styles                   = 0
+unknown industries               = 0
+knowledge orphan                 = 0
+duplicate rows                   = 0
+empty rich payload               = 0
+
+====================================================
+OUTPUT VERDICT
+====================================================
+
+Jika seluruh kriteria terpenuhi, tulis:
+
+TEMPLATE KNOWLEDGE REMEDIATION: PASS
+
+READY FOR PRODUCTION MIGRATION PREPARATION
+
+Catatan:
+
+Ini belum berarti data sudah masuk Production.
+
+Jika ada masalah, jangan menyembunyikan atau memperbaiki secara spekulatif.
+
+Laporkan:
+
+- issue
+- affected rows
+- root cause
+- file atau table
+- risiko
+- langkah perbaikan

@@ -24,6 +24,7 @@
 import { eq, desc, sql, and } from "drizzle-orm";
 import { db, aiTemplatesTable } from "@workspace/db";
 import type { AiTemplate } from "@workspace/db";
+import { normalizeStyle, normalizeIndustry } from "../utils/canonicalNormalizer.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Weight table — sums to 100 base
@@ -426,6 +427,20 @@ function explainGap(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function findBestTemplates(input: KnowledgeMatchInput): Promise<MatchResponse> {
+  // ── Normalize input to canonical style/industry keys ──────────────────────
+  // This ensures legacy values (Title Case, Bahasa Indonesia, abbreviations)
+  // from the client are mapped to canonical keys before scoring, making all
+  // templates—including legacy-normalized ones—correctly comparable.
+  input = {
+    ...input,
+    industry:       input.industry
+                      ? (normalizeIndustry(input.industry)    ?? input.industry)
+                      : undefined,
+    preferredStyle: input.preferredStyle
+                      ? (normalizeStyle(input.preferredStyle) ?? input.preferredStyle)
+                      : undefined,
+  };
+
   const limit = input.limit ?? 5;
 
   // Fetch candidates: filter by category if given, else all published

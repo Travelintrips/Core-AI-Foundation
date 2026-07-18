@@ -1505,7 +1505,7 @@ export const STYLE_KNOWLEDGE: InsertAiStyleKnowledge[] = [
       poorFit: ["government", "agriculture", "logistics", "kids_fashion"],
     },
     visualRules: {
-      spacingStyle: "dramatic",
+      spacingStyle: "generous",
       illustrationStyle: "none",
       photographyStyle: "editorial-fashion",
       iconStyle: "none",
