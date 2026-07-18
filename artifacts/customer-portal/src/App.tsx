@@ -55,6 +55,8 @@ const InteriorDesignProjectPage = lazy(() => import('@/pages/interior-design/pro
 const VendorDirectoryPage        = lazy(() => import('@/pages/creative-vendors/VendorDirectoryPage'));
 const VendorProfilePage          = lazy(() => import('@/pages/creative-vendors/VendorProfilePage'));
 const StartPage                  = lazy(() => import('@/pages/start'));
+// ── Customs Tariff ────────────────────────────────────────────────────────
+const CustomsTariffPage          = lazy(() => import('@/pages/customs-tariff'));
 
 /* ─── Loading fallback ─── */
 function PageLoader() {
@@ -152,6 +154,8 @@ function Router() {
         <Route path="/vendors/:id" component={VendorProfilePage} />
         <Route path="/vendors" component={VendorDirectoryPage} />
         <Route path="/start" component={StartPage} />
+        {/* ── Customs Tariff ─────────────────────────────────────────── */}
+        <Route path="/customs-tariff" component={CustomsTariffPage} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

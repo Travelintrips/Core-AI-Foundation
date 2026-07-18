@@ -75,6 +75,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/storage/objects", // serves back the same public brief uploads for preview/generation
   "/ai/catalog/public", // customer-facing catalog — must never require the admin key
   "/internal/auth/login", // internal staff login — must be reachable before a session exists
+  "/customs", // BTKI tariff search — public reference data, no auth needed
 ];
 
 /**
