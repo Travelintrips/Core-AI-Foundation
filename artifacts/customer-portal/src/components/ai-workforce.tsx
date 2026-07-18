@@ -5,11 +5,11 @@
  * Clearly labelled "Demo Preview" per design spec.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Cpu, Users, Brain, Palette, CheckCircle2, Clock, Zap,
-  Sparkles, ChevronRight, Activity, AlertCircle, Timer,
+  Sparkles, ChevronRight, ChevronLeft, Activity, AlertCircle, Timer,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -386,6 +386,108 @@ function ProgressPanel({ inView }: { inView: boolean }) {
   );
 }
 
+// ── Worker Cards Scroller (with arrows + fade mask) ───────────────────────────
+
+function WorkerCardsScroller({ workers, inView }: { workers: AIWorker[]; inView: boolean }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const updateArrows = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 4);
+    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    updateArrows();
+    el.addEventListener("scroll", updateArrows, { passive: true });
+    const ro = new ResizeObserver(updateArrows);
+    ro.observe(el);
+    return () => { el.removeEventListener("scroll", updateArrows); ro.disconnect(); };
+  }, [updateArrows]);
+
+  const scroll = (dir: "left" | "right") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir === "left" ? -272 : 272, behavior: "smooth" });
+  };
+
+  return (
+    <div className="flex-1 min-w-0">
+      {/* Scroll area with fade masks */}
+      <div className="relative">
+        {/* Left fade + arrow */}
+        <AnimatePresence>
+          {canLeft && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute left-0 top-0 bottom-3 w-16 pointer-events-none z-10 flex items-center justify-start"
+              style={{ background: "linear-gradient(90deg, rgba(7,12,28,0.95) 0%, transparent 100%)" }}
+            >
+              <button
+                onClick={() => scroll("left")}
+                className="pointer-events-auto ml-1 w-7 h-7 rounded-full flex items-center justify-center transition-colors"
+                style={{ background: "rgba(46,66,112,0.7)", border: "1px solid rgba(124,110,250,0.4)" }}
+              >
+                <ChevronLeft className="w-4 h-4 text-[#C8D5F0]" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Right fade + arrow */}
+        <AnimatePresence>
+          {canRight && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute right-0 top-0 bottom-3 w-16 pointer-events-none z-10 flex items-center justify-end"
+              style={{ background: "linear-gradient(270deg, rgba(7,12,28,0.95) 0%, transparent 100%)" }}
+            >
+              <button
+                onClick={() => scroll("right")}
+                className="pointer-events-auto mr-1 w-7 h-7 rounded-full flex items-center justify-center transition-colors"
+                style={{ background: "rgba(46,66,112,0.7)", border: "1px solid rgba(124,110,250,0.4)" }}
+              >
+                <ChevronRight className="w-4 h-4 text-[#C8D5F0]" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Cards row */}
+        <div
+          ref={scrollRef}
+          className="flex gap-4 overflow-x-auto pb-3"
+          style={{ scrollbarWidth: "none" }}
+        >
+          {workers.map((worker, i) => (
+            <AIWorkerCard key={worker.id} worker={worker} index={i} inView={inView} />
+          ))}
+        </div>
+      </div>
+
+      {/* Legend */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={inView ? { opacity: 1 } : { opacity: 0 }}
+        transition={{ delay: 0.8 }}
+        className="flex items-center gap-4 mt-4 flex-wrap"
+      >
+        {(Object.entries(STATUS_CONFIG) as [WorkerStatus, typeof STATUS_CONFIG[WorkerStatus]][]).map(([status, cfg]) => (
+          <span key={status} className="flex items-center gap-1.5 text-[11px] text-[#8B9BC4]">
+            <StatusDot status={status} />
+            {cfg.label}
+          </span>
+        ))}
+      </motion.div>
+    </div>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export function AiWorkforceSection() {
@@ -464,32 +566,8 @@ export function AiWorkforceSection() {
         {/* Main layout: cards left, timeline + progress right */}
         <div className="flex gap-8 items-start flex-col lg:flex-row">
 
-          {/* AI Worker cards — horizontal scroll */}
-          <div className="flex-1 min-w-0">
-            <div
-              className="flex gap-4 overflow-x-auto pb-3"
-              style={{ scrollbarWidth: "none" }}
-            >
-              {WORKERS.map((worker, i) => (
-                <AIWorkerCard key={worker.id} worker={worker} index={i} inView={inView} />
-              ))}
-            </div>
-
-            {/* Legend */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={inView ? { opacity: 1 } : { opacity: 0 }}
-              transition={{ delay: 0.8 }}
-              className="flex items-center gap-4 mt-4 flex-wrap"
-            >
-              {(Object.entries(STATUS_CONFIG) as [WorkerStatus, typeof STATUS_CONFIG[WorkerStatus]][]).map(([status, cfg]) => (
-                <span key={status} className="flex items-center gap-1.5 text-[11px] text-[#8B9BC4]">
-                  <StatusDot status={status} />
-                  {cfg.label}
-                </span>
-              ))}
-            </motion.div>
-          </div>
+          {/* AI Worker cards — horizontal scroll with nav arrows */}
+          <WorkerCardsScroller workers={WORKERS} inView={inView} />
 
           {/* Right column: timeline + progress */}
           <div className="lg:w-72 shrink-0 flex flex-col gap-6 lg:gap-8">
