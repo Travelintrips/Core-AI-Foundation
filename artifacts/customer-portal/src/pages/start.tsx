@@ -120,6 +120,36 @@ const fadeUp = {
 };
 
 /* ─────────────────────────────────────────────────────────
+   HELPER — detect best category from a free-text query
+───────────────────────────────────────────────────────── */
+
+function findCategoryFromQuery(query: string): string {
+  if (!query.trim()) return "branding";
+  const q = query.toLowerCase();
+  // Extended keyword map (covers common Indonesian + English terms)
+  const extended: Record<string, string[]> = {
+    interior:          ["ruang", "interior", "rumah", "kamar", "dapur", "kantor", "makan", "tidur", "apartemen", "villa", "cafe", "restoran", "lobby", "bedroom", "kitchen", "living", "dining"],
+    branding:          ["brand", "logo", "identitas", "identity", "merek", "mark", "branding"],
+    packaging:         ["packaging", "kemasan", "botol", "box", "wadah", "produk", "label"],
+    fashion:           ["fashion", "baju", "pakaian", "koleksi", "clothing", "outfit", "busana"],
+    company_profile:   ["company", "profil perusahaan", "company profile", "profil bisnis"],
+    pitch_deck:        ["pitch", "deck", "investor", "presentation", "presentasi", "slide"],
+    social_media:      ["social media", "instagram", "tiktok", "konten", "content", "feed", "story"],
+    website:           ["website", "web", "landing page", "toko online", "e-commerce", "ecommerce"],
+    ai_image:          ["foto", "gambar", "visual", "image", "campaign", "editorial", "photo"],
+    creative_marketing:["marketing", "iklan", "ads", "promosi", "campaign", "digital marketing"],
+  };
+
+  let best = { id: "branding", score: 0 };
+  for (const cat of PROJECT_CATEGORIES) {
+    const allKw = [...(cat.keywords ?? []), ...(extended[cat.id] ?? [])];
+    const score = allKw.reduce((n, kw) => n + (q.includes(kw) ? 2 : 0), 0);
+    if (score > best.score) best = { id: cat.id, score };
+  }
+  return best.id;
+}
+
+/* ─────────────────────────────────────────────────────────
    HELPER — find the best-matching service from catalog
 ───────────────────────────────────────────────────────── */
 
@@ -308,19 +338,77 @@ function SelectChip({
 
 function Step1({ data, onChange }: { data: WizardData; onChange: (k: keyof WizardData, v: string) => void }) {
   const cat = PROJECT_CATEGORIES.find((c) => c.id === data.categoryId);
+  // Start collapsed (compact badge) when a category is already set; open grid when user wants to change
+  const [showGrid, setShowGrid] = useState(false);
+
   return (
     <motion.div key="step1" variants={slideIn} initial="hidden" animate="show" exit="exit" className="space-y-6">
       <div>
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-4"
-          style={{ background: `${cat?.color ?? "#7C6EFA"}18`, border: `1px solid ${cat?.color ?? "#7C6EFA"}33`, color: cat?.color ?? "#7C6EFA" }}>
-          <span>{cat?.emoji}</span> {cat?.label ?? "Project Kreatif"}
-        </div>
+        <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#4F6494" }}>
+          Apa yang dibuat
+        </p>
         <h2 className="text-2xl font-bold mb-2" style={{ color: "#F0F4FF", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
           Apa yang ingin Anda buat?
         </h2>
         <p className="text-sm" style={{ color: "#6B7FA8" }}>
           Jelaskan kebutuhan Anda. Semakin detail, semakin tepat workflow AI yang kami siapkan.
         </p>
+      </div>
+
+      {/* Category — compact badge (collapsed) or full grid */}
+      <div>
+        <FieldLabel>Kategori project</FieldLabel>
+        {!showGrid ? (
+          <div className="flex items-center justify-between px-4 py-3 rounded-xl"
+            style={{ background: `${cat?.color ?? "#7C6EFA"}12`, border: `1.5px solid ${cat?.color ?? "#7C6EFA"}40` }}>
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">{cat?.emoji}</span>
+              <span className="font-semibold text-sm" style={{ color: cat?.color ?? "#7C6EFA" }}>{cat?.label ?? "Project Kreatif"}</span>
+              <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: `${cat?.color ?? "#7C6EFA"}22`, color: cat?.color ?? "#7C6EFA" }}>
+                ✓ Terdeteksi
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowGrid(true)}
+              className="text-xs font-medium transition-colors"
+              style={{ color: "#6B7FA8" }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#F0F4FF"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#6B7FA8"; }}
+            >
+              Ganti kategori ↓
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
+              {PROJECT_CATEGORIES.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => { onChange("categoryId", c.id); setShowGrid(false); }}
+                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left"
+                  style={
+                    data.categoryId === c.id
+                      ? { background: `${c.color}18`, border: `1.5px solid ${c.color}44`, color: c.color }
+                      : { background: "rgba(13,21,38,0.60)", border: "1.5px solid #243352", color: "#8B9BC4" }
+                  }
+                >
+                  <span className="text-base">{c.emoji}</span>
+                  <span className="truncate">{c.label}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowGrid(false)}
+              className="text-xs font-medium"
+              style={{ color: "#4F6494" }}
+            >
+              ↑ Tutup
+            </button>
+          </div>
+        )}
       </div>
 
       <div>
@@ -331,28 +419,6 @@ function Step1({ data, onChange }: { data: WizardData; onChange: (k: keyof Wizar
           placeholder={`Contoh: "Saya ingin membuat brand fashion wanita premium untuk target usia 25-35 tahun, dengan nuansa minimalis dan elegan."`}
           rows={4}
         />
-      </div>
-
-      <div>
-        <FieldLabel>Pilih kategori lain</FieldLabel>
-        <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
-          {PROJECT_CATEGORIES.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => onChange("categoryId", c.id)}
-              className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left"
-              style={
-                data.categoryId === c.id
-                  ? { background: `${c.color}18`, border: `1.5px solid ${c.color}44`, color: c.color }
-                  : { background: "rgba(13,21,38,0.60)", border: "1.5px solid #243352", color: "#8B9BC4" }
-              }
-            >
-              <span className="text-base">{c.emoji}</span>
-              <span className="truncate">{c.label}</span>
-            </button>
-          ))}
-        </div>
       </div>
     </motion.div>
   );
@@ -837,10 +903,15 @@ export default function StartPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const queryParam    = decodeURIComponent(params.get("query") ?? "");
+  const categoryParam = params.get("category");
+  // Auto-detect category from free-text when none is specified in URL
+  const initCategory  = categoryParam ?? (queryParam ? findCategoryFromQuery(queryParam) : "branding");
+
   const [data, setData] = useState<WizardData>({
-    categoryId:   params.get("category") ?? "branding",
-    query:        decodeURIComponent(params.get("query") ?? ""),
-    projectDesc:  decodeURIComponent(params.get("query") ?? ""),
+    categoryId:   initCategory,
+    query:        queryParam,
+    projectDesc:  queryParam,
     businessName: "",
     industry:     "",
     stage:        "",
