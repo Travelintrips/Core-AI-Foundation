@@ -1,0 +1,59 @@
+The screenshot confirms the core problem: "baju" returns 93 results but starts with plastics (392628), rubber (4015, 401598), leather (4203) — all chapters before 61/62 because they sort by hs_code. The textile clothing the user actually wants is buried further down.
+
+The fix: narrow "baju" synonyms to terms that specifically match chapters 61/62, removing the broad "apparel"/"clothing" that also hits plastics and rubber chapters.
+
+
+6 actions
+"baju" now shows chapter 61 shirts/blouses first ✅. One more false positive: "pakaian" returns flowers (0603) because %suit% matches "suitable" and %dress% matches "dressed" in botanical descriptions. Quick fix:
+
+
+4 actions
+"pakaian" still hits flowers — the last synonym edit needs a rebuild. Restarting now.
+
+
+4 actions
+Sudah beres. Hasil sekarang:
+
+"baju" → 69 hasil, langsung mulai dari chapter 61 tekstil: kemeja pria (6105), blus wanita (6106), dst — bukan plastik atau karet lagi
+"pakaian" → 107 hasil, mulai dari 6101 coats/overcoats chapter 61
+Akar masalahnya: data BTKI deskripsinya dalam bahasa Inggris, jadi kata "baju" tidak ada di database. Solusinya adalah synonym map di backend — tapi synonym yang terlalu luas (seperti "apparel" atau "clothing") juga muncul di deskripsi plastik (chapter 39) dan karet (chapter 40). Synonym sekarang lebih spesifik ke istilah garmen tekstil, sehingga chapter 61/62 muncul pertama.
+
+
+Checkpoint made
+15 minutes ago
+
+Worked for 2 minutes
+Bea Masuk per Skema FTA TIDAK TAMPIL ?
+
+14 minutes ago
+
+4 actions
+Root cause is the data — all FTA fields are null in the DB. Let me check how many rows actually have BM values vs how many are null.
+
+
+3 actions
+The data confirms: 8471.30.00 has bm_mfn: 0, acfta: 0 and 6109.10.00 has bm_mfn: 25, acfta: 0 — values exist, they're just numeric zeros. The UI probably treats 0 the same as null and shows "—". Let me check the FTA rendering code.
+
+
+17 actions
+Now I understand the full picture. The detail panel uses the search result row directly — no second fetch. Two problems:
+
+Search results include parent/heading rows (e.g. 6105, 610510) which have all-null FTA. Users click these and see all "—".
+No fallback message when a heading row is selected, so the FTA section just looks broken.
+Let me check real coverage and then fix both.
+
+
+3 actions
+Clear picture now:
+
+Heading rows (6105, 610510 — 4 and 6 digit): zero tariff data, null everywhere
+Leaf rows (6109.10.00 — 10 chars with dots): has real data (bm_mfn: 25, acfta: 0)
+Two fixes: (1) sort leaf/tariffed rows first in search results, (2) add a clear message in the detail panel when a heading row is selected instead of silent "—" everywhere.
+
+
+3 actions
+Making both fixes in parallel now — backend sort priority + frontend heading-row notice.
+
+
+2 actions
+You've reached your monthly free quota limit. It will reset on August 16, 2026.
