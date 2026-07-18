@@ -916,14 +916,81 @@ export async function runImageDesignerPipeline(
 }
 
 /**
+ * Rewrites an existing image prompt to incorporate a human revision note.
+ * Uses the image-prompt-generator agent. Falls back to simple append on error.
+ */
+async function rewritePromptWithNote(
+  originalPrompt: string,
+  negativePrompt: string | null,
+  aspectRatio: string | null,
+  revisionNote: string,
+): Promise<{ prompt: string; negativePrompt: string; aspectRatio: string }> {
+  const fallback = {
+    prompt: `${originalPrompt}. ${revisionNote}`,
+    negativePrompt: negativePrompt ?? "text, watermark, low quality, blurry, distorted",
+    aspectRatio: aspectRatio ?? "1:1",
+  };
+
+  const agent = await getAgentBySlug("image-prompt-generator");
+  if (!agent?.modelId || !agent.providerId) return fallback;
+
+  const [model, provider] = await Promise.all([
+    getModelById(agent.modelId),
+    getProviderById(agent.providerId),
+  ]);
+  if (!model || !provider) return fallback;
+
+  const userPrompt = `You are an expert AI image prompt engineer. Rewrite the existing prompt to incorporate the revision instruction, preserving brand intent.
+
+ORIGINAL PROMPT:
+${originalPrompt}
+
+REVISION INSTRUCTION (what the client wants changed):
+${revisionNote}
+
+Only adjust the parts the client asked to change. Keep the same brand, mood, and overall style. Output 60–150 words for the revised prompt.
+
+Respond with ONLY valid JSON (no markdown):
+{
+  "prompt": "<revised prompt>",
+  "negativePrompt": "<comma-separated negatives>",
+  "aspectRatio": "${aspectRatio ?? "1:1"}"
+}`;
+
+  try {
+    const output = await executeAI({
+      prompt: userPrompt,
+      systemPrompt: "You are an expert image prompt engineer for AI diffusion models. Respond only with valid JSON.",
+      model,
+      provider,
+      temperature: 0.6,
+      maxTokens: 512,
+    });
+    const raw = output.content.trim().replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "");
+    const jsonStart = raw.indexOf("{");
+    const jsonEnd = raw.lastIndexOf("}") + 1;
+    const parsed = JSON.parse(raw.slice(jsonStart, jsonEnd));
+    return {
+      prompt: String(parsed.prompt ?? fallback.prompt),
+      negativePrompt: String(parsed.negativePrompt ?? fallback.negativePrompt),
+      aspectRatio: String(parsed.aspectRatio ?? fallback.aspectRatio),
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+/**
  * Regenerate a single image asset in-place.
- * Reuses the original prompt — no LLM prompt-gen step.
+ * If `revisionNote` is supplied, the LLM rewrites the prompt to incorporate
+ * the client's feedback before generating.
  * Marks the original asset `needs_revision`, inserts a new row as `generating`,
  * runs Replicate + QC, then finalises the new row.
  */
 export async function regenerateSingleAsset(
   originalAssetId: number,
   projectUuid: string,
+  revisionNote?: string,
 ): Promise<void> {
   const guardrails = await readGuardrails();
 
@@ -952,6 +1019,25 @@ export async function regenerateSingleAsset(
   const maxRetries = Math.min(guardrails.maxRetryPerProvider, 2);
   const timeoutMs = Math.min(guardrails.providerTimeoutMs, 120000);
 
+  // Resolve prompt — rewrite with LLM if the user supplied a revision note
+  let prompt = original.prompt ?? "";
+  let negativePrompt: string | undefined = original.negativePrompt ?? undefined;
+  let aspectRatio = original.aspectRatio ?? "1:1";
+
+  if (revisionNote?.trim()) {
+    console.info(`[imageDesigner] Rewriting prompt for revision of asset ${originalAssetId}: "${revisionNote}"`);
+    const rewritten = await rewritePromptWithNote(
+      prompt,
+      original.negativePrompt ?? null,
+      original.aspectRatio ?? null,
+      revisionNote.trim(),
+    );
+    prompt = rewritten.prompt;
+    negativePrompt = rewritten.negativePrompt;
+    aspectRatio = rewritten.aspectRatio;
+    console.info(`[imageDesigner] Rewritten prompt: "${prompt.slice(0, 80)}…"`);
+  }
+
   // Insert new asset row immediately so UI shows "generating"
   const imageDesignerAgent = await getAgentBySlug("image-designer");
   const [newAsset] = await db
@@ -962,25 +1048,25 @@ export async function regenerateSingleAsset(
       provider: "replicate",
       model: original.model ?? FLUX_SCHNELL,
       assetType: "image",
-      prompt: original.prompt,
-      negativePrompt: original.negativePrompt,
-      aspectRatio: original.aspectRatio,
+      prompt,
+      negativePrompt: negativePrompt ?? null,
+      aspectRatio,
       imageUrl: null,
       status: replicateKey ? "generating" : "failed",
       qcScore: null,
       qcNotes: replicateKey ? null : "Image generation requires REPLICATE_API_TOKEN.",
       cost: "0",
       latencyMs: 0,
-      metadata: { ...(original.metadata as object ?? {}), revisedFromAssetId: originalAssetId },
+      metadata: {
+        ...(original.metadata as object ?? {}),
+        revisedFromAssetId: originalAssetId,
+        ...(revisionNote?.trim() ? { revisionNote: revisionNote.trim() } : {}),
+      },
       parentAssetId: originalAssetId,
     })
     .returning({ id: creativeAiAssetsTable.id });
 
   if (!replicateKey) return;
-
-  const prompt = original.prompt ?? "";
-  const negativePrompt = original.negativePrompt ?? undefined;
-  const aspectRatio = original.aspectRatio ?? "1:1";
   let imageUrl: string | null = null;
   let imageLatency = 0;
   let imageStatus = "failed";

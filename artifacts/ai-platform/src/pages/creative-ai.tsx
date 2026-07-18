@@ -41,6 +41,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Sparkles,
   Plus,
   Clock,
@@ -626,7 +633,7 @@ function assetStatusColor(status: string) {
 interface AssetCardProps {
   asset: CreativeAiAsset;
   onApprove: (id: number) => void;
-  onRevision: (id: number) => void;
+  onRevision: (id: number, note: string) => Promise<void>;
   onReject: (id: number) => void;
   isUpdating: boolean;
 }
@@ -634,6 +641,21 @@ interface AssetCardProps {
 function AssetCard({ asset, onApprove, onRevision, onReject, isUpdating }: AssetCardProps) {
   const [showPrompt, setShowPrompt] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showReviseDialog, setShowReviseDialog] = useState(false);
+  const [reviseNote, setReviseNote] = useState("");
+  const [revising, setRevising] = useState(false);
+
+  const handleReviseSubmit = async () => {
+    if (!reviseNote.trim()) return;
+    setRevising(true);
+    try {
+      await onRevision(asset.id, reviseNote.trim());
+      setShowReviseDialog(false);
+      setReviseNote("");
+    } finally {
+      setRevising(false);
+    }
+  };
 
   const handleCopyPrompt = () => {
     navigator.clipboard.writeText(asset.prompt);
@@ -761,8 +783,8 @@ function AssetCard({ asset, onApprove, onRevision, onReject, isUpdating }: Asset
           <Button
             size="sm"
             variant="ghost"
-            disabled={isUpdating || asset.status === "needs_revision"}
-            onClick={() => onRevision(asset.id)}
+            disabled={isUpdating || asset.status === "generating"}
+            onClick={() => setShowReviseDialog(true)}
             className="flex-1 h-7 gap-1 text-[10px] font-mono text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10"
           >
             <RotateCcw className="size-3" />Revise
@@ -778,6 +800,45 @@ function AssetCard({ asset, onApprove, onRevision, onReject, isUpdating }: Asset
           </Button>
         </div>
       </div>
+      {/* Revision dialog */}
+      <Dialog open={showReviseDialog} onOpenChange={(open) => { if (!revising) { setShowReviseDialog(open); if (!open) setReviseNote(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-mono">Instruksi Revisi</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground font-mono leading-relaxed">
+            Deskripsikan perubahan yang diinginkan. AI akan menyesuaikan prompt lalu generate ulang — misalnya: <span className="text-foreground/60">"pindahkan logo ke tengah", "warna lebih gelap", "teks judul lebih besar"</span>.
+          </p>
+          <Textarea
+            value={reviseNote}
+            onChange={(e) => setReviseNote(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { void handleReviseSubmit(); } }}
+            placeholder="contoh: logo di pojok kiri atas, latar belakang lebih terang, komposisi portrait..."
+            className="text-xs font-mono resize-none min-h-[80px]"
+            autoFocus
+            disabled={revising}
+          />
+          <DialogFooter className="gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => { setShowReviseDialog(false); setReviseNote(""); }}
+              disabled={revising}
+            >
+              Batal
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleReviseSubmit}
+              disabled={revising || !reviseNote.trim()}
+              className="gap-1.5"
+            >
+              {revising ? <Loader2 className="size-3 animate-spin" /> : <RotateCcw className="size-3" />}
+              {revising ? "Generating…" : "Generate Ulang"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1464,7 +1525,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   const handleAssetApprove = (assetId: number) => {
     updateAssetStatus.mutate({ assetId, data: { status: "approved" } });
   };
-  const handleAssetRevision = async (assetId: number) => {
+  const handleAssetRevision = async (assetId: number, revisionNote: string) => {
     const adminKey = import.meta.env.VITE_ADMIN_API_KEY as string | undefined;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -1474,6 +1535,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
       const res = await fetch(`/api/creative-ai/assets/${assetId}/regenerate`, {
         method: "POST",
         headers,
+        body: JSON.stringify({ revisionNote }),
       });
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { error?: string };

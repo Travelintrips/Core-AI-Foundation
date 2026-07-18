@@ -311,7 +311,8 @@ router.post("/creative-ai/assets/:assetId/regenerate", async (req, res): Promise
     .where(eq(creativeAiAssetsTable.id, assetId));
 
   // Fire regeneration in background — never await
-  regenerateSingleAsset(assetId, asset.projectId).catch(async (err) => {
+  const { revisionNote } = req.body as { revisionNote?: string };
+  regenerateSingleAsset(assetId, asset.projectId, revisionNote?.trim() || undefined).catch(async (err) => {
     console.error(`[image-designer] Revision failed for asset ${assetId}:`, err);
     await logAudit(
       "creative-ai", "image_revision_error", asset.projectId, "creative_ai_asset", "failure",
