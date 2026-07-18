@@ -91,6 +91,7 @@ import VendorAdminPage from "@/pages/creative-vendors/VendorAdminPage";
 import VendorAdminDetailPage from "@/pages/creative-vendors/VendorAdminDetailPage";
 // ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
 import CustomsTariff from "@/pages/customs-tariff";
+import TarifKalkulator from "@/pages/tarif-kalkulator";
 
 const queryClient = new QueryClient();
 
@@ -176,6 +177,7 @@ function AdminRouter() {
         <Route path="/creative-vendors" component={VendorAdminPage} />
         {/* ── Customs Tariff (BTKI) ───────────────────────────────────── */}
         <Route path="/customs-tariff" component={CustomsTariff} />
+        <Route path="/tarif-kalkulator" component={TarifKalkulator} />
         <Route path="/design-render-batches/new" component={DesignRenderBatchesNew} />
         <Route path="/design-render-batches/:id" component={DesignRenderBatchDetail} />
         <Route path="/design-render-batches" component={DesignRenderBatches} />

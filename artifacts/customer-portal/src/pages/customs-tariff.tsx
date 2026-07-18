@@ -26,6 +26,7 @@ import {
   Info,
   ShieldAlert,
   Loader2,
+  Calculator,
 } from "lucide-react";
 
 // ── API ────────────────────────────────────────────────────────────────────────
@@ -753,6 +754,19 @@ export default function CustomsTariff() {
         <span style={{ color: "#334155" }}>/</span>
         <span className="text-sm font-medium text-white">Tarif BTKI & HS Code</span>
         <div className="flex-1" />
+        <Link
+          href="/tarif-kalkulator"
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+          style={{
+            background: "rgba(20,184,166,0.1)",
+            color: "#2DD4BF",
+            border: "1px solid rgba(20,184,166,0.25)",
+            textDecoration: "none",
+          }}
+        >
+          <Calculator className="w-3.5 h-3.5" />
+          Kalkulator Tarif
+        </Link>
         <span
           className="hidden sm:inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full"
           style={{

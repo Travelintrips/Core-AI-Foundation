@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ import {
   Percent,
   X,
   Info,
+  Calculator,
 } from "lucide-react";
 
 // ── API helper ────────────────────────────────────────────────────────────────
@@ -111,6 +113,20 @@ function RateBadge({ label, value, highlight }: { label: string; value: string |
         {display}
       </span>
     </div>
+  );
+}
+
+// ── Kalkulator link button ────────────────────────────────────────────────────
+function KalkulatorLink() {
+  const [, navigate] = useLocation();
+  return (
+    <button
+      onClick={() => navigate("/tarif-kalkulator")}
+      className="ml-2 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border border-teal-600/40 bg-teal-950/30 text-teal-400 hover:bg-teal-900/40 transition-colors"
+    >
+      <Calculator className="w-3.5 h-3.5" />
+      Kalkulator
+    </button>
   );
 }
 
@@ -402,6 +418,7 @@ export default function CustomsTariff() {
           <div className="flex items-center gap-2 mb-1">
             <Package className="w-5 h-5 text-blue-400" />
             <h1 className="text-lg font-semibold text-slate-100">Tarif BTKI & HS Code</h1>
+            <KalkulatorLink />
           </div>
           <p className="text-xs text-slate-400 mb-3">
             Cari 6.990 kode HS — BM MFN, FTA, PPn, PPh 22, LARTAS, perizinan impor
