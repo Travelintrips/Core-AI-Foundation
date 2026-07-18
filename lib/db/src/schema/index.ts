@@ -87,3 +87,4 @@ export * from "./ai-design-studio";
 export * from "./design-template-engine";
 export * from "./design-render-zip-exports";
 export * from "./ai-template-knowledge";
+export * from "./creative-render-sessions";

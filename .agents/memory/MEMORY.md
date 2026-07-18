@@ -1,3 +1,4 @@
+- [two-stage-image-pipeline](two-stage-image-pipeline.md) — render_stage on creative_ai_assets, creative_render_sessions table, 7 API endpoints, customer preview UI; prod migration needed
 - [parallel-dev-rules](parallel-dev-rules.md) — Multi-team rules: feature branches only, shared file lock, draft-only DB/OpenAPI, Team 24 wires integrations; full rules in replit.md
 - [team2-design-agents](team2-design-agents.md) — Team 2 Design Agents 4-8 built in services/design-ai/; dep-injection pattern (deps.executeAI), zod schemas, font registry validation, WCAG contrast checks, 1007 tests passing
 - [import-fix-concatenated-files](import-fix-concatenated-files.md) — GitHub import merged old+new versions of 5 files end-to-end; fix by keeping v2 and removing v1

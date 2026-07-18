@@ -37,6 +37,7 @@ const PortfolioGalleryPage           = lazy(() => import('@/pages/portfolio-gall
 const AssetMarketplacePage           = lazy(() => import('@/pages/asset-marketplace'));
 const GalleryPage                    = lazy(() => import('@/pages/gallery'));
 const WorkspaceFavoritesPage         = lazy(() => import('@/pages/workspace/favorites'));
+const CreativePreviewPage            = lazy(() => import('@/pages/workspace/creative-preview'));
 const WorkspaceNotificationsPage = lazy(() => import('@/pages/workspace/notifications'));
 const WorkspaceProfilePage       = lazy(() => import('@/pages/workspace/profile'));
 const WorkspaceSupportPage       = lazy(() => import('@/pages/workspace/support'));
@@ -139,6 +140,7 @@ function Router() {
         <Route path="/workspace/:token/profile" component={WorkspaceProfilePage} />
         <Route path="/workspace/:token/support" component={WorkspaceSupportPage} />
         <Route path="/workspace/:token/settings" component={WorkspaceSettingsPage} />
+        <Route path="/creative-preview/:sessionId" component={CreativePreviewPage} />
         {/* ── Team 04: Portfolio V2 ───────────────────────────────────── */}
         <Route path="/interior-design" component={InteriorDesignBriefPage} />
         <Route path="/interior-design/:id" component={InteriorDesignProjectPage} />

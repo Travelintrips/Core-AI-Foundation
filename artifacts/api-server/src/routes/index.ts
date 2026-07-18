@@ -115,6 +115,8 @@ import { vendorRouter } from "../domains/creative-vendors/index.js";
 // ── V5.0: Enterprise Template Knowledge Library ───────────────────────────
 import templateKnowledgeRouter from "./template-knowledge.js";
 import seedKnowledgeRouter from "./seedKnowledge.js";
+// ── Two-Stage Image Preview Pipeline ─────────────────────────────────────
+import imagePreviewPipelineRouter from "./image-preview-pipeline.js";
 
 const router: IRouter = Router();
 
@@ -233,5 +235,7 @@ router.use(vendorRouter);
 // ── V5.0: Enterprise Template Knowledge Library ───────────────────────────
 router.use("/template-knowledge", templateKnowledgeRouter);
 router.use("/seed", seedKnowledgeRouter);
+// ── Two-Stage Image Preview Pipeline ─────────────────────────────────────
+router.use(imagePreviewPipelineRouter);
 
 export default router;

@@ -33,6 +33,15 @@ export const creativeAiAssetsTable = appSchema.table("creative_ai_assets", {
   parentAssetId: integer("parent_asset_id"), // self-reference: previous version of this asset
   approvedBy: text("approved_by"),
   revisionNotes: text("revision_notes"),
+  // Preview pipeline (Phase: Two-Stage Image Generation)
+  // render_stage distinguishes legacy direct-renders from two-stage preview/final assets.
+  // All existing rows default to 'legacy' for full backward compatibility.
+  renderStage: text("render_stage").notNull().default("legacy"), // legacy | preview | final
+  renderSessionId: integer("render_session_id"), // FK to creative_render_sessions.id
+  conceptIndex: integer("concept_index"), // preview slot 1–N
+  aiExplanation: text("ai_explanation"), // AI-generated rationale for this concept
+  estimatedFinalCostUsd: numeric("estimated_final_cost_usd", { precision: 10, scale: 6 }),
+  estimatedRenderTimeMs: integer("estimated_render_time_ms"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
