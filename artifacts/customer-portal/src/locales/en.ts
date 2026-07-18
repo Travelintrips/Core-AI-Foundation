@@ -25,6 +25,7 @@ export const en = {
   nav: {
     services: "Services",
     portfolio: "Portfolio",
+    tarifKalkulator: "Tariff Calculator",
     clientLogin: "Client Login",
     startProject: "Start Project",
   },

@@ -63,8 +63,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
 
   const NAV_LINKS = [
-    { href: "/services",  label: t('nav.services') },
-    { href: "/portfolio", label: t('nav.portfolio') },
+    { href: "/services",          label: t('nav.services') },
+    { href: "/portfolio",         label: t('nav.portfolio') },
+    { href: "/tarif-kalkulator",  label: t('nav.tarifKalkulator') },
   ];
 
   const FOOTER_COLS = FOOTER_COLS_KEYS.map((col) => ({

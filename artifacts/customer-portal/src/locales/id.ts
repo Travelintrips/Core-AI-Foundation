@@ -25,6 +25,7 @@ export const id = {
   nav: {
     services: "Layanan",
     portfolio: "Portfolio",
+    tarifKalkulator: "Kalkulator Tarif",
     clientLogin: "Login Klien",
     startProject: "Mulai Proyek",
   },

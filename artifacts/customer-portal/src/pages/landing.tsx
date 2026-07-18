@@ -9,7 +9,7 @@ import {
   Cpu, Briefcase, Shield, Play, Brain,
   FileCheck, Boxes, PieChart, Building2, Zap,
   CheckCircle2, Clock, BadgeCheck, ExternalLink,
-  Lock, Award, Search,
+  Lock, Award, Search, Calculator,
 } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { PROJECT_CATEGORIES } from "@/pages/start";
@@ -52,7 +52,7 @@ const SERVICES = [
   { icon: Users,        name: "HR & Payroll AI",     descId: "SDM, penggajian, kontrak",         descEn: "HR, payroll, contracts" },
   { icon: Scale,        name: "Legal AI",            descId: "Kontrak, compliance, dokumen",     descEn: "Contracts, compliance, documents",    badgeKey: "humanReview", badgeColor: "#8B5CF6" },
   { icon: Truck,        name: "Logistics AI",        descId: "Rantai pasok, ekspedisi",          descEn: "Supply chain, shipping" },
-  { icon: Globe,        name: "Customs & PPJK AI",   descId: "Kepabeanan, BC, dokumen",          descEn: "Customs, documents",                  badgeKey: "new",        badgeColor: "#22D3EE" },
+  { icon: Globe,        name: "Customs & PPJK AI",   descId: "Kepabeanan, BC, dokumen",          descEn: "Customs, documents",                  badgeKey: "new",        badgeColor: "#22D3EE", href: "/tarif-kalkulator" },
   { icon: ShoppingCart, name: "Procurement AI",      descId: "Pengadaan, vendor, tender",        descEn: "Procurement, vendor, tender" },
   { icon: Package,      name: "Trading AI",          descId: "Analisis pasar, arbitrase",        descEn: "Market analysis, arbitrage" },
   { icon: PieChart,     name: "Data Analytics AI",   descId: "BI, dashboard, insight",           descEn: "BI, dashboard, insights" },
@@ -555,7 +555,7 @@ export default function LandingPage() {
               const badgeLabel = svc.badgeKey ? BADGE_MAP[svc.badgeKey] : undefined;
               return (
                 <motion.div key={svc.name} variants={fadeUp}>
-                  <Link href="/services" className="service-card-sm group flex flex-col items-center gap-2 p-4 rounded-xl text-center cursor-pointer" style={{ display: "flex" }}>
+                  <Link href={(svc as { href?: string }).href ?? "/services"} className="service-card-sm group flex flex-col items-center gap-2 p-4 rounded-xl text-center cursor-pointer" style={{ display: "flex" }}>
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center"
                       style={{ background: "rgba(124,110,250,0.10)", border: "1px solid rgba(124,110,250,0.16)" }}>
                       <Icon className="w-4 h-4" style={{ color: "#9D91FB" }} />
@@ -584,6 +584,127 @@ export default function LandingPage() {
               {t('landing.services.viewAll')} <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
+        </div>
+      </section>
+
+      {/* ── PPJK / TARIFF CALCULATOR SPOTLIGHT ───── */}
+      <section className="py-20 px-4 relative overflow-hidden" style={{ background: "#060B18", borderTop: "1px solid #1C2A40" }}>
+        <div className="pointer-events-none absolute inset-0"
+          style={{ background: "radial-gradient(ellipse 70% 60% at 50% 50%, rgba(34,211,238,0.06) 0%, transparent 70%)" }} />
+        <div className="relative container mx-auto max-w-5xl">
+          <motion.div
+            initial="hidden" whileInView="show" viewport={{ once: true }} variants={stagger(0.1)}
+            className="rounded-3xl overflow-hidden"
+            style={{ background: "linear-gradient(135deg, #0A1A2E 0%, #0D2036 50%, #0A1A2E 100%)", border: "1px solid rgba(34,211,238,0.20)", boxShadow: "0 0 80px rgba(34,211,238,0.05), inset 0 1px 0 rgba(34,211,238,0.10)" }}>
+            {/* top accent line */}
+            <div className="h-px w-full" style={{ background: "linear-gradient(to right, transparent, rgba(34,211,238,0.60) 40%, rgba(124,110,250,0.40) 70%, transparent)" }} />
+
+            <div className="p-8 md:p-12 flex flex-col md:flex-row gap-8 md:gap-12 items-center">
+              {/* Left: text */}
+              <div className="flex-1 space-y-5">
+                <motion.div variants={fadeUp}>
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold"
+                    style={{ background: "rgba(34,211,238,0.10)", border: "1px solid rgba(34,211,238,0.28)", color: "#22D3EE" }}>
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#22D3EE" }} />
+                    {lang === "id" ? "Baru · Customs & PPJK AI" : "New · Customs & PPJK AI"}
+                  </div>
+                </motion.div>
+                <motion.h2 variants={fadeUp}
+                  className="font-display font-bold leading-tight"
+                  style={{ fontSize: "clamp(1.6rem, 3vw, 2.4rem)", color: "#F0F4FF", letterSpacing: "-0.025em" }}>
+                  {lang === "id"
+                    ? <>Kalkulator Tarif Impor<br /><span style={{ color: "#22D3EE" }}>Instan & Akurat</span></>
+                    : <>Import Tariff Calculator<br /><span style={{ color: "#22D3EE" }}>Instant & Accurate</span></>}
+                </motion.h2>
+                <motion.p variants={fadeUp} className="text-sm leading-relaxed max-w-md" style={{ color: "#6B7FA8" }}>
+                  {lang === "id"
+                    ? "Simulasikan Bea Masuk, PPN, PPh 22, dan Total DDP untuk 6.990+ kode HS/BTKI dalam hitungan detik. Bandingkan skema MFN, ACFTA, AFTA, dan FTA lainnya sekaligus."
+                    : "Simulate import duties, VAT, PPh 22, and Total DDP for 6,990+ HS/BTKI codes in seconds. Compare MFN, ACFTA, AFTA, and other FTA schemes side-by-side."}
+                </motion.p>
+                {/* stat pills */}
+                <motion.div variants={fadeUp} className="flex flex-wrap gap-2">
+                  {[
+                    { label: lang === "id" ? "6.990+ Kode HS" : "6,990+ HS Codes",  color: "#22D3EE" },
+                    { label: lang === "id" ? "Multi-skema FTA" : "Multi-scheme FTA", color: "#7C6EFA" },
+                    { label: lang === "id" ? "Kalkulasi Real-time" : "Real-time Calc", color: "#10B981" },
+                    { label: lang === "id" ? "Gratis Digunakan" : "Free to Use",     color: "#F59E0B" },
+                  ].map((p) => (
+                    <span key={p.label}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
+                      style={{ background: `${p.color}10`, border: `1px solid ${p.color}28`, color: p.color }}>
+                      <CheckCircle2 className="w-3 h-3" /> {p.label}
+                    </span>
+                  ))}
+                </motion.div>
+                <motion.div variants={fadeUp} className="flex gap-3 pt-1">
+                  <Link href="/tarif-kalkulator"
+                    className="inline-flex items-center gap-2 font-semibold text-sm rounded-xl px-6 py-3 transition-all"
+                    style={{ background: "linear-gradient(135deg, #22D3EE 0%, #0EA5E9 100%)", color: "#060B18", boxShadow: "0 4px 20px rgba(34,211,238,0.30)" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.filter = "brightness(1.10)"; (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.filter = ""; (e.currentTarget as HTMLElement).style.transform = ""; }}>
+                    <Calculator className="w-4 h-4" />
+                    {lang === "id" ? "Coba Kalkulator" : "Try Calculator"}
+                  </Link>
+                  <Link href="/tarif-kalkulator"
+                    className="inline-flex items-center gap-2 font-semibold text-sm rounded-xl px-5 py-3 transition-all"
+                    style={{ color: "#22D3EE", border: "1px solid rgba(34,211,238,0.28)", background: "rgba(34,211,238,0.06)" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(34,211,238,0.12)"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(34,211,238,0.06)"; }}>
+                    {lang === "id" ? "Lihat Daftar BTKI" : "Browse BTKI List"} <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </motion.div>
+              </div>
+
+              {/* Right: mini calculator preview card */}
+              <motion.div variants={fadeUp} className="shrink-0 w-full md:w-72">
+                <div className="rounded-2xl overflow-hidden"
+                  style={{ background: "#0A1020", border: "1px solid rgba(34,211,238,0.18)", boxShadow: "0 16px 48px rgba(6,11,24,0.60)" }}>
+                  {/* window bar */}
+                  <div className="flex items-center gap-1.5 px-4 py-2.5" style={{ background: "#060B18", borderBottom: "1px solid rgba(34,211,238,0.12)" }}>
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#FF5F57" }} />
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#FEBC2E" }} />
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: "#28C840" }} />
+                    <span className="ml-2 text-[10px] font-mono" style={{ color: "#4F6494" }}>HS 6203.42.00 · Celana Panjang Katun</span>
+                  </div>
+                  <div className="p-5 space-y-3">
+                    {/* input row */}
+                    <div className="rounded-lg px-3 py-2" style={{ background: "rgba(34,211,238,0.05)", border: "1px solid rgba(34,211,238,0.16)" }}>
+                      <div className="text-[10px] font-semibold mb-1" style={{ color: "#4F6494" }}>CIF (IDR)</div>
+                      <div className="font-mono font-bold text-sm" style={{ color: "#F0F4FF" }}>Rp 100.000.000</div>
+                    </div>
+                    <div className="rounded-lg px-3 py-1.5 flex justify-between items-center" style={{ background: "rgba(124,110,250,0.06)", border: "1px solid rgba(124,110,250,0.15)" }}>
+                      <span className="text-[10px]" style={{ color: "#8B9BC4" }}>Skema</span>
+                      <span className="text-xs font-semibold" style={{ color: "#9D91FB" }}>BM MFN (25%)</span>
+                    </div>
+                    {/* result rows */}
+                    {[
+                      { label: "Bea Masuk",  value: "Rp 25.000.000",  color: "#F97316" },
+                      { label: "PPN 11%",    value: "Rp 13.750.000",  color: "#22D3EE" },
+                      { label: "PPh 2,5%",   value: "Rp  2.500.000",  color: "#8B5CF6" },
+                    ].map((row) => (
+                      <div key={row.label} className="flex justify-between items-center px-1">
+                        <span className="text-[11px]" style={{ color: "#6B7FA8" }}>{row.label}</span>
+                        <span className="text-xs font-mono font-semibold" style={{ color: row.color }}>{row.value}</span>
+                      </div>
+                    ))}
+                    <div className="h-px" style={{ background: "rgba(34,211,238,0.18)" }} />
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold" style={{ color: "#F0F4FF" }}>Total DDP</span>
+                      <span className="font-mono font-bold text-sm" style={{ color: "#10B981" }}>Rp 141.250.000</span>
+                    </div>
+                    <Link href="/tarif-kalkulator"
+                      className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-all"
+                      style={{ background: "linear-gradient(135deg, #22D3EE 0%, #0EA5E9 100%)", color: "#060B18", display: "flex" }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.filter = "brightness(1.08)"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.filter = ""; }}>
+                      <Calculator className="w-3.5 h-3.5" />
+                      {lang === "id" ? "Hitung Tarif Saya" : "Calculate My Tariff"}
+                    </Link>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
