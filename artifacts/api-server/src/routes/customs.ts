@@ -2,21 +2,21 @@
  * customs.ts — BTKI Tariff Search
  *
  * GET /customs/hs-search?q=...   — full-text search by keyword / HS code (max 20 results)
- * GET /customs/hs/:code          — detail for one HS code (BM per FTA, PPN, PPh, LARTAS, perizinan)
+ * GET /customs/hs/:code          — detail for one HS code
  *
  * Data source: btki_tariff table (6 990 rows, already populated).
  * Uses raw pool.query — table is NOT in the Drizzle schema.
  *
- * Synonym map: maps common Indonesian keywords to narrow, chapter-specific
- * English terms so that garment queries (baju, pakaian, kemeja, etc.) surface
- * chapter 61/62 first and don't bleed into chapters 39/40/42.
+ * Synonym map: maps Indonesian keywords to narrow, chapter-specific English
+ * terms so garment queries (baju, pakaian, kemeja, …) surface chapter 61/62
+ * first and don't bleed into chapters 39/40/42.
  *
- * Sort priority (applied to every search):
+ * Sort priority:
  *   1. Exact HS-code match
  *   2. HS-code prefix match
- *   3. Chapter priority  (ch 61/62 first for garment queries; uniform otherwise)
- *   4. Leaf rows first  (10-digit dotted codes like 6109.10.00 have real tariff data;
- *                        heading rows 4/6-digit have null FTA)
+ *   3. Chapter 61/62 first  (garment queries only)
+ *   4. Leaf rows first       (dotted 10-digit codes have real FTA data;
+ *                             4/6-digit heading codes have null FTA)
  *   5. hs_code ascending
  */
 
@@ -25,7 +25,7 @@ import { pool } from "@workspace/db";
 
 const router: IRouter = Router();
 
-// ── shared column list ────────────────────────────────────────────────────────
+// ── Shared column list ────────────────────────────────────────────────────────
 const COLS = `
   id, hs_code, hs_code_6, hs_code_4, hs_code_2,
   description_id, description_en, unit, category,
@@ -38,18 +38,15 @@ const COLS = `
 `;
 
 // ── Synonym map ───────────────────────────────────────────────────────────────
-// Maps Indonesian search keywords → narrow English terms used in BTKI descriptions.
+// Maps Indonesian keywords → narrow English BTKI description terms.
 //
-// CRITICAL rules:
-//   • Terms must NOT appear in ch 39/40/42 heading descriptions.
-//     Avoid "apparel", "clothing", "accessories" — they appear in:
-//       ch 39: "articles of apparel and clothing accessories"
-//       ch 40: "articles of apparel and clothing accessories (vulcanised rubber)"
-//   • Avoid bare "suit" or "dress" — substring-match against "suitable", "dressed"
-//     in botanical/chemical descriptions (→ ch 06 flowers false positives).
-//   • Use plural or compound forms specific to the target chapter.
+// Rules:
+//   - Do NOT include "apparel", "clothing", "accessories" — appear in ch 39/40 headings.
+//   - Do NOT use bare "suit" or "dress" — substring-match "suitable"/"dressed" in
+//     botanical/chemical descriptions (ch 06 flowers false positive).
+//   - Use plural or compound forms specific to the target chapter.
 const SYNONYM_MAP: Record<string, string[]> = {
-  // ── Garment / Chapters 61–62 ────────────────────────────────────────────────
+  // Garment — Chapters 61–62
   baju:          ["shirts", "blouses", "polo shirts", "pullovers", "jerseys", "knitted garments"],
   kemeja:        ["shirts", "blouses"],
   kaos:          ["t-shirts", "singlets", "undershirts", "vests"],
@@ -68,16 +65,16 @@ const SYNONYM_MAP: Record<string, string[]> = {
   sarung:        ["sarongs", "sarong"],
   dasi:          ["ties", "cravats", "neckties", "bow ties"],
   syal:          ["scarves", "mufflers", "scarfs"],
-  // ── Headwear / Chapter 65 ───────────────────────────────────────────────────
+  // Headwear — Chapter 65
   topi:          ["headgear", "hats", "caps", "berets", "helmets"],
-  // ── Footwear / Chapter 64 ───────────────────────────────────────────────────
+  // Footwear — Chapter 64
   sepatu:        ["footwear", "shoes", "boots", "overshoes"],
   sandal:        ["sandals", "flip-flops", "thongs"],
-  // ── Bags / Chapter 42 ───────────────────────────────────────────────────────
+  // Bags — Chapter 42
   tas:           ["bags", "handbags", "backpacks", "satchels"],
   koper:         ["suitcases", "trunks", "valises"],
   dompet:        ["wallets", "purses", "coin purses"],
-  // ── Textiles / Chapters 50–63 ───────────────────────────────────────────────
+  // Textiles — Chapters 50–63
   selimut:       ["blankets", "travelling rugs"],
   handuk:        ["towels", "toilet linen", "kitchen linen"],
   sprei:         ["bed linen", "bed sheets"],
@@ -93,16 +90,11 @@ const SYNONYM_MAP: Record<string, string[]> = {
   bordir:        ["embroidery", "embroidered"],
 };
 
-/**
- * Build the WHERE clause + its bound parameters for the search query.
- *
- * Design contract:
- *   - whereParams holds ONLY the values referenced in the WHERE fragment.
- *   - The count query passes whereParams as-is (no extra params → no "42P18" error).
- *   - The data query appends LIMIT/OFFSET after whereParams.
- *   - ORDER BY values for exact/prefix match are embedded as SQL literals
- *     (after single-quote escaping) to avoid adding untyped params.
- */
+// ── buildSearch ───────────────────────────────────────────────────────────────
+// Returns WHERE clause + bound params (WHERE only — no ORDER BY / LIMIT params).
+// The count query uses whereParams as-is; the data query appends LIMIT/OFFSET.
+// ORDER BY values are embedded as escaped SQL literals to avoid the PostgreSQL
+// "42P18: could not determine data type of parameter $N" error on unused params.
 function buildSearch(q: string): {
   where: string;
   whereParams: unknown[];
@@ -110,11 +102,9 @@ function buildSearch(q: string): {
 } {
   const normalized = q.toLowerCase().trim().replace(/\s+/g, "_");
   const synonyms   = SYNONYM_MAP[normalized] ?? SYNONYM_MAP[q.toLowerCase().trim()];
-
-  const rawPattern = `%${q}%`;
+  const rawPat     = `%${q}%`;
 
   if (!synonyms) {
-    // Plain ILIKE path — $1 is the only WHERE param.
     return {
       where: `(
         description_id ILIKE $1
@@ -123,14 +113,12 @@ function buildSearch(q: string): {
         OR hs_code_6     ILIKE $1
         OR category      ILIKE $1
       )`,
-      whereParams: [rawPattern],
+      whereParams: [rawPat],
       isGarmentQuery: false,
     };
   }
 
-  // Synonym path: match description_id / hs_code with raw pattern ($1)
-  // and description_en with narrow, chapter-specific English terms ($2..$N+1).
-  const synParams  = synonyms.map((syn) => `%${syn}%`);
+  const synParams  = synonyms.map((s) => `%${s}%`);
   const synClauses = synParams.map((_, i) => `description_en ILIKE $${i + 2}`);
 
   return {
@@ -139,7 +127,7 @@ function buildSearch(q: string): {
       OR hs_code     ILIKE $1
       OR ${synClauses.join(" OR ")}
     )`,
-    whereParams: [rawPattern, ...synParams],
+    whereParams: [rawPat, ...synParams],
     isGarmentQuery: true,
   };
 }
@@ -161,22 +149,23 @@ router.get("/customs/hs-search", async (req, res) => {
   try {
     const { where, whereParams, isGarmentQuery } = buildSearch(q);
 
-    // Chapter priority: garment queries boost ch 61/62 to the top.
-    // Non-garment queries use uniform priority (0 = no boost).
-    const chapterSort = isGarmentQuery
-      ? "CASE WHEN LEFT(REPLACE(hs_code, '.', ''), 2) IN ('61', '62') THEN 0 ELSE 1 END"
-      : "0";
+    // Chapter sort: garment queries boost ch 61/62.
+    // Omit clause entirely for non-garment queries — PostgreSQL forbids ORDER BY 0.
+    const chapterClause = isGarmentQuery
+      ? "CASE WHEN LEFT(REPLACE(hs_code, '.', ''), 2) IN ('61', '62') THEN 0 ELSE 1 END,"
+      : "";
 
-    // Leaf-row priority: rows with 10-digit dotted HS codes (e.g. 6109.10.00)
-    // have real tariff data; 4/6-digit heading rows have all-null FTA fields.
-    const leafSort =
-      "CASE WHEN hs_code ~ '^[0-9]{4}\\.[0-9]{2}\\.[0-9]{2}$' THEN 0 ELSE 1 END";
+    // Leaf-row sort: rows with dots in hs_code are 10-digit tariff lines with
+    // real FTA data; rows without dots are 4/6-digit headings with null FTA.
+    const leafClause =
+      "CASE WHEN POSITION('.' IN hs_code) > 0 THEN 0 ELSE 1 END";
 
-    // Embed exact/prefix literals into ORDER BY to avoid untyped-parameter errors.
+    // Embed exact/prefix match as escaped SQL literals so the count query
+    // does not receive untyped extra parameters.
     const safeQ      = q.replace(/'/g, "''");
-    const safePrefix = `${safeQ}%`;
+    const safePfx    = `${safeQ}%`;
 
-    const n = whereParams.length; // LIMIT is $(n+1), OFFSET is $(n+2)
+    const n = whereParams.length; // LIMIT = $(n+1), OFFSET = $(n+2)
 
     const [dataRes, countRes] = await Promise.all([
       pool.query(
@@ -184,11 +173,11 @@ router.get("/customs/hs-search", async (req, res) => {
          FROM btki_tariff
          WHERE ${where}
          ORDER BY
-           CASE WHEN hs_code = '${safeQ}'          THEN 0
-                WHEN hs_code ILIKE '${safePrefix}'  THEN 1
+           CASE WHEN hs_code = '${safeQ}'         THEN 0
+                WHEN hs_code ILIKE '${safePfx}'    THEN 1
                 ELSE 2 END,
-           ${chapterSort},
-           ${leafSort},
+           ${chapterClause}
+           ${leafClause},
            hs_code
          LIMIT $${n + 1} OFFSET $${n + 2}`,
         [...whereParams, limit, offset]
@@ -197,7 +186,7 @@ router.get("/customs/hs-search", async (req, res) => {
         `SELECT COUNT(*)::int AS total
          FROM btki_tariff
          WHERE ${where}`,
-        whereParams   // count query uses only the WHERE params — no extras
+        whereParams
       ),
     ]);
 
