@@ -1,0 +1,322 @@
+Anda adalah Principal UX Architect, Product Designer, dan AI Workflow Architect.
+
+=========================================================
+OBJECTIVE
+=========================================================
+
+Ubah Customer Portal Creative AI dari:
+
+Marketplace Service
+
+menjadi
+
+AI Guided Creative Project.
+
+Saat ini customer melihat puluhan service card seperti:
+
+- Fashion Brand Strategy
+- Fashion Campaign Copy
+- Fashion Visual Campaign
+- Fashion Collection Brief
+- Interior Client Proposal
+- Interior Concept & Mood
+- dll.
+
+Ini membuat customer bingung karena mereka harus memahami proses kreatif.
+
+Customer seharusnya cukup menjelaskan apa yang ingin dibuat.
+
+AI yang menentukan workflow.
+
+=========================================================
+DESIGN PRINCIPLE
+=========================================================
+
+Customer TIDAK membeli service.
+
+Customer membuat PROJECT.
+
+Service hanya menjadi workflow internal AI.
+
+=========================================================
+HOMEPAGE BARU
+=========================================================
+
+Hapus konsep marketplace dengan puluhan card service.
+
+Ganti menjadi:
+
+"Apa yang ingin Anda buat hari ini?"
+
+Tampilkan pilihan sederhana seperti:
+
+🎨 Branding & Logo
+
+📦 Packaging Produk
+
+👗 Fashion Design
+
+🏠 Interior Design
+
+🏢 Company Profile
+
+📊 Pitch Deck
+
+📱 Social Media Content
+
+🌐 Website
+
+📸 AI Image Campaign
+
+🎬 Creative Marketing
+
+Atau customer bisa langsung mengetik:
+
+"Saya ingin membuat brand fashion wanita premium."
+
+=========================================================
+AI GUIDED PROJECT
+=========================================================
+
+Setelah customer memilih kategori atau mengetik kebutuhan:
+
+AI membuka Project Wizard.
+
+Contoh:
+
+Step 1
+
+Apa yang ingin Anda buat?
+
+Step 2
+
+Ceritakan bisnis Anda.
+
+Step 3
+
+Apa target market Anda?
+
+Step 4
+
+Apa tujuan project?
+
+Step 5
+
+Upload logo / referensi (opsional)
+
+Setelah itu AI menganalisis kebutuhan.
+
+=========================================================
+AI WORKFLOW PLANNER
+=========================================================
+
+AI menentukan workflow otomatis.
+
+Contoh:
+
+Input:
+
+"Saya ingin membuat brand fashion wanita premium."
+
+AI menghasilkan:
+
+✔ Brand Strategy
+
+✔ Collection Brief
+
+✔ Visual Campaign
+
+✔ Campaign Copy
+
+✔ Company Profile
+
+✔ Social Media Kit
+
+✔ Presentation
+
+Customer tidak memilih satu-persatu.
+
+=========================================================
+WORKFLOW VISUAL
+=========================================================
+
+Tampilkan workflow seperti timeline.
+
+Brand Strategy
+      ↓
+Creative Direction
+      ↓
+Visual Design
+      ↓
+Copywriting
+      ↓
+Quality Check
+      ↓
+Delivery
+
+Customer melihat progress, bukan daftar service.
+
+=========================================================
+SERVICE MENJADI INTERNAL
+=========================================================
+
+Service Catalog tetap dipertahankan.
+
+Namun digunakan:
+
+- AI Workflow
+- Admin
+- Pricing Engine
+- Analytics
+- Internal Routing
+
+Bukan menjadi tampilan utama customer.
+
+=========================================================
+PACKAGE
+=========================================================
+
+Customer memilih paket.
+
+Starter
+
+Professional
+
+Enterprise
+
+AI otomatis menyesuaikan:
+
+- jumlah deliverable
+- jumlah revisi
+- kualitas render
+- jumlah preview
+- jumlah final image
+- AI model
+- human review
+
+=========================================================
+HASIL ANALISIS AI
+=========================================================
+
+Sebelum checkout tampilkan:
+
+"Kami memahami kebutuhan Anda."
+
+AI akan membuat:
+
+✓ Brand Strategy
+
+✓ Fashion Collection Brief
+
+✓ 10 AI Campaign Images
+
+✓ Caption Marketing
+
+✓ Company Profile
+
+Estimasi:
+
+Durasi
+
+Harga
+
+Jumlah Deliverable
+
+=========================================================
+PROJECT DASHBOARD
+=========================================================
+
+Setelah order dibuat.
+
+Customer tidak lagi melihat service.
+
+Customer melihat progress project.
+
+Contoh:
+
+🟢 Analisis Brief
+
+🟢 Brand Strategy
+
+🟢 Creative Direction
+
+🟡 Preview Design
+
+⚪ Menunggu Persetujuan
+
+⚪ Rendering Final
+
+⚪ Quality Control
+
+⚪ Selesai
+
+=========================================================
+PREVIEW APPROVAL
+=========================================================
+
+Untuk AI Image.
+
+AI membuat preview terlebih dahulu.
+
+Customer memilih konsep.
+
+Baru AI membuat render final.
+
+=========================================================
+UI
+=========================================================
+
+Buat UI jauh lebih sederhana.
+
+Kurangi jumlah card.
+
+Kurangi istilah teknis.
+
+Gunakan bahasa yang mudah dipahami.
+
+Fokus pada tujuan customer, bukan nama layanan internal.
+
+=========================================================
+BACKWARD COMPATIBILITY
+=========================================================
+
+Jangan menghapus Service Catalog.
+
+Service Catalog tetap dipakai:
+
+- AI Router
+
+- Workflow Engine
+
+- Admin Portal
+
+- Pricing
+
+- Analytics
+
+- Workforce
+
+- Marketplace Internal
+
+=========================================================
+IMPLEMENTATION
+=========================================================
+
+Lakukan audit terlebih dahulu.
+
+Reuse semua engine yang sudah ada.
+
+Jangan membuat workflow engine baru jika sudah tersedia.
+
+Bangun layer UX baru di atas arsitektur existing.
+
+=========================================================
+SUCCESS CRITERIA
+=========================================================
+
+- Customer cukup membuat satu Project.
+- AI otomatis memilih service yang diperlukan.
+- Customer tidak perlu memahami workflow internal.
+- Service Catalog tetap digunakan di backend.
+- UX menjadi lebih sederhana, modern, dan familiar seperti berbicara dengan konsultan kreatif.
+- Tidak ada regression pada fitur yang sudah ada.
