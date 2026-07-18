@@ -54,6 +54,15 @@ export const aiTemplatesTable = appSchema.table("ai_templates", {
   sortOrder: integer("sort_order").notNull().default(0),
   pricePoints: jsonb("price_points").$type<Record<string, number>>(), // package → price multiplier
 
+  // ── Canvas (design editor state) ─────────────────────────────────────────
+  canvasState: jsonb("canvas_state").$type<{
+    width: number; height: number; background: string;
+    elements: Array<Record<string, unknown>>;
+  }>(),
+  canvasWidth: integer("canvas_width"),
+  canvasHeight: integer("canvas_height"),
+  tags: jsonb("tags").$type<string[]>(),
+
   // ── Analytics (denormalized counters) ────────────────────────────────────
   views: integer("views").notNull().default(0),
   selections: integer("selections").notNull().default(0),

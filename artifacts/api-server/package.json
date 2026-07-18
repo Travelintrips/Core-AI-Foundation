@@ -17,6 +17,8 @@
     "migrate:v43": "tsx --tsconfig tsconfig.json src/migrate-v43.ts",
     "migrate:v43-gallery": "tsx --tsconfig tsconfig.json src/migrate-v43-portfolio-gallery.ts",
     "seed:templates": "tsx --tsconfig tsconfig.json src/seedTemplates.ts",
+    "seed:builtin-templates": "tsx --tsconfig tsconfig.json src/seedBuiltinTemplates.ts",
+    "migrate:builtin-templates": "tsx --tsconfig tsconfig.json src/migrate-builtin-templates.ts",
     "migrate:v44": "tsx --tsconfig tsconfig.json src/migrate-v44.ts",
     "migrate:tkl-v50": "tsx --tsconfig tsconfig.json src/migrate-tkl-v50.ts"
   },

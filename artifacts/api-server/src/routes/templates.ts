@@ -1,8 +1,8 @@
 /**
- * templates.ts — V4.3 Template Marketplace routes (admin + public).
+ * templates.ts — Template Marketplace routes (admin + public).
  *
- * All paths below are relative to the app-level "/api" mount in app.ts —
- * do NOT re-add an "/api" prefix here (that would double it up).
+ * All templates are stored in Supabase (ai_platform.ai_templates).
+ * No hardcoded builtin templates — all data comes from the DB.
  *
  * Admin routes (x-admin-api-key):
  *   GET    /api/ai/templates                          list / filter
@@ -31,7 +31,7 @@
  */
 
 import { Router } from "express";
-import { adminAuth as requireAdminApiKey } from "../middleware/adminAuth.js";
+import type { AiTemplate } from "@workspace/db";
 import {
   listTemplates,
   getTemplate,
@@ -50,65 +50,10 @@ import {
   getPublicRecommendations,
 } from "../services/templateMatchingService.js";
 import { resolveWorkspaceSession } from "../services/customerWorkspaceService.js";
-import {
-  BUILTIN_TEMPLATES,
-  listBuiltinTemplates,
-  getBuiltinTemplate,
-  type BuiltinTemplate,
-  type BuiltinCanvasState,
-  type BuiltinCanvasElement,
-} from "../data/design-templates.js";
 
-// ── Builtin Template Helpers ──────────────────────────────────────────────────
+const router = Router();
 
-/** Convert a BuiltinTemplate to the public TemplateItem shape used by the frontend. */
-function builtinToPublicTemplate(t: BuiltinTemplate, index: number) {
-  const primary = t.canvasState.background;
-  // Pick a contrasting accent from the first non-background colored element
-  const accent =
-    t.canvasState.elements.find(
-      (e) =>
-        e.fill &&
-        e.fill !== primary &&
-        e.fill !== "#FFFFFF" &&
-        e.fill !== "#FAFAFA" &&
-        e.fill !== "#F5F0E8" &&
-        !e.fill.startsWith("rgba"),
-    )?.fill ?? "#7C6EFA";
-
-  return {
-    id: -(index + 1),         // negative ID = builtin (avoids DB collision)
-    templateCode: t.templateCode,
-    name: t.name,
-    description: t.description,
-    category: t.category,
-    style: t.style,
-    industry: t.industry,
-    colorTheme: {
-      primary,
-      secondary: accent,
-      accent: "#7C6EFA",
-      background: primary,
-      text: "#FFFFFF",
-    },
-    previewImages: null,
-    editable: true,
-    isPremium: false,
-    version: "1.0",
-    status: "published",
-    featured: index < 3,
-    views: 0,
-    selections: 0,
-    previewsGenerated: 0,
-    conversions: 0,
-    supportedPackages: null,
-    tags: t.tags,
-    isBuiltin: true,
-    canvasWidth: t.canvasWidth,
-    canvasHeight: t.canvasHeight,
-    canvasState: t.canvasState,
-  };
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Detect if a hex color is perceptually dark (for contrast text). */
 function isHexDark(hex: string): boolean {
@@ -121,56 +66,49 @@ function isHexDark(hex: string): boolean {
 }
 
 /**
- * Apply brand personalization to a builtin canvas state:
+ * Apply brand personalization to a DB template's canvas state:
  *  - Replace brand/company name text placeholders
- *  - Swap accent/highlight color on decorative elements
+ *  - Swap accent/highlight color on unlocked decorative elements
  */
 function personalizeCanvasState(
-  template: BuiltinTemplate,
+  template: AiTemplate,
   companyName: string,
   brandColor: string,
-): BuiltinCanvasState {
+) {
+  const canvasState = template.canvasState as {
+    width: number; height: number; background: string;
+    elements: Array<Record<string, unknown>>;
+  } | null;
+  if (!canvasState) return null;
+
   const color = brandColor.startsWith("#") ? brandColor : `#${brandColor}`;
+  const bgColor = canvasState.background;
+
   const originalAccent =
-    template.canvasState.elements.find(
-      (e) =>
-        e.fill &&
-        e.fill !== template.canvasState.background &&
-        e.fill !== "#FFFFFF" &&
-        e.fill !== "#FAFAFA" &&
-        !e.fill.startsWith("rgba"),
-    )?.fill ?? null;
+    canvasState.elements.find((e) => {
+      const fill = e.fill as string | undefined;
+      return fill && fill !== bgColor && fill !== "#FFFFFF" && fill !== "#FAFAFA" && !fill.startsWith("rgba");
+    })?.fill as string | null ?? null;
 
   const brandWords = companyName.trim().split(/\s+/);
   const shortName = brandWords.slice(0, 2).join(" ").toUpperCase();
-  const initials = brandWords
-    .slice(0, 2)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .toUpperCase();
+  const initials = brandWords.slice(0, 2).map((w) => w[0] ?? "").join("").toUpperCase();
 
-  const elements: BuiltinCanvasElement[] = template.canvasState.elements.map((el) => {
-    const updated: BuiltinCanvasElement = { ...el };
+  const BRAND_IDS = ["brand-name", "brand", "brand-ribbon", "brand-top", "brand-bottom",
+    "logo-text", "brand-top-right", "company-name"];
 
-    // ── Replace placeholder brand/company name text ──────────────────────────
+  const elements = canvasState.elements.map((el) => {
+    const updated = { ...el };
+
     if (el.type === "text" && el.text) {
-      const brandIds = ["brand-name", "brand", "brand-ribbon", "brand-top", "brand-bottom",
-        "logo-text", "brand-top-right", "company-name"];
-      if (brandIds.some((bid) => el.id.includes(bid))) {
-        // Keep @username prefix if original had it
-        if (el.text.startsWith("@")) {
-          updated.text = `@${companyName.toLowerCase().replace(/\s+/g, "")}`;
-        } else {
-          updated.text = shortName;
-        }
+      if (BRAND_IDS.some((bid) => (el.id as string).includes(bid))) {
+        updated.text = (el.text as string).startsWith("@")
+          ? `@${companyName.toLowerCase().replace(/\s+/g, "")}`
+          : shortName;
       }
-      if (el.id === "author-init") {
-        updated.text = initials || "NA";
-      }
+      if (el.id === "author-init") updated.text = initials || "NA";
     }
 
-    // ── Apply brand color to accent decorative elements ──────────────────────
-    // Only recolor elements that carry the original accent color
     if (originalAccent && !el.locked) {
       if (el.fill === originalAccent) updated.fill = color;
       if (el.stroke === originalAccent) updated.stroke = color;
@@ -180,17 +118,14 @@ function personalizeCanvasState(
     return updated;
   });
 
-  return { ...template.canvasState, elements };
+  return { ...canvasState, elements };
 }
-
-const router = Router();
 
 // ── Admin Routes ──────────────────────────────────────────────────────────────
 
 router.get("/ai/templates/stats", async (req, res) => {
   try {
-    const stats = await getTemplateAnalyticsStats();
-    res.json(stats);
+    res.json(await getTemplateAnalyticsStats());
   } catch (e: unknown) {
     res.status(500).json({ error: e instanceof Error ? e.message : "internal error" });
   }
@@ -198,8 +133,7 @@ router.get("/ai/templates/stats", async (req, res) => {
 
 router.get("/ai/templates/evolution", async (req, res) => {
   try {
-    const recs = await getTemplateEvolutionRecommendations();
-    res.json(recs);
+    res.json(await getTemplateEvolutionRecommendations());
   } catch (e: unknown) {
     res.status(500).json({ error: e instanceof Error ? e.message : "internal error" });
   }
@@ -207,8 +141,7 @@ router.get("/ai/templates/evolution", async (req, res) => {
 
 router.get("/ai/templates/industry-showcase", async (req, res) => {
   try {
-    const showcase = await getIndustryShowcase();
-    res.json({ items: showcase });
+    res.json({ items: await getIndustryShowcase() });
   } catch (e: unknown) {
     res.status(500).json({ error: e instanceof Error ? e.message : "internal error" });
   }
@@ -319,8 +252,7 @@ router.post("/ai/templates/:id/event", async (req, res) => {
 
 router.get("/public/templates/industry-showcase", async (req, res) => {
   try {
-    const showcase = await getIndustryShowcase();
-    res.json({ items: showcase });
+    res.json({ items: await getIndustryShowcase() });
   } catch (e: unknown) {
     res.status(500).json({ error: e instanceof Error ? e.message : "internal error" });
   }
@@ -329,16 +261,9 @@ router.get("/public/templates/industry-showcase", async (req, res) => {
 router.get("/public/templates/recommended", async (req, res) => {
   try {
     const { industry, category, limit } = req.query as Record<string, string>;
-    const maxItems = limit ? parseInt(limit, 10) : 6;
-    let items = await getPublicRecommendations({ industry, category, limit: maxItems });
-
-    // Pad with builtin templates if DB has fewer than requested
-    if (items.length < maxItems) {
-      const builtinFiltered = listBuiltinTemplates({ category, industry });
-      const builtinMapped = builtinFiltered.map(builtinToPublicTemplate);
-      items = [...items, ...builtinMapped].slice(0, maxItems);
-    }
-
+    const items = await getPublicRecommendations({
+      industry, category, limit: limit ? parseInt(limit, 10) : 6,
+    });
     res.json({ items });
   } catch (e: unknown) {
     res.status(500).json({ error: e instanceof Error ? e.message : "internal error" });
@@ -352,49 +277,18 @@ router.get("/public/templates", async (req, res) => {
       sortBy, search, limit, offset,
     } = req.query as Record<string, string>;
 
-    const pageLimit = limit ? parseInt(limit, 10) : 24;
-    const pageOffset = offset ? parseInt(offset, 10) : 0;
-
-    // ── Builtin templates (always included, prepended) ────────────────────────
-    let builtins = listBuiltinTemplates({ category, industry, style });
-
-    // Apply search filter
-    if (search) {
-      const q = search.toLowerCase();
-      builtins = builtins.filter(
-        (t) =>
-          t.name.toLowerCase().includes(q) ||
-          t.description.toLowerCase().includes(q) ||
-          t.tags.some((tag) => tag.includes(q)) ||
-          t.category.toLowerCase().includes(q),
-      );
-    }
-    // isPremium filter: builtins are never premium
-    if (isPremium === "true") builtins = [];
-
-    const builtinItems = builtins.map(builtinToPublicTemplate);
-
-    // ── DB templates ──────────────────────────────────────────────────────────
-    const dbResult = await listTemplates({
+    const result = await listTemplates({
       category, industry, style,
       status: "published",
       isPremium: isPremium === "true" ? true : isPremium === "false" ? false : undefined,
       featured: featured === "true" ? true : undefined,
       sortBy: (sortBy as "popular" | "newest" | "conversions" | "selections") ?? "popular",
       search,
-      limit: pageLimit,
-      offset: pageOffset,
+      limit: limit ? parseInt(limit, 10) : 24,
+      offset: offset ? parseInt(offset, 10) : 0,
     });
 
-    // ── Merge: builtins first (only on first page, to avoid duplicates) ───────
-    const allItems = pageOffset === 0
-      ? [...builtinItems, ...dbResult.items]
-      : dbResult.items;
-
-    res.json({
-      items: allItems,
-      total: dbResult.total + builtinItems.length,
-    });
+    res.json(result);
   } catch (e: unknown) {
     res.status(500).json({ error: e instanceof Error ? e.message : "internal error" });
   }
@@ -403,20 +297,9 @@ router.get("/public/templates", async (req, res) => {
 router.get("/public/templates/:id", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
-
-    // Negative ID = builtin template
-    if (id < 0) {
-      const idx = -(id) - 1;
-      const t = BUILTIN_TEMPLATES[idx];
-      if (!t) { res.status(404).json({ error: "not found" }); return; }
-      res.json(builtinToPublicTemplate(t, idx));
-      return;
-    }
-
+    if (isNaN(id) || id < 1) { res.status(400).json({ error: "invalid id" }); return; }
     const t = await getTemplate(id);
     if (!t || t.status !== "published") { res.status(404).json({ error: "not found" }); return; }
-    // async fire-and-forget view count
     recordTemplateEvent(id, "view", { sessionId: req.headers["x-session-id"] as string | undefined }).catch(() => {});
     res.json(t);
   } catch (e: unknown) {
@@ -427,25 +310,25 @@ router.get("/public/templates/:id", async (req, res): Promise<void> => {
 router.post("/public/templates/:id/preview", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
+    if (isNaN(id) || id < 1) { res.status(400).json({ error: "invalid id" }); return; }
     const { companyName, brandColor, logoUrl, industry } = req.body as Record<string, string>;
     if (!companyName || !brandColor) { res.status(400).json({ error: "companyName, brandColor required" }); return; }
 
-    // Builtin template: personalize the canvas state directly
-    if (id < 0) {
-      const idx = -(id) - 1;
-      const t = BUILTIN_TEMPLATES[idx];
-      if (!t) { res.status(404).json({ error: "not found" }); return; }
-      const personalizedCanvasState = personalizeCanvasState(t, companyName, brandColor);
+    const t = await getTemplate(id);
+    if (!t || t.status !== "published") { res.status(404).json({ error: "not found" }); return; }
+
+    // If template has a canvas state (design-editor style), personalize it directly
+    if (t.canvasState) {
       const color = brandColor.startsWith("#") ? brandColor : `#${brandColor}`;
       const textColor = isHexDark(color) ? "#FFFFFF" : "#1A1A1A";
+      const personalizedCanvasState = personalizeCanvasState(t, companyName, brandColor);
       res.json({
         templateId: id,
         templateName: t.name,
         companyName,
         brandColor: color,
         logoUrl: logoUrl ?? null,
-        isBuiltin: true,
+        isBuiltin: false,
         personalizedCanvasState,
         canvasWidth: t.canvasWidth,
         canvasHeight: t.canvasHeight,
@@ -453,13 +336,16 @@ router.post("/public/templates/:id/preview", async (req, res): Promise<void> => 
           headerBg: color,
           headerText: textColor,
           accentColor: color,
-          fontPairing: t.style === "Elegant" ? "Georgia / Inter" : t.style === "Bold" ? "Inter Black / Inter" : t.style === "Minimalist" ? "Georgia / Inter" : "Inter / Inter",
+          fontPairing: t.style === "Elegant" ? "Georgia / Inter"
+            : t.style === "Bold" ? "Inter Black / Inter"
+            : t.style === "Minimalist" ? "Georgia / Inter"
+            : "Inter / Inter",
           layoutType: t.category.toLowerCase().replace(/\s+/g, "-"),
           mockSections: [
             { type: "brand", content: companyName, color },
             { type: "category", content: t.category, color: "#64748B" },
             { type: "style", content: t.style, color: "#64748B" },
-            { type: "canvas", content: `${t.canvasWidth} × ${t.canvasHeight}px`, color: "#64748B" },
+            { type: "canvas", content: `${t.canvasWidth ?? 1080} × ${t.canvasHeight ?? 1080}px`, color: "#64748B" },
           ],
         },
         generatedAt: new Date().toISOString(),
@@ -467,6 +353,7 @@ router.post("/public/templates/:id/preview", async (req, res): Promise<void> => 
       return;
     }
 
+    // Standard document-template live preview
     const preview = await generateLivePreview({ templateId: id, companyName, brandColor, logoUrl, industry });
     res.json(preview);
   } catch (e: unknown) {
@@ -477,9 +364,7 @@ router.post("/public/templates/:id/preview", async (req, res): Promise<void> => 
 router.post("/public/templates/:id/event", async (req, res): Promise<void> => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
-    // Builtin templates don't have analytics; silently succeed
-    if (id < 0) { res.json({ ok: true }); return; }
+    if (isNaN(id) || id < 1) { res.status(400).json({ error: "invalid id" }); return; }
     const { eventType, clientId, sessionId, metadata } = req.body as Record<string, unknown>;
     if (!eventType) { res.status(400).json({ error: "eventType required" }); return; }
     await recordTemplateEvent(id, eventType as "view", {
@@ -551,7 +436,7 @@ router.post("/public/customer/workspace/:token/templates/:id/preview", async (re
     const client = await resolveToken(req.params.token);
     if (!client) { res.status(404).json({ error: "workspace not found" }); return; }
     const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
+    if (isNaN(id) || id < 1) { res.status(400).json({ error: "invalid id" }); return; }
     const { companyName, brandColor, logoUrl, industry } = req.body as Record<string, string>;
     if (!companyName || !brandColor) { res.status(400).json({ error: "companyName, brandColor required" }); return; }
     const preview = await generateLivePreview({ templateId: id, companyName, brandColor, logoUrl, industry });
