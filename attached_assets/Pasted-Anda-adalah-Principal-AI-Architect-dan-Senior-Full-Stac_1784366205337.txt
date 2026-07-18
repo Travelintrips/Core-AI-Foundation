@@ -1,0 +1,533 @@
+Anda adalah Principal AI Architect dan Senior Full Stack Engineer.
+
+Tugas Anda adalah mengubah seluruh workflow Image Generation Creative AI dari:
+
+Brief
+→ Render Final
+
+menjadi
+
+Brief
+→ AI Planning
+→ Preview
+→ Customer Selection
+→ Final Production
+
+=========================================================
+OBJECTIVE
+=========================================================
+
+Saat ini sistem langsung menghasilkan gambar final beresolusi tinggi.
+
+Hal ini menyebabkan:
+
+- biaya AI tinggi
+- waktu render lama
+- customer sering meminta revisi setelah biaya render keluar
+- token/image cost tidak efisien
+
+Ubah pipeline menjadi dua tahap.
+
+=========================================================
+PIPELINE BARU
+=========================================================
+
+STEP 1
+
+Creative Brief
+
+↓
+
+Template Matching
+
+↓
+
+Template Knowledge Library
+
+↓
+
+Brand DNA
+
+↓
+
+Creative Director AI
+
+↓
+
+Prompt Builder
+
+↓
+
+Preview Render
+
+↓
+
+Customer Review
+
+↓
+
+Customer Select Concept
+
+↓
+
+STEP 2
+
+Prompt Refinement
+
+↓
+
+High Resolution Rendering
+
+↓
+
+QC
+
+↓
+
+Delivery
+
+=========================================================
+PREVIEW MODE
+=========================================================
+
+Tambahkan mode baru:
+
+preview
+
+Karakteristik:
+
+- biaya paling murah
+- cepat
+- kualitas cukup untuk memilih konsep
+
+Preview hanya digunakan untuk:
+
+- memilih arah desain
+- memilih komposisi
+- memilih style
+- memilih warna
+- memilih layout
+
+Preview BUKAN hasil final.
+
+=========================================================
+FINAL MODE
+=========================================================
+
+Tambahkan mode:
+
+standard
+
+premium
+
+enterprise
+
+Mode menentukan:
+
+jumlah gambar
+
+resolusi
+
+quality
+
+provider
+
+upscaling
+
+=========================================================
+DEFAULT WORKFLOW
+=========================================================
+
+Customer meminta:
+
+"Buatkan 10 logo"
+
+Sistem TIDAK BOLEH langsung merender 10 final.
+
+Workflow baru:
+
+Generate
+
+4 Preview
+
+↓
+
+Customer memilih
+
+1 konsep
+
+↓
+
+Generate
+
+10 Final Variations
+
+↓
+
+QC
+
+↓
+
+Delivery
+
+=========================================================
+PREVIEW SCREEN
+=========================================================
+
+Tambahkan halaman Preview.
+
+Menampilkan:
+
+Concept 1
+
+Concept 2
+
+Concept 3
+
+Concept 4
+
+Masing-masing memiliki:
+
+thumbnail
+
+AI explanation
+
+style
+
+template
+
+estimated cost
+
+estimated render time
+
+=========================================================
+CUSTOMER ACTION
+=========================================================
+
+Customer dapat:
+
+Approve
+
+Reject
+
+Compare
+
+Favorite
+
+Request Revision
+
+Generate More Preview
+
+=========================================================
+PROMPT REFINEMENT
+=========================================================
+
+Setelah customer memilih Concept.
+
+AI melakukan:
+
+Prompt Improvement
+
+berdasarkan:
+
+customer feedback
+
+selected concept
+
+Template Knowledge
+
+Brand DNA
+
+Style Knowledge
+
+=========================================================
+FINAL RENDER
+=========================================================
+
+Baru setelah approve.
+
+Generate:
+
+jumlah sesuai order.
+
+Contoh:
+
+Order:
+
+10 image
+
+↓
+
+Generate:
+
+10 final images
+
+dengan kualitas tinggi.
+
+=========================================================
+AI COST OPTIMIZATION
+=========================================================
+
+Preview:
+
+gunakan provider/image model paling ekonomis yang tetap memenuhi kualitas preview.
+
+Final:
+
+gunakan provider sesuai paket customer.
+
+Contoh:
+
+Starter
+
+↓
+
+economy model
+
+Professional
+
+↓
+
+balanced model
+
+Enterprise
+
+↓
+
+highest quality model
+
+Model dipilih melalui AI Model Router yang sudah ada, bukan hardcoded.
+
+=========================================================
+QUALITY CONTROL
+=========================================================
+
+QC dilakukan HANYA pada final image.
+
+QC menilai:
+
+brand consistency
+
+composition
+
+typography
+
+readability
+
+color harmony
+
+resolution
+
+artifact detection
+
+=========================================================
+DATABASE
+=========================================================
+
+Tambahkan konsep baru:
+
+creative_preview_images
+
+creative_final_images
+
+creative_selected_concept
+
+creative_render_session
+
+creative_render_cost
+
+creative_generation_stage
+
+Status:
+
+planning
+
+preview_generating
+
+preview_ready
+
+waiting_customer
+
+approved
+
+final_generating
+
+quality_check
+
+completed
+
+=========================================================
+CUSTOMER PORTAL
+=========================================================
+
+Tambahkan progress:
+
+Planning
+
+↓
+
+Preview
+
+↓
+
+Waiting Approval
+
+↓
+
+Rendering Final
+
+↓
+
+Quality Check
+
+↓
+
+Completed
+
+=========================================================
+ADMIN
+=========================================================
+
+Admin dapat melihat:
+
+preview images
+
+selected concept
+
+AI cost preview
+
+AI cost final
+
+provider
+
+model
+
+render duration
+
+revision history
+
+=========================================================
+API
+=========================================================
+
+Pisahkan endpoint:
+
+Generate Preview
+
+Approve Preview
+
+Reject Preview
+
+Generate Final
+
+Request Revision
+
+Get Preview
+
+Get Final
+
+=========================================================
+COST TRACKING
+=========================================================
+
+Pisahkan pencatatan biaya:
+
+Preview Cost
+
+Final Cost
+
+Upscaling Cost
+
+QC Cost
+
+Total Cost
+
+=========================================================
+ANALYTICS
+=========================================================
+
+Tambahkan analytics:
+
+preview accepted rate
+
+preview rejected rate
+
+average preview count
+
+average final render
+
+cost saving
+
+render success rate
+
+revision rate
+
+=========================================================
+BACKWARD COMPATIBILITY
+=========================================================
+
+Order lama tetap dapat dibuka.
+
+Jika order lama belum memiliki preview.
+
+Status:
+
+Legacy Final Render
+
+=========================================================
+IMPLEMENTATION
+=========================================================
+
+Lakukan audit terlebih dahulu.
+
+Reuse seluruh komponen yang sudah ada:
+
+- AI Router
+- Template Knowledge Library
+- Prompt Builder
+- QC Engine
+- Cost Tracking
+- Client Review
+- Workforce
+- Job Queue
+
+Jangan membuat engine baru jika fungsi serupa sudah ada.
+
+Bangun di atas arsitektur yang sudah ada.
+
+=========================================================
+TEST
+=========================================================
+
+Tambahkan test untuk:
+
+Preview Generation
+
+Preview Selection
+
+Prompt Refinement
+
+Final Rendering
+
+Cost Tracking
+
+Progress Tracking
+
+QC
+
+Analytics
+
+Backward Compatibility
+
+=========================================================
+SUCCESS CRITERIA
+=========================================================
+
+- Customer tidak lagi langsung merender gambar final.
+- Preview menjadi tahap wajib sebelum final rendering.
+- Final rendering hanya dilakukan setelah customer memilih konsep.
+- AI Cost turun signifikan.
+- Template Knowledge tetap digunakan sebagai sumber knowledge.
+- AI Model Router tetap menentukan provider terbaik.
+- Seluruh workflow backward compatible.
+- Tidak ada regression pada fitur Creative AI yang sudah ada.
