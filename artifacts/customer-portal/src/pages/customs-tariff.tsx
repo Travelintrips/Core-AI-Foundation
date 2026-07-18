@@ -92,6 +92,15 @@ function pct(val: string | null | undefined): string {
   return isNaN(n) ? "—" : `${n}%`;
 }
 
+/**
+ * Heading rows have a 4 or 6-digit hs_code with no dots (e.g. "6105", "610510").
+ * These are chapter/subchapter headings — all FTA/tariff fields are null.
+ * Only 10-digit dotted codes (e.g. "6109.10.00") carry real tariff data.
+ */
+function isHeadingRow(hs_code: string): boolean {
+  return !/\./.test(hs_code);
+}
+
 function RateChip({
   label,
   value,
@@ -325,6 +334,30 @@ function DetailView({
           </div>
 
           <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+
+          {/* Heading-row notice — shown when hs_code has no dots (4/6-digit heading) */}
+          {isHeadingRow(row.hs_code) && (
+            <div
+              className="flex items-start gap-3 px-3 py-3 rounded-xl border"
+              style={{
+                borderColor: "rgba(251,191,36,0.3)",
+                background: "rgba(251,191,36,0.06)",
+              }}
+            >
+              <Info className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "#FCD34D" }} />
+              <div>
+                <p className="text-xs font-semibold" style={{ color: "#FCD34D" }}>
+                  Ini adalah kode pos/heading — bukan kode tarif penuh
+                </p>
+                <p className="text-xs mt-1 leading-relaxed" style={{ color: "#94A3B8" }}>
+                  Data bea masuk, FTA, dan pajak hanya tersedia di kode HS{" "}
+                  <span className="font-mono font-bold text-white/80">10 digit</span>{" "}
+                  (format: XXXX.XX.XX). Pilih kode lengkap dari hasil pencarian untuk
+                  melihat tarif detail.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* FTA rates */}
           <div>

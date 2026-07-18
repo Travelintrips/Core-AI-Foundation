@@ -27,6 +27,7 @@ import {
   FileText,
   Percent,
   X,
+  Info,
 } from "lucide-react";
 
 // ── API helper ────────────────────────────────────────────────────────────────
@@ -89,6 +90,15 @@ function pct(val: string | null): string {
   if (val === null || val === undefined) return "—";
   const n = parseFloat(val);
   return isNaN(n) ? "—" : `${n}%`;
+}
+
+/**
+ * Heading rows (4 or 6-digit codes without dots, e.g. "6105", "610510")
+ * are chapter/subchapter headings — all FTA/tariff fields are null.
+ * Only 10-digit dotted codes (e.g. "6109.10.00") have real tariff data.
+ */
+function isHeadingRow(hs_code: string): boolean {
+  return !/\./.test(hs_code);
 }
 
 function RateBadge({ label, value, highlight }: { label: string; value: string | null; highlight?: boolean }) {
@@ -191,6 +201,24 @@ function DetailPanel({ row, onClose }: { row: TariffRow; onClose: () => void }) 
         </div>
 
         <Separator className="border-slate-700" />
+
+        {/* Heading-row notice */}
+        {isHeadingRow(row.hs_code) && (
+          <div className="flex items-start gap-3 px-3 py-3 rounded-xl border border-yellow-500/30 bg-yellow-500/5">
+            <Info className="w-4 h-4 mt-0.5 shrink-0 text-yellow-400" />
+            <div>
+              <p className="text-xs font-semibold text-yellow-400">
+                Ini adalah kode pos/heading — bukan kode tarif penuh
+              </p>
+              <p className="text-xs mt-1 leading-relaxed text-slate-400">
+                Data bea masuk, FTA, dan pajak hanya tersedia di kode HS{" "}
+                <span className="font-mono font-bold text-white/80">10 digit</span>{" "}
+                (format: XXXX.XX.XX). Pilih kode lengkap dari hasil pencarian
+                untuk melihat tarif detail.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* BM per FTA */}
         <div>
