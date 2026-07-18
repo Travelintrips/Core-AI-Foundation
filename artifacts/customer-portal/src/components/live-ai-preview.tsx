@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
-import { Sparkles, Loader2, Lock, ArrowRight, RefreshCcw } from "lucide-react";
+import { Sparkles, Loader2, Lock, ArrowRight, RefreshCcw, CheckCircle2 } from "lucide-react";
 import {
   useStartLivePreview,
   useLivePreview,
@@ -8,6 +7,7 @@ import {
   useContinueLivePreview,
   LIVE_PREVIEW_MAX,
   type LivePreviewConcept,
+  type ContinueConceptResult,
 } from "@/hooks/use-portfolio";
 
 function ConceptCard({
@@ -15,14 +15,16 @@ function ConceptCard({
   concept,
   onContinue,
   continuing,
+  selected,
 }: {
   label: "A" | "B";
   concept: LivePreviewConcept;
   onContinue: () => void;
   continuing: boolean;
+  selected?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-card-border bg-card overflow-hidden">
+    <div className={`rounded-2xl overflow-hidden transition-all ${selected ? "ring-2 ring-emerald-500 border-emerald-500/50" : "border border-card-border"} bg-card`}>
       <div
         className="aspect-square bg-muted relative select-none"
         onContextMenu={(e) => e.preventDefault()}
@@ -64,23 +66,38 @@ function ConceptCard({
         </div>
         <button
           onClick={onContinue}
-          disabled={continuing}
-          className="w-full mt-2 px-4 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-70 flex items-center justify-center gap-2"
+          disabled={continuing || selected}
+          className={`w-full mt-2 px-4 py-2.5 rounded-full text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+            selected
+              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 cursor-default"
+              : "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-70"
+          }`}
         >
-          {continuing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-          Continue With This Concept
+          {selected
+            ? <><CheckCircle2 className="w-4 h-4" /> Selected — scroll down to submit</>
+            : continuing
+            ? <><Loader2 className="w-4 h-4 animate-spin" /> Selecting…</>
+            : <><ArrowRight className="w-4 h-4" /> Continue With This Concept</>
+          }
         </button>
       </div>
     </div>
   );
 }
 
-export function LiveAiPreview({ serviceId }: { serviceId: number }) {
-  const [, setLocation] = useLocation();
+export function LiveAiPreview({
+  serviceId,
+  onConceptContinued,
+}: {
+  serviceId: number;
+  onConceptContinued?: (result: ContinueConceptResult) => void;
+}) {
   const usage = usePreviewSessionUsage();
   const start = useStartLivePreview();
   const continueMutation = useContinueLivePreview();
   const [previewId, setPreviewId] = useState<number | undefined>(undefined);
+  const [selectedConcept, setSelectedConcept] = useState<"A" | "B" | null>(null);
+  const [continueError, setContinueError] = useState<string | null>(null);
   const [form, setForm] = useState({ companyName: "", industry: "", style: "", shortDescription: "" });
   const { data: preview } = useLivePreview(previewId, { poll: true });
 
@@ -89,6 +106,8 @@ export function LiveAiPreview({ serviceId }: { serviceId: number }) {
 
   const onGenerate = () => {
     if (!form.companyName || !form.industry || !form.style) return;
+    setContinueError(null);
+    setSelectedConcept(null);
     start.mutate(
       { serviceId, ...form },
       { onSuccess: (res) => setPreviewId(res.id) },
@@ -97,14 +116,33 @@ export function LiveAiPreview({ serviceId }: { serviceId: number }) {
 
   const onContinue = (concept: "A" | "B") => {
     if (!previewId) return;
+    setContinueError(null);
     continueMutation.mutate(
       { previewId, concept },
       {
         onSuccess: (res) => {
-          // Seed the existing catalog request/brief flow with the exact
-          // generated concept — this never re-triggers generation.
+          // Mark locally as selected (keeps concept cards visible)
+          setSelectedConcept(concept);
+          // Persist for the request form seed
           sessionStorage.setItem("live-preview-seed", JSON.stringify(res));
-          setLocation(`/services/${serviceId}?seedPreview=${previewId}&concept=${concept}`);
+          // Notify parent (service-detail) to set seededConcept + scroll
+          onConceptContinued?.(res);
+        },
+        onError: (err: unknown) => {
+          const msg = err instanceof Error ? err.message : "Something went wrong.";
+          // If already converted (e.g. double-click), still try to use stored seed
+          if (msg.includes("converted") || msg.includes("not ready")) {
+            const raw = sessionStorage.getItem("live-preview-seed");
+            if (raw) {
+              try {
+                const stored = JSON.parse(raw) as ContinueConceptResult;
+                setSelectedConcept(concept);
+                onConceptContinued?.(stored);
+                return;
+              } catch { /* ignore */ }
+            }
+          }
+          setContinueError(msg);
         },
       },
     );
@@ -177,13 +215,49 @@ export function LiveAiPreview({ serviceId }: { serviceId: number }) {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {preview.conceptA && (
-            <ConceptCard label="A" concept={preview.conceptA} onContinue={() => onContinue("A")} continuing={continueMutation.isPending} />
+        <div className="space-y-4">
+          {/* Success banner: concept chosen */}
+          {selectedConcept && (
+            <div className="flex items-start gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-emerald-300 mb-0.5">
+                  Concept {selectedConcept} selected!
+                </p>
+                <p className="text-emerald-400/80 text-xs">
+                  Your concept is ready. Scroll down to pick a package and submit your request — our team will use this exact direction.
+                </p>
+              </div>
+            </div>
           )}
-          {preview.conceptB && (
-            <ConceptCard label="B" concept={preview.conceptB} onContinue={() => onContinue("B")} continuing={continueMutation.isPending} />
+
+          {/* Error banner */}
+          {continueError && (
+            <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+              {continueError}
+            </div>
           )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {preview.conceptA && (
+              <ConceptCard
+                label="A"
+                concept={preview.conceptA}
+                onContinue={() => onContinue("A")}
+                continuing={continueMutation.isPending}
+                selected={selectedConcept === "A"}
+              />
+            )}
+            {preview.conceptB && (
+              <ConceptCard
+                label="B"
+                concept={preview.conceptB}
+                onContinue={() => onContinue("B")}
+                continuing={continueMutation.isPending}
+                selected={selectedConcept === "B"}
+              />
+            )}
+          </div>
         </div>
       )}
     </section>

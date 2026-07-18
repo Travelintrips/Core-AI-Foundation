@@ -939,7 +939,15 @@ export default function ServiceDetailPage() {
             {/* Live AI Preview */}
             <section id="live-preview">
               <SectionHead icon={Sparkles} title="Try a Free AI Preview" />
-              <LiveAiPreview serviceId={serviceId} />
+              <LiveAiPreview
+                serviceId={serviceId}
+                onConceptContinued={(res) => {
+                  setSeededConcept(res);
+                  setContact((c) => ({ ...c, notes: res.seed.notes }));
+                  // Scroll to the request / customize section so user sees the banner
+                  setTimeout(() => scrollTo("customize"), 100);
+                }}
+              />
             </section>
 
             {/* FAQ */}
