@@ -133,7 +133,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               onMouseLeave={(e) => (e.currentTarget.style.color = '#8B9BC4')}>
               {t('nav.clientLogin')}
             </Link>
-            <Link href="/services" className="btn-primary text-sm py-2 px-4">
+            <Link href="/start" className="btn-primary text-sm py-2 px-4">
               {t('nav.startProject')} <ArrowRight className="w-4 h-4" />
             </Link>
           </div>

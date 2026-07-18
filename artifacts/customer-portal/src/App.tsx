@@ -54,6 +54,7 @@ const InteriorDesignProjectPage = lazy(() => import('@/pages/interior-design/pro
 // ── Team 22: Vendor Directory ────────────────────────────────────────────
 const VendorDirectoryPage        = lazy(() => import('@/pages/creative-vendors/VendorDirectoryPage'));
 const VendorProfilePage          = lazy(() => import('@/pages/creative-vendors/VendorProfilePage'));
+const StartPage                  = lazy(() => import('@/pages/start'));
 
 /* ─── Loading fallback ─── */
 function PageLoader() {
@@ -150,6 +151,7 @@ function Router() {
         {/* ── Team 22: Vendor Directory ───────────────────────────────── */}
         <Route path="/vendors/:id" component={VendorProfilePage} />
         <Route path="/vendors" component={VendorDirectoryPage} />
+        <Route path="/start" component={StartPage} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

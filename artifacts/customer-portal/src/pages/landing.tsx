@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import { motion, useInView } from "framer-motion";
 import { useRef, useEffect, useState } from "react";
@@ -9,9 +9,10 @@ import {
   Cpu, Briefcase, Shield, Play, Brain,
   FileCheck, Boxes, PieChart, Building2, Zap,
   CheckCircle2, Clock, BadgeCheck, ExternalLink,
-  Lock, Award,
+  Lock, Award, Search,
 } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
+import { PROJECT_CATEGORIES } from "@/pages/start";
 
 /* ─── ANIMATION VARIANTS ─── */
 const fadeUp = {
@@ -208,6 +209,154 @@ function DashboardMockup() {
   );
 }
 
+/* ─── HERO PROJECT PICKER ─── */
+function HeroProjectPicker() {
+  const [query, setQuery] = useState("");
+  const [, navigate] = useLocation();
+  const { lang } = useTranslation();
+
+  function goCategory(id: string) {
+    navigate(`/start?category=${encodeURIComponent(id)}`);
+  }
+
+  function goQuery(e: React.FormEvent) {
+    e.preventDefault();
+    const q = query.trim();
+    if (q.length < 3) return;
+    navigate(`/start?query=${encodeURIComponent(q)}`);
+  }
+
+  return (
+    <section className="relative overflow-hidden" style={{ minHeight: "100vh", display: "flex", alignItems: "center", background: "#060B18" }}>
+      <NoiseTexture />
+      {/* Background glows */}
+      <div className="pointer-events-none absolute" style={{ top: "-10%", right: "-5%", width: "55%", height: "65%", background: "radial-gradient(ellipse at center, rgba(124,110,250,0.14) 0%, transparent 70%)" }} />
+      <div className="pointer-events-none absolute" style={{ bottom: "0%", left: "-5%", width: "40%", height: "50%", background: "radial-gradient(ellipse at center, rgba(34,211,238,0.06) 0%, transparent 65%)" }} />
+      <div className="pointer-events-none absolute" style={{ backgroundImage: "linear-gradient(rgba(240,244,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(240,244,255,0.02) 1px, transparent 1px)", backgroundSize: "80px 80px", inset: 0, position: "absolute" }} />
+
+      <div className="relative z-10 container mx-auto px-4 md:px-8 max-w-5xl py-20 md:py-28">
+        <motion.div initial="hidden" animate="show" variants={stagger(0.10)} className="text-center space-y-10">
+
+          {/* Badge */}
+          <motion.div variants={fadeUp} className="flex justify-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold"
+              style={{ background: "rgba(124,110,250,0.08)", border: "1px solid rgba(124,110,250,0.28)", color: "#A89EFC" }}>
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#7C6EFA" }} />
+              ✦ AI Creative Studio — Enterprise
+              <ChevronRight className="w-3 h-3 opacity-50" />
+            </div>
+          </motion.div>
+
+          {/* Headline */}
+          <motion.div variants={fadeUp} className="space-y-4">
+            <h1 className="font-display font-bold leading-tight tracking-tight"
+              style={{ fontSize: "clamp(2.2rem, 5vw, 3.8rem)", color: "#F0F4FF", letterSpacing: "-0.03em", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              {lang === "id" ? (
+                <>Apa yang ingin Anda{" "}<span className="text-gradient-primary italic">buat</span>{" "}hari ini?</>
+              ) : (
+                <>What do you want to{" "}<span className="text-gradient-primary italic">create</span>{" "}today?</>
+              )}
+            </h1>
+            <p className="text-base md:text-lg max-w-xl mx-auto leading-relaxed" style={{ color: "#6B7FA8" }}>
+              {lang === "id"
+                ? "Ceritakan kebutuhan Anda. AI kami merancang workflow yang tepat — Anda cukup menyetujui hasilnya."
+                : "Describe what you need. Our AI designs the right workflow — you just approve the results."}
+            </p>
+          </motion.div>
+
+          {/* Category tiles */}
+          <motion.div variants={fadeUp}>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 max-w-3xl mx-auto">
+              {PROJECT_CATEGORIES.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => goCategory(cat.id)}
+                  className="group flex flex-col items-center gap-2 px-3 py-4 rounded-2xl text-sm font-medium transition-all duration-200 cursor-pointer"
+                  style={{ background: "rgba(13,21,38,0.80)", border: "1.5px solid #243352" }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = `${cat.color}10`;
+                    (e.currentTarget as HTMLElement).style.borderColor = `${cat.color}44`;
+                    (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)";
+                    (e.currentTarget as HTMLElement).style.boxShadow = `0 8px 24px ${cat.color}15`;
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "rgba(13,21,38,0.80)";
+                    (e.currentTarget as HTMLElement).style.borderColor = "#243352";
+                    (e.currentTarget as HTMLElement).style.transform = "";
+                    (e.currentTarget as HTMLElement).style.boxShadow = "";
+                  }}
+                >
+                  <span className="text-2xl">{cat.emoji}</span>
+                  <span className="text-xs leading-tight text-center" style={{ color: "#C8D0E8" }}>{cat.label}</span>
+                </button>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* Text input */}
+          <motion.div variants={fadeUp}>
+            <form onSubmit={goQuery} className="flex items-center gap-2 max-w-xl mx-auto">
+              <div className="flex-1 flex items-center gap-3 rounded-2xl px-4 py-3.5 transition-all"
+                style={{ background: "rgba(13,21,38,0.90)", border: "1.5px solid #243352" }}
+                onFocus={() => {}}
+              >
+                <Search className="w-4 h-4 shrink-0" style={{ color: "#4F6494" }} />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={lang === "id" ? 'Atau ketik kebutuhan Anda… contoh: "Saya ingin membuat brand fashion"' : 'Or type your need… e.g. "I want to create a fashion brand"'}
+                  className="flex-1 bg-transparent outline-none text-sm"
+                  style={{ color: "#F0F4FF", fontFamily: "inherit" }}
+                  onFocus={(e) => { (e.currentTarget.parentElement as HTMLElement).style.borderColor = "#7C6EFA"; }}
+                  onBlur={(e) => { (e.currentTarget.parentElement as HTMLElement).style.borderColor = "#243352"; }}
+                />
+              </div>
+              <button
+                type="submit"
+                className="flex items-center gap-2 px-5 py-3.5 rounded-2xl font-semibold text-sm text-white transition-all shrink-0"
+                style={{ background: "linear-gradient(135deg, #7C6EFA 0%, #5F52D0 100%)", boxShadow: "0 4px 20px rgba(124,110,250,0.35)" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.filter = "brightness(1.12)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.filter = ""; }}
+              >
+                <Sparkles className="w-4 h-4" />
+                {lang === "id" ? "Mulai" : "Start"}
+              </button>
+            </form>
+            <p className="text-xs mt-3 text-center" style={{ color: "#4F6494" }}>
+              {lang === "id"
+                ? "Pilih kategori atau ketik kebutuhan Anda — AI menentukan workflow secara otomatis"
+                : "Pick a category or type your need — AI automatically determines the workflow"}
+            </p>
+          </motion.div>
+
+          {/* Trust micro-stats */}
+          <motion.div variants={fadeUp}
+            className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 pt-4"
+            style={{ borderTop: "1px solid rgba(36,51,82,0.50)" }}>
+            {[
+              { icon: Building2,    value: "2,400+", label: "Klien aktif" },
+              { icon: Sparkles,     value: "10+",    label: "Kategori kreatif" },
+              { icon: CheckCircle2, value: "99.2%",  label: "Kepuasan klien" },
+              { icon: Zap,          value: "< 24 jam", label: "Penawaran pertama" },
+            ].map((s) => {
+              const Icon = s.icon;
+              return (
+                <div key={s.label} className="flex items-center gap-1.5">
+                  <Icon className="w-3.5 h-3.5 shrink-0" style={{ color: "#7C6EFA" }} />
+                  <span className="font-bold text-sm" style={{ color: "#F0F4FF", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.value}</span>
+                  <span className="text-xs" style={{ color: "#6B7FA8" }}>{s.label}</span>
+                </div>
+              );
+            })}
+          </motion.div>
+
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
 /* ─── TRUST STATS SECTION ─── */
 function TrustStats() {
   const { t } = useTranslation();
@@ -311,85 +460,8 @@ export default function LandingPage() {
   return (
     <Layout>
 
-      {/* ── HERO ──────────────────────────────────── */}
-      <section className="relative overflow-hidden" style={{ minHeight: "100vh", display: "flex", alignItems: "center", background: "#060B18" }}>
-        <NoiseTexture />
-        <div className="pointer-events-none absolute" style={{ top: "-10%", right: "-5%", width: "55%", height: "65%", background: "radial-gradient(ellipse at center, rgba(124,110,250,0.16) 0%, transparent 70%)" }} />
-        <div className="pointer-events-none absolute" style={{ bottom: "0%", left: "-5%", width: "40%", height: "50%", background: "radial-gradient(ellipse at center, rgba(34,211,238,0.07) 0%, transparent 65%)" }} />
-        <div className="pointer-events-none absolute" style={{ bottom: "-15%", left: "30%", width: "40%", height: "60%", background: "radial-gradient(ellipse at center, rgba(95,82,208,0.10) 0%, transparent 70%)" }} />
-        <div className="pointer-events-none absolute animate-float-orb" style={{ top: "18%", right: "28%", width: 280, height: 280, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,110,250,0.07) 0%, transparent 70%)" }} />
-        <div className="pointer-events-none absolute animate-float-orb-b" style={{ top: "55%", right: "12%", width: 180, height: 180, borderRadius: "50%", background: "radial-gradient(circle, rgba(34,211,238,0.05) 0%, transparent 70%)" }} />
-        <div className="pointer-events-none absolute" style={{ backgroundImage: "linear-gradient(rgba(240,244,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(240,244,255,0.025) 1px, transparent 1px)", backgroundSize: "80px 80px", inset: 0, position: "absolute" }} />
-
-        <div className="relative z-10 container mx-auto px-4 md:px-8 max-w-7xl py-24 lg:py-32">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-            <motion.div className="space-y-8 text-center lg:text-left" initial="hidden" animate="show" variants={stagger(0.12)}>
-              <motion.div variants={fadeUp}>
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold"
-                  style={{ background: "rgba(124,110,250,0.08)", border: "1px solid rgba(124,110,250,0.28)", color: "#A89EFC", boxShadow: "0 0 20px rgba(124,110,250,0.10)" }}>
-                  <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#7C6EFA" }} />
-                  ✦ {t('landing.badge')}
-                  <ChevronRight className="w-3 h-3 opacity-50" />
-                </div>
-              </motion.div>
-
-              <motion.div className="space-y-5" variants={fadeUp}>
-                <h1 className="font-display font-bold leading-[1.06] tracking-tight"
-                  style={{ fontSize: "clamp(2.6rem, 5.5vw, 4.25rem)", color: "#F0F4FF", letterSpacing: "-0.03em" }}>
-                  {t('landing.hero.title1')}<br />
-                  {t('landing.hero.title2')}{" "}
-                  <span className="text-gradient-primary italic">{t('landing.hero.titleHighlight')}</span>
-                  {" "}{t('landing.hero.title3')}
-                </h1>
-                <p className="text-lg leading-relaxed max-w-xl mx-auto lg:mx-0" style={{ color: "#6B7FA8" }}>
-                  {t('landing.hero.desc')}
-                </p>
-              </motion.div>
-
-              <motion.div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start" variants={fadeUp}>
-                <Link href="/services"
-                  className="inline-flex items-center justify-center gap-2 font-semibold text-base text-white rounded-full transition-all"
-                  style={{ padding: "14px 28px", background: "linear-gradient(135deg, #7C6EFA 0%, #5F52D0 100%)", boxShadow: "0 4px 24px rgba(124,110,250,0.40), 0 1px 0 rgba(255,255,255,0.10) inset" }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.filter = "brightness(1.12)"; (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.filter = ""; (e.currentTarget as HTMLElement).style.transform = ""; }}>
-                  {t('landing.cta.start')} <ArrowRight className="w-5 h-5" />
-                </Link>
-                <button
-                  className="inline-flex items-center justify-center gap-2 font-semibold text-base rounded-full transition-all"
-                  style={{ padding: "14px 28px", color: "#C8D0E8", border: "1.5px solid rgba(240,244,255,0.14)", background: "rgba(240,244,255,0.03)" }}
-                  onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(124,110,250,0.40)"; (e.currentTarget as HTMLElement).style.color = "#F0F4FF"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(240,244,255,0.14)"; (e.currentTarget as HTMLElement).style.color = "#C8D0E8"; }}>
-                  <Play className="w-4 h-4" /> {t('landing.cta.demo')}
-                </button>
-              </motion.div>
-
-              <motion.div className="flex flex-wrap justify-center lg:justify-start gap-x-6 gap-y-3 pt-5"
-                style={{ borderTop: "1px solid rgba(36,51,82,0.70)" }} variants={fadeUp}>
-                {[
-                  { icon: Building2,   value: "2,400+", label: t('landing.trust.clients') },
-                  { icon: Sparkles,    value: "15",     label: t('landing.trust.servicesCount') },
-                  { icon: CheckCircle2, value: "99.2%", label: t('landing.trust.satisfaction') },
-                  { icon: TrendingUp,  value: "4.8×",  label: t('landing.trust.roi') },
-                ].map((s) => {
-                  const Icon = s.icon;
-                  return (
-                    <div key={s.label} className="flex items-center gap-1.5">
-                      <Icon className="w-3.5 h-3.5 shrink-0" style={{ color: "#7C6EFA" }} />
-                      <span className="font-display font-bold text-base" style={{ color: "#F0F4FF" }}>{s.value}</span>
-                      <span className="text-xs" style={{ color: "#6B7FA8" }}>{s.label}</span>
-                    </div>
-                  );
-                })}
-              </motion.div>
-            </motion.div>
-
-            <div className="hidden lg:block">
-              <DashboardMockup />
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* ── HERO — AI Guided Project Picker ──────── */}
+      <HeroProjectPicker />
 
       {/* ── PARTNER LOGOS ─────────────────────────── */}
       <section className="py-10 relative overflow-hidden" style={{ background: "#0D1526", borderTop: "1px solid #1C2A40", borderBottom: "1px solid #1C2A40" }}>
