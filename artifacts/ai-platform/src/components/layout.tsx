@@ -35,6 +35,7 @@ import {
   Layers,
   FileStack,
   PackageSearch,
+  Calculator,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -98,6 +99,7 @@ const NAV_SECTIONS = [
       { href: "/service-requests", label: "Service Requests", icon: ClipboardList },
       { href: "/payments", label: "Payments", icon: Wallet },
       { href: "/commercial", label: "Commercial", icon: TrendingUp },
+      { href: "/pricing-calculator", label: "Kalkulator Harga AI", icon: Calculator },
       { href: "/promotions", label: "Promotions", icon: Tags },
       { href: "/coupons", label: "Coupons", icon: Ticket },
     ],
