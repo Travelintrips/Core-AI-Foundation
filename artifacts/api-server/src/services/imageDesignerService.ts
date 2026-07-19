@@ -679,6 +679,72 @@ export async function runImageDesignerPipeline(
     goal: project.goal,
   };
 
+  // ── Template-first path untuk layanan logo ────────────────────────────────
+  // Cek apakah ini proyek logo — kalau iya, coba render dari template dulu
+  // (biaya ~$0.0005 vs $0.003–0.025 via FLUX). Fallback ke FLUX jika gagal.
+  const briefJson = project.briefJson as Record<string, unknown> | null;
+  const serviceCode = String(briefJson?.serviceCode ?? "");
+  const isLogoService = ["logo-design", "GD-LOGO"].includes(serviceCode);
+
+  if (isLogoService) {
+    try {
+      const { tryTemplateLogoRender } = await import("./templateLogoService.js");
+      const templateResult = await tryTemplateLogoRender(brief, projectUuid);
+
+      if (templateResult) {
+        // Simpan asset sebagai completed — skip FLUX sepenuhnya
+        await db.insert(creativeAiAssetsTable).values({
+          projectId: projectUuid,
+          agentId: null,
+          provider: "template",
+          model: templateResult.templateCode,
+          assetType: "image",
+          prompt: `Template: ${templateResult.templateName} — AI-filled slots only`,
+          negativePrompt: null,
+          aspectRatio: "1:1",
+          imageUrl: templateResult.outputUrl,
+          status: "completed",
+          qcScore: 90,
+          qcNotes: `Rendered from built-in template ${templateResult.templateCode}. AI (GPT-4o Mini) filled text slots. No image generation needed.`,
+          cost: String(templateResult.costUsd.toFixed(6)),
+          latencyMs: templateResult.renderDurationMs,
+          metadata: {
+            templateCode: templateResult.templateCode,
+            templateName: templateResult.templateName,
+            tokensUsed: templateResult.tokensUsed,
+            renderMethod: "template",
+            savingsVsFlux: `${(0.003 - templateResult.costUsd).toFixed(4)} saved per image`,
+          },
+        });
+
+        await logAudit(
+          "creative-ai",
+          "image_pipeline_completed_via_template",
+          projectUuid,
+          "creative_project",
+          "success",
+          {
+            templateCode: templateResult.templateCode,
+            costUsd: templateResult.costUsd,
+            renderDurationMs: templateResult.renderDurationMs,
+          },
+        );
+
+        return; // ← FLUX tidak dijalankan
+      }
+    } catch (templateErr) {
+      // Jika template render gagal, lanjut ke pipeline FLUX normal
+      await logAudit(
+        "creative-ai",
+        "template_logo_fallback_to_flux",
+        projectUuid,
+        "creative_project",
+        "failure",
+        { error: String(templateErr) },
+      );
+    }
+  }
+
   await logAudit("creative-ai", "image_pipeline_started", projectUuid, "creative_project", "success", {
     variations: maxVariations,
   });
