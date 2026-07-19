@@ -130,6 +130,11 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
   { method: "POST", pattern: /^\/ai\/fashion-design\/orders\/\d+\/revision-request$/ },
   // List revisions — email-gated in the route handler; no admin key required.
   { method: "GET",  pattern: /^\/ai\/fashion-design\/orders\/\d+\/revisions$/ },
+  // Team 02 — Goal Taxonomy (V4.2C). Read-only goal discovery is public.
+  // Admin write routes (POST /ai/goals, PATCH, DELETE) remain key-protected.
+  { method: "GET",  pattern: /^\/ai\/goals$/ },
+  { method: "GET",  pattern: /^\/ai\/goals\/[^/]+$/ },
+  { method: "GET",  pattern: /^\/ai\/goals\/[^/]+\/services$/ },
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {

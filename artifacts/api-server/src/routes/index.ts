@@ -79,6 +79,8 @@ import cargoRatesRouter from "./cargo-rates";
 import { creativeWorkflowV2Router, creativeWorkflowPublicRouter } from "./creative-workflow-v2/index.js";
 // ── Team 02: Customer Creative Workspace (enhanced) ───────────────────────
 import customerCreativeWorkspaceRouter from "./customer-creative-workspace/index.js";
+// ── Team 02: Goal Taxonomy (V4.2C) ────────────────────────────────────────
+import goalTaxonomyRouter from "../goals/goalRoutes.js";
 // ── Team 03: Creative Commercial Automation ───────────────────────────────
 import creativeCommercialRouter from "./creative-commercial/index.js";
 // ── Team 04: Portfolio V2 (Gallery, Inspiration, Compare) ────────────────
@@ -201,6 +203,8 @@ router.use(creativeWorkflowPublicRouter);
 router.use(creativeWorkflowV2Router);
 // ── Team 02: Customer Creative Workspace Enhanced ─────────────────────────
 router.use(customerCreativeWorkspaceRouter);
+// ── Team 02: Goal Taxonomy (V4.2C) ────────────────────────────────────────
+router.use(goalTaxonomyRouter);
 // ── Team 03: Creative Commercial Automation ───────────────────────────────
 router.use(creativeCommercialRouter);
 // ── Team 04: Portfolio V2 — mount BEFORE any catch-all ───────────────────
