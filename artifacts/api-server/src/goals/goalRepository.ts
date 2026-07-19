@@ -165,6 +165,7 @@ export async function updateGoal(id: number, input: UpdateGoalInput): Promise<Go
  */
 export async function listServicesForGoal(goalId: number): Promise<GoalServiceStub[]> {
   const { rows } = await pool.query<{
+    service_id: number;
     service_code: string;
     service_name: string;
     short_description: string | null;
@@ -175,7 +176,17 @@ export async function listServicesForGoal(goalId: number): Promise<GoalServiceSt
     is_primary: boolean;
     display_order: number;
   }>(
+    // Team 04 (Phase 6): select s.id so GoalServiceStub carries the numeric serviceId.
+    // Also joins ai_service_categories to enforce Team 01 commercial eligibility policy:
+    //   s.status = 'active'              (service-level gate)
+    //   c.visibility = 'public'          (category-level gate 1)
+    //   c.commercial_status = 'commercial_ready' (category-level gate 2)
+    //   c.status = 'active'              (category-level gate 3)
+    // Internally-only or commercially-blocked services are excluded even when a
+    // goal mapping exists. This matches isServiceCommerciallyEligible() from
+    // artifacts/api-server/src/policy/commercialEligibilityPolicy.ts.
     `SELECT
+       s.id              AS service_id,
        s.service_code,
        s.service_name,
        s.short_description,
@@ -186,15 +197,20 @@ export async function listServicesForGoal(goalId: number): Promise<GoalServiceSt
        m.is_primary,
        m.display_order
      FROM ai_goal_service_mappings m
-     JOIN ai_services s ON s.id = m.service_id
+     JOIN ai_services s           ON s.id  = m.service_id
+     JOIN ai_service_categories c ON c.id  = s.category_id
      WHERE m.goal_id = $1
-       AND m.status  = 'active'
-       AND s.status  = 'active'
+       AND m.status             = 'active'
+       AND s.status             = 'active'
+       AND c.visibility         = 'public'
+       AND c.commercial_status  = 'commercial_ready'
+       AND c.status             = 'active'
      ORDER BY m.display_order ASC, m.relevance_score DESC, m.id ASC`,
     [goalId],
   );
 
   return rows.map((r) => ({
+    serviceId: r.service_id,
     serviceCode: r.service_code,
     serviceName: r.service_name,
     shortDescription: r.short_description,
