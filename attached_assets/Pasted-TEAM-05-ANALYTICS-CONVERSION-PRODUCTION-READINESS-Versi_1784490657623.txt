@@ -1,0 +1,1582 @@
+TEAM-05 — ANALYTICS, CONVERSION & PRODUCTION READINESS
+
+Version: 1.0
+Status: ACTIVE
+
+Assigned feature branch:
+
+feature/v4.2i-analytics-production-readiness
+
+Required base branch:
+
+origin/integration/v4.2
+
+Target review branch:
+
+integration/v4.2
+
+==================================================
+CRITICAL BRANCH GATE — RUN BEFORE ANY OTHER ACTION
+==================================================
+
+This is a mandatory execution gate.
+
+Do not inspect application source code.
+Do not edit files.
+Do not create files.
+Do not install dependencies.
+Do not run migrations.
+Do not modify the database.
+Do not start implementation.
+Do not make commits.
+
+First run:
+
+git fetch origin
+git branch --show-current
+git status --short
+git rev-parse --short HEAD
+git branch -a
+
+Print the complete result.
+
+Implementation is forbidden while the active branch is:
+
+main
+
+integration/v4.2
+
+or any branch other than:
+
+feature/v4.2i-analytics-production-readiness
+
+==================================================
+VERIFY REQUIRED BASE BRANCH
+==================================================
+
+Check whether the remote integration branch exists:
+
+git show-ref --verify --quiet refs/remotes/origin/integration/v4.2
+
+If this command fails:
+
+STOP IMMEDIATELY.
+
+Return:
+
+BLOCKED — origin/integration/v4.2 does not exist.
+
+Do not use origin/main as fallback.
+Do not use local main as fallback.
+Do not create the feature branch from another team branch.
+Do not continue implementation.
+
+The feature branch must be based only on:
+
+origin/integration/v4.2
+
+==================================================
+CREATE OR SWITCH TO THE ASSIGNED BRANCH
+==================================================
+
+If the local branch exists:
+
+git switch feature/v4.2i-analytics-production-readiness
+
+If only the remote branch exists:
+
+git switch --track origin/feature/v4.2i-analytics-production-readiness
+
+If neither exists:
+
+git switch -c feature/v4.2i-analytics-production-readiness origin/integration/v4.2
+
+After switching, run:
+
+git branch --show-current
+git status
+git merge-base --is-ancestor origin/integration/v4.2 HEAD
+git log --oneline --decorate -5
+
+The active branch must return exactly:
+
+feature/v4.2i-analytics-production-readiness
+
+The merge-base command must succeed.
+
+If either check fails:
+
+STOP.
+
+Do not inspect source files.
+Do not edit anything.
+Do not commit anything.
+
+Before implementation, print exactly:
+
+ACTIVE BRANCH: feature/v4.2i-analytics-production-readiness
+BASE BRANCH: origin/integration/v4.2
+WORKING TREE: clean
+BRANCH GATE: PASSED
+
+If the working tree is not clean:
+
+STOP.
+
+Report all existing modified or untracked files.
+
+Do not stash, delete, reset, or overwrite unknown work without explicit owner approval.
+
+Implementation may begin only after:
+
+BRANCH GATE: PASSED
+
+==================================================
+READ FIRST
+==================================================
+
+Read:
+
+docs/prompts/MASTER-00.md
+
+If the file is unavailable in the branch:
+
+Report it.
+
+Continue using the governance rules in this prompt.
+
+Inspect only approved work already present in:
+
+origin/integration/v4.2
+
+Expected dependencies may include:
+
+- Team 1 Commercial Eligibility Policy
+- Team 2 Goal Taxonomy Foundation
+- Team 3 Goal-Based Discovery Experience
+- Team 4 Service Normalization and Solution Collections
+
+Do not cherry-pick other team branches yourself.
+
+Do not merge Team 1, Team 2, Team 3, or Team 4 yourself.
+
+If a required dependency is missing:
+
+Report:
+
+WAITING FOR REQUIRED INTEGRATION
+
+Do not duplicate the missing implementation.
+
+Continue only with work that is independent and safe.
+
+==================================================
+PROJECT
+==================================================
+
+Creative AI Platform
+
+Phase:
+
+V4.2I — Analytics & Conversion
+
+and:
+
+V4.2J — QA & Production Readiness
+
+==================================================
+TEAM RESPONSIBILITY
+==================================================
+
+Team 5 is responsible for:
+
+- Defining event analytics for discovery and conversion
+- Tracking goal discovery usage
+- Tracking goal detail usage
+- Tracking service selection from goals
+- Tracking collection usage
+- Tracking quote/request entry points
+- Funnel analytics
+- Conversion reporting
+- Data quality validation
+- Privacy-safe event design
+- Backend analytics ingestion where needed
+- Frontend analytics hooks where needed
+- Operational dashboards only if an existing admin analytics surface exists
+- Production-readiness checks
+- Feature-flag and rollout controls
+- Regression preparation
+- Release checklist
+- QA automation relevant to analytics and rollout
+- Observability
+- Documentation
+- Tests
+
+Team 5 is not responsible for:
+
+- Building new customer discovery UI
+- Building Goal Taxonomy
+- Building Service Normalization
+- Building Solution Collections
+- Building Recommendation Engine
+- Building AI Discovery Assistant
+- Changing pricing
+- Changing checkout
+- Changing order workflow
+- Changing payment flow
+- Modifying Creative AI runtime
+- Modifying Presentation Engine
+- Redesigning BizPortal
+- General SEO implementation
+- General marketplace redesign
+
+==================================================
+PRIMARY MISSION
+==================================================
+
+Provide a reliable, privacy-safe, and production-ready measurement layer for V4.2.
+
+The platform must be able to answer questions such as:
+
+- How many customers open the marketplace?
+- How many see the goal discovery section?
+- Which goals are opened most often?
+- Which services are selected from a goal?
+- Which solution collections are opened?
+- Which discovery path leads to quote or request creation?
+- Where do customers leave the funnel?
+- Are analytics events duplicated?
+- Are events missing?
+- Are internal users polluting customer analytics?
+- Are customer-facing experiments safe to roll back?
+- Can V4.2 be released gradually?
+- Can production issues be detected quickly?
+
+The analytics system must measure real behavior.
+
+It must not fabricate results.
+
+==================================================
+NON-NEGOTIABLE RULES
+==================================================
+
+Do not change commercial eligibility logic.
+
+Do not change Goal Taxonomy logic.
+
+Do not change normalization logic.
+
+Do not change pricing.
+
+Do not change order creation behavior.
+
+Do not change payment behavior.
+
+Do not change customer-visible claims based on analytics.
+
+Do not expose personal or sensitive data unnecessarily.
+
+Do not log secrets.
+
+Do not log prompts or AI chain of thought.
+
+Do not create analytics tracking that blocks customer flows.
+
+Analytics failures must not break:
+
+- Marketplace loading
+- Goal browsing
+- Service detail
+- Quote creation
+- Request creation
+- Checkout
+
+Analytics must fail safely.
+
+==================================================
+TARGET ANALYTICS ARCHITECTURE
+==================================================
+
+Preferred conceptual flow:
+
+Customer Action
+      ↓
+Typed Analytics Event
+      ↓
+Client Analytics Adapter
+      ↓
+Backend Analytics Ingestion
+      ↓
+Validated Event Store
+      ↓
+Aggregation / Reporting
+      ↓
+Operational Dashboard or Export
+
+The architecture may reuse an existing analytics provider or event infrastructure.
+
+Do not introduce a new vendor unless strictly necessary and explicitly approved.
+
+Prefer first-party event tracking where the repository already supports it.
+
+==================================================
+PHASE 1 — EXISTING ANALYTICS AUDIT
+==================================================
+
+Before coding, audit:
+
+1. Existing analytics tables
+2. Existing event logging services
+3. Existing frontend analytics hooks
+4. Existing admin analytics dashboards
+5. Existing image analytics implementation
+6. Existing AI cost analytics
+7. Existing request/order tracking
+8. Existing pageview tracking
+9. Existing cookie/consent behavior
+10. Existing privacy policy integration
+11. Existing feature flags
+12. Existing environment toggles
+13. Existing error monitoring
+14. Existing structured logging
+15. Existing release checklist
+16. Existing QA workflows
+17. Existing health endpoints
+18. Existing monitoring endpoints
+19. Existing rate limiting
+20. Existing event deduplication logic
+
+Produce an audit table:
+
+Area
+File or Table
+Current Behavior
+Reuse Plan
+Risk
+Modification Required
+
+Do not create duplicate analytics infrastructure.
+
+==================================================
+PHASE 2 — EVENT TAXONOMY DESIGN
+==================================================
+
+Create a typed event taxonomy for V4.2.
+
+Recommended event categories:
+
+Discovery
+
+- marketplace_viewed
+- goal_discovery_viewed
+- goal_card_viewed
+- goal_opened
+- goal_services_loaded
+- goal_empty_state_viewed
+- goal_error_viewed
+
+Search
+
+- catalog_search_started
+- catalog_search_completed
+- catalog_search_empty
+- catalog_filter_applied
+- catalog_filter_removed
+
+Service
+
+- service_card_viewed
+- service_opened
+- service_selected_from_goal
+- service_selected_from_collection
+- service_quote_started
+- service_request_started
+
+Collection
+
+- solution_collection_viewed
+- solution_collection_opened
+- collection_service_selected
+
+Conversion
+
+- quote_form_viewed
+- quote_submitted
+- request_form_viewed
+- request_submitted
+- checkout_started
+- payment_started
+- order_created
+
+Operational
+
+- analytics_event_rejected
+- analytics_event_deduplicated
+- analytics_ingestion_failed
+- analytics_delivery_retried
+
+Use actual naming conventions from the repository.
+
+Do not create duplicate names for events that already exist.
+
+==================================================
+EVENT CONTRACT REQUIREMENTS
+==================================================
+
+Each event must use a typed contract.
+
+Recommended common fields:
+
+- event_name
+- event_version
+- occurred_at
+- session_id
+- anonymous_user_id
+- authenticated_user_id if allowed
+- tenant_id if applicable
+- source
+- page_path
+- referrer_type
+- goal_slug if applicable
+- service_code if applicable
+- collection_slug if applicable
+- category_code if applicable
+- request_id if applicable
+- quote_id if applicable
+- order_id if applicable
+- experiment_key if applicable
+- metadata constrained by schema
+
+Do not place arbitrary unvalidated objects in metadata.
+
+Do not log:
+
+- Full names unless necessary and approved
+- Phone numbers
+- Email addresses
+- Address
+- Payment credentials
+- API keys
+- Tokens
+- Raw request bodies
+- Prompt content
+- AI outputs
+- Internal notes
+- Stack traces in public payloads
+
+==================================================
+EVENT VERSIONING
+==================================================
+
+Every event contract must include a version.
+
+Example:
+
+event_version: 1
+
+If an event schema changes incompatibly:
+
+Create a new version.
+
+Do not silently change the meaning of existing fields.
+
+Document all event versions.
+
+==================================================
+EVENT DEDUPLICATION
+==================================================
+
+Prevent duplicate events caused by:
+
+- React rerenders
+- Page refresh retries
+- Network retries
+- SSE reconnects
+- Browser back/forward navigation
+- Double clicks
+- API retry logic
+- Server retry logic
+
+Use a deterministic event ID or idempotency key where appropriate.
+
+Potential inputs:
+
+- Session ID
+- Event name
+- Entity identifier
+- Timestamp bucket
+- Client-generated UUID
+- Request correlation ID
+
+Do not rely only on timestamps for deduplication.
+
+==================================================
+SESSION AND IDENTITY RULES
+==================================================
+
+Define identity behavior clearly.
+
+Anonymous users:
+
+Use a privacy-safe anonymous identifier.
+
+Authenticated users:
+
+Use existing internal user ID only where allowed.
+
+Do not expose the identifier publicly.
+
+Do not merge identities across tenants incorrectly.
+
+Do not store a permanent cross-site tracking identifier.
+
+Respect existing consent and privacy rules.
+
+If consent infrastructure does not exist:
+
+Document the limitation.
+
+Do not silently claim full compliance.
+
+==================================================
+FRONTEND TRACKING REQUIREMENTS
+==================================================
+
+Frontend tracking must:
+
+- Reuse existing analytics adapter
+- Be typed
+- Be non-blocking
+- Avoid duplicate events
+- Avoid tracking during SSR if not applicable
+- Avoid firing events on every rerender
+- Track meaningful customer actions
+- Avoid noisy low-value events
+- Fail silently from the customer perspective
+- Log development diagnostics only in non-production environments
+
+Do not add analytics calls directly throughout many components without abstraction.
+
+Prefer a small typed analytics client and hooks.
+
+Examples:
+
+trackMarketplaceViewed()
+
+trackGoalOpened(goalSlug)
+
+trackServiceSelectedFromGoal(goalSlug, serviceCode)
+
+trackQuoteStarted(serviceCode, source)
+
+Follow existing code conventions.
+
+==================================================
+BACKEND INGESTION REQUIREMENTS
+==================================================
+
+If an ingestion endpoint is required, it must:
+
+- Accept only typed known events
+- Validate event version
+- Validate allowed event names
+- Reject unknown fields or sanitize them
+- Apply payload size limits
+- Apply batch size limits
+- Apply rate limiting
+- Support idempotency
+- Use structured logging
+- Return safe errors
+- Avoid exposing DB internals
+- Avoid blocking customer flows
+- Support anonymous events safely
+
+Do not make all analytics ingestion endpoints admin-only if customer events must call them.
+
+Public ingestion must be narrowly scoped and hardened.
+
+==================================================
+DATABASE DESIGN
+==================================================
+
+Reuse existing analytics tables if suitable.
+
+If new tables are necessary, design them additively.
+
+Potential conceptual tables:
+
+ai_discovery_events
+
+ai_discovery_event_dedup
+
+ai_discovery_daily_metrics
+
+ai_discovery_funnel_metrics
+
+Use actual repository naming conventions.
+
+Do not create tables unnecessarily.
+
+Raw event storage should support:
+
+- event_id
+- event_name
+- event_version
+- occurred_at
+- received_at
+- session identifier
+- approved entity identifiers
+- source
+- structured metadata
+- environment
+- tenant or platform scope
+- deduplication status
+
+Indexes should support:
+
+- event_name
+- occurred_at
+- goal_slug
+- service_code
+- collection_slug
+- tenant_id if applicable
+- session_id
+- event_id uniqueness
+
+==================================================
+RETENTION AND PRIVACY
+==================================================
+
+Define retention expectations.
+
+At minimum document:
+
+- Raw event retention
+- Aggregated metric retention
+- Anonymous identifier retention
+- Deletion strategy
+- Tenant isolation
+- Environment separation
+
+Do not implement permanent retention by accident.
+
+Do not copy production analytics into development.
+
+Do not mix test and production events.
+
+Use an environment field or separate storage where appropriate.
+
+==================================================
+FUNNEL DEFINITION
+==================================================
+
+Define deterministic funnels.
+
+Example Goal Discovery Funnel:
+
+1. marketplace_viewed
+2. goal_discovery_viewed
+3. goal_opened
+4. service_selected_from_goal
+5. quote_started or request_started
+6. quote_submitted or request_submitted
+7. order_created
+
+Example Collection Funnel:
+
+1. solution_collection_viewed
+2. solution_collection_opened
+3. collection_service_selected
+4. quote_started or request_started
+5. request_submitted
+6. order_created
+
+Do not count events merely because they exist in the same day.
+
+Use session, correlation, or approved attribution logic.
+
+Document attribution windows.
+
+==================================================
+SOURCE ATTRIBUTION
+==================================================
+
+Track discovery source safely.
+
+Allowed examples:
+
+- direct_catalog
+- goal_discovery
+- goal_detail
+- solution_collection
+- search
+- category_filter
+- related_service
+- external_campaign if existing tracking supports it
+
+Do not accept unrestricted source strings.
+
+Use an enum.
+
+Do not place full referrer URLs in analytics by default.
+
+Use sanitized referrer classifications.
+
+==================================================
+CONVERSION METRICS
+==================================================
+
+Support metrics such as:
+
+- Marketplace visitors
+- Goal discovery impressions
+- Goal open rate
+- Goal-to-service selection rate
+- Collection open rate
+- Service-to-quote start rate
+- Quote completion rate
+- Request completion rate
+- Order conversion rate
+- Empty-result rate
+- Error rate
+- Funnel drop-off rate
+
+Do not calculate revenue attribution unless pricing and payment data integration is explicitly approved and correct.
+
+Do not invent conversion benchmarks.
+
+==================================================
+REPORTING API REQUIREMENTS
+==================================================
+
+If reporting endpoints are needed, use admin authentication.
+
+Potential endpoints may include equivalents of:
+
+GET /api/ai/admin/analytics/discovery/overview
+
+GET /api/ai/admin/analytics/discovery/goals
+
+GET /api/ai/admin/analytics/discovery/services
+
+GET /api/ai/admin/analytics/discovery/collections
+
+GET /api/ai/admin/analytics/discovery/funnel
+
+GET /api/ai/admin/analytics/discovery/errors
+
+Do not implement exact routes before auditing existing conventions.
+
+Required filters may include:
+
+- date range
+- environment
+- tenant
+- source
+- goal
+- service
+- collection
+
+Apply reasonable maximum date ranges.
+
+Prevent unbounded queries.
+
+==================================================
+REPORTING RESPONSE RULES
+==================================================
+
+Admin analytics responses may include:
+
+- Aggregated counts
+- Rates
+- Funnel steps
+- Error counts
+- Time series
+- Top goals
+- Top services
+- Top collections
+- Data freshness timestamp
+- Sampling or data limitation notes
+
+Do not expose:
+
+- Raw PII
+- Raw anonymous identifiers
+- Internal tokens
+- Full request payloads
+- Secret metadata
+- Customer message contents
+
+==================================================
+ADMIN DASHBOARD POLICY
+==================================================
+
+Only modify an existing analytics admin screen if one already exists and is within Team 5 scope.
+
+Do not redesign BizPortal.
+
+Do not create a broad new dashboard platform.
+
+If no suitable admin surface exists:
+
+Provide backend APIs and documentation.
+
+Leave UI implementation for a separate approved phase.
+
+==================================================
+FEATURE FLAG REQUIREMENTS
+==================================================
+
+V4.2 rollout must be controllable.
+
+Reuse the existing feature flag system if available.
+
+Recommended flags may include:
+
+- v4_2_goal_discovery_enabled
+- v4_2_solution_collections_enabled
+- v4_2_discovery_analytics_enabled
+- v4_2_new_marketplace_default
+
+Do not create duplicate configuration systems.
+
+Flags must support:
+
+- Environment separation
+- Safe default
+- Gradual rollout if existing infrastructure supports it
+- Fast disable
+- No code redeploy where possible
+- Clear ownership
+- Documented fallback behavior
+
+Do not use client-only flags for security.
+
+==================================================
+ROLLOUT STRATEGY
+==================================================
+
+Design a staged rollout.
+
+Recommended stages:
+
+Stage 0 — Internal only
+
+- Admin/internal users
+- Development environment
+- Validate event integrity
+
+Stage 1 — Limited exposure
+
+- Small customer percentage or selected tenant
+- Monitor errors and conversion
+
+Stage 2 — Expanded exposure
+
+- Larger percentage
+- Compare old and new discovery paths
+
+Stage 3 — Default experience
+
+- V4.2 enabled broadly
+- Legacy catalog remains available as fallback
+
+Stage 4 — Stabilization
+
+- Remove temporary instrumentation only after approval
+- Preserve event contract compatibility
+
+Do not remove the legacy catalog during rollout.
+
+==================================================
+ROLLBACK REQUIREMENTS
+==================================================
+
+Rollback must be possible without data corruption.
+
+Rollback should support:
+
+- Disabling goal discovery
+- Disabling collections
+- Disabling analytics delivery
+- Returning to legacy catalog
+- Preserving already stored events
+- Avoiding broken routes
+- Avoiding customer dead ends
+
+Document exact rollback steps.
+
+Do not require destructive DB rollback for a frontend feature rollback.
+
+==================================================
+OBSERVABILITY REQUIREMENTS
+==================================================
+
+Add or reuse monitoring for:
+
+- Analytics ingestion failures
+- Event rejection rate
+- Deduplication rate
+- Event delivery latency
+- Missing event spikes
+- Goal endpoint error rate
+- Collection endpoint error rate
+- Quote/request conversion errors
+- Feature flag status
+- Event backlog if applicable
+
+Use structured logs.
+
+Do not log sensitive payloads.
+
+==================================================
+DATA QUALITY CHECKS
+==================================================
+
+Implement or document checks for:
+
+- Unknown event names
+- Unknown event versions
+- Missing required fields
+- Invalid goal slug
+- Invalid service code
+- Invalid collection slug
+- Events from wrong environment
+- Duplicate events
+- Events older than allowed threshold
+- Future-dated events
+- Invalid attribution source
+- Event volume anomalies
+- Empty funnel step gaps
+
+Provide a data quality report.
+
+==================================================
+PRODUCTION READINESS AUDIT
+==================================================
+
+Audit V4.2 for:
+
+1. Branch isolation
+2. Feature flag coverage
+3. Public endpoint authentication
+4. Admin endpoint authentication
+5. Rate limiting
+6. Input validation
+7. Error sanitization
+8. Commercial eligibility reuse
+9. Goal taxonomy contract stability
+10. Service normalization compatibility
+11. Solution collection filtering
+12. Frontend loading states
+13. Frontend empty states
+14. Frontend error states
+15. Accessibility
+16. Responsive behavior
+17. Browser navigation
+18. Legacy route compatibility
+19. Order workflow compatibility
+20. Analytics event integrity
+21. Event deduplication
+22. Privacy compliance
+23. Performance
+24. Build integrity
+25. Rollback readiness
+26. Monitoring
+27. Documentation
+28. Migration safety
+29. Environment separation
+30. UAT readiness
+
+Do not fix unrelated defects found during audit.
+
+Document them separately.
+
+==================================================
+QA MATRIX
+==================================================
+
+Create a V4.2 QA matrix.
+
+Required columns:
+
+Area
+Scenario
+Expected Result
+Automation Status
+Manual Status
+Environment
+Owner
+Evidence
+Risk
+Release Blocker
+
+Cover at least:
+
+- Marketplace
+- Goal discovery
+- Goal detail
+- Service detail
+- Search
+- Category filters
+- Solution collections
+- Quote flow
+- Request flow
+- Commercial eligibility
+- Admin write protection
+- Analytics ingestion
+- Analytics reporting
+- Feature flags
+- Rollback
+- Mobile
+- Desktop
+- Keyboard
+- Error states
+- Empty states
+- Legacy URLs
+
+==================================================
+RELEASE CHECKLIST
+==================================================
+
+Create a production release checklist containing:
+
+- Approved branches merged into integration
+- All required tests passed
+- Typecheck passed or baseline documented
+- Build passed
+- Migration reviewed
+- Migration environment confirmed
+- Feature flags configured
+- Monitoring configured
+- Rollback plan approved
+- Public endpoints verified
+- Admin endpoints verified
+- Analytics event contract verified
+- Privacy review completed
+- UAT completed
+- Owner approval received
+- Main merge approval received
+
+No item may be marked complete without evidence.
+
+==================================================
+ALLOWED FILES
+==================================================
+
+Team 5 may modify files related to:
+
+- Analytics event types
+- Analytics client
+- Analytics hooks
+- Analytics ingestion
+- Analytics repository
+- Analytics service
+- Analytics validation
+- Reporting APIs
+- Existing analytics admin components if approved
+- Feature flags
+- Observability
+- Data quality checks
+- Analytics tests
+- QA documentation
+- Release documentation
+- Team 5 documentation
+
+==================================================
+FORBIDDEN FILES
+==================================================
+
+Do not modify:
+
+- Goal Taxonomy business logic
+- Commercial Eligibility Policy business logic
+- Service Normalization business logic
+- Solution Collection business logic
+- Pricing
+- Checkout
+- Payments
+- Existing order workflow
+- Creative Workflow Runner
+- AI Runtime
+- Presentation Engine
+- AI Recommendation Engine
+- Customer account system
+- General BizPortal redesign
+- General Customer Portal redesign
+- Replit configuration
+- GitHub workflow unless explicitly required and approved
+- Production secrets
+- Other team branches
+
+Do not fix unrelated bugs.
+
+==================================================
+SECURITY REQUIREMENTS
+==================================================
+
+Required:
+
+- Input validation
+- Rate limits
+- Payload limits
+- Batch limits
+- Auth on admin reporting
+- Narrow public ingestion scope
+- No secrets
+- No PII leakage
+- Tenant isolation
+- Environment isolation
+- Safe structured logging
+- Safe error messages
+- No stack traces in public responses
+- No arbitrary metadata storage
+- No insecure client trust for privileged fields
+
+The server must derive protected fields where possible.
+
+Do not trust the client to set:
+
+- tenant scope
+- environment
+- admin identity
+- order ownership
+- privileged attribution
+
+==================================================
+TESTING REQUIREMENTS
+==================================================
+
+Add tests for at least:
+
+1. Valid event acceptance
+2. Unknown event rejection
+3. Invalid event version rejection
+4. Required-field validation
+5. Unknown metadata rejection or sanitization
+6. Payload size limit
+7. Batch size limit
+8. Rate limiting
+9. Event deduplication
+10. Idempotent retry
+11. Anonymous event handling
+12. Authenticated event handling
+13. Tenant isolation
+14. Environment isolation
+15. Invalid goal slug behavior
+16. Invalid service code behavior
+17. Invalid collection slug behavior
+18. Reporting auth
+19. Date range limits
+20. Funnel calculation
+21. Attribution logic
+22. Empty analytics state
+23. Analytics ingestion failure does not break customer flow
+24. Feature flag disabled behavior
+25. Feature flag enabled behavior
+26. Rollback fallback
+27. No PII in public payload
+28. No secret in logs
+29. Existing marketplace regression
+30. Existing quote/request regression
+
+Use the existing test framework.
+
+Do not introduce a new test framework.
+
+==================================================
+MANUAL VERIFICATION
+==================================================
+
+Verify:
+
+- Marketplace works with analytics enabled
+- Marketplace works with analytics disabled
+- Goal view events fire once
+- Goal open event fires once
+- Service selection source is correct
+- Collection events fire once
+- Quote start event does not duplicate
+- Request start event does not duplicate
+- Analytics network failure does not block UI
+- Admin report requires authentication
+- Date filters work
+- Empty analytics state works
+- Data freshness is visible
+- Feature flag rollback works
+- Legacy catalog remains accessible
+- Mobile flow works
+- Desktop flow works
+- Keyboard flow works
+- No PII appears in event payloads
+- No secret appears in logs
+
+==================================================
+MIGRATION SAFETY
+==================================================
+
+Before running any migration:
+
+1. Confirm active branch.
+2. Confirm target environment.
+3. Confirm target database.
+4. Confirm additive-only behavior.
+5. Confirm no destructive SQL.
+6. Confirm explicit owner approval.
+
+Creating a migration file is allowed.
+
+Applying it to production is not allowed by default.
+
+If approval is absent:
+
+Report:
+
+MIGRATION CREATED BUT NOT APPLIED
+
+Do not run it.
+
+==================================================
+COMMIT GATE
+==================================================
+
+Before every commit, run:
+
+git branch --show-current
+
+The output must be exactly:
+
+feature/v4.2i-analytics-production-readiness
+
+If not:
+
+STOP.
+
+Do not commit.
+
+Also run:
+
+git status --short
+git diff --check
+
+Use focused commits.
+
+Suggested commits:
+
+feat(analytics): add typed discovery event contracts
+feat(analytics): add privacy-safe event ingestion
+feat(analytics): add discovery funnel reporting
+feat(rollout): add v4.2 feature flags and rollback controls
+test(analytics): cover ingestion and conversion metrics
+docs(team-05): add QA and release readiness report
+
+Do not include unrelated files.
+
+==================================================
+PRE-PUSH VERIFICATION
+==================================================
+
+Before push, run:
+
+git fetch origin
+git branch --show-current
+git status
+git log --oneline origin/integration/v4.2..HEAD
+git diff --name-status origin/integration/v4.2..HEAD
+git diff --stat origin/integration/v4.2..HEAD
+git diff --check
+
+Review every commit and file.
+
+If unrelated changes appear:
+
+STOP.
+
+Remove them safely before pushing.
+
+==================================================
+PUSH RULES
+==================================================
+
+Push only:
+
+feature/v4.2i-analytics-production-readiness
+
+Use:
+
+git push -u origin feature/v4.2i-analytics-production-readiness
+
+Do not push main.
+
+Do not push integration/v4.2.
+
+Do not merge into main.
+
+Do not merge into integration/v4.2.
+
+Do not force-push another team branch.
+
+Team 6 will review and integrate the work.
+
+==================================================
+FINAL BRANCH VERIFICATION
+==================================================
+
+After push, run:
+
+git branch --show-current
+git status
+git branch -vv
+git log --oneline --decorate -10
+git log --oneline origin/integration/v4.2..HEAD
+git diff --name-status origin/integration/v4.2..HEAD
+
+Required result:
+
+Active branch:
+
+feature/v4.2i-analytics-production-readiness
+
+Working tree:
+
+clean
+
+Remote tracking:
+
+origin/feature/v4.2i-analytics-production-readiness
+
+No Team 5 commit may exist only on local main.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return this exact structure:
+
+# TEAM-05 FINAL REPORT
+
+## 1. Branch Verification
+
+Active branch:
+
+Base branch:
+
+Remote tracking branch:
+
+Branch gate result:
+
+Confirm:
+
+- Work was not performed on main
+- Main was not pushed
+- Integration branch was not directly modified
+- No other team branch was merged
+
+## 2. Executive Summary
+
+Explain what analytics and production-readiness work was implemented.
+
+## 3. Existing Architecture Audit
+
+List:
+
+- Existing analytics infrastructure
+- Existing event logging
+- Existing feature flags
+- Existing monitoring
+- Existing admin analytics
+- Existing privacy controls
+
+## 4. Event Taxonomy
+
+List all event names and versions.
+
+Explain each event’s trigger and approved fields.
+
+## 5. Scope Completed
+
+List every completed Team 5 requirement.
+
+## 6. Files Changed
+
+For every file:
+
+Path
+Change
+Reason
+Owning domain
+
+## 7. Database Changes
+
+Report:
+
+- Existing tables reused
+- New tables
+- New indexes
+- Migration file
+- Migration applied or not
+- Target environment
+- Idempotency
+- Destructive operations
+
+## 8. Ingestion API
+
+List:
+
+- Endpoint
+- Authentication
+- Validation
+- Rate limits
+- Payload limits
+- Batch limits
+- Idempotency
+
+## 9. Reporting API
+
+List:
+
+- Endpoints
+- Filters
+- Date range limits
+- Authentication
+- Response fields
+- Data freshness
+
+## 10. Privacy Review
+
+Confirm:
+
+- No PII stored unnecessarily
+- No secret stored
+- No prompt or AI output stored
+- Environment isolated
+- Tenant scope enforced
+- Retention documented
+
+## 11. Funnel Definitions
+
+Document all funnels and attribution rules.
+
+## 12. Feature Flags
+
+List:
+
+- Flag names
+- Defaults
+- Environments
+- Rollout behavior
+- Rollback behavior
+
+## 13. Observability
+
+Document:
+
+- Metrics
+- Logs
+- Alerts
+- Failure handling
+- Data quality checks
+
+## 14. Tests
+
+Provide exact commands and results.
+
+## 15. Typecheck
+
+Provide exact commands and results.
+
+## 16. Production Build
+
+Provide exact commands and results.
+
+## 17. Manual Verification
+
+Report all verified flows.
+
+## 18. QA Matrix
+
+Summarize:
+
+- Passed scenarios
+- Failed scenarios
+- Blockers
+- Evidence
+
+## 19. Release Readiness
+
+Classify V4.2 as one of:
+
+NOT READY
+
+READY FOR INTERNAL UAT
+
+READY FOR LIMITED ROLLOUT
+
+READY FOR PRODUCTION
+
+Provide evidence.
+
+## 20. Migration Safety
+
+Report:
+
+- Migration created
+- Migration applied or not
+- Environment
+- Additive-only verification
+- Idempotency
+- Destructive operation result
+
+## 21. Known Limitations
+
+State honestly.
+
+## 22. Remaining Risks
+
+List actual risks.
+
+## 23. Rollback Plan
+
+Provide exact rollback steps.
+
+## 24. Commit List
+
+Show:
+
+git log --oneline origin/integration/v4.2..HEAD
+
+## 25. Final Diff
+
+Show:
+
+git diff --name-status origin/integration/v4.2..HEAD
+
+## 26. Push Confirmation
+
+Confirm:
+
+origin/feature/v4.2i-analytics-production-readiness
+
+==================================================
+STOP CONDITION
+==================================================
+
+After Team 5 work is complete and pushed:
+
+STOP.
+
+Do not implement:
+
+- Team 6 integration work
+- Final branch merging
+- Production deployment
+- Main merge
+- New Recommendation Engine
+- AI Discovery Assistant
+- New customer UI
+- New pricing bundle
+- New checkout flow
+
+Do not merge the branch.
+
+Wait for Team 6 review.
