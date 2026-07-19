@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-modules = ["nodejs-20", "web", "bash", "postgresql-16"]
-=======
 modules = ["nodejs-20", "web", "bash", "python-base-3.13", "postgresql-16"]
->>>>>>> 7883974 (Update Replit configuration)
 
 [deployment]
 router = "application"
