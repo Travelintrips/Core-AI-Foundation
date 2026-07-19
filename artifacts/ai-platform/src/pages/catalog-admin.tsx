@@ -11,11 +11,17 @@ import {
   useListServiceRequests,
   useUpdateServiceRequestStatus,
   useGetCatalogAnalytics,
+  useGetService,
+  useCreateServicePackage,
+  useUpdateServicePackage,
+  useDeleteServicePackage,
   getListServiceCategoriesQueryKey,
   getListServicesQueryKey,
   getListServiceRequestsQueryKey,
+  getGetServiceQueryKey,
   type AiServiceCategory,
   type AiService,
+  type AiServicePackage,
   type ServiceRequestStatus,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -38,7 +44,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { LayoutGrid, Plus, Pencil, Trash2, BarChart2, ClipboardList, Boxes } from "lucide-react";
+import { LayoutGrid, Plus, Pencil, Trash2, BarChart2, ClipboardList, Boxes, Package } from "lucide-react";
 
 const REQUEST_STATUSES: ServiceRequestStatus[] = [
   "draft", "brief_in_progress", "brief_completed", "pricing_calculated",
@@ -265,6 +271,196 @@ function ServicesTab() {
   );
 }
 
+function PackagesTab() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: services = [] } = useListServices();
+  const [selectedServiceId, setSelectedServiceId] = useState<number | null>(null);
+
+  const { data: serviceDetail, isLoading } = useGetService(selectedServiceId ?? 0, {
+    query: { enabled: selectedServiceId != null, queryKey: getGetServiceQueryKey(selectedServiceId ?? 0) },
+  });
+  const packages: AiServicePackage[] = serviceDetail?.packages ?? [];
+
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<AiServicePackage | null>(null);
+  const [form, setForm] = useState({
+    packageName: "", packageType: "basic",
+    oneTimePrice: "", monthlyPrice: "", yearlyPrice: "",
+    featuresJson: "", status: "active",
+  });
+
+  const invalidate = () => {
+    if (selectedServiceId) queryClient.invalidateQueries({ queryKey: getGetServiceQueryKey(selectedServiceId) });
+  };
+
+  const createMutation = useCreateServicePackage({ mutation: { onSuccess: () => { invalidate(); setOpen(false); } } });
+  const updateMutation = useUpdateServicePackage({ mutation: { onSuccess: () => { invalidate(); setOpen(false); } } });
+  const deleteMutation = useDeleteServicePackage({
+    mutation: {
+      onSuccess: () => invalidate(),
+      onError: () => toast({ title: "Delete failed", variant: "destructive" }),
+    },
+  });
+
+  function parseFeatures(raw: string): string[] {
+    return raw.split("\n").map((s) => s.trim()).filter(Boolean);
+  }
+
+  function openCreate() {
+    setEditing(null);
+    setForm({ packageName: "", packageType: "basic", oneTimePrice: "", monthlyPrice: "", yearlyPrice: "", featuresJson: "", status: "active" });
+    setOpen(true);
+  }
+
+  function openEdit(p: AiServicePackage) {
+    setEditing(p);
+    setForm({
+      packageName: p.packageName,
+      packageType: p.packageType ?? "basic",
+      oneTimePrice: p.oneTimePrice ?? "",
+      monthlyPrice: p.monthlyPrice ?? "",
+      yearlyPrice: p.yearlyPrice ?? "",
+      featuresJson: (p.featuresJson ?? []).join("\n"),
+      status: p.status ?? "active",
+    });
+    setOpen(true);
+  }
+
+  function save() {
+    if (!selectedServiceId) return;
+    const data = {
+      packageName: form.packageName,
+      packageType: form.packageType,
+      oneTimePrice: form.oneTimePrice || undefined,
+      monthlyPrice: form.monthlyPrice || undefined,
+      yearlyPrice: form.yearlyPrice || undefined,
+      featuresJson: parseFeatures(form.featuresJson),
+      status: form.status,
+    };
+    if (editing) updateMutation.mutate({ id: editing.id, data });
+    else createMutation.mutate({ id: selectedServiceId, data });
+  }
+
+  const formatPrice = (p?: string | null) => (p ? `Rp ${Number(p).toLocaleString("id-ID")}` : "—");
+
+  return (
+    <div className="space-y-4">
+      {/* Service selector */}
+      <div className="flex items-center gap-3">
+        <Select
+          value={selectedServiceId != null ? String(selectedServiceId) : ""}
+          onValueChange={(v) => setSelectedServiceId(Number(v))}
+        >
+          <SelectTrigger className="w-72" data-testid="select-package-service">
+            <SelectValue placeholder="Pilih layanan…" />
+          </SelectTrigger>
+          <SelectContent>
+            {services.map((s) => (
+              <SelectItem key={s.id} value={String(s.id)}>{s.serviceName}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {selectedServiceId != null && (
+          <Button size="sm" className="gap-1" onClick={openCreate} data-testid="button-add-package">
+            <Plus className="size-3.5" /> Tambah paket
+          </Button>
+        )}
+      </div>
+
+      {selectedServiceId == null && (
+        <div className="py-12 text-center text-sm text-muted-foreground">Pilih layanan di atas untuk melihat paketnya.</div>
+      )}
+
+      {selectedServiceId != null && (
+        isLoading ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nama Paket</TableHead>
+                <TableHead>Tipe</TableHead>
+                <TableHead>Harga Sekali Bayar</TableHead>
+                <TableHead>Harga Bulanan</TableHead>
+                <TableHead>Harga Tahunan</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Aksi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {packages.length === 0 && (
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Belum ada paket.</TableCell></TableRow>
+              )}
+              {packages.map((p) => (
+                <TableRow key={p.id} data-testid={`row-package-${p.id}`}>
+                  <TableCell className="font-medium">{p.packageName}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground capitalize">{p.packageType}</TableCell>
+                  <TableCell className="text-sm">{formatPrice(p.oneTimePrice)}</TableCell>
+                  <TableCell className="text-sm">{formatPrice(p.monthlyPrice)}</TableCell>
+                  <TableCell className="text-sm">{formatPrice(p.yearlyPrice)}</TableCell>
+                  <TableCell><Badge variant="outline" className="text-xs capitalize">{p.status}</Badge></TableCell>
+                  <TableCell className="text-right space-x-1">
+                    <Button size="icon" variant="ghost" className="size-7" onClick={() => openEdit(p)} data-testid={`button-edit-package-${p.id}`}><Pencil className="size-3.5" /></Button>
+                    <Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => deleteMutation.mutate({ id: p.id })} data-testid={`button-delete-package-${p.id}`}><Trash2 className="size-3.5" /></Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )
+      )}
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit Paket" : "Tambah Paket Baru"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input placeholder="Nama paket (e.g. Basic, Professional)" value={form.packageName} onChange={(e) => setForm({ ...form, packageName: e.target.value })} data-testid="input-package-name" />
+            <Select value={form.packageType} onValueChange={(v) => setForm({ ...form, packageType: v })}>
+              <SelectTrigger data-testid="select-package-type"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="basic">Basic</SelectItem>
+                <SelectItem value="standard">Standard</SelectItem>
+                <SelectItem value="professional">Professional</SelectItem>
+                <SelectItem value="premium">Premium</SelectItem>
+                <SelectItem value="enterprise">Enterprise</SelectItem>
+                <SelectItem value="custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="grid grid-cols-1 gap-2">
+              <Input placeholder="Harga sekali bayar (e.g. 5000000)" value={form.oneTimePrice} onChange={(e) => setForm({ ...form, oneTimePrice: e.target.value })} data-testid="input-package-one-time-price" />
+              <Input placeholder="Harga bulanan (e.g. 1500000)" value={form.monthlyPrice} onChange={(e) => setForm({ ...form, monthlyPrice: e.target.value })} data-testid="input-package-monthly-price" />
+              <Input placeholder="Harga tahunan (e.g. 15000000)" value={form.yearlyPrice} onChange={(e) => setForm({ ...form, yearlyPrice: e.target.value })} data-testid="input-package-yearly-price" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Fitur (satu per baris)</label>
+              <textarea
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[80px] resize-y focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder={"Logo design\n3 revisi\nFile PNG & PDF"}
+                value={form.featuresJson}
+                onChange={(e) => setForm({ ...form, featuresJson: e.target.value })}
+                data-testid="input-package-features"
+              />
+            </div>
+            <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+              <SelectTrigger data-testid="select-package-status"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button className="w-full" onClick={save} disabled={createMutation.isPending || updateMutation.isPending} data-testid="button-save-package">
+              Simpan
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 function RequestsTab() {
   const queryClient = useQueryClient();
   const { data: requests = [], isLoading } = useListServiceRequests();
@@ -376,11 +572,13 @@ export default function CatalogAdmin() {
         <TabsList>
           <TabsTrigger value="categories" className="gap-1"><Boxes className="size-3.5" /> Categories</TabsTrigger>
           <TabsTrigger value="services" className="gap-1"><LayoutGrid className="size-3.5" /> Services</TabsTrigger>
+          <TabsTrigger value="packages" className="gap-1"><Package className="size-3.5" /> Packages & Harga</TabsTrigger>
           <TabsTrigger value="requests" className="gap-1"><ClipboardList className="size-3.5" /> Requests</TabsTrigger>
           <TabsTrigger value="analytics" className="gap-1"><BarChart2 className="size-3.5" /> Analytics</TabsTrigger>
         </TabsList>
         <TabsContent value="categories" className="mt-4"><CategoriesTab /></TabsContent>
         <TabsContent value="services" className="mt-4"><ServicesTab /></TabsContent>
+        <TabsContent value="packages" className="mt-4"><PackagesTab /></TabsContent>
         <TabsContent value="requests" className="mt-4"><RequestsTab /></TabsContent>
         <TabsContent value="analytics" className="mt-4"><AnalyticsTab /></TabsContent>
       </Tabs>
