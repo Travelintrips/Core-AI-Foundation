@@ -1,0 +1,492 @@
+TEAM-03 FINAL CLEANUP, REBASE, AND REAL API INTEGRATION
+
+This is a correction and verification task.
+
+Do not add new discovery features.
+Do not redesign the customer portal.
+Do not modify backend business logic.
+Do not modify Team 01, Team 02, Team 04, or Team 05 implementations.
+Do not merge into main.
+Do not merge directly into integration/v4.2.
+Do not run database migrations.
+
+Current Team 03 branch:
+
+feature/v4.2d-discovery-experience
+
+Current known implementation commit:
+
+a5bf366 feat(discovery): add goal-based marketplace entry
+
+Required clean base:
+
+origin/integration/v4.2
+
+==================================================
+PHASE 1 — INSPECT CURRENT STATE
+==================================================
+
+Run:
+
+git fetch --all --prune
+git branch --show-current
+git status --short
+git branch -vv
+git branch -a
+git log --oneline --decorate -15
+
+Confirm that:
+
+origin/integration/v4.2
+
+now exists.
+
+If it does not exist:
+
+STOP.
+
+Return:
+
+BLOCKED — origin/integration/v4.2 is unavailable.
+
+Do not use main as fallback.
+
+If the working tree is not clean:
+
+STOP.
+
+Report every modified and untracked file.
+
+Do not stash, delete, or overwrite unknown work.
+
+==================================================
+PHASE 2 — INSPECT TEAM-03 DIFF
+==================================================
+
+Inspect:
+
+git log --oneline origin/main..feature/v4.2d-discovery-experience
+git diff --name-status origin/main..feature/v4.2d-discovery-experience
+git diff --stat origin/main..feature/v4.2d-discovery-experience
+
+Classify every commit and file as:
+
+- Team 03 implementation
+- Team 03 tests
+- Required route registration
+- Unrelated
+- Unclear
+
+Expected Team 03 files:
+
+artifacts/customer-portal/src/App.tsx
+artifacts/customer-portal/src/components/goal-card.tsx
+artifacts/customer-portal/src/hooks/__tests__/use-goals.test.ts
+artifacts/customer-portal/src/hooks/use-goals.ts
+artifacts/customer-portal/src/lib/goalDiscoveryApi.ts
+artifacts/customer-portal/src/pages/goal-detail.tsx
+artifacts/customer-portal/src/pages/goals.tsx
+artifacts/customer-portal/src/pages/services.tsx
+
+If other files appear:
+
+STOP and report them.
+
+==================================================
+PHASE 3 — CREATE BACKUP
+==================================================
+
+Create:
+
+backup/team-03-before-integration-rebase
+
+from the current Team 03 branch.
+
+Push the backup using the authenticated Replit Git integration.
+
+Do not continue until the backup is confirmed on origin.
+
+If push fails:
+
+STOP.
+
+Do not rewrite the Team 03 branch.
+
+==================================================
+PHASE 4 — RECREATE CLEAN TEAM-03 BRANCH
+==================================================
+
+Create a clean temporary branch from:
+
+origin/integration/v4.2
+
+Example:
+
+git switch -c cleanup/team-03-v4.2 origin/integration/v4.2
+
+Do not create it from main.
+
+Move only the approved Team 03 implementation.
+
+Preferred method:
+
+git cherry-pick a5bf366
+
+If that commit contains unrelated files or causes invalid integration:
+
+abort the cherry-pick and reconstruct only the approved Team 03 file changes.
+
+Do not import unrelated prompt TXT files, screenshots, .replit changes, or other-team files.
+
+==================================================
+PHASE 5 — REMOVE PRODUCTION FIXTURE SWITCH
+==================================================
+
+Inspect:
+
+artifacts/customer-portal/src/lib/goalDiscoveryApi.ts
+
+Remove any production source toggle equivalent to:
+
+USE_FIXTURE = true
+
+Required behavior:
+
+1. Real Team 02 public API is the default runtime source.
+2. Fixtures may be used only in:
+   - tests;
+   - explicitly named mock modules;
+   - explicit development-only test configuration.
+3. API failure must return the normal error state.
+4. Runtime must not silently substitute fixture data.
+5. No manual code edit should be required before deployment.
+
+Do not create a second API client if an existing customer portal API abstraction can be reused.
+
+==================================================
+PHASE 6 — INTEGRATE REAL TEAM-02 CONTRACT
+==================================================
+
+Audit the actual Team 02 public responses in origin/integration/v4.2:
+
+GET /api/ai/goals
+GET /api/ai/goals/:slug
+GET /api/ai/goals/:slug/services
+
+Do not assume the previous fixture schema matches.
+
+Update only the Team 03 adapter boundary as required.
+
+The adapter must:
+
+- use typed response contracts;
+- normalize snake_case to camelCase only at the boundary;
+- preserve stable IDs, codes, and slugs;
+- reject malformed payloads safely;
+- avoid admin endpoints;
+- avoid hardcoded goal statistics;
+- avoid fabricated service counts.
+
+If Team 02 endpoints differ:
+
+adapt Team 03 to the actual approved contract.
+
+Do not modify Team 02 backend unless there is a genuine contract defect.
+
+If a backend defect is found:
+
+STOP and report it for Team 02 or Team 6.
+
+==================================================
+PHASE 7 — FIX SERVICE COUNT
+==================================================
+
+Remove hardcoded serviceCount values.
+
+Use one of:
+
+- a service_count field returned by the approved API;
+- services.length when the complete services list is available;
+- omit the count when no reliable count exists.
+
+Do not display a guessed number.
+
+Add tests proving that service count comes from the API response or is omitted safely.
+
+==================================================
+PHASE 8 — FIX SERVICE DETAIL NAVIGATION
+==================================================
+
+Inspect the existing official service detail route and service response identifiers.
+
+Replace:
+
+/services?q=<serviceName>
+
+with the stable official detail destination where possible.
+
+Preferred:
+
+/services/:id
+
+or the existing official slug/code route.
+
+Requirements:
+
+- use a stable API identifier;
+- do not use mutable service name as identity;
+- preserve existing service detail behavior;
+- encode route parameters safely.
+
+If the API does not provide a valid service identifier:
+
+disable or relabel the CTA safely and report the contract gap.
+
+Do not fabricate an ID.
+
+==================================================
+PHASE 9 — VERIFY ROUTING ORDER
+==================================================
+
+Inspect Wouter route ordering in:
+
+artifacts/customer-portal/src/App.tsx
+
+Confirm:
+
+- /goals renders browse page;
+- /goals/:slug renders detail page;
+- invalid slug displays the intended state;
+- existing routes remain reachable;
+- no broad dynamic route captures /goals;
+- refresh on /goals/:slug works;
+- fallback routing remains unchanged.
+
+Add or update tests where practical.
+
+==================================================
+PHASE 10 — TESTING
+==================================================
+
+Run Team 03 tests against the real integrated API contract.
+
+Required tests:
+
+1. Goal list success
+2. Goal list empty
+3. Goal list error
+4. Goal detail success
+5. Unknown goal
+6. Goal services success
+7. Empty goal services
+8. API response normalization
+9. Malformed API response
+10. No admin endpoint usage
+11. No fixture fallback in runtime
+12. Service count from API
+13. Missing service count behavior
+14. Stable service-detail navigation
+15. Goal card keyboard interaction
+16. Reduced-motion behavior
+17. Existing /services regression
+18. Existing service detail regression
+19. Route refresh behavior where test infrastructure supports it
+20. Browser back/forward state where test infrastructure supports it
+
+Run the relevant complete customer portal test suite.
+
+Report exact commands and exact results.
+
+==================================================
+PHASE 11 — TYPECHECK AND BUILD
+==================================================
+
+Run:
+
+- customer portal typecheck;
+- customer portal production build.
+
+Use the actual package scripts.
+
+If typecheck has pre-existing failures:
+
+record the exact baseline and prove there are no Team 03 errors.
+
+Production build must actually run.
+
+Do not report ready if build is not run.
+
+==================================================
+PHASE 12 — MANUAL VERIFICATION
+==================================================
+
+Verify in development:
+
+- /services loads
+- Goal discovery section appears
+- /goals loads real API data
+- /goals/:slug loads real API data
+- invalid goal shows safe state
+- API failure shows error state
+- empty goals show empty state
+- service CTA opens correct service detail
+- mobile layout
+- desktop layout
+- keyboard navigation
+- browser back/forward
+- direct refresh on /goals/:slug
+- existing catalog remains usable
+- existing service details remain usable
+
+Do not use production records or production migrations.
+
+==================================================
+PHASE 13 — FINAL DIFF REVIEW
+==================================================
+
+Run:
+
+git log --oneline origin/integration/v4.2..HEAD
+git diff --name-status origin/integration/v4.2..HEAD
+git diff --stat origin/integration/v4.2..HEAD
+git diff --check
+
+Ensure only Team 03 files are present.
+
+Forbidden:
+
+- backend edits
+- DB schema edits
+- migrations
+- pricing changes
+- checkout changes
+- admin UI changes
+- analytics implementation
+- service normalization logic
+- commercial policy logic
+- .replit
+- uploaded TXT files
+- screenshots
+- unrelated documentation
+
+==================================================
+PHASE 14 — REPLACE OFFICIAL TEAM-03 BRANCH
+==================================================
+
+Only after:
+
+- backup exists remotely;
+- real API integration works;
+- tests pass;
+- typecheck has no new errors;
+- production build succeeds;
+- diff is clean;
+
+replace the official branch:
+
+feature/v4.2d-discovery-experience
+
+Use:
+
+git branch -M feature/v4.2d-discovery-experience
+git push --force-with-lease origin feature/v4.2d-discovery-experience
+
+Never use plain --force.
+
+Do not push main.
+
+Do not push integration/v4.2.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+# TEAM-03 CORRECTED FINAL REPORT
+
+## 1. Branch Verification
+
+Active branch:
+Base branch:
+Remote tracking:
+Backup branch:
+Branch gate result:
+
+Confirm:
+
+- Branch is based on origin/integration/v4.2
+- Work was not performed on main during cleanup
+- Main was not pushed
+- Integration branch was not directly modified
+
+## 2. Cleanup Method
+
+Explain whether Team 03 was cherry-picked or reconstructed selectively.
+
+## 3. Real API Integration
+
+List actual Team 02 endpoints and response contracts used.
+
+## 4. Fixture Removal
+
+Confirm:
+
+- No runtime USE_FIXTURE switch
+- No silent fixture fallback
+- Fixtures limited to tests or explicit mocks
+
+## 5. Service Count
+
+Explain the authoritative source.
+
+## 6. Service Navigation
+
+Explain the stable identifier and final route used.
+
+## 7. Files Changed
+
+List all files and reasons.
+
+## 8. Tests
+
+Exact commands and results.
+
+## 9. Typecheck
+
+Exact command and result.
+
+## 10. Production Build
+
+Exact command and result.
+
+## 11. Manual Verification
+
+List results.
+
+## 12. Known Limitations
+
+State honestly.
+
+## 13. Commit List
+
+Show:
+
+git log --oneline origin/integration/v4.2..HEAD
+
+## 14. Final Diff
+
+Show:
+
+git diff --name-status origin/integration/v4.2..HEAD
+
+## 15. Push Confirmation
+
+Confirm:
+
+origin/feature/v4.2d-discovery-experience
+
+STOP after this report.
+
+Do not merge the branch.
+Wait for Team 6 review.
