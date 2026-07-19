@@ -1,0 +1,165 @@
+TEAM-01 CLEANUP TASK (NO FEATURE CHANGES)
+
+IMPORTANT
+
+Do NOT implement any new feature.
+
+Do NOT modify business logic.
+
+Do NOT change API behavior.
+
+Do NOT touch any code except Git history cleanup if needed.
+
+The implementation itself is already finished.
+
+Your job is ONLY to clean the Git history so the PR contains ONLY Team-01 work.
+
+Current situation
+
+feature/v4.2b-commercial-policy currently contains extra commits inherited from local main.
+
+Current commits unique from origin/main:
+
+6787f8b Implement commercial eligibility policy with catalog integration and comprehensive tests
+c943e57 Add TEAM-01 commercial policy documentation and asset
+bc7683c Add initial master documentation and update replit instructions
+b0318ff Add master platform documentation for multi-team creative AI implementation
+ad1c620 Remove unused import from App.tsx and add creative AI platform documentation
+
+Only Team-01 implementation should remain.
+
+===================================================
+
+TASK
+
+1.
+
+Create a backup branch.
+
+Example:
+
+backup/team-01-before-cleanup
+
+Push it to origin.
+
+===================================================
+
+2.
+
+Create a NEW CLEAN branch starting from
+
+origin/main
+
+NOT from local main.
+
+===================================================
+
+3.
+
+Move ONLY the Team-01 implementation onto the clean branch.
+
+Do NOT bring unrelated documentation commits.
+
+Do NOT bring master documentation.
+
+Do NOT bring unrelated App.tsx changes.
+
+If necessary:
+
+- cherry-pick
+- interactive rebase
+- or another safe Git approach
+
+Choose the safest method.
+
+===================================================
+
+4.
+
+After cleanup verify that
+
+git log origin/main..HEAD
+
+contains ONLY Team-01 commits.
+
+===================================================
+
+5.
+
+Verify changed files.
+
+Expected files should only be related to Team-01:
+
+artifacts/api-server/src/policy/commercialEligibilityPolicy.ts
+
+artifacts/api-server/src/policy/__tests__/commercialEligibilityPolicy.test.ts
+
+artifacts/api-server/src/routes/catalog.ts
+
+docs/team-specs/TEAM-01-commercial-policy.md
+
+If additional files appear,
+
+investigate and remove unrelated commits.
+
+===================================================
+
+6.
+
+Run again:
+
+- tests
+- typecheck
+- build
+
+Use the project's existing commands.
+
+Do NOT skip verification.
+
+===================================================
+
+7.
+
+Replace the existing remote branch safely.
+
+Use
+
+--force-with-lease
+
+NOT
+
+--force
+
+===================================================
+
+8.
+
+Restore local main so it matches origin/main.
+
+===================================================
+
+FINAL REPORT
+
+Return:
+
+1. Backup branch name
+
+2. Cleanup method used
+
+3. Final commit list
+
+4. Final changed files
+
+5. Test result
+
+6. Typecheck result
+
+7. Build result
+
+8. Confirmation that the PR now contains ONLY Team-01 implementation.
+
+Do NOT implement any new code.
+
+Do NOT modify functionality.
+
+Git cleanup only.
