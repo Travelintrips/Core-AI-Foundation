@@ -50,6 +50,11 @@ import { creativeAiAssetsTable } from "@workspace/db";
 import { scoreFromAssetMetadata } from "../services/companyProfileQcService.js";
 import { resolvePublicRequestTenantId } from "../security/tenantResolution.js";
 import { getPublicBaseUrl } from "../lib/publicBaseUrl.js";
+import {
+  isCategoryCommerciallyEligible,
+  isServiceCommerciallyEligible,
+  getServiceIneligibilityReason,
+} from "../policy/commercialEligibilityPolicy.js";
 
 // Statuses that must only be reached once the commercial gate (if one exists
 // for this request's quotation) has been verified or waived. Without this
@@ -98,10 +103,19 @@ function parseId(raw: string | undefined, res: import("express").Response): numb
 // Creative AI. Bypasses adminAuthWithExceptions via an exact-path exception
 // in middleware/adminAuth.ts (PUBLIC_PATH_PREFIXES).
 router.get("/ai/catalog/public", async (_req, res): Promise<void> => {
+  // V4.2B: CommercialEligibilityPolicy applied — categories must be
+  // visibility='public' AND commercial_status='commercial_ready' AND status='active'.
+  // Previously only visibility was checked, leaking 18 internal_only categories.
   const categories = await db
     .select()
     .from(aiServiceCategoriesTable)
-    .where(eq(aiServiceCategoriesTable.visibility, "public"))
+    .where(
+      and(
+        eq(aiServiceCategoriesTable.visibility, "public"),
+        eq(aiServiceCategoriesTable.commercialStatus, "commercial_ready"),
+        eq(aiServiceCategoriesTable.status, "active"),
+      ),
+    )
     .orderBy(aiServiceCategoriesTable.displayOrder, aiServiceCategoriesTable.name);
 
   const publicCategoryIds = categories.map((c) => c.id);
@@ -295,18 +309,34 @@ async function loadServiceAndPackage(serviceId: number, packageId: number | null
 }
 
 /**
- * Customer-facing transactional guard: a quote/order can only be placed
- * against a service whose category is visibility='public' (Creative AI
- * today). Blocks a customer from buying/requesting an internal-only
- * service even if they guess a valid serviceId.
+ * Customer-facing transactional guard (V4.2B): a quote/order can only be
+ * placed against a service that passes the full CommercialEligibilityPolicy —
+ * category must be visibility='public' AND commercial_status='commercial_ready'
+ * AND status='active', AND the service itself must be status='active'.
+ *
+ * Replaces the old assertServiceIsPubliclyRequestable which only checked
+ * category.visibility, leaving 18 internal_only services exploitable.
  */
-async function assertServiceIsPubliclyRequestable(categoryId: number, res: import("express").Response): Promise<boolean> {
+async function assertServiceIsCommerciallyEligible(
+  service: { categoryId: number; status: string },
+  res: import("express").Response,
+): Promise<boolean> {
   const [category] = await db
     .select()
     .from(aiServiceCategoriesTable)
-    .where(eq(aiServiceCategoriesTable.id, categoryId))
+    .where(eq(aiServiceCategoriesTable.id, service.categoryId))
     .limit(1);
-  if (!category || category.visibility !== "public") {
+
+  const ineligibilityReason = category
+    ? getServiceIneligibilityReason({
+        status:                   service.status,
+        categoryVisibility:       category.visibility,
+        categoryCommercialStatus: category.commercialStatus,
+        categoryStatus:           category.status,
+      })
+    : "category not found";
+
+  if (ineligibilityReason) {
     res.status(403).json({ error: "This service is not available for customer purchase." });
     return false;
   }
@@ -321,7 +351,7 @@ router.post("/ai/catalog/services/:id/quote", async (req, res): Promise<void> =>
   const loaded = await loadServiceAndPackage(serviceId, body.packageId, res);
   if (!loaded) return;
   const { service, pkg } = loaded;
-  if (!(await assertServiceIsPubliclyRequestable(service.categoryId, res))) return;
+  if (!(await assertServiceIsCommerciallyEligible(service, res))) return;
 
   // WP-00 fix: this is a public, unauthenticated route — a client-supplied
   // tenantId has no legitimate meaning here (no session/resource token to
@@ -358,7 +388,7 @@ router.post("/ai/catalog/services/:id/request", async (req, res): Promise<void> 
   const loaded = await loadServiceAndPackage(serviceId, parsed.data.packageId, res);
   if (!loaded) return;
   const { service, pkg } = loaded;
-  if (!(await assertServiceIsPubliclyRequestable(service.categoryId, res))) return;
+  if (!(await assertServiceIsCommerciallyEligible(service, res))) return;
 
   // WP-00 fix: public route, no session/token to verify a client-supplied
   // tenantId against — never trust it for tax calculation or for the value
