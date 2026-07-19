@@ -342,14 +342,16 @@ function PackagesTab() {
   const [selectedServiceId, setSelectedServiceId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
 
-  const { data: serviceDetail, isLoading } = useGetService(selectedServiceId ?? 0, {
+  const { data: serviceDetail, isLoading, isFetching } = useGetService(selectedServiceId ?? 0, {
     query: { enabled: selectedServiceId != null, queryKey: getGetServiceQueryKey(selectedServiceId ?? 0) },
   });
   const packages: AiServicePackage[] = serviceDetail?.packages ?? [];
-  const filtered = packages.filter((p) => {
-    const q = search.toLowerCase();
-    return !q || p.packageName.toLowerCase().includes(q) || (p.packageType ?? "").toLowerCase().includes(q);
-  });
+  const filtered = search
+    ? packages.filter((p) => {
+        const q = search.toLowerCase();
+        return p.packageName.toLowerCase().includes(q) || (p.packageType ?? "").toLowerCase().includes(q);
+      })
+    : packages;
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AiServicePackage | null>(null);
@@ -463,7 +465,7 @@ function PackagesTab() {
       )}
 
       {selectedServiceId != null && (
-        isLoading ? (
+        (isLoading || isFetching || !serviceDetail) ? (
           <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
         ) : (
           <Table>
