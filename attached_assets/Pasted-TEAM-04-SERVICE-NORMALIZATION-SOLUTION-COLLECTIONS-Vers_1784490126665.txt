@@ -1,0 +1,1464 @@
+TEAM-04 — SERVICE NORMALIZATION & SOLUTION COLLECTIONS
+
+Version: 1.0
+Status: ACTIVE
+
+Assigned feature branch:
+
+feature/v4.2e-service-normalization
+
+Required base branch:
+
+origin/integration/v4.2
+
+Target review branch:
+
+integration/v4.2
+
+==================================================
+CRITICAL BRANCH GATE — RUN BEFORE ANY OTHER ACTION
+==================================================
+
+This is a mandatory execution gate.
+
+Do not inspect application source code.
+Do not edit any file.
+Do not create any file.
+Do not install dependencies.
+Do not run migrations.
+Do not apply seed data.
+Do not modify the database.
+Do not start implementation.
+Do not make a commit.
+
+First run:
+
+git fetch origin
+git branch --show-current
+git status --short
+git rev-parse --short HEAD
+git branch -a
+
+Print the complete result.
+
+The implementation is forbidden while the active branch is:
+
+main
+
+integration/v4.2
+
+or any branch other than:
+
+feature/v4.2e-service-normalization
+
+==================================================
+VERIFY REQUIRED BASE BRANCH
+==================================================
+
+Check whether the remote integration branch exists:
+
+git show-ref --verify --quiet refs/remotes/origin/integration/v4.2
+
+If the command fails:
+
+STOP IMMEDIATELY.
+
+Return:
+
+BLOCKED — origin/integration/v4.2 does not exist.
+
+Do not use origin/main as fallback.
+Do not use local main as fallback.
+Do not create the feature branch from another team branch.
+Do not continue implementation.
+
+The feature branch must be based only on:
+
+origin/integration/v4.2
+
+==================================================
+CREATE OR SWITCH TO THE ASSIGNED BRANCH
+==================================================
+
+Check whether the assigned branch already exists.
+
+If the local branch exists:
+
+git switch feature/v4.2e-service-normalization
+
+If only the remote branch exists:
+
+git switch --track origin/feature/v4.2e-service-normalization
+
+If neither exists:
+
+git switch -c feature/v4.2e-service-normalization origin/integration/v4.2
+
+After switching, run:
+
+git branch --show-current
+git status
+git merge-base --is-ancestor origin/integration/v4.2 HEAD
+git log --oneline --decorate -5
+
+The active branch must return exactly:
+
+feature/v4.2e-service-normalization
+
+The merge-base command must succeed.
+
+If either condition fails:
+
+STOP.
+
+Do not inspect source files.
+Do not edit anything.
+Do not commit anything.
+
+Before implementation, print exactly:
+
+ACTIVE BRANCH: feature/v4.2e-service-normalization
+BASE BRANCH: origin/integration/v4.2
+WORKING TREE: clean
+BRANCH GATE: PASSED
+
+If the working tree is not clean:
+
+STOP.
+
+Report all existing modified or untracked files.
+
+Do not stash, delete, reset, or overwrite unknown work without explicit owner approval.
+
+Implementation may begin only after:
+
+BRANCH GATE: PASSED
+
+==================================================
+READ FIRST
+==================================================
+
+Read the following governance document if present:
+
+docs/prompts/MASTER-00.md
+
+If it is not present in the branch:
+
+Report that it is unavailable.
+
+Continue using the governance rules contained in this prompt.
+
+Also inspect the approved contracts already integrated into:
+
+origin/integration/v4.2
+
+Expected dependencies may include:
+
+- Team 1 Commercial Eligibility Policy
+- Team 2 Goal Taxonomy Foundation
+- Existing catalog and service schema
+- Existing category and service APIs
+
+Do not cherry-pick other team branches yourself.
+
+Do not merge Team 1, Team 2, or Team 3 yourself.
+
+If a required dependency is not present in origin/integration/v4.2:
+
+STOP the dependent portion only.
+
+Report:
+
+WAITING FOR REQUIRED INTEGRATION
+
+Do not duplicate the missing dependency.
+
+==================================================
+PROJECT
+==================================================
+
+Creative AI Platform
+
+Phase:
+
+V4.2E — Solution Collections
+
+and:
+
+V4.2H — Service Normalization
+
+==================================================
+TEAM RESPONSIBILITY
+==================================================
+
+Team 4 is responsible for:
+
+- Auditing duplicate and overlapping services
+- Defining canonical service identities
+- Defining aliases for duplicated customer-facing concepts
+- Creating service normalization rules
+- Creating deterministic solution collections
+- Mapping services into solution collections
+- Preserving all historical service codes
+- Preserving existing orders and projects
+- Backend repository and service logic
+- Backend administration APIs where required
+- Read-only public collection APIs where required
+- Validation
+- Database schema additions where justified
+- Safe migrations
+- Idempotent seed or backfill scripts
+- Backend tests
+- Documentation
+
+Team 4 is not responsible for:
+
+- Customer frontend implementation
+- Goal discovery UI
+- Recommendation Engine
+- AI recommendation ranking
+- AI chatbot
+- Commercial eligibility rules
+- Pricing changes
+- Checkout changes
+- Existing order workflow
+- Creative production runtime
+- Presentation runtime
+- Analytics dashboards
+- SEO implementation
+- Broad marketplace redesign
+- Payment processing
+- Customer account management
+
+==================================================
+PRIMARY MISSION
+==================================================
+
+The platform currently contains many services that overlap in meaning.
+
+Examples may include:
+
+- Company Profile
+- Company Profile Design
+- Company Profile Presentation
+- Company Profile Document
+- Corporate Profile
+- Pitch Deck
+- Investor Pitch Deck
+- Business Pitch Deck
+- Presentation Design
+- Product Presentation
+
+Some services may be genuinely different.
+
+Some may only be alternate labels.
+
+Some may represent:
+
+- Different outputs
+- Different delivery formats
+- Different customer segments
+- Different complexity levels
+- Historical duplicates
+- Legacy service codes
+
+The goal is not to delete services.
+
+The goal is to introduce a safe normalization layer so the platform can:
+
+1. Preserve every existing service record.
+2. Preserve every historical service code.
+3. Preserve every existing order and project.
+4. Identify canonical customer-facing concepts.
+5. Map aliases and duplicates safely.
+6. Organize services into deterministic solution collections.
+7. Reduce customer confusion.
+8. Avoid displaying duplicate concepts repeatedly.
+9. Support future Recommendation Engine development.
+10. Maintain backward compatibility.
+
+==================================================
+NON-NEGOTIABLE RULES
+==================================================
+
+Do not delete existing services.
+
+Do not rename existing service codes.
+
+Do not change historical order references.
+
+Do not update existing project foreign keys.
+
+Do not merge database rows destructively.
+
+Do not replace one service ID with another in historical records.
+
+Do not change existing pricing.
+
+Do not change existing commercial eligibility.
+
+Do not hide services by directly modifying visibility unless explicitly approved.
+
+Do not archive existing services merely because they appear duplicated.
+
+Do not modify the AI production workflow.
+
+Normalization must be additive.
+
+==================================================
+TARGET ARCHITECTURE
+==================================================
+
+Existing model:
+
+Category
+   ↓
+Service
+
+Target additive model:
+
+Category
+   ↓
+Service
+   ↓
+Normalization Mapping
+   ↓
+Canonical Service Concept
+   ↓
+Solution Collection
+
+Historical transactions continue pointing to:
+
+Service
+
+They must not be migrated to point directly to the canonical concept.
+
+Canonical concepts are an organizational and discovery abstraction.
+
+==================================================
+KEY DEFINITIONS
+==================================================
+
+Service Record:
+
+An existing purchasable or historical service in the current database.
+
+Canonical Service Concept:
+
+A stable customer-facing concept representing one or more related service records.
+
+Alias:
+
+An alternate name, legacy label, typo, or commonly used term that resolves to a canonical concept.
+
+Duplicate Candidate:
+
+A service suspected of overlapping with another service but not yet approved as a true duplicate.
+
+Normalization Mapping:
+
+A deterministic relationship between an existing service and a canonical service concept.
+
+Solution Collection:
+
+A curated, deterministic grouping of services intended to solve a broader customer outcome.
+
+Examples:
+
+Brand Launch Essentials
+
+Marketing Content Starter
+
+Business Presentation Package
+
+Product Packaging Collection
+
+Do not treat a solution collection as an order bundle unless specifically approved.
+
+A collection is initially a discovery grouping.
+
+It must not automatically change pricing or create a combined order.
+
+==================================================
+PHASE 1 — EXISTING DATA AND CODE AUDIT
+==================================================
+
+Before implementation, audit:
+
+1. Existing service table
+2. Existing category table
+3. Existing service code conventions
+4. Existing slug conventions
+5. Existing service visibility fields
+6. Existing commercial status fields
+7. Existing active/archived status fields
+8. Existing pricing references
+9. Existing order references
+10. Existing project references
+11. Existing package or bundle tables
+12. Existing marketplace collection logic
+13. Existing related-service logic
+14. Existing search indexing logic
+15. Existing service seed scripts
+16. Existing service aliases or synonym logic
+17. Existing Goal Taxonomy mappings
+18. Existing Commercial Eligibility Policy
+19. Existing admin APIs for catalog management
+20. Existing database migration conventions
+
+Produce an audit report before changing code.
+
+Required audit table:
+
+Area
+File or Table
+Current Behavior
+Risk
+Proposed Reuse
+Modification Required
+
+==================================================
+PHASE 2 — DUPLICATE AND OVERLAP AUDIT
+==================================================
+
+Audit all active and archived services.
+
+Identify candidate groups based on:
+
+- Exact normalized name
+- Similar name
+- Shared slug fragments
+- Shared description
+- Shared deliverables
+- Shared category
+- Shared output format
+- Shared service intent
+- Existing internal documentation
+- Historical naming variants
+
+Do not classify services only by name similarity.
+
+For each candidate group, classify it as one of:
+
+A. Exact duplicate
+
+Same customer outcome, same deliverable, same workflow.
+
+B. Alias or naming variant
+
+Different label, same underlying concept.
+
+C. Related but distinct
+
+Similar purpose but different deliverable or workflow.
+
+D. Format variant
+
+Same business outcome, different output format.
+
+E. Tier variant
+
+Same service family, different complexity or scope.
+
+F. Historical legacy service
+
+Old code retained for compatibility.
+
+G. Unclear — requires owner decision
+
+Do not automatically normalize unclear cases.
+
+Produce a normalization audit table:
+
+Candidate Group
+Service IDs
+Service Codes
+Names
+Classification
+Recommended Canonical Concept
+Reason
+Risk
+Owner Approval Required
+
+==================================================
+PHASE 3 — CANONICAL MODEL DESIGN
+==================================================
+
+Design an additive, typed model.
+
+Recommended conceptual entities:
+
+service_canonical_concepts
+
+service_normalization_mappings
+
+service_aliases
+
+solution_collections
+
+solution_collection_services
+
+Use repository naming conventions.
+
+Do not blindly use these names if equivalent tables already exist.
+
+Avoid duplicate schema.
+
+The canonical concept should support fields such as:
+
+- id
+- code
+- slug
+- name
+- short_description
+- status
+- display_order
+- created_at
+- updated_at
+
+The normalization mapping may support:
+
+- canonical_concept_id
+- service_id
+- relationship_type
+- is_primary
+- notes or review metadata
+- created_at
+- updated_at
+
+The alias model may support:
+
+- canonical_concept_id
+- alias
+- normalized_alias
+- alias_type
+- locale
+- status
+
+A solution collection may support:
+
+- id
+- code
+- slug
+- name
+- short_description
+- status
+- visibility
+- display_order
+- created_at
+- updated_at
+
+Collection-service mapping may support:
+
+- collection_id
+- service_id
+- display_order
+- role
+- optional flag
+- created_at
+
+Final schema must follow actual repository conventions.
+
+==================================================
+SCHEMA RULES
+==================================================
+
+All schema changes must be additive.
+
+Migration must:
+
+- Use safe creation guards where supported
+- Avoid dropping tables
+- Avoid renaming columns
+- Avoid rewriting existing service IDs
+- Avoid modifying order tables
+- Avoid modifying project tables
+- Avoid destructive data cleanup
+- Be idempotent where repository conventions allow
+- Create indexes for expected lookup patterns
+- Enforce uniqueness where safe
+- Define explicit foreign-key deletion behavior
+- Preserve tenant isolation if relevant
+
+Do not use ON DELETE CASCADE when deleting a canonical concept could erase critical historical mappings without review.
+
+Prefer RESTRICT or safe soft-delete behavior for organizational records, depending on current architecture.
+
+Document every foreign-key decision.
+
+==================================================
+CANONICAL CODE AND SLUG RULES
+==================================================
+
+Canonical codes must be:
+
+- Stable
+- Human-readable
+- Unique
+- Lowercase or follow project convention
+- Independent from database IDs
+- Not derived from mutable display names after creation
+
+Canonical slugs must:
+
+- Be unique
+- Be URL-safe
+- Remain stable after publication
+- Not replace existing service slugs
+- Not break existing URLs
+
+Do not reuse an existing service code as a canonical concept code unless the architecture review shows this is safe.
+
+==================================================
+NORMALIZATION LOGIC
+==================================================
+
+Normalization logic must be deterministic.
+
+Allowed inputs:
+
+- Explicit mapping records
+- Explicit alias records
+- Approved canonical concept
+- Approved relationship type
+
+Forbidden logic:
+
+- AI model calls
+- Embedding similarity at request time
+- Non-deterministic ranking
+- Automatically generated mappings without review
+- Fuzzy matching that silently changes service identity
+- Hardcoded database IDs
+
+Provide pure functions for:
+
+- Normalizing an alias string
+- Resolving a canonical concept from an explicit mapping
+- Listing all service variants for a concept
+- Distinguishing primary service from variants
+- Producing customer-safe canonical views
+- Validating conflicting mappings
+
+==================================================
+MAPPING RULES
+==================================================
+
+Each service may have:
+
+- Zero canonical mapping
+- One approved primary canonical mapping
+
+Do not allow one service to be a primary member of multiple conflicting canonical concepts.
+
+If multi-concept relationships are needed, explicitly separate:
+
+Primary identity mapping
+
+from:
+
+Related concept relationship
+
+Do not overload one field.
+
+A canonical concept may map to multiple services.
+
+Mapping must never change the original service row.
+
+==================================================
+SOLUTION COLLECTION RULES
+==================================================
+
+Solution collections are curated discovery groupings.
+
+They are not:
+
+- Pricing bundles
+- Checkout bundles
+- Subscription packages
+- Automatic orders
+- AI recommendations
+- Goal Taxonomy replacements
+
+A service may belong to multiple collections where valid.
+
+Only commercially eligible services should appear in public collection responses.
+
+Team 4 must reuse the Team 1 canonical commercial eligibility policy.
+
+Do not duplicate eligibility conditions.
+
+Do not write independent logic such as:
+
+visibility === "public"
+
+inside collection routes.
+
+Use the approved policy or repository filter.
+
+==================================================
+GOAL TAXONOMY RELATIONSHIP
+==================================================
+
+Goal Taxonomy and Solution Collections are different.
+
+Goal:
+
+Represents what the customer wants to achieve.
+
+Solution Collection:
+
+Represents a curated group of services that may help achieve an outcome.
+
+Do not replace goals with collections.
+
+Do not modify Team 2 Goal schema unless a strictly additive mapping is approved.
+
+If goals need to reference solution collections in the future:
+
+Document the proposed contract.
+
+Do not implement it in this phase unless explicitly present in Team 4’s approved scope.
+
+==================================================
+REPOSITORY REQUIREMENTS
+==================================================
+
+All database access must be isolated in repository modules.
+
+Do not execute database queries directly inside Express route handlers.
+
+Repository functions should support:
+
+- Create canonical concept
+- Read canonical concept by ID, code, or slug
+- List canonical concepts
+- Update canonical concept
+- Create mapping
+- Remove or deactivate mapping
+- List mappings
+- Resolve concept for service
+- Create alias
+- List aliases
+- Create solution collection
+- Update solution collection
+- Add service to collection
+- Remove service from collection
+- Reorder collection services
+- List public collections
+- Read public collection detail
+
+Use transactions for multi-step writes.
+
+Do not silently fall back from transaction clients to global DB clients.
+
+Follow existing shared repository and transaction architecture.
+
+==================================================
+SERVICE LAYER REQUIREMENTS
+==================================================
+
+Business rules belong in the service layer.
+
+The service layer must validate:
+
+- Canonical code uniqueness
+- Canonical slug uniqueness
+- Alias normalization
+- Mapping conflicts
+- Missing service
+- Missing canonical concept
+- Duplicate mapping
+- Collection slug uniqueness
+- Collection membership duplication
+- Display order validity
+- Invalid status transitions
+- Public collection eligibility
+- Circular or invalid conceptual relationships if supported
+
+Do not return raw database errors to routes.
+
+Use typed domain errors.
+
+==================================================
+API REQUIREMENTS
+==================================================
+
+Use existing route conventions.
+
+Potential admin APIs may include equivalents of:
+
+GET /api/ai/admin/canonical-services
+
+POST /api/ai/admin/canonical-services
+
+GET /api/ai/admin/canonical-services/:slug
+
+PATCH /api/ai/admin/canonical-services/:slug
+
+POST /api/ai/admin/canonical-services/:slug/mappings
+
+DELETE /api/ai/admin/canonical-services/:slug/mappings/:serviceId
+
+POST /api/ai/admin/canonical-services/:slug/aliases
+
+GET /api/ai/admin/solution-collections
+
+POST /api/ai/admin/solution-collections
+
+PATCH /api/ai/admin/solution-collections/:slug
+
+POST /api/ai/admin/solution-collections/:slug/services
+
+DELETE /api/ai/admin/solution-collections/:slug/services/:serviceId
+
+Potential public APIs may include equivalents of:
+
+GET /api/ai/solution-collections
+
+GET /api/ai/solution-collections/:slug
+
+Do not implement exact paths before auditing existing routing conventions.
+
+Do not rename existing endpoints.
+
+All write endpoints require the existing admin authentication mechanism.
+
+Public endpoints must be read-only.
+
+==================================================
+PUBLIC RESPONSE RULES
+==================================================
+
+Public responses may expose:
+
+- Collection slug
+- Collection name
+- Customer-safe description
+- Display order
+- Eligible service cards
+- Canonical customer-facing name
+- Customer-safe aliases where useful
+
+Public responses must not expose:
+
+- Internal review notes
+- Duplicate classifications
+- Mapping confidence
+- Raw database IDs unless already part of public contract
+- Archived internal services
+- Internal-only services
+- Commercial status implementation details
+- Admin metadata
+- Migration metadata
+- Historical cleanup notes
+
+==================================================
+VALIDATION REQUIREMENTS
+==================================================
+
+Validate all inputs.
+
+Required validation may include:
+
+- Code format
+- Slug format
+- Name length
+- Description length
+- Allowed status enum
+- Allowed relationship type
+- Allowed alias type
+- Display order integer range
+- Service ID validity
+- Duplicate array entries
+- Bulk-operation limits
+
+Do not accept unrestricted bulk payload sizes.
+
+Use existing schema-validation libraries.
+
+Do not introduce another validation framework.
+
+==================================================
+SECURITY REQUIREMENTS
+==================================================
+
+Required:
+
+- Existing admin authentication on all writes
+- Public read-only endpoints only
+- Input validation
+- Output sanitization
+- Rate limiting consistent with existing public APIs
+- No SQL injection
+- No internal data leakage
+- No secret exposure
+- No auth bypass
+- Tenant isolation if tables are tenant-scoped
+- Platform scope if taxonomy is platform-global
+
+Explicitly decide whether normalization data is:
+
+Platform-global
+
+or:
+
+Tenant-specific
+
+Do not mix both models.
+
+Use existing repository context and scope guards.
+
+==================================================
+BACKFILL AND SEED POLICY
+==================================================
+
+Do not automatically normalize all services based only on similarity.
+
+The initial backfill must be:
+
+- Explicit
+- Reviewable
+- Idempotent
+- Deterministic
+- Based on approved mappings
+- Safe to rerun
+- Free from hardcoded database IDs where possible
+
+Prefer stable service codes.
+
+If service codes are inconsistent, report the issue.
+
+Do not silently guess.
+
+Separate:
+
+Schema migration
+
+from:
+
+Normalization data backfill
+
+from:
+
+Demo seed data
+
+Do not combine all three in one opaque script.
+
+==================================================
+OWNER-DECISION FILE
+==================================================
+
+For unclear duplicates, create a review artifact such as:
+
+docs/audits/v4.2/service-normalization-review.md
+
+It should include:
+
+- Candidate group
+- Existing service codes
+- Proposed canonical concept
+- Classification
+- Risk
+- Decision required
+- Default action: no normalization until approved
+
+Do not make product decisions silently.
+
+==================================================
+ALLOWED FILES
+==================================================
+
+Team 4 may modify files related to:
+
+- Normalization schema
+- Collection schema
+- Database schema exports
+- Safe migration
+- Repository
+- Service layer
+- Validation
+- Admin routes
+- Public collection routes
+- Route registration
+- Commercial policy integration usage
+- Goal contract reading where necessary
+- Unit and integration tests
+- Audit documentation
+- Team 4 documentation
+
+==================================================
+FORBIDDEN FILES
+==================================================
+
+Do not modify:
+
+- Customer frontend
+- Goal discovery UI
+- BizPortal frontend
+- Pricing engine
+- Checkout
+- Payments
+- Order processing
+- Existing order schema
+- Existing project schema
+- Creative workflow runner
+- AI runtime
+- Presentation engine
+- Recommendation Engine
+- Analytics dashboards
+- SEO components
+- Replit configuration
+- GitHub workflows
+- Team 1 implementation logic
+- Team 2 Goal implementation logic
+- Team 3 frontend implementation
+- Production environment configuration
+
+Do not fix unrelated bugs.
+
+==================================================
+TESTING REQUIREMENTS
+==================================================
+
+Add tests for at least:
+
+1. Canonical concept creation
+2. Duplicate canonical code rejection
+3. Duplicate canonical slug rejection
+4. Alias normalization
+5. Duplicate alias rejection
+6. Mapping creation
+7. Duplicate mapping rejection
+8. Conflicting primary mapping rejection
+9. Concept resolution from service
+10. Unmapped service behavior
+11. Legacy service remains unchanged
+12. Existing service code remains unchanged
+13. Collection creation
+14. Duplicate collection slug rejection
+15. Add service to collection
+16. Duplicate collection membership rejection
+17. Remove service from collection
+18. Collection ordering
+19. Public collection excludes ineligible services
+20. Public collection reuses commercial eligibility policy
+21. Admin endpoints require authentication
+22. Public endpoints do not expose internal fields
+23. Validation rejects invalid payloads
+24. Bulk limit enforcement
+25. Transaction rollback on partial failure
+26. Migration safety or schema validation
+27. Idempotent backfill behavior
+28. Existing orders remain readable
+29. Existing projects remain readable
+30. No service row is deleted or renamed
+
+Use the existing test framework.
+
+Do not create a new test framework.
+
+==================================================
+TYPECHECK AND BUILD
+==================================================
+
+Run actual repository commands for:
+
+- Normalization unit tests
+- Collection unit tests
+- Route integration tests
+- Relevant repository tests
+- Database/shared schema typecheck
+- API server typecheck
+- API server production build
+
+If there are pre-existing failures:
+
+Record the exact baseline.
+
+Prove that Team 4 introduced no new errors.
+
+Do not claim “all passed” if the full command failed.
+
+==================================================
+MANUAL VERIFICATION
+==================================================
+
+Perform backend manual verification.
+
+Verify:
+
+- Admin can create a canonical concept
+- Admin can map a service
+- Admin cannot create a conflicting mapping
+- Admin can create an alias
+- Admin can create a collection
+- Admin can add eligible services
+- Public collection endpoint returns only eligible services
+- Ineligible service does not appear publicly
+- Existing service detail still works
+- Existing quote/request flow still works
+- Existing service code remains unchanged
+- Existing order remains readable
+- Existing project remains readable
+- Unauthorized writes are rejected
+- Invalid payload returns safe validation error
+- No internal notes leak publicly
+
+Do not create production records unless explicitly authorized.
+
+Use test data or an isolated development environment.
+
+==================================================
+MIGRATION SAFETY CHECK
+==================================================
+
+Before running any migration:
+
+1. Confirm the active branch.
+2. Confirm the environment.
+3. Confirm the target database.
+4. Confirm the migration is additive.
+5. Confirm no DROP or destructive ALTER exists.
+6. Confirm owner approval for applying it.
+
+Do not apply a migration to a live or production database by default.
+
+Creating a migration file is allowed.
+
+Applying it requires explicit environment confirmation.
+
+If uncertain:
+
+STOP.
+
+Report:
+
+MIGRATION CREATED BUT NOT APPLIED
+
+==================================================
+COMMIT GATE
+==================================================
+
+Before every commit, run:
+
+git branch --show-current
+
+The output must be exactly:
+
+feature/v4.2e-service-normalization
+
+If not:
+
+STOP.
+
+Do not commit.
+
+Also run:
+
+git status --short
+git diff --check
+
+Use focused commits.
+
+Suggested commit structure:
+
+feat(normalization): add canonical service concept schema
+feat(normalization): add deterministic service mappings
+feat(collections): add solution collection foundation
+test(normalization): cover mappings and compatibility
+docs(team-04): add normalization audit and final report
+
+Do not include unrelated files.
+
+==================================================
+PRE-PUSH VERIFICATION
+==================================================
+
+Before push, run:
+
+git fetch origin
+git branch --show-current
+git status
+git log --oneline origin/integration/v4.2..HEAD
+git diff --name-status origin/integration/v4.2..HEAD
+git diff --stat origin/integration/v4.2..HEAD
+git diff --check
+
+Review every commit and file.
+
+If unrelated files appear:
+
+STOP.
+
+Remove unrelated changes safely before pushing.
+
+==================================================
+PUSH RULES
+==================================================
+
+Push only:
+
+feature/v4.2e-service-normalization
+
+Use:
+
+git push -u origin feature/v4.2e-service-normalization
+
+Do not push main.
+
+Do not push integration/v4.2.
+
+Do not merge into main.
+
+Do not merge into integration/v4.2.
+
+Do not force-push another team branch.
+
+Do not push a backup branch unless necessary.
+
+Team 6 will review and perform integration.
+
+==================================================
+FINAL BRANCH VERIFICATION
+==================================================
+
+After push, run:
+
+git branch --show-current
+git status
+git branch -vv
+git log --oneline --decorate -10
+git log --oneline origin/integration/v4.2..HEAD
+git diff --name-status origin/integration/v4.2..HEAD
+
+Required result:
+
+Active branch:
+
+feature/v4.2e-service-normalization
+
+Working tree:
+
+clean
+
+Remote tracking:
+
+origin/feature/v4.2e-service-normalization
+
+No Team 4 commit may exist only on local main.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return this exact structure:
+
+# TEAM-04 FINAL REPORT
+
+## 1. Branch Verification
+
+Active branch:
+
+Base branch:
+
+Remote tracking branch:
+
+Branch gate result:
+
+Confirm:
+
+- Work was not performed on main
+- Main was not pushed
+- Integration branch was not directly modified
+- No other team branch was merged
+
+## 2. Executive Summary
+
+Explain what normalization and collection foundation was implemented.
+
+## 3. Existing Architecture Audit
+
+List:
+
+- Existing service schema
+- Existing category schema
+- Existing order references
+- Existing project references
+- Existing commercial policy
+- Existing goal taxonomy
+- Existing collection or package logic
+
+## 4. Duplicate and Overlap Audit
+
+Provide all candidate groups.
+
+Include:
+
+- Classification
+- Proposed canonical concept
+- Risk
+- Owner decision status
+
+## 5. Scope Completed
+
+List each completed Team 4 requirement.
+
+## 6. Files Changed
+
+For every file:
+
+Path
+Change
+Reason
+Owning domain
+
+## 7. Database Changes
+
+Report:
+
+- New tables
+- New indexes
+- Foreign keys
+- Deletion behavior
+- Migration file
+- Migration applied or not
+- Environment
+- Idempotency
+- Destructive operations
+
+## 8. Canonical Model
+
+Explain:
+
+- Canonical concept
+- Alias
+- Mapping
+- Primary mapping
+- Collection
+- Collection membership
+
+## 9. API Changes
+
+List:
+
+- Admin endpoints
+- Public endpoints
+- Authentication
+- Validation
+- Backward compatibility
+
+## 10. Commercial Eligibility Integration
+
+Explain exactly how Team 1’s canonical policy is reused.
+
+Confirm no duplicate eligibility logic was created.
+
+## 11. Goal Taxonomy Compatibility
+
+Explain how Team 4 coexists with Team 2 Goal Taxonomy.
+
+Confirm Goal Taxonomy was not replaced.
+
+## 12. Historical Compatibility
+
+Confirm:
+
+- No service deleted
+- No service code renamed
+- No service slug replaced
+- No order reference rewritten
+- No project reference rewritten
+- Existing pricing unchanged
+
+## 13. Tests
+
+Provide exact commands and results.
+
+## 14. Typecheck
+
+Provide exact commands and results.
+
+## 15. Production Build
+
+Provide exact command and result.
+
+## 16. Security Review
+
+Confirm:
+
+- Admin writes protected
+- Public reads sanitized
+- No secret exposed
+- No internal notes leaked
+- Scope isolation enforced
+- Bulk limits enforced
+
+## 17. Migration Safety
+
+Report:
+
+- Migration created
+- Migration applied or not
+- Database target
+- Additive-only verification
+- Idempotency
+- Destructive operation result
+
+## 18. Manual Verification
+
+Report all verified backend flows.
+
+## 19. Known Limitations
+
+State honestly.
+
+## 20. Owner Decisions Required
+
+List all unclear duplicate groups that were not normalized automatically.
+
+## 21. Remaining Risks
+
+List real technical and product risks.
+
+## 22. Commit List
+
+Show:
+
+git log --oneline origin/integration/v4.2..HEAD
+
+## 23. Final Diff
+
+Show:
+
+git diff --name-status origin/integration/v4.2..HEAD
+
+## 24. Push Confirmation
+
+Confirm:
+
+origin/feature/v4.2e-service-normalization
+
+==================================================
+STOP CONDITION
+==================================================
+
+After Team 4 implementation is complete and pushed:
+
+STOP.
+
+Do not implement:
+
+- Customer collection UI
+- Recommendation Engine
+- AI Discovery Assistant
+- Pricing bundles
+- Combined checkout
+- Analytics
+- SEO
+- Team 5 scope
+- Team 6 scope
+
+Do not merge the branch.
+
+Wait for Team 6 review.
