@@ -14,6 +14,9 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
+  Users,
+  Bot,
+  ArrowLeftRight,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -113,33 +116,48 @@ const complexityColor: Record<string, string> = {
   complex: "bg-red-500/20 text-red-400",
 };
 
+const LABOR_RATE = 75_000; // Rp per jam
+const SERVER_COST = 15_000; // Rp per proyek (alokasi server)
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function PricingCalculator() {
   const [exchangeRate, setExchangeRate] = useState(16300);
   const [profitPct, setProfitPct] = useState(200);
   const [modelOpen, setModelOpen] = useState(false);
+  const [aiOnly, setAiOnly] = useState(false); // toggle: with vs without labor
 
   // Interactive token calculator state
   const [calcInputTokens, setCalcInputTokens] = useState(10000);
   const [calcOutputTokens, setCalcOutputTokens] = useState(8000);
   const [calcModelIdx, setCalcModelIdx] = useState(0); // GPT-4o
 
-  // Derived service data — modalIdr is total cost (API + server + tenaga)
+  // Derived service data — compute both modal variants
   const services = useMemo(() => {
     return SERVICES.map((s) => {
-      const hargaJual = s.modalIdr * (1 + profitPct / 100);
-      const profit = hargaJual - s.modalIdr;
-      return { ...s, hargaJual, profit, margin: profitPct };
+      const laborCost   = s.laborHours * LABOR_RATE;
+      const apiCost     = Math.max(0, s.modalIdr - laborCost - SERVER_COST);
+      const modalFull   = s.modalIdr;                              // API + server + tenaga
+      const modalAiOnly = Math.max(apiCost + SERVER_COST, 5_000); // API + server only
+
+      const activeModal  = aiOnly ? modalAiOnly : modalFull;
+      const hargaJual    = activeModal * (1 + profitPct / 100);
+      const profit       = hargaJual - activeModal;
+
+      // Comparison values (always computed for side-by-side badge)
+      const hargaFull   = modalFull   * (1 + profitPct / 100);
+      const hargaAiOnly = modalAiOnly * (1 + profitPct / 100);
+
+      return { ...s, modalFull, modalAiOnly, activeModal, hargaJual, profit, margin: profitPct, hargaFull, hargaAiOnly, laborCost };
     });
-  }, [profitPct]);
+  }, [profitPct, aiOnly]);
 
   // Summary stats
-  const totalModal    = useMemo(() => services.reduce((a, s) => a + s.modalIdr, 0), [services]);  // eslint-disable-line
-  const totalHarga    = useMemo(() => services.reduce((a, s) => a + s.hargaJual, 0), [services]);
-  const totalProfit   = useMemo(() => services.reduce((a, s) => a + s.profit, 0), [services]);
-  const avgModal      = totalModal / services.length;
-  const avgHarga      = totalHarga / services.length;
-  const avgProfit     = totalProfit / services.length;
+  const totalModal  = useMemo(() => services.reduce((a, s) => a + s.activeModal, 0), [services]);
+  const totalHarga  = useMemo(() => services.reduce((a, s) => a + s.hargaJual,   0), [services]);
+  const totalProfit = useMemo(() => services.reduce((a, s) => a + s.profit,       0), [services]);
+  const avgModal    = totalModal  / services.length;
+  const avgHarga    = totalHarga  / services.length;
+  const avgProfit   = totalProfit / services.length;
 
   // Interactive calculator
   const calcModel = AI_MODELS[calcModelIdx];
@@ -171,6 +189,45 @@ export default function PricingCalculator() {
           Kalkulasi modal API AI, harga jual, dan profit per layanan
         </p>
       </div>
+
+      {/* Mode Toggle */}
+      <div className="flex items-center gap-2 p-3 rounded-xl border bg-card/50 w-fit">
+        <ArrowLeftRight className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm text-muted-foreground mr-1">Mode:</span>
+        <button
+          onClick={() => setAiOnly(false)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+            !aiOnly
+              ? "bg-primary text-primary-foreground shadow"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Users className="h-3.5 w-3.5" />
+          Dengan Tenaga
+        </button>
+        <button
+          onClick={() => setAiOnly(true)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+            aiOnly
+              ? "bg-primary text-primary-foreground shadow"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Bot className="h-3.5 w-3.5" />
+          AI-Only
+        </button>
+      </div>
+
+      {/* AI-only info banner */}
+      {aiOnly && (
+        <div className="flex items-start gap-2 text-sm bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-amber-300">
+          <Bot className="h-4 w-4 mt-0.5 shrink-0" />
+          <span>
+            <strong>Mode AI-Only:</strong> Modal hanya mencakup biaya API + server (Rp 15.000/proyek).
+            Biaya tenaga manusia (reviewer, QC, account manager) tidak dihitung — cocok jika semua proses otomatis penuh.
+          </span>
+        </div>
+      )}
 
       {/* Settings Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -228,9 +285,11 @@ export default function PricingCalculator() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="bg-red-950/30 border-red-900/40">
           <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Rata-rata Modal AI</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider">Rata-rata Modal</p>
             <p className="text-2xl font-bold text-red-400 mt-1">{fmt(avgModal)}</p>
-            <p className="text-xs text-muted-foreground mt-1">biaya API per proyek</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {aiOnly ? "API + server saja" : "API + server + tenaga"}
+            </p>
           </CardContent>
         </Card>
 
@@ -369,10 +428,14 @@ export default function PricingCalculator() {
               <TableHeader>
                 <TableRow className="border-border hover:bg-transparent">
                   <TableHead className="pl-6 text-xs">Layanan</TableHead>
-                  <TableHead className="text-xs">Kompleksitas</TableHead>
-                  <TableHead className="text-xs">Agent AI</TableHead>
-                  <TableHead className="text-xs text-red-400">Modal</TableHead>
-                  <TableHead className="text-xs text-blue-400">Harga Jual</TableHead>
+                  <TableHead className="text-xs">Jam Kerja</TableHead>
+                  <TableHead className="text-xs text-red-400">
+                    Modal {aiOnly ? "(AI-Only)" : "(+ Tenaga)"}
+                  </TableHead>
+                  <TableHead className="text-xs text-blue-400">
+                    Harga Jual {aiOnly ? "(AI-Only)" : "(+ Tenaga)"}
+                  </TableHead>
+                  <TableHead className="text-xs text-muted-foreground">Perbandingan</TableHead>
                   <TableHead className="text-xs text-green-400">Profit</TableHead>
                   <TableHead className="pr-6 text-xs text-right">Margin</TableHead>
                 </TableRow>
@@ -381,21 +444,30 @@ export default function PricingCalculator() {
                 {svcList.map((s) => (
                   <TableRow key={s.name} className="border-border hover:bg-muted/20">
                     <TableCell className="pl-6 font-medium text-sm">
-                      {s.name}
+                      <div>{s.name}</div>
                       {s.withImages && (
-                        <Badge variant="outline" className="ml-2 text-xs py-0 h-4 border-muted-foreground/30 text-muted-foreground">
+                        <Badge variant="outline" className="mt-0.5 text-xs py-0 h-4 border-muted-foreground/30 text-muted-foreground">
                           + gambar
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell>
-                      <Badge className={`text-xs ${complexityColor[s.complexity]}`}>
-                        {s.complexity}
-                      </Badge>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {s.laborHours > 0 ? `${s.laborHours} jam` : <span className="text-xs text-muted-foreground/50">—</span>}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{s.agents}</TableCell>
-                    <TableCell className="text-sm font-medium text-red-400">{fmt(s.modalIdr)}</TableCell>
+                    <TableCell className="text-sm font-medium text-red-400">{fmt(s.activeModal)}</TableCell>
                     <TableCell className="text-sm font-medium text-blue-400">{fmt(s.hargaJual)}</TableCell>
+                    {/* Comparison: show the "other" mode's harga jual */}
+                    <TableCell className="text-xs">
+                      {aiOnly ? (
+                        <span className="text-muted-foreground">
+                          Dengan tenaga: <span className="text-blue-300">{fmt(s.hargaFull)}</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          AI-only: <span className="text-amber-400">{fmt(s.hargaAiOnly)}</span>
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-sm font-medium text-green-400">{fmt(s.profit)}</TableCell>
                     <TableCell className="pr-6 text-right">
                       <Badge className="bg-green-500/15 text-green-400 border-green-500/20">
