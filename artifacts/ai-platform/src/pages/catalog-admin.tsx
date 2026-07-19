@@ -44,7 +44,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { LayoutGrid, Plus, Pencil, Trash2, BarChart2, ClipboardList, Boxes, Package } from "lucide-react";
+import { LayoutGrid, Plus, Pencil, Trash2, BarChart2, ClipboardList, Boxes, Package, Search, X } from "lucide-react";
 
 const REQUEST_STATUSES: ServiceRequestStatus[] = [
   "draft", "brief_in_progress", "brief_completed", "pricing_calculated",
@@ -69,7 +69,13 @@ function CategoriesTab() {
   const { data: categories = [], isLoading } = useListServiceCategories();
   const [editing, setEditing] = useState<AiServiceCategory | null>(null);
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [form, setForm] = useState({ code: "", name: "", description: "", icon: "", displayOrder: 0 });
+
+  const filtered = categories.filter((c) => {
+    const q = search.toLowerCase();
+    return !q || c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q);
+  });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListServiceCategoriesQueryKey() });
 
@@ -102,8 +108,26 @@ function CategoriesTab() {
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
-        <Button size="sm" className="gap-1" onClick={openCreate} data-testid="button-add-category"><Plus className="size-3.5" /> Add category</Button>
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            className="pl-8 h-8 text-sm"
+            placeholder="Cari nama atau kode…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            data-testid="search-categories"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+        {search && <span className="text-xs text-muted-foreground">{filtered.length} hasil</span>}
+        <div className="ml-auto">
+          <Button size="sm" className="gap-1" onClick={openCreate} data-testid="button-add-category"><Plus className="size-3.5" /> Add category</Button>
+        </div>
       </div>
       <Table>
         <TableHeader>
@@ -116,7 +140,8 @@ function CategoriesTab() {
         </TableHeader>
         <TableBody>
           {isLoading && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>}
-          {categories.map((c) => (
+          {!isLoading && filtered.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Tidak ada hasil.</TableCell></TableRow>}
+          {filtered.map((c) => (
             <TableRow key={c.id} data-testid={`row-category-${c.code}`}>
               <TableCell className="font-medium">{c.name}</TableCell>
               <TableCell className="font-mono text-xs text-muted-foreground">{c.code}</TableCell>
@@ -153,10 +178,19 @@ function ServicesTab() {
   const { data: services = [], isLoading } = useListServices();
   const [editing, setEditing] = useState<AiService | null>(null);
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filterCategory, setFilterCategory] = useState<string>("all");
   const [form, setForm] = useState({
     categoryId: 0, serviceCode: "", serviceName: "", shortDescription: "",
     pricingModel: "one_time", startingPrice: "", estimatedDelivery: "", status: "active",
     serviceFlow: "custom_project" as "fixed_price" | "custom_project" | "enterprise",
+  });
+
+  const filtered = services.filter((s) => {
+    const q = search.toLowerCase();
+    const matchSearch = !q || s.serviceName.toLowerCase().includes(q) || s.serviceCode.toLowerCase().includes(q);
+    const matchCat = filterCategory === "all" || s.categoryId === Number(filterCategory);
+    return matchSearch && matchCat;
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListServicesQueryKey() });
@@ -191,8 +225,37 @@ function ServicesTab() {
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
-        <Button size="sm" className="gap-1" onClick={openCreate} data-testid="button-add-service"><Plus className="size-3.5" /> Add service</Button>
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            className="pl-8 h-8 text-sm"
+            placeholder="Cari nama layanan…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            data-testid="search-services"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+        <Select value={filterCategory} onValueChange={setFilterCategory}>
+          <SelectTrigger className="h-8 text-sm w-44" data-testid="filter-services-category">
+            <SelectValue placeholder="Semua kategori" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua kategori</SelectItem>
+            {categories.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {(search || filterCategory !== "all") && (
+          <span className="text-xs text-muted-foreground">{filtered.length} hasil</span>
+        )}
+        <div className="ml-auto">
+          <Button size="sm" className="gap-1" onClick={openCreate} data-testid="button-add-service"><Plus className="size-3.5" /> Add service</Button>
+        </div>
       </div>
       <Table>
         <TableHeader>
@@ -206,7 +269,8 @@ function ServicesTab() {
         </TableHeader>
         <TableBody>
           {isLoading && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>}
-          {services.map((s) => (
+          {!isLoading && filtered.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Tidak ada hasil.</TableCell></TableRow>}
+          {filtered.map((s) => (
             <TableRow key={s.id} data-testid={`row-service-${s.serviceCode}`}>
               <TableCell className="font-medium">{s.serviceName}</TableCell>
               <TableCell className="text-xs text-muted-foreground">{categories.find((c) => c.id === s.categoryId)?.name ?? "—"}</TableCell>
@@ -276,11 +340,16 @@ function PackagesTab() {
   const { toast } = useToast();
   const { data: services = [] } = useListServices();
   const [selectedServiceId, setSelectedServiceId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
 
   const { data: serviceDetail, isLoading } = useGetService(selectedServiceId ?? 0, {
     query: { enabled: selectedServiceId != null, queryKey: getGetServiceQueryKey(selectedServiceId ?? 0) },
   });
   const packages: AiServicePackage[] = serviceDetail?.packages ?? [];
+  const filtered = packages.filter((p) => {
+    const q = search.toLowerCase();
+    return !q || p.packageName.toLowerCase().includes(q) || (p.packageType ?? "").toLowerCase().includes(q);
+  });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AiServicePackage | null>(null);
@@ -346,13 +415,13 @@ function PackagesTab() {
 
   return (
     <div className="space-y-4">
-      {/* Service selector */}
-      <div className="flex items-center gap-3">
+      {/* Top controls: service selector + search + add */}
+      <div className="flex items-center gap-2 flex-wrap">
         <Select
           value={selectedServiceId != null ? String(selectedServiceId) : ""}
-          onValueChange={(v) => setSelectedServiceId(Number(v))}
+          onValueChange={(v) => { setSelectedServiceId(Number(v)); setSearch(""); }}
         >
-          <SelectTrigger className="w-72" data-testid="select-package-service">
+          <SelectTrigger className="w-64 h-8 text-sm" data-testid="select-package-service">
             <SelectValue placeholder="Pilih layanan…" />
           </SelectTrigger>
           <SelectContent>
@@ -361,10 +430,31 @@ function PackagesTab() {
             ))}
           </SelectContent>
         </Select>
+
         {selectedServiceId != null && (
-          <Button size="sm" className="gap-1" onClick={openCreate} data-testid="button-add-package">
-            <Plus className="size-3.5" /> Tambah paket
-          </Button>
+          <>
+            <div className="relative flex-1 min-w-[160px] max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                className="pl-8 h-8 text-sm"
+                placeholder="Cari nama paket…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                data-testid="search-packages"
+              />
+              {search && (
+                <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
+            {search && <span className="text-xs text-muted-foreground">{filtered.length} hasil</span>}
+            <div className="ml-auto">
+              <Button size="sm" className="gap-1" onClick={openCreate} data-testid="button-add-package">
+                <Plus className="size-3.5" /> Tambah paket
+              </Button>
+            </div>
+          </>
         )}
       </div>
 
@@ -389,10 +479,10 @@ function PackagesTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {packages.length === 0 && (
-                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Belum ada paket.</TableCell></TableRow>
+              {filtered.length === 0 && (
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">{search ? "Tidak ada hasil." : "Belum ada paket."}</TableCell></TableRow>
               )}
-              {packages.map((p) => (
+              {filtered.map((p) => (
                 <TableRow key={p.id} data-testid={`row-package-${p.id}`}>
                   <TableCell className="font-medium">{p.packageName}</TableCell>
                   <TableCell className="text-xs text-muted-foreground capitalize">{p.packageType}</TableCell>
@@ -465,42 +555,72 @@ function RequestsTab() {
   const queryClient = useQueryClient();
   const { data: requests = [], isLoading } = useListServiceRequests();
   const { data: services = [] } = useListServices();
+  const [search, setSearch] = useState("");
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListServiceRequestsQueryKey() });
   const statusMutation = useUpdateServiceRequestStatus({ mutation: { onSuccess: () => invalidate() } });
 
+  const filtered = requests.filter((r) => {
+    const q = search.toLowerCase();
+    const serviceName = services.find((s) => s.id === r.serviceId)?.serviceName ?? "";
+    return !q
+      || (r.customerName ?? "").toLowerCase().includes(q)
+      || (r.customerEmail ?? "").toLowerCase().includes(q)
+      || serviceName.toLowerCase().includes(q);
+  });
+
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Customer</TableHead>
-          <TableHead>Service</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Submitted</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {isLoading && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>}
-        {requests.length === 0 && !isLoading && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">No requests yet.</TableCell></TableRow>}
-        {requests.map((r) => (
-          <TableRow key={r.id} data-testid={`row-request-${r.requestId}`}>
-            <TableCell>
-              <div className="font-medium">{r.customerName}</div>
-              <div className="text-xs text-muted-foreground">{r.customerEmail}</div>
-            </TableCell>
-            <TableCell className="text-sm">{services.find((s) => s.id === r.serviceId)?.serviceName ?? `#${r.serviceId}`}</TableCell>
-            <TableCell>
-              <Select value={r.status} onValueChange={(v) => statusMutation.mutate({ id: r.id, data: { status: v as ServiceRequestStatus } })}>
-                <SelectTrigger className="h-7 w-36 text-xs" data-testid={`select-request-status-${r.requestId}`}><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {REQUEST_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </TableCell>
-            <TableCell className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</TableCell>
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            className="pl-8 h-8 text-sm"
+            placeholder="Cari customer atau layanan…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            data-testid="search-requests"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+        {search && <span className="text-xs text-muted-foreground">{filtered.length} hasil</span>}
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Customer</TableHead>
+            <TableHead>Service</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Submitted</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {isLoading && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>}
+          {!isLoading && filtered.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">{search ? "Tidak ada hasil." : "No requests yet."}</TableCell></TableRow>}
+          {filtered.map((r) => (
+            <TableRow key={r.id} data-testid={`row-request-${r.requestId}`}>
+              <TableCell>
+                <div className="font-medium">{r.customerName}</div>
+                <div className="text-xs text-muted-foreground">{r.customerEmail}</div>
+              </TableCell>
+              <TableCell className="text-sm">{services.find((s) => s.id === r.serviceId)?.serviceName ?? `#${r.serviceId}`}</TableCell>
+              <TableCell>
+                <Select value={r.status} onValueChange={(v) => statusMutation.mutate({ id: r.id, data: { status: v as ServiceRequestStatus } })}>
+                  <SelectTrigger className="h-7 w-36 text-xs" data-testid={`select-request-status-${r.requestId}`}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {REQUEST_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 
