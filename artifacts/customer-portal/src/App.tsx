@@ -60,6 +60,7 @@ const StartPage                  = lazy(() => import('@/pages/start'));
 // ── Customs Tariff ────────────────────────────────────────────────────────
 const CustomsTariffPage          = lazy(() => import('@/pages/customs-tariff'));
 const TarifKalkulatorPage        = lazy(() => import('@/pages/tarif-kalkulator'));
+const DevTestPage                = lazy(() => import('@/pages/dev-test'));
 
 /* ─── Loading fallback ─── */
 function PageLoader() {
@@ -162,6 +163,8 @@ function Router() {
         {/* ── Customs Tariff ─────────────────────────────────────────── */}
         <Route path="/customs-tariff" component={CustomsTariffPage} />
         <Route path="/tarif-kalkulator" component={TarifKalkulatorPage} />
+        {/* ── Dev Testing (internal only) ─────────────────────────────── */}
+        <Route path="/dev-test" component={DevTestPage} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>
