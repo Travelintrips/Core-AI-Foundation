@@ -43,8 +43,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
-import { LayoutGrid, Plus, Pencil, Trash2, BarChart2, ClipboardList, Boxes, Package, Search, X } from "lucide-react";
+import { LayoutGrid, Plus, Pencil, Trash2, BarChart2, ClipboardList, Boxes, Package, Search, X, ChevronsUpDown, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const REQUEST_STATUSES: ServiceRequestStatus[] = [
   "draft", "brief_in_progress", "brief_completed", "pricing_calculated",
@@ -340,6 +354,7 @@ function PackagesTab() {
   const { toast } = useToast();
   const { data: services = [] } = useListServices();
   const [selectedServiceId, setSelectedServiceId] = useState<number | null>(null);
+  const [comboOpen, setComboOpen] = useState(false);
   const [search, setSearch] = useState("");
 
   const { data: serviceDetail, isLoading, isFetching } = useGetService(selectedServiceId ?? 0, {
@@ -415,23 +430,55 @@ function PackagesTab() {
 
   const formatPrice = (p?: string | null) => (p ? `Rp ${Number(p).toLocaleString("id-ID")}` : "—");
 
+  const selectedService = services.find((s) => s.id === selectedServiceId);
+
   return (
     <div className="space-y-4">
-      {/* Top controls: service selector + search + add */}
+      {/* Top controls: service combobox + package search + add */}
       <div className="flex items-center gap-2 flex-wrap">
-        <Select
-          value={selectedServiceId != null ? String(selectedServiceId) : ""}
-          onValueChange={(v) => { setSelectedServiceId(Number(v)); setSearch(""); }}
-        >
-          <SelectTrigger className="w-64 h-8 text-sm" data-testid="select-package-service">
-            <SelectValue placeholder="Pilih layanan…" />
-          </SelectTrigger>
-          <SelectContent>
-            {services.map((s) => (
-              <SelectItem key={s.id} value={String(s.id)}>{s.serviceName}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Searchable service combobox */}
+        <Popover open={comboOpen} onOpenChange={setComboOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={comboOpen}
+              className="w-72 h-8 text-sm justify-between font-normal"
+              data-testid="select-package-service"
+            >
+              <span className="truncate">
+                {selectedService ? selectedService.serviceName : "Pilih layanan…"}
+              </span>
+              <ChevronsUpDown className="ml-2 size-3.5 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 p-0" align="start">
+            <Command>
+              <CommandInput placeholder="Cari nama layanan…" />
+              <CommandList>
+                <CommandEmpty>Layanan tidak ditemukan.</CommandEmpty>
+                <CommandGroup>
+                  {services.map((s) => (
+                    <CommandItem
+                      key={s.id}
+                      value={s.serviceName}
+                      onSelect={() => {
+                        setSelectedServiceId(s.id);
+                        setSearch("");
+                        setComboOpen(false);
+                      }}
+                    >
+                      <Check
+                        className={cn("mr-2 size-3.5", selectedServiceId === s.id ? "opacity-100" : "opacity-0")}
+                      />
+                      <span className="text-sm">{s.serviceName}</span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
 
         {selectedServiceId != null && (
           <>
@@ -461,7 +508,9 @@ function PackagesTab() {
       </div>
 
       {selectedServiceId == null && (
-        <div className="py-12 text-center text-sm text-muted-foreground">Pilih layanan di atas untuk melihat paketnya.</div>
+        <div className="py-12 text-center text-sm text-muted-foreground">
+          Ketik nama layanan di kotak "Pilih layanan" untuk mencari, lalu pilih untuk melihat paketnya.
+        </div>
       )}
 
       {selectedServiceId != null && (
