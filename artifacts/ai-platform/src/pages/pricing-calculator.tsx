@@ -50,46 +50,50 @@ const AI_MODELS = [
   { name: "Mistral Medium",       provider: "Mistral",    inputPerM: 3.00,  outputPerM: 9.00  },
 ];
 
-// ─── Service catalog with estimated AI token usage ────────────────────────────
-// modalUsd: estimated total AI API cost per project (mix of models + image gen)
+// ─── Service catalog — modalIdr = total cost (API + server + tenaga manusia) ──
+// Harga Jual = modalIdr × 3 (profit 200%). Modal breakdown:
+//   - AI API:  Rp 1.500–5.000/proyek (negligible)
+//   - Server:  Rp 15.000/proyek (alokasi bulanan)
+//   - Tenaga:  Rp 75.000/jam (tarif profesional Indonesia)
 type ServiceEntry = {
   name: string;
   category: string;
   agents: number;
   complexity: "simple" | "medium" | "complex";
-  modalUsd: number;      // real API cost estimate
+  modalIdr: number;      // total cost = API + server + labor (IDR)
+  laborHours: number;    // estimasi jam kerja
   withImages: boolean;
 };
 
 const SERVICES: ServiceEntry[] = [
   // Branding & Logo
-  { name: "Konsep Logo AI",           category: "Branding",    agents: 2, complexity: "simple",  modalUsd: 0.05, withImages: true  },
-  { name: "Paket Identitas Brand",    category: "Branding",    agents: 3, complexity: "complex", modalUsd: 0.30, withImages: true  },
-  { name: "Strategi Brand",           category: "Branding",    agents: 1, complexity: "medium",  modalUsd: 0.12, withImages: false },
+  { name: "Konsep Logo AI",           category: "Branding",    agents: 2, complexity: "simple",  modalIdr: 150_000, laborHours: 2,   withImages: true  },
+  { name: "Paket Identitas Brand",    category: "Branding",    agents: 3, complexity: "complex", modalIdr: 500_000, laborHours: 6.5, withImages: true  },
+  { name: "Strategi Brand",           category: "Branding",    agents: 1, complexity: "medium",  modalIdr: 300_000, laborHours: 4,   withImages: false },
   // Desain Kreatif
-  { name: "Desain Media Sosial",      category: "Desain",      agents: 1, complexity: "simple",  modalUsd: 0.04, withImages: true  },
-  { name: "Konsep Kemasan",           category: "Desain",      agents: 1, complexity: "medium",  modalUsd: 0.10, withImages: true  },
+  { name: "Desain Media Sosial",      category: "Desain",      agents: 1, complexity: "simple",  modalIdr:  50_000, laborHours: 0.5, withImages: true  },
+  { name: "Konsep Kemasan",           category: "Desain",      agents: 1, complexity: "medium",  modalIdr: 250_000, laborHours: 3,   withImages: true  },
   // Dokumen & Presentasi
-  { name: "Company Profile Dokumen",  category: "Dokumen",     agents: 2, complexity: "medium",  modalUsd: 0.18, withImages: false },
-  { name: "Company Profile",          category: "Dokumen",     agents: 2, complexity: "medium",  modalUsd: 0.16, withImages: false },
-  { name: "Pitch Deck / Presentasi",  category: "Dokumen",     agents: 2, complexity: "medium",  modalUsd: 0.20, withImages: true  },
-  { name: "Proposal Bisnis",          category: "Dokumen",     agents: 1, complexity: "simple",  modalUsd: 0.08, withImages: false },
-  { name: "Katalog Produk",           category: "Dokumen",     agents: 2, complexity: "medium",  modalUsd: 0.15, withImages: true  },
-  { name: "Laporan Tahunan",          category: "Dokumen",     agents: 2, complexity: "complex", modalUsd: 0.28, withImages: false },
-  { name: "Executive Summary",        category: "Dokumen",     agents: 1, complexity: "simple",  modalUsd: 0.06, withImages: false },
-  { name: "White Paper",              category: "Dokumen",     agents: 2, complexity: "complex", modalUsd: 0.25, withImages: false },
-  { name: "Case Study",               category: "Dokumen",     agents: 2, complexity: "medium",  modalUsd: 0.18, withImages: false },
-  { name: "E-Book",                   category: "Dokumen",     agents: 2, complexity: "complex", modalUsd: 0.25, withImages: false },
+  { name: "Company Profile Dokumen",  category: "Dokumen",     agents: 2, complexity: "medium",  modalIdr: 350_000, laborHours: 4.5, withImages: false },
+  { name: "Company Profile",          category: "Dokumen",     agents: 2, complexity: "medium",  modalIdr: 250_000, laborHours: 3,   withImages: false },
+  { name: "Pitch Deck / Presentasi",  category: "Dokumen",     agents: 2, complexity: "medium",  modalIdr: 350_000, laborHours: 4.5, withImages: true  },
+  { name: "Proposal Bisnis",          category: "Dokumen",     agents: 1, complexity: "simple",  modalIdr: 250_000, laborHours: 3,   withImages: false },
+  { name: "Katalog Produk",           category: "Dokumen",     agents: 2, complexity: "medium",  modalIdr: 350_000, laborHours: 4.5, withImages: true  },
+  { name: "Laporan Tahunan",          category: "Dokumen",     agents: 2, complexity: "complex", modalIdr: 750_000, laborHours: 9,   withImages: false },
+  { name: "Executive Summary",        category: "Dokumen",     agents: 1, complexity: "simple",  modalIdr: 100_000, laborHours: 1,   withImages: false },
+  { name: "White Paper",              category: "Dokumen",     agents: 2, complexity: "complex", modalIdr: 500_000, laborHours: 6,   withImages: false },
+  { name: "Case Study",               category: "Dokumen",     agents: 2, complexity: "medium",  modalIdr: 350_000, laborHours: 4.5, withImages: false },
+  { name: "E-Book",                   category: "Dokumen",     agents: 2, complexity: "complex", modalIdr: 500_000, laborHours: 6,   withImages: false },
   // Marketing
-  { name: "Rencana Marketing",        category: "Marketing",   agents: 1, complexity: "medium",  modalUsd: 0.12, withImages: false },
-  { name: "Rencana Kampanye",         category: "Marketing",   agents: 1, complexity: "medium",  modalUsd: 0.15, withImages: false },
-  { name: "Kalender Konten 30 Hari",  category: "Marketing",   agents: 1, complexity: "simple",  modalUsd: 0.08, withImages: false },
-  { name: "Analisis Kompetitor",      category: "Marketing",   agents: 1, complexity: "medium",  modalUsd: 0.14, withImages: false },
-  { name: "Paket Persona Pelanggan",  category: "Marketing",   agents: 1, complexity: "simple",  modalUsd: 0.09, withImages: false },
+  { name: "Rencana Marketing",        category: "Marketing",   agents: 1, complexity: "medium",  modalIdr: 250_000, laborHours: 3,   withImages: false },
+  { name: "Rencana Kampanye",         category: "Marketing",   agents: 1, complexity: "medium",  modalIdr: 400_000, laborHours: 5,   withImages: false },
+  { name: "Kalender Konten 30 Hari",  category: "Marketing",   agents: 1, complexity: "simple",  modalIdr: 150_000, laborHours: 2,   withImages: false },
+  { name: "Analisis Kompetitor",      category: "Marketing",   agents: 1, complexity: "medium",  modalIdr: 350_000, laborHours: 4.5, withImages: false },
+  { name: "Paket Persona Pelanggan",  category: "Marketing",   agents: 1, complexity: "simple",  modalIdr: 250_000, laborHours: 3,   withImages: false },
   // Keuangan
-  { name: "Analisis Keuangan",        category: "Keuangan",    agents: 1, complexity: "complex", modalUsd: 0.22, withImages: false },
-  { name: "Analisis Cash Flow",       category: "Keuangan",    agents: 1, complexity: "medium",  modalUsd: 0.18, withImages: false },
-  { name: "Perkiraan Keuangan",       category: "Keuangan",    agents: 1, complexity: "complex", modalUsd: 0.28, withImages: false },
+  { name: "Analisis Keuangan",        category: "Keuangan",    agents: 1, complexity: "complex", modalIdr: 500_000, laborHours: 6,   withImages: false },
+  { name: "Analisis Cash Flow",       category: "Keuangan",    agents: 1, complexity: "medium",  modalIdr: 500_000, laborHours: 6,   withImages: false },
+  { name: "Perkiraan Keuangan",       category: "Keuangan",    agents: 1, complexity: "complex", modalIdr: 1_000_000, laborHours: 0, withImages: false },
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -120,19 +124,17 @@ export default function PricingCalculator() {
   const [calcOutputTokens, setCalcOutputTokens] = useState(8000);
   const [calcModelIdx, setCalcModelIdx] = useState(0); // GPT-4o
 
-  // Derived service data
+  // Derived service data — modalIdr is total cost (API + server + tenaga)
   const services = useMemo(() => {
     return SERVICES.map((s) => {
-      const modalIdr = s.modalUsd * exchangeRate;
-      const hargaJual = modalIdr * (1 + profitPct / 100);
-      const profit = hargaJual - modalIdr;
-      const margin = profitPct;
-      return { ...s, modalIdr, hargaJual, profit, margin };
+      const hargaJual = s.modalIdr * (1 + profitPct / 100);
+      const profit = hargaJual - s.modalIdr;
+      return { ...s, hargaJual, profit, margin: profitPct };
     });
-  }, [exchangeRate, profitPct]);
+  }, [profitPct]);
 
   // Summary stats
-  const totalModal    = useMemo(() => services.reduce((a, s) => a + s.modalIdr, 0), [services]);
+  const totalModal    = useMemo(() => services.reduce((a, s) => a + s.modalIdr, 0), [services]);  // eslint-disable-line
   const totalHarga    = useMemo(() => services.reduce((a, s) => a + s.hargaJual, 0), [services]);
   const totalProfit   = useMemo(() => services.reduce((a, s) => a + s.profit, 0), [services]);
   const avgModal      = totalModal / services.length;
