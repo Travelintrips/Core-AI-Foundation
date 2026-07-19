@@ -5,9 +5,9 @@ import {
   Loader2, ArrowRight, Sparkles, Search, Star, Clock, CheckCircle,
   Paintbrush, Megaphone, DollarSign, BookOpen, Receipt, Users,
   Scale, Truck, Package, TrendingUp, Briefcase, Headphones, BarChart2,
-  RotateCcw, Filter, ChevronDown, Zap, Shield, X, Eye, Building2,
-  Globe, LayoutGrid, ChevronRight, Award, Flame, BadgeCheck, Lock,
-  ChevronUp, SlidersHorizontal, History, Hash, Cpu, ArrowLeft, Calculator,
+  RotateCcw, ChevronDown, Zap, Shield, X, Eye, Building2,
+  Globe, LayoutGrid, ChevronRight, Award, Flame, Lock,
+  History, Hash, Cpu, ArrowLeft, Calculator,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -159,64 +159,6 @@ function SkeletonCard() {
   );
 }
 
-// ── Quick Preview Panel ───────────────────────────────────────────────────────
-
-function QuickPreview({ s, onView }: { s: CatalogService; onView: (id: number) => void }) {
-  const { t } = useTranslation();
-  const deliverables = [
-    s.humanReview ? t('services.preview.humanOutput') : t('services.preview.aiOutput'),
-    t('services.preview.deliveredIn', { time: s.estimatedDelivery }),
-    s.serviceFlow === "fixed_price" ? t('services.preview.fixedPrice') : t('services.preview.customScope'),
-    t('services.preview.commercialLicense'),
-  ];
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 4 }}
-      transition={{ duration: 0.15, ease: "easeOut" }}
-      className="absolute inset-0 z-10 flex flex-col justify-between rounded-2xl overflow-hidden"
-      style={{ background: "linear-gradient(160deg, #111C38 0%, #0D1526 100%)", border: "1px solid rgba(124,110,250,0.5)" }}
-    >
-      <div className="absolute inset-0 rounded-2xl pointer-events-none" style={{ boxShadow: "inset 0 0 0 1px rgba(124,110,250,0.3), 0 8px 32px rgba(124,110,250,0.2)" }} />
-      <div className="p-5 flex flex-col gap-3 flex-1">
-        <p className="text-[10px] font-bold text-[#7C6EFA] uppercase tracking-widest mb-1">{t('services.preview.title')}</p>
-        <div className="space-y-2">
-          {deliverables.map((d, i) => (
-            <div key={i} className="flex items-start gap-2">
-              <CheckCircle className="w-3.5 h-3.5 text-[#10B981] mt-0.5 shrink-0" />
-              <span className="text-xs text-[#C8D5F0] leading-snug">{d}</span>
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 mt-auto flex-wrap">
-          {s.humanReview && (
-            <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#7C6EFA]/15 text-[#7C6EFA] border border-[#7C6EFA]/25">
-              <Shield className="w-3 h-3" /> {t('services.preview.humanReviewed')}
-            </span>
-          )}
-          {s.serviceFlow === "fixed_price" && (
-            <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/25">
-              <BadgeCheck className="w-3 h-3" /> {t('services.preview.commercial')}
-            </span>
-          )}
-        </div>
-      </div>
-      <div className="p-4 pt-0">
-        <Link
-          href={`/services/${s.id}`}
-          onClick={() => onView(s.id)}
-          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-semibold transition-all duration-150"
-          style={{ background: "linear-gradient(135deg, #7C6EFA 0%, #5F52D0 100%)", color: "#fff" }}
-        >
-          {t('services.preview.viewDetail')}
-          <ArrowRight className="w-3.5 h-3.5" />
-        </Link>
-      </div>
-    </motion.div>
-  );
-}
 
 // ── Service Card ──────────────────────────────────────────────────────────────
 
@@ -225,35 +167,24 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
   const badge = serviceBadge(s);
   const rating = mockRating(s.id);
   const completed = mockCompleted(s.id);
-  const [hovered, setHovered] = useState(false);
   const CategoryIcon = getCategoryIcon({ id: s.categoryId, name: s.serviceCode, code: s.serviceCode } as ServiceCategory);
 
   return (
     <motion.div
       variants={cardVariant}
       className="group relative rounded-2xl cursor-pointer overflow-hidden"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{ minHeight: 260 }}
+      style={{ minHeight: 240 }}
     >
-      {/* Gradient border glow on hover */}
-      <div
-        className="absolute inset-0 rounded-2xl transition-opacity duration-300 pointer-events-none z-0"
-        style={{
-          background: "linear-gradient(135deg, rgba(124,110,250,0.5) 0%, rgba(34,211,238,0.3) 100%)",
-          opacity: hovered ? 1 : 0,
-          padding: 1,
-        }}
-      />
-
-      <div className="relative z-[1] bg-[#0D1526] rounded-2xl p-5 flex flex-col gap-4 h-full"
-           style={{ border: hovered ? "1px solid transparent" : "1px solid #2E4270", boxShadow: hovered ? "0 8px 32px rgba(124,110,250,0.2)" : "none" }}>
+      <div className="relative bg-[#0D1526] rounded-2xl p-5 flex flex-col gap-4 h-full transition-all duration-200 group-hover:shadow-[0_8px_32px_rgba(124,110,250,0.18)] group-hover:-translate-y-0.5"
+           style={{ border: "1px solid #2E4270" }}
+           onMouseEnter={(e) => (e.currentTarget.style.borderColor = "rgba(124,110,250,0.5)")}
+           onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#2E4270")}>
 
         {/* Top row: icon + category + badge */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
             <motion.div
-              animate={{ scale: hovered ? 1.1 : 1, rotate: hovered ? 5 : 0 }}
+              whileHover={{ scale: 1.1, rotate: 5 }}
               transition={{ duration: 0.2 }}
               className="w-11 h-11 rounded-xl border border-[#7C6EFA]/20 flex items-center justify-center shrink-0"
               style={{ background: "linear-gradient(135deg, rgba(124,110,250,0.2) 0%, rgba(34,211,238,0.1) 100%)" }}
@@ -276,8 +207,8 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
         {/* Name + description */}
         <div className="flex-1">
           <h3
-            className="font-semibold text-base mb-1.5 leading-snug transition-colors duration-200"
-            style={{ color: hovered ? "#7C6EFA" : "#F0F4FF", fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            className="font-semibold text-base mb-1.5 leading-snug transition-colors duration-200 group-hover:text-[#7C6EFA]"
+            style={{ color: "#F0F4FF", fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
             {s.serviceName}
           </h3>
@@ -326,14 +257,6 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
         </div>
       </div>
 
-      {/* Quick preview overlay — desktop only */}
-      <AnimatePresence>
-        {hovered && (
-          <div className="hidden md:block absolute inset-0 z-20">
-            <QuickPreview s={s} onView={onView} />
-          </div>
-        )}
-      </AnimatePresence>
     </motion.div>
   );
 }
@@ -370,183 +293,6 @@ function countActiveFilters(f: Filters): number {
   if (f.minRating > 0) n++;
   if (f.flow) n++;
   return n;
-}
-
-function AccordionSection({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between py-1 mb-2 group"
-        aria-expanded={open}
-      >
-        <p className="text-xs font-semibold text-[#8B9BC4] uppercase tracking-wider group-hover:text-[#F0F4FF] transition-colors">
-          {title}
-        </p>
-        {open ? <ChevronUp className="w-3.5 h-3.5 text-[#8B9BC4]" /> : <ChevronDown className="w-3.5 h-3.5 text-[#8B9BC4]" />}
-      </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            {children}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function RadioOption({ label, checked, onClick }: { label: string; checked: boolean; onClick: () => void }) {
-  return (
-    <label className="flex items-center gap-2.5 cursor-pointer group py-0.5" onClick={onClick}>
-      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors
-        ${checked ? "border-[#7C6EFA] bg-[#7C6EFA]" : "border-[#2E4270] group-hover:border-[#7C6EFA]/60"}`}>
-        {checked && <div className="w-1.5 h-1.5 rounded-full bg-[#F0F4FF]" />}
-      </div>
-      <span className="text-sm text-[#8B9BC4] group-hover:text-[#F0F4FF] transition-colors">{label}</span>
-    </label>
-  );
-}
-
-function FilterSidebar({
-  filters, onChange, onReset, open, onClose,
-}: {
-  filters: Filters;
-  onChange: (f: Filters) => void;
-  onReset: () => void;
-  open: boolean;
-  onClose: () => void;
-}) {
-  const { t } = useTranslation();
-  const set = <K extends keyof Filters>(k: K, v: Filters[K]) => onChange({ ...filters, [k]: v });
-  const activeCount = countActiveFilters(filters);
-
-  return (
-    <>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/60 z-30 lg:hidden"
-          onClick={onClose}
-        />
-      )}
-
-      <aside className={`
-        fixed top-0 left-0 h-full z-40 w-72 bg-[#0A1225] border-r border-[#2E4270] overflow-y-auto
-        transition-transform duration-300 ease-out
-        ${open ? "translate-x-0" : "-translate-x-full"}
-        lg:static lg:translate-x-0 lg:h-auto lg:w-64 lg:border lg:border-[#2E4270] lg:rounded-2xl lg:bg-[#0D1526] lg:shrink-0 lg:sticky lg:top-[120px]
-      `}>
-        <div className="p-5 space-y-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="w-4 h-4 text-[#7C6EFA]" />
-              <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-semibold text-sm text-[#F0F4FF]">{t('services.filter.title')}</h3>
-              {activeCount > 0 && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#7C6EFA] text-white min-w-[18px] text-center">
-                  {activeCount}
-                </span>
-              )}
-            </div>
-            <button onClick={onClose} className="lg:hidden text-[#8B9BC4] hover:text-[#F0F4FF] transition-colors" aria-label="Close filters">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            <AccordionSection title={t('services.filter.price')}>
-              <div className="space-y-1 mb-2">
-                {[
-                  { label: t('services.filter.anyPrice'), val: 999_999_999 },
-                  { label: "Under $500", val: 500 },
-                  { label: "Under $1,000", val: 1000 },
-                  { label: "Under $5,000", val: 5000 },
-                ].map((o) => (
-                  <RadioOption key={o.val} label={o.label} checked={filters.maxPrice === o.val} onClick={() => set("maxPrice", o.val)} />
-                ))}
-              </div>
-            </AccordionSection>
-
-            <div className="h-px bg-[#243352]" />
-
-            <AccordionSection title={t('services.filter.delivery')}>
-              <div className="space-y-1 mb-2">
-                {[
-                  { label: t('services.filter.anyDelivery'), val: 30 },
-                  { label: t('services.filter.sameDay'), val: 2 },
-                  { label: t('services.filter.upTo5'), val: 5 },
-                  { label: t('services.filter.upTo14'), val: 14 },
-                ].map((o) => (
-                  <RadioOption key={o.val} label={o.label} checked={filters.maxDelivery === o.val} onClick={() => set("maxDelivery", o.val)} />
-                ))}
-              </div>
-            </AccordionSection>
-
-            <div className="h-px bg-[#243352]" />
-
-            <AccordionSection title={t('services.filter.humanReview')}>
-              <div className="space-y-1 mb-2">
-                {[
-                  { label: t('services.filter.any'), val: null },
-                  { label: t('services.filter.included'), val: true },
-                  { label: t('services.filter.aiOnly'), val: false },
-                ].map((o) => (
-                  <RadioOption key={String(o.val)} label={o.label} checked={filters.humanReview === o.val} onClick={() => set("humanReview", o.val)} />
-                ))}
-              </div>
-            </AccordionSection>
-
-            <div className="h-px bg-[#243352]" />
-
-            <AccordionSection title={t('services.filter.rating')}>
-              <div className="space-y-1 mb-2">
-                {[
-                  { label: t('services.filter.anyRating'), val: 0 },
-                  { label: t('services.filter.above40'), val: 4.0 },
-                  { label: t('services.filter.above45'), val: 4.5 },
-                ].map((o) => (
-                  <RadioOption key={o.val} label={o.label} checked={filters.minRating === o.val} onClick={() => set("minRating", o.val)} />
-                ))}
-              </div>
-            </AccordionSection>
-
-            <div className="h-px bg-[#243352]" />
-
-            <AccordionSection title={t('services.filter.commercial')} defaultOpen={false}>
-              <div className="space-y-1 mb-2">
-                {[
-                  { label: t('services.filter.all'), val: "" },
-                  { label: t('services.filter.fixedPrice'), val: "fixed_price" },
-                  { label: t('services.filter.customProject'), val: "custom_project" },
-                  { label: "Enterprise", val: "enterprise" },
-                ].map((o) => (
-                  <RadioOption key={o.val} label={o.label} checked={filters.flow === o.val} onClick={() => set("flow", o.val)} />
-                ))}
-              </div>
-            </AccordionSection>
-          </div>
-
-          {activeCount > 0 && (
-            <button
-              onClick={onReset}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-[#2E4270] text-sm text-[#8B9BC4] hover:text-[#F0F4FF] hover:border-[#7C6EFA] transition-all duration-150"
-              aria-label="Reset semua filter"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              {t('services.filter.clearFilters', { count: activeCount })}
-            </button>
-          )}
-        </div>
-      </aside>
-    </>
-  );
 }
 
 // ── Search Dropdown ───────────────────────────────────────────────────────────
@@ -726,7 +472,6 @@ export default function ServicesPage() {
   const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
   const [sort, setSort] = useState<SortKey>("popular");
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -1350,71 +1095,47 @@ export default function ServicesPage() {
             </section>
           )}
 
-          {/* ── Main grid: sidebar + cards ───────────────────────────────── */}
-          <div className="flex gap-8 items-start">
-            <FilterSidebar
-              filters={filters}
-              onChange={setFilters}
-              onReset={resetAll}
-              open={sidebarOpen}
-              onClose={() => setSidebarOpen(false)}
-            />
-
-            <div className="flex-1 min-w-0">
+          {/* ── Main grid ───────────────────────────────────────────────── */}
+          <div>
+            <div className="min-w-0">
               {/* Toolbar */}
               <div className="flex items-center gap-3 mb-6 flex-wrap">
-                {/* Mobile filter toggle */}
-                <button
-                  onClick={() => setSidebarOpen(true)}
-                  className="lg:hidden flex items-center gap-2 px-4 py-2 rounded-xl border border-[#2E4270] text-sm font-medium text-[#F0F4FF] hover:border-[#7C6EFA]/40 transition-colors bg-[#0D1526] relative"
-                  aria-label="Buka filter"
-                >
-                  <Filter className="w-4 h-4" />
-                  {t('services.filter.title')}
-                  {activeFilterCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[#7C6EFA] text-[10px] font-bold text-white flex items-center justify-center">
-                      {activeFilterCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* Active filter badges */}
-                {activeFilterCount > 0 && (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {filters.maxPrice < 999_999_999 && (
-                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#7C6EFA]/10 border border-[#7C6EFA]/30 text-[11px] text-[#7C6EFA]">
-                        {t('services.filter.price')}
-                        <button onClick={() => setFilters(f => ({ ...f, maxPrice: DEFAULT_FILTERS.maxPrice }))} className="hover:text-white ml-0.5" aria-label="Remove price filter"><X className="w-2.5 h-2.5" /></button>
-                      </span>
-                    )}
-                    {filters.maxDelivery < 30 && (
-                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#22D3EE]/10 border border-[#22D3EE]/30 text-[11px] text-[#22D3EE]">
-                        {t('services.filter.delivery')}
-                        <button onClick={() => setFilters(f => ({ ...f, maxDelivery: DEFAULT_FILTERS.maxDelivery }))} className="hover:text-white ml-0.5" aria-label="Remove delivery filter"><X className="w-2.5 h-2.5" /></button>
-                      </span>
-                    )}
-                    {filters.humanReview !== null && (
-                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#10B981]/10 border border-[#10B981]/30 text-[11px] text-[#10B981]">
-                        {t('services.filter.humanReview')}
-                        <button onClick={() => setFilters(f => ({ ...f, humanReview: null }))} className="hover:text-white ml-0.5" aria-label="Remove human review filter"><X className="w-2.5 h-2.5" /></button>
-                      </span>
-                    )}
-                    {filters.flow && (
-                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#8B5CF6]/10 border border-[#8B5CF6]/30 text-[11px] text-[#8B5CF6]">
-                        {FLOW_LABELS[filters.flow] ?? filters.flow.replace(/_/g, " ")}
-                        <button onClick={() => setFilters(f => ({ ...f, flow: "" }))} className="hover:text-white ml-0.5" aria-label="Hapus filter tipe layanan"><X className="w-2.5 h-2.5" /></button>
-                      </span>
-                    )}
-                  </div>
-                )}
-
                 <p className="text-sm text-[#8B9BC4]">
                   <span className="font-semibold text-[#F0F4FF]">{filtered.length}</span> {t('services.servicesLabel')}
                   {(search || categoryId !== undefined) && ` ${t('services.foundLabel')}`}
                 </p>
 
+                <div className="ml-auto flex items-center gap-2">
+                  {/* Delivery filter pill */}
+                  <div className="relative">
+                    <select
+                      value={filters.maxDelivery}
+                      onChange={(e) => setFilters(f => ({ ...f, maxDelivery: Number(e.target.value) }))}
+                      aria-label="Filter pengiriman"
+                      className="appearance-none flex items-center gap-2 pl-3 pr-8 py-2 rounded-xl border border-[#2E4270] text-sm text-[#8B9BC4] bg-[#0D1526] hover:border-[#7C6EFA]/40 hover:text-[#F0F4FF] transition-colors cursor-pointer focus:outline-none focus:border-[#7C6EFA]/60"
+                    >
+                      <option value={30}>Semua Waktu</option>
+                      <option value={2}>Hari ini</option>
+                      <option value={5}>Maks 5 hari</option>
+                      <option value={14}>Maks 2 minggu</option>
+                    </select>
+                    <Clock className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8B9BC4] pointer-events-none" />
+                  </div>
+
+                  {/* Reset button — shown when any filter active */}
+                  {activeFilterCount > 0 && (
+                    <button
+                      onClick={resetAll}
+                      aria-label="Reset semua filter"
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#2E4270] text-xs text-[#8B9BC4] hover:text-[#F0F4FF] hover:border-[#7C6EFA]/40 transition-colors bg-[#0D1526]"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Reset
+                    </button>
+                  )}
+
                 {/* Sort dropdown */}
-                <div className="ml-auto relative">
+                <div className="relative">
                   <button
                     onClick={() => setSortOpen((v) => !v)}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl border border-[#2E4270] text-sm font-medium text-[#F0F4FF] hover:border-[#7C6EFA]/40 transition-colors bg-[#0D1526]"
@@ -1460,6 +1181,7 @@ export default function ServicesPage() {
                     )}
                   </AnimatePresence>
                 </div>
+              </div>
               </div>
 
               {/* Service grid */}

@@ -329,7 +329,7 @@ export default function ServiceDetailPage() {
   };
 
   // ── Scroll-tracking nav ──────────────────────────────────────────────────────
-  const sectionIds = ["overview", "deliverables", "packages", "preview", "reviews", "workflow", "live-preview", "faq", "related"];
+  const sectionIds = ["overview", "deliverables", "packages", "customize", "preview", "reviews", "workflow", "live-preview", "faq", "related"];
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -395,6 +395,7 @@ export default function ServiceDetailPage() {
     { id: "overview",     label: "Overview"    },
     { id: "deliverables", label: "Deliverables" },
     ...(hasPackages  ? [{ id: "packages",    label: "Packages"    }] : []),
+    { id: "customize",   label: "Add-ons"     },
     ...(hasPortfolio ? [{ id: "preview",     label: "Portfolio"   }] : []),
     ...(hasReviews   ? [{ id: "reviews",     label: "Reviews"     }] : []),
     { id: "workflow",     label: "How It Works" },
@@ -769,39 +770,23 @@ export default function ServiceDetailPage() {
               </section>
             )}
 
-            {/* Portfolio */}
-            {hasPortfolio && (
-              <section id="preview">
-                <SectionHead icon={Award} title="Portfolio & Sample Output" />
-                <PortfolioGallery portfolios={showcase.portfolios} />
-              </section>
-            )}
-
-            {/* Reviews */}
-            {hasReviews && (
-              <section id="reviews">
-                <SectionHead icon={Star} title="Client Reviews" />
-                <PortfolioReviews reviews={showcase!.reviews!} avgRating={showcase!.stats.avgRating} />
-              </section>
-            )}
-
-            {/* Customize */}
+            {/* ── Add-ons & Customization ── shown right after package pick */}
             <section id="customize">
-              <SectionHead icon={Settings2} title="Customize Your Order" />
-              <div className="rounded-2xl p-6 space-y-6" style={{ border: "1px solid rgba(46,66,112,0.5)", background: "rgba(13,21,38,0.6)" }}>
+              <SectionHead icon={Settings2} title="Add-ons & Customization" />
+              <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(46,66,112,0.5)", background: "rgba(13,21,38,0.6)" }}>
 
-                {/* Delivery speed — segmented control */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-[#8B9BC4] uppercase tracking-wider flex items-center gap-1.5">
+                {/* Delivery speed */}
+                <div className="p-5 border-b" style={{ borderColor: "rgba(46,66,112,0.4)" }}>
+                  <p className="text-xs font-bold text-[#8B9BC4] uppercase tracking-wider mb-3 flex items-center gap-1.5">
                     <Zap className="w-3.5 h-3.5 text-cyan" />
-                    Delivery Speed
-                  </label>
+                    Kecepatan Pengiriman
+                  </p>
                   <div className="flex flex-wrap gap-2" role="group" aria-label="Delivery speed options">
                     {[
-                      { value: "", label: `Standard (${service.estimatedDelivery})`, addl: "" },
-                      { value: "48h",      label: "Rush 48h",   addl: "+fee" },
-                      { value: "24h",      label: "Rush 24h",   addl: "+fee" },
-                      { value: "same_day", label: "Same Day",   addl: "+fee" },
+                      { value: "",         label: `Standar (${service.estimatedDelivery})`, addl: "" },
+                      { value: "48h",      label: "Rush 48 Jam",  addl: "+biaya" },
+                      { value: "24h",      label: "Rush 24 Jam",  addl: "+biaya" },
+                      { value: "same_day", label: "Hari Sama",    addl: "+biaya" },
                     ].map((opt) => {
                       const active = (selections.rushSpeed ?? "") === opt.value;
                       return (
@@ -824,111 +809,112 @@ export default function ServiceDetailPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  {/* Quantity */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-[#8B9BC4] uppercase tracking-wider flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-violet" />
-                      Quantity
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <button
-                        aria-label="Decrease quantity"
-                        onClick={() => runQuote({ ...selections, quantity: Math.max(1, (selections.quantity ?? 1) - 1) })}
-                        className="w-9 h-9 rounded-lg border border-border/60 flex items-center justify-center text-[#8B9BC4] hover:border-violet/40 hover:text-[#F0F4FF] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet/50"
-                      >−</button>
-                      <input
-                        type="number"
-                        min={1}
-                        className="input-field flex-1 text-center"
-                        value={selections.quantity ?? 1}
-                        onChange={(e) => runQuote({ ...selections, quantity: Math.max(1, Number(e.target.value) || 1) })}
-                        aria-label="Quantity"
-                      />
-                      <button
-                        aria-label="Increase quantity"
-                        onClick={() => runQuote({ ...selections, quantity: (selections.quantity ?? 1) + 1 })}
-                        className="w-9 h-9 rounded-lg border border-border/60 flex items-center justify-center text-[#8B9BC4] hover:border-violet/40 hover:text-[#F0F4FF] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet/50"
-                      >+</button>
-                    </div>
-                  </div>
+                {/* Optional add-ons — checkbox list */}
+                <div className="p-5 space-y-2.5">
+                  <p className="text-xs font-bold text-[#8B9BC4] uppercase tracking-wider mb-3">
+                    Pilih Add-on Opsional
+                  </p>
+                  {(
+                    [
+                      ["humanReviewRequested", "Human Review",          Shield,    "text-violet",     "Pakar manusia meninjau output akhir untuk kualitas & kesesuaian merek.",          ""],
+                      ["bilingual",            "Pengiriman Bilingual",  LayoutGrid,"text-cyan",       "Terima semua copy & materi dalam dua bahasa.",                                   ""],
+                      ["editableSourceFile",   "File Sumber Editable",  Settings2, "text-gold",       "Dapatkan file asli yang bisa diedit (AI, PSD, Figma, dll.).",                    ""],
+                      ["extendedUsageRights",  "Hak Penggunaan Luas",   Award,     "text-emerald-400","Lisensi komersial penuh untuk saluran media tak terbatas.",                       ""],
+                      ["extraRevisions",       "Revisi Tambahan (×1)",  RefreshCw, "text-[#FB923C]",  "Tambahkan satu putaran revisi ekstra di atas jumlah revisi paket Anda.",          "revisions"],
+                    ] as const
+                  ).map(([key, label, Icon, iconCls, tooltip, special]) => {
+                    const isRevisions = special === "revisions";
+                    const checked = isRevisions
+                      ? (selections.extraRevisions ?? 0) > 0
+                      : !!(selections as Record<string, unknown>)[key];
+                    return (
+                      <label
+                        key={key}
+                        title={tooltip}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all duration-150 focus-within:ring-2 focus-within:ring-violet/50 ${
+                          checked
+                            ? "border-violet/40 bg-violet/[0.07]"
+                            : "border-[rgba(46,66,112,0.5)] hover:border-violet/30 hover:bg-white/[0.015]"
+                        }`}
+                      >
+                        {/* Checkbox visual */}
+                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all duration-150 ${
+                          checked ? "border-violet bg-violet shadow-[0_0_8px_rgba(124,110,250,0.4)]" : "border-[#3A5080]"
+                        }`}>
+                          {checked && <Check className="w-3 h-3 text-white" />}
+                        </div>
 
-                  {/* Extra revisions */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-[#8B9BC4] uppercase tracking-wider flex items-center gap-1.5">
-                      <RefreshCw className="w-3.5 h-3.5 text-gold" />
-                      Extra Revisions
-                      <span className="text-[10px] text-[#8B9BC4] normal-case font-normal">(+fee each)</span>
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <button
-                        aria-label="Decrease revisions"
-                        onClick={() => runQuote({ ...selections, extraRevisions: Math.max(0, (selections.extraRevisions ?? 0) - 1) })}
-                        className="w-9 h-9 rounded-lg border border-border/60 flex items-center justify-center text-[#8B9BC4] hover:border-violet/40 hover:text-[#F0F4FF] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet/50"
-                      >−</button>
-                      <input
-                        type="number"
-                        min={0}
-                        className="input-field flex-1 text-center"
-                        value={selections.extraRevisions ?? 0}
-                        onChange={(e) => runQuote({ ...selections, extraRevisions: Math.max(0, Number(e.target.value) || 0) })}
-                        aria-label="Extra revisions"
-                      />
-                      <button
-                        aria-label="Increase revisions"
-                        onClick={() => runQuote({ ...selections, extraRevisions: (selections.extraRevisions ?? 0) + 1 })}
-                        className="w-9 h-9 rounded-lg border border-border/60 flex items-center justify-center text-[#8B9BC4] hover:border-violet/40 hover:text-[#F0F4FF] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet/50"
-                      >+</button>
-                    </div>
-                  </div>
+                        {/* Icon */}
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                          checked ? "bg-gradient-primary" : "bg-[#131E35]"
+                        }`}>
+                          <Icon className={`w-3.5 h-3.5 ${checked ? "text-white" : iconCls}`} />
+                        </div>
+
+                        {/* Label & description */}
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-sm font-semibold transition-colors ${checked ? "text-[#F0F4FF]" : "text-[#A8B8D8]"}`}>{label}</span>
+                          <p className="text-[11px] text-[#6B7FA3] mt-0.5 leading-snug">{tooltip}</p>
+                        </div>
+
+                        {/* Price hint */}
+                        <span className="text-[11px] text-[#8B9BC4] shrink-0">+biaya</span>
+
+                        <input
+                          type="checkbox"
+                          className="sr-only"
+                          checked={checked}
+                          onChange={(e) => {
+                            if (isRevisions) {
+                              runQuote({ ...selections, extraRevisions: e.target.checked ? 1 : 0 });
+                            } else {
+                              runQuote({ ...selections, [key]: e.target.checked });
+                            }
+                          }}
+                        />
+                      </label>
+                    );
+                  })}
                 </div>
 
-                {/* Add-ons */}
-                <div className="border-t pt-5" style={{ borderColor: "rgba(46,66,112,0.4)" }}>
-                  <p className="text-xs font-bold text-[#8B9BC4] uppercase tracking-wider mb-4">Add-ons</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {(
-                      [
-                        ["humanReviewRequested", "Human review add-on",   Shield,    "text-violet",   "Expert human reviews your final output for quality and brand fit."],
-                        ["bilingual",            "Bilingual delivery",    LayoutGrid,"text-cyan",      "Receive all copy and materials in two languages."],
-                        ["editableSourceFile",   "Editable source files", Settings2, "text-gold",      "Get the original editable files (AI, PSD, Figma, etc.)."],
-                        ["extendedUsageRights",  "Extended usage rights", Award,     "text-emerald-400","Full commercial license for unlimited media channels."],
-                      ] as const
-                    ).map(([key, label, Icon, iconCls, tooltip]) => {
-                      const checked = !!(selections as Record<string, unknown>)[key];
-                      return (
-                        <label
-                          key={key}
-                          title={tooltip}
-                          className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all focus-within:ring-2 focus-within:ring-violet/50 ${
-                            checked
-                              ? "border-violet/40 bg-violet/5"
-                              : "border-border/60 hover:border-violet/25 hover:bg-white/[0.01]"
-                          }`}
-                        >
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${checked ? "bg-gradient-primary" : "bg-surface-2 border border-border"}`}>
-                            <Icon className={`w-4 h-4 ${checked ? "text-white" : iconCls}`} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <span className="text-sm font-medium text-[#F0F4FF]">{label}</span>
-                            <p className="text-[11px] text-[#8B9BC4] mt-0.5 leading-snug">{tooltip}</p>
-                          </div>
-                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors ${checked ? "border-violet bg-violet" : "border-border"}`}>
-                            {checked && <Check className="w-3 h-3 text-white" />}
-                          </div>
-                          <input
-                            type="checkbox"
-                            className="sr-only"
-                            checked={checked}
-                            onChange={(e) => runQuote({ ...selections, [key]: e.target.checked })}
-                          />
-                        </label>
-                      );
-                    })}
+                {/* Quantity — compact row at the bottom */}
+                <div className="px-5 pb-5 pt-1 border-t flex items-center justify-between gap-4" style={{ borderColor: "rgba(46,66,112,0.4)" }}>
+                  <label className="text-xs font-bold text-[#8B9BC4] uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-violet" />
+                    Jumlah
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      aria-label="Kurangi jumlah"
+                      onClick={() => runQuote({ ...selections, quantity: Math.max(1, (selections.quantity ?? 1) - 1) })}
+                      className="w-8 h-8 rounded-lg border border-border/60 flex items-center justify-center text-[#8B9BC4] hover:border-violet/40 hover:text-[#F0F4FF] transition-colors"
+                    >−</button>
+                    <span className="w-8 text-center text-sm font-semibold text-[#F0F4FF]">{selections.quantity ?? 1}</span>
+                    <button
+                      aria-label="Tambah jumlah"
+                      onClick={() => runQuote({ ...selections, quantity: (selections.quantity ?? 1) + 1 })}
+                      className="w-8 h-8 rounded-lg border border-border/60 flex items-center justify-center text-[#8B9BC4] hover:border-violet/40 hover:text-[#F0F4FF] transition-colors"
+                    >+</button>
                   </div>
                 </div>
               </div>
             </section>
+
+            {/* Portfolio */}
+            {hasPortfolio && (
+              <section id="preview">
+                <SectionHead icon={Award} title="Portfolio & Sample Output" />
+                <PortfolioGallery portfolios={showcase.portfolios} />
+              </section>
+            )}
+
+            {/* Reviews */}
+            {hasReviews && (
+              <section id="reviews">
+                <SectionHead icon={Star} title="Client Reviews" />
+                <PortfolioReviews reviews={showcase!.reviews!} avgRating={showcase!.stats.avgRating} />
+              </section>
+            )}
 
             {/* How It Works */}
             <section id="workflow">
