@@ -18,6 +18,7 @@
 import { Link, useParams } from "wouter";
 import { Layout } from "@/components/layout";
 import { useCollectionDetail } from "@/hooks/use-discovery";
+import { useTrackCollectionOpened } from "@/hooks/use-discovery-analytics";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, Clock, LayoutGrid, Layers, RefreshCw, AlertTriangle,
@@ -133,6 +134,8 @@ export default function CollectionDetailPage() {
   const slug = params.slug;
 
   const { data, isLoading, isError, error, refetch } = useCollectionDetail(slug);
+  // ── Analytics ─────────────────────────────────────────────────────────────
+  useTrackCollectionOpened(slug);
 
   // 404
   if (!isLoading && !isError && data === null) {

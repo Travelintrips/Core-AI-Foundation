@@ -19,6 +19,7 @@
 import { Link, useParams, useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import { useGoalDetail } from "@/hooks/use-discovery";
+import { useTrackGoalOpened, useTrackGoalServicesLoaded } from "@/hooks/use-discovery-analytics";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, RefreshCw, Clock, LayoutGrid, Star, AlertTriangle,
@@ -159,6 +160,9 @@ export default function GoalDetailPage() {
   const slug = params.slug;
 
   const { data: goal, isLoading, isError, error, refetch } = useGoalDetail(slug);
+  // ── Analytics ─────────────────────────────────────────────────────────────
+  useTrackGoalOpened(slug);
+  useTrackGoalServicesLoaded(slug, !isLoading, goal?.services.length === 0, isError);
 
   // 404 redirect
   if (!isLoading && !isError && goal === null) {

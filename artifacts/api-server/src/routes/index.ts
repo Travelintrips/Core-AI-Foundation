@@ -75,6 +75,8 @@ import designTemplatesAiAssistRouter from "./design-templates-ai-assist";
 import creativeMarketplaceRouter from "./creative-marketplace";
 import cargoRatesRouter from "./cargo-rates";
 import serviceNormalizationRouter from "./service-normalization.js";
+// ── Team 05: Discovery Analytics & Feature Flags ──────────────────────────
+import discoveryAnalyticsRouter from "./discoveryAnalytics.js";
 
 // ── Team 01: Creative Workflow V2 ──────────────────────────────────────────
 import { creativeWorkflowV2Router, creativeWorkflowPublicRouter } from "./creative-workflow-v2/index.js";
@@ -250,5 +252,7 @@ router.use(customsRouter);
 router.use(cargoRatesRouter);
 // ── Team 04: Service Normalization & Solution Collections ─────────────────────
 router.use(serviceNormalizationRouter);
+// ── Team 05: Discovery Analytics & Feature Flags ──────────────────────────────
+router.use(discoveryAnalyticsRouter);
 
 export default router;

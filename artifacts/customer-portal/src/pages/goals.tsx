@@ -11,6 +11,7 @@
 import { Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { useGoals } from "@/hooks/use-discovery";
+import { useTrackGoalDiscoveryViewed } from "@/hooks/use-discovery-analytics";
 import { GoalCard, GoalCardSkeleton } from "@/components/goal-card";
 import { motion } from "framer-motion";
 import { Sparkles, ArrowRight, LayoutGrid, RefreshCw, AlertTriangle } from "lucide-react";
@@ -26,6 +27,8 @@ const fadeUp = {
 
 export default function GoalsPage() {
   const { data: goals, isLoading, isError, error, refetch } = useGoals();
+  // ── Analytics — fires once when the goal discovery section mounts ──────────
+  useTrackGoalDiscoveryViewed(true);
 
   return (
     <Layout>

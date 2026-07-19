@@ -11,6 +11,7 @@
 import { Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { useCollections } from "@/hooks/use-discovery";
+import { useTrackMarketplaceViewed } from "@/hooks/use-discovery-analytics";
 import { CollectionCard, CollectionCardSkeleton } from "@/components/collection-card";
 import { motion } from "framer-motion";
 import { Layers, ArrowRight, LayoutGrid, RefreshCw, AlertTriangle } from "lucide-react";
@@ -22,6 +23,8 @@ const fadeUp = {
 
 export default function CollectionsPage() {
   const { data: collections, isLoading, isError, error, refetch } = useCollections();
+  // ── Analytics — collections list is a marketplace discovery surface ────────
+  useTrackMarketplaceViewed();
 
   return (
     <Layout>

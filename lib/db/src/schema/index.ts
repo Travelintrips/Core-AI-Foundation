@@ -90,3 +90,4 @@ export * from "./ai-template-knowledge";
 export * from "./creative-render-sessions";
 export * from "./ai-goals";
 export * from "./ai-service-normalization";
+export * from "./ai-discovery-analytics";
