@@ -1,0 +1,481 @@
+Saya ingin melakukan refactor menyeluruh terhadap aplikasi ini dengan fokus pada UX, UI, struktur layanan, dan kemudahan penggunaan.
+
+Jangan hanya memberikan rekomendasi. Lakukan audit terhadap seluruh project, identifikasi masalah UX/UI, kemudian implementasikan refactor langsung pada kode tanpa merusak fitur yang sudah berjalan.
+
+==================================================
+TUJUAN UTAMA
+==================================================
+
+Aplikasi saat ini memiliki terlalu banyak pilihan layanan yang ditampilkan pada halaman utama sehingga membingungkan pengguna.
+
+Contohnya pada halaman Creative AI terdapat layanan seperti:
+
+- Interior Client Proposal
+- Interior Concept & Mood
+- Fashion Visual Campaign
+- Fashion Brand Strategy
+- Fashion Campaign Copy
+
+Semua ditampilkan sebagai layanan terpisah, padahal sebenarnya masih berada dalam kategori yang sama.
+
+Bagi pengguna baru, ini membuat proses memilih layanan menjadi sulit.
+
+Saya ingin mengubah pengalaman pengguna agar jauh lebih sederhana.
+
+==================================================
+KONSEP BARU
+==================================================
+
+Halaman utama hanya menampilkan SATU layanan utama untuk setiap kategori.
+
+Contohnya:
+
+• Logo Design
+• Interior Design
+• Fashion Campaign
+• Presentation Design
+• Business Proposal
+• Social Media Design
+• Website Design
+• Copywriting
+
+Setiap kartu hanya berisi:
+
+- Nama layanan
+- Deskripsi singkat
+- Harga mulai
+- Rating
+- Estimasi pengerjaan
+- Tombol Lihat Detail
+
+Jangan lagi membuat banyak kartu hanya karena memiliki fitur yang berbeda.
+
+==================================================
+HALAMAN DETAIL LAYANAN
+==================================================
+
+Setelah user membuka detail layanan, baru tampilkan seluruh konfigurasi.
+
+Gunakan konsep:
+
+BASE PACKAGE + OPTIONAL ADD-ONS
+
+Contoh:
+
+Interior Design
+
+Paket Dasar
+Rp850.000
+
+Sudah termasuk:
+
+✔ Interior Concept
+✔ AI Consultation
+✔ 1x Revisi
+
+---------------------------------
+
+Tambahkan kebutuhan Anda
+
+☐ Mood Board
++Rp250.000
+
+☐ Client Proposal PDF
++Rp300.000
+
+☐ Material Recommendation
++Rp200.000
+
+☐ 3D Mockup
++Rp500.000
+
+☐ Human Expert Review
++Rp150.000
+
+☐ Priority Delivery
++Rp100.000
+
+---------------------------------
+
+Ringkasan
+
+Paket Dasar
+
+Rp850.000
+
+Mood Board
+
+Rp250.000
+
+3D Mockup
+
+Rp500.000
+
+----------------------------
+
+TOTAL
+
+Rp1.600.000
+
+==================================================
+ATURAN ADD-ON
+==================================================
+
+Semua fitur tambahan harus menggunakan checkbox.
+
+Saat checkbox dicentang:
+
+- Total harga berubah otomatis
+- Ringkasan ikut berubah
+- Tidak reload halaman
+- Mudah ditambah di masa depan
+
+Konsep ini berlaku untuk seluruh layanan.
+
+Contoh:
+
+Logo Design
+
+☐ Brand Guideline
+☐ Social Media Kit
+☐ Source File Premium
+☐ Human Review
+☐ Priority Delivery
+
+Fashion Campaign
+
+☐ Copywriting
+☐ Brand Strategy
+☐ Landing Page Copy
+☐ Human Review
+
+Presentation Design
+
+☐ Speaker Notes
+☐ Animation
+☐ Editable Template
+☐ Infographic
+☐ Human Review
+
+==================================================
+AUDIT SELURUH PROJECT
+==================================================
+
+Periksa seluruh aplikasi.
+
+Audit:
+
+- Landing Page
+- Homepage
+- Creative AI
+- Portfolio
+- Dashboard
+- Checkout
+- Detail Service
+- Login
+- Register
+- Navigation
+- Sidebar
+- Header
+- Footer
+- Filter
+- Search
+- Forms
+- Cards
+- Buttons
+- Pricing
+- Mobile Layout
+- Empty State
+- Loading State
+- Error State
+
+Cari seluruh bagian yang membingungkan user.
+
+==================================================
+TEMUKAN DAN PERBAIKI
+==================================================
+
+Cari jika ada:
+
+- Terlalu banyak pilihan
+- Fitur duplikat
+- Halaman yang terlalu padat
+- Banyak layanan yang sebenarnya satu kategori
+- Navigasi membingungkan
+- Tombol tidak jelas
+- Hierarchy visual buruk
+- CTA kurang terlihat
+- Informasi tidak sesuai isi
+- Thumbnail tidak sesuai layanan
+- Portfolio menggunakan foto stok padahal menjual desain logo
+- Istilah tidak konsisten
+- Harga membingungkan
+- Filter terlalu banyak
+- Form terlalu panjang
+- Alur checkout berbelit
+- Halaman yang dapat disederhanakan
+
+Jika ditemukan, langsung refactor.
+
+==================================================
+PRINSIP UX
+==================================================
+
+Gunakan prinsip:
+
+Progressive Disclosure
+
+User hanya melihat pilihan penting terlebih dahulu.
+
+Pilihan lanjutan muncul setelah user membuka detail.
+
+==================================================
+LAYANAN
+==================================================
+
+Jika beberapa layanan sebenarnya masih satu kategori:
+
+Gabungkan.
+
+Jangan buat banyak kartu.
+
+Gunakan:
+
+Base Package
+
++
+
+Optional Add-ons
+
+==================================================
+FORM
+==================================================
+
+Periksa seluruh form.
+
+Pastikan:
+
+- Tidak meminta data berlebihan
+- Label jelas
+- Placeholder membantu
+- Error message jelas
+- Input tidak hilang saat error
+- Tidak meminta informasi dua kali
+
+==================================================
+FILTER
+==================================================
+
+Periksa seluruh filter.
+
+Hapus filter yang:
+
+- Tidak berguna
+- Tidak mempengaruhi hasil
+- Terlalu teknis
+- Duplikat
+
+Tambahkan tombol:
+
+Reset Filter
+
+==================================================
+NAVIGASI
+==================================================
+
+Periksa:
+
+Header
+
+Sidebar
+
+Breadcrumb
+
+Back Button
+
+CTA
+
+Logo
+
+Pastikan user selalu tahu sedang berada dimana.
+
+==================================================
+PORTFOLIO
+==================================================
+
+Periksa Portfolio.
+
+Jika layanan adalah Logo Design:
+
+Thumbnail harus mockup logo.
+
+Jangan hanya menggunakan foto kopi, butik, rumah, atau foto stok.
+
+Pastikan isi portfolio sesuai layanan yang dijual.
+
+==================================================
+DESAIN
+==================================================
+
+Pertahankan:
+
+Dark Theme
+
+Purple Accent
+
+Modern Style
+
+Premium Feel
+
+Namun rapikan:
+
+Spacing
+
+Alignment
+
+Typography
+
+Hierarchy
+
+Card Layout
+
+Button
+
+Hover
+
+Animation
+
+==================================================
+RESPONSIVE
+==================================================
+
+Periksa:
+
+Desktop
+
+Tablet
+
+Mobile
+
+Pastikan:
+
+Tidak ada overflow.
+
+Tidak ada text terpotong.
+
+Button mudah ditekan.
+
+==================================================
+AKSESIBILITAS
+==================================================
+
+Periksa:
+
+Contrast
+
+Keyboard Navigation
+
+Focus State
+
+Alt Image
+
+Label Input
+
+==================================================
+KOMPONEN
+==================================================
+
+Gunakan reusable component.
+
+Hindari membuat banyak versi komponen yang sama.
+
+Satukan:
+
+Service Card
+
+Button
+
+Badge
+
+Price Card
+
+Checkbox
+
+Modal
+
+Input
+
+Summary Card
+
+==================================================
+PERFORMA
+==================================================
+
+Cari:
+
+Render tidak perlu
+
+Komponen duplikat
+
+State berlebihan
+
+Import tidak dipakai
+
+Query berulang
+
+Optimalkan jika ditemukan.
+
+==================================================
+JANGAN MERUSAK FITUR
+==================================================
+
+Sebelum menghapus atau menggabungkan fitur:
+
+Periksa dependency.
+
+Pastikan:
+
+- Route tetap berjalan
+- API tetap berjalan
+- Database tetap kompatibel
+- Authentication tidak rusak
+- Checkout tetap berfungsi
+
+==================================================
+TESTING
+==================================================
+
+Setelah selesai refactor:
+
+Uji seluruh alur.
+
+- Browse layanan
+- Buka detail layanan
+- Tambah add-on
+- Hapus add-on
+- Total harga berubah
+- Isi brief
+- Checkout
+- Login
+- Register
+- Portfolio
+- Filter
+- Mobile View
+
+Perbaiki seluruh bug yang ditemukan.
+
+==================================================
+OUTPUT
+==================================================
+
+Setelah implementasi selesai, buat ringkasan berisi:
+
+1. Daftar halaman yang di-refactor.
+2. Masalah yang ditemukan.
+3. Perubahan yang dilakukan.
+4. Alasan UX di balik perubahan.
+5. File yang dimodifikasi.
+6. Daftar bug yang diperbaiki.
+7. Rekomendasi lanjutan jika masih ada area yang bisa ditingkatkan.
+
+Prioritas utama adalah membuat aplikasi menjadi jauh lebih sederhana, intuitif, profesional, dan mudah digunakan oleh pengguna baru, tanpa mengurangi kemampuan atau fitur yang sudah ada.
