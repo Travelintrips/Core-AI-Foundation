@@ -1,0 +1,110 @@
+CREATE V4.2 INTEGRATION BRANCH
+
+This is a Git branch setup task only.
+
+Do not implement features.
+Do not modify application code.
+Do not run migrations.
+Do not push main.
+Do not merge Team 3, Team 4, or Team 5 yet.
+
+Goal:
+
+Create the missing integration branch:
+
+integration/v4.2
+
+Base branch:
+
+origin/main
+
+==================================================
+PHASE 1 — INSPECT
+==================================================
+
+Run:
+
+git branch --show-current
+git status
+git fetch origin
+git log --oneline --decorate -5 origin/main
+git branch -a
+
+If the working tree is not clean:
+
+STOP and report all changes.
+
+Do not stash, delete, or overwrite unknown work.
+
+==================================================
+PHASE 2 — CREATE INTEGRATION BRANCH
+==================================================
+
+Create the branch from origin/main:
+
+git switch -c integration/v4.2 origin/main
+
+Verify:
+
+git branch --show-current
+git status
+git log --oneline --decorate -5
+
+The active branch must be exactly:
+
+integration/v4.2
+
+==================================================
+PHASE 3 — PUSH INTEGRATION BRANCH
+==================================================
+
+Push only:
+
+integration/v4.2
+
+Use Replit Git integration if terminal authentication fails.
+
+Do not push main.
+
+Do not merge any feature branch during this task.
+
+Verify remote tracking:
+
+git branch -vv
+
+Expected:
+
+integration/v4.2 tracks origin/integration/v4.2
+
+==================================================
+PHASE 4 — RESTORE PREVIOUS BRANCH
+==================================================
+
+After the integration branch exists remotely, switch back to:
+
+feature/04-service-normalization
+
+Do not modify its files.
+
+Verify:
+
+git branch --show-current
+git status
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. Base commit used
+2. Integration branch created
+3. Remote push status
+4. Remote tracking status
+5. Confirmation main was not pushed
+6. Confirmation no feature branch was merged
+7. Final active branch
+8. Confirmation no migration was run
+9. Confirmation no code was modified
+
+STOP after report.
