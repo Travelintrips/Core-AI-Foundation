@@ -2,7 +2,15 @@
  * Goal Detail Page — /goals/:slug — Team 03
  *
  * Shows a single business goal and the services available for it.
- * Uses existing service detail links — no new order/checkout flow.
+ * Uses existing service catalog links — no new order/checkout flow.
+ *
+ * SERVICE NAVIGATION CONTRACT GAP:
+ *   GET /api/ai/goals/:slug/services returns GoalServiceStub which has
+ *   serviceCode but NOT a numeric serviceId. The customer portal service
+ *   detail route /services/:id requires a numeric ID. Until Team 02/Team 04
+ *   extends GoalServiceStub with serviceId, the CTA links to
+ *   /services?q=<serviceCode> (catalog search) and is labelled
+ *   "Lihat layanan terkait" to accurately describe the behaviour.
  */
 
 import { Link, useParams, useLocation } from "wouter";
@@ -10,35 +18,32 @@ import { Layout } from "@/components/layout";
 import { useGoalDetail } from "@/hooks/use-goals";
 import { motion } from "framer-motion";
 import {
-  ArrowLeft, ArrowRight, RefreshCw, Clock, Zap, LayoutGrid,
+  ArrowLeft, ArrowRight, RefreshCw, Clock, LayoutGrid, Star,
 } from "lucide-react";
 import type { GoalService } from "@/lib/goalDiscoveryApi";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatPrice(value: string, currency: string) {
+function formatPrice(value: string | null, currency: string): string | null {
+  if (!value) return null;
   const n = Number(value);
   if (!n) return "Hubungi kami";
   if (currency === "IDR") return `Rp ${n.toLocaleString("id-ID")}`;
   return `$${n.toLocaleString()}`;
 }
 
-function flowLabel(flow: GoalService["serviceFlow"]) {
-  if (flow === "enterprise") return "Enterprise";
-  if (flow === "custom_project") return "Custom Project";
-  return "Fixed Price";
-}
-
-function flowStyle(flow: GoalService["serviceFlow"]): { text: string; border: string; bg: string } {
-  if (flow === "enterprise")    return { text: "#F59E0B", border: "rgba(245,158,11,0.3)",  bg: "rgba(245,158,11,0.08)" };
-  if (flow === "custom_project") return { text: "#22D3EE", border: "rgba(34,211,238,0.3)", bg: "rgba(34,211,238,0.08)" };
-  return                               { text: "#7C6EFA", border: "rgba(124,110,250,0.3)", bg: "rgba(124,110,250,0.08)" };
-}
-
 // ── Service card (goal context) ───────────────────────────────────────────────
+// Simplified: no serviceFlow badge (not in GoalServiceStub contract).
+// isPrimary is surfaced as a "Utama" badge.
 
 function GoalServiceCard({ service, index }: { service: GoalService; index: number }) {
-  const style = flowStyle(service.serviceFlow);
+  // Accent based on isPrimary and position
+  const isHighlighted = service.isPrimary;
+  const accentColor   = isHighlighted ? "#7C6EFA" : "#22D3EE";
+  const borderColor   = isHighlighted ? "rgba(124,110,250,0.35)" : "rgba(34,211,238,0.25)";
+  const bgGlow        = isHighlighted ? "rgba(124,110,250,0.08)" : "rgba(34,211,238,0.06)";
+
+  const priceDisplay = formatPrice(service.startingPrice, service.currency);
 
   return (
     <motion.div
@@ -51,23 +56,30 @@ function GoalServiceCard({ service, index }: { service: GoalService; index: numb
         border: "1px solid #2E4270",
       }}
       onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.borderColor = style.border;
-        (e.currentTarget as HTMLElement).style.boxShadow = `0 8px 28px ${style.bg}`;
+        (e.currentTarget as HTMLElement).style.borderColor = borderColor;
+        (e.currentTarget as HTMLElement).style.boxShadow  = `0 8px 28px ${bgGlow}`;
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLElement).style.borderColor = "#2E4270";
-        (e.currentTarget as HTMLElement).style.boxShadow = "none";
+        (e.currentTarget as HTMLElement).style.boxShadow  = "none";
       }}
     >
       {/* Top */}
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <span
-            className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold mb-2"
-            style={{ color: style.text, border: `1px solid ${style.border}`, background: style.bg }}
-          >
-            {flowLabel(service.serviceFlow)}
-          </span>
+        <div className="min-w-0 flex-1">
+          {service.isPrimary && (
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold mb-2"
+              style={{
+                color: "#F59E0B",
+                border: "1px solid rgba(245,158,11,0.3)",
+                background: "rgba(245,158,11,0.08)",
+              }}
+            >
+              <Star className="w-2.5 h-2.5" aria-hidden="true" />
+              Utama
+            </span>
+          )}
           <h3
             className="font-bold text-[#F0F4FF] text-sm leading-snug"
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
@@ -78,43 +90,59 @@ function GoalServiceCard({ service, index }: { service: GoalService; index: numb
       </div>
 
       {/* Description */}
-      <p className="text-sm text-[#8B9BC4] leading-relaxed flex-1">
-        {service.shortDescription}
-      </p>
+      {service.shortDescription && (
+        <p className="text-sm text-[#8B9BC4] leading-relaxed flex-1">
+          {service.shortDescription}
+        </p>
+      )}
 
       {/* Meta */}
-      <div className="flex items-center gap-4 text-xs text-[#8B9BC4]">
-        {service.estimatedDelivery && (
+      {service.estimatedDelivery && (
+        <div className="flex items-center gap-4 text-xs text-[#8B9BC4]">
           <span className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5 text-[#22D3EE]" aria-hidden="true" />
             {service.estimatedDelivery}
           </span>
-        )}
-        {service.serviceFlow === "fixed_price" && (
-          <span className="flex items-center gap-1">
-            <Zap className="w-3.5 h-3.5 text-[#F59E0B]" aria-hidden="true" />
-            Langsung pesan
-          </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="flex items-center justify-between pt-3 border-t border-[#243352]">
         <div>
-          <p className="text-[11px] text-[#8B9BC4] mb-0.5">Mulai dari</p>
-          <p className="font-bold text-sm text-[#F0F4FF]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            {formatPrice(service.startingPrice, service.currency)}
-          </p>
+          {priceDisplay ? (
+            <>
+              <p className="text-[11px] text-[#8B9BC4] mb-0.5">Mulai dari</p>
+              <p
+                className="font-bold text-sm text-[#F0F4FF]"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {priceDisplay}
+              </p>
+            </>
+          ) : (
+            <span className="text-xs text-[#8B9BC4]">Hubungi kami</span>
+          )}
         </div>
 
-        {/* Uses existing service detail route — no new flow */}
+        {/*
+          CTA: links to catalog search by serviceCode.
+          Label is "Lihat layanan terkait" (not "Lihat detail") because this
+          opens a search result page, not a specific detail page.
+          CONTRACT GAP: when Team 02/Team 04 adds serviceId to GoalServiceStub,
+          update this href to /services/${service.serviceId} and change label to
+          "Lihat detail".
+        */}
         <Link
-          href={`/services?q=${encodeURIComponent(service.serviceName)}`}
+          href={`/services?q=${encodeURIComponent(service.serviceCode)}`}
           className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl transition-all duration-150 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C6EFA]"
-          style={{ background: style.bg, color: style.text, border: `1px solid ${style.border}` }}
-          aria-label={`Lihat detail layanan ${service.serviceName}`}
+          style={{
+            background: bgGlow,
+            color: accentColor,
+            border: `1px solid ${borderColor}`,
+          }}
+          aria-label={`Lihat layanan terkait untuk ${service.serviceName}`}
         >
-          Lihat detail
+          Lihat layanan terkait
           <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
         </Link>
       </div>
@@ -156,14 +184,17 @@ export default function GoalDetailPage() {
 
   if (isLoading) return <DetailSkeleton />;
 
-  // Unknown goal
+  // Unknown goal (404 from API → fetchGoalDetail returns null)
   if (!isLoading && !isError && goal === null) {
     return (
       <Layout>
         <div className="bg-[#060B18] min-h-screen flex items-center justify-center px-4">
           <div className="text-center max-w-md" role="main">
             <p className="text-5xl mb-5" aria-hidden="true">🔍</p>
-            <h1 className="font-bold text-2xl text-[#F0F4FF] mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            <h1
+              className="font-bold text-2xl text-[#F0F4FF] mb-2"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
               Tujuan tidak ditemukan
             </h1>
             <p className="text-sm text-[#8B9BC4] mb-6">
@@ -192,14 +223,17 @@ export default function GoalDetailPage() {
     );
   }
 
-  // Error
+  // Error state
   if (isError) {
     return (
       <Layout>
         <div className="bg-[#060B18] min-h-screen flex items-center justify-center px-4">
           <div className="text-center max-w-md" role="alert">
             <p className="text-5xl mb-5" aria-hidden="true">⚠️</p>
-            <h1 className="font-bold text-2xl text-[#F0F4FF] mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            <h1
+              className="font-bold text-2xl text-[#F0F4FF] mb-2"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
               Gagal memuat halaman
             </h1>
             <p className="text-sm text-[#8B9BC4] mb-6">
@@ -283,7 +317,7 @@ export default function GoalDetailPage() {
                 }}
                 aria-hidden="true"
               >
-                {goal.icon}
+                {goal.icon ?? "🎯"}
               </div>
               <h1
                 className="font-bold text-2xl md:text-4xl leading-tight"
@@ -293,9 +327,11 @@ export default function GoalDetailPage() {
               </h1>
             </div>
 
-            <p className="text-[#8B9BC4] text-sm md:text-base max-w-2xl leading-relaxed">
-              {goal.description}
-            </p>
+            {goal.description && (
+              <p className="text-[#8B9BC4] text-sm md:text-base max-w-2xl leading-relaxed">
+                {goal.description}
+              </p>
+            )}
           </div>
         </section>
 
@@ -306,11 +342,17 @@ export default function GoalDetailPage() {
         >
           <h2
             id="goal-services-heading"
-            className="font-bold text-lg text-[#F0F4FF] mb-6"
+            className="font-bold text-lg text-[#F0F4FF] mb-2"
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
           >
             Layanan yang tersedia
           </h2>
+          {/* Service count — derived from actual services array length, not fabricated */}
+          {goal.services.length > 0 && (
+            <p className="text-sm text-[#8B9BC4] mb-6">
+              {goal.services.length} layanan tersedia untuk tujuan ini
+            </p>
+          )}
 
           {/* No services for this goal */}
           {goal.services.length === 0 && (
@@ -346,7 +388,8 @@ export default function GoalDetailPage() {
               aria-label={`Layanan untuk ${goal.name}`}
             >
               {goal.services.map((svc, i) => (
-                <div key={svc.id} role="listitem">
+                /* Use serviceCode as key — stable identifier from the API */
+                <div key={svc.serviceCode || i} role="listitem">
                   <GoalServiceCard service={svc} index={i} />
                 </div>
               ))}

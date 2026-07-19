@@ -565,7 +565,7 @@ function GoalDiscoverySection() {
             aria-label="Tujuan bisnis"
           >
             {goals.slice(0, 5).map((goal, i) => (
-              <div key={goal.id} role="listitem">
+              <div key={goal.slug} role="listitem">
                 <GoalCard goal={goal} index={i} />
               </div>
             ))}

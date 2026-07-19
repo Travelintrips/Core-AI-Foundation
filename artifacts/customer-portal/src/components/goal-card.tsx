@@ -38,7 +38,7 @@ export function GoalCard({ goal, index = 0 }: GoalCardProps) {
       <Link
         href={`/goals/${goal.slug}`}
         className="block rounded-2xl p-5 h-full outline-none focus-visible:ring-2 focus-visible:ring-[#7C6EFA] focus-visible:ring-offset-2 focus-visible:ring-offset-[#060B18] transition-all duration-200 hover:-translate-y-0.5"
-        aria-label={`${goal.name} — ${goal.shortDescription}`}
+        aria-label={`${goal.name}${goal.description ? ` — ${goal.description}` : ""}`}
         style={{
           background: "#0D1526",
           border: `1px solid #2E4270`,
@@ -62,7 +62,7 @@ export function GoalCard({ goal, index = 0 }: GoalCardProps) {
             }}
             aria-hidden="true"
           >
-            {goal.icon}
+            {goal.icon ?? "🎯"}
           </div>
 
           {/* Text */}
@@ -73,20 +73,21 @@ export function GoalCard({ goal, index = 0 }: GoalCardProps) {
             >
               {goal.name}
             </h3>
-            <p className="text-sm text-[#8B9BC4] leading-relaxed line-clamp-2">
-              {goal.shortDescription}
-            </p>
+            {goal.description && (
+              <p className="text-sm text-[#8B9BC4] leading-relaxed line-clamp-2">
+                {goal.description}
+              </p>
+            )}
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between pt-3 border-t border-[#243352] mt-auto">
-            {goal.serviceCount > 0 ? (
-              <span className="text-xs text-[#8B9BC4]">
-                {goal.serviceCount} layanan tersedia
-              </span>
-            ) : (
-              <span />
-            )}
+          <div className="flex items-center justify-end pt-3 border-t border-[#243352] mt-auto">
+            {/*
+              Service count is NOT shown here.
+              The GoalSummary from GET /api/ai/goals does not include a serviceCount field.
+              A count is only available after fetching /api/ai/goals/:slug/services.
+              Fetching all goals' services on the list page would be wasteful.
+            */}
             <span
               className="flex items-center gap-1 text-xs font-semibold transition-all duration-200 group-hover:gap-2"
               style={{ color: accent.icon }}
@@ -117,8 +118,7 @@ export function GoalCardSkeleton() {
         <div className="skeleton h-4 w-2/3 rounded" />
       </div>
       <div className="h-px bg-[#243352] mt-auto" />
-      <div className="flex justify-between items-center">
-        <div className="skeleton h-3.5 w-24 rounded" />
+      <div className="flex justify-end items-center">
         <div className="skeleton h-3.5 w-16 rounded" />
       </div>
     </div>

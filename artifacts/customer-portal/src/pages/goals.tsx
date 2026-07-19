@@ -177,7 +177,7 @@ export default function GoalsPage() {
                 aria-label="Tujuan bisnis"
               >
                 {goals.map((goal, i) => (
-                  <div key={goal.id} role="listitem">
+                  <div key={goal.slug} role="listitem">
                     <GoalCard goal={goal} index={i} />
                   </div>
                 ))}
