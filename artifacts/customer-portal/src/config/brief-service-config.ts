@@ -223,16 +223,19 @@ const OVERRIDES: Partial<Record<ServiceType, Partial<BriefSectionConfig>>> = {
     },
     step3: {
       ...DEFAULT.step3,
-      audienceLabel: "Siapa target konsumen koleksi ini?",
-      audienceDescription: "Pilih hingga 4 segmen konsumen utama.",
+      audienceLabel: "Segmen konsumen koleksi ini",
+      // Note: gender sudah dikumpulkan di Step 1 (fdTargetGender). Step 3 fokus pada
+      // segmen pasar & perilaku belanja — bukan mengulangi gender.
+      audienceDescription: "Pilih hingga 4 segmen. Target gender sudah tercatat dari Step 1.",
       painPointsLabel: "Apa yang sedang dicari oleh konsumen fashion Anda?",
       channelsLabel: "Di mana konsumen Anda biasanya berbelanja atau mencari inspirasi?",
     },
     step4: {
       ...DEFAULT.step4,
       styleLabel: "Gaya visual / estetika koleksi yang diinginkan",
-      referenceLabel: "Referensi brand, desainer, atau lookbook",
-      referenceHint: "Contoh: brand seperti X, desainer Y, atau link Pinterest mood board Anda",
+      // showReferences: false — field referensi disatukan ke fdFashionStyle di bawah
+      // agar tidak ditanya dua kali (referensi desainer + link referensi = satu field)
+      showReferences: false,
       specialReqLabel: "Pantangan visual atau elemen wajib ada",
       specialReqHint: "Contoh: no head-to-toe hitam, harus ada batik motif, wajib inklusif size",
     },

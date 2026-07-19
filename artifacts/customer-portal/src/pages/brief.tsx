@@ -117,11 +117,10 @@ export type BriefData = {
   cpContactAddress: string;
   cpContactWebsite: string;
   // Fashion Design Specialist — namespaced `fd*` to avoid collision
+  // Note: fdTargetGender + fdPricePoint are declared above (lines 71/73) — no duplicate here
   fdCollectionName: string;
   fdSeasonCollection: string;
   fdGarmentTypes: string;
-  fdTargetGender: string;
-  fdPricePoint: string;
   fdFashionStyle: string;
   fdMoodBoardRef: string;
   fdBrandPersonality: string;
@@ -157,10 +156,9 @@ const EMPTY_BRIEF: BriefData = {
   cpSustainability: "", cpPageTarget: "", cpUploadedLogo: "",
   cpUploadedPhotos: "", cpReferenceDocuments: "", cpVideo: "", cpContactEmail: "",
   cpContactPhone: "", cpContactAddress: "", cpContactWebsite: "",
-  // Fashion Design Specialist
+  // Fashion Design Specialist (fdTargetGender + fdPricePoint already set above)
   fdCollectionName: "", fdSeasonCollection: "", fdGarmentTypes: "",
-  fdTargetGender: "", fdPricePoint: "", fdFashionStyle: "",
-  fdMoodBoardRef: "", fdBrandPersonality: "",
+  fdFashionStyle: "", fdMoodBoardRef: "", fdBrandPersonality: "",
   // Interior Design Specialist
   idRoomTypes: "", idProjectType: "", idInteriorStyle: "",
   idMaterialPreference: "", idBudgetRange: "", idTechnicalSpecs: "",
@@ -1244,6 +1242,24 @@ export default function BriefPage() {
             {currentStep === 3 && (
               <SectionCard icon={Users} title="Target Audiens" description="Siapa yang paling ingin Anda jangkau?">
 
+                {/* Fashion: show gender pre-fill notice so users don't re-enter what they chose in Step 1 */}
+                {isFashionDesign && brief.fdTargetGender && (
+                  <div className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl border text-xs"
+                    style={{ background: "rgba(124,110,250,0.07)", borderColor: "rgba(124,110,250,0.25)" }}>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                    <span className="text-muted-foreground">
+                      <span className="font-semibold text-foreground">Target gender sudah tercatat</span> dari Step 1:{" "}
+                      <span className="text-primary font-medium">
+                        {brief.fdTargetGender === "womenswear" ? "Womenswear" :
+                         brief.fdTargetGender === "menswear" ? "Menswear" :
+                         brief.fdTargetGender === "unisex" ? "Unisex / Gender-Neutral" :
+                         brief.fdTargetGender === "kidswear" ? "Kidswear" :
+                         brief.fdTargetGender === "all" ? "All Genders" : brief.fdTargetGender}
+                      </span>. Di sini pilih segmen pasar atau perilaku konsumen yang ingin dijangkau.
+                    </span>
+                  </div>
+                )}
+
                 {/* Audience type */}
                 <FieldItem id="audienceDemographics" label={serviceConfig.step3.audienceLabel} required error={errors.audienceDemographics}>
                   <p className="text-xs text-muted-foreground -mt-1 mb-2">{serviceConfig.step3.audienceDescription}</p>
@@ -1430,16 +1446,24 @@ export default function BriefPage() {
                 )}
 
 
-                {/* ── Fashion Design — Mood Board & Brand Personality ───── */}
+                {/* ── Fashion Design — Referensi & Brand Personality ────── */}
+                {/* Note: showReferences = false untuk fashion, jadi referenceLinks tersembunyi.
+                    fdFashionStyle menggantikannya dan mencakup nama desainer SEKALIGUS link referensi
+                    agar user tidak ditanya dua hal yang sama. */}
                 {isFashionDesign && (
                   <>
-                    <FieldItem id="fdFashionStyle" label="Referensi desainer atau brand yang Anda kagumi" optional hint="Nama desainer, brand, atau era mode yang paling mendekati arah estetika Anda">
+                    <FieldItem
+                      id="fdFashionStyle"
+                      label="Referensi visual & inspirasi estetika"
+                      optional
+                      hint="Nama desainer / brand yang Anda sukai, atau tempel link referensi (Pinterest, Instagram, lookbook)"
+                    >
                       <textarea
                         id="brief-fdFashionStyle"
-                        className="input-field min-h-[72px]"
+                        className="input-field min-h-[96px]"
                         value={brief.fdFashionStyle}
                         onChange={(e) => handleChange("fdFashionStyle", e.target.value)}
-                        placeholder="Contoh: Rick Owens meets Khatulistiwa, atau seperti kampanye Issey Miyake era 90s"
+                        placeholder={"Contoh:\n• Estetika: Rick Owens meets Khatulistiwa, atau kampanye Issey Miyake era 90s\n• Link: https://pinterest.com/board-anda atau @brand_inspirasi"}
                       />
                     </FieldItem>
                     <FieldItem id="fdBrandPersonality" label="Kepribadian brand fashion Anda" optional hint="Gambaran brand dalam 3–5 kata atau kalimat singkat">

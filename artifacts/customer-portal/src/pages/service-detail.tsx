@@ -259,8 +259,6 @@ export default function ServiceDetailPage() {
     customerName: "",
     customerEmail: "",
     customerPhone: "",
-    companyName: "",
-    notes: "",
   });
   const [seededConcept, setSeededConcept] = useState<ContinueConceptResult | null>(null);
   const [activeSection, setActiveSection] = useState<string>("overview");
@@ -278,7 +276,6 @@ export default function ServiceDetailPage() {
         try {
           const parsed = JSON.parse(raw) as ContinueConceptResult;
           setSeededConcept(parsed);
-          setContact((c) => ({ ...c, notes: parsed.seed.notes }));
         } catch { /* ignore */ }
       }
     }
@@ -291,9 +288,7 @@ export default function ServiceDetailPage() {
     if (!raw) return;
     try {
       const parsed = JSON.parse(raw) as { templateId: number; templateName: string; category: string; style: string };
-      setContact((c) => (c.notes
-        ? c
-        : { ...c, notes: `Referensi template: ${parsed.templateName} (${parsed.category} · ${parsed.style})` }));
+      // template seed is carried into the brief via sessionStorage — no sidebar field needed
     } catch { /* ignore */ }
     // Consumed once per service-detail visit; clear so it doesn't leak into unrelated requests later.
     sessionStorage.removeItem("template-selection-seed");
@@ -1063,7 +1058,7 @@ export default function ServiceDetailPage() {
                 <fieldset className="space-y-3" aria-label="Contact information">
                   <input
                     className="input-field"
-                    placeholder="Your name *"
+                    placeholder="Nama Anda *"
                     autoComplete="name"
                     value={contact.customerName}
                     onChange={(e) => setContact({ ...contact, customerName: e.target.value })}
@@ -1072,7 +1067,7 @@ export default function ServiceDetailPage() {
                   />
                   <input
                     className="input-field"
-                    placeholder="Email address *"
+                    placeholder="Alamat email *"
                     type="email"
                     autoComplete="email"
                     value={contact.customerEmail}
@@ -1082,29 +1077,17 @@ export default function ServiceDetailPage() {
                   />
                   <input
                     className="input-field"
-                    placeholder="Phone (optional)"
+                    placeholder="Nomor telepon / WhatsApp (opsional)"
                     autoComplete="tel"
                     value={contact.customerPhone}
                     onChange={(e) => setContact({ ...contact, customerPhone: e.target.value })}
                     aria-label="Phone number"
                   />
-                  <input
-                    className="input-field"
-                    placeholder="Company (optional)"
-                    autoComplete="organization"
-                    value={contact.companyName}
-                    onChange={(e) => setContact({ ...contact, companyName: e.target.value })}
-                    aria-label="Company name"
-                  />
-                  <textarea
-                    className="input-field resize-none"
-                    rows={3}
-                    placeholder="Anything we should know? (optional)"
-                    value={contact.notes}
-                    onChange={(e) => setContact({ ...contact, notes: e.target.value })}
-                    aria-label="Additional notes"
-                  />
                 </fieldset>
+                <p className="text-[11px] text-[#8B9BC4] flex items-center gap-1.5 -mt-1">
+                  <FileText className="w-3 h-3 shrink-0" />
+                  Detail project lengkap akan dikumpulkan di langkah brief berikutnya.
+                </p>
                 <button
                   onClick={onSubmitRequest}
                   disabled={requestService.isPending || !contact.customerName || !contact.customerEmail}
