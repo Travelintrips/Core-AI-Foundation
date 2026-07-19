@@ -1,0 +1,98 @@
+TEAM-02 FINAL SCOPE VERIFICATION
+
+Do not implement new features.
+Do not run migrations.
+Do not modify production data.
+Do not push main.
+
+Current feature branch:
+
+feature/v4.2c-goal-taxonomy
+
+Perform final scope verification only.
+
+1. Switch to the Team-02 branch:
+
+git switch feature/v4.2c-goal-taxonomy
+
+2. Verify branch and remote:
+
+git branch --show-current
+git status
+git branch -vv
+git fetch origin
+
+3. Show the final diff against origin/main:
+
+git diff --name-status origin/main..HEAD
+git log --oneline origin/main..HEAD
+
+4. Review MASTER-00.md.
+
+Determine whether MASTER-00.md is genuinely required as a Team-02 change.
+
+If MASTER-00.md is unrelated governance documentation inherited from earlier work:
+
+remove it only from the Team-02 branch without deleting the local source permanently.
+
+Use a safe method such as:
+
+git restore --source=origin/main --staged --worktree MASTER-00.md
+
+If MASTER-00.md does not exist in origin/main and must remain, report that owner approval is required before keeping it in the Team-02 PR.
+
+Do not make this decision silently.
+
+5. Review the changes in:
+
+artifacts/api-server/src/middleware/adminAuth.ts
+
+Report exactly:
+
+- why this shared middleware had to change;
+- which existing endpoints may be affected;
+- whether the change is backward compatible;
+- which tests protect the old behavior.
+
+Do not broaden the middleware changes.
+
+6. Verify that required integration changes are limited to:
+
+- Goal route mounting
+- Goal schema exports
+- Goal migration registration if applicable
+- Goal admin authentication support
+
+7. Run:
+
+git diff --check
+git status
+
+If any scope cleanup was required, commit using:
+
+chore(team-02): remove unrelated files from goal taxonomy branch
+
+8. Push only:
+
+git push origin feature/v4.2c-goal-taxonomy
+
+Do not push main.
+
+9. Retry pushing the existing local backup branch only if Git authentication is available:
+
+git push -u origin backup/team-02-before-branch-fix
+
+If authentication still fails, do not modify credentials or force anything. Report the failure honestly.
+
+FINAL REPORT
+
+Return:
+
+- final branch
+- final commit list
+- final changed-file list
+- status of MASTER-00.md
+- justification for adminAuth.ts changes
+- backup remote status
+- confirmation that main was not pushed
+- confirmation that no migration was run
