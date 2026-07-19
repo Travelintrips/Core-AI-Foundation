@@ -253,7 +253,7 @@ export function buildEbookSpec(
 // ── DocumentDefinition export ─────────────────────────────────────────────────
 
 export const ebookDefinition: DocumentDefinition = {
-  documentType:     "ebook" as unknown as CreativeDocumentType,
+  documentType:     "ebook" as CreativeDocumentType,
   filenamePrefix:   "ebook",
   minimumPageCount: 8,
   requiresLogo:     false,

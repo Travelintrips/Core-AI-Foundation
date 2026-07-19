@@ -19,6 +19,7 @@ import { creativeConsultationDefinition }    from "./mappers/creativeConsultatio
 import { brandIdentityGuidelineDefinition }  from "./mappers/brandIdentityGuidelineDocumentMapper.js";
 import { fashionDesignDefinition }           from "./mappers/fashionDesignDocumentMapper.js";
 import { interiorDesignDefinition }          from "./mappers/interiorDesignDocumentMapper.js";
+import { ebookDefinition }                   from "../domains/presentation-document/mappers/ebookDocumentMapper.js";
 
 /** Call once at startup to register all document type definitions. */
 export function initDocumentRegistry(): void {
@@ -29,4 +30,5 @@ export function initDocumentRegistry(): void {
   registerDocument(brandIdentityGuidelineDefinition);
   registerDocument(fashionDesignDefinition);
   registerDocument(interiorDesignDefinition);
+  registerDocument(ebookDefinition);
 }
