@@ -1,0 +1,354 @@
+TEAM-04 FINAL GIT CLEANUP AND SCOPE VERIFICATION
+
+STOP ALL FEATURE DEVELOPMENT.
+
+Do not add new features.
+Do not modify normalization behavior.
+Do not modify collection behavior.
+Do not run another migration.
+Do not push main.
+Do not merge any branch.
+Do not delete any branch yet.
+
+CURRENT SITUATION
+
+Team 04 was implemented while main was active because GitHub authentication failed.
+
+A remote branch was later created:
+
+feature/04-service-normalization
+
+However, the approved branch name is:
+
+feature/v4.2e-service-normalization
+
+There are also suspected unrelated commits:
+
+aede24f — .replit configuration
+a03feff — specification TXT documentation
+
+Your task is only to clean Git history, verify scope, and place Team 04 on the correct branch.
+
+==================================================
+PHASE 1 — INSPECT ALL RELEVANT BRANCHES
+==================================================
+
+Run:
+
+git fetch --all --prune
+git branch --show-current
+git status
+git branch -vv
+git branch -a
+git log --oneline --decorate -20
+
+Then inspect:
+
+git log --oneline origin/main..origin/feature/04-service-normalization
+git diff --name-status origin/main..origin/feature/04-service-normalization
+git diff --stat origin/main..origin/feature/04-service-normalization
+
+Check whether the required base exists:
+
+git show-ref --verify --quiet refs/remotes/origin/integration/v4.2
+
+If origin/integration/v4.2 does not exist:
+
+STOP.
+
+Return:
+
+BLOCKED — origin/integration/v4.2 does not exist.
+
+Do not silently use origin/main.
+
+==================================================
+PHASE 2 — IDENTIFY TEAM-04 COMMITS
+==================================================
+
+Identify exactly which commits belong to Team 04.
+
+Classify every commit as:
+
+- Team 04 implementation
+- Team 04 test
+- Team 04 documentation
+- Required integration change
+- Unrelated
+- Unclear
+
+Explicitly inspect:
+
+aede24f
+a03feff
+
+The .replit configuration commit must not be included unless Team 04 functionality genuinely requires it and owner approval exists.
+
+Raw pasted specification TXT files and attached assets must not be included unless they are approved project documentation.
+
+Do not guess.
+
+==================================================
+PHASE 3 — CREATE SAFETY BACKUP
+==================================================
+
+Create a backup from the current Team 04 remote branch:
+
+backup/team-04-before-cleanup
+
+Push it to origin using the authenticated Replit Git integration.
+
+Confirm both local and remote backup exist before continuing.
+
+If backup push fails:
+
+STOP and report the exact reason.
+
+Do not continue with destructive cleanup.
+
+==================================================
+PHASE 4 — CREATE CORRECT CLEAN BRANCH
+==================================================
+
+Create the approved branch from the approved base:
+
+feature/v4.2e-service-normalization
+
+Base:
+
+origin/integration/v4.2
+
+Do not create it from local main.
+
+Do not create it from feature/04-service-normalization directly.
+
+Use a clean branch:
+
+git switch -c feature/v4.2e-service-normalization origin/integration/v4.2
+
+If the branch already exists remotely:
+
+inspect it first and do not overwrite blindly.
+
+==================================================
+PHASE 5 — MOVE ONLY TEAM-04 WORK
+==================================================
+
+Move only approved Team 04 commits onto the clean branch.
+
+Preferred method:
+
+- cherry-pick specific clean commits
+
+If commits mix Team 04 and unrelated files:
+
+do not cherry-pick blindly.
+
+Reconstruct the change selectively.
+
+Allowed Team 04 scope:
+
+- Canonical service concept schema
+- Service normalization mappings
+- Service aliases
+- Solution collections
+- Collection-service mappings
+- Repository
+- Service layer
+- Validation
+- Admin routes
+- Public collection routes
+- Route registration
+- Schema exports
+- Safe migration
+- Tests
+- Team 04 audit/documentation
+
+Forbidden:
+
+- .replit
+- GitHub workflow
+- Customer frontend
+- BizPortal frontend
+- Pricing
+- Checkout
+- Payment
+- Order workflow
+- Creative runtime
+- Presentation engine
+- Recommendation engine
+- Analytics
+- SEO
+- Team 01 files
+- Team 02 files
+- Team 03 files
+- Raw pasted prompt assets
+- Unrelated configuration
+
+==================================================
+PHASE 6 — VERIFY DATABASE MIGRATION
+==================================================
+
+The development database has already been migrated.
+
+Do not rerun the migration.
+
+Verify:
+
+- migration is additive
+- migration is idempotent
+- no DROP TABLE
+- no destructive ALTER
+- no service deletion
+- no order rewrite
+- no project rewrite
+- no pricing rewrite
+
+Report:
+
+Migration already applied: yes
+Migration rerun during cleanup: no
+Target environment: development
+Destructive operation: no
+
+Do not apply to production.
+
+==================================================
+PHASE 7 — VERIFY FINAL DIFF
+==================================================
+
+Run:
+
+git log --oneline origin/integration/v4.2..HEAD
+git diff --name-status origin/integration/v4.2..HEAD
+git diff --stat origin/integration/v4.2..HEAD
+git diff --check
+
+Review every file.
+
+If .replit, pasted assets, screenshots, unrelated TXT files, or other-team files appear:
+
+remove them from the Team 04 branch.
+
+Do not modify their source branches.
+
+==================================================
+PHASE 8 — RUN VERIFICATION
+==================================================
+
+Run the actual project commands for:
+
+- Team 04 tests
+- Relevant API tests
+- Database/shared schema typecheck
+- API server typecheck
+- API server build
+
+Do not rely only on the previous 38-test report.
+
+Run them again on the clean branch based on origin/integration/v4.2.
+
+Also verify read-only behavior for:
+
+- public collection listing
+- public collection detail
+- commercial eligibility filtering
+- existing service detail
+- existing order readability
+- existing project readability
+
+Do not create production records.
+
+==================================================
+PHASE 9 — PUSH CORRECT BRANCH
+==================================================
+
+Push only:
+
+feature/v4.2e-service-normalization
+
+Use the authenticated Replit Git integration.
+
+Do not push main.
+
+Do not merge into integration/v4.2.
+
+Do not push force unless absolutely required.
+
+If replacing an existing remote branch, use:
+
+--force-with-lease
+
+Never use plain --force.
+
+==================================================
+PHASE 10 — RESTORE LOCAL MAIN
+==================================================
+
+Only after:
+
+- backup branch exists remotely
+- correct Team 04 branch exists remotely
+- Team 04 commits are verified
+- tests/build pass
+
+restore local main:
+
+git switch main
+git fetch origin
+git reset --hard origin/main
+
+Then verify:
+
+git branch --show-current
+git status
+git log --oneline --decorate -5
+
+Expected:
+
+- active branch: main
+- local main equals origin/main
+- clean working tree
+
+==================================================
+PHASE 11 — OLD INCORRECT BRANCH
+==================================================
+
+Do not delete:
+
+feature/04-service-normalization
+
+yet.
+
+Mark it as:
+
+DEPRECATED — DO NOT MERGE
+
+Team 6 may delete it only after the correct branch has been reviewed.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. Original branch inspected
+2. Approved base branch
+3. Backup branch and remote status
+4. Correct Team 04 branch
+5. Cleanup method
+6. Final Team 04 commit list
+7. Final changed-file list
+8. Unrelated files removed
+9. Status of aede24f
+10. Status of a03feff
+11. Test results
+12. Typecheck results
+13. Build result
+14. Migration safety result
+15. Push confirmation
+16. Local main restoration result
+17. Confirmation old branch is deprecated and not merged
+18. Confirmation no new feature was implemented
+
+STOP after the report.
