@@ -5,9 +5,9 @@ import {
   Loader2, ArrowRight, Sparkles, Search, Star, Clock, CheckCircle,
   Paintbrush, Megaphone, DollarSign, BookOpen, Receipt, Users,
   Scale, Truck, Package, TrendingUp, Briefcase, Headphones, BarChart2,
-  RotateCcw, ChevronDown, Zap, Shield, X, Eye, Building2,
-  Globe, LayoutGrid, ChevronRight, Award, Flame, Lock,
-  History, Hash, Cpu, ArrowLeft, Calculator,
+  RotateCcw, ChevronDown, Zap, Shield, X,
+  Globe, ChevronRight, Award, Flame,
+  History, Hash, ArrowLeft, Calculator,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,8 +15,8 @@ import { useTranslation } from "@/lib/i18n";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatPrice(value: string, currency: string) {
-  const n = Number(value);
+function formatPrice(value: string | number, currency: string) {
+  const n = typeof value === "string" ? Number(value) : value;
   if (currency === "IDR") return `Rp ${n.toLocaleString("id-ID")}`;
   return `$${n.toLocaleString()}`;
 }
@@ -29,10 +29,6 @@ function mockCompleted(id: number) {
   return ((id * 11 + 7) % 180) + 42;
 }
 
-// Parses strings like "30-60 menit", "2-4 jam", "5-7 hari", "2 minggu" into a
-// day-equivalent number so comparisons/sorts/filters (all expressed in days)
-// are correct regardless of unit. Falls back to 7 for non-numeric estimates
-// like "Ongoing, bulanan".
 function deliveryDays(est: string): number {
   const m = est.toLowerCase().match(/(\d+)(?:\s*[-–]\s*\d+)?\s*(menit|jam|hari|minggu|bulan)/);
   if (!m) return 7;
@@ -42,7 +38,7 @@ function deliveryDays(est: string): number {
     case "jam": return value / 24;
     case "minggu": return value * 7;
     case "bulan": return value * 30;
-    default: return value; // hari
+    default: return value;
   }
 }
 
@@ -55,11 +51,10 @@ function serviceBadge(s: CatalogService): { label: BadgeKind; color: string } | 
   if (s.id % 7 === 0) return { label: "Trending", color: "bg-[#F97316]/10 text-[#F97316] border-[#F97316]/30" };
   if (s.id % 4 === 0) return { label: "Baru", color: "bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30" };
   if (s.id % 3 === 0) return { label: "Terpopuler", color: "bg-[#7C6EFA]/10 text-[#7C6EFA] border-[#7C6EFA]/30" };
-  if (s.serviceFlow === "fixed_price" && s.id % 2 === 0) return { label: "Siap Komersial", color: "bg-[#8B5CF6]/10 text-[#8B5CF6] border-[#8B5CF6]/30" };
   return null;
 }
 
-// ── Category icons map ────────────────────────────────────────────────────────
+// ── Category icons ────────────────────────────────────────────────────────────
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   creative: Paintbrush,
@@ -74,10 +69,10 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
   trading: TrendingUp,
   executive: Briefcase,
   "customer service": Headphones,
-  "customer_service": Headphones,
+  customer_service: Headphones,
   analytics: BarChart2,
   data: BarChart2,
-  procurement: Building2,
+  procurement: Globe,
   default: Sparkles,
 };
 
@@ -88,6 +83,17 @@ function getCategoryIcon(cat: ServiceCategory): React.ElementType {
   }
   return CATEGORY_ICONS.default;
 }
+
+// ── Category accent colours (one per slot, loops) ────────────────────────────
+
+const CAT_ACCENTS = [
+  { glow: "rgba(124,110,250,0.18)", border: "rgba(124,110,250,0.50)", icon: "#7C6EFA", bg: "rgba(124,110,250,0.12)" },
+  { glow: "rgba(34,211,238,0.14)", border: "rgba(34,211,238,0.45)", icon: "#22D3EE", bg: "rgba(34,211,238,0.10)" },
+  { glow: "rgba(249,115,22,0.14)", border: "rgba(249,115,22,0.45)", icon: "#F97316", bg: "rgba(249,115,22,0.10)" },
+  { glow: "rgba(16,185,129,0.14)", border: "rgba(16,185,129,0.45)", icon: "#10B981", bg: "rgba(16,185,129,0.10)" },
+  { glow: "rgba(245,158,11,0.14)", border: "rgba(245,158,11,0.45)", icon: "#F59E0B", bg: "rgba(245,158,11,0.10)" },
+  { glow: "rgba(139,92,246,0.14)", border: "rgba(139,92,246,0.45)", icon: "#8B5CF6", bg: "rgba(139,92,246,0.10)" },
+];
 
 // ── Sort options ──────────────────────────────────────────────────────────────
 
@@ -100,14 +106,9 @@ const SORT_KEYS: { key: SortKey; tKey: string; icon: React.ElementType }[] = [
   { key: "rating",    tKey: "services.sort.rating",    icon: Star },
 ];
 
-// ── Search constants ──────────────────────────────────────────────────────────
-
-const RECENT_SEARCH_KEY = "apex_recent_searches";
+const RECENT_SEARCH_KEY   = "apex_recent_searches";
 const RECENTLY_VIEWED_KEY = "apex_recently_viewed";
-const POPULAR_SEARCHES = [
-  "Strategi Brand", "Dokumen Legal", "Laporan Keuangan",
-  "Kampanye Marketing", "Analitik HR", "Logistics AI",
-];
+const POPULAR_SEARCHES    = ["Strategi Brand", "Dokumen Legal", "Laporan Keuangan", "Kampanye Marketing", "Analitik HR", "Logistics AI"];
 
 // ── Animation variants ────────────────────────────────────────────────────────
 
@@ -115,12 +116,10 @@ const fadeUp = {
   hidden: { opacity: 0, y: 16 },
   show:   { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" as const } },
 };
-
 const staggerGrid = {
   hidden: {},
   show:   { transition: { staggerChildren: 0.06 } },
 };
-
 const cardVariant = {
   hidden: { opacity: 0, y: 20 },
   show:   { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" as const } },
@@ -130,10 +129,10 @@ const cardVariant = {
 
 function SkeletonCard() {
   return (
-    <div className="bg-[#0D1526] border border-[#2E4270] p-5 space-y-4 overflow-hidden rounded-2xl" style={{ minHeight: 260 }}>
+    <div className="bg-[#0D1526] border border-[#2E4270] p-5 space-y-4 overflow-hidden rounded-2xl" style={{ minHeight: 220 }}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-[#131E35] animate-pulse shrink-0" />
+          <div className="w-12 h-12 rounded-xl bg-[#131E35] animate-pulse shrink-0" />
           <div className="space-y-2">
             <div className="h-2.5 w-20 bg-[#131E35] rounded animate-pulse" />
             <div className="h-3 w-28 bg-[#131E35] rounded animate-pulse" />
@@ -146,11 +145,6 @@ function SkeletonCard() {
         <div className="h-3 w-full bg-[#131E35] rounded animate-pulse" />
         <div className="h-3 w-5/6 bg-[#131E35] rounded animate-pulse" />
       </div>
-      <div className="flex gap-3 pt-1">
-        <div className="h-3 w-14 bg-[#131E35] rounded animate-pulse" />
-        <div className="h-3 w-20 bg-[#131E35] rounded animate-pulse" />
-        <div className="h-3 w-16 bg-[#131E35] rounded animate-pulse" />
-      </div>
       <div className="flex items-center justify-between pt-3 border-t border-[#243352]">
         <div className="h-4 w-20 bg-[#131E35] rounded animate-pulse" />
         <div className="h-8 w-24 bg-[#131E35] rounded-lg animate-pulse" />
@@ -159,6 +153,123 @@ function SkeletonCard() {
   );
 }
 
+// ── Category Card ─────────────────────────────────────────────────────────────
+
+function CategoryCard({
+  category,
+  services,
+  accentIdx,
+  onSelect,
+}: {
+  category: ServiceCategory;
+  services: CatalogService[];
+  accentIdx: number;
+  onSelect: (id: number) => void;
+}) {
+  const Icon = getCategoryIcon(category);
+  const accent = CAT_ACCENTS[accentIdx % CAT_ACCENTS.length];
+  const count = services.length;
+  const prices = services.map((s) => Number(s.startingPrice)).filter((p) => p > 0);
+  const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+  const currency = services[0]?.currency ?? "IDR";
+  const avgRating =
+    count > 0
+      ? (services.reduce((acc, s) => acc + Number(mockRating(s.id)), 0) / count).toFixed(1)
+      : "0.0";
+  const fastestService = [...services].sort(
+    (a, b) => deliveryDays(a.estimatedDelivery) - deliveryDays(b.estimatedDelivery),
+  )[0];
+
+  return (
+    <motion.button
+      variants={cardVariant}
+      onClick={() => onSelect(category.id)}
+      className="group relative w-full text-left rounded-2xl cursor-pointer overflow-hidden"
+      style={{ minHeight: 200 }}
+      aria-label={`Lihat layanan ${category.name}`}
+    >
+      <div
+        className="relative bg-[#0D1526] rounded-2xl p-6 flex flex-col gap-4 h-full transition-all duration-200"
+        style={{ border: "1.5px solid #2E4270" }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLElement).style.borderColor = accent.border;
+          (e.currentTarget as HTMLElement).style.boxShadow = `0 8px 32px ${accent.glow}`;
+          (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLElement).style.borderColor = "#2E4270";
+          (e.currentTarget as HTMLElement).style.boxShadow = "none";
+          (e.currentTarget as HTMLElement).style.transform = "";
+        }}
+      >
+        {/* Icon + count badge */}
+        <div className="flex items-start justify-between">
+          <div
+            className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-110"
+            style={{ background: accent.bg, border: `1px solid ${accent.border}` }}
+          >
+            <Icon className="w-6 h-6" style={{ color: accent.icon }} />
+          </div>
+          <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#131E35] border border-[#2E4270] text-[#8B9BC4]">
+            {count} {count === 1 ? "layanan" : "layanan"}
+          </span>
+        </div>
+
+        {/* Name + description */}
+        <div className="flex-1">
+          <h3
+            className="font-semibold text-base mb-1.5 leading-snug transition-colors duration-200"
+            style={{ color: "#F0F4FF", fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+          >
+            {category.name}
+          </h3>
+          <p className="text-sm text-[#8B9BC4] leading-relaxed line-clamp-2">
+            {category.description ?? `Solusi ${category.name} berbasis AI untuk kebutuhan bisnis Anda`}
+          </p>
+        </div>
+
+        {/* Stats row */}
+        {count > 0 && (
+          <div className="flex items-center gap-4 text-xs text-[#8B9BC4]">
+            <span className="flex items-center gap-1">
+              <Star className="w-3.5 h-3.5 fill-[#F59E0B] text-[#F59E0B]" />
+              <span className="font-medium text-[#F0F4FF]">{avgRating}</span>
+            </span>
+            {fastestService && (
+              <span className="flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5 text-[#22D3EE]" />
+                {fastestService.estimatedDelivery}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Price + CTA */}
+        <div className="flex items-center justify-between pt-3 border-t border-[#243352] mt-auto">
+          {minPrice > 0 ? (
+            <div>
+              <p className="text-[11px] text-[#8B9BC4] mb-0.5">Mulai dari</p>
+              <p
+                className="font-bold text-sm text-[#F0F4FF]"
+                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+              >
+                {formatPrice(minPrice, currency)}
+              </p>
+            </div>
+          ) : (
+            <div />
+          )}
+          <div
+            className="flex items-center gap-1 text-xs font-semibold transition-all duration-200 group-hover:gap-2"
+            style={{ color: accent.icon }}
+          >
+            Lihat Layanan <ArrowRight className="w-3.5 h-3.5" />
+          </div>
+        </div>
+      </div>
+    </motion.button>
+  );
+}
 
 // ── Service Card ──────────────────────────────────────────────────────────────
 
@@ -173,14 +284,15 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
     <motion.div
       variants={cardVariant}
       className="group relative rounded-2xl cursor-pointer overflow-hidden"
-      style={{ minHeight: 240 }}
+      style={{ minHeight: 220 }}
     >
-      <div className="relative bg-[#0D1526] rounded-2xl p-5 flex flex-col gap-4 h-full transition-all duration-200 group-hover:shadow-[0_8px_32px_rgba(124,110,250,0.18)] group-hover:-translate-y-0.5"
-           style={{ border: "1px solid #2E4270" }}
-           onMouseEnter={(e) => (e.currentTarget.style.borderColor = "rgba(124,110,250,0.5)")}
-           onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#2E4270")}>
-
-        {/* Top row: icon + category + badge */}
+      <div
+        className="relative bg-[#0D1526] rounded-2xl p-5 flex flex-col gap-4 h-full transition-all duration-200 group-hover:shadow-[0_8px_32px_rgba(124,110,250,0.18)] group-hover:-translate-y-0.5"
+        style={{ border: "1px solid #2E4270" }}
+        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "rgba(124,110,250,0.5)")}
+        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "#2E4270")}
+      >
+        {/* Top row */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
             <motion.div
@@ -215,7 +327,7 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
           <p className="text-sm text-[#8B9BC4] leading-relaxed line-clamp-2">{s.shortDescription}</p>
         </div>
 
-        {/* Stats row */}
+        {/* Stats */}
         <div className="flex items-center gap-3 text-xs text-[#8B9BC4] flex-wrap">
           <span className="flex items-center gap-1">
             <Star className="w-3.5 h-3.5 fill-[#F59E0B] text-[#F59E0B]" />
@@ -223,7 +335,7 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
           </span>
           <span className="flex items-center gap-1">
             <CheckCircle className="w-3.5 h-3.5 text-[#10B981]" />
-            {completed} {t('services.card.projects')}
+            {completed} {t("services.card.projects")}
           </span>
           <span className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5 text-[#22D3EE]" />
@@ -232,7 +344,7 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
           {s.humanReview && (
             <span className="flex items-center gap-1 text-[#7C6EFA]">
               <Shield className="w-3.5 h-3.5" />
-              {t('services.preview.humanReviewed')}
+              {t("services.preview.humanReviewed")}
             </span>
           )}
         </div>
@@ -240,7 +352,7 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
         {/* Price + CTA */}
         <div className="flex items-center justify-between pt-3 border-t border-[#243352] mt-auto">
           <div>
-            <p className="text-[11px] text-[#8B9BC4] mb-0.5">{t('services.card.startingFrom')}</p>
+            <p className="text-[11px] text-[#8B9BC4] mb-0.5">{t("services.card.startingFrom")}</p>
             <p style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-bold text-base text-[#F0F4FF]">
               {formatPrice(s.startingPrice, s.currency)}
             </p>
@@ -251,48 +363,13 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
             className="btn-primary !py-2 !px-4 !text-xs gap-1.5 flex items-center"
             aria-label={`Lihat detail untuk ${s.serviceName}`}
           >
-            {t('services.card.viewDetail')}
+            {t("services.card.viewDetail")}
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
       </div>
-
     </motion.div>
   );
-}
-
-// ── Filter Sidebar ────────────────────────────────────────────────────────────
-
-interface Filters {
-  maxPrice: number;
-  maxDelivery: number;
-  humanReview: boolean | null;
-  minRating: number;
-  flow: string;
-}
-
-const FLOW_LABELS: Record<string, string> = {
-  fixed_price: "Harga Pasti",
-  custom_project: "Project Kustom",
-  enterprise: "Enterprise",
-};
-
-const DEFAULT_FILTERS: Filters = {
-  maxPrice: 999_999_999,
-  maxDelivery: 30,
-  humanReview: null,
-  minRating: 0,
-  flow: "",
-};
-
-function countActiveFilters(f: Filters): number {
-  let n = 0;
-  if (f.maxPrice < 999_999_999) n++;
-  if (f.maxDelivery < 30) n++;
-  if (f.humanReview !== null) n++;
-  if (f.minRating > 0) n++;
-  if (f.flow) n++;
-  return n;
 }
 
 // ── Search Dropdown ───────────────────────────────────────────────────────────
@@ -320,10 +397,10 @@ function SearchDropdown({
         <div className="p-4 border-b border-[#243352]">
           <div className="flex items-center justify-between mb-3">
             <p className="text-[11px] font-semibold text-[#8B9BC4] uppercase tracking-wider flex items-center gap-1.5">
-              <History className="w-3 h-3" /> {t('services.search.recent')}
+              <History className="w-3 h-3" /> {t("services.search.recent")}
             </p>
             <button onClick={onClearRecent} className="text-[11px] text-[#8B9BC4] hover:text-[#7C6EFA] transition-colors">
-              {t('services.search.clear')}
+              {t("services.search.clear")}
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -342,7 +419,7 @@ function SearchDropdown({
       )}
       <div className="p-4">
         <p className="text-[11px] font-semibold text-[#8B9BC4] uppercase tracking-wider mb-3 flex items-center gap-1.5">
-          <Flame className="w-3 h-3 text-[#F97316]" /> {t('services.search.popular')}
+          <Flame className="w-3 h-3 text-[#F97316]" /> {t("services.search.popular")}
         </p>
         <div className="flex flex-wrap gap-2">
           {POPULAR_SEARCHES.map((q) => (
@@ -359,10 +436,10 @@ function SearchDropdown({
       </div>
       <div className="px-4 pb-3 flex items-center gap-1.5 text-[11px] text-[#8B9BC4]/60">
         <kbd className="px-1.5 py-0.5 rounded bg-[#131E35] border border-[#2E4270] font-mono text-[10px]">Esc</kbd>
-        <span>{t('services.search.close')}</span>
+        <span>{t("services.search.close")}</span>
         <span className="mx-1">·</span>
         <kbd className="px-1.5 py-0.5 rounded bg-[#131E35] border border-[#2E4270] font-mono text-[10px]">/</kbd>
-        <span>{t('services.search.focus')}</span>
+        <span>{t("services.search.focus")}</span>
       </div>
     </motion.div>
   );
@@ -380,13 +457,14 @@ function EmptyState({ onReset }: { onReset: () => void }) {
       className="col-span-full flex flex-col items-center justify-center py-24 text-center"
     >
       <div className="mb-8 relative">
-        <div className="w-24 h-24 rounded-3xl border border-[#2E4270] flex items-center justify-center"
-             style={{ background: "linear-gradient(135deg, #0D1526 0%, #131E35 100%)" }}>
+        <div
+          className="w-24 h-24 rounded-3xl border border-[#2E4270] flex items-center justify-center"
+          style={{ background: "linear-gradient(135deg, #0D1526 0%, #131E35 100%)" }}
+        >
           <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="22" cy="22" r="14" stroke="#2E4270" strokeWidth="2" />
             <circle cx="22" cy="22" r="14" stroke="url(#srGrad)" strokeWidth="2" strokeDasharray="4 2" />
             <path d="M32 32L40 40" stroke="#7C6EFA" strokeWidth="2.5" strokeLinecap="round" />
-            <path d="M18 22H26M22 18V26" stroke="#8B9BC4" strokeWidth="1.5" strokeLinecap="round" opacity="0.5" />
             <defs>
               <linearGradient id="srGrad" x1="8" y1="8" x2="36" y2="36" gradientUnits="userSpaceOnUse">
                 <stop stopColor="#7C6EFA" />
@@ -400,10 +478,10 @@ function EmptyState({ onReset }: { onReset: () => void }) {
         </div>
       </div>
       <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-semibold text-xl mb-2 text-[#F0F4FF]">
-        {t('services.empty.title')}
+        {t("services.empty.title")}
       </h3>
       <p className="text-[#8B9BC4] text-sm max-w-xs mb-8 leading-relaxed">
-        {t('services.empty.desc')}
+        {t("services.empty.desc")}
       </p>
       <div className="flex items-center gap-3 flex-wrap justify-center">
         <button
@@ -411,48 +489,9 @@ function EmptyState({ onReset }: { onReset: () => void }) {
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-[#2E4270] text-sm text-[#F0F4FF] hover:bg-[#131E35] hover:border-[#7C6EFA]/40 transition-all duration-150"
         >
           <RotateCcw className="w-4 h-4" />
-          {t('services.empty.reset')}
+          Reset Pencarian
         </button>
-        <Link href="/services" className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150"
-              style={{ background: "linear-gradient(135deg, #7C6EFA 0%, #5F52D0 100%)", color: "#fff" }}>
-          <Sparkles className="w-4 h-4" />
-          {t('services.empty.browseAll')}
-        </Link>
       </div>
-    </motion.div>
-  );
-}
-
-// ── Section Header ────────────────────────────────────────────────────────────
-
-function SectionHeader({
-  icon: Icon,
-  iconColor,
-  title,
-  badge,
-  children,
-}: {
-  icon: React.ElementType;
-  iconColor: string;
-  title: string;
-  badge?: React.ReactNode;
-  children?: React.ReactNode;
-}) {
-  return (
-    <motion.div
-      variants={fadeUp}
-      initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, margin: "-40px" }}
-      className="flex items-center gap-3 mb-6 flex-wrap"
-    >
-      <div className="flex items-center gap-2">
-        <Icon className="w-4 h-4" style={{ color: iconColor }} />
-        <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-bold text-lg text-[#F0F4FF]">{title}</h2>
-      </div>
-      {badge && badge}
-      <div className="flex-1 h-px bg-[#243352] min-w-[20px]" />
-      {children}
     </motion.div>
   );
 }
@@ -465,26 +504,25 @@ export default function ServicesPage() {
 
   const SORT_OPTIONS = SORT_KEYS.map((o) => ({ ...o, label: t(o.tKey) }));
 
-  const [search, setSearch] = useState("");
-  const [templateSeed, setTemplateSeed] = useState<{ templateId: number; templateName: string; category: string; style: string } | null>(null);
-  const [searchFocused, setSearchFocused] = useState(false);
-  const [recentSearches, setRecentSearches] = useState<string[]>([]);
-  const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
-  const [sort, setSort] = useState<SortKey>("popular");
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
-  const [sortOpen, setSortOpen] = useState(false);
-  const [page, setPage] = useState(1);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [recentlyViewed, setRecentlyViewed] = useState<number[]>([]);
-  const categoryScrollRef = useRef<HTMLDivElement>(null);
+  const [search, setSearch]                     = useState("");
+  const [searchFocused, setSearchFocused]       = useState(false);
+  const [recentSearches, setRecentSearches]     = useState<string[]>([]);
+  const [categoryId, setCategoryId]             = useState<number | undefined>(undefined);
+  const [sort, setSort]                         = useState<SortKey>("popular");
+  const [maxDelivery, setMaxDelivery]           = useState(30);
+  const [sortOpen, setSortOpen]                 = useState(false);
+  const [page, setPage]                         = useState(1);
+  const [loadingMore, setLoadingMore]           = useState(false);
+  const [recentlyViewed, setRecentlyViewed]     = useState<number[]>([]);
+  const [templateSeed, setTemplateSeed]         = useState<{ templateId: number; templateName: string; category: string; style: string } | null>(null);
+
   const searchRef = useRef<HTMLInputElement>(null);
   const PAGE_SIZE = 9;
 
   const { data: categories = [], isLoading: loadingCategories } = useCategories();
-  const { data: allServices = [], isLoading: loadingServices } = useServices(undefined);
+  const { data: allServices = [], isLoading: loadingServices }  = useServices(undefined);
 
-  // Arriving from the Template Gallery's "Use This Template" CTA: read the
-  // seed left in sessionStorage and pre-select the matching service category.
+  // Read template seed from sessionStorage
   useEffect(() => {
     const params = new URLSearchParams(searchQuery);
     const templateId = params.get("templateId");
@@ -501,9 +539,10 @@ export default function ServicesPage() {
   useEffect(() => {
     if (!templateSeed || categories.length === 0) return;
     const match = categories.find(
-      (c) => c.name.toLowerCase() === templateSeed.category.toLowerCase()
-        || templateSeed.category.toLowerCase().includes(c.name.toLowerCase())
-        || c.name.toLowerCase().includes(templateSeed.category.toLowerCase()),
+      (c) =>
+        c.name.toLowerCase() === templateSeed.category.toLowerCase() ||
+        templateSeed.category.toLowerCase().includes(c.name.toLowerCase()) ||
+        c.name.toLowerCase().includes(templateSeed.category.toLowerCase()),
     );
     if (match) setCategoryId(match.id);
   }, [templateSeed, categories]);
@@ -518,7 +557,7 @@ export default function ServicesPage() {
     } catch { /* ignore */ }
   }, []);
 
-  // Keyboard shortcut: "/" to focus search
+  // "/" keyboard shortcut
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "/" && document.activeElement?.tagName !== "INPUT") {
@@ -558,10 +597,7 @@ export default function ServicesPage() {
     searchRef.current?.blur();
   };
 
-  const handleSearchBlur = () => {
-    // Delay so clicks on dropdown items register first
-    setTimeout(() => setSearchFocused(false), 200);
-  };
+  const handleSearchBlur = () => { setTimeout(() => setSearchFocused(false), 200); };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && search.trim()) {
@@ -570,11 +606,17 @@ export default function ServicesPage() {
     }
   };
 
-  const featured = useMemo(() => {
-    if (allServices.length === 0) return [];
-    return allServices.filter((_, i) => i % 3 === 0).slice(0, 4);
+  // Services grouped by category (for category cards)
+  const servicesByCategory = useMemo(() => {
+    const map: Record<number, CatalogService[]> = {};
+    for (const s of allServices) {
+      if (!map[s.categoryId]) map[s.categoryId] = [];
+      map[s.categoryId].push(s);
+    }
+    return map;
   }, [allServices]);
 
+  // Filtered services for search / category view
   const filtered = useMemo(() => {
     let list = [...allServices];
 
@@ -590,93 +632,65 @@ export default function ServicesPage() {
       );
     }
 
-    if (filters.maxPrice < 999_999_999) {
-      list = list.filter((s) => Number(s.startingPrice) <= filters.maxPrice);
-    }
-
-    if (filters.maxDelivery < 30) {
-      list = list.filter((s) => deliveryDays(s.estimatedDelivery) <= filters.maxDelivery);
-    }
-
-    if (filters.humanReview !== null) {
-      list = list.filter((s) => s.humanReview === filters.humanReview);
-    }
-
-    if (filters.minRating > 0) {
-      list = list.filter((s) => Number(mockRating(s.id)) >= filters.minRating);
-    }
-
-    if (filters.flow) {
-      list = list.filter((s) => s.serviceFlow === filters.flow);
+    if (maxDelivery < 30) {
+      list = list.filter((s) => deliveryDays(s.estimatedDelivery) <= maxDelivery);
     }
 
     switch (sort) {
-      case "fastest":
-        list.sort((a, b) => deliveryDays(a.estimatedDelivery) - deliveryDays(b.estimatedDelivery));
-        break;
-      case "price_asc":
-        list.sort((a, b) => Number(a.startingPrice) - Number(b.startingPrice));
-        break;
-      case "rating":
-        list.sort((a, b) => Number(mockRating(b.id)) - Number(mockRating(a.id)));
-        break;
-      case "newest":
-        list.sort((a, b) => b.id - a.id);
-        break;
-      default:
-        list.sort((a, b) => mockCompleted(b.id) - mockCompleted(a.id));
+      case "fastest":   list.sort((a, b) => deliveryDays(a.estimatedDelivery) - deliveryDays(b.estimatedDelivery)); break;
+      case "price_asc": list.sort((a, b) => Number(a.startingPrice) - Number(b.startingPrice)); break;
+      case "rating":    list.sort((a, b) => Number(mockRating(b.id)) - Number(mockRating(a.id))); break;
+      case "newest":    list.sort((a, b) => b.id - a.id); break;
+      default:          list.sort((a, b) => mockCompleted(b.id) - mockCompleted(a.id));
     }
 
     return list;
-  }, [allServices, categoryId, search, filters, sort]);
+  }, [allServices, categoryId, search, maxDelivery, sort]);
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated = filtered.slice(0, page * PAGE_SIZE);
-  const hasMore = page < totalPages;
+  const totalPages  = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated   = filtered.slice(0, page * PAGE_SIZE);
+  const hasMore     = page < totalPages;
 
-  useEffect(() => { setPage(1); }, [search, categoryId, sort, filters]);
+  useEffect(() => { setPage(1); }, [search, categoryId, sort, maxDelivery]);
 
   const resetAll = () => {
     setSearch("");
     setCategoryId(undefined);
     setSort("popular");
-    setFilters(DEFAULT_FILTERS);
+    setMaxDelivery(30);
     setPage(1);
   };
 
   const handleLoadMore = () => {
     setLoadingMore(true);
-    setTimeout(() => {
-      setPage((p) => p + 1);
-      setLoadingMore(false);
-    }, 500);
+    setTimeout(() => { setPage((p) => p + 1); setLoadingMore(false); }, 500);
   };
 
-  const recentServices = allServices.filter((s) => recentlyViewed.includes(s.id));
-  const recommended = allServices
-    .filter((s) => !recentlyViewed.includes(s.id))
-    .sort((a, b) => mockCompleted(b.id) - mockCompleted(a.id))
-    .slice(0, 4);
+  const recentServices     = allServices.filter((s) => recentlyViewed.includes(s.id));
+  const isLoading          = loadingServices || loadingCategories;
+  const activeSort         = SORT_OPTIONS.find((o) => o.key === sort)!;
+  const showDropdown       = searchFocused && !search.trim();
+  const selectedCategory   = categories.find((c) => c.id === categoryId);
+  const hasFilters         = maxDelivery < 30 || search.trim().length > 0;
 
-  const isLoading = loadingServices;
-  const activeSort = SORT_OPTIONS.find((o) => o.key === sort)!;
-  const activeFilterCount = countActiveFilters(filters);
-  const showDropdown = searchFocused && !search.trim();
+  // Determine view mode
+  // "categories" = default landing grid
+  // "services"   = showing service cards (when category selected OR search active)
+  const mode = (categoryId !== undefined || search.trim().length > 0) ? "services" : "categories";
 
   return (
     <Layout>
       <div className="bg-[#060B18] text-[#F0F4FF] min-h-screen">
-        <div className="container mx-auto px-4 pt-6 max-w-5xl">
-          <Link href="/" className="inline-flex items-center gap-1.5 text-sm transition-colors group" style={{ color: '#8B9BC4' }}>
-            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
-            Kembali
-          </Link>
 
-          {templateSeed && (
-            <div className="mt-4 flex items-center justify-between gap-3 px-4 py-3 rounded-xl border"
-              style={{ background: "rgba(124,110,250,0.08)", borderColor: "rgba(124,110,250,0.3)" }}>
+        {/* ── Template seed banner ─────────────────────────────────────── */}
+        {templateSeed && (
+          <div className="container mx-auto px-4 pt-4 max-w-5xl">
+            <div
+              className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border"
+              style={{ background: "rgba(124,110,250,0.08)", borderColor: "rgba(124,110,250,0.3)" }}
+            >
               <p className="text-sm text-[#C9BFFF]">
-                <span className="font-semibold">Dari template:</span> {templateSeed.templateName} ({templateSeed.category} · {templateSeed.style}) — layanan berikut disaring agar cocok.
+                <span className="font-semibold">Dari template:</span> {templateSeed.templateName} ({templateSeed.category} · {templateSeed.style})
               </p>
               <button
                 onClick={() => { setTemplateSeed(null); setCategoryId(undefined); }}
@@ -685,12 +699,11 @@ export default function ServicesPage() {
                 Bersihkan
               </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* ── Hero ──────────────────────────────────────────────────────── */}
+        {/* ── Hero / Search ─────────────────────────────────────────────── */}
         <section className="relative overflow-hidden bg-[#060B18] border-b border-[#243352]">
-          {/* Animated ambient background */}
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             <motion.div
               animate={{ scale: [1, 1.1, 1], opacity: [0.08, 0.14, 0.08] }}
@@ -698,27 +711,26 @@ export default function ServicesPage() {
               className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] rounded-full"
               style={{ background: "radial-gradient(ellipse, #7C6EFA 0%, transparent 70%)", filter: "blur(60px)" }}
             />
-            <motion.div
-              animate={{ scale: [1, 1.15, 1], opacity: [0.06, 0.1, 0.06] }}
-              transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-              className="absolute bottom-0 right-1/4 w-[400px] h-[300px] rounded-full"
-              style={{ background: "radial-gradient(ellipse, #22D3EE 0%, transparent 70%)", filter: "blur(50px)" }}
+            <div
+              className="absolute inset-0 opacity-[0.025]"
+              style={{
+                backgroundImage:
+                  "linear-gradient(#7C6EFA 1px, transparent 1px), linear-gradient(90deg, #7C6EFA 1px, transparent 1px)",
+                backgroundSize: "40px 40px",
+              }}
             />
-            {/* Subtle grid */}
-            <div className="absolute inset-0 opacity-[0.025]"
-                 style={{ backgroundImage: "linear-gradient(#7C6EFA 1px, transparent 1px), linear-gradient(90deg, #7C6EFA 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
           </div>
 
-          <div className="relative container mx-auto px-4 md:px-8 max-w-5xl py-16 md:py-24 text-center">
-            {/* Enterprise badge */}
-            <motion.div variants={fadeUp} initial="hidden" animate="show" className="flex items-center justify-center gap-3 mb-6">
+          <div className="relative container mx-auto px-4 md:px-8 max-w-5xl py-12 md:py-16 text-center">
+            {/* Badge */}
+            <motion.div variants={fadeUp} initial="hidden" animate="show" className="flex items-center justify-center gap-2 mb-5">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#2E4270] bg-[#0D1526]/70 text-xs font-semibold text-[#7C6EFA]">
                 <Sparkles className="w-3.5 h-3.5" />
-                AI Service Catalog — {allServices.length > 0 ? `${allServices.length}+ ${t('services.servicesLabel')}` : `150+ ${t('services.servicesLabel')}`}
+                AI Service Catalog
               </div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#F59E0B]/30 bg-[#F59E0B]/8 text-xs font-semibold text-[#F59E0B]">
                 <Award className="w-3.5 h-3.5" />
-                {t('services.enterpriseGrade')}
+                {t("services.enterpriseGrade")}
               </div>
             </motion.div>
 
@@ -727,20 +739,18 @@ export default function ServicesPage() {
               initial="hidden"
               animate="show"
               style={{ animationDelay: "60ms", fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-              className="font-bold text-4xl md:text-6xl lg:text-7xl mb-5 leading-[1.08] text-[#F0F4FF]"
+              className="font-bold text-3xl md:text-5xl mb-3 leading-tight text-[#F0F4FF]"
             >
-              {t('services.hero.title')}{" "}
-              <span className="text-gradient-primary">{t('services.hero.titleSuffix')}</span>
+              Temukan Layanan yang Tepat
             </motion.h1>
-
             <motion.p
               variants={fadeUp}
               initial="hidden"
               animate="show"
-              style={{ animationDelay: "120ms" }}
-              className="text-base md:text-lg text-[#8B9BC4] max-w-2xl mx-auto mb-10"
+              style={{ animationDelay: "100ms" }}
+              className="text-sm md:text-base text-[#8B9BC4] max-w-xl mx-auto mb-8"
             >
-              {t('services.hero.desc')}
+              Pilih kategori, konfigurasikan paket, dan AI kami siap mengerjakan.
             </motion.p>
 
             {/* Search bar */}
@@ -748,7 +758,7 @@ export default function ServicesPage() {
               variants={fadeUp}
               initial="hidden"
               animate="show"
-              style={{ animationDelay: "180ms" }}
+              style={{ animationDelay: "160ms" }}
               className="relative max-w-2xl mx-auto"
             >
               <div className="relative">
@@ -760,8 +770,8 @@ export default function ServicesPage() {
                   onFocus={() => setSearchFocused(true)}
                   onBlur={handleSearchBlur}
                   onKeyDown={handleSearchKeyDown}
-                  placeholder={t('services.search.placeholder')}
-                  aria-label={t('services.search.placeholder')}
+                  placeholder={t("services.search.placeholder")}
+                  aria-label={t("services.search.placeholder")}
                   className="w-full pl-14 pr-16 py-4 rounded-2xl bg-[#131E35] border border-[#2E4270]
                              text-base text-[#F0F4FF] placeholder:text-[#8B9BC4]/60 outline-none transition-all duration-200
                              focus:border-[#7C6EFA] focus:shadow-[0_0_0_3px_rgba(124,110,250,0.15)]"
@@ -771,19 +781,15 @@ export default function ServicesPage() {
                     <button
                       onClick={() => setSearch("")}
                       className="text-[#8B9BC4] hover:text-[#F0F4FF] transition-colors"
-                      aria-label="Clear search"
+                      aria-label="Hapus pencarian"
                     >
                       <X className="w-4 h-4" />
                     </button>
                   ) : (
-                    <kbd className="hidden sm:flex px-1.5 py-0.5 rounded bg-[#0D1526] border border-[#2E4270] font-mono text-[10px] text-[#8B9BC4] items-center gap-0.5">
-                      /
-                    </kbd>
+                    <kbd className="hidden sm:flex px-1.5 py-0.5 rounded bg-[#0D1526] border border-[#2E4270] font-mono text-[10px] text-[#8B9BC4] items-center">/</kbd>
                   )}
                 </div>
               </div>
-
-              {/* Search Dropdown */}
               <AnimatePresence>
                 {showDropdown && (
                   <SearchDropdown
@@ -798,320 +804,172 @@ export default function ServicesPage() {
               </AnimatePresence>
             </motion.div>
 
-            {/* Quick category shortcuts */}
-            <motion.div
-              variants={fadeUp}
-              initial="hidden"
-              animate="show"
-              style={{ animationDelay: "240ms" }}
-              className="flex items-center justify-center gap-2 mt-5 flex-wrap"
-            >
-              {categories.length > 0 && (
-                <>
-                  <span className="text-xs text-[#8B9BC4]">{t('services.quickLabel')}</span>
-                  {categories.map((cat) => (
-                    <button
-                      key={cat.id}
-                      onClick={() => setCategoryId(cat.id)}
-                      className="text-xs px-3 py-1 rounded-full border border-[#2E4270] text-[#8B9BC4] hover:border-[#7C6EFA]/50 hover:text-[#7C6EFA] transition-all duration-150"
-                    >
-                      {cat.name}
-                    </button>
-                  ))}
-                  {/* PPJK Tariff Calculator shortcut */}
-                  <Link
-                    href="/tarif-kalkulator"
-                    className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border transition-all duration-150"
-                    style={{ borderColor: "rgba(34,211,238,0.40)", color: "#22D3EE", background: "rgba(34,211,238,0.06)" }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(34,211,238,0.14)"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(34,211,238,0.06)"; }}
-                  >
-                    <Calculator className="w-3 h-3" />
-                    Customs &amp; PPJK AI
-                    <span className="ml-0.5 text-[9px] font-bold px-1 py-0.5 rounded-full"
-                      style={{ background: "rgba(34,211,238,0.18)", color: "#22D3EE" }}>Baru</span>
-                  </Link>
-                </>
-              )}
-            </motion.div>
-          </div>
-        </section>
-
-        {/* ── Category filter ────────────────────────────────────────────── */}
-        <section className="sticky top-0 z-20 bg-[#060B18]/90 backdrop-blur-md border-b border-[#243352]">
-          <div className="container mx-auto px-4 md:px-8 max-w-7xl">
-            <div
-              ref={categoryScrollRef}
-              className="flex items-center gap-2 py-3 overflow-x-auto"
-              style={{ scrollbarWidth: "none" }}
-              role="navigation"
-              aria-label="Kategori layanan"
-            >
-              <button
-                onClick={() => setCategoryId(undefined)}
-                className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-all duration-200 ${
-                  categoryId === undefined
-                    ? "bg-[#7C6EFA] text-[#F0F4FF] border-transparent shadow-[0_2px_12px_rgba(124,110,250,0.3)]"
-                    : "border-[#2E4270] text-[#8B9BC4] hover:border-[#7C6EFA]/40 hover:text-[#F0F4FF]"
-                }`}
-                aria-pressed={categoryId === undefined}
+            {/* Shortcuts */}
+            {categories.length > 0 && (
+              <motion.div
+                variants={fadeUp}
+                initial="hidden"
+                animate="show"
+                style={{ animationDelay: "200ms" }}
+                className="flex items-center justify-center gap-2 mt-4 flex-wrap"
               >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                {t('services.noCategory')}
-              </button>
-
-              {loadingCategories
-                ? Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} className="shrink-0 h-9 w-28 rounded-full bg-[#131E35] animate-pulse" />
-                  ))
-                : categories.map((cat) => {
-                    const Icon = getCategoryIcon(cat);
-                    const active = categoryId === cat.id;
-                    return (
-                      <button
-                        key={cat.id}
-                        onClick={() => setCategoryId(active ? undefined : cat.id)}
-                        aria-pressed={active}
-                        className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-all duration-200 ${
-                          active
-                            ? "bg-[#7C6EFA] text-[#F0F4FF] border-transparent shadow-[0_2px_12px_rgba(124,110,250,0.3)] scale-105"
-                            : "border-[#2E4270] text-[#8B9BC4] hover:border-[#7C6EFA]/40 hover:text-[#F0F4FF] hover:scale-105"
-                        }`}
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                        {cat.name}
-                      </button>
-                    );
-                  })}
-
-              {/* ── Customs & PPJK AI — special tab linking to tariff calculator ── */}
-              {!loadingCategories && (
+                <span className="text-xs text-[#8B9BC4]">Kategori:</span>
+                {categories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setCategoryId(cat.id)}
+                    className="text-xs px-3 py-1 rounded-full border border-[#2E4270] text-[#8B9BC4] hover:border-[#7C6EFA]/50 hover:text-[#7C6EFA] transition-all duration-150"
+                  >
+                    {cat.name}
+                  </button>
+                ))}
                 <Link
                   href="/tarif-kalkulator"
-                  className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-all duration-200 hover:scale-105"
-                  style={{
-                    borderColor: "rgba(34,211,238,0.45)",
-                    color: "#22D3EE",
-                    background: "rgba(34,211,238,0.07)",
-                    boxShadow: "0 0 12px rgba(34,211,238,0.08)",
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = "rgba(34,211,238,0.16)";
-                    (e.currentTarget as HTMLElement).style.borderColor = "rgba(34,211,238,0.70)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = "rgba(34,211,238,0.07)";
-                    (e.currentTarget as HTMLElement).style.borderColor = "rgba(34,211,238,0.45)";
-                  }}
+                  className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border transition-all duration-150"
+                  style={{ borderColor: "rgba(34,211,238,0.40)", color: "#22D3EE", background: "rgba(34,211,238,0.06)" }}
                 >
-                  <Calculator className="w-3.5 h-3.5" />
+                  <Calculator className="w-3 h-3" />
                   Customs &amp; PPJK AI
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                    style={{ background: "rgba(34,211,238,0.20)", color: "#22D3EE", lineHeight: 1 }}>
-                    Baru
-                  </span>
+                  <span className="text-[9px] font-bold px-1 py-0.5 rounded-full" style={{ background: "rgba(34,211,238,0.18)", color: "#22D3EE" }}>Baru</span>
                 </Link>
-              )}
-            </div>
+              </motion.div>
+            )}
           </div>
         </section>
 
+        {/* ── Main content ─────────────────────────────────────────────── */}
         <div className="container mx-auto px-4 md:px-8 max-w-7xl py-10">
 
-          {/* ── Featured Services ────────────────────────────────────────── */}
-          {!search && categoryId === undefined && featured.length > 0 && (
-            <section className="mb-14">
-              <SectionHeader icon={Zap} iconColor="#F59E0B" title={t('services.featuredTitle')} />
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* First card: hero size spanning 2 cols */}
-                {featured[0] && (() => {
-                  const s = featured[0];
-                  const badge = serviceBadge(s) ?? { label: "Unggulan" as BadgeKind, color: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" };
-                  return (
-                    <motion.div
-                      key={s.id}
-                      variants={fadeUp}
-                      initial="hidden"
-                      whileInView="show"
-                      viewport={{ once: true }}
-                      className="sm:col-span-2 lg:col-span-2"
-                    >
-                      <Link
-                        href={`/services/${s.id}`}
-                        onClick={() => trackView(s.id)}
-                        className="group relative block rounded-2xl p-6 h-full transition-all duration-200 hover:-translate-y-1 overflow-hidden"
-                        style={{ background: "linear-gradient(135deg, #111C38 0%, #0D1526 100%)", border: "1px solid #2E4270" }}
-                      >
-                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-                             style={{ background: "linear-gradient(135deg, rgba(124,110,250,0.1) 0%, rgba(34,211,238,0.05) 100%)", boxShadow: "inset 0 0 0 1px rgba(124,110,250,0.3)" }} />
-                        <div className="relative z-[1]">
-                          <div className="flex items-start justify-between mb-4">
-                            <div className="w-14 h-14 rounded-2xl border border-[#7C6EFA]/20 flex items-center justify-center"
-                                 style={{ background: "linear-gradient(135deg, rgba(124,110,250,0.25) 0%, rgba(34,211,238,0.15) 100%)" }}>
-                              <Sparkles className="w-6 h-6 text-[#7C6EFA] group-hover:scale-110 transition-transform duration-200" />
-                            </div>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge.color}`}>
-                              {badge.label}
-                            </span>
-                          </div>
-                          <p style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-bold text-xl leading-snug mb-2 text-[#F0F4FF] group-hover:text-[#7C6EFA] transition-colors">
-                            {s.serviceName}
-                          </p>
-                          <p className="text-sm text-[#8B9BC4] leading-relaxed mb-6 line-clamp-3">{s.shortDescription}</p>
-                          <div className="flex items-center gap-4 text-xs text-[#8B9BC4] mb-4">
-                            <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 fill-[#F59E0B] text-[#F59E0B]" />{mockRating(s.id)}</span>
-                            <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-[#22D3EE]" />{s.estimatedDelivery}</span>
-                            {s.humanReview && <span className="flex items-center gap-1 text-[#7C6EFA]"><Shield className="w-3.5 h-3.5" />Review Manusia</span>}
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-[11px] text-[#8B9BC4] mb-0.5">Mulai dari</p>
-                              <p style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-bold text-lg text-[#F0F4FF]">{formatPrice(s.startingPrice, s.currency)}</p>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm font-semibold text-[#7C6EFA] group-hover:gap-3 transition-all">
-                              Lihat Detail <ArrowRight className="w-4 h-4" />
-                            </div>
-                          </div>
-                        </div>
-                      </Link>
-                    </motion.div>
-                  );
-                })()}
-
-                {/* Remaining 3 cards */}
-                {featured.slice(1).map((s, idx) => {
-                  const badge = serviceBadge(s) ?? { label: "Unggulan" as BadgeKind, color: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" };
-                  return (
-                    <motion.div
-                      key={s.id}
-                      variants={fadeUp}
-                      initial="hidden"
-                      whileInView="show"
-                      viewport={{ once: true }}
-                      transition={{ delay: idx * 0.05 }}
-                    >
-                      <Link
-                        href={`/services/${s.id}`}
-                        onClick={() => trackView(s.id)}
-                        className="group block bg-[#0D1526] border border-[#2E4270] rounded-2xl p-5 h-full flex flex-col gap-3 hover:border-[#7C6EFA]/50 hover:shadow-[0_8px_24px_rgba(124,110,250,0.15)] hover:-translate-y-1 transition-all duration-200"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="w-10 h-10 rounded-xl border border-[#7C6EFA]/20 flex items-center justify-center"
-                               style={{ background: "linear-gradient(135deg, rgba(124,110,250,0.25) 0%, rgba(34,211,238,0.15) 100%)" }}>
-                            <Sparkles className="w-4 h-4 text-[#7C6EFA] group-hover:scale-110 transition-transform" />
-                          </div>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge.color}`}>{badge.label}</span>
-                        </div>
-                        <div className="flex-1">
-                          <p style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-semibold text-sm leading-snug mb-1 text-[#F0F4FF] group-hover:text-[#7C6EFA] transition-colors">{s.serviceName}</p>
-                          <p className="text-xs text-[#8B9BC4] line-clamp-2">{s.shortDescription}</p>
-                        </div>
-                        <div className="mt-auto flex items-center justify-between pt-2 border-t border-[#243352]">
-                          <span className="text-xs font-bold text-[#F0F4FF]">{formatPrice(s.startingPrice, s.currency)}</span>
-                          <ArrowRight className="w-3.5 h-3.5 text-[#8B9BC4] group-hover:text-[#7C6EFA] group-hover:translate-x-0.5 transition-all" />
-                        </div>
-                      </Link>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* ── Recommended for You ──────────────────────────────────────── */}
-          {!search && categoryId === undefined && recommended.length > 0 && (
-            <section className="mb-14">
-              <SectionHeader
-                icon={TrendingUp}
-                iconColor="#22D3EE"
-                title={t('services.recommendedTitle')}
-                badge={
-                  <span className="text-[11px] text-[#8B9BC4] bg-[#131E35] border border-[#2E4270] px-2 py-0.5 rounded-full">
-                    {t('services.basedOnPopularity')}
-                  </span>
-                }
-              />
+          {/* ── Breadcrumb (service view) ─────────────────────────────── */}
+          <AnimatePresence>
+            {mode === "services" && (
               <motion.div
-                variants={staggerGrid}
-                initial="hidden"
-                whileInView="show"
-                viewport={{ once: true }}
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="flex items-center gap-2 mb-8 text-sm"
               >
-                {recommended.map((s) => (
-                  <motion.div key={s.id} variants={cardVariant}>
-                    <Link
-                      href={`/services/${s.id}`}
-                      onClick={() => trackView(s.id)}
-                      className="group block bg-[#0D1526] border border-[#2E4270] rounded-2xl p-4 flex flex-col gap-2 hover:border-[#22D3EE]/50 hover:-translate-y-0.5 hover:shadow-[0_4px_20px_rgba(34,211,238,0.1)] transition-all duration-200"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Star className="w-3.5 h-3.5 fill-[#F59E0B] text-[#F59E0B]" />
-                        <span className="text-xs font-semibold text-[#F0F4FF]">{mockRating(s.id)}</span>
-                        <span className="text-xs text-[#8B9BC4] ml-auto">{s.estimatedDelivery}</span>
-                      </div>
-                      <p style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="text-sm font-semibold leading-snug text-[#F0F4FF] group-hover:text-[#22D3EE] transition-colors">
-                        {s.serviceName}
-                      </p>
-                      <p className="text-xs text-[#8B9BC4] line-clamp-1">{s.shortDescription}</p>
-                      <p className="text-sm font-bold text-[#F0F4FF] mt-auto">{formatPrice(s.startingPrice, s.currency)}</p>
-                    </Link>
-                  </motion.div>
-                ))}
-              </motion.div>
-            </section>
-          )}
-
-          {/* ── Recently Viewed ───────────────────────────────────────────── */}
-          {recentServices.length > 0 && !search && (
-            <section className="mb-14">
-              <SectionHeader icon={Eye} iconColor="#8B9BC4" title={t('services.recentlyViewedTitle')}>
                 <button
-                  onClick={() => {
-                    setRecentlyViewed([]);
-                    localStorage.removeItem(RECENTLY_VIEWED_KEY);
-                  }}
-                  className="text-xs text-[#8B9BC4] hover:text-[#F0F4FF] transition-colors ml-2"
-                  aria-label="Hapus riwayat dilihat"
+                  onClick={resetAll}
+                  className="flex items-center gap-1.5 text-[#8B9BC4] hover:text-[#7C6EFA] transition-colors"
                 >
-                  {t('services.clear')}
+                  <ArrowLeft className="w-4 h-4" />
+                  Semua Kategori
                 </button>
-              </SectionHeader>
-              <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
-                {recentServices.map((s) => (
-                  <Link
-                    key={s.id}
-                    href={`/services/${s.id}`}
-                    onClick={() => trackView(s.id)}
-                    className="group shrink-0 w-52 bg-[#0D1526] border border-[#2E4270] rounded-2xl p-4 flex flex-col gap-2 hover:border-[#7C6EFA]/50 hover:-translate-y-0.5 transition-all duration-200"
-                  >
-                    <p style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="text-sm font-semibold leading-snug text-[#F0F4FF] group-hover:text-[#7C6EFA] transition-colors line-clamp-2">
-                      {s.serviceName}
-                    </p>
-                    <p className="text-xs text-[#8B9BC4] mt-auto">{formatPrice(s.startingPrice, s.currency)}</p>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
+                {selectedCategory && (
+                  <>
+                    <ChevronRight className="w-3.5 h-3.5 text-[#4F6494]" />
+                    <span className="font-semibold text-[#F0F4FF]">{selectedCategory.name}</span>
+                  </>
+                )}
+                {search.trim() && (
+                  <>
+                    <ChevronRight className="w-3.5 h-3.5 text-[#4F6494]" />
+                    <span className="text-[#8B9BC4]">Hasil: "<span className="text-[#F0F4FF]">{search}</span>"</span>
+                  </>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          {/* ── Main grid ───────────────────────────────────────────────── */}
-          <div>
-            <div className="min-w-0">
+          {isLoading ? (
+            /* ── Loading skeleton ──────────────────────────────────────── */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
+            </div>
+
+          ) : mode === "categories" ? (
+            /* ── Category Grid ─────────────────────────────────────────── */
+            <>
+              {/* Recently Viewed */}
+              {recentServices.length > 0 && (
+                <section className="mb-12">
+                  <div className="flex items-center gap-3 mb-5">
+                    <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-bold text-base text-[#F0F4FF]">
+                      Terakhir Dilihat
+                    </h2>
+                    <div className="flex-1 h-px bg-[#243352]" />
+                    <button
+                      onClick={() => {
+                        setRecentlyViewed([]);
+                        localStorage.removeItem(RECENTLY_VIEWED_KEY);
+                      }}
+                      className="text-xs text-[#8B9BC4] hover:text-[#F0F4FF] transition-colors"
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                  <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
+                    {recentServices.map((s) => (
+                      <Link
+                        key={s.id}
+                        href={`/services/${s.id}`}
+                        onClick={() => trackView(s.id)}
+                        className="group shrink-0 w-52 bg-[#0D1526] border border-[#2E4270] rounded-2xl p-4 flex flex-col gap-2 hover:border-[#7C6EFA]/50 hover:-translate-y-0.5 transition-all duration-200"
+                      >
+                        <p style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="text-sm font-semibold leading-snug text-[#F0F4FF] group-hover:text-[#7C6EFA] transition-colors line-clamp-2">
+                          {s.serviceName}
+                        </p>
+                        <p className="text-xs text-[#8B9BC4] mt-auto">{formatPrice(s.startingPrice, s.currency)}</p>
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Category section header */}
+              <div className="flex items-center gap-3 mb-6">
+                <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-bold text-lg text-[#F0F4FF]">
+                  Pilih Kategori Layanan
+                </h2>
+                <div className="flex-1 h-px bg-[#243352]" />
+                <span className="text-xs text-[#8B9BC4] bg-[#131E35] border border-[#2E4270] px-2.5 py-1 rounded-full">
+                  {categories.length} kategori
+                </span>
+              </div>
+
+              {categories.length === 0 ? (
+                <div className="py-24 text-center text-[#8B9BC4]">
+                  <Sparkles className="w-10 h-10 mx-auto mb-4 opacity-30" />
+                  <p>Tidak ada kategori tersedia.</p>
+                </div>
+              ) : (
+                <motion.div
+                  variants={staggerGrid}
+                  initial="hidden"
+                  animate="show"
+                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"
+                >
+                  {categories.map((cat, idx) => (
+                    <CategoryCard
+                      key={cat.id}
+                      category={cat}
+                      services={servicesByCategory[cat.id] ?? []}
+                      accentIdx={idx}
+                      onSelect={(id) => setCategoryId(id)}
+                    />
+                  ))}
+                </motion.div>
+              )}
+            </>
+
+          ) : (
+            /* ── Service Grid ──────────────────────────────────────────── */
+            <>
               {/* Toolbar */}
               <div className="flex items-center gap-3 mb-6 flex-wrap">
                 <p className="text-sm text-[#8B9BC4]">
-                  <span className="font-semibold text-[#F0F4FF]">{filtered.length}</span> {t('services.servicesLabel')}
-                  {(search || categoryId !== undefined) && ` ${t('services.foundLabel')}`}
+                  <span className="font-semibold text-[#F0F4FF]">{filtered.length}</span> {t("services.servicesLabel")}
+                  {search.trim() && ` ditemukan`}
                 </p>
 
                 <div className="ml-auto flex items-center gap-2">
-                  {/* Delivery filter pill */}
+                  {/* Delivery filter */}
                   <div className="relative">
                     <select
-                      value={filters.maxDelivery}
-                      onChange={(e) => setFilters(f => ({ ...f, maxDelivery: Number(e.target.value) }))}
-                      aria-label="Filter pengiriman"
+                      value={maxDelivery}
+                      onChange={(e) => setMaxDelivery(Number(e.target.value))}
+                      aria-label="Filter waktu pengerjaan"
                       className="appearance-none flex items-center gap-2 pl-3 pr-8 py-2 rounded-xl border border-[#2E4270] text-sm text-[#8B9BC4] bg-[#0D1526] hover:border-[#7C6EFA]/40 hover:text-[#F0F4FF] transition-colors cursor-pointer focus:outline-none focus:border-[#7C6EFA]/60"
                     >
                       <option value={30}>Semua Waktu</option>
@@ -1122,11 +980,11 @@ export default function ServicesPage() {
                     <Clock className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8B9BC4] pointer-events-none" />
                   </div>
 
-                  {/* Reset button — shown when any filter active */}
-                  {activeFilterCount > 0 && (
+                  {/* Reset button */}
+                  {hasFilters && (
                     <button
                       onClick={resetAll}
-                      aria-label="Reset semua filter"
+                      aria-label="Reset filter"
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#2E4270] text-xs text-[#8B9BC4] hover:text-[#F0F4FF] hover:border-[#7C6EFA]/40 transition-colors bg-[#0D1526]"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
@@ -1134,62 +992,55 @@ export default function ServicesPage() {
                     </button>
                   )}
 
-                {/* Sort dropdown */}
-                <div className="relative">
-                  <button
-                    onClick={() => setSortOpen((v) => !v)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl border border-[#2E4270] text-sm font-medium text-[#F0F4FF] hover:border-[#7C6EFA]/40 transition-colors bg-[#0D1526]"
-                    aria-expanded={sortOpen}
-                    aria-label="Urutkan layanan"
-                  >
-                    <activeSort.icon className="w-3.5 h-3.5 text-[#8B9BC4]" />
-                    <span className="text-[#8B9BC4] hidden sm:inline">{t('services.sortLabel')}</span>
-                    {activeSort.label}
-                    <ChevronDown className={`w-4 h-4 text-[#8B9BC4] transition-transform duration-200 ${sortOpen ? "rotate-180" : ""}`} />
-                  </button>
+                  {/* Sort dropdown */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setSortOpen((v) => !v)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl border border-[#2E4270] text-sm font-medium text-[#F0F4FF] hover:border-[#7C6EFA]/40 transition-colors bg-[#0D1526]"
+                      aria-expanded={sortOpen}
+                    >
+                      <activeSort.icon className="w-3.5 h-3.5 text-[#8B9BC4]" />
+                      <span className="text-[#8B9BC4] hidden sm:inline">{t("services.sortLabel")}</span>
+                      {activeSort.label}
+                      <ChevronDown className={`w-4 h-4 text-[#8B9BC4] transition-transform duration-200 ${sortOpen ? "rotate-180" : ""}`} />
+                    </button>
 
-                  <AnimatePresence>
-                    {sortOpen && (
-                      <>
-                        <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} />
-                        <motion.div
-                          initial={{ opacity: 0, y: -6, scale: 0.97 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -4, scale: 0.97 }}
-                          transition={{ duration: 0.15 }}
-                          className="absolute right-0 top-full mt-2 z-20 w-52 rounded-xl border border-[#2E4270] overflow-hidden"
-                          style={{ background: "#0D1526", boxShadow: "0 16px 40px rgba(0,0,0,0.4)" }}
-                        >
-                          {SORT_OPTIONS.map((o) => {
-                            const Icon = o.icon;
-                            return (
-                              <button
-                                key={o.key}
-                                onClick={() => { setSort(o.key); setSortOpen(false); }}
-                                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-[#131E35] ${
-                                  sort === o.key ? "text-[#7C6EFA] font-semibold bg-[#7C6EFA]/5" : "text-[#8B9BC4]"
-                                }`}
-                              >
-                                <Icon className={`w-3.5 h-3.5 ${sort === o.key ? "text-[#7C6EFA]" : "text-[#8B9BC4]"}`} />
-                                {o.label}
-                                {sort === o.key && <CheckCircle className="w-3.5 h-3.5 ml-auto text-[#7C6EFA]" />}
-                              </button>
-                            );
-                          })}
-                        </motion.div>
-                      </>
-                    )}
-                  </AnimatePresence>
+                    <AnimatePresence>
+                      {sortOpen && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} />
+                          <motion.div
+                            initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                            transition={{ duration: 0.15 }}
+                            className="absolute right-0 top-full mt-2 z-20 w-52 rounded-xl border border-[#2E4270] overflow-hidden"
+                            style={{ background: "#0D1526", boxShadow: "0 16px 40px rgba(0,0,0,0.4)" }}
+                          >
+                            {SORT_OPTIONS.map((o) => {
+                              const Icon = o.icon;
+                              return (
+                                <button
+                                  key={o.key}
+                                  onClick={() => { setSort(o.key); setSortOpen(false); }}
+                                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-[#131E35] ${sort === o.key ? "text-[#7C6EFA] font-semibold bg-[#7C6EFA]/5" : "text-[#8B9BC4]"}`}
+                                >
+                                  <Icon className={`w-3.5 h-3.5 ${sort === o.key ? "text-[#7C6EFA]" : "text-[#8B9BC4]"}`} />
+                                  {o.label}
+                                  {sort === o.key && <CheckCircle className="w-3.5 h-3.5 ml-auto text-[#7C6EFA]" />}
+                                </button>
+                              );
+                            })}
+                          </motion.div>
+                        </>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
               </div>
-              </div>
 
-              {/* Service grid */}
-              {isLoading ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-                  {Array.from({ length: 9 }).map((_, i) => <SkeletonCard key={i} />)}
-                </div>
-              ) : filtered.length === 0 ? (
+              {/* Grid */}
+              {filtered.length === 0 ? (
                 <div className="grid">
                   <EmptyState onReset={resetAll} />
                 </div>
@@ -1199,7 +1050,7 @@ export default function ServicesPage() {
                     variants={staggerGrid}
                     initial="hidden"
                     animate="show"
-                    key={`${search}-${categoryId}-${sort}-${JSON.stringify(filters)}`}
+                    key={`${search}-${categoryId}-${sort}-${maxDelivery}`}
                     className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5"
                   >
                     {paginated.map((s) => (
@@ -1216,13 +1067,13 @@ export default function ServicesPage() {
                         className="flex items-center gap-2 py-3 px-8 rounded-xl border border-[#2E4270] text-sm font-medium text-[#F0F4FF] hover:bg-[#131E35] hover:border-[#7C6EFA]/40 transition-all duration-150 disabled:opacity-70 disabled:cursor-not-allowed"
                       >
                         {loadingMore ? (
-                          <><Loader2 className="w-4 h-4 animate-spin" /> {t('services.loading')}</>
+                          <><Loader2 className="w-4 h-4 animate-spin" /> {t("services.loading")}</>
                         ) : (
-                          <><ChevronDown className="w-4 h-4" /> {t('services.loadMore')}</>
+                          <><ChevronDown className="w-4 h-4" /> {t("services.loadMore")}</>
                         )}
                       </button>
                       <p className="text-xs text-[#8B9BC4]">
-                        {t('services.showing', { shown: String(paginated.length), total: String(filtered.length) })}
+                        {t("services.showing", { shown: String(paginated.length), total: String(filtered.length) })}
                       </p>
                     </div>
                   )}
@@ -1234,13 +1085,13 @@ export default function ServicesPage() {
                       className="text-center text-xs text-[#8B9BC4] mt-10 flex items-center justify-center gap-2"
                     >
                       <CheckCircle className="w-3.5 h-3.5 text-[#10B981]" />
-                      {t('services.allLoaded', { total: String(filtered.length) })}
+                      {t("services.allLoaded", { total: String(filtered.length) })}
                     </motion.p>
                   )}
                 </>
               )}
-            </div>
-          </div>
+            </>
+          )}
         </div>
       </div>
     </Layout>
