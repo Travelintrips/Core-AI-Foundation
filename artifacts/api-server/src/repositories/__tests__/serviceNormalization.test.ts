@@ -509,3 +509,102 @@ describe("TC-extra: public API does not expose internal fields", async () => {
     expect(publicSection).not.toContain("reviewNotes");
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TC-auth: Authentication guard — Team-6 integration fix verification
+//
+// Phase 7 finding: Team 04 originally added "/ai/solution-collections" to
+// PUBLIC_PATH_PREFIXES, which would bypass auth for ALL HTTP methods (POST,
+// PATCH, DELETE) under that prefix. Team-6 moved these to explicit GET-only
+// entries in PUBLIC_ROUTE_RULES to match the codebase's documented convention.
+//
+// These tests verify the fix is in place and permanent.
+// ═══════════════════════════════════════════════════════════════════════════════
+describe("TC-auth-01: /ai/solution-collections NOT in PUBLIC_PATH_PREFIXES", async () => {
+  const authSrc = await fs.readFile(
+    path.resolve(SRC, "middleware/adminAuth.ts"),
+    "utf8",
+  );
+
+  it("broad prefix is absent from PUBLIC_PATH_PREFIXES array", () => {
+    // Extract only the PUBLIC_PATH_PREFIXES block (ends before PUBLIC_ROUTE_RULES)
+    const prefixBlock = authSrc.split("PUBLIC_ROUTE_RULES")[0] ?? "";
+    expect(prefixBlock).not.toContain('"/ai/solution-collections"');
+  });
+
+  it("explicit GET /ai/solution-collections rule is in PUBLIC_ROUTE_RULES", () => {
+    expect(authSrc).toContain('/^\\/ai\\/solution-collections$/');
+  });
+
+  it("explicit GET /ai/solution-collections/:slug rule is in PUBLIC_ROUTE_RULES", () => {
+    expect(authSrc).toContain('/^\\/ai\\/solution-collections\\/[^/]+$/');
+  });
+
+  it("both solution-collections GET rules are method:GET only", () => {
+    // Each exemption must be tagged { method: "GET", ... }
+    const ruleSection = authSrc.split("PUBLIC_ROUTE_RULES")[1] ?? "";
+    const solutionCollectionRules = ruleSection
+      .split("\n")
+      .filter((l) => l.includes("solution-collections"));
+    for (const line of solutionCollectionRules) {
+      expect(line).toContain('"GET"');
+    }
+  });
+});
+
+describe("TC-auth-02: admin write routes NOT under /ai/solution-collections prefix", async () => {
+  const routeSrc = await fs.readFile(
+    path.resolve(SRC, "routes/service-normalization.ts"),
+    "utf8",
+  );
+
+  it("admin POST route uses /ai/admin/ prefix, not /ai/solution-collections/", () => {
+    expect(routeSrc).toContain('"/ai/admin/solution-collections"');
+  });
+
+  it("admin PATCH route uses /ai/admin/ prefix", () => {
+    expect(routeSrc).toContain('router.patch("/ai/admin/solution-collections');
+  });
+
+  it("admin DELETE route uses /ai/admin/ prefix", () => {
+    expect(routeSrc).toContain('router.delete("/ai/admin/solution-collections');
+  });
+
+  it("no POST route is registered directly under /ai/solution-collections (non-admin)", () => {
+    // Only GET routes should appear at /ai/solution-collections (without /admin/)
+    const nonAdminPosts = routeSrc.match(/router\.post\(["']\/ai\/solution-collections[^/]/g);
+    expect(nonAdminPosts).toBeNull();
+  });
+
+  it("no PATCH route is registered directly under /ai/solution-collections (non-admin)", () => {
+    const nonAdminPatches = routeSrc.match(/router\.patch\(["']\/ai\/solution-collections[^/]/g);
+    expect(nonAdminPatches).toBeNull();
+  });
+
+  it("no DELETE route is registered directly under /ai/solution-collections (non-admin)", () => {
+    const nonAdminDeletes = routeSrc.match(/router\.delete\(["']\/ai\/solution-collections[^/]/g);
+    expect(nonAdminDeletes).toBeNull();
+  });
+});
+
+describe("TC-auth-03: internal/draft collections not leaked to public endpoint", () => {
+  it("listPublicCollections filters by status='active' AND visibility='public'", async () => {
+    const svcSrc = await fs.readFile(
+      path.resolve(SRC, "services/serviceNormalizationService.ts"),
+      "utf8",
+    );
+    // The service must pass both status and visibility filters to the repo
+    expect(svcSrc).toContain('status: "active"');
+    expect(svcSrc).toContain('visibility: "public"');
+  });
+
+  it("getPublicCollectionDetail guards status=active AND visibility=public before returning data", async () => {
+    const svcSrc = await fs.readFile(
+      path.resolve(SRC, "services/serviceNormalizationService.ts"),
+      "utf8",
+    );
+    // The guard must check both conditions and throw NOT_FOUND for internal/draft
+    expect(svcSrc).toContain('collection.status !== "active"');
+    expect(svcSrc).toContain('collection.visibility !== "public"');
+  });
+});
