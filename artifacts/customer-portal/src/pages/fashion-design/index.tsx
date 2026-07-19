@@ -3,6 +3,10 @@
  *
  * Public-facing page for browsing available apparel services and submitting
  * design orders. Connects to the /api/ai/fashion-design/* endpoints.
+ *
+ * Revision flow:
+ *   After submitting, customers can track order status and request human-touch
+ *   revisions when the AI output is in "review" status.
  */
 
 import { useState } from "react";
@@ -11,7 +15,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Shirt, ChevronRight, Palette, Layout, FileJson,
   CheckCircle2, AlertTriangle, Loader2, ArrowLeft,
-  Package, Sparkles, Info,
+  Package, Sparkles, Info, MessageSquare, Search,
+  History, ExternalLink, RefreshCw, PenTool,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,10 +65,23 @@ interface OrderResult {
   status: string;
   trademarkSafe: boolean;
   trademarkNotes?: string;
+  designerName?: string | null;
+  designerEmail?: string | null;
   createdAt: string;
 }
 
-// ── Service type display config ───────────────────────────────────────────────
+interface FashionRevision {
+  id: number;
+  type: string;
+  feedback?: string | null;
+  referenceUrls: string[];
+  designerName?: string | null;
+  revisedFileUrls: string[];
+  notes?: string | null;
+  createdAt: string;
+}
+
+// ── Display config ────────────────────────────────────────────────────────────
 
 const SERVICE_CONFIG: Record<string, { label: string; emoji: string; color: string; bg: string }> = {
   "t-shirt":         { label: "T-Shirt",              emoji: "👕", color: "text-blue-400",   bg: "bg-blue-500/10 border-blue-500/30" },
@@ -76,31 +94,37 @@ const SERVICE_CONFIG: Record<string, { label: string; emoji: string; color: stri
   "merchandise":     { label: "Merchandise",          emoji: "🛍️", color: "text-cyan-400",   bg: "bg-cyan-500/10 border-cyan-500/30" },
 };
 
-const OUTPUT_LABELS: Record<string, string> = {
-  "flat-design":      "Flat Design",
-  "front-back-preview": "Preview Depan/Belakang",
-  "colorways":        "Variasi Warna",
-  "motif-variants":   "Variasi Motif",
-  "placement-spec":   "Spesifikasi Penempatan",
-  "composition-json": "Komposisi JSON (Editable)",
+const STATUS_INFO: Record<string, { label: string; color: string; desc: string }> = {
+  draft:                { label: "Draft",              color: "bg-gray-500/20 text-gray-300 border-gray-500/30",    desc: "Order diterima, menunggu konfirmasi." },
+  blueprint_ready:      { label: "Blueprint Siap",     color: "bg-blue-500/20 text-blue-400 border-blue-500/30",    desc: "Tim kami sedang menyiapkan desain." },
+  generating:           { label: "AI Generating",      color: "bg-purple-500/20 text-purple-400 border-purple-500/30", desc: "AI sedang membuat desain Anda." },
+  review:               { label: "Siap Direview",      color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30", desc: "Desain selesai, Anda dapat meminta revisi jika perlu." },
+  revision_requested:   { label: "Revisi Diminta",     color: "bg-orange-500/20 text-orange-400 border-orange-500/30", desc: "Permintaan revisi Anda diterima, menunggu assignment designer." },
+  revision_in_progress: { label: "Designer Bekerja",   color: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",    desc: "Designer sedang mengerjakan revisi Anda." },
+  approved:             { label: "Disetujui",          color: "bg-green-500/20 text-green-400 border-green-500/30",  desc: "Desain telah disetujui." },
+  delivered:            { label: "Terkirim",           color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30", desc: "Desain telah dikirimkan ke Anda." },
+  trademark_flagged:    { label: "Perlu Review TM",    color: "bg-red-500/20 text-red-400 border-red-500/30",        desc: "Order perlu review trademark. Tim kami akan menghubungi Anda." },
+  cancelled:            { label: "Dibatalkan",         color: "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",     desc: "Order telah dibatalkan." },
 };
 
-const PANEL_LABELS: Record<string, string> = {
-  "front":          "Depan",
-  "back":           "Belakang",
-  "sleeves":        "Lengan",
-  "collar":         "Kerah",
-  "pocket":         "Saku",
-  "logo-area":      "Area Logo",
-  "sponsor":        "Sponsor",
-  "name":           "Nama",
-  "number":         "Nomor",
-  "garment-panels": "Panel Pakaian",
+const REVISION_TYPE_LABEL: Record<string, { label: string; icon: string }> = {
+  customer_request:    { label: "Permintaan Revisi Anda", icon: "💬" },
+  designer_assignment: { label: "Designer Ditugaskan",    icon: "👤" },
+  designer_upload:     { label: "File Revisi Tersedia",   icon: "✅" },
+};
+
+const OUTPUT_LABELS: Record<string, string> = {
+  "flat-design":        "Flat Design",
+  "front-back-preview": "Preview Depan/Belakang",
+  "colorways":          "Variasi Warna",
+  "motif-variants":     "Variasi Motif",
+  "placement-spec":     "Spesifikasi Penempatan",
+  "composition-json":   "Komposisi JSON",
 };
 
 // ── Steps ─────────────────────────────────────────────────────────────────────
 
-type Step = "select-service" | "fill-form" | "submitted";
+type Step = "select-service" | "fill-form" | "submitted" | "track-order" | "request-revision";
 
 const DEFAULT_COLORS = ["#1A237E", "#FFFFFF", "#F44336"];
 
@@ -113,6 +137,17 @@ export default function FashionDesignPage() {
   const [submittedOrder, setSubmittedOrder] = useState<OrderResult | null>(null);
   const [colorways, setColorways] = useState<string[]>(DEFAULT_COLORS);
   const [newColor, setNewColor] = useState("#000000");
+
+  // Track order state
+  const [trackOrderId, setTrackOrderId] = useState("");
+  const [trackEmail, setTrackEmail] = useState("");
+  const [trackedOrder, setTrackedOrder] = useState<OrderResult | null>(null);
+  const [trackedRevisions, setTrackedRevisions] = useState<FashionRevision[]>([]);
+  const [trackLoading, setTrackLoading] = useState(false);
+
+  // Revision request form
+  const [revisionFeedback, setRevisionFeedback] = useState("");
+  const [revisionRefUrls, setRevisionRefUrls] = useState("");
 
   // Form state
   const [form, setForm] = useState({
@@ -146,6 +181,27 @@ export default function FashionDesignPage() {
     },
   });
 
+  const revisionMutation = useMutation({
+    mutationFn: ({ orderId, customerEmail, feedback, referenceUrls }: {
+      orderId: number; customerEmail: string; feedback: string; referenceUrls: string[];
+    }) =>
+      apiFetch<{ revision: FashionRevision }>(`/api/ai/fashion-design/orders/${orderId}/revision-request`, {
+        method: "POST",
+        body: JSON.stringify({ customerEmail, feedback, referenceUrls }),
+      }),
+    onSuccess: () => {
+      toast({ title: "Permintaan revisi terkirim!", description: "Tim kami akan menghubungi designer untuk mengerjakan revisi Anda." });
+      setRevisionFeedback("");
+      setRevisionRefUrls("");
+      // Re-fetch order & revisions
+      if (trackedOrder) {
+        handleTrackOrder(String(trackedOrder.id), form.customerEmail || trackEmail);
+      }
+      setStep("track-order");
+    },
+    onError: (err: Error) => toast({ title: "Gagal mengirim revisi", description: err.message, variant: "destructive" }),
+  });
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   function handleSelectService(svc: ServiceMeta) {
@@ -164,372 +220,501 @@ export default function FashionDesignPage() {
   }
 
   function handleRemoveColor(c: string) {
-    setColorways(colorways.filter((x) => x !== c));
+    setColorways(colorways.filter(x => x !== c));
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function handleSubmit() {
     if (!selectedService) return;
+    const { customerName, customerEmail, orderName, description, quantity } = form;
+    if (!customerName.trim() || !customerEmail.trim() || !orderName.trim()) {
+      toast({ title: "Lengkapi form", description: "Nama, email, dan nama order wajib diisi.", variant: "destructive" });
+      return;
+    }
     createMutation.mutate({
-      customerName: form.customerName,
-      customerEmail: form.customerEmail,
-      orderName: form.orderName,
-      description: form.description || undefined,
+      customerName: customerName.trim(),
+      customerEmail: customerEmail.trim(),
+      orderName: orderName.trim(),
+      description: description.trim() || undefined,
       serviceType: selectedService.type,
-      quantity: parseInt(form.quantity, 10) || 1,
+      quantity: parseInt(quantity, 10) || 1,
       colorways,
     });
   }
 
+  async function handleTrackOrder(orderId: string, email: string) {
+    if (!orderId || !email) return;
+    setTrackLoading(true);
+    try {
+      const [orderRes, revisionsRes] = await Promise.all([
+        apiFetch<OrderResult & { outputs?: Record<string, unknown> }>(`/api/ai/fashion-design/orders/${orderId}`).catch(() => null),
+        apiFetch<{ revisions: FashionRevision[] }>(`/api/ai/fashion-design/orders/${orderId}/revisions?customerEmail=${encodeURIComponent(email)}`).catch(() => ({ revisions: [] })),
+      ]);
+      if (!orderRes) {
+        toast({ title: "Order tidak ditemukan", description: "Periksa kembali nomor order dan email.", variant: "destructive" });
+        return;
+      }
+      setTrackedOrder(orderRes);
+      setTrackedRevisions(revisionsRes.revisions);
+      setStep("track-order");
+    } catch {
+      toast({ title: "Gagal memuat order", variant: "destructive" });
+    } finally {
+      setTrackLoading(false);
+    }
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
 
+  const activeOrder = trackedOrder ?? submittedOrder;
+  const activeEmail = form.customerEmail || trackEmail;
+
   return (
-    <div className="min-h-screen bg-[#0A0A14] text-white">
-      {/* Header */}
-      <div className="border-b border-white/10 bg-[#0D0D1A]/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-            <Shirt className="w-4 h-4 text-white" />
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center">
+            <Shirt className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-sm font-semibold text-white">Fashion & Apparel Design</h1>
-            <p className="text-xs text-white/50">AI-assisted garment design studio</p>
+            <h1 className="text-xl font-bold">Fashion & Apparel Design</h1>
+            <p className="text-sm text-muted-foreground">Desain pakaian custom berbasis AI + sentuhan designer manusia</p>
           </div>
-          {step !== "select-service" && (
-            <div className="ml-auto">
-              <Button variant="ghost" size="sm" onClick={handleBack} className="text-white/60 hover:text-white">
-                <ArrowLeft className="w-4 h-4 mr-1" /> Kembali
-              </Button>
-            </div>
-          )}
         </div>
-      </div>
 
-      <div className="max-w-5xl mx-auto px-4 py-8">
         <AnimatePresence mode="wait">
 
-          {/* ── Step 1: Service selection ─────────────────────────────────── */}
+          {/* ── STEP: Select service ── */}
           {step === "select-service" && (
-            <motion.div
-              key="select"
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -16 }}
-            >
-              <div className="mb-8">
-                <h2 className="text-2xl font-bold mb-2">Pilih Jenis Pakaian</h2>
-                <p className="text-white/50 text-sm">
-                  Tersedia 8 kategori pakaian dengan blueprint panel lengkap dan validasi otomatis.
-                </p>
-              </div>
+            <motion.div key="select" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-6">
 
-              {servicesLoading ? (
-                <div className="flex items-center justify-center py-20">
-                  <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {(servicesData?.services ?? []).map((svc) => {
-                    const cfg = SERVICE_CONFIG[svc.type] ?? { label: svc.type, emoji: "👕", color: "text-white", bg: "bg-white/5 border-white/20" };
-                    return (
-                      <motion.button
-                        key={svc.type}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => handleSelectService(svc)}
-                        className={`border rounded-xl p-5 text-left transition-all hover:shadow-lg ${cfg.bg}`}
-                      >
-                        <div className="text-3xl mb-3">{cfg.emoji}</div>
-                        <div className={`font-semibold mb-1 ${cfg.color}`}>{cfg.label}</div>
-                        <div className="text-xs text-white/40 mb-3">{svc.blueprintPanels.length} panel blueprint</div>
-                        <div className="flex flex-wrap gap-1">
-                          {svc.outputTypes.slice(0, 3).map((o) => (
-                            <span key={o} className="text-[10px] bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-white/50">
-                              {OUTPUT_LABELS[o] ?? o}
-                            </span>
-                          ))}
-                        </div>
-                        {svc.notes && (
-                          <div className="mt-3 text-[10px] text-amber-400/70 flex gap-1">
-                            <Info className="w-3 h-3 shrink-0 mt-0.5" />{svc.notes}
-                          </div>
-                        )}
-                        <ChevronRight className="w-4 h-4 text-white/20 mt-3 ml-auto" />
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Info banner */}
-              <div className="mt-8 border border-blue-500/20 bg-blue-500/5 rounded-xl p-4 flex gap-3">
-                <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
-                <p className="text-xs text-white/50">
-                  Output desain fashion ini bukan pola produksi final. Pola produksi memerlukan spesifikasi ukuran dan technical review sebelum manufaktur.
-                  Desain yang meniru merek terkenal (Nike, Adidas, dll.) akan otomatis diblokir.
-                </p>
-              </div>
-            </motion.div>
-          )}
-
-          {/* ── Step 2: Order form ────────────────────────────────────────── */}
-          {step === "fill-form" && selectedService && (
-            <motion.div
-              key="form"
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -16 }}
-            >
-              <div className="mb-6 flex items-center gap-3">
-                <div className="text-3xl">{SERVICE_CONFIG[selectedService.type]?.emoji ?? "👕"}</div>
-                <div>
-                  <h2 className="text-xl font-bold">
-                    {SERVICE_CONFIG[selectedService.type]?.label ?? selectedService.type}
-                  </h2>
-                  <p className="text-white/40 text-sm">Isi detail order desain Anda</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Form column */}
-                <form onSubmit={handleSubmit} className="lg:col-span-2 space-y-5">
-                  <Card className="bg-white/5 border-white/10">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm text-white">Informasi Order</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label className="text-xs text-white/60 mb-1.5 block">Nama Pelanggan *</Label>
-                          <Input
-                            required
-                            value={form.customerName}
-                            onChange={(e) => setForm({ ...form, customerName: e.target.value })}
-                            placeholder="Budi Santoso"
-                            className="bg-white/5 border-white/10 text-white placeholder:text-white/30 text-sm"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs text-white/60 mb-1.5 block">Email *</Label>
-                          <Input
-                            required
-                            type="email"
-                            value={form.customerEmail}
-                            onChange={(e) => setForm({ ...form, customerEmail: e.target.value })}
-                            placeholder="budi@contoh.com"
-                            className="bg-white/5 border-white/10 text-white placeholder:text-white/30 text-sm"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <Label className="text-xs text-white/60 mb-1.5 block">Nama Order *</Label>
-                        <Input
-                          required
-                          value={form.orderName}
-                          onChange={(e) => setForm({ ...form, orderName: e.target.value })}
-                          placeholder="Jersey Tim Futsal Garuda 2026"
-                          className="bg-white/5 border-white/10 text-white placeholder:text-white/30 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs text-white/60 mb-1.5 block">Deskripsi</Label>
-                        <Textarea
-                          rows={3}
-                          value={form.description}
-                          onChange={(e) => setForm({ ...form, description: e.target.value })}
-                          placeholder="Deskripsikan kebutuhan desain Anda..."
-                          className="bg-white/5 border-white/10 text-white placeholder:text-white/30 text-sm resize-none"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs text-white/60 mb-1.5 block">Jumlah (pcs)</Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          max="10000"
-                          value={form.quantity}
-                          onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-                          className="bg-white/5 border-white/10 text-white text-sm w-32"
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Colorways */}
-                  <Card className="bg-white/5 border-white/10">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm text-white flex items-center gap-2">
-                        <Palette className="w-4 h-4 text-purple-400" /> Colorways
-                      </CardTitle>
-                      <CardDescription className="text-xs text-white/40">
-                        Pilih hingga 10 warna untuk desain (format hex)
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="flex flex-wrap gap-2">
-                        {colorways.map((c) => (
-                          <button
-                            key={c}
-                            type="button"
-                            onClick={() => handleRemoveColor(c)}
-                            title={`Hapus ${c}`}
-                            className="group relative w-8 h-8 rounded-lg border-2 border-white/20 hover:border-red-400 transition-colors"
-                            style={{ backgroundColor: c }}
-                          >
-                            <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 text-white text-xs font-bold">✕</span>
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex gap-2">
-                        <input
-                          type="color"
-                          value={newColor}
-                          onChange={(e) => setNewColor(e.target.value)}
-                          className="w-9 h-9 rounded-lg border border-white/20 bg-transparent cursor-pointer"
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={handleAddColor}
-                          disabled={colorways.length >= 10}
-                          className="border-white/20 text-white/70 hover:text-white text-xs"
-                        >
-                          Tambah Warna
-                        </Button>
-                        <span className="text-xs text-white/30 self-center">{colorways.length}/10</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Button
-                    type="submit"
-                    disabled={createMutation.isPending}
-                    className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                  >
-                    {createMutation.isPending ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Membuat Order...</>
-                    ) : (
-                      <><Sparkles className="w-4 h-4 mr-2" /> Buat Order Desain</>
-                    )}
-                  </Button>
-                </form>
-
-                {/* Sidebar: blueprint panels & outputs */}
-                <div className="space-y-4">
-                  <Card className="bg-white/5 border-white/10">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-xs text-white/60 uppercase tracking-wider flex items-center gap-1.5">
-                        <Layout className="w-3 h-3" /> Blueprint Panels
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-1.5">
-                        {selectedService.blueprintPanels.map((p) => (
-                          <div key={p} className="flex items-center gap-2 text-xs text-white/50">
-                            <div className="w-1.5 h-1.5 rounded-full bg-purple-400/60" />
-                            {PANEL_LABELS[p] ?? p}
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="bg-white/5 border-white/10">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-xs text-white/60 uppercase tracking-wider flex items-center gap-1.5">
-                        <FileJson className="w-3 h-3" /> Output
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-1.5">
-                        {selectedService.outputTypes.map((o) => (
-                          <div key={o} className="flex items-center gap-2 text-xs text-white/50">
-                            <div className="w-1.5 h-1.5 rounded-full bg-green-400/60" />
-                            {OUTPUT_LABELS[o] ?? o}
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {selectedService.notes && (
-                    <div className="border border-amber-500/20 bg-amber-500/5 rounded-xl p-3 flex gap-2">
-                      <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                      <p className="text-xs text-amber-400/80">{selectedService.notes}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* ── Step 3: Success ───────────────────────────────────────────── */}
-          {step === "submitted" && submittedOrder && (
-            <motion.div
-              key="success"
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="max-w-lg mx-auto text-center py-16"
-            >
-              <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-green-500/30">
-                <CheckCircle2 className="w-8 h-8 text-green-400" />
-              </div>
-              <h2 className="text-2xl font-bold mb-2">Order Berhasil Dibuat!</h2>
-              <p className="text-white/50 mb-6 text-sm">
-                Order desain Anda telah diterima. Tim kami akan memproses blueprint dan menghubungi Anda via email.
-              </p>
-
-              <div className="border border-white/10 bg-white/5 rounded-xl p-5 text-left mb-6 space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-white/50">Order ID</span>
-                  <span className="font-mono font-semibold">#{submittedOrder.id}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-white/50">Nama Order</span>
-                  <span className="font-medium">{submittedOrder.orderName}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-white/50">Jenis Pakaian</span>
-                  <span>{SERVICE_CONFIG[submittedOrder.serviceType]?.label ?? submittedOrder.serviceType}</span>
-                </div>
-                <div className="flex justify-between text-sm items-center">
-                  <span className="text-white/50">Status</span>
-                  <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">Draft</Badge>
-                </div>
-                <div className="flex justify-between text-sm items-center">
-                  <span className="text-white/50">Trademark Safety</span>
-                  {submittedOrder.trademarkSafe ? (
-                    <span className="flex items-center gap-1 text-green-400 text-xs">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Aman
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-amber-400 text-xs">
-                      <AlertTriangle className="w-3.5 h-3.5" /> Perlu review
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {!submittedOrder.trademarkSafe && (
-                <div className="border border-amber-500/20 bg-amber-500/5 rounded-xl p-4 mb-6 text-left">
+              {/* Track existing order */}
+              <Card className="border-dashed">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Search className="w-4 h-4 text-muted-foreground" /> Lacak Order Existing
+                  </CardTitle>
+                  <CardDescription>Sudah punya order? Cek status atau minta revisi di sini.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
                   <div className="flex gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-xs font-semibold text-amber-400 mb-1">Trademark Review Required</p>
-                      <p className="text-xs text-white/50">{submittedOrder.trademarkNotes}</p>
+                    <Input
+                      value={trackOrderId}
+                      onChange={(e) => setTrackOrderId(e.target.value)}
+                      placeholder="Nomor Order (contoh: 42)"
+                      className="text-sm"
+                    />
+                    <Input
+                      type="email"
+                      value={trackEmail}
+                      onChange={(e) => setTrackEmail(e.target.value)}
+                      placeholder="Email Anda"
+                      className="text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => handleTrackOrder(trackOrderId, trackEmail)}
+                      disabled={trackLoading || !trackOrderId || !trackEmail}
+                      className="gap-1.5 shrink-0"
+                    >
+                      {trackLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                      Cek
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Services grid */}
+              <div>
+                <h2 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Pilih Jenis Pakaian</h2>
+                {servicesLoading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {(servicesData?.services ?? []).map((svc) => {
+                      const cfg = SERVICE_CONFIG[svc.type];
+                      return (
+                        <Card
+                          key={svc.type}
+                          className={`cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md border ${cfg?.bg ?? "border-border"}`}
+                          onClick={() => handleSelectService(svc)}
+                        >
+                          <CardContent className="p-4 text-center space-y-2">
+                            <div className="text-3xl">{cfg?.emoji ?? "👕"}</div>
+                            <p className={`font-semibold text-sm ${cfg?.color ?? ""}`}>{cfg?.label ?? svc.type}</p>
+                            {svc.notes && <p className="text-[10px] text-muted-foreground line-clamp-2">{svc.notes}</p>}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Info card */}
+              <Card className="bg-purple-500/5 border-purple-500/20">
+                <CardContent className="p-4">
+                  <div className="flex gap-3">
+                    <Sparkles className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1 text-sm">
+                      <p className="font-medium text-purple-300">AI + Human Designer</p>
+                      <p className="text-muted-foreground text-xs">
+                        AI kami akan membuat komposisi desain awal. Jika hasilnya kurang pas, Anda bisa minta revisi —
+                        designer manusia kami yang akan menyempurnakannya sesuai keinginan Anda.
+                      </p>
                     </div>
                   </div>
-                </div>
-              )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
 
-              <Button
-                onClick={() => { setStep("select-service"); setSubmittedOrder(null); setForm({ customerName: "", customerEmail: "", orderName: "", description: "", quantity: "1" }); setColorways(DEFAULT_COLORS); }}
-                variant="outline"
-                className="border-white/20 text-white/70 hover:text-white"
-              >
-                <Package className="w-4 h-4 mr-2" /> Buat Order Baru
+          {/* ── STEP: Fill form ── */}
+          {step === "fill-form" && selectedService && (
+            <motion.div key="form" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+              <Button variant="ghost" size="sm" onClick={handleBack} className="gap-1.5 mb-4 -ml-2">
+                <ArrowLeft className="w-4 h-4" /> Kembali
               </Button>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <span className="text-2xl">{SERVICE_CONFIG[selectedService.type]?.emoji}</span>
+                    Order {SERVICE_CONFIG[selectedService.type]?.label ?? selectedService.type}
+                  </CardTitle>
+                  <CardDescription>Isi detail order Anda. AI akan membuat komposisi desain berdasarkan informasi ini.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label>Nama Anda *</Label>
+                      <Input value={form.customerName} onChange={(e) => setForm(f => ({ ...f, customerName: e.target.value }))} placeholder="Budi Santoso" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Email *</Label>
+                      <Input type="email" value={form.customerEmail} onChange={(e) => setForm(f => ({ ...f, customerEmail: e.target.value }))} placeholder="budi@example.com" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Nama Order *</Label>
+                      <Input value={form.orderName} onChange={(e) => setForm(f => ({ ...f, orderName: e.target.value }))} placeholder="Jersey Tim Garuda 2025" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Jumlah (pcs)</Label>
+                      <Input type="number" min="1" max="10000" value={form.quantity} onChange={(e) => setForm(f => ({ ...f, quantity: e.target.value }))} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Deskripsi Desain</Label>
+                    <Textarea
+                      value={form.description}
+                      onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))}
+                      placeholder="Jelaskan konsep desain: tema, motif, inspirasi, atau detail khusus yang Anda inginkan..."
+                      rows={3}
+                    />
+                  </div>
+
+                  {/* Colorways */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1.5"><Palette className="w-3.5 h-3.5" /> Pilihan Warna</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {colorways.map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => handleRemoveColor(c)}
+                          title="Klik untuk hapus"
+                          className="flex items-center gap-1.5 bg-muted/40 hover:bg-red-500/20 rounded px-2 py-1 text-xs transition-colors"
+                        >
+                          <div className="w-4 h-4 rounded border border-white/20" style={{ backgroundColor: c }} />
+                          <span className="font-mono">{c}</span>
+                          <span className="text-muted-foreground">×</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <input type="color" value={newColor} onChange={(e) => setNewColor(e.target.value)} className="w-9 h-9 rounded cursor-pointer border-0" />
+                      <Input value={newColor} onChange={(e) => setNewColor(e.target.value)} className="w-32 font-mono text-sm" />
+                      <Button size="sm" variant="outline" onClick={handleAddColor} disabled={colorways.length >= 10}>+ Tambah</Button>
+                    </div>
+                  </div>
+
+                  {selectedService.notes && (
+                    <div className="flex gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-400">
+                      <Info className="w-4 h-4 shrink-0" /> {selectedService.notes}
+                    </div>
+                  )}
+
+                  <Button
+                    className="w-full gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                    onClick={handleSubmit}
+                    disabled={createMutation.isPending}
+                  >
+                    {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    Buat Order
+                  </Button>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* ── STEP: Submitted ── */}
+          {step === "submitted" && submittedOrder && (
+            <motion.div key="submitted" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
+              <Card className="border-green-500/30 bg-green-500/5">
+                <CardContent className="p-6 text-center space-y-3">
+                  <CheckCircle2 className="w-12 h-12 text-green-400 mx-auto" />
+                  <h2 className="text-lg font-bold">Order Berhasil Dibuat!</h2>
+                  <p className="text-muted-foreground text-sm">
+                    Order #{submittedOrder.id} — <strong>{submittedOrder.orderName}</strong> sedang diproses.
+                  </p>
+                  {!submittedOrder.trademarkSafe && (
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-xs text-red-400 text-left">
+                      <p className="font-semibold">⚠️ Perlu review trademark</p>
+                      <p>{submittedOrder.trademarkNotes}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-sm font-medium mb-3">Simpan info ini untuk lacak order Anda:</p>
+                  <div className="bg-muted/40 rounded-lg p-3 space-y-1 text-sm font-mono">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Order ID:</span><strong>#{submittedOrder.id}</strong></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Email:</span><span>{form.customerEmail}</span></div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="flex gap-3">
+                <Button
+                  className="flex-1 gap-2"
+                  onClick={() => {
+                    setTrackedOrder(submittedOrder);
+                    setTrackedRevisions([]);
+                    setStep("track-order");
+                  }}
+                >
+                  <Search className="w-4 h-4" /> Lacak Order
+                </Button>
+                <Button variant="outline" className="flex-1" onClick={() => { setStep("select-service"); setSubmittedOrder(null); }}>
+                  Buat Order Baru
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── STEP: Track Order ── */}
+          {step === "track-order" && activeOrder && (
+            <motion.div key="track" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setStep("select-service")} className="gap-1.5 -ml-2">
+                  <ArrowLeft className="w-4 h-4" /> Kembali
+                </Button>
+                <Button
+                  variant="ghost" size="sm"
+                  onClick={() => handleTrackOrder(String(activeOrder.id), activeEmail)}
+                  className="gap-1.5 ml-auto"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                </Button>
+              </div>
+
+              {/* Order status card */}
+              <Card>
+                <CardContent className="p-5 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xl">{SERVICE_CONFIG[activeOrder.serviceType]?.emoji ?? "👕"}</span>
+                        <h2 className="font-bold">{activeOrder.orderName}</h2>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Order #{activeOrder.id} · {new Date(activeOrder.createdAt).toLocaleDateString("id-ID")}</p>
+                    </div>
+                    <Badge className={`border shrink-0 ${(STATUS_INFO[activeOrder.status] ?? STATUS_INFO["draft"]).color}`}>
+                      {(STATUS_INFO[activeOrder.status] ?? { label: activeOrder.status }).label}
+                    </Badge>
+                  </div>
+
+                  {/* Status description */}
+                  <div className="bg-muted/30 rounded-lg p-3 text-sm text-muted-foreground">
+                    {(STATUS_INFO[activeOrder.status] ?? { desc: "Status tidak diketahui." }).desc}
+                  </div>
+
+                  {/* Designer info */}
+                  {activeOrder.designerName && (
+                    <div className="flex items-center gap-2 text-sm bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-3">
+                      <PenTool className="w-4 h-4 text-cyan-400 shrink-0" />
+                      <div>
+                        <span className="text-cyan-400 font-medium">Designer: {activeOrder.designerName}</span>
+                        <p className="text-xs text-muted-foreground">Sedang mengerjakan revisi desain Anda</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Trademark warning */}
+                  {!activeOrder.trademarkSafe && (
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-xs text-red-400">
+                      <p className="font-semibold flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Perlu review trademark</p>
+                      <p>{activeOrder.trademarkNotes}</p>
+                    </div>
+                  )}
+
+                  {/* CTA: Request Revision */}
+                  {["review", "revision_in_progress"].includes(activeOrder.status) && (
+                    <div className="border border-dashed border-purple-500/30 rounded-lg p-4 space-y-2">
+                      <p className="text-sm font-medium flex items-center gap-1.5">
+                        <MessageSquare className="w-4 h-4 text-purple-400" />
+                        {activeOrder.status === "review" ? "Hasil desain AI siap — butuh sentuhan designer manusia?" : "Revisi sedang dikerjakan — ada tambahan feedback?"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Jika desain AI kurang sesuai keinginan Anda, klik tombol di bawah untuk minta penyempurnaan dari designer manusia kami.
+                      </p>
+                      <Button
+                        size="sm"
+                        onClick={() => setStep("request-revision")}
+                        className="gap-1.5 bg-purple-600 hover:bg-purple-700"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" /> Minta Revisi Designer
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Revision history */}
+              {trackedRevisions.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <History className="w-4 h-4 text-muted-foreground" /> Riwayat Revisi
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {trackedRevisions.map((rev) => {
+                      const typeInfo = REVISION_TYPE_LABEL[rev.type] ?? { label: rev.type, icon: "📝" };
+                      return (
+                        <div key={rev.id} className="bg-muted/30 rounded-lg p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{typeInfo.icon} {typeInfo.label}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(rev.createdAt).toLocaleString("id-ID")}
+                            </span>
+                          </div>
+
+                          {rev.feedback && (
+                            <div className="bg-background/50 rounded p-2 text-xs">
+                              <p className="text-muted-foreground mb-1">Feedback Anda:</p>
+                              <p>{rev.feedback}</p>
+                            </div>
+                          )}
+
+                          {rev.designerName && (
+                            <p className="text-xs text-cyan-400 flex items-center gap-1">
+                              <PenTool className="w-3 h-3" /> Designer: {rev.designerName}
+                            </p>
+                          )}
+
+                          {(rev.revisedFileUrls as string[])?.length > 0 && (
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1.5">File Revisi Tersedia:</p>
+                              <div className="flex flex-wrap gap-2">
+                                {(rev.revisedFileUrls as string[]).map((url, i) => (
+                                  <a
+                                    key={i} href={url} target="_blank" rel="noopener noreferrer"
+                                    className="text-xs text-green-400 hover:underline flex items-center gap-1 bg-green-500/10 px-2 py-1 rounded"
+                                  >
+                                    <ExternalLink className="w-3 h-3" /> Lihat File {i + 1}
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {rev.notes && <p className="text-xs text-muted-foreground italic">Catatan: {rev.notes}</p>}
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              )}
+            </motion.div>
+          )}
+
+          {/* ── STEP: Request Revision ── */}
+          {step === "request-revision" && activeOrder && (
+            <motion.div key="revision" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+              <Button variant="ghost" size="sm" onClick={() => setStep("track-order")} className="gap-1.5 -ml-2">
+                <ArrowLeft className="w-4 h-4" /> Kembali ke Status Order
+              </Button>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5 text-purple-400" /> Minta Revisi Designer
+                  </CardTitle>
+                  <CardDescription>
+                    Order #{activeOrder.id} — {activeOrder.orderName}.
+                    Jelaskan secara detail perubahan yang Anda inginkan.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label>Feedback Revisi * <span className="text-xs text-muted-foreground">(min. 10 karakter)</span></Label>
+                    <Textarea
+                      value={revisionFeedback}
+                      onChange={(e) => setRevisionFeedback(e.target.value)}
+                      placeholder="Contoh: Logo terlalu besar di bagian depan, tolong perkecil 30%. Warna merah kurang cerah, gunakan #FF1744. Nomor punggung perlu font yang lebih tebal..."
+                      rows={5}
+                    />
+                    <p className="text-xs text-muted-foreground">{revisionFeedback.length} karakter</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>URL Referensi (opsional) <span className="text-xs text-muted-foreground">— satu URL per baris, maks. 5</span></Label>
+                    <Textarea
+                      value={revisionRefUrls}
+                      onChange={(e) => setRevisionRefUrls(e.target.value)}
+                      placeholder={"https://example.com/referensi-jersey.jpg\nhttps://example.com/inspirasi-warna.png"}
+                      rows={3}
+                      className="font-mono text-xs"
+                    />
+                  </div>
+
+                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-400 space-y-1">
+                    <p className="font-semibold flex items-center gap-1"><Info className="w-3.5 h-3.5" /> Yang akan terjadi selanjutnya:</p>
+                    <ol className="list-decimal list-inside space-y-0.5 text-muted-foreground">
+                      <li>Tim kami menerima permintaan revisi Anda</li>
+                      <li>Admin akan menugaskan designer manusia</li>
+                      <li>Designer mengerjakan revisi sesuai feedback Anda</li>
+                      <li>File hasil revisi akan tersedia di halaman ini</li>
+                    </ol>
+                  </div>
+
+                  <Button
+                    className="w-full gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                    onClick={() => {
+                      const refUrls = revisionRefUrls
+                        .split("\n")
+                        .map(u => u.trim())
+                        .filter(u => u.startsWith("http"));
+                      revisionMutation.mutate({
+                        orderId: activeOrder.id,
+                        customerEmail: activeEmail,
+                        feedback: revisionFeedback,
+                        referenceUrls: refUrls,
+                      });
+                    }}
+                    disabled={revisionMutation.isPending || revisionFeedback.trim().length < 10}
+                  >
+                    {revisionMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
+                    Kirim Permintaan Revisi
+                  </Button>
+                </CardContent>
+              </Card>
             </motion.div>
           )}
 

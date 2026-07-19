@@ -119,6 +119,17 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
   { method: "POST", pattern: /^\/public\/interior-design\/projects\/[^/]+\/brief$/ },
   // View outputs by accessToken.
   { method: "GET",  pattern: /^\/public\/interior-design\/projects\/[^/]+\/outputs$/ },
+  // Team 18 — Fashion & Apparel Design public routes (customer-facing, no admin key).
+  // Service list — public discovery, no sensitive data.
+  { method: "GET",  pattern: /^\/ai\/fashion-design\/services$/ },
+  // Create order — customer-facing form submission.
+  { method: "POST", pattern: /^\/ai\/fashion-design\/orders$/ },
+  // View single order — email-matched server-side; no admin key required.
+  { method: "GET",  pattern: /^\/ai\/fashion-design\/orders\/\d+$/ },
+  // Request revision — customer submits feedback; email-matched server-side.
+  { method: "POST", pattern: /^\/ai\/fashion-design\/orders\/\d+\/revision-request$/ },
+  // List revisions — email-gated in the route handler; no admin key required.
+  { method: "GET",  pattern: /^\/ai\/fashion-design\/orders\/\d+\/revisions$/ },
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {

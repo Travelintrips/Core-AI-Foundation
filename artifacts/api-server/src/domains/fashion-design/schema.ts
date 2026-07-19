@@ -19,6 +19,23 @@ import {
   integer,
 } from "drizzle-orm/pg-core";
 
+// ── Revision types ────────────────────────────────────────────────────────────
+export const FASHION_REVISION_TYPES = [
+  "customer_request",
+  "designer_assignment",
+  "designer_upload",
+] as const;
+
+export type FashionRevisionType = (typeof FASHION_REVISION_TYPES)[number];
+
+export const FASHION_REVISION_STATUSES = [
+  "pending",
+  "in_progress",
+  "completed",
+] as const;
+
+export type FashionRevisionStatus = (typeof FASHION_REVISION_STATUSES)[number];
+
 // Mirror of lib/db/src/schema/_pg-schema.ts — same schema name, idempotent.
 const appSchema = pgSchema("ai_platform");
 
@@ -66,12 +83,15 @@ export type FashionOutputType = (typeof FASHION_OUTPUT_TYPES)[number];
 
 // ── Status flow ───────────────────────────────────────────────────────────────
 // draft → blueprint_ready → generating → review → approved → delivered
+// revision path: review → revision_requested → revision_in_progress → review
 // also: trademark_flagged, cancelled
 export const FASHION_ORDER_STATUSES = [
   "draft",
   "blueprint_ready",
   "generating",
   "review",
+  "revision_requested",
+  "revision_in_progress",
   "approved",
   "delivered",
   "trademark_flagged",
@@ -113,6 +133,10 @@ export const fashionDesignOrdersTable = appSchema.table("fashion_design_orders",
 
   // Admin notes
   adminNotes: text("admin_notes"),
+
+  // Assigned designer (set during revision flow)
+  designerName: text("designer_name"),
+  designerEmail: text("designer_email"),
 
   // Timestamps
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -156,3 +180,33 @@ export const fashionDesignBlueprintsTable = appSchema.table("fashion_design_blue
 
 export type FashionDesignBlueprint = typeof fashionDesignBlueprintsTable.$inferSelect;
 export type InsertFashionDesignBlueprint = typeof fashionDesignBlueprintsTable.$inferInsert;
+
+// ── fashion_design_revisions ──────────────────────────────────────────────────
+export const fashionDesignRevisionsTable = appSchema.table("fashion_design_revisions", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id")
+    .notNull()
+    .references(() => fashionDesignOrdersTable.id, { onDelete: "cascade" }),
+
+  // Type: customer_request | designer_assignment | designer_upload
+  type: text("type").notNull(),
+
+  // Status: pending | in_progress | completed
+  status: text("status").notNull().default("pending"),
+
+  // Customer revision request
+  feedback: text("feedback"),
+  referenceUrls: jsonb("reference_urls").notNull().default([]),
+
+  // Designer assignment / upload
+  designerName: text("designer_name"),
+  designerEmail: text("designer_email"),
+  revisedFileUrls: jsonb("revised_file_urls").notNull().default([]),
+  notes: text("notes"),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export type FashionDesignRevision = typeof fashionDesignRevisionsTable.$inferSelect;
+export type InsertFashionDesignRevision = typeof fashionDesignRevisionsTable.$inferInsert;

@@ -34,6 +34,12 @@ import {
   validateServiceType,
   validateStatus,
 } from "../services/fashionDesignService.js";
+import {
+  requestRevision,
+  assignDesigner,
+  uploadRevision,
+  listRevisions,
+} from "../services/fashionRevisionService.js";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
@@ -115,7 +121,7 @@ router.get("/ai/fashion-design/services", (_req, res) => {
 
 // ── Orders (admin) ────────────────────────────────────────────────────────────
 
-router.post("/ai/fashion-design/orders", fashionDesignAuthGuard, adminAuth, async (req, res) => {
+router.post("/ai/fashion-design/orders", async (req, res) => {
   try {
     const parsed = createOrderSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -144,7 +150,7 @@ router.get("/ai/fashion-design/orders", fashionDesignAuthGuard, adminAuth, async
   }
 });
 
-router.get("/ai/fashion-design/orders/:id", fashionDesignAuthGuard, adminAuth, async (req, res) => {
+router.get("/ai/fashion-design/orders/:id", async (req, res) => {
   try {
     const id = parseId(req.params["id"] as string);
     if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -323,6 +329,127 @@ router.get("/ai/fashion-design/orders/:id/outputs", fashionDesignAuthGuard, admi
       trademarkSafe: order.trademarkSafe,
       trademarkNotes: order.trademarkNotes,
     });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+// ── Revision flow ─────────────────────────────────────────────────────────────
+
+/**
+ * POST /ai/fashion-design/orders/:id/revision-request
+ * Customer requests a human designer revision. Validates customerEmail against order.
+ * PUBLIC — no admin auth (customer-facing).
+ */
+router.post("/ai/fashion-design/orders/:id/revision-request", async (req, res) => {
+  try {
+    const id = parseId(req.params["id"] as string);
+    if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
+
+    const schema = z.object({
+      customerEmail: z.string().email(),
+      feedback: z.string().min(10).max(2000),
+      referenceUrls: z.array(z.string().url()).max(5).optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Validation error", details: parsed.error.issues });
+      return;
+    }
+
+    const revision = await requestRevision(id, parsed.data);
+    res.status(201).json({ revision });
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+/**
+ * POST /ai/fashion-design/orders/:id/assign-designer
+ * Admin assigns a human designer to work on a revision.
+ */
+router.post("/ai/fashion-design/orders/:id/assign-designer", fashionDesignAuthGuard, adminAuth, async (req, res) => {
+  try {
+    const id = parseId(req.params["id"] as string);
+    if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
+
+    const schema = z.object({
+      designerName: z.string().min(1).max(200),
+      designerEmail: z.string().email(),
+      notes: z.string().max(2000).optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Validation error", details: parsed.error.issues });
+      return;
+    }
+
+    const result = await assignDesigner(id, parsed.data);
+    res.status(201).json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+/**
+ * POST /ai/fashion-design/orders/:id/revision-upload
+ * Admin/designer uploads revised design file URLs.
+ * Returns order to "review" status for final approval.
+ */
+router.post("/ai/fashion-design/orders/:id/revision-upload", fashionDesignAuthGuard, adminAuth, async (req, res) => {
+  try {
+    const id = parseId(req.params["id"] as string);
+    if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
+
+    const schema = z.object({
+      revisedFileUrls: z.array(z.string().url()).min(1).max(20),
+      notes: z.string().max(2000).optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Validation error", details: parsed.error.issues });
+      return;
+    }
+
+    const result = await uploadRevision(id, parsed.data);
+    res.status(201).json(result);
+  } catch (err) {
+    handleError(res, err);
+  }
+});
+
+/**
+ * GET /ai/fashion-design/orders/:id/revisions
+ * List all revisions for an order.
+ * Admin: full access. Customer: must pass ?customerEmail= matching the order.
+ */
+router.get("/ai/fashion-design/orders/:id/revisions", async (req, res) => {
+  try {
+    const id = parseId(req.params["id"] as string);
+    if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
+
+    // Allow either admin key OR matching customerEmail query param
+    const adminKey = req.headers["x-admin-api-key"] ?? req.headers["x-admin-key"];
+    const isAdmin = typeof adminKey === "string" && adminKey === process.env["ADMIN_API_KEY"];
+
+    if (!isAdmin) {
+      const customerEmail = typeof req.query["customerEmail"] === "string" ? req.query["customerEmail"] : null;
+      if (!customerEmail) {
+        res.status(401).json({ error: "Provide x-admin-api-key header or ?customerEmail= query param" });
+        return;
+      }
+      // Verify email against order
+      const { getOrder: fetchOrder } = await import("../services/fashionDesignService.js");
+      const order = await fetchOrder(id);
+      if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+      if (order.customerEmail.toLowerCase() !== customerEmail.toLowerCase()) {
+        res.status(403).json({ error: "Email tidak sesuai dengan data order" });
+        return;
+      }
+    }
+
+    const revisions = await listRevisions(id);
+    res.json({ revisions });
   } catch (err) {
     handleError(res, err);
   }
