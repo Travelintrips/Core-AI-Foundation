@@ -74,6 +74,7 @@ import designTemplatesRouter from "./design-templates";
 import designTemplatesAiAssistRouter from "./design-templates-ai-assist";
 import creativeMarketplaceRouter from "./creative-marketplace";
 import cargoRatesRouter from "./cargo-rates";
+import discoveryAnalyticsRouter from "./discoveryAnalytics.js";
 
 // ── Team 01: Creative Workflow V2 ──────────────────────────────────────────
 import { creativeWorkflowV2Router, creativeWorkflowPublicRouter } from "./creative-workflow-v2/index.js";
@@ -243,5 +244,7 @@ router.use(imagePreviewPipelineRouter);
 // ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
 router.use(customsRouter);
 router.use(cargoRatesRouter);
+// ── Team 05: Analytics, Conversion & Production Readiness (V4.2I) ─────────
+router.use(discoveryAnalyticsRouter);
 
 export default router;
