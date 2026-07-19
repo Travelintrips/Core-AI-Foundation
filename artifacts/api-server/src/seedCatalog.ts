@@ -91,7 +91,6 @@ export const SERVICES: Record<string, ServiceSeed[]> = {
     svc("brand-identity", "Paket Identitas Brand", "Sistem identitas visual lengkap: logo, warna, tipografi, dan panduan pakai.", "one_time", "1750000", "5-7 hari", true, ["Creative Director AI", "Designer AI", "Brand Strategist AI"], ["Brand guideline", "Logo suite", "Color & type system"]),
     svc("brand-strategy", "Strategi Brand", "Positioning, target audience, USP, dan tone of voice untuk brand Anda.", "one_time", "750000", "5-7 hari", true, ["Brand Strategist AI"], ["Brand strategy document", "Messaging framework"]),
     svc("social-media-design", "Desain Media Sosial", "Desain konten sosial media on-brand per batch.", "one_time", "75000", "1-3 hari", false, ["Designer AI"], ["Desain feed", "Headline/copy pendek"]),
-    svc("social-media-content", "Konten Media Sosial Bulanan", "Konten sosial media bulanan: ide, caption, visual, dan kalender konten.", "monthly_subscription", "999000", "Ongoing, bulanan", false, ["Designer AI", "Copywriter AI"], ["Content ideas", "Captions", "Content calendar"]),
     svc("company-profile", "Company Profile", "Dokumen company profile profesional dengan struktur dan copy.", "one_time", "750000", "4-6 hari", true, ["Designer AI", "Copywriter AI"], ["Company profile PDF"]),
     svc("pitch-deck", "Pitch Deck / Presentasi", "Pitch deck investor-ready dengan storytelling dan arah visual.", "one_time", "1250000", "5-7 hari", true, ["Creative Director AI", "Copywriter AI"], ["Pitch deck (PDF/PPTX)"]),
     svc("packaging-design", "Konsep Kemasan", "Konsep desain kemasan produk sesuai brand Anda.", "one_time", "750000", "5-7 hari", true, ["Designer AI"], ["Visual concept kemasan"]),
@@ -100,15 +99,9 @@ export const SERVICES: Record<string, ServiceSeed[]> = {
     svc("image-generation", "Pembuatan Gambar AI", "Gambar AI untuk kampanye dan konten.", "one_time", "75000", "1-2 hari", false, ["Designer AI"], ["Image set"]),
     svc("creative-consultation", "Konsultasi Kreatif", "Sesi konsultasi kreatif strategis dengan human review.", "one_time", "500000", "1-2 hari", true, ["Creative Director AI"], ["Consultation notes"]),
     // ── Fashion Design Specialist services ──
-    svc("fashion-brand-brief", "Fashion Collection Brief", "Brief koleksi fashion lengkap: narasi tema, arah estetik, target konsumen, dan panduan visual. Dikerjakan oleh Fashion Design Specialist AI (Claude Opus 4.8).", "one_time", "950000", "3-5 hari", true, ["Fashion Design Specialist AI"], ["Collection concept document", "Brand narrative", "Aesthetic direction guide"]),
-    svc("fashion-campaign-copy", "Fashion Campaign Copy", "Copy kampanye fashion: product description, caption editorial, tagline koleksi, dan press release. Tone premium, sesuai DNA brand.", "one_time", "650000", "2-3 hari", false, ["Fashion Design Specialist AI"], ["Campaign copy document", "Product descriptions", "Social captions"]),
-    svc("fashion-brand-strategy", "Fashion Brand Strategy", "Strategi brand fashion: positioning pasar, persona konsumen, price-point, dan roadmap koleksi. Untuk fashion brand baru maupun yang ingin rebranding.", "one_time", "1250000", "5-7 hari", true, ["Fashion Design Specialist AI", "Brand Strategist AI"], ["Brand strategy document", "Consumer persona", "Market positioning"]),
-    svc("fashion-visual-campaign", "Fashion Visual Campaign (AI Image)", "Set gambar kampanye fashion editorial menggunakan FLUX.1 Dev — lookbook photography style, tekstur, dan pencahayaan studio-grade.", "one_time", "450000", "2-3 hari", false, ["Fashion Design Specialist AI", "Designer AI"], ["Editorial image set", "Lookbook visuals"]),
+    svc("fashion-brand-brief", "Fashion Design", "Brief koleksi fashion lengkap: narasi tema, arah estetik, target konsumen, dan panduan visual. Dikerjakan oleh Fashion Design Specialist AI (Claude Opus 4.8).", "one_time", "950000", "3-5 hari", true, ["Fashion Design Specialist AI"], ["Collection concept document", "Brand narrative", "Aesthetic direction guide"]),
     // ── Interior Design Specialist services ──
-    svc("interior-concept-design", "Interior Concept & Mood", "Konsep desain interior lengkap: suasana ruangan, palet material, gaya, dan narasi spasial. Dikerjakan oleh Interior Design Specialist AI (Gemini 2.5 Pro).", "one_time", "850000", "3-5 hari", true, ["Interior Design Specialist AI"], ["Interior concept document", "Material palette", "Spatial narrative"]),
-    svc("interior-client-proposal", "Interior Client Proposal", "Proposal klien desain interior profesional: scope of work, estimasi anggaran per elemen, dan panduan spesifikasi material.", "one_time", "1100000", "4-6 hari", true, ["Interior Design Specialist AI"], ["Client proposal PDF", "Scope of work", "Material specification"]),
-    svc("interior-brand-identity", "Interior Brand Identity", "Identitas visual untuk bisnis desain interior: logo, palet warna, tipografi, dan panduan brand yang mencerminkan estetika studio.", "one_time", "1750000", "5-7 hari", true, ["Interior Design Specialist AI", "Creative Director AI", "Designer AI"], ["Brand guideline", "Logo suite", "Visual identity system"]),
-    svc("interior-mood-visual", "Interior Mood Board (AI Render)", "Visualisasi mood board interior realistis menggunakan FLUX.1 Dev — render suasana ruangan, material, dan pencahayaan.", "one_time", "500000", "2-3 hari", false, ["Interior Design Specialist AI", "Designer AI"], ["Interior mood board visuals", "Room atmosphere renders"]),
+    svc("interior-concept-design", "Interior Design", "Konsep desain interior lengkap: suasana ruangan, palet material, gaya, dan narasi spasial. Dikerjakan oleh Interior Design Specialist AI (Gemini 2.5 Pro).", "one_time", "850000", "3-5 hari", true, ["Interior Design Specialist AI"], ["Interior concept document", "Material palette", "Spatial narrative"]),
     // ── Team 16: Presentation & Document Creative Services ──
     svc("proposal", "Proposal Bisnis", "Proposal bisnis profesional: latar belakang, ruang lingkup, deliverable, dan langkah selanjutnya. Anti-fabrikasi: tanpa angka harga atau pasal legal yang dikarang.", "one_time", "950000", "3-5 hari", true, ["Copywriter AI", "Brand Strategist AI"], ["Proposal PDF", "Executive summary"]),
     svc("product-catalog", "Katalog Produk / Layanan", "Katalog produk atau layanan on-brand: intro brand, kategori, fitur unggulan, dan informasi pemesanan. Tanpa daftar harga yang dikarang.", "one_time", "1100000", "4-6 hari", true, ["Copywriter AI", "Designer AI"], ["Product catalog PDF"]),
@@ -424,6 +417,35 @@ const IMAGE_BATCH_ENTITLEMENTS: Record<string, Record<string, unknown>> = {
   },
 };
 
+// ── Service-level add-on packages ─────────────────────────────────────────────
+// These are seeded as packageType = "addon-<code>" on the base service so the
+// service-detail page can display them as optional companion services.
+const ADDON_PACKAGES: Record<string, Array<{
+  addonCode: string;
+  packageName: string;
+  oneTimePrice: string;
+  description: string;
+  deliverables: string[];
+}>> = {
+  "logo-design": [
+    { addonCode: "brand-identity",  packageName: "Paket Identitas Brand",  oneTimePrice: "1750000", description: "Sistem identitas visual lengkap: logo, warna, tipografi, dan panduan pakai.", deliverables: ["Brand guideline", "Logo suite", "Color & type system"] },
+    { addonCode: "brand-strategy",  packageName: "Strategi Brand",         oneTimePrice: "750000",  description: "Positioning, target audience, USP, dan tone of voice untuk brand Anda.",    deliverables: ["Brand strategy document", "Messaging framework"] },
+  ],
+  "social-media-design": [
+    { addonCode: "content-monthly", packageName: "Konten Media Sosial Bulanan", oneTimePrice: "999000", description: "Konten sosial media bulanan: ide, caption, visual, dan kalender konten.",    deliverables: ["Content ideas", "Captions", "Content calendar"] },
+  ],
+  "fashion-brand-brief": [
+    { addonCode: "campaign-copy",   packageName: "Fashion Campaign Copy",           oneTimePrice: "650000",  description: "Copy kampanye fashion: product description, caption editorial, tagline koleksi, dan press release.", deliverables: ["Campaign copy document", "Product descriptions", "Social captions"] },
+    { addonCode: "brand-strategy",  packageName: "Fashion Brand Strategy",          oneTimePrice: "1250000", description: "Strategi brand fashion: positioning pasar, persona konsumen, price-point, dan roadmap koleksi.",   deliverables: ["Brand strategy document", "Consumer persona", "Market positioning"] },
+    { addonCode: "visual-campaign", packageName: "Fashion Visual Campaign (AI Image)", oneTimePrice: "450000",  description: "Set gambar kampanye fashion editorial menggunakan FLUX.1 Dev — lookbook photography style.",       deliverables: ["Editorial image set", "Lookbook visuals"] },
+  ],
+  "interior-concept-design": [
+    { addonCode: "client-proposal", packageName: "Interior Client Proposal",   oneTimePrice: "1100000", description: "Proposal klien desain interior profesional: scope of work, estimasi anggaran per elemen, dan spesifikasi material.", deliverables: ["Client proposal PDF", "Scope of work", "Material specification"] },
+    { addonCode: "brand-identity",  packageName: "Interior Brand Identity",    oneTimePrice: "1750000", description: "Identitas visual untuk bisnis desain interior: logo, palet warna, tipografi, dan panduan brand.",               deliverables: ["Brand guideline", "Logo suite", "Visual identity system"] },
+    { addonCode: "mood-visual",     packageName: "Mood Board (AI Render)",     oneTimePrice: "500000",  description: "Visualisasi mood board interior realistis menggunakan FLUX.1 Dev — render suasana ruangan dan material.",         deliverables: ["Interior mood board visuals", "Room atmosphere renders"] },
+  ],
+};
+
 export async function seedServiceCatalog() {
   console.log("\n🗂️  Seeding AI Service Catalog...");
 
@@ -468,6 +490,19 @@ export async function seedServiceCatalog() {
         limitsJson: imageBatchLimits,
       });
       packageCount += 3;
+
+      // Seed service-level add-on packages
+      const addons = ADDON_PACKAGES[s.serviceCode];
+      if (addons) {
+        for (const addon of addons) {
+          await upsertPackage(service.id, `addon-${addon.addonCode}`, {
+            packageName: addon.packageName,
+            oneTimePrice: addon.oneTimePrice,
+            features: [addon.description, ...addon.deliverables],
+          });
+          packageCount += 1;
+        }
+      }
     }
     console.log(`  ✓ ${services.length} service(s) under ${categoryByCode.get(categoryCode) ? categoryCode : categoryCode}`);
   }

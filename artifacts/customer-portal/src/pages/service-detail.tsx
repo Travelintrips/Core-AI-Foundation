@@ -22,7 +22,7 @@ import {
   Loader2, ArrowLeft, CheckCircle2, Sparkles, Star, Clock, Shield,
   Zap, ChevronRight, Users, Award, Cpu, Package, Settings2,
   Receipt, HelpCircle, LayoutGrid, Check, FileText, Globe,
-  RefreshCw, Lock, BadgeCheck, CreditCard, X,
+  RefreshCw, Lock, BadgeCheck, CreditCard, X, PlusCircle,
 } from "lucide-react";
 
 // ── Lazy AI Workforce (below-fold, safe to defer) ─────────────────────────────
@@ -102,6 +102,7 @@ function MobileStickyBar({
   isPending,
   onSubmit,
   submitting,
+  addonTotal,
 }: {
   service: { serviceName: string; startingPrice: string; currency: string; serviceFlow: string };
   breakdown: PricingBreakdown | undefined;
@@ -109,9 +110,10 @@ function MobileStickyBar({
   isPending: boolean;
   onSubmit: () => void;
   submitting: boolean;
+  addonTotal: number;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const total = breakdown?.total ?? Number(service.startingPrice);
+  const total = (breakdown?.total ?? Number(service.startingPrice)) + addonTotal;
   const currency = breakdown?.currency ?? service.currency;
 
   return (
@@ -264,6 +266,7 @@ export default function ServiceDetailPage() {
   });
   const [seededConcept, setSeededConcept] = useState<ContinueConceptResult | null>(null);
   const [activeSection, setActiveSection] = useState<string>("overview");
+  const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
   // Keep prev breakdown so there's no flash-of-blank while recalculating
   const prevBreakdownRef = useRef<PricingBreakdown | undefined>(undefined);
   if (quote.data) prevBreakdownRef.current = quote.data;
@@ -369,7 +372,18 @@ export default function ServiceDetailPage() {
   const hasReviews = showcase && showcase.reviews && showcase.reviews.length > 0;
   const hasFaq = showcase?.faqs && showcase.faqs.length > 0;
   const hasRelated = showcase?.relatedServices && showcase.relatedServices.length > 0;
-  const hasPackages = service.packages.length > 0;
+  // Split packages: standard tier picks vs service-level add-ons
+  const tierPackages = service.packages.filter(p => ['standard', 'pro', 'enterprise'].includes(p.packageType));
+  const addonPackages = service.packages.filter(p => p.packageType.startsWith('addon-'));
+  const hasPackages = tierPackages.length > 0;
+  const hasAddonPackages = addonPackages.length > 0;
+
+  // Sum of selected service add-on prices (additive on top of quote total)
+  const addonTotal = selectedAddonIds.reduce((sum, id) => {
+    const pkg = addonPackages.find(p => p.id === id);
+    return sum + Number(pkg?.oneTimePrice ?? 0);
+  }, 0);
+
   const hasDeliverables = service.deliverables && service.deliverables.length > 0;
 
   // ── Scroll helpers ───────────────────────────────────────────────────────────
@@ -394,7 +408,8 @@ export default function ServiceDetailPage() {
   const NAV_SECTIONS = [
     { id: "overview",     label: "Overview"    },
     { id: "deliverables", label: "Deliverables" },
-    ...(hasPackages  ? [{ id: "packages",    label: "Packages"    }] : []),
+    ...(hasPackages      ? [{ id: "packages",      label: "Packages"          }] : []),
+    ...(hasAddonPackages ? [{ id: "service-addons", label: "Layanan Tambahan" }] : []),
     { id: "customize",   label: "Add-ons"     },
     ...(hasPortfolio ? [{ id: "preview",     label: "Portfolio"   }] : []),
     ...(hasReviews   ? [{ id: "reviews",     label: "Reviews"     }] : []),
@@ -405,8 +420,8 @@ export default function ServiceDetailPage() {
 
   // ── Package recommended logic ────────────────────────────────────────────────
   const recommendedPackageId = (() => {
-    if (service.packages.length === 3) return service.packages[1].id;
-    const std = service.packages.find((p) => /standard|pro|business/i.test(p.packageType));
+    if (tierPackages.length === 3) return tierPackages[1].id;
+    const std = tierPackages.find((p) => /standard|pro|business/i.test(p.packageType));
     return std?.id;
   })();
 
@@ -688,7 +703,7 @@ export default function ServiceDetailPage() {
               <section id="packages">
                 <SectionHead icon={Package} title="Choose a Package" />
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" role="radiogroup" aria-label="Service packages">
-                  {service.packages.map((p, idx) => {
+                  {tierPackages.map((p, idx) => {
                     const price = p.oneTimePrice ?? p.monthlyPrice ?? p.yearlyPrice;
                     const selected = selections.packageId === p.id;
                     const recommended = p.id === recommendedPackageId;
@@ -766,6 +781,82 @@ export default function ServiceDetailPage() {
                       </div>
                     );
                   })}
+                </div>
+              </section>
+            )}
+
+            {/* ── Service-level Add-ons ── companion services from same specialist ── */}
+            {hasAddonPackages && (
+              <section id="service-addons">
+                <SectionHead icon={PlusCircle} title="Layanan Tambahan" />
+                <div className="rounded-2xl overflow-hidden space-y-2" style={{ border: "1px solid rgba(46,66,112,0.5)", background: "rgba(13,21,38,0.6)" }}>
+                  <p className="px-5 pt-5 text-xs text-[#8B9BC4] leading-relaxed">
+                    Lengkapi pesanan Anda dengan layanan terkait dari spesialis yang sama — dikerjakan dalam satu brief.
+                  </p>
+                  <div className="p-3 space-y-2">
+                    {addonPackages.map((pkg) => {
+                      const selected = selectedAddonIds.includes(pkg.id);
+                      const price = Number(pkg.oneTimePrice ?? 0);
+                      // First feature is the description, rest are deliverables
+                      const [desc, ...deliverables] = pkg.featuresJson ?? [];
+                      return (
+                        <label
+                          key={pkg.id}
+                          className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all duration-150 focus-within:ring-2 focus-within:ring-violet/50 ${
+                            selected
+                              ? "border-violet/50 bg-violet/[0.07]"
+                              : "border-[rgba(46,66,112,0.5)] hover:border-violet/30 hover:bg-white/[0.015]"
+                          }`}
+                        >
+                          {/* Checkbox */}
+                          <div className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all duration-150 ${
+                            selected ? "border-violet bg-violet shadow-[0_0_8px_rgba(124,110,250,0.4)]" : "border-[#3A5080]"
+                          }`}>
+                            {selected && <Check className="w-3 h-3 text-white" />}
+                          </div>
+
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className={`text-sm font-semibold transition-colors ${selected ? "text-[#F0F4FF]" : "text-[#A8B8D8]"}`}>
+                                {pkg.packageName}
+                              </span>
+                              <span className={`text-sm font-bold whitespace-nowrap ${selected ? "text-violet" : "text-[#8B9BC4]"}`}>
+                                +{price > 0 ? formatMoney(price, currency) : "Custom"}
+                              </span>
+                            </div>
+                            {desc && <p className="text-xs text-[#6B7FA3] mt-1 leading-snug">{desc}</p>}
+                            {deliverables.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {deliverables.slice(0, 3).map((d, i) => (
+                                  <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[#8B9BC4]">
+                                    {d}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={selected}
+                            onChange={(e) =>
+                              setSelectedAddonIds(prev =>
+                                e.target.checked ? [...prev, pkg.id] : prev.filter(id => id !== pkg.id)
+                              )
+                            }
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {selectedAddonIds.length > 0 && (
+                    <div className="px-5 pb-4 flex items-center justify-between">
+                      <span className="text-xs text-[#8B9BC4]">{selectedAddonIds.length} layanan tambahan dipilih</span>
+                      <span className="text-sm font-bold text-violet">+{formatMoney(addonTotal, currency)}</span>
+                    </div>
+                  )}
                 </div>
               </section>
             )}
@@ -997,10 +1088,16 @@ export default function ServiceDetailPage() {
                           <span>{formatMoney(displayBreakdown.tax, displayBreakdown.currency)}</span>
                         </div>
                       )}
+                      {addonTotal > 0 && (
+                        <div className="flex justify-between text-sm text-violet">
+                          <span>Layanan Tambahan ({selectedAddonIds.length}×)</span>
+                          <span>+{formatMoney(addonTotal, displayBreakdown.currency)}</span>
+                        </div>
+                      )}
                       <div className="border-t pt-3 flex justify-between items-baseline" style={{ borderColor: "rgba(46,66,112,0.5)" }}>
                         <span className="font-bold text-[#F0F4FF]">Total</span>
                         <span className="font-bold text-xl text-gradient-primary" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          {formatMoney(displayBreakdown.total, displayBreakdown.currency)}
+                          {formatMoney(displayBreakdown.total + addonTotal, displayBreakdown.currency)}
                         </span>
                       </div>
                     </div>
@@ -1148,6 +1245,7 @@ export default function ServiceDetailPage() {
         isPending={quote.isPending}
         onSubmit={onSubmitRequest}
         submitting={requestService.isPending}
+        addonTotal={addonTotal}
       />
     </Layout>
   );
