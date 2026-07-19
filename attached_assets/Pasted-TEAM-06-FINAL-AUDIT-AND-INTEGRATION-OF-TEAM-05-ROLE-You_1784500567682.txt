@@ -1,0 +1,773 @@
+TEAM-06 — FINAL AUDIT AND INTEGRATION OF TEAM-05
+
+ROLE
+
+You are Team 06.
+
+Audit Team 05 Analytics & Production Readiness before merging it
+into integration/v4.2.
+
+Do not trust the report without verifying the repository.
+
+==================================================
+TARGETS
+==================================================
+
+Integration branch:
+
+origin/integration/v4.2
+
+Expected integration base:
+
+209409d6cbe1649122e1c54d363dfd3be7bdf1a6
+
+Team 05 branch:
+
+origin/feature/v4.2i-analytics-production-readiness
+
+Expected Team 05 commit:
+
+5d34af2
+
+Protected:
+
+main
+Team 01
+Team 02
+Team 03
+Team 04
+
+Never force-push integration.
+Never modify main.
+Never run production migrations.
+
+==================================================
+PHASE 1 — FETCH AND VERIFY
+==================================================
+
+Run:
+
+git fetch --all --prune
+git rev-parse origin/integration/v4.2
+git rev-parse origin/feature/v4.2i-analytics-production-readiness
+git merge-base \
+  origin/integration/v4.2 \
+  origin/feature/v4.2i-analytics-production-readiness
+git status --short
+
+Required:
+
+integration = 209409d6cbe1649122e1c54d363dfd3be7bdf1a6
+Team 05 = 5d34af2
+merge-base = 209409d6cbe1649122e1c54d363dfd3be7bdf1a6
+
+If not:
+
+STOP.
+
+==================================================
+PHASE 2 — CREATE SAFETY REFERENCES
+==================================================
+
+Create and push:
+
+backup/integration-v4.2-before-team05
+
+Create review branch:
+
+integration-review/team05-v4.2
+
+from:
+
+origin/integration/v4.2
+
+Do not merge directly into integration yet.
+
+==================================================
+PHASE 3 — FULL DIFF INVENTORY
+==================================================
+
+Run:
+
+git diff --name-status \
+  origin/integration/v4.2...origin/feature/v4.2i-analytics-production-readiness
+
+git diff --stat \
+  origin/integration/v4.2...origin/feature/v4.2i-analytics-production-readiness
+
+List every changed file.
+
+Reject:
+
+.replit
+attached_assets/
+TXT prompts
+screenshots
+dist/
+build output
+unrelated Team 01–04 files
+unrelated marketplace business logic
+unrelated AI production files
+
+Expected scope:
+
+analytics routes
+analytics services
+feature flag service
+analytics tests
+customer portal analytics client/hooks
+minimal Team 03 page instrumentation
+analytics schema
+migration
+documentation
+
+==================================================
+PHASE 4 — EVENT TAXONOMY AUDIT
+==================================================
+
+Open the actual enum and count every event.
+
+Required documented count:
+
+32
+
+Verify exact parity between:
+
+TypeScript event enum
+validation allowlist
+frontend event type
+database constraints, if any
+tests
+reporting queries
+documentation
+
+Produce an explicit 32-event inventory.
+
+Reject:
+
+events accepted by frontend but rejected by backend
+backend-only undocumented events
+dead event names
+spelling mismatches
+version mismatches
+
+==================================================
+PHASE 5 — PRODUCER COVERAGE MATRIX
+==================================================
+
+For every event, document:
+
+eventName
+producer file
+trigger
+payload
+whether currently wired
+
+Classify each event:
+
+ACTIVE
+DEFINED_NOT_WIRED
+OPERATIONAL_SERVER_EVENT
+FUTURE_RESERVED
+
+Verify at minimum:
+
+goal_discovery_viewed
+goal_opened
+goal_services_loaded
+goal_empty_state_viewed
+goal_error_viewed
+service_selected_from_goal
+solution_collection_viewed/opened
+collection_service_selected
+quote_started
+request_started
+quote_submitted
+request_submitted
+order_created
+
+Do not claim an active funnel for events with no producer.
+
+==================================================
+PHASE 6 — DISCOVERY PAGE INSTRUMENTATION
+==================================================
+
+Audit:
+
+/goals
+/goals/:slug
+/collections
+/collections/:slug
+
+Verify:
+
+analytics hooks do not change UI behavior
+page events fire only once per valid page view
+React StrictMode does not produce duplicate events
+refetch does not incorrectly count a new page view
+loading transitions do not repeatedly emit events
+empty and error events are dedup-safe
+
+Review this questionable mapping:
+
+/collections → useTrackMarketplaceViewed()
+
+Determine whether marketplace_viewed is semantically correct.
+
+If incorrect, apply the smallest safe Team-6 integration fix and add tests.
+
+Do not redesign UI.
+
+==================================================
+PHASE 7 — CLICK EVENT WIRING
+==================================================
+
+Verify service selection is tracked before navigation.
+
+Goal service CTA must emit:
+
+service_selected_from_goal
+
+Payload should include:
+
+serviceId
+serviceCode
+goalSlug
+source
+
+Collection service CTA must emit:
+
+collection_service_selected
+or service_selected_from_collection
+according to the canonical taxonomy.
+
+Payload should include:
+
+serviceId
+serviceCode
+collectionSlug
+source
+
+Do not block navigation if analytics fails.
+
+If click tracking is absent, classify as a blocker or apply a minimal integration fix.
+
+==================================================
+PHASE 8 — SERVICE IDENTITY
+==================================================
+
+Verify analytics contracts support:
+
+serviceId: number
+serviceCode: string
+
+serviceId must come from Team 03 / Team 04 runtime data.
+
+Never derive serviceId.
+Never use serviceName as identity.
+Never route by serviceCode.
+
+Check DB columns and reporting aggregation behavior for both fields.
+
+==================================================
+PHASE 9 — INGESTION VALIDATION
+==================================================
+
+Audit:
+
+POST /api/analytics/discovery/events
+POST /api/analytics/discovery/events/batch
+
+Verify:
+
+valid event → 202
+valid duplicate → 202
+invalid payload → 400 or 422
+internal storage failure → fail-open 202 only if intentional
+batch max = 25
+metadata max = 10 keys
+value size constrained
+eventVersion = 1
+occurredAt rules enforced
+source enum enforced
+unknown event rejected
+
+Do not return 202 for malformed input.
+
+==================================================
+PHASE 10 — DEDUP AUDIT
+==================================================
+
+Inspect the actual unique constraint.
+
+Determine whether uniqueness is:
+
+event_id only
+
+or:
+
+event_id + environment
+
+or:
+
+event_id + tenant_id + environment
+
+Assess cross-environment and cross-tenant collision risk.
+
+Verify:
+
+duplicate handling is atomic
+ON CONFLICT behavior is safe
+24-hour expiry semantics are correct
+expired dedup records do not permanently block events
+
+Document cleanup behavior while cron is deferred.
+
+==================================================
+PHASE 11 — TENANT AND ENVIRONMENT SCOPE
+==================================================
+
+Prove how server derives:
+
+tenantId
+environment
+customerId, if present
+
+They must not come from untrusted client fields.
+
+For anonymous public ingestion, document the exact trusted resolver.
+
+If tenant cannot be safely resolved:
+
+store null or explicit platform scope
+
+Do not fabricate a default tenant.
+
+Add tests proving client-supplied tenantId/environment are ignored.
+
+==================================================
+PHASE 12 — PRIVACY AUDIT
+==================================================
+
+Verify no storage of:
+
+name
+email
+phone
+address
+payment details
+prompts
+AI outputs
+free-form sensitive text
+cookies
+authorization headers
+raw IP addresses unless explicitly approved
+
+Inspect metadata validation.
+
+Ensure arbitrary nested objects are rejected.
+
+Verify logs do not include full payloads containing identifiers.
+
+==================================================
+PHASE 13 — FEATURE FLAG SECURITY
+==================================================
+
+Audit:
+
+GET /api/analytics/flags/:key
+
+Require:
+
+allowlisted public keys only
+response contains minimal enabled state
+no rollout percentage leakage unless explicitly approved
+no environment leakage
+no internal notes
+no tenant configuration
+no audit fields
+unknown/internal key → 404
+
+Verify admin mutation routes require admin auth.
+
+Verify cache TTL behavior.
+
+Verify flag evaluation is deterministic by sessionId.
+
+==================================================
+PHASE 14 — FEATURE FLAG RUNTIME GATING
+==================================================
+
+Prove the flags actually control runtime behavior:
+
+v4_2_goal_discovery_enabled
+v4_2_solution_collections_enabled
+v4_2_discovery_analytics_enabled
+v4_2_new_marketplace_default
+
+At minimum:
+
+analytics flag false
+→ no event network request
+
+Goal/collection feature flags false
+→ safe fallback or hidden entry points according to product design
+
+If flags only exist in DB but are not consumed, rollback claims are invalid.
+
+==================================================
+PHASE 15 — REPORTING API
+==================================================
+
+Audit all reported endpoints:
+
+overview
+goals
+services
+collections
+funnel
+conversion
+errors
+quality
+
+Verify:
+
+admin auth
+date range max
+environment filtering
+tenant filtering
+parameter validation
+deterministic ordering
+zero-denominator returns null
+no fabricated conversion percentages
+no SQL injection
+no PII leakage
+correct serviceId/serviceCode handling
+
+Check whether reports query:
+
+raw events
+
+daily aggregates
+
+funnel aggregates
+
+Document actual source of truth.
+
+==================================================
+PHASE 16 — MIGRATION CHAIN
+==================================================
+
+Critical audit.
+
+Current report says migration is:
+
+docs/team-05-analytics-migration.sql
+
+Find the official runtime migration chain.
+
+Verify whether the analytics DDL is executable during deployment.
+
+Schema export alone is not migration integration.
+
+Required outcome:
+
+migration placed in official migration directory
+and registered in the existing startup/deployment migration chain
+
+or:
+
+a documented, repository-standard migration mechanism that automatically includes it
+
+Do not run migration against production.
+
+Migration must be:
+
+additive
+idempotent
+transactional
+schema-parity with Drizzle
+repeat-safe
+ordered after required schemas
+free of destructive statements
+
+If migration remains documentation-only:
+
+BLOCK MERGE.
+
+==================================================
+PHASE 17 — CRON AND RETENTION
+==================================================
+
+Inspect:
+
+ai_discovery_daily_metrics
+ai_discovery_funnel_metrics
+dedup expires_at
+
+Determine:
+
+which tables are currently written
+which tables are queried
+which tables are reserved only
+
+Since cron is deferred, documentation must explicitly say:
+
+raw reporting currently active
+aggregate tables not automatically populated
+dedup cleanup not automatically executed
+retention is policy-only until a worker exists
+
+Reject claims that deferred jobs are operational.
+
+==================================================
+PHASE 18 — BASELINE TEST COMPARISON
+==================================================
+
+On clean integration base:
+
+run full API tests
+record passing/failing counts
+
+On Team 05 review branch:
+
+run full API tests
+record passing/failing counts
+
+Run Team 05 analytics tests separately.
+
+Explain why previous report had 57 tests but reconstructed report has 53.
+
+List removed/replaced tests.
+
+Required:
+
+zero new failures.
+
+==================================================
+PHASE 19 — TYPECHECK
+==================================================
+
+Run baseline and post-Team05:
+
+pnpm run typecheck:libs
+pnpm --filter @workspace/api-server run typecheck
+pnpm --filter @workspace/customer-portal run typecheck
+
+Compare exact error counts and files.
+
+Required:
+
+zero Team 05 errors
+zero delta from baseline
+
+==================================================
+PHASE 20 — BUILDS
+==================================================
+
+Run actual API build:
+
+cd artifacts/api-server
+node ./build.mjs
+
+Run actual Customer Portal build with required env:
+
+PORT=5173 BASE_PATH=/customer-portal \
+pnpm --filter @workspace/customer-portal run build
+
+Both builds must complete.
+
+Do not substitute dev-server success for production build.
+
+==================================================
+PHASE 21 — MERGE INTO REVIEW BRANCH
+==================================================
+
+Only after audit passes:
+
+merge Team 05 into:
+
+integration-review/team05-v4.2
+
+Resolve only verified integration issues.
+
+Do not perform unrelated cleanup.
+
+Document every Team-6 correction separately.
+
+==================================================
+PHASE 22 — POST-MERGE REGRESSION
+==================================================
+
+Run:
+
+full API tests
+analytics tests
+library typecheck
+API typecheck comparison
+Customer Portal typecheck comparison
+API build
+Customer Portal build
+git diff --check
+git status --short
+
+Required:
+
+no new failures
+no untracked generated files
+clean working tree
+
+==================================================
+PHASE 23 — UPDATE INTEGRATION
+==================================================
+
+Only if all gates pass:
+
+update integration/v4.2 using fast-forward only.
+
+Never force-push.
+
+Do not modify main.
+
+Do not run production migration.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+# TEAM-06 TEAM-05 INTEGRATION REPORT
+
+## 1. Branch Verification
+
+Base
+Team 05 commit
+Merge base
+Backup
+Review branch
+Final integration commit
+
+## 2. Scope Audit
+
+Every file
+Classification
+Unexpected files
+
+## 3. Event Taxonomy
+
+Exact 32-event inventory
+Enum/validation/frontend parity
+
+## 4. Producer Coverage
+
+Active
+Not wired
+Operational
+Reserved
+
+## 5. Discovery Instrumentation
+
+Page events
+Click events
+StrictMode behavior
+Dedup behavior
+
+## 6. Identity
+
+serviceId
+serviceCode
+Tenant
+Environment
+
+## 7. Ingestion
+
+Validation
+Status codes
+Batch
+Failure handling
+Dedup
+
+## 8. Privacy
+
+Stored fields
+Rejected fields
+Logging safety
+
+## 9. Feature Flags
+
+Public response
+Allowlist
+Admin protection
+Runtime gating
+Rollback proof
+
+## 10. Reporting
+
+Endpoints
+Filters
+Metrics
+Raw vs aggregate source
+
+## 11. Migration
+
+Official location
+Runtime registration
+Schema parity
+Applied status
+
+## 12. Retention and Jobs
+
+Aggregation
+Dedup cleanup
+Actual operational status
+
+## 13. Tests
+
+Baseline
+After
+Team 05 tests
+Why 53 versus 57
+New failures
+
+## 14. Typecheck
+
+Baseline
+After
+Delta
+
+## 15. Builds
+
+API
+Customer Portal
+
+## 16. Integration Fixes
+
+Every correction made by Team 6
+
+## 17. Final Diff
+
+Relative to 209409d
+
+## 18. Push
+
+Fast-forward confirmation
+
+## 19. Protected Branches
+
+main untouched
+no force-push
+no production migration
+Team 01–04 unchanged
+
+## 20. Readiness
+
+One of:
+
+READY FOR RELEASE CANDIDATE
+
+or
+
+BLOCKED
+
+STOP.
