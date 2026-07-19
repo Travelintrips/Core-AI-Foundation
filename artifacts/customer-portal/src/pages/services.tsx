@@ -1,6 +1,8 @@
 import { Link, useSearch } from "wouter";
 import { Layout } from "@/components/layout";
 import { useCategories, useServices, type CatalogService, type ServiceCategory } from "@/hooks/use-catalog";
+import { useGoals } from "@/hooks/use-goals";
+import { GoalCard, GoalCardSkeleton } from "@/components/goal-card";
 import {
   Loader2, ArrowRight, Sparkles, Search, Star, Clock, CheckCircle,
   Paintbrush, Megaphone, DollarSign, BookOpen, Receipt, Users,
@@ -498,6 +500,82 @@ function EmptyState({ onReset }: { onReset: () => void }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+// ── Goal Discovery Section (Team 03) ─────────────────────────────────────────
+// Additive entry point placed between the hero and the service catalog.
+// Does not modify or replace existing catalog behavior.
+
+function GoalDiscoverySection() {
+  const { data: goals, isLoading, isError } = useGoals();
+
+  // Don't render section if goals are empty (no layout shift for catalog users)
+  if (!isLoading && !isError && goals?.length === 0) return null;
+
+  return (
+    <section
+      className="border-b border-[#243352] bg-[#060B18]"
+      aria-labelledby="goal-discovery-heading"
+    >
+      <div className="container mx-auto px-4 md:px-8 max-w-7xl py-10">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+          <div>
+            <h2
+              id="goal-discovery-heading"
+              className="font-bold text-lg text-[#F0F4FF]"
+              style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+            >
+              Atau pilih berdasarkan tujuan bisnis Anda
+            </h2>
+            <p className="text-sm text-[#8B9BC4] mt-0.5">
+              Tidak tahu layanan mana yang tepat? Mulai dari tujuan Anda.
+            </p>
+          </div>
+          <Link
+            href="/goals"
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-[#2E4270] text-[#8B9BC4] hover:text-[#F0F4FF] hover:border-[#7C6EFA]/40 transition-all duration-150 whitespace-nowrap"
+          >
+            Lihat semua tujuan
+            <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+          </Link>
+        </div>
+
+        {/* Loading */}
+        {isLoading && (
+          <>
+            <p className="sr-only" role="status">Memuat tujuan bisnis…</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+              {Array.from({ length: 5 }).map((_, i) => <GoalCardSkeleton key={i} />)}
+            </div>
+          </>
+        )}
+
+        {/* Error — silent: don't block the catalog */}
+        {isError && !isLoading && (
+          <div className="rounded-xl border border-[#243352] bg-[#0D1526] px-4 py-3 text-sm text-[#8B9BC4] flex items-center gap-2">
+            <span aria-hidden="true">⚠️</span>
+            Tidak dapat memuat tujuan bisnis saat ini. Anda tetap bisa menelusuri layanan di bawah.
+          </div>
+        )}
+
+        {/* Goal cards — show first 5, link to /goals for the rest */}
+        {!isLoading && !isError && goals && goals.length > 0 && (
+          <div
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4"
+            role="list"
+            aria-label="Tujuan bisnis"
+          >
+            {goals.slice(0, 5).map((goal, i) => (
+              <div key={goal.id} role="listitem">
+                <GoalCard goal={goal} index={i} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function ServicesPage() {
   const { t } = useTranslation();
   const searchQuery = useSearch();
@@ -836,6 +914,9 @@ export default function ServicesPage() {
             )}
           </div>
         </section>
+
+        {/* ── Goal-Based Discovery (Team 03) ───────────────────────────── */}
+        <GoalDiscoverySection />
 
         {/* ── Main content ─────────────────────────────────────────────── */}
         <div className="container mx-auto px-4 md:px-8 max-w-7xl py-10">

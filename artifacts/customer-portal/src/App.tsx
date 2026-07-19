@@ -14,6 +14,8 @@ const DashboardPage              = lazy(() => import('@/pages/dashboard'));
 const AccessPage                 = lazy(() => import('@/pages/access'));
 const QuotationPage              = lazy(() => import('@/pages/quotation'));
 const ServicesPage               = lazy(() => import('@/pages/services'));
+const GoalsPage                  = lazy(() => import('@/pages/goals'));
+const GoalDetailPage             = lazy(() => import('@/pages/goal-detail'));
 const ServiceDetailPage          = lazy(() => import('@/pages/service-detail'));
 const CommercialGatePage         = lazy(() => import('@/pages/commercial-gate'));
 const ProjectPage                = lazy(() => import('@/pages/project'));
@@ -114,6 +116,9 @@ function Router() {
         <Route path="/portfolio" component={PortfolioPage} />
         <Route path="/services" component={ServicesPage} />
         <Route path="/services/:id" component={ServiceDetailPage} />
+        {/* ── Team 03: Goal-Based Discovery ──────────────────────────── */}
+        <Route path="/goals" component={GoalsPage} />
+        <Route path="/goals/:slug" component={GoalDetailPage} />
         <Route path="/submit" component={SubmitPage} />
         <Route path="/success" component={SuccessPage} />
         <Route path="/review/:token" component={ReviewPage} />
