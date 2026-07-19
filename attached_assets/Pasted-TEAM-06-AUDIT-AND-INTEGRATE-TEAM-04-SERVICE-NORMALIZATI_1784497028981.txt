@@ -1,0 +1,678 @@
+TEAM-06 — AUDIT AND INTEGRATE TEAM-04 SERVICE NORMALIZATION
+
+ROLE
+
+You are Team 06, the integration gatekeeper.
+
+Audit Team 04 thoroughly and merge it into integration/v4.2 only if all
+security, schema, contract, test, and scope checks pass.
+
+Do not modify main.
+Do not merge Team 03.
+Do not merge Team 05.
+Do not implement new product features.
+Do not accept the Team 04 report without independent verification.
+
+==================================================
+BRANCHES
+==================================================
+
+Target:
+
+origin/integration/v4.2
+
+Expected current target commit:
+
+9932e0a
+
+Source:
+
+origin/feature/v4.2e-service-normalization
+
+Expected source commit:
+
+73c827f
+
+Backup:
+
+origin/backup/team-04-before-v4.2-reconstruction
+
+==================================================
+PHASE 1 — VERIFY REPOSITORY STATE
+==================================================
+
+Run:
+
+git fetch --all --prune
+git status --short
+git branch --show-current
+git branch -a
+git rev-parse origin/integration/v4.2
+git rev-parse origin/feature/v4.2e-service-normalization
+git log --oneline --decorate -12 origin/integration/v4.2
+git log --oneline --decorate -12 origin/feature/v4.2e-service-normalization
+
+Confirm:
+
+- integration/v4.2 is at 9932e0a or a documented later Team-6-approved commit;
+- Team 04 source contains 73c827f;
+- working tree is clean.
+
+If not:
+
+STOP and report.
+
+Do not use main as fallback.
+
+==================================================
+PHASE 2 — PROTECT INTEGRATION
+==================================================
+
+Create and push:
+
+backup/integration-v4.2-before-team04
+
+from:
+
+origin/integration/v4.2
+
+Verify the remote backup exists before continuing.
+
+==================================================
+PHASE 3 — CREATE REVIEW BRANCH
+==================================================
+
+Create:
+
+integration-review/team04-v4.2
+
+from:
+
+origin/integration/v4.2
+
+Do not work directly on integration/v4.2.
+
+==================================================
+PHASE 4 — AUDIT TEAM-04 DIFF
+==================================================
+
+Run:
+
+git log --oneline --decorate origin/integration/v4.2..origin/feature/v4.2e-service-normalization
+git diff --name-status origin/integration/v4.2..origin/feature/v4.2e-service-normalization
+git diff --stat origin/integration/v4.2..origin/feature/v4.2e-service-normalization
+git diff --check origin/integration/v4.2..origin/feature/v4.2e-service-normalization
+
+Expected files:
+
+artifacts/api-server/src/goals/goalRepository.ts
+artifacts/api-server/src/goals/types.ts
+artifacts/api-server/src/middleware/adminAuth.ts
+artifacts/api-server/src/migrations/20260719_service_normalization.sql
+artifacts/api-server/src/repositories/__tests__/serviceNormalization.test.ts
+artifacts/api-server/src/repositories/serviceNormalizationRepository.ts
+artifacts/api-server/src/routes/index.ts
+artifacts/api-server/src/routes/service-normalization.ts
+artifacts/api-server/src/services/serviceNormalizationService.ts
+docs/audits/v4.2/team-04-service-normalization.md
+lib/db/src/schema/ai-service-normalization.ts
+lib/db/src/schema/index.ts
+
+Classify every file:
+
+- Required GoalService contract
+- Normalization domain
+- Public collection API
+- Admin API
+- Migration
+- Test
+- Documentation
+- Unrelated
+- Unclear
+
+If any unreported file exists:
+
+STOP before merge.
+
+==================================================
+PHASE 5 — DETECT DUPLICATE DOMAIN MODELS
+==================================================
+
+Search the repository for existing concepts equivalent to:
+
+- canonical service concepts;
+- service aliases;
+- service mappings;
+- service collections;
+- collection members;
+- service normalization;
+- solution collections.
+
+Use repository-wide searches for table names, route names, services, and
+schemas.
+
+Determine whether the five new tables duplicate existing tables or concepts.
+
+For every new table document:
+
+1. purpose;
+2. authoritative owner;
+3. relationship to ai_services;
+4. why an existing table cannot be reused;
+5. uniqueness constraints;
+6. tenant/company scope;
+7. deletion behavior;
+8. expected lifecycle.
+
+If any new table creates a second source of truth for service identity:
+
+STOP.
+
+Return:
+
+BLOCKED — DUPLICATE SERVICE DOMAIN MODEL
+
+==================================================
+PHASE 6 — TENANT AND PLATFORM SCOPE REVIEW
+==================================================
+
+Inspect every new table, repository query, service method, and route.
+
+Verify whether the application is multi-tenant or multi-company in this
+domain.
+
+Check for:
+
+- tenant_id;
+- company_id;
+- platform/global scope;
+- cross-tenant reads;
+- cross-tenant writes;
+- unscoped admin listing;
+- public leakage between tenants.
+
+If these normalization tables are intentionally platform-global, require:
+
+- explicit platform-scope authorization;
+- documented ownership;
+- repository guards;
+- tests rejecting tenant-scoped misuse where applicable.
+
+Do not assume admin authentication alone is sufficient for platform-global
+writes.
+
+==================================================
+PHASE 7 — PUBLIC AUTH SECURITY AUDIT
+==================================================
+
+Inspect the exact change in:
+
+artifacts/api-server/src/middleware/adminAuth.ts
+
+Team 04 reportedly added:
+
+/ai/solution-collections
+
+to PUBLIC_PATH_PREFIXES.
+
+Determine all routes under that prefix.
+
+Verify whether prefix matching can expose:
+
+- POST;
+- PATCH;
+- PUT;
+- DELETE;
+- admin list;
+- unpublished collections;
+- internal metadata;
+- management endpoints.
+
+Required safe pattern:
+
+Only explicitly approved GET routes may be public.
+
+Prefer exact method-and-path rules such as:
+
+GET /api/ai/solution-collections
+GET /api/ai/solution-collections/:slug
+
+Do not allow a broad prefix exception if write/admin routes share the prefix.
+
+Add tests proving:
+
+- public collection GET succeeds without admin key;
+- public collection detail GET succeeds without admin key;
+- admin list/write route without key is rejected;
+- POST without key is rejected;
+- PATCH without key is rejected;
+- DELETE without key is rejected;
+- internal/draft collection is not leaked.
+
+If the broad prefix exposes any admin operation:
+
+fix it before merge and record the correction as a Team-6 integration fix.
+
+Do not weaken global authentication.
+
+==================================================
+PHASE 8 — GOAL SERVICE CONTRACT REVIEW
+==================================================
+
+Inspect:
+
+GoalServiceStub
+goalRepository.listServicesForGoal
+GET /api/ai/goals/:slug/services
+
+Verify:
+
+- serviceId is selected from ai_services.id;
+- serviceId is a number;
+- no fallback or fabricated ID exists;
+- serviceCode is preserved;
+- serviceName is display-only;
+- response remains backward-compatible;
+- unknown goal behavior remains 404;
+- empty services returns an empty array;
+- deterministic ordering remains intact.
+
+Confirm the actual response wrapper:
+
+{
+  goal: GoalView,
+  services: GoalServiceStub[]
+}
+
+Add a route-level test for serviceId, not only a repository unit test.
+
+==================================================
+PHASE 9 — COMMERCIAL POLICY PARITY
+==================================================
+
+Inspect whether Team 04 truly reuses Team 01 policy or manually duplicates
+its rules in SQL and Drizzle.
+
+Identify the single source of truth for:
+
+- eligible status;
+- eligible visibility;
+- eligible commercial status;
+- category eligibility;
+- service eligibility.
+
+If SQL predicates are necessarily explicit, add parity tests proving the
+query conditions match Team 01 policy constants.
+
+Avoid copied string literals spread across multiple files.
+
+A future policy change must not cause SQL filtering and policy evaluation
+to diverge silently.
+
+==================================================
+PHASE 10 — DATA INTEGRITY AND OBSERVABILITY
+==================================================
+
+Distinguish:
+
+- commercially blocked service;
+- inactive service;
+- inactive relationship;
+- missing joined service;
+- malformed DB row;
+- duplicate mapping;
+- invalid collection membership.
+
+Normal policy exclusions may be silent.
+
+Malformed or corrupt records must not be silently treated as normal policy
+exclusions.
+
+Verify logging or controlled error behavior for data-integrity failures.
+
+Do not leak internal error details to public clients.
+
+==================================================
+PHASE 11 — MIGRATION AUDIT
+==================================================
+
+Inspect:
+
+20260719_service_normalization.sql
+ai-service-normalization.ts
+
+Verify exact parity between SQL migration and Drizzle schema.
+
+Check:
+
+- all five tables are genuinely necessary;
+- primary keys;
+- foreign keys;
+- unique constraints;
+- indexes;
+- check constraints;
+- nullable fields;
+- timestamps;
+- update timestamps;
+- tenant/platform scope;
+- ON DELETE behavior;
+- idempotency;
+- transaction boundaries;
+- migration ordering;
+- no hardcoded IDs;
+- no destructive backfill.
+
+Special review:
+
+ON DELETE RESTRICT everywhere may prevent legitimate cleanup. Confirm it is
+intentional for each relationship, not copied mechanically.
+
+Run migration twice in an isolated test database if infrastructure permits.
+
+==================================================
+PHASE 12 — ROUTE AND API REVIEW
+==================================================
+
+Inventory all:
+
+- 15 admin routes;
+- 2 public routes.
+
+For each route document:
+
+- method;
+- path;
+- authentication;
+- authorization/scope;
+- validation schema;
+- repository/service function;
+- response;
+- error behavior;
+- pagination;
+- audit logging where writes occur.
+
+Verify no admin mutation is accidentally mounted under a public prefix.
+
+Verify write endpoints have:
+
+- body validation;
+- duplicate handling;
+- not-found handling;
+- conflict handling;
+- transaction safety;
+- authorization.
+
+==================================================
+PHASE 13 — BASELINE TEST COMPARISON
+==================================================
+
+Create a clean baseline worktree or branch at:
+
+origin/integration/v4.2
+
+Run exactly:
+
+pnpm --filter @workspace/api-server run test
+pnpm run typecheck:libs
+pnpm --filter @workspace/api-server run typecheck
+
+Record exact baseline:
+
+- test files;
+- passing tests;
+- failing tests;
+- typecheck error count;
+- error files.
+
+Then run the exact same commands on Team 04.
+
+Do not rely on approximate values such as:
+
+~3562
+
+Report exact before and after totals.
+
+Required:
+
+new test failures = 0
+new typecheck errors = 0
+
+==================================================
+PHASE 14 — BUILD VERIFICATION
+==================================================
+
+Inspect package scripts.
+
+Identify the real build command for:
+
+- api-server;
+- libraries affected by Team 04.
+
+Run the real build command if one exists.
+
+Do not report typecheck as build.
+
+If no API build script exists, state:
+
+NO DEDICATED API BUILD SCRIPT
+
+and run the repository/package production build pipeline that actually
+includes the API package, where available.
+
+If build is blocked by baseline errors, prove the same build failure occurs
+on origin/integration/v4.2.
+
+==================================================
+PHASE 15 — MERGE TEAM-04 INTO REVIEW BRANCH
+==================================================
+
+Only after the pre-merge audit is acceptable, merge:
+
+origin/feature/v4.2e-service-normalization
+
+into:
+
+integration-review/team04-v4.2
+
+Use a merge commit.
+
+Suggested message:
+
+merge(v4.2): integrate Team 04 service normalization
+
+Resolve only legitimate Team 04 integration conflicts.
+
+If conflicts touch Team 03, Team 05, or unrelated domains:
+
+STOP.
+
+==================================================
+PHASE 16 — POST-MERGE VERIFICATION
+==================================================
+
+Run:
+
+1. Team 01 tests
+2. Team 02 tests
+3. Team 04 tests
+4. Complete API server tests
+5. Public auth tests
+6. Migration/schema checks
+7. Library typecheck
+8. API typecheck
+9. Actual build command
+
+Verify:
+
+- serviceId is returned;
+- serviceCode remains;
+- public collections are safely exposed;
+- admin writes remain protected;
+- commercial policy parity;
+- no internal-only leakage;
+- no duplicate service identity;
+- no additional failure.
+
+==================================================
+PHASE 17 — FINAL DIFF AUDIT
+==================================================
+
+Run:
+
+git diff --name-status origin/integration/v4.2..HEAD
+git diff --stat origin/integration/v4.2..HEAD
+git diff --check
+git log --oneline --decorate origin/integration/v4.2..HEAD
+
+Reject:
+
+- .replit;
+- attached_assets;
+- prompt TXT files;
+- screenshots;
+- build artifacts;
+- Team 03 frontend;
+- Team 05 analytics;
+- unrelated changes.
+
+==================================================
+PHASE 18 — UPDATE INTEGRATION/V4.2
+==================================================
+
+Only if every blocker is resolved:
+
+Push review branch:
+
+git push origin integration-review/team04-v4.2
+
+Then update integration/v4.2 using fast-forward only:
+
+git switch integration/v4.2
+git reset --hard origin/integration/v4.2
+git merge --ff-only integration-review/team04-v4.2
+git push origin integration/v4.2
+
+Never force-push integration/v4.2.
+
+Do not merge into main.
+
+==================================================
+PHASE 19 — POST-PUSH VERIFICATION
+==================================================
+
+Run:
+
+git fetch origin
+git rev-parse integration/v4.2
+git rev-parse origin/integration/v4.2
+git log --oneline --decorate -15 origin/integration/v4.2
+
+Confirm local and remote match.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+# TEAM-06 TEAM-04 INTEGRATION REPORT
+
+## 1. Branch Verification
+
+Original integration commit:
+Team 04 source commit:
+Backup branch:
+Review branch:
+Final integration commit:
+
+## 2. Scope Audit
+
+Files:
+Scope result:
+Duplicate-model result:
+Tenant/platform-scope result:
+
+## 3. Authentication Audit
+
+Public routes:
+Admin routes:
+Broad-prefix finding:
+Corrections made:
+Unauthenticated test results:
+
+## 4. Goal Service Contract
+
+Exact response:
+serviceId source:
+serviceCode behavior:
+Team 03 route field:
+
+## 5. Commercial Policy
+
+Single source of truth:
+SQL/Drizzle parity:
+Eligibility tests:
+
+## 6. Migration
+
+Tables:
+Constraints:
+Idempotency:
+Schema parity:
+Tenant/platform ownership:
+Second-run result:
+
+## 7. API Inventory
+
+List all routes with method, path, and auth classification.
+
+## 8. Baseline Comparison
+
+Before tests:
+After tests:
+New failures:
+Before typecheck:
+After typecheck:
+New errors:
+
+## 9. Build
+
+Actual command:
+Baseline result:
+Team 04 result:
+
+## 10. Merge
+
+Merge commit:
+Conflicts:
+Integration fixes:
+
+## 11. Final Diff
+
+All files relative to original integration.
+
+## 12. Push Confirmation
+
+Confirm integration/v4.2 updated without force.
+
+## 13. Protected Branches
+
+Confirm:
+
+- main untouched;
+- Team 03 untouched;
+- Team 05 untouched;
+- no plain force;
+- no migration run against production.
+
+## 14. Readiness
+
+Use one:
+
+READY FOR TEAM-03 RECONSTRUCTION
+
+or:
+
+BLOCKED — TEAM-04 ISSUES REMAIN
+
+STOP.
