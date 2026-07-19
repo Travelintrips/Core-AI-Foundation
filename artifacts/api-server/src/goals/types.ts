@@ -60,6 +60,9 @@ export interface GoalView {
 
 /** Service stub attached to a GoalServiceView. Only public-safe fields. */
 export interface GoalServiceStub {
+  /** Numeric primary key from ai_services.id — use this for /services/:id route navigation. */
+  serviceId: number;
+  /** Machine-stable business code from ai_services.service_code — preferred for external references. */
   serviceCode: string;
   serviceName: string;
   shortDescription: string | null;
