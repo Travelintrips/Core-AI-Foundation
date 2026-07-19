@@ -1,3 +1,4 @@
+- [team01-commercial-policy](team01-commercial-policy.md) — CommercialEligibilityPolicy: 3-condition category guard (visibility+commercial_status+status), replaces inline visibility checks
 - [two-stage-image-pipeline](two-stage-image-pipeline.md) — render_stage on creative_ai_assets, creative_render_sessions table, 7 API endpoints, customer preview UI; prod migration needed
 - [parallel-dev-rules](parallel-dev-rules.md) — Multi-team rules: feature branches only, shared file lock, draft-only DB/OpenAPI, Team 24 wires integrations; full rules in replit.md
 - [team2-design-agents](team2-design-agents.md) — Team 2 Design Agents 4-8 built in services/design-ai/; dep-injection pattern (deps.executeAI), zod schemas, font registry validation, WCAG contrast checks, 1007 tests passing
