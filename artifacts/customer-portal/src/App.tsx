@@ -14,6 +14,12 @@ const DashboardPage              = lazy(() => import('@/pages/dashboard'));
 const AccessPage                 = lazy(() => import('@/pages/access'));
 const QuotationPage              = lazy(() => import('@/pages/quotation'));
 const ServicesPage               = lazy(() => import('@/pages/services'));
+// ── Team 03: Discovery Experience ────────────────────────────────────────────
+const GoalsPage                  = lazy(() => import('@/pages/goals'));
+const GoalDetailPage             = lazy(() => import('@/pages/goal-detail'));
+const CollectionsPage            = lazy(() => import('@/pages/collections'));
+const CollectionDetailPage       = lazy(() => import('@/pages/collection-detail'));
+// ─────────────────────────────────────────────────────────────────────────────
 const ServiceDetailPage          = lazy(() => import('@/pages/service-detail'));
 const CommercialGatePage         = lazy(() => import('@/pages/commercial-gate'));
 const ProjectPage                = lazy(() => import('@/pages/project'));
@@ -114,6 +120,11 @@ function Router() {
         <Route path="/portfolio" component={PortfolioPage} />
         <Route path="/services" component={ServicesPage} />
         <Route path="/services/:id" component={ServiceDetailPage} />
+        {/* ── Team 03: Discovery Experience ──────────────────────────── */}
+        <Route path="/goals" component={GoalsPage} />
+        <Route path="/goals/:slug" component={GoalDetailPage} />
+        <Route path="/collections" component={CollectionsPage} />
+        <Route path="/collections/:slug" component={CollectionDetailPage} />
         <Route path="/submit" component={SubmitPage} />
         <Route path="/success" component={SuccessPage} />
         <Route path="/review/:token" component={ReviewPage} />
