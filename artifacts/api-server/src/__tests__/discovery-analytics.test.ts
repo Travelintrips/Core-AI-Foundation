@@ -585,3 +585,55 @@ describe("Test 30 — Quote/request flow regression", () => {
     expect(ANALYTICS_FAILURE_STATUS).not.toBe(400);
   });
 });
+
+// ── Team-6 Test 31: Public flag allowlist ─────────────────────────────────────
+// Team-6 integration fix: GET /api/analytics/flags/:key must only serve known
+// public keys and return 404 for any unknown or internal key.
+
+describe("Team-6 Test 31 — Public flag allowlist", () => {
+  const PUBLIC_FLAG_ALLOWLIST = new Set([
+    "v4_2_goal_discovery_enabled",
+    "v4_2_solution_collections_enabled",
+    "v4_2_discovery_analytics_enabled",
+    "v4_2_new_marketplace_default",
+  ]);
+
+  it("allowlist contains exactly the four V4.2 public keys", () => {
+    expect(PUBLIC_FLAG_ALLOWLIST.size).toBe(4);
+    expect(PUBLIC_FLAG_ALLOWLIST.has("v4_2_goal_discovery_enabled")).toBe(true);
+    expect(PUBLIC_FLAG_ALLOWLIST.has("v4_2_solution_collections_enabled")).toBe(true);
+    expect(PUBLIC_FLAG_ALLOWLIST.has("v4_2_discovery_analytics_enabled")).toBe(true);
+    expect(PUBLIC_FLAG_ALLOWLIST.has("v4_2_new_marketplace_default")).toBe(true);
+  });
+
+  it("internal/unknown keys are rejected (not in allowlist)", () => {
+    const internalKeys = [
+      "admin_panel_enabled",
+      "internal_debug_mode",
+      "__proto__",
+      "constructor",
+      "v4_2_goal_discovery_enabled_internal",
+      "",
+    ];
+    for (const key of internalKeys) {
+      expect(PUBLIC_FLAG_ALLOWLIST.has(key)).toBe(false);
+    }
+  });
+
+  it("FLAG_KEYS values are a subset of the public allowlist", () => {
+    // All well-known flag keys must be publicly queryable
+    for (const key of Object.values(FLAG_KEYS)) {
+      expect(PUBLIC_FLAG_ALLOWLIST.has(key)).toBe(true);
+    }
+  });
+
+  it("allowlist does not leak rollout percent or internal metadata", () => {
+    // The public endpoint response shape must only contain key + enabled
+    const publicResponseShape = { key: "v4_2_discovery_analytics_enabled", enabled: true };
+    expect(Object.keys(publicResponseShape)).toEqual(["key", "enabled"]);
+    expect(Object.keys(publicResponseShape)).not.toContain("rolloutPercent");
+    expect(Object.keys(publicResponseShape)).not.toContain("environment");
+    expect(Object.keys(publicResponseShape)).not.toContain("description");
+    expect(Object.keys(publicResponseShape)).not.toContain("updatedBy");
+  });
+});

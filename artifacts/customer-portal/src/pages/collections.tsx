@@ -23,7 +23,9 @@ const fadeUp = {
 
 export default function CollectionsPage() {
   const { data: collections, isLoading, isError, error, refetch } = useCollections();
-  // ── Analytics — collections list is a marketplace discovery surface ────────
+  // ── Analytics — /collections is a marketplace discovery surface (no dedicated collections-list event)
+  // Team-6 determination: marketplace_viewed is semantically correct here; there is no
+  // collections_list_viewed event and solution_collection_viewed requires a collectionSlug.
   useTrackMarketplaceViewed();
 
   return (

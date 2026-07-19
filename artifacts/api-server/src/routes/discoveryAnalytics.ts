@@ -162,11 +162,24 @@ router.post(
 );
 
 // ── Public feature flag check ─────────────────────────────────────────────────
-// Returns only enabled/disabled — no internal configuration exposed.
+// Returns only enabled/disabled for an explicit allowlist of public keys.
+// Unknown keys, internal keys, and admin keys → 404 (no information leakage).
+// Team-6 integration fix: added allowlist + 404 for unknown/internal keys.
+
+const PUBLIC_FLAG_ALLOWLIST = new Set([
+  "v4_2_goal_discovery_enabled",
+  "v4_2_solution_collections_enabled",
+  "v4_2_discovery_analytics_enabled",
+  "v4_2_new_marketplace_default",
+]);
 
 router.get("/analytics/flags/:key", async (req, res): Promise<void> => {
   try {
     const { key } = req.params as { key: string };
+    if (!PUBLIC_FLAG_ALLOWLIST.has(key)) {
+      res.status(404).json({ error: "Flag not found" });
+      return;
+    }
     const sessionId = req.query["session_id"] as string | undefined;
     const enabled = await isFlagEnabled(key, { sessionId });
     res.json({ key, enabled });
