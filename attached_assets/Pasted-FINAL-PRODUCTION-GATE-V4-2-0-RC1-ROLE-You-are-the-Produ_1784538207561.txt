@@ -1,0 +1,685 @@
+FINAL PRODUCTION GATE — V4.2.0-RC1
+
+ROLE
+
+You are the Production Release Manager and Security Gatekeeper.
+
+Your task is to perform the final production deployment audit for V4.2.
+
+This is not a feature-development task.
+
+Do not redesign UI.
+Do not refactor unrelated code.
+Do not add new functionality.
+Only resolve verified production blockers.
+
+==================================================
+TARGET
+==================================================
+
+Branch:
+
+origin/integration/v4.2
+
+Expected commit:
+
+b626865
+
+Recommended release tag:
+
+v4.2.0-rc1
+
+Do not create the tag yet.
+Do not deploy yet.
+Do not modify main.
+
+==================================================
+REQUIRED OUTCOME
+==================================================
+
+Return exactly one:
+
+AUTHORIZED FOR PRODUCTION DEPLOYMENT
+
+or
+
+BLOCKED
+
+==================================================
+PHASE 1 — CLEAN RELEASE WORKTREE
+==================================================
+
+Create a clean release branch or detached worktree from:
+
+origin/integration/v4.2@b626865
+
+Confirm:
+
+git status --short
+
+must return empty.
+
+Do not include:
+
+attached_assets upload generated for this audit
+untracked TXT prompts
+screenshots
+temporary output
+dist artifacts unless intentionally versioned
+
+Do not delete tracked repository files without approval.
+
+==================================================
+PHASE 2 — SECRET AND CREDENTIAL INCIDENT
+==================================================
+
+Treat the previously exposed GitHub PAT as compromised.
+
+Required:
+
+1. Confirm the old PAT has been revoked.
+2. Confirm a replacement PAT was created if still needed.
+3. Confirm git remote contains no credential.
+4. Search tracked files for:
+   ghp_
+   github_pat_
+   sk-
+   postgres://
+   postgresql://
+   SUPABASE
+   DATABASE_URL
+   ADMIN_API_KEY
+   SESSION_SECRET
+5. Search Git history for credential patterns.
+6. Inspect:
+   .git/config
+   shell history where accessible
+   CI/CD variables
+   Replit Secrets
+   deployment configuration
+
+Never print actual secret values.
+
+Report only:
+
+FOUND
+NOT FOUND
+ROTATED
+REVOKED
+REQUIRES OWNER ACTION
+
+If old PAT has not been revoked:
+
+BLOCK.
+
+==================================================
+PHASE 3 — PUBLIC FEATURE FLAG RESPONSE
+==================================================
+
+Inspect:
+
+GET /api/analytics/flags/:key
+
+Allowed response:
+
+{
+  "key": "v4_2_discovery_analytics_enabled",
+  "enabled": true
+}
+
+Forbidden public fields:
+
+rolloutPercent
+environment
+tenantId
+notes
+description
+updatedAt
+createdAt
+configuration
+targeting rules
+audit fields
+
+Unknown or internal key:
+
+404
+
+Verify with actual route tests.
+
+If rolloutPercent is currently returned publicly:
+
+remove it with the smallest safe fix
+update tests
+rerun regression
+
+==================================================
+PHASE 4 — FEATURE FLAG RUNTIME PROOF
+==================================================
+
+Verify actual behavior for:
+
+v4_2_discovery_analytics_enabled
+v4_2_goal_discovery_enabled
+v4_2_solution_collections_enabled
+v4_2_new_marketplace_default
+
+Analytics flag false must result in:
+
+zero analytics network requests.
+
+Goal discovery flag false must have a documented actual effect.
+
+Solution collections flag false must have a documented actual effect.
+
+If goal and collection flags are not consumed by the UI:
+
+do not claim they provide no-deploy rollback.
+
+Classify them as:
+
+SEEDED_NOT_CONSUMED
+
+or
+
+ACTIVE_RUNTIME_GATE
+
+Update release notes accordingly.
+
+Do not implement UI gating unless explicitly required for release.
+
+==================================================
+PHASE 5 — ANALYTICS INGESTION CONTRACT
+==================================================
+
+Read the actual validation schema and route.
+
+Document the exact valid payload.
+
+Verify actual field names for:
+
+event name
+event version
+session identifier
+anonymous user identifier
+timestamp
+source
+metadata
+
+Client must not control:
+
+tenantId
+environment
+
+Create a valid production smoke-test payload based on the runtime contract.
+
+Do not use guessed fields such as:
+
+event
+version: "1.0"
+environment: "production"
+
+unless those are proven by the actual schema.
+
+Add or run a test proving the smoke payload returns 202.
+
+==================================================
+PHASE 6 — MIGRATION TRANSACTION SAFETY
+==================================================
+
+Inspect:
+
+scripts/migrations/v4.2i-analytics.sql
+
+Choose one safe method:
+
+A. Add explicit:
+
+BEGIN;
+...
+COMMIT;
+
+or
+
+B. Require execution using:
+
+psql --single-transaction
+
+Document the selected method.
+
+Verify:
+
+idempotent
+additive
+repeat-safe
+no DROP
+no TRUNCATE
+no destructive ALTER
+correct schema search_path
+correct index definitions
+Drizzle parity
+
+Do not run against production.
+
+==================================================
+PHASE 7 — DATABASE ENVIRONMENT CONTRACT
+==================================================
+
+Determine the exact production database environment variable used by deployment.
+
+Do not write:
+
+PROD_DATABASE_URL or alias.
+
+Return one verified name.
+
+Verify it is present without displaying its value.
+
+Migration command must reference the exact verified environment name.
+
+Example:
+
+psql --single-transaction "$VERIFIED_PRODUCTION_DB_ENV" \
+  -f scripts/migrations/v4.2i-analytics.sql
+
+Do not execute against production during audit.
+
+==================================================
+PHASE 8 — FIX STALE TEST
+==================================================
+
+Inspect:
+
+creativeDocumentWorkerService.test.ts
+
+Confirm the registry legitimately contains 8 supported types.
+
+Replace the stale brittle assertion.
+
+Preferred:
+
+verify exact required type keys
+
+rather than only checking array length.
+
+Run:
+
+full API test suite
+
+Required:
+
+0 failing tests
+
+If the production behavior is uncertain:
+
+BLOCK instead of changing the test.
+
+==================================================
+PHASE 9 — TYPECHECK RISK CLASSIFICATION
+==================================================
+
+Run clean baseline and release typechecks.
+
+For every error category, classify:
+
+PRE_EXISTING
+V4.2_INTRODUCED
+RUNTIME_RISK
+BUILD_ONLY
+PACKAGE_ORDER
+LATENT
+
+Do not state “zero impact” without evidence.
+
+Verify whether building required dependencies first reduces errors:
+
+pnpm run build:libs
+pnpm run typecheck:libs
+pnpm --filter @workspace/api-server run typecheck
+pnpm --filter @workspace/customer-portal run typecheck
+
+Any V4.2-introduced type error:
+
+BLOCK.
+
+==================================================
+PHASE 10 — TRACKED ARTIFACT SECURITY SCAN
+==================================================
+
+Audit tracked:
+
+attached_assets/
+screenshots/
+TXT
+PDF
+prompt files
+
+Check for:
+
+credentials
+internal URLs
+customer data
+personal data
+database dumps
+tokens
+private architecture data
+production configuration
+
+Do not remove them during this gate unless they contain a verified secret.
+
+If a secret exists in Git history:
+
+report incident scope
+rotate secret
+prepare history-cleaning recommendation
+
+==================================================
+PHASE 11 — ROUTE AND RELEASE NOTE CORRECTION
+==================================================
+
+Verify actual routes.
+
+Expected discovery routes:
+
+/goals
+/goals/:slug
+/collections
+/collections/:slug
+
+Correct all release notes and smoke-test instructions.
+
+No singular route forms unless they actually exist.
+
+==================================================
+PHASE 12 — ANALYTICS CAPABILITY HONESTY
+==================================================
+
+Create a matrix:
+
+Event
+Defined
+Hook exists
+Runtime producer
+Reporting consumer
+Operational status
+
+Mark:
+
+ACTIVE
+DEFINED_NOT_WIRED
+SERVER_OPERATIONAL
+RESERVED
+
+Do not describe the conversion funnel as end-to-end if:
+
+service click
+quote
+request
+checkout
+payment
+order
+
+events are not wired.
+
+Update release notes:
+
+Discovery page analytics active.
+
+Full conversion funnel instrumentation pending.
+
+==================================================
+PHASE 13 — CLEAN BUILDS
+==================================================
+
+Run:
+
+pnpm run typecheck:libs
+
+API build:
+
+cd artifacts/api-server
+node ./build.mjs
+
+Customer Portal build:
+
+PORT=5173 BASE_PATH=/customer-portal \
+pnpm --filter @workspace/customer-portal run build
+
+Record:
+
+duration
+bundle size
+warnings
+errors
+
+Both builds must pass.
+
+==================================================
+PHASE 14 — FULL REGRESSION
+==================================================
+
+Run full API suite after all release fixes.
+
+Required:
+
+0 failing tests.
+
+Run analytics tests.
+
+Run commercial policy tests.
+
+Run goal taxonomy tests.
+
+Run service normalization tests.
+
+Run discovery adapter tests.
+
+Run security tests.
+
+Required:
+
+zero new failures.
+
+==================================================
+PHASE 15 — STAGING MIGRATION
+==================================================
+
+Only with explicit owner approval:
+
+apply the analytics migration to the staging/dev database.
+
+Never production during this phase.
+
+Verify tables:
+
+ai_discovery_events
+ai_discovery_event_dedup
+ai_discovery_daily_metrics
+ai_discovery_funnel_metrics
+ai_feature_flags
+
+Verify indexes.
+
+Verify four feature flag seed rows.
+
+Repeat migration once to prove idempotency.
+
+==================================================
+PHASE 16 — STAGING SMOKE TEST
+==================================================
+
+On staging, verify:
+
+1. Public allowlisted flag → 200.
+2. Unknown flag → 404.
+3. Public response contains no rolloutPercent.
+4. Analytics disabled → no event request.
+5. Analytics enabled → valid event returns 202.
+6. Duplicate event returns 202 with duplicate status.
+7. Invalid event returns 422.
+8. Goal page works.
+9. Goal detail navigates using serviceId.
+10. Collection page works.
+11. Collection detail works.
+12. Admin reporting requires authentication.
+13. Reporting receives the smoke event.
+14. No PII stored.
+
+==================================================
+PHASE 17 — FINAL RELEASE DIFF
+==================================================
+
+Document every fix made after:
+
+b626865
+
+Allowed release fixes:
+
+public flag response hardening
+smoke-test contract correction
+migration transaction protection
+stale test correction
+release note correction
+security cleanup
+
+No unrelated changes.
+
+==================================================
+PHASE 18 — TAG RECOMMENDATION
+==================================================
+
+Only when all gates pass:
+
+recommend tag:
+
+v4.2.0-rc1
+
+Do not automatically create or push the tag.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+# FINAL PRODUCTION GATE REPORT
+
+## 1. Repository
+
+Commit
+Clean status
+Release branch
+
+## 2. Credential Incident
+
+PAT revoked
+Replacement status
+Repository scan
+History scan
+CI/Replit scan
+
+Never display secret values.
+
+## 3. Public Feature Flag
+
+Response
+Allowlist
+Unknown key
+rolloutPercent exposure
+
+## 4. Runtime Flags
+
+Analytics
+Goals
+Collections
+Marketplace
+Active vs seeded-only
+
+## 5. Analytics Contract
+
+Exact valid payload
+Status codes
+Server-derived fields
+Smoke test
+
+## 6. Migration
+
+Official file
+Transaction method
+Exact environment name
+Idempotency
+Staging application result
+
+## 7. Tests
+
+Passing
+Failing
+Stale test correction
+New failures
+
+## 8. Typecheck
+
+Baseline
+After
+Risk classification
+
+## 9. Builds
+
+API
+Portal
+Libraries
+
+## 10. Artifact Security
+
+Tracked files
+Secret findings
+Required cleanup
+
+## 11. Routes
+
+Actual routes
+Corrected documentation
+
+## 12. Analytics Operational Matrix
+
+Active events
+Not wired
+Reserved
+Reporting limitations
+
+## 13. Staging UAT
+
+Each smoke test
+Result
+Evidence
+
+## 14. Release Fixes
+
+Files
+Reason
+Commit
+
+## 15. Risk Acceptance
+
+Every remaining risk
+Owner
+Mitigation
+
+## 16. Recommendation
+
+Exactly one:
+
+AUTHORIZED FOR PRODUCTION DEPLOYMENT
+
+or
+
+BLOCKED
+
+If authorized, provide:
+
+recommended tag
+exact migration command
+deployment order
+post-deploy smoke tests
+rollback commands
+
+STOP.
