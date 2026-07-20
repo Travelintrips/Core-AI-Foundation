@@ -77,6 +77,9 @@ const PUBLIC_PATH_PREFIXES = [
   "/internal/auth/login", // internal staff login — must be reachable before a session exists
   "/customs", // BTKI tariff search — public reference data, no auth needed
   "/cargo",   // Cargo Rate Finder proxy — public rate lookup, no admin key needed
+  // NOTE: /ai/solution-collections was intentionally NOT added here.
+  // That prefix would bypass auth for ALL methods (POST/PATCH/DELETE) under the path.
+  // Use PUBLIC_ROUTE_RULES below for explicit GET-only exemptions (Team-6 integration fix).
 ];
 
 /**
@@ -130,6 +133,18 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
   { method: "POST", pattern: /^\/ai\/fashion-design\/orders\/\d+\/revision-request$/ },
   // List revisions — email-gated in the route handler; no admin key required.
   { method: "GET",  pattern: /^\/ai\/fashion-design\/orders\/\d+\/revisions$/ },
+  // Team 02 — Goal Taxonomy (V4.2C). Read-only goal discovery is public.
+  // Admin write routes (POST /ai/goals, PATCH, DELETE) remain key-protected.
+  { method: "GET",  pattern: /^\/ai\/goals$/ },
+  { method: "GET",  pattern: /^\/ai\/goals\/[^/]+$/ },
+  { method: "GET",  pattern: /^\/ai\/goals\/[^/]+\/services$/ },
+  // Team 04 — Solution Collections (V4.2E). Read-only public discovery is public.
+  // All admin routes (POST, PATCH, DELETE, and admin list) are under /ai/admin/...
+  // and are never exempted here. Only these two GET routes are customer-facing.
+  // Team-6 integration fix: originally added as a broad PUBLIC_PATH_PREFIXES entry
+  // which would bypass auth for ALL HTTP methods; replaced with explicit GET-only rules.
+  { method: "GET",  pattern: /^\/ai\/solution-collections$/ },
+  { method: "GET",  pattern: /^\/ai\/solution-collections\/[^/]+$/ },
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {

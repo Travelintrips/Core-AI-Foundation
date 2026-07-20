@@ -1,0 +1,371 @@
+# TEAM-01
+
+# COMMERCIAL POLICY TEAM
+
+Version:
+1.0
+
+Status:
+ACTIVE
+
+Owner:
+Architecture
+
+Branch:
+
+feature/v4.2b-commercial-policy
+
+---
+
+# PROJECT
+
+Creative AI Platform
+
+Phase:
+
+V4.2B
+
+Commercial Eligibility Guard
+
+---
+
+# READ FIRST
+
+WAJIB membaca:
+
+MASTER-00.md
+
+sebelum melakukan perubahan.
+
+Seluruh aturan pada MASTER-00 berlaku.
+
+Dokumen ini hanya menambahkan aturan khusus Team 1.
+
+---
+
+# TEAM RESPONSIBILITY
+
+Team ini bertanggung jawab terhadap:
+
+- Commercial Policy
+- Public Eligibility
+- Backend Guard
+- API Validation
+- Security
+- Service Visibility
+- Order Eligibility
+- Repository
+- Backend Test
+
+Team ini TIDAK bertanggung jawab terhadap:
+
+- UI
+- Marketplace Design
+- Goal Discovery
+- Recommendation UI
+- Analytics
+- SEO
+
+---
+
+# PRIMARY MISSION
+
+Bangun SATU
+
+Canonical Commercial Eligibility Policy
+
+yang dipakai oleh seluruh backend.
+
+Tidak boleh ada:
+
+if (visibility === "public")
+
+yang tersebar di banyak route.
+
+Seluruh route harus memakai policy yang sama.
+
+---
+
+# BACKGROUND
+
+Audit V4.2A menemukan:
+
+123 service
+
+116 active
+
+7 archived
+
+21 commercial_ready
+
+18 public tetapi internal_only
+
+77 internal
+
+Public API saat ini mengembalikan:
+
+39 service
+
+Padahal seharusnya customer hanya dapat melihat:
+
+21 service
+
+Selain itu:
+
+Customer masih dapat melakukan order
+
+ke service yang sebenarnya
+
+belum commercial_ready.
+
+Ini adalah bug.
+
+Bug tersebut harus diperbaiki.
+
+Tanpa merusak:
+
+existing order
+
+existing project
+
+existing workflow
+
+---
+
+# OBJECTIVES
+
+Setelah phase selesai:
+
+✓
+
+Public catalog
+
+hanya menampilkan
+
+commercial_ready service.
+
+✓
+
+Public service detail
+
+menggunakan policy yang sama.
+
+✓
+
+Order baru
+
+menggunakan policy yang sama.
+
+✓
+
+Search
+
+menggunakan policy yang sama.
+
+✓
+
+Related service
+
+menggunakan policy yang sama.
+
+✓
+
+Package
+
+menggunakan policy yang sama.
+
+✓
+
+Pricing
+
+menggunakan policy yang sama.
+
+---
+
+# IMPORTANT
+
+Jangan mengubah:
+
+pricing
+
+workflow
+
+runtime
+
+AI agent
+
+goal taxonomy
+
+recommendation
+
+frontend
+
+UI
+
+customer portal
+
+---
+
+# ARCHITECTURE GOAL
+
+Yang ingin dicapai:
+
+BAD
+
+Route A
+
+visibility
+
+Route B
+
+visibility + active
+
+Route C
+
+visibility + archived
+
+Route D
+
+visibility + status
+
+GOOD
+
+CommercialEligibilityPolicy
+
+↓
+
+Route A
+
+↓
+
+Route B
+
+↓
+
+Route C
+
+↓
+
+Route D
+
+---
+
+# DESIGN PRINCIPLE
+
+Policy harus:
+
+Pure
+
+Reusable
+
+Typed
+
+Testable
+
+Deterministic
+
+Documented
+
+---
+
+# ALLOWED FILES
+
+Boleh mengubah:
+
+api-server
+
+services
+
+repository
+
+validation
+
+middleware
+
+policy
+
+shared types
+
+backend tests
+
+documentation
+
+---
+
+# FORBIDDEN FILES
+
+Tidak boleh mengubah:
+
+customer-portal
+
+bizportal UI
+
+runtime
+
+creative workflow
+
+presentation engine
+
+AI dispatcher
+
+taxonomy
+
+goal engine
+
+recommendation engine
+
+analytics
+
+SEO
+
+CSS
+
+---
+
+# DO NOT
+
+Jangan:
+
+Rename endpoint
+
+Rename payload
+
+Rename response
+
+Rename service code
+
+Rename category
+
+Rename workflow
+
+Rename project
+
+---
+
+# REQUIRED OUTPUT
+
+Setelah selesai wajib menghasilkan:
+
+Final Report
+
+Files Changed
+
+API Changes
+
+Tests
+
+Build
+
+Typecheck
+
+Manual Verification
+
+Known Limitation
+
+Risk
+
+Recommendation
+
+Berhenti setelah report.
+
+Jangan mengerjakan Team 2.

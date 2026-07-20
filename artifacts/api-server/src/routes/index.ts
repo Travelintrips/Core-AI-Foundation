@@ -74,11 +74,16 @@ import designTemplatesRouter from "./design-templates";
 import designTemplatesAiAssistRouter from "./design-templates-ai-assist";
 import creativeMarketplaceRouter from "./creative-marketplace";
 import cargoRatesRouter from "./cargo-rates";
+import serviceNormalizationRouter from "./service-normalization.js";
+// ── Team 05: Discovery Analytics & Feature Flags ──────────────────────────
+import discoveryAnalyticsRouter from "./discoveryAnalytics.js";
 
 // ── Team 01: Creative Workflow V2 ──────────────────────────────────────────
 import { creativeWorkflowV2Router, creativeWorkflowPublicRouter } from "./creative-workflow-v2/index.js";
 // ── Team 02: Customer Creative Workspace (enhanced) ───────────────────────
 import customerCreativeWorkspaceRouter from "./customer-creative-workspace/index.js";
+// ── Team 02: Goal Taxonomy (V4.2C) ────────────────────────────────────────
+import goalTaxonomyRouter from "../goals/goalRoutes.js";
 // ── Team 03: Creative Commercial Automation ───────────────────────────────
 import creativeCommercialRouter from "./creative-commercial/index.js";
 // ── Team 04: Portfolio V2 (Gallery, Inspiration, Compare) ────────────────
@@ -201,6 +206,8 @@ router.use(creativeWorkflowPublicRouter);
 router.use(creativeWorkflowV2Router);
 // ── Team 02: Customer Creative Workspace Enhanced ─────────────────────────
 router.use(customerCreativeWorkspaceRouter);
+// ── Team 02: Goal Taxonomy (V4.2C) ────────────────────────────────────────
+router.use(goalTaxonomyRouter);
 // ── Team 03: Creative Commercial Automation ───────────────────────────────
 router.use(creativeCommercialRouter);
 // ── Team 04: Portfolio V2 — mount BEFORE any catch-all ───────────────────
@@ -243,5 +250,9 @@ router.use(imagePreviewPipelineRouter);
 // ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
 router.use(customsRouter);
 router.use(cargoRatesRouter);
+// ── Team 04: Service Normalization & Solution Collections ─────────────────────
+router.use(serviceNormalizationRouter);
+// ── Team 05: Discovery Analytics & Feature Flags ──────────────────────────────
+router.use(discoveryAnalyticsRouter);
 
 export default router;
