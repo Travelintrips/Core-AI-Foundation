@@ -9,6 +9,11 @@
 --                 Do not run against production without owner approval.
 -- =============================================================================
 
+-- Transaction method: Option A — explicit BEGIN/COMMIT wraps all DDL.
+-- This makes the entire migration atomic: if any statement fails, all changes
+-- roll back automatically. Safe to run with plain psql (no --single-transaction flag needed).
+BEGIN;
+
 SET search_path TO ai_platform, public;
 
 -- ---------------------------------------------------------------------------
@@ -215,12 +220,18 @@ ON CONFLICT (flag_key, environment) DO NOTHING;
 -- Cron implementation: DEFERRED — implement via pg_cron or a scheduled API
 --   endpoint once the migration is applied and volumes justify it.
 
+COMMIT;
+
 -- =============================================================================
 -- MIGRATION CREATED BUT NOT APPLIED
 -- Apply only after:
 --   1. Owner approval
---   2. Confirm active branch = feature/v4.2i-analytics-production-readiness
---   3. Confirm target DB (dev: SUPABASE_DEV_DATABASE_URL, prod: SUPABASE_PROD_DATABASE_URL)
---   4. Verify additive-only (no destructive SQL above)
---   5. Run: psql $SUPABASE_DEV_DATABASE_URL -f docs/team-05-analytics-migration.sql
+--   2. Confirm target DB env var: SUPABASE_PROD_DATABASE_URL (production)
+--                               or SUPABASE_DEV_DATABASE_URL (staging)
+--   3. Verify additive-only (no destructive SQL above)
+--   4. Run command (production):
+--        psql "$SUPABASE_PROD_DATABASE_URL" -f scripts/migrations/v4.2i-analytics.sql
+--   4. Run command (staging):
+--        psql "$SUPABASE_DEV_DATABASE_URL" -f scripts/migrations/v4.2i-analytics.sql
+--   5. Re-run once to confirm idempotency (all IF NOT EXISTS — should produce no error)
 -- =============================================================================

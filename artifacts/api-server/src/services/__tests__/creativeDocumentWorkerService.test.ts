@@ -255,6 +255,7 @@ beforeEach(() => {
 describe("A. Document registry", () => {
   it("registers all supported document types", () => {
     const types = getSupportedDocumentTypes();
+    // Core creative document types
     expect(types).toContain("company_profile");
     expect(types).toContain("brand_strategy");
     expect(types).toContain("copywriting");
@@ -262,7 +263,10 @@ describe("A. Document registry", () => {
     expect(types).toContain("brand_identity_guideline");
     expect(types).toContain("fashion_design");
     expect(types).toContain("interior_design");
-    expect(types).toHaveLength(7);
+    // Extended document types (added in presentation-document domain)
+    expect(types).toContain("ebook");
+    // Total registered types — update this when a new type is added to creativeDocumentRegistry.ts
+    expect(types).toHaveLength(8);
   });
 
   it("returns a definition for every registered type with correct contract shape", () => {
