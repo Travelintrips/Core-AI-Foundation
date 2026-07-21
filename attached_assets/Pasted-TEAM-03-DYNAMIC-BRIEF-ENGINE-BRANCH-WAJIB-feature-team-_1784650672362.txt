@@ -1,0 +1,222 @@
+TEAM 03 — DYNAMIC BRIEF ENGINE
+
+BRANCH WAJIB:
+feature/team-03-dynamic-brief-engine
+
+PERAN TEAM
+
+Ubah fondasi Brief Wizard existing menjadi Dynamic Brief Engine yang dapat
+merender dan memvalidasi brief berbeda berdasarkan project/service plugin.
+
+PROJECT BRIEF
+
+Creative AI sudah memiliki:
+
+- Brief Wizard dengan beberapa langkah;
+- service-specific brief configuration;
+- field tambahan untuk Fashion, Interior, dan Company Profile;
+- AI Guided Brief Assistant;
+- planner pertanyaan;
+- answer mapper;
+- session storage;
+- review dan completion summary.
+
+Jangan membuang atau mengganti sistem tersebut. Bangun lapisan canonical schema
+dan adapter agar brief dapat berkembang untuk semua project design.
+
+CONTOH BRIEF DOMAIN
+
+Fashion:
+- garment category
+- target wearer
+- season
+- fit
+- silhouette
+- fabric preference
+- production quantity
+- size range
+- sustainability constraints
+
+Interior:
+- property type
+- room type
+- dimensions
+- style
+- occupants
+- budget range
+- material preference
+- existing conditions
+- lighting requirements
+
+Packaging:
+- product type
+- dimensions/volume
+- packaging structure
+- material
+- printing process
+- regulatory copy
+- barcode area
+- shelf/display context
+
+Branding:
+- company/product
+- audience
+- positioning
+- values
+- competitor context
+- brand personality
+- required assets
+- usage channels
+
+Field tersebut harus berada dalam domain schema, bukan core schema.
+
+TUJUAN
+
+Bangun DynamicBriefEngine yang mendukung:
+
+1. Universal core brief fields.
+2. Domain-specific field sections.
+3. Conditional visibility.
+4. Required/optional rules.
+5. Repeatable groups.
+6. Typed options.
+7. Validation rules.
+8. Draft persistence.
+9. Schema version.
+10. Migration dari draft lama.
+11. Derived completion progress.
+12. Review-ready normalized output.
+13. Human-readable summary.
+14. Compatibility dengan AI Guided Brief Assistant.
+
+UNIVERSAL CORE YANG DISARANKAN
+
+Evaluasi field existing, lalu canonicalize minimal:
+
+- project title;
+- service/project type;
+- objective;
+- target audience;
+- deliverables;
+- style/direction;
+- brand references;
+- timeline;
+- budget guidance;
+- usage/channel;
+- constraints;
+- reference assets;
+- notes.
+
+Jangan memaksa field yang tidak relevan untuk seluruh service.
+
+SCHEMA DEFINITION
+
+Setiap schema minimal memiliki:
+
+- schemaId;
+- version;
+- serviceTypes;
+- sections;
+- field definitions;
+- conditional rules;
+- validation;
+- default values;
+- data migration handler;
+- completion policy;
+- assistant metadata;
+- localization key.
+
+FIELD TYPES
+
+Dukung berdasarkan kebutuhan existing:
+
+- text;
+- textarea;
+- number;
+- currency;
+- select;
+- multi-select;
+- radio;
+- checkbox;
+- date;
+- dimension;
+- file/reference asset;
+- repeatable group;
+- color/style reference.
+
+Jangan membangun renderer UI besar jika berada di luar scope. Sediakan registry,
+normalizer, validator, dan adapter yang dapat dipakai UI existing.
+
+LEGACY COMPATIBILITY
+
+- Existing brief records harus tetap terbaca.
+- Existing wizard data tidak boleh hilang.
+- Buat migration/normalization in-memory atau additive persisted version bila perlu.
+- Unknown legacy field dipertahankan dalam extension bag jika aman.
+- Jangan silent drop.
+
+FILE OWNERSHIP
+
+Boleh:
+
+- brief schema registry;
+- brief normalizer;
+- validation;
+- completion calculator;
+- legacy adapter;
+- brief summary builder;
+- tests;
+- minimal integration ke existing brief config.
+
+Tidak boleh:
+
+- membangun conversational question planner baru milik Team 04;
+- membangun plugin penuh Fashion/Interior milik Team 31/32;
+- redesign seluruh UI;
+- mengubah AI provider;
+- membuat workflow engine;
+- menghapus existing config.
+
+ACCEPTANCE CRITERIA
+
+1. Existing Fashion, Interior, dan Company Profile brief dapat dinormalisasi.
+2. Schema dipilih berdasarkan service type/plugin.
+3. Conditional fields bekerja deterministic.
+4. Validation error memiliki field path dan user-facing message key.
+5. Draft lama dapat dimigrasi tanpa kehilangan data.
+6. Completion tidak sekadar menghitung semua field; gunakan required-visible fields.
+7. Output normalized cocok untuk AI agent dan downstream engine.
+8. Semua domain extension berada di namespace yang jelas.
+9. Tidak ada hard-coded condition tersebar di banyak komponen.
+10. Dokumentasikan cara plugin mendaftarkan schema brief.
+
+TEST WAJIB
+
+- universal brief;
+- Fashion fixture;
+- Interior fixture;
+- Packaging fixture;
+- Branding fixture;
+- conditional required field;
+- hidden field tidak menghambat completion;
+- repeatable group;
+- invalid enum;
+- legacy draft migration;
+- unknown field preservation;
+- schema version mismatch;
+- stable normalization.
+
+OUTPUT UNTUK TEAM 04 DAN DOMAIN PLUGIN
+
+Laporkan:
+
+- registry API;
+- schema definition format;
+- normalized brief output;
+- assistant metadata contract;
+- contoh pendaftaran schema domain;
+- legacy compatibility notes.
+
+COMMIT YANG DISARANKAN
+
+feat(dynamic-brief): add schema-driven brief engine
