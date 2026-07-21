@@ -1,0 +1,152 @@
+TEAM 09 — DESIGN VERSION HISTORY & REVISION SYSTEM
+
+BRANCH WAJIB:
+feature/team-09-version-history
+
+PERAN TEAM
+
+Bangun version history dan revision foundation untuk brief, design artifact,
+technical specification, dan approved output.
+
+PROJECT BRIEF
+
+Design project membutuhkan iterasi yang dapat diaudit:
+
+- AI menghasilkan konsep V1;
+- customer/admin memberi komentar;
+- revisi menghasilkan V2;
+- technical drawing atau specification diperbarui;
+- approved version tidak boleh ditimpa;
+- export harus menunjuk versi tertentu;
+- rollback harus membuat versi baru atau memilih versi lama secara aman.
+
+Platform sudah memiliki client review/comments dan asset records. Reuse sistem
+tersebut; jangan membuat review system kedua.
+
+TUJUAN
+
+Bangun versioning service yang mendukung:
+
+1. Immutable version records atau immutable version semantics.
+2. Parent-version relation.
+3. Revision reason.
+4. Actor/source.
+5. AI execution provenance.
+6. Content hash.
+7. Version comparison metadata.
+8. Approved/current version pointers.
+9. Restore/promote version.
+10. Audit trail.
+11. Integration dengan client review.
+12. Idempotent version creation.
+
+VERSIONABLE ENTITIES
+
+Minimal framework harus mendukung:
+
+- normalized brief snapshot;
+- artifact metadata/content reference;
+- design specification;
+- export manifest.
+
+Jangan menduplikasi binary file. Version record boleh menunjuk storage object
+yang sama bila hash identik.
+
+IMMUTABILITY
+
+- Approved version tidak boleh di-update in place.
+- Perubahan harus membuat versi baru.
+- Metadata audit tertentu dapat dipisahkan bila memang mutable.
+- Delete sebaiknya soft archive/tombstone sesuai pola existing.
+- Current pointer harus diperbarui secara atomic.
+
+REVISION REQUEST
+
+Petakan client review existing:
+
+- approved;
+- rejected;
+- revision_requested;
+- comment.
+
+Revision harus dapat mereferensikan versionId yang ditinjau. Jika schema existing
+belum mendukung, gunakan additive relation yang aman.
+
+DIFF
+
+Tidak perlu membuat visual diff engine penuh.
+
+Sediakan:
+
+- structured field diff untuk JSON;
+- artifact metadata diff;
+- changed paths;
+- added/removed/modified summary;
+- size/complexity limits;
+- no exposure terhadap secret/internal prompt.
+
+PERSISTENCE
+
+Audit table asset/review existing terlebih dahulu.
+
+Pilih:
+
+- reuse existing version field/table;
+- atau additive version table generik jika benar-benar diperlukan.
+
+Jangan menyimpan full binary ke database.
+
+MULTI-TENANT
+
+Version dan revision wajib mengikuti tenant/project ownership.
+
+FILE OWNERSHIP
+
+Boleh:
+
+- versioning domain service;
+- repository;
+- revision link adapter;
+- JSON diff;
+- additive migration;
+- tests;
+- docs.
+
+Tidak boleh:
+
+- membuat UI visual compare besar;
+- mengubah client review portal secara besar;
+- membangun image diff;
+- mengganti storage engine;
+- membuat export engine.
+
+ACCEPTANCE CRITERIA
+
+1. Version number monotonic per entity.
+2. Duplicate idempotency key tidak membuat versi ganda.
+3. Approved version immutable.
+4. Restore/promote atomic.
+5. Diff structured tersedia.
+6. Review dapat menunjuk version yang benar.
+7. Cross-tenant access ditolak.
+8. Existing assets/reviews tetap kompatibel.
+9. Binary tidak diduplikasi tanpa kebutuhan.
+10. Provenance mencatat sumber human/AI/import tanpa menyimpan secret.
+
+TEST WAJIB
+
+- create V1;
+- create V2 from V1;
+- duplicate version command;
+- approve;
+- mutation approved ditolak;
+- restore old version;
+- concurrent version number;
+- JSON diff;
+- review relation;
+- tenant isolation;
+- identical content hash dedup behavior.
+
+COMMIT YANG DISARANKAN
+
+feat(design-versioning): add immutable revision history
