@@ -1,0 +1,181 @@
+TEAM 16 — DESIGN REVIEW AND APPROVAL WORKSPACE
+
+BRANCH WAJIB:
+feature/team-16-review-workspace
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun review workspace universal untuk:
+
+- internal review;
+- client review;
+- approve;
+- reject;
+- request revision;
+- review summary;
+- reviewer status;
+- decision history;
+- due date;
+- version-specific review.
+
+Gunakan sistem client review existing.
+
+Jangan membuat review database atau token system kedua.
+
+==================================================
+AUDIT
+==================================================
+
+Audit:
+
+- creative_ai_client_reviews;
+- comments;
+- public review route;
+- admin review UI;
+- approve/reject/revision API;
+- token/rate limiting;
+- review statuses;
+- project events;
+- artifact versions;
+- permissions.
+
+==================================================
+FEATURE
+==================================================
+
+Bangun reusable:
+
+ReviewWorkspaceShell
+ReviewStatusSummary
+ReviewerList
+ReviewDecisionPanel
+ReviewChecklist
+ReviewHistory
+ReviewDeadline
+ReviewPermissionState
+
+Dukung:
+
+- pending;
+- in_review;
+- approved;
+- rejected;
+- revision_requested;
+- expired;
+- canceled;
+- superseded.
+
+Gunakan status mapping existing. Jangan mengganti canonical statuses.
+
+==================================================
+DECISION
+==================================================
+
+Action:
+
+- approve;
+- reject;
+- request revision;
+- cancel decision bila diizinkan;
+- acknowledge review;
+- internal sign-off.
+
+Setiap decision harus:
+
+- permission-aware;
+- version-aware;
+- idempotent;
+- require reason bila policy meminta;
+- confirmation untuk irreversible action;
+- menangani stale version;
+- tidak double-submit;
+- menampilkan audit result.
+
+==================================================
+CHECKLIST
+==================================================
+
+Checklist bersifat schema/config driven.
+
+Dapat berasal dari:
+
+- core;
+- workflow;
+- plugin;
+- service policy.
+
+Jangan hard-code checklist domain dalam core.
+
+==================================================
+PUBLIC REVIEW
+==================================================
+
+Pertahankan keamanan token existing:
+
+- hash-first validation;
+- rate limit;
+- expiry;
+- invalid token;
+- revoked token;
+- tenant boundary;
+- no admin data leakage.
+
+Jangan mengubah public review flow tanpa compatibility test.
+
+==================================================
+INTEGRATION
+==================================================
+
+Team 11:
+
+- workspace dapat menyediakan slot review.
+
+Team 15:
+
+- review melekat pada artifact/version.
+
+Team 18:
+
+- comment pin/annotation dapat dihubungkan melalui adapter.
+
+Team 08:
+
+- lifecycle transition setelah approval melalui service canonical, bukan frontend
+  status mutation langsung.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. pending review;
+2. approve;
+3. reject;
+4. revision request;
+5. reason required;
+6. double submit protection;
+7. idempotent decision;
+8. stale version;
+9. permission denied;
+10. expired token;
+11. revoked token;
+12. invalid token;
+13. checklist;
+14. plugin checklist;
+15. review history;
+16. version-specific decision;
+17. public/admin data isolation;
+18. keyboard/accessibility;
+19. existing public review regression;
+20. raw secret/token tidak tampil.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-review): add universal review workspace"
+git push -u origin HEAD
