@@ -15,6 +15,7 @@
  */
 
 import { z } from "zod";
+import { FeatureStabilitySchema } from "./deprecation.js";
 
 // ── Plugin capability declaration ─────────────────────────────────────────────
 
@@ -43,6 +44,49 @@ export const PluginFeatureFlagSchema = z.object({
 
 export type PluginFeatureFlag = z.infer<typeof PluginFeatureFlagSchema>;
 
+// ── Plugin dependency (Task J) ────────────────────────────────────────────────
+
+/**
+ * Declares a dependency on another plugin.
+ *
+ * Example: the Fashion plugin depends on the Material, Export, and Renderer
+ * plugins. The plugin registry resolves and loads dependencies in topological
+ * order before activating the dependent plugin.
+ *
+ * Circular plugin dependencies are not allowed; the registry validates the
+ * dependency DAG at load time.
+ */
+export const PluginDependencySchema = z.object({
+  /**
+   * pluginId of the required plugin.
+   * Must match a registered DesignPluginManifest.pluginId.
+   */
+  pluginId: z.string().min(1).max(100).regex(/^[a-z][a-z0-9_-]*$/, {
+    message: "pluginId must be lowercase alphanumeric with hyphens/underscores",
+  }),
+  /**
+   * Minimum semantic version of the dependency required.
+   * Format: "MAJOR.MINOR.PATCH" (semver).
+   * The registry rejects the dependent plugin if the installed version is lower.
+   */
+  minimumVersion: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+$/, { message: "minimumVersion must be semver: MAJOR.MINOR.PATCH" })
+    .optional(),
+  /**
+   * When true, the dependent plugin can load even if this dependency is missing.
+   * Missing optional dependencies disable the capabilities that require them.
+   */
+  optional: z.boolean().default(false),
+  /**
+   * Human-readable explanation of why this dependency is needed.
+   * Shown in developer tooling and error messages.
+   */
+  reason: z.string().max(300).optional(),
+});
+
+export type PluginDependency = z.infer<typeof PluginDependencySchema>;
+
 // ── DesignPluginManifest ──────────────────────────────────────────────────────
 
 export const DesignPluginManifestSchema = z.object({
@@ -67,6 +111,13 @@ export const DesignPluginManifestSchema = z.object({
    * the supported range.
    */
   compatibleContractVersion: z.number().int().positive(),
+
+  /**
+   * Stability tier of this plugin (Task I — FeatureStability).
+   * Defaults to "stable" for registered production plugins.
+   * Use "experimental" for new plugins under active development.
+   */
+  stability: FeatureStabilitySchema.default("stable"),
 
   // ── Service coverage ──────────────────────────────────────────────────────
 
@@ -96,6 +147,15 @@ export const DesignPluginManifestSchema = z.object({
   capabilities: z.array(PluginCapabilityFlagSchema).default([]),
   /** Feature flags scoped to this plugin. */
   featureFlags: z.array(PluginFeatureFlagSchema).default([]),
+
+  // ── Plugin dependencies (Task J) ─────────────────────────────────────────
+
+  /**
+   * Other plugins this plugin depends on.
+   * The registry loads dependencies first and validates the DAG for cycles.
+   * Example: fashion depends on ["material", "export-renderer"].
+   */
+  dependencies: z.array(PluginDependencySchema).default([]),
 
   // ── Compatibility metadata ────────────────────────────────────────────────
 

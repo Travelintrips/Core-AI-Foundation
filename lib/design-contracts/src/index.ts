@@ -95,6 +95,8 @@ export {
   type PluginCapabilityFlag,
   PluginFeatureFlagSchema,
   type PluginFeatureFlag,
+  PluginDependencySchema,
+  type PluginDependency,
   DesignPluginManifestSchema,
   type DesignPluginManifest,
 } from "./plugin.js";
@@ -103,6 +105,12 @@ export {
 export {
   EXECUTION_MODES,
   type ExecutionMode,
+  CAPABILITY_CATEGORIES,
+  type CapabilityCategory,
+  EXECUTION_PRIORITIES,
+  type ExecutionPriority,
+  ExecutionEstimationSchema,
+  type ExecutionEstimation,
   AiRequirementSchema,
   type AiRequirement,
   RendererRequirementSchema,
@@ -126,3 +134,35 @@ export {
   WELL_KNOWN_DESIGN_COMMANDS,
   type WellKnownDesignCommand,
 } from "./events.js";
+
+// ── Contract Metadata (Task A) ────────────────────────────────────────────────
+export {
+  CONTRACT_METADATA_SOURCES,
+  type ContractMetadataSource,
+  WELL_KNOWN_GENERATORS,
+  type WellKnownGenerator,
+  ContractMetadataSchema,
+  type ContractMetadata,
+} from "./metadata.js";
+
+// ── Artifact Relationship & Graph (Tasks B, C) ────────────────────────────────
+export {
+  RELATIONSHIP_TYPES,
+  type RelationshipType,
+  ArtifactRelationshipSchema,
+  type ArtifactRelationship,
+  type ArtifactGraphValidationResult,
+  validateArtifactGraph,
+  detectArtifactCycles,
+  findArtifactDependencies,
+  findArtifactDependents,
+} from "./relationship.js";
+
+// ── Deprecation & Feature Stability (Tasks H, I) ──────────────────────────────
+export {
+  FEATURE_STABILITIES,
+  type FeatureStability,
+  FeatureStabilitySchema,
+  DeprecationPolicySchema,
+  type DeprecationPolicy,
+} from "./deprecation.js";
