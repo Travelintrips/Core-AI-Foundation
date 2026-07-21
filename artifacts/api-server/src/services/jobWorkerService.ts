@@ -45,11 +45,14 @@ import { getSupportedImageBatchTypes } from "./image-batch/creativeImageBatchReg
 import { executeGenericImageBatchExportJob } from "./image-batch/creativeImageBatchWorkerService.js";
 import { resolveProjectImageBatchType } from "./creativeProjectImageBatchType.js";
 import { executeZipDeliveryJob } from "./zipDeliveryService.js";
+import { initExportFormatRegistry } from "./export-workspace/exportFormatRegistry.js";
 
 // Register all document type definitions at module load time.
 initDocumentRegistry();
 initPresentationRegistry();
 initImageBatchRegistry();
+// Team 17: Register export format definitions.
+try { initExportFormatRegistry(); } catch { /* already initialised */ }
 
 // ── WP-06: Worker context factory ────────────────────────────────────────────
 
@@ -624,6 +627,12 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
         throw new Error("design_render_zip_export: payload missing exportId, tenantId, or batchId");
       }
       return executeZipExportJob(zipExportId, zipTenantId, zipBatchId);
+    }
+
+    // ── Team 17: Universal Design Export Workspace ───────────────────────────
+    case "export_workspace_job": {
+      const { executeExportWorkspaceJob } = await import("./export-workspace/exportWorkspaceService.js");
+      return executeExportWorkspaceJob(job);
     }
 
     default:

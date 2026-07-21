@@ -62,6 +62,8 @@ import DesignTemplateEditor from "@/pages/design-template-editor";
 import DesignTemplates from "@/pages/design-templates";
 import DesignTemplateDetail from "@/pages/design-template-detail";
 
+// ── Team 17: Universal Design Export Workspace ───────────────────────────
+import ExportWorkspacePage from "@/pages/export-workspace";
 // ── Team 03: Commercial Automation ───────────────────────────────────────
 import CommercialAutomationPage from "@/pages/creative-commercial/CommercialAutomationPage";
 // ── Team 05: Brand Intelligence V2 ───────────────────────────────────────
@@ -183,6 +185,8 @@ function AdminRouter() {
         <Route path="/design-render-batches/new" component={DesignRenderBatchesNew} />
         <Route path="/design-render-batches/:id" component={DesignRenderBatchDetail} />
         <Route path="/design-render-batches" component={DesignRenderBatches} />
+        {/* ── Team 17: Universal Design Export Workspace ────────────────── */}
+        <Route path="/export-workspace" component={ExportWorkspacePage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
