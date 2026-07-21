@@ -94,6 +94,8 @@ import brandIntelligenceV2Router from "./brand-intelligence-v2/index.js";
 import assetIntelligenceV2Router from "./asset-intelligence-v2/index.js";
 // ── Team 07: Design Blueprints ────────────────────────────────────────────
 import designBlueprintsRouter from "./design-blueprints/index.js";
+// ── Team 07: Domain Plugin Framework ─────────────────────────────────────
+import { designPluginsRouter } from "../domains/design-plugins/index.js";
 // ── Team 08: Design Components ───────────────────────────────────────────
 import designComponentsRouter from "./design-components/router.js";
 // ── Team 09: Design Patterns ─────────────────────────────────────────────
@@ -218,6 +220,8 @@ router.use(brandIntelligenceV2Router);
 router.use(assetIntelligenceV2Router);
 // ── Team 07: Design Blueprints ────────────────────────────────────────────
 router.use(designBlueprintsRouter);
+// ── Team 07: Domain Plugin Framework ─────────────────────────────────────
+router.use(designPluginsRouter);
 // ── Team 08: Design Components ───────────────────────────────────────────
 router.use(designComponentsRouter);
 // ── Team 09: Design Patterns ─────────────────────────────────────────────
