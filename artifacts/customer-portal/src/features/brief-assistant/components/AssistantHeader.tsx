@@ -20,6 +20,7 @@ const MODE_LABELS: Record<AssistantMode, string> = {
   "start-from-beginning": "Isi dari awal",
   "complete-missing": "Lengkapi yang kosong",
   "show-recommendations": "Rekomendasi",
+  "correction": "Koreksi jawaban",
 };
 
 interface AssistantHeaderProps {
