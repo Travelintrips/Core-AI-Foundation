@@ -98,6 +98,8 @@ import designBlueprintsRouter from "./design-blueprints/index.js";
 import designComponentsRouter from "./design-components/router.js";
 // ── Team 09: Design Patterns ─────────────────────────────────────────────
 import designPatternsRouter from "./design-patterns/index.js";
+// ── Team 09: Design Version History & Revision System ────────────────────
+import designVersioningRouter from "./design-versioning.js";
 // ── Team 10: Design Tokens (Typography & Palette) ────────────────────────
 import designTokensRouter from "./design-tokens/index.js";
 // ── Team 11: Universal Template Matching ─────────────────────────────────
@@ -222,6 +224,8 @@ router.use(designBlueprintsRouter);
 router.use(designComponentsRouter);
 // ── Team 09: Design Patterns ─────────────────────────────────────────────
 router.use(designPatternsRouter);
+// ── Team 09: Design Version History & Revision System ────────────────────
+router.use(designVersioningRouter);
 // ── Team 10: Design Tokens ───────────────────────────────────────────────
 router.use(designTokensRouter);
 // ── Team 11: Universal Template Matching ─────────────────────────────────
