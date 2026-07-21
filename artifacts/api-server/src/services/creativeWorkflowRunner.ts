@@ -396,7 +396,8 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
     createExecutionPlanForCreativeProject(project.projectId, `${project.goal} — ${project.brandName} Fashion Design`).catch(() => {});
     const guardrails = await readGuardrails();
     const { stepOutputs, anyFailed } = await runFashionDesignWorkflow(
-      { id: project.id, projectId: project.projectId, brandName: project.brandName, targetMarket: project.targetMarket, stylePreference: project.stylePreference, goal: project.goal, notes: project.notes, briefJson: project.briefJson as Record<string, unknown> | null },
+      { id: project.id, projectId: project.projectId, brandName: project.brandName, targetMarket: project.targetMarket, stylePreference: project.stylePreference, goal: project.goal, notes: project.notes },
+      (project.briefJson as Record<string, string>) ?? {},
       { maxCostPerWorkflow: guardrails.maxCostPerWorkflow, maxRetries: 2, timeoutMs: 120000 },
     );
     const aggregatedResult = {
@@ -422,7 +423,8 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
     createExecutionPlanForCreativeProject(project.projectId, `${project.goal} — ${project.brandName} Interior Design`).catch(() => {});
     const guardrails = await readGuardrails();
     const { stepOutputs, anyFailed } = await runInteriorDesignWorkflow(
-      { id: project.id, projectId: project.projectId, brandName: project.brandName, targetMarket: project.targetMarket, stylePreference: project.stylePreference, goal: project.goal, notes: project.notes, briefJson: project.briefJson as Record<string, unknown> | null },
+      { id: project.id, projectId: project.projectId, brandName: project.brandName, targetMarket: project.targetMarket, stylePreference: project.stylePreference, goal: project.goal, notes: project.notes },
+      (project.briefJson as Record<string, string>) ?? {},
       { maxCostPerWorkflow: guardrails.maxCostPerWorkflow, maxRetries: 2, timeoutMs: 120000 },
     );
     const aggregatedResult = {
