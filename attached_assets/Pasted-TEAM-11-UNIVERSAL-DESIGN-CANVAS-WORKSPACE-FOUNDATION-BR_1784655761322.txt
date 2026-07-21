@@ -1,0 +1,1165 @@
+TEAM 11 — UNIVERSAL DESIGN CANVAS WORKSPACE FOUNDATION
+
+BRANCH WAJIB:
+feature/team-11-canvas-workspace
+
+BASELINE PROGRAM:
+origin/integration/v4.2
+
+==================================================
+PERAN TEAM
+==================================================
+
+Anda adalah Team 11 — Canvas Workspace Foundation.
+
+Tugas Anda adalah membangun fondasi workspace visual untuk Universal Creative AI
+Design Platform.
+
+Workspace ini akan digunakan oleh berbagai jenis project:
+
+- Fashion Design
+- Interior Design
+- Packaging Design
+- Branding
+- Furniture Design
+- Product/Industrial Design
+- Architecture
+- Landscape
+- Jewelry
+- project design masa depan
+
+Workspace tidak boleh dibangun khusus hanya untuk Fashion atau Interior.
+
+Canvas harus bersifat domain-neutral dan menerima konfigurasi dari plugin,
+artifact, schema, dan capability registry.
+
+==================================================
+KONTEKS PLATFORM EXISTING
+==================================================
+
+Repository ini sudah memiliki sebagian sistem berikut:
+
+- Creative AI workflow dan multi-agent execution;
+- AI Job Engine, worker, dispatcher, model router, dan cost tracking;
+- Customer Portal Creative AI;
+- Brief Wizard dan AI Guided Brief Assistant;
+- project steps dan canonical event model;
+- asset dan artifact lifecycle;
+- client review;
+- Document Engine;
+- Presentation Engine;
+- design contracts foundation dari Team 01;
+- Universal Design Engine dari Team 02;
+- Dynamic Brief Engine dari Team 03;
+- Workflow Registry dari Team 05;
+- Design Plugin Framework dari Team 07;
+- lifecycle/persistence adapter dari Team 08.
+
+Sebagian pekerjaan team lain mungkin belum di-merge ke baseline branch.
+
+Jangan menyalin atau membuat ulang implementasi team lain.
+
+Gunakan interface lokal yang sempit atau adapter compatibility bila dependency
+belum tersedia, lalu dokumentasikan titik integrasinya.
+
+==================================================
+ATURAN BRANCH
+==================================================
+
+Project owner sudah memilih branch secara manual melalui Shell.
+
+Sebelum bekerja, jalankan:
+
+git branch --show-current
+git status --short
+git rev-parse HEAD
+git log --oneline -5
+
+Branch aktif harus tepat:
+
+feature/team-11-canvas-workspace
+
+Jika branch berbeda:
+
+- berhenti;
+- jangan checkout branch lain;
+- jangan membuat branch baru;
+- jangan mencoba memperbaiki branch sendiri;
+- laporkan branch aktif dan status worktree.
+
+DILARANG:
+
+- merge ke integration;
+- merge ke main;
+- merge ke release-candidate;
+- checkout branch lain;
+- rebase;
+- cherry-pick tanpa instruksi eksplisit;
+- force push;
+- mengubah history branch lain.
+
+Setelah selesai, team bertanggung jawab menjalankan test, commit, dan push hanya
+ke branch aktif.
+
+==================================================
+MASTER ARCHITECTURE RULES
+==================================================
+
+1. Audit implementation existing sebelum membuat komponen baru.
+2. Jangan membuat design system kedua.
+3. Jangan membuat state management global baru bila repository sudah mempunyai
+   pola canonical.
+4. Jangan membuat asset model kedua.
+5. Jangan membuat workflow state kedua.
+6. Jangan mengakses database langsung dari frontend.
+7. Jangan memanggil AI provider langsung dari canvas.
+8. Jangan hard-code OpenAI, Gemini, Anthropic, Replicate, atau model tertentu.
+9. Jangan hard-code domain menggunakan switch besar berdasarkan service type.
+10. Jangan mengarang status live, worker status, progress, cost, atau artifact.
+11. Semua data customer harus mengikuti tenant authorization dari backend.
+12. Semua perubahan harus additive dan backward-compatible.
+13. Gunakan TypeScript strict typing.
+14. Gunakan komponen, icon library, utility CSS, dan accessibility pattern existing.
+15. Pertahankan loading, empty, error, disabled, and unavailable states.
+
+==================================================
+PROJECT BRIEF
+==================================================
+
+Bangun Canvas Workspace sebagai area visual utama tempat user melihat dan
+mengatur artifact design.
+
+Workspace bukan aplikasi menggambar profesional penuh seperti Figma, CLO3D,
+AutoCAD, Illustrator, atau Blender.
+
+Workspace V1 adalah orchestration dan inspection canvas yang mendukung:
+
+- menampilkan design artifact;
+- memilih artifact;
+- zoom dan pan;
+- fit-to-screen;
+- melihat page/frame/view;
+- menampilkan overlays;
+- menampilkan hotspot/selection;
+- menghubungkan canvas dengan property panel;
+- menghubungkan canvas dengan layer system;
+- menampilkan loading/generation/review states;
+- menampilkan version dan provenance;
+- menggunakan renderer adapter berdasarkan artifact type;
+- menjaga accessibility dan responsive behavior.
+
+Editing kompleks seperti vector drawing, 3D mesh editing, CAD operation,
+freehand illustration, material simulation, atau technical measurement editing
+bukan scope Team 11.
+
+==================================================
+CONTOH PENGGUNAAN PER PROJECT
+==================================================
+
+FASHION
+
+Canvas dapat menampilkan:
+
+- moodboard;
+- concept sketch;
+- front/back technical drawing;
+- garment visualization;
+- campaign image;
+- selectable garment regions bila renderer mendukung.
+
+Canvas tidak boleh mengetahui langsung istilah collar, sleeve, cuff, pocket,
+atau fabric. Data tersebut berasal dari plugin/artifact renderer.
+
+INTERIOR
+
+Canvas dapat menampilkan:
+
+- moodboard;
+- floor/space plan preview;
+- elevation;
+- material board;
+- room visualization;
+- hotspot object/area bila renderer mendukung.
+
+Canvas core tidak boleh memiliki field khusus room, wall, floor, lamp, atau
+furniture.
+
+PACKAGING
+
+Canvas dapat menampilkan:
+
+- concept;
+- dieline preview;
+- mockup;
+- print area;
+- safe-area overlay;
+- front/back/side panels.
+
+Canvas core tidak boleh memahami struktur box secara hard-coded.
+
+BRANDING
+
+Canvas dapat menampilkan:
+
+- visual direction;
+- logo concepts;
+- identity applications;
+- guideline page;
+- brand assets.
+
+FURNITURE/PRODUCT DESIGN
+
+Canvas dapat menampilkan:
+
+- concept sketch;
+- orthographic views;
+- component views;
+- technical preview;
+- visualization.
+
+Perbedaan domain harus masuk melalui renderer adapter dan structured metadata.
+
+==================================================
+AUDIT WAJIB SEBELUM IMPLEMENTASI
+==================================================
+
+Audit repository untuk menemukan:
+
+1. Customer Portal Creative AI workspace/project pages.
+2. Existing image, PDF, document, slide, or asset preview components.
+3. Existing zoom, dialog, gallery, carousel, tabs, split-pane, resizable panel,
+   scroll container, and fullscreen components.
+4. Existing project route dan project context.
+5. Existing artifact/asset types.
+6. Existing runtime roster, project events, SSE stream, and execution summary.
+7. Existing client review UI.
+8. Existing loading/error/empty state components.
+9. Existing design tokens dan responsive patterns.
+10. Existing keyboard shortcut utilities.
+11. Existing storage URL/signed URL handling.
+12. Existing tests dan frontend test setup.
+
+Buat baseline report sebelum coding:
+
+- branch;
+- commit;
+- worktree status;
+- test status;
+- typecheck status;
+- build status;
+- pre-existing failures.
+
+Jangan memperbaiki error unrelated kecuali perubahan Team 11 memang memerlukan.
+
+==================================================
+TUJUAN UTAMA
+==================================================
+
+Bangun canvas workspace reusable dengan arsitektur berikut:
+
+DesignWorkspaceShell
+├── WorkspaceToolbar
+├── CanvasViewport
+│   ├── CanvasRendererHost
+│   ├── CanvasOverlayHost
+│   ├── SelectionOverlay
+│   ├── LoadingOverlay
+│   ├── ErrorOverlay
+│   └── EmptyOverlay
+├── WorkspaceStatusBar
+└── optional integration slots
+    ├── Layer panel slot
+    ├── Property panel slot
+    ├── Timeline/version slot
+    └── Review/comments slot
+
+Nama final harus mengikuti convention repository. Jangan memaksakan nama contoh
+bila repository memiliki pola lebih tepat.
+
+==================================================
+SCOPE IMPLEMENTASI
+==================================================
+
+Implementasikan minimal:
+
+1. Workspace Shell
+2. Canvas Viewport
+3. Renderer Adapter Contract
+4. Renderer Registry
+5. Viewport Transform State
+6. Zoom controls
+7. Pan controls
+8. Fit-to-screen
+9. Reset view
+10. Fullscreen atau expanded workspace bila pattern existing mendukung
+11. Artifact selection
+12. Frame/page/view navigation
+13. Overlay system
+14. Loading/error/empty/unavailable states
+15. Status bar
+16. Keyboard navigation
+17. Responsive layout
+18. Accessibility semantics
+19. Test fixtures
+20. Integration documentation
+
+==================================================
+TASK A — WORKSPACE SHELL
+==================================================
+
+Buat shell reusable yang menerima configuration dan slots.
+
+Minimal props/contract:
+
+- project identity;
+- active artifact;
+- available artifacts atau artifact navigation;
+- renderer registry/resolver;
+- optional toolbar actions;
+- optional left panel;
+- optional right panel;
+- optional bottom panel;
+- loading/error state;
+- permissions/read-only state;
+- feature availability;
+- callback events.
+
+Shell harus mendukung:
+
+- desktop;
+- tablet;
+- mobile fallback;
+- narrow viewport;
+- read-only mode;
+- unavailable renderer;
+- no artifact selected.
+
+Jangan membuat project fetch langsung di generic shell.
+
+Pisahkan container/data-loading component dari presentational workspace.
+
+==================================================
+TASK B — CANVAS VIEWPORT
+==================================================
+
+Canvas viewport harus:
+
+- mempunyai bounded viewport;
+- tidak merusak page scroll;
+- mendukung zoom;
+- mendukung pan;
+- mendukung fit-to-screen;
+- menjaga aspect ratio;
+- menghitung viewport transform secara deterministic;
+- merespons resize;
+- menangani artifact portrait dan landscape;
+- tidak membuat browser freeze untuk asset besar;
+- menyediakan loading dan decode state;
+- menjaga transform ketika UI panel dibuka atau ditutup secara rasional.
+
+Gunakan CSS transform atau mekanisme existing yang paling sederhana dan stabil.
+
+Jangan memasang heavy graphics framework kecuali audit membuktikan kebutuhan nyata.
+
+Jangan menambahkan Fabric.js, Konva, PixiJS, Three.js, atau library besar hanya
+untuk menampilkan image/artifact 2D.
+
+==================================================
+TASK C — VIEWPORT TRANSFORM MODEL
+==================================================
+
+Buat pure state/utilities untuk:
+
+- zoom level;
+- min zoom;
+- max zoom;
+- pan offset;
+- viewport dimensions;
+- content dimensions;
+- fit transform;
+- center transform;
+- clamp transform;
+- reset transform;
+- zoom around pointer/focal point bila feasible;
+- keyboard pan step;
+- transform serialization bila diperlukan.
+
+Transform logic harus dipisahkan dari React component sehingga dapat diuji.
+
+Contoh model:
+
+type CanvasTransform = {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+};
+
+Gunakan naming canonical repository.
+
+Dilarang menyimpan raw DOM object dalam shared state.
+
+==================================================
+TASK D — RENDERER ADAPTER CONTRACT
+==================================================
+
+Canvas core tidak boleh berisi switch besar seperti:
+
+if artifact.type === "fashion_sketch"
+if artifact.type === "interior_plan"
+if artifact.type === "packaging_dieline"
+
+Buat renderer adapter contract.
+
+Minimal kemampuan:
+
+- rendererId;
+- supportedArtifactTypes;
+- canRender(artifact);
+- render component atau renderer component reference;
+- intrinsic size resolver;
+- optional frame/view support;
+- optional overlay support;
+- optional selectable region support;
+- optional capability metadata;
+- read-only/edit-support declaration;
+- safe fallback.
+
+Renderer adapter adalah internal compiled module.
+
+Jangan load renderer dari URL atau arbitrary module path dari client.
+
+==================================================
+TASK E — RENDERER REGISTRY
+==================================================
+
+Buat registry yang:
+
+- mendaftarkan renderer;
+- menolak duplicate renderer ID;
+- memilih renderer secara deterministic;
+- mendukung priority;
+- menghasilkan explicit unsupported state;
+- tidak silent fallback ke renderer yang salah;
+- menyediakan diagnostic reason;
+- dapat menerima future plugin contribution.
+
+Minimal renderer V1 dapat menggunakan komponen existing untuk:
+
+- image;
+- PDF/page preview bila existing;
+- generic unavailable artifact card.
+
+Jangan membangun PDF engine baru jika viewer existing tersedia.
+
+Jangan membangun 3D renderer penuh.
+
+Sediakan adapter boundary untuk future 3D viewer, tetapi jangan implementasikan
+engine 3D pada Team 11.
+
+==================================================
+TASK F — ARTIFACT NAVIGATION
+==================================================
+
+Workspace harus dapat menangani:
+
+- satu artifact;
+- banyak artifact;
+- artifact version;
+- multi-page/frame/view;
+- active artifact ID;
+- previous/next artifact;
+- explicit select;
+- artifact unavailable;
+- deleted/archived artifact;
+- artifact masih generating;
+- artifact failed;
+- artifact waiting review.
+
+Gunakan stable IDs.
+
+Jangan menggunakan array index sebagai identity utama.
+
+==================================================
+TASK G — OVERLAY SYSTEM
+==================================================
+
+Buat overlay host generic.
+
+Overlay dapat digunakan untuk:
+
+- safe-area;
+- grid;
+- annotation markers;
+- selectable region;
+- measurement;
+- review comment pin;
+- technical guide;
+- loading indicator;
+- error state.
+
+Team 11 hanya membangun host/contract dan satu atau dua contoh generic.
+
+Annotation system penuh adalah scope Team 18.
+
+Property-specific overlay adalah scope Team 12/19 atau domain plugin.
+
+Overlay harus:
+
+- dapat diaktifkan/dinonaktifkan;
+- memiliki stable ID;
+- mempunyai z-order;
+- dapat pointer-events none atau interactive;
+- tidak mengubah artifact source;
+- mengikuti viewport transform;
+- mendukung accessibility label bila interactive.
+
+==================================================
+TASK H — SELECTION MODEL
+==================================================
+
+Buat selection model minimal:
+
+- selectedArtifactId;
+- selectedFrameId;
+- selectedElementId atau selectedRegionId;
+- selection source;
+- selection capability;
+- clear selection.
+
+Selection harus menggunakan opaque stable IDs dari renderer/plugin.
+
+Canvas core tidak boleh memahami semantic element domain.
+
+Contoh:
+
+Fashion plugin dapat mengirim region ID `garment-region-123`,
+tetapi canvas core tidak boleh mengetahui bahwa region itu adalah sleeve.
+
+Interior plugin dapat mengirim object ID,
+tetapi canvas core tidak boleh mengetahui bahwa object itu adalah sofa.
+
+Selection event harus dapat diteruskan ke property panel future.
+
+==================================================
+TASK I — TOOLBAR
+==================================================
+
+Toolbar minimal:
+
+- zoom out;
+- zoom percentage;
+- zoom in;
+- fit;
+- reset;
+- previous/next view bila tersedia;
+- toggle overlays bila tersedia;
+- fullscreen/expand bila supported;
+- accessible labels;
+- disabled state;
+- keyboard tooltip bila pattern existing ada.
+
+Jangan membuat fitur edit yang belum benar-benar tersedia.
+
+Tombol tidak boleh terlihat aktif bila capability tidak tersedia.
+
+==================================================
+TASK J — STATUS BAR
+==================================================
+
+Status bar dapat menampilkan secara aman:
+
+- artifact title/type;
+- version;
+- current page/frame/view;
+- zoom percentage;
+- read-only/editable state;
+- generation/review status;
+- renderer diagnostic;
+- optional provenance source.
+
+Jangan tampilkan:
+
+- secret storage path;
+- internal AI prompt;
+- API key;
+- raw provider payload;
+- hidden system metadata.
+
+==================================================
+TASK K — STATE MANAGEMENT
+==================================================
+
+Gunakan state sesederhana mungkin.
+
+Preferensi:
+
+- local reducer/hook untuk viewport;
+- controlled props untuk project/artifact data;
+- existing query/cache library untuk server data;
+- existing app state bila sudah canonical.
+
+Dilarang menambahkan global state library baru hanya untuk canvas.
+
+Pisahkan:
+
+1. server state;
+2. workspace UI state;
+3. viewport transform state;
+4. selection state.
+
+Jangan mencampur semua data dalam satu reducer raksasa.
+
+==================================================
+TASK L — DATA AND SECURITY
+==================================================
+
+Generic canvas tidak boleh melakukan raw storage fetch tanpa service existing.
+
+Ikuti mekanisme existing untuk:
+
+- signed URL;
+- authenticated asset URL;
+- loading;
+- expiry;
+- refresh;
+- permission.
+
+Jangan memasukkan tenantId dari query string sebagai source of authority.
+
+Jangan render raw HTML dari artifact metadata.
+
+Sanitize user-facing labels bila diperlukan.
+
+Hindari SVG injection dari untrusted source.
+
+Jika SVG external ditampilkan, gunakan pola keamanan repository atau tampilkan
+sebagai image, bukan menyuntikkan markup mentah.
+
+==================================================
+TASK M — RESPONSIVE BEHAVIOR
+==================================================
+
+Desktop:
+
+- canvas menjadi area utama;
+- toolbar tetap mudah dijangkau;
+- panel slots dapat hidup berdampingan;
+- viewport tidak overflow page.
+
+Tablet:
+
+- panel dapat collapse;
+- canvas tetap usable;
+- toolbar dapat wrap atau menjadi compact.
+
+Mobile:
+
+- canvas dapat dilihat dan di-zoom;
+- panel tambahan menjadi drawer/sheet/tab bila pola existing mendukung;
+- tidak perlu menyediakan editing kompleks;
+- tidak ada horizontal overflow halaman;
+- touch pan dan zoom dipertimbangkan secara aman.
+
+Jangan membuat gesture rumit tanpa test.
+
+==================================================
+TASK N — ACCESSIBILITY
+==================================================
+
+Wajib:
+
+- landmark/region yang jelas;
+- accessible name untuk canvas;
+- toolbar buttons memiliki aria-label;
+- focus order logis;
+- keyboard zoom;
+- keyboard pan bila canvas focus;
+- escape untuk keluar fullscreen/expanded state;
+- selected state dapat diumumkan;
+- error/loading state dapat dibaca screen reader;
+- tidak hanya mengandalkan warna;
+- focus indicator terlihat;
+- reduced motion dihormati bila ada animation.
+
+Canvas non-interactive tidak boleh diberi role application tanpa alasan.
+
+==================================================
+TASK O — PERFORMANCE
+==================================================
+
+Perhatikan:
+
+- jangan rerender seluruh workspace pada setiap pointer move bila tidak perlu;
+- throttle atau requestAnimationFrame untuk pan/resize bila diperlukan;
+- jangan clone metadata/artifact besar setiap render;
+- lazy render viewer berat;
+- release event listener;
+- cleanup ResizeObserver;
+- batasi preloading;
+- jangan menyimpan binary/base64 besar dalam React state;
+- jangan fetch artifact berulang tanpa cache.
+
+Jangan melakukan premature optimization yang membuat kode sulit diuji.
+
+==================================================
+TASK P — EXISTING PAGE INTEGRATION
+==================================================
+
+Setelah audit, integrasikan secara minimal ke halaman Creative AI/project yang
+paling tepat.
+
+Tujuan integrasi minimal:
+
+- canvas foundation benar-benar dapat dirender;
+- menggunakan real artifact data atau safe existing fixture/test data;
+- existing project page tidak rusak;
+- feature dapat berada di balik feature flag bila sistem existing belum siap;
+- tidak mengganti seluruh halaman sekaligus;
+- tidak menghapus existing artifact preview sebelum parity tercapai.
+
+Jika dependency backend belum tersedia:
+
+- gunakan adapter terhadap API existing;
+- atau feature flag;
+- jangan menampilkan data demo sebagai data live;
+- beri label preview/internal bila memang fixture.
+
+==================================================
+TASK Q — COMPATIBILITY DENGAN TEAM LAIN
+==================================================
+
+TEAM 01 — DESIGN CONTRACTS
+
+Bila @workspace/design-contracts tersedia:
+
+- gunakan DesignArtifactContract;
+- gunakan artifact status/provenance contract;
+- gunakan version/compatibility utilities yang relevan.
+
+Jika belum tersedia pada branch baseline:
+
+- buat adapter type lokal yang sangat sempit;
+- jangan copy seluruh kontrak;
+- beri integration note yang jelas;
+- jangan membuat package design-contracts kedua.
+
+TEAM 07 — PLUGIN FRAMEWORK
+
+Renderer registry harus dapat menerima contribution dari plugin di masa depan,
+tetapi jangan import plugin domain langsung ke canvas core.
+
+TEAM 09 — VERSION HISTORY
+
+Workspace harus dapat memilih versi artifact melalui controlled data contract,
+tetapi jangan implementasikan version repository sendiri.
+
+TEAM 12 — PROPERTY PANEL
+
+Expose selection dan active artifact events.
+
+TEAM 13 — LAYER SYSTEM
+
+Sediakan slot/integration boundary untuk layer panel.
+
+TEAM 18 — ANNOTATION SYSTEM
+
+Overlay host harus dapat menerima annotation overlay contribution.
+
+TEAM 19 — WORKSPACE INTERACTIONS
+
+Jangan membangun advanced editing interactions yang menjadi scope Team 19.
+
+TEAM 20 — WORKSPACE DESIGN SYSTEM
+
+Reuse design system existing. Jangan menciptakan token/visual language final
+yang akan berbenturan dengan Team 20.
+
+==================================================
+FILE OWNERSHIP
+==================================================
+
+Team 11 boleh membuat atau mengubah:
+
+- universal canvas workspace module;
+- viewport transform hooks/utilities;
+- renderer adapter contract;
+- renderer registry;
+- generic image renderer adapter;
+- generic fallback renderer;
+- toolbar/status bar;
+- workspace shell;
+- minimal integration page;
+- related tests;
+- workspace architecture documentation;
+- barrel exports.
+
+Team 11 dilarang:
+
+- membuat Dynamic Brief Engine;
+- membuat property editing engine;
+- membuat material library;
+- membuat component library;
+- membuat layer engine penuh;
+- membuat annotation system penuh;
+- membuat domain plugin;
+- membuat 3D garment/interior engine;
+- membuat technical drawing renderer penuh;
+- membuat image generation service;
+- membuat AI prompt/model calls;
+- membuat database migration kecuali benar-benar terbukti wajib;
+- mengubah project lifecycle source of truth;
+- mengubah quotation/payment/order flow;
+- mengubah auth system;
+- mengganti keseluruhan Creative AI project page tanpa migration plan.
+
+==================================================
+REKOMENDASI STRUKTUR MODUL
+==================================================
+
+Ikuti struktur repository existing.
+
+Jika belum ada pola yang sesuai, gunakan struktur konseptual seperti:
+
+components/design-workspace/
+├── DesignWorkspaceShell.tsx
+├── CanvasViewport.tsx
+├── CanvasRendererHost.tsx
+├── WorkspaceToolbar.tsx
+├── WorkspaceStatusBar.tsx
+├── overlays/
+├── renderers/
+├── hooks/
+├── state/
+├── types/
+├── utils/
+├── index.ts
+└── __tests__/
+
+Lokasi final harus mengikuti package boundary existing.
+
+Jangan membuat folder baru di root tanpa alasan arsitektur.
+
+==================================================
+PUBLIC CONTRACT MINIMAL
+==================================================
+
+Public API workspace harus sesempit mungkin.
+
+Contoh konseptual:
+
+- DesignWorkspaceShell
+- CanvasViewport
+- CanvasRendererAdapter
+- CanvasRendererRegistry
+- CanvasTransform
+- calculateFitTransform
+- clampCanvasTransform
+- CanvasSelection
+- CanvasOverlayDefinition
+
+Jangan export internal implementation helpers secara berlebihan.
+
+==================================================
+ERROR STATES
+==================================================
+
+Sediakan typed atau structured error state untuk:
+
+- no artifact;
+- unsupported artifact;
+- renderer unavailable;
+- invalid artifact URL;
+- load failed;
+- decode failed;
+- expired access;
+- permission denied;
+- artifact still generating;
+- artifact failed;
+- artifact archived;
+- incompatible artifact version.
+
+Jangan menampilkan raw error stack kepada user.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal test berikut:
+
+PURE LOGIC
+
+1. fit portrait content ke landscape viewport;
+2. fit landscape content ke portrait viewport;
+3. min/max zoom clamp;
+4. pan clamp;
+5. reset transform;
+6. resize behavior;
+7. zoom around focal point;
+8. invalid dimensions;
+9. zero-size viewport safety;
+10. transform serialization bila ada.
+
+RENDERER REGISTRY
+
+11. register renderer;
+12. duplicate renderer ditolak;
+13. resolve supported artifact;
+14. unsupported artifact;
+15. renderer priority;
+16. deterministic resolution;
+17. diagnostic reason;
+18. invalid renderer contract.
+
+WORKSPACE UI
+
+19. empty state;
+20. loading state;
+21. error state;
+22. unsupported renderer state;
+23. image artifact render;
+24. zoom controls;
+25. fit button;
+26. reset button;
+27. disabled actions;
+28. artifact selection;
+29. frame/view navigation;
+30. overlay toggle;
+31. read-only mode;
+32. responsive behavior yang dapat diuji;
+33. keyboard controls;
+34. accessibility labels;
+35. focus behavior;
+36. cleanup event listeners/observers.
+
+SECURITY/REGRESSION
+
+37. unsafe HTML tidak dirender;
+38. internal storage metadata tidak tampil;
+39. existing artifact preview tetap bekerja;
+40. existing project page tidak mengalami regression;
+41. renderer tidak dipilih berdasarkan unvalidated arbitrary module path.
+
+Tidak perlu memaksakan jumlah test tertentu. Fokus pada coverage bermakna.
+
+==================================================
+BASELINE DAN VERIFICATION
+==================================================
+
+Sebelum coding:
+
+- jalankan frontend test relevan;
+- jalankan typecheck;
+- jalankan build;
+- catat pre-existing failures.
+
+Sesudah coding:
+
+1. jalankan semua test Team 11;
+2. jalankan test halaman project/artifact terdampak;
+3. jalankan full frontend test package;
+4. jalankan typecheck;
+5. jalankan build;
+6. jalankan git diff --check;
+7. bandingkan dengan baseline.
+
+Jangan mengklaim error sebagai pre-existing tanpa bukti baseline atau tanpa
+memastikan file tersebut tidak diubah Team 11.
+
+==================================================
+ACCEPTANCE CRITERIA
+==================================================
+
+Pekerjaan dianggap selesai hanya jika:
+
+1. Workspace bersifat domain-neutral.
+2. Tidak ada service-type switch besar di canvas core.
+3. Renderer menggunakan registry/adapter.
+4. Image artifact dapat ditampilkan secara nyata.
+5. Unsupported artifact memiliki explicit fallback.
+6. Zoom, pan, fit, dan reset bekerja.
+7. Viewport logic terpisah dan teruji.
+8. Selection contract siap dikonsumsi property panel.
+9. Overlay host siap dikonsumsi annotation/layer/domain plugin.
+10. Responsive layout tersedia.
+11. Keyboard dan accessibility dasar tersedia.
+12. Read-only dan unavailable states jujur.
+13. Existing Creative AI page tetap berfungsi.
+14. Tidak ada dependency besar baru tanpa justifikasi.
+15. Tidak ada database/API/auth source of truth baru.
+16. Tidak ada AI provider hard-coded.
+17. Test baru lolos.
+18. Tidak ada regresi baru.
+19. Typecheck package terdampak bersih atau semua kegagalan tersisa terbukti
+    pre-existing.
+20. Build berhasil.
+21. Commit dan push berhasil ke branch Team 11.
+
+==================================================
+DOCUMENTATION WAJIB
+==================================================
+
+Buat dokumentasi singkat yang menjelaskan:
+
+- tujuan canvas workspace;
+- boundaries;
+- renderer adapter;
+- renderer registry;
+- viewport transform;
+- selection model;
+- overlay integration;
+- security assumptions;
+- accessibility;
+- integration untuk Team 12, 13, 18, 19, 20;
+- cara plugin domain menambahkan renderer tanpa mengubah canvas core;
+- known limitations V1.
+
+==================================================
+GIT FINALIZATION
+==================================================
+
+Sebelum commit:
+
+git status
+git diff --check
+git diff --stat
+git diff --name-status
+
+Pastikan:
+
+- tidak ada conflict marker;
+- tidak ada secret;
+- tidak ada debug file;
+- tidak ada generated artifact yang tidak seharusnya;
+- tidak ada perubahan unrelated;
+- tidak ada source code milik team lain yang diambil secara manual.
+
+Kemudian:
+
+git add .
+git commit -m "feat(design-workspace): add universal canvas foundation"
+git push -u origin HEAD
+
+Jika commit message perlu disesuaikan karena convention repository, gunakan
+Conventional Commit yang setara.
+
+Jangan merge.
+
+Jangan checkout branch lain.
+
+Jangan rebase.
+
+Jangan force push.
+
+==================================================
+FORMAT FINAL TEAM REPORT
+==================================================
+
+FINAL TEAM REPORT
+
+Team:
+Branch:
+Commit awal:
+Commit akhir:
+Commit message:
+Push status:
+
+1. Baseline
+- Test:
+- Typecheck:
+- Build:
+- Pre-existing failures:
+
+2. Audit Existing System
+- Existing workspace/page:
+- Existing preview components:
+- Existing asset contracts:
+- Existing state/query patterns:
+- Existing design system:
+- Existing functionality reused:
+
+3. Implementasi
+- Workspace shell:
+- Canvas viewport:
+- Viewport transform:
+- Renderer adapter:
+- Renderer registry:
+- Renderers:
+- Overlay host:
+- Selection:
+- Toolbar:
+- Status bar:
+- Responsive behavior:
+- Accessibility:
+- Performance safeguards:
+
+4. Project Compatibility
+- Fashion:
+- Interior:
+- Packaging:
+- Branding:
+- Furniture/Product:
+- Domain-specific logic avoided:
+
+5. File
+- File baru:
+- File diubah:
+- File dihapus:
+- File unrelated, bila ada:
+
+6. Public Contracts
+- Exported components:
+- Exported types:
+- Exported utilities:
+- Renderer contract:
+- Selection contract:
+- Overlay contract:
+
+7. Integration
+- Team 01 design-contract compatibility:
+- Team 07 plugin compatibility:
+- Team 09 version compatibility:
+- Team 12 property-panel handoff:
+- Team 13 layer-system handoff:
+- Team 18 annotation handoff:
+- Team 19 interactions handoff:
+- Team 20 design-system handoff:
+
+8. Security
+- Asset URL handling:
+- HTML/SVG safety:
+- Tenant/auth assumptions:
+- Internal metadata redaction:
+
+9. Verification
+- Unit tests:
+- Component tests:
+- Regression tests:
+- Accessibility tests:
+- Total tests:
+- Typecheck:
+- Build:
+- Diff check:
+
+10. Dependencies
+- Dependency baru:
+- Alasan:
+- Bundle impact:
+- Alternative yang dipertimbangkan:
+
+11. Compatibility
+- Existing behavior preserved:
+- Breaking changes:
+- Feature flag:
+- Migration required:
+
+12. Risks
+- Merge conflicts:
+- Known limitations:
+- Performance risks:
+- Follow-up:
+
+13. Integration Notes
+- Suggested merge order:
+- Yang harus diverifikasi Team 39:
+- Yang harus diverifikasi Team 40:
+- Manual QA scenarios:
