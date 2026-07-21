@@ -108,6 +108,8 @@ import layoutComposerRouter from "./layout-composer/index.js";
 import dynamicDesignComposerRouter from "./dynamic-design-composer/index.js";
 // ── Team 14: Universal Renderer ──────────────────────────────────────────
 import universalRendererRouter from "./universal-renderer/index.js";
+// ── Team 16: Design Review and Approval Workspace ────────────────────────
+import reviewWorkspaceRouter from "./review-workspace.js";
 // ── Team 15: Graphic Design Domain ───────────────────────────────────────
 import graphicDesignRouter from "../domains/graphic-design/routes.js";
 // ── Team 17: Interior Design ─────────────────────────────────────────────
@@ -232,6 +234,8 @@ router.use(layoutComposerRouter);
 router.use(dynamicDesignComposerRouter);
 // ── Team 14: Universal Renderer ──────────────────────────────────────────
 router.use(universalRendererRouter);
+// ── Team 16: Design Review and Approval Workspace ────────────────────────
+router.use(reviewWorkspaceRouter);
 // ── Team 15: Graphic Design Domain ───────────────────────────────────────
 router.use(graphicDesignRouter);
 // ── Team 17: Interior Design ─────────────────────────────────────────────

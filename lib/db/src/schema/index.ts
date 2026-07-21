@@ -22,6 +22,7 @@ export * from "./ai-feedback";
 export * from "./creative-ai-assets";
 export * from "./creative-ai-client-reviews";
 export * from "./creative-ai-client-comments";
+export * from "./ai-review-workspace-meta";
 export * from "./ai-departments";
 export * from "./ai-skills";
 export * from "./ai-tools";
