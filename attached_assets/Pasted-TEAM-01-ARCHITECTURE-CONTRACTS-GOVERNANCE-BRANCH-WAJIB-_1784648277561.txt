@@ -1,0 +1,222 @@
+TEAM 01 — ARCHITECTURE CONTRACTS & GOVERNANCE
+
+BRANCH WAJIB:
+feature/team-01-architecture-contracts
+
+PERAN TEAM
+
+Anda adalah Architecture Foundation Team untuk Universal Creative AI Design
+Platform. Tugas Anda bukan membangun UI, renderer, atau plugin domain. Tugas
+Anda adalah membangun kontrak arsitektur yang akan digunakan Team 02–40.
+
+PROJECT BRIEF
+
+Creative AI saat ini telah memiliki workflow multi-agent, Brief Wizard,
+AI Guided Brief Assistant, job engine, model router, client review, Document
+Engine, Presentation Engine, serta berbagai layanan kreatif.
+
+Program baru akan memperluasnya menjadi Universal Design Platform yang dapat
+menjalankan workflow berbeda berdasarkan project type.
+
+Contoh:
+
+Fashion:
+Brief → Moodboard → Sketch → Technical Drawing → Material → Garment View
+→ Production Spec → Campaign
+
+Interior:
+Brief → Moodboard → Space Planning → Material Board → Elevation → 3D View
+→ BOQ/Specification → Presentation
+
+Packaging:
+Brief → Brand/Product Analysis → Concept → Dieline → Material → Mockup
+→ Print Specification → Export
+
+Branding:
+Brief → Strategy → Visual Direction → Logo Concept → Brand System
+→ Guidelines → Asset Export
+
+Kontrak core tidak boleh berisi field khusus fashion, interior, atau packaging.
+Perbedaan domain harus disediakan melalui extension/plugin contracts.
+
+TUJUAN UTAMA
+
+Bangun satu package atau modul kontrak canonical yang mendefinisikan bahasa
+bersama seluruh Universal Design Platform.
+
+AUDIT WAJIB
+
+Sebelum membuat file:
+
+1. Temukan semua type/interface yang sudah ada terkait:
+   - Creative project
+   - Creative brief
+   - Workflow atau project step
+   - Asset
+   - AI job
+   - Client review
+   - Presentation/document output
+   - Tenant/request context
+   - Audit metadata
+2. Identifikasi kontrak mana yang canonical dan mana yang legacy.
+3. Jangan membuat kontrak baru yang menduplikasi kontrak existing.
+4. Tentukan additive adapter yang diperlukan.
+5. Catat kemungkinan circular dependency.
+
+SCOPE IMPLEMENTASI
+
+Definisikan minimal:
+
+1. DesignProjectContext
+   - projectId
+   - tenantId
+   - serviceType
+   - domainPluginId
+   - locale
+   - lifecycle status
+   - authenticated actor context
+   - correlationId
+   - optional brand context
+
+2. DesignStageDefinition
+   - stable stage ID
+   - stage category
+   - title
+   - dependencies
+   - required capabilities
+   - supported artifact types
+   - completion policy
+   - optional/repeatable flags
+
+3. DesignArtifactContract
+   - artifactId
+   - artifactType
+   - projectId
+   - stageId
+   - version
+   - status
+   - storage reference
+   - structured metadata
+   - provenance
+   - generation source
+   - review status
+
+4. DesignPluginManifest
+   - plugin identity
+   - version
+   - supported services
+   - brief schema reference
+   - workflow reference
+   - capabilities
+   - compatible contract version
+   - feature flags
+
+5. DesignCapabilityContract
+   - capability ID
+   - input schema
+   - output schema
+   - execution mode
+   - optional AI requirement
+   - renderer/export requirements
+
+6. DesignCommand dan DesignEvent envelope
+   - event ID
+   - event type
+   - project/tenant context
+   - timestamp
+   - actor
+   - correlation/causation
+   - payload version
+   - typed payload
+
+7. ValidationResult dan typed architecture errors.
+
+8. Contract version compatibility utilities.
+
+9. Public barrel exports yang tidak membuka implementation detail.
+
+DELIVERABLE ARSITEKTUR
+
+Buat Architecture Decision Records atau dokumen teknis ringkas untuk:
+
+- canonical contract ownership;
+- extension mechanism;
+- event envelope;
+- compatibility/versioning policy;
+- plugin boundary;
+- package dependency direction;
+- prohibition terhadap domain leakage ke core.
+
+CONTRACT VERSIONING
+
+Gunakan pola semantic version atau explicit integer contractVersion.
+
+Wajib mendukung:
+
+- compatible minor extension;
+- rejection untuk major version yang tidak didukung;
+- explicit error, bukan silent fallback;
+- test compatibility.
+
+FILE OWNERSHIP
+
+Team ini boleh membuat atau mengubah:
+
+- package/modul contracts khusus Universal Design;
+- schema validator untuk contract tersebut;
+- ADR atau architecture documentation;
+- barrel export;
+- unit tests kontrak.
+
+Team ini dilarang:
+
+- membangun workflow runtime;
+- membangun Brief Wizard;
+- membangun UI workspace;
+- membuat AI prompt;
+- membuat domain plugin;
+- membuat database feature tables;
+- mengubah business flow existing;
+- memindahkan seluruh type existing tanpa alasan kuat.
+
+ACCEPTANCE CRITERIA
+
+1. Kontrak tidak mengandung istilah domain-spesifik sebagai mandatory core field.
+2. Semua public input tervalidasi.
+3. Event dan command memiliki versioned envelope.
+4. Contract compatibility memiliki unit test.
+5. Tidak ada dependency dari package contract ke API server, database, React,
+   renderer, atau AI provider.
+6. Existing canonical RequestContext digunakan atau dibungkus secara additive;
+   jangan membuat model authentication context kedua.
+7. Tidak ada circular import.
+8. Dokumentasi menjelaskan cara Team 02–40 menggunakan contract.
+9. Semua baseline behavior tetap berjalan.
+10. API public contract memiliki contoh JSON minimal untuk Fashion, Interior,
+    Packaging, dan Branding tanpa memasukkan domain detail ke core.
+
+TEST WAJIB
+
+- valid canonical contract;
+- missing required field;
+- unsupported contract version;
+- unknown extension field policy;
+- event envelope validation;
+- plugin manifest validation;
+- serialization/deserialization stability;
+- no domain leakage check melalui architectural unit test bila feasible.
+
+DEPENDENCY OUTPUT UNTUK TEAM LAIN
+
+Laporkan dengan jelas:
+
+- package import path;
+- exported type names;
+- exported schema names;
+- version constant;
+- extension registration pattern;
+- breaking-change approval process.
+
+COMMIT YANG DISARANKAN
+
+feat(design-contracts): add universal design architecture contracts
