@@ -80,6 +80,8 @@ import FontPairsPage from "@/pages/design-tokens/font-pairs";
 import ColorPalettesPage from "@/pages/design-tokens/color-palettes";
 // ── Team 15: Graphic Design ───────────────────────────────────────────────
 import GraphicDesignPage from "@/pages/graphic-design";
+// ── Team 15: Version Timeline ─────────────────────────────────────────────
+import VersionTimelinePage from "@/pages/version-timeline";
 // ── Team 17: Interior Design ─────────────────────────────────────────────
 import InteriorDesignPage from "@/pages/interior-design";
 // ── Team 18: Fashion Design ──────────────────────────────────────────────
@@ -167,6 +169,8 @@ function AdminRouter() {
         <Route path="/design-tokens" component={DesignTokensPage} />
         {/* ── Team 15: Graphic Design ─────────────────────────────────── */}
         <Route path="/graphic-design" component={GraphicDesignPage} />
+        {/* ── Team 15: Version Timeline ───────────────────────────────── */}
+        <Route path="/version-timeline" component={VersionTimelinePage} />
         {/* ── Team 17: Interior Design ────────────────────────────────── */}
         <Route path="/interior-design" component={InteriorDesignPage} />
         {/* ── Team 18: Fashion Design ─────────────────────────────────── */}
