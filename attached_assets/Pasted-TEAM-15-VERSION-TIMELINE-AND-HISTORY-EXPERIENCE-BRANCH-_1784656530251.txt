@@ -1,0 +1,144 @@
+TEAM 15 — VERSION TIMELINE AND HISTORY EXPERIENCE
+
+BRANCH WAJIB:
+feature/team-15-version-timeline
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun UI version timeline untuk project dan artifact.
+
+Team 15 tidak membuat version persistence baru.
+
+Gunakan Team 09 version history contract jika tersedia atau adapter sempit jika
+belum tersedia.
+
+==================================================
+FEATURE
+==================================================
+
+Dukung:
+
+- daftar version;
+- chronological timeline;
+- created by;
+- source;
+- timestamp;
+- change summary;
+- status;
+- active/current version;
+- select historical version;
+- compare entry point;
+- restore request entry point;
+- branch/variation visualization bila contract mendukung;
+- loading/empty/error;
+- pagination;
+- deleted/unavailable version;
+- retention/deprecation label.
+
+==================================================
+CONTRACT
+==================================================
+
+Minimal UI adapter:
+
+VersionTimelineEntry
+VersionSource
+VersionActor
+VersionChangeSummary
+VersionSelection
+VersionComparisonRequest
+VersionRestoreRequest
+VersionAvailability
+
+Jangan mengubah canonical version contract.
+
+==================================================
+RESTORE
+==================================================
+
+Restore harus:
+
+- permission-aware;
+- confirmation;
+- tidak langsung overwrite tanpa server response;
+- memakai optimistic concurrency;
+- menciptakan version baru bila canonical behavior demikian;
+- menampilkan conflict;
+- tidak menyatakan berhasil sebelum response sukses.
+
+==================================================
+COMPARE
+==================================================
+
+Team 15 hanya menyediakan:
+
+- selection dua version;
+- compare action;
+- metadata comparison;
+- integration boundary visual diff.
+
+Pixel/vector/document diff engine bukan scope.
+
+==================================================
+INTEGRATION
+==================================================
+
+Team 11:
+
+- version selection mengganti active artifact/view secara controlled.
+
+Team 09:
+
+- consume canonical history contract.
+
+Team 16:
+
+- review status dapat ditampilkan pada version.
+
+Team 18:
+
+- annotation version compatibility dapat ditampilkan sebagai badge/status.
+
+==================================================
+ACCESSIBILITY
+==================================================
+
+- timeline semantics;
+- keyboard selection;
+- current version announcement;
+- restore confirmation accessible;
+- timestamp readable;
+- tidak hanya warna.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. chronological sorting;
+2. current version;
+3. historical selection;
+4. unavailable version;
+5. pagination;
+6. change summary;
+7. source display;
+8. permission-based restore;
+9. restore confirmation;
+10. stale conflict;
+11. compare two versions;
+12. invalid same-version compare;
+13. keyboard navigation;
+14. empty/loading/error;
+15. no raw internal metadata;
+16. existing version behavior preserved.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-history): add version timeline experience"
+git push -u origin HEAD
