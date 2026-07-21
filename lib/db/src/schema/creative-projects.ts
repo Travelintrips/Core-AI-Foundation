@@ -43,6 +43,11 @@ export const creativeProjectsTable = appSchema.table("creative_projects", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   // WP-05: archive — NULL = not archived, non-NULL = archived (orthogonal to deletedAt)
   archivedAt: timestamp("archived_at", { withTimezone: true }),
+  // Team 08: Universal Design Platform lifecycle columns (additive, all nullable/defaulted)
+  // Migration: scripts/migrations/team08-design-lifecycle-additive.sql
+  designPluginId: text("design_plugin_id"),
+  lifecycleVersion: integer("lifecycle_version").notNull().default(0),
+  lifecycleMetadata: jsonb("lifecycle_metadata"),
 });
 
 export const insertCreativeProjectSchema = createInsertSchema(creativeProjectsTable).omit({
