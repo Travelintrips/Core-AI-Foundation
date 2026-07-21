@@ -1,0 +1,186 @@
+TEAM 10 — CORE DESIGN API CONTRACTS & ORCHESTRATION BOUNDARY
+
+BRANCH WAJIB:
+feature/team-10-core-api-contracts
+
+PERAN TEAM
+
+Bangun API boundary untuk Universal Design Platform. Fokus pada contracts,
+authorization, validation, orchestration endpoint, dan compatibility dengan
+Customer Portal/BizPortal. Jangan mengimplementasikan semua underlying engine
+sendiri.
+
+PROJECT BRIEF
+
+Creative AI sudah memiliki API untuk project, AI jobs, assets, reviews,
+analytics, operations, dan service execution.
+
+API design baru harus bersifat additive dan tidak menciptakan endpoint duplikat
+untuk fungsi yang sudah tersedia.
+
+Target consumer:
+
+- Customer Portal;
+- BizPortal/admin;
+- future design workspace;
+- internal worker;
+- client review page.
+
+TUJUAN
+
+Setelah audit route existing, definisikan dan implementasikan minimal API
+surface yang benar-benar diperlukan, misalnya:
+
+1. Resolve design project configuration.
+2. Get safe plugin/workflow/brief manifest.
+3. Get design project overview.
+4. Submit or update normalized brief.
+5. Initialize design workflow.
+6. Execute valid project command.
+7. List stages.
+8. List artifacts and versions.
+9. Get project events/activity.
+10. Request review or revision melalui existing review service.
+
+Nama route harus mengikuti convention repository. Jangan memaksakan path contoh
+jika route grouping existing berbeda.
+
+API CONTRACT PRINCIPLES
+
+- Versioned/additive response.
+- Auth context-derived tenant.
+- Zod/schema validation sesuai pola existing.
+- Typed error codes.
+- Idempotency key untuk mutating commands.
+- Correlation ID propagation.
+- Pagination untuk list besar.
+- Safe projection untuk client.
+- Internal fields tidak bocor.
+- No raw stack trace.
+- No AI provider/model secret.
+- No storage internal path bila signed/public URL policy berbeda.
+
+PROJECT-SPECIFIC RESPONSE
+
+API harus mampu mengirim konfigurasi berbeda tanpa UI hard-code:
+
+Fashion:
+- fashion brief schema reference;
+- fashion workflow;
+- artifact types seperti sketch/technical drawing;
+- capabilities dan feature availability.
+
+Interior:
+- interior brief/workflow;
+- space plan/material/elevation/visualization artifact definitions.
+
+Packaging:
+- structure/dieline/mockup/export capabilities.
+
+Branding:
+- strategy/concept/system/guideline artifacts.
+
+API core tidak boleh memiliki endpoint khusus per domain kecuali domain feature
+memang membutuhkan action unik yang tidak dapat dipresentasikan sebagai
+capability/command.
+
+AUTHORIZATION
+
+Pisahkan:
+
+- customer project owner;
+- tenant admin;
+- platform admin;
+- public review token;
+- worker/internal execution.
+
+Reuse middleware existing. Jangan membuat auth middleware kedua.
+
+PUBLIC REVIEW
+
+Jangan mengubah keamanan token review existing.
+
+Jika API baru perlu review action, delegasikan ke existing review service dan
+pertahankan rate limit serta token protection.
+
+ORCHESTRATION
+
+Route handler harus tipis:
+
+validate
+→ authorize
+→ call application service
+→ map response
+→ audit/error mapping
+
+Jangan menaruh domain logic besar di route.
+
+DEPENDENCY HANDLING
+
+Karena Team 01–09 bekerja paralel:
+
+- gunakan ports/interfaces atau adapter;
+- jangan copy implementation mereka;
+- bila contract belum tersedia, buat local interface minimal dengan TODO
+  compatibility note;
+- hindari mengunci import path yang spekulatif;
+- laporkan integration steps secara jelas.
+
+OPENAPI
+
+Jika repository sudah memiliki OpenAPI, tambahkan schema dan endpoint secara
+konsisten. Jangan membuat dokumentasi API system kedua.
+
+FILE OWNERSHIP
+
+Boleh:
+
+- route/controller;
+- request/response schema;
+- authorization integration;
+- application facade;
+- API mapper;
+- OpenAPI update;
+- tests;
+- docs.
+
+Tidak boleh:
+
+- membangun core engine duplikat;
+- membuat plugin domain;
+- mengubah UI;
+- mengubah payment/order/quotation routes;
+- membuat auth system baru;
+- membuat public endpoint yang membuka tenant data.
+
+ACCEPTANCE CRITERIA
+
+1. Existing Creative AI endpoints tidak breaking.
+2. API baru tervalidasi.
+3. Tenant authorization teruji.
+4. Mutasi idempotent atau meneruskan idempotency ke service.
+5. Route handler tipis.
+6. Safe plugin/project projection.
+7. Domain project dikonfigurasi melalui manifest, bukan endpoint clone.
+8. Error codes konsisten.
+9. OpenAPI/type exports diperbarui jika applicable.
+10. Tests mencakup unauthorized, forbidden, not found, invalid payload,
+    conflict, success, dan idempotency.
+
+TEST WAJIB
+
+- get project authorized;
+- cross-tenant denied;
+- missing auth;
+- invalid brief;
+- unsupported plugin/workflow;
+- duplicate idempotency key;
+- safe manifest projection;
+- artifact pagination;
+- lifecycle conflict;
+- public review security regression;
+- internal field redaction.
+
+COMMIT YANG DISARANKAN
+
+feat(design-api): add universal design API boundary
