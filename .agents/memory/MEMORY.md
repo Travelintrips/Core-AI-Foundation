@@ -82,3 +82,4 @@
 - [team03-rbac-tenant-scope](team03-rbac-tenant-scope.md) — Aggregate endpoints filter via customer_profiles WHERE tenant_id = ? subquery; sales_funnel_events has no tenant_id column
 - [knowledge-library-v50-normalization](knowledge-library-v50-normalization.md) — Canonical normalizer + backfill complete; isCanonicalX bug, duplicate properti key, styleKnowledgeSeed spacingStyle fix, DB gap=0
 - [adminauth-mock-pattern](adminauth-mock-pattern.md) — vi.mock for adminAuth must ALSO export adminAuthWithExceptions (delegate to adminAuth); pass-through breaks GET 401 assertions
+- [master-execution-rules](master-execution-rules.md) — Universal rules for all teams: branch hygiene, baseline audit, arch constraints, multi-tenant, DB, API, UI, test, git, and final report format
