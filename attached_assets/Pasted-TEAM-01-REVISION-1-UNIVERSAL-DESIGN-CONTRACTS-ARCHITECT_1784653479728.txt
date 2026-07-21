@@ -1,0 +1,598 @@
+TEAM 01 — REVISION 1
+UNIVERSAL DESIGN CONTRACTS ARCHITECTURE ENHANCEMENT
+
+BRANCH WAJIB
+
+feature/team-01-architecture-contracts
+
+JANGAN PINDAH BRANCH.
+JANGAN MERGE.
+JANGAN REBASE.
+JANGAN MENGUBAH FILE MILIK TEAM LAIN.
+
+==================================================
+LATAR BELAKANG
+==================================================
+
+Architecture Review telah dilakukan.
+
+Implementasi Team 01 dinyatakan APPROVED.
+
+Namun terdapat beberapa enhancement yang harus ditambahkan agar contract benar-benar siap menjadi foundation untuk seluruh Universal Design Platform.
+
+Ini adalah REVISION 1.
+
+Bukan redesign.
+
+Jangan menghapus kontrak yang sudah ada.
+
+Jangan membuat breaking change.
+
+Semua perubahan harus additive.
+
+Compatibility dengan implementasi saat ini harus tetap terjaga.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Sempurnakan package
+
+@workspace/design-contracts
+
+agar mampu menjadi single source of truth
+untuk Team 02–40.
+
+==================================================
+RULES
+==================================================
+
+WAJIB
+
+✔ additive only
+
+✔ backward compatible
+
+✔ version compatible
+
+✔ tidak mengubah existing public contract secara breaking
+
+✔ tidak mengubah package name
+
+✔ tidak mengubah import path
+
+✔ tidak mengubah folder structure kecuali diperlukan secara additive
+
+DILARANG
+
+✘ menghapus type existing
+
+✘ rename exported type
+
+✘ memindahkan package
+
+✘ mengubah API existing
+
+✘ membuat dependency ke React
+
+✘ membuat dependency ke Express
+
+✘ membuat dependency ke Database
+
+✘ membuat dependency ke AI Provider
+
+==================================================
+TASK A
+
+CONTRACT METADATA
+==================================================
+
+Tambahkan canonical metadata contract.
+
+Minimal:
+
+ContractMetadata
+
+memiliki:
+
+createdAt
+
+updatedAt
+
+createdBy
+
+updatedBy
+
+source
+
+generator
+
+generatorVersion
+
+source dapat berupa:
+
+human
+
+ai
+
+import
+
+migration
+
+external-api
+
+generator adalah nama engine
+misalnya
+
+creative-ai
+
+presentation-engine
+
+document-engine
+
+workflow-engine
+
+Semua metadata bersifat optional jika memang belum tersedia.
+
+Jangan memaksa existing contract memiliki field mandatory baru.
+
+==================================================
+TASK B
+
+ARTIFACT RELATIONSHIP
+==================================================
+
+Tambahkan contract baru
+
+ArtifactRelationship
+
+yang dapat menggambarkan hubungan antar artifact.
+
+Contoh:
+
+Moodboard
+
+↓
+
+Concept
+
+↓
+
+Sketch
+
+↓
+
+Technical Drawing
+
+↓
+
+Production Specification
+
+Relationship minimal:
+
+relationshipId
+
+parentArtifactId
+
+childArtifactId
+
+relationshipType
+
+createdAt
+
+metadata
+
+RelationshipType minimal:
+
+depends_on
+
+derived_from
+
+references
+
+variation_of
+
+revision_of
+
+presentation_of
+
+==================================================
+TASK C
+
+ARTIFACT DEPENDENCY GRAPH
+==================================================
+
+Selain stage dependency,
+
+tambahkan artifact dependency.
+
+Minimal utility:
+
+validateArtifactGraph()
+
+detectArtifactCycles()
+
+findArtifactDependencies()
+
+findArtifactDependents()
+
+Semuanya pure function.
+
+Tidak boleh bergantung ke database.
+
+==================================================
+TASK D
+
+CAPABILITY CATEGORY
+==================================================
+
+Capability saat ini hanya memiliki ID.
+
+Tambahkan category.
+
+Minimal:
+
+AI
+
+Rendering
+
+Simulation
+
+Analysis
+
+Export
+
+Validation
+
+Human Review
+
+Automation
+
+Transformation
+
+Storage
+
+Jangan mengganti capability existing.
+
+Tambahkan secara additive.
+
+==================================================
+TASK E
+
+EXECUTION PRIORITY
+==================================================
+
+Tambahkan enum.
+
+ExecutionPriority
+
+Minimal:
+
+critical
+
+high
+
+medium
+
+low
+
+background
+
+Digunakan oleh dispatcher
+di masa depan.
+
+Belum perlu implementasi runtime.
+
+==================================================
+TASK F
+
+EXECUTION ESTIMATION
+==================================================
+
+Tambahkan metadata capability.
+
+Contoh:
+
+estimatedRuntimeMs
+
+estimatedTokenUsage
+
+estimatedCostUsd
+
+estimatedMemoryMb
+
+estimatedOutputSize
+
+Semua optional.
+
+Jangan hardcode.
+
+==================================================
+TASK G
+
+INPUT OUTPUT ARTIFACT
+==================================================
+
+Capability harus dapat mendeskripsikan:
+
+inputArtifactTypes
+
+outputArtifactTypes
+
+Contoh
+
+Concept Sketch
+
+↓
+
+Technical Drawing
+
+↓
+
+Production Spec
+
+↓
+
+Presentation
+
+Ini hanya metadata contract.
+
+Bukan workflow.
+
+==================================================
+TASK H
+
+DEPRECATION POLICY
+==================================================
+
+Tambahkan contract
+
+DeprecationPolicy
+
+Minimal
+
+deprecatedSince
+
+replacement
+
+removeAfterVersion
+
+reason
+
+isDeprecated
+
+Jangan menghapus version utility yang sudah ada.
+
+==================================================
+TASK I
+
+FEATURE STABILITY
+==================================================
+
+Tambahkan enum
+
+FeatureStability
+
+experimental
+
+preview
+
+stable
+
+deprecated
+
+internal
+
+Ini akan dipakai Plugin Framework.
+
+==================================================
+TASK J
+
+PLUGIN DEPENDENCY
+==================================================
+
+PluginManifest
+harus mampu mendeskripsikan
+dependency antar plugin.
+
+Contoh:
+
+Fashion
+
+bergantung
+
+Material
+
+Export
+
+Renderer
+
+Buat:
+
+PluginDependency
+
+pluginId
+
+minimumVersion
+
+optional
+
+reason
+
+==================================================
+TASK K
+
+EXAMPLES
+==================================================
+
+Saat ini terdapat
+
+Fashion
+
+Interior
+
+Packaging
+
+Branding
+
+Tambahkan contoh:
+
+Furniture
+
+Architecture
+
+Landscape
+
+Industrial Product
+
+Jewelry
+
+Semua hanya berupa contoh contract.
+
+Tidak perlu implementasi plugin.
+
+==================================================
+TASK L
+
+DOCUMENTATION
+==================================================
+
+Update ADR.
+
+Tambahkan:
+
+Contract Evolution Strategy
+
+Versioning Strategy
+
+Deprecation Policy
+
+Plugin Dependency
+
+Artifact Lineage
+
+Capability Category
+
+Execution Metadata
+
+Future Compatibility
+
+==================================================
+TASK M
+
+TEST
+==================================================
+
+Tambahkan unit test baru.
+
+Minimal:
+
+ContractMetadata
+
+ArtifactRelationship
+
+ArtifactDependency
+
+ExecutionPriority
+
+CapabilityCategory
+
+ExecutionEstimation
+
+DeprecationPolicy
+
+FeatureStability
+
+PluginDependency
+
+New Example Validation
+
+Backward Compatibility
+
+Version Compatibility
+
+Cycle Detection
+
+Artifact Lineage
+
+Semua test lama wajib tetap lolos.
+
+==================================================
+TASK N
+
+ARCHITECTURE VALIDATION
+==================================================
+
+Pastikan:
+
+✔ tidak ada circular dependency
+
+✔ tidak ada import React
+
+✔ tidak ada import Express
+
+✔ tidak ada import Database
+
+✔ tidak ada import AI Provider
+
+✔ package tetap tree-shakeable
+
+✔ zero runtime dependency
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+1.
+Semua file yang berubah
+
+2.
+Semua type baru
+
+3.
+Semua schema baru
+
+4.
+Semua utilitas baru
+
+5.
+Semua test baru
+
+6.
+Jumlah total test
+
+7.
+Backward compatibility
+
+8.
+Breaking Change
+
+9.
+Dependency baru (jika ada)
+
+10.
+Hal yang perlu diketahui Team 02–40
+
+11.
+Risiko merge
+
+12.
+Rekomendasi untuk Team 39 Integration Audit
+
+==================================================
+COMMIT
+==================================================
+
+Gunakan Conventional Commit
+
+feat(design-contracts): add architecture metadata and lineage contracts
+
+Jangan merge.
+
+Jangan pindah branch.
+
+Commit dan push hanya ke
+
+feature/team-01-architecture-contracts
