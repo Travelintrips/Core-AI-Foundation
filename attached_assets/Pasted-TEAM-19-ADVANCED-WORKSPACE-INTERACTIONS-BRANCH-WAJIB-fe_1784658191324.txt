@@ -1,0 +1,176 @@
+TEAM 19 — ADVANCED WORKSPACE INTERACTIONS
+
+BRANCH WAJIB:
+feature/team-19-workspace-interactions
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun interaction layer reusable di atas Canvas Workspace.
+
+Scope:
+
+- multi-selection;
+- keyboard shortcuts;
+- command routing;
+- context menu;
+- drag selection;
+- alignment action contracts;
+- snapping contracts;
+- copy/paste internal reference;
+- undo/redo command integration;
+- interaction modes;
+- gesture conflict handling.
+
+Team 19 tidak membangun vector editor atau CAD editor penuh.
+
+==================================================
+DEPENDENCY
+==================================================
+
+Gunakan Team 11 canvas contract jika tersedia.
+
+Jika belum:
+
+- buat CanvasInteractionAdapter sempit;
+- jangan membuat viewport/rendering engine kedua.
+
+Gunakan Team 13 layer selection dan Team 12 property handoff melalui adapter.
+
+==================================================
+COMMAND MODEL
+==================================================
+
+Minimal:
+
+WorkspaceCommand
+WorkspaceCommandHandler
+WorkspaceCommandRegistry
+WorkspaceShortcut
+WorkspaceInteractionMode
+WorkspaceSelectionSet
+WorkspaceClipboardPayload
+WorkspaceUndoEntry
+
+Command examples:
+
+- select;
+- select-all;
+- clear-selection;
+- delete;
+- duplicate;
+- move;
+- nudge;
+- bring-forward;
+- send-backward;
+- lock;
+- unlock;
+- show;
+- hide;
+- copy;
+- paste;
+- undo;
+- redo.
+
+Command harus capability-aware dan permission-aware.
+
+==================================================
+SHORTCUT REGISTRY
+==================================================
+
+Registry harus:
+
+- menolak duplicate shortcut conflict;
+- mendukung platform key;
+- tidak menangkap shortcut ketika user mengetik dalam input;
+- mendukung disabled command;
+- mempunyai accessible help;
+- cleanup event listener.
+
+==================================================
+UNDO/REDO
+==================================================
+
+Jangan membuat persistence versioning baru.
+
+Undo/redo hanya command-level local/session behavior kecuali backend telah
+menyediakan canonical operation.
+
+Dukung:
+
+- reversible command;
+- non-reversible command;
+- command grouping;
+- max history;
+- clear on artifact/version change;
+- failed operation tidak masuk history.
+
+==================================================
+SELECTION
+==================================================
+
+Dukung:
+
+- single;
+- toggle;
+- additive;
+- range bila hierarchy;
+- box selection boundary;
+- clear;
+- locked/unselectable item;
+- primary selection.
+
+Selection menggunakan opaque IDs.
+
+==================================================
+SNAPPING/ALIGNMENT
+==================================================
+
+Team 19 hanya membuat contract dan pure calculation generik:
+
+- snap point;
+- threshold;
+- guide;
+- align left/center/right;
+- distribute;
+- bounds.
+
+Jangan membuat domain measurement engine.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. command registration;
+2. duplicate command;
+3. shortcut conflict;
+4. input typing protection;
+5. selection toggle;
+6. multi-selection;
+7. locked item;
+8. primary selection;
+9. command permission;
+10. capability unavailable;
+11. undo;
+12. redo;
+13. failed command history;
+14. history clear on version change;
+15. copy/paste validation;
+16. cross-project paste rejection;
+17. nudge;
+18. snap threshold;
+19. context menu;
+20. listener cleanup;
+21. accessibility shortcut help;
+22. no canvas duplication.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-workspace): add advanced workspace interactions"
+git push -u origin HEAD

@@ -1,0 +1,427 @@
+MASTER EXECUTION RULES — CREATIVE AI UNIVERSAL DESIGN PLATFORM
+
+
+
+KONTEKS PRODUK
+
+
+
+Repository ini berisi platform Creative AI enterprise yang sudah memiliki sebagian sistem berikut:
+
+
+
+- Creative AI workflow dan multi-agent execution.
+
+- Brand Strategist, Creative Director, Copywriter, dan QC agents.
+
+- AI job engine, worker, dispatcher, model router, cost tracking, dan audit.
+
+- Customer Portal Creative AI.
+
+- Brief Wizard dan AI Guided Brief Assistant.
+
+- Client review dan project execution summary.
+
+- Document Engine dan Presentation Engine.
+
+- Marketplace/service catalog dan multi-tenant platform foundation.
+
+- Beberapa layanan desain, termasuk Fashion, Interior, Packaging, Branding,
+
+  Presentation, dan layanan kreatif lainnya.
+
+
+
+Tujuan program baru ini adalah membangun Universal Design Platform yang mendukung:
+
+
+
+Brief
+
+→ Moodboard
+
+→ Concept
+
+→ Technical Design
+
+→ Material dan Component Selection
+
+→ Visualization atau 3D
+
+→ Production Specification
+
+→ Export
+
+→ Client Review
+
+
+
+Platform harus mendukung banyak domain melalui plugin, bukan dengan membuat
+
+aplikasi terpisah untuk setiap layanan.
+
+
+
+ATURAN BRANCH
+
+
+
+Project owner sudah memindahkan repository ke branch team melalui Shell.
+
+
+
+Sebelum bekerja, jalankan:
+
+
+
+git branch --show-current
+
+git status --short
+
+git rev-parse HEAD
+
+
+
+Ketentuan:
+
+
+
+1. Pastikan branch aktif sama persis dengan BRANCH WAJIB di prompt.
+
+2. Jangan mengganti branch.
+
+3. Jangan membuat branch baru.
+
+4. Jika branch salah, berhenti dan laporkan.
+
+5. Jangan merge ke integration, release-candidate, main, atau branch team lain.
+
+6. Jangan melakukan rebase.
+
+7. Jangan menggunakan git push --force.
+
+8. Commit dan push hanya ke branch aktif setelah pekerjaan selesai.
+
+
+
+ATURAN BASELINE
+
+
+
+Sebelum implementasi:
+
+
+
+1. Audit struktur repository.
+
+2. Identifikasi implementasi yang sudah ada.
+
+3. Jalankan baseline test, typecheck, dan build yang relevan.
+
+4. Catat kegagalan yang sudah ada sebelum perubahan.
+
+5. Jangan mengklaim error baseline sebagai regresi.
+
+6. Jangan memperbaiki error di luar scope kecuali diperlukan langsung oleh pekerjaan.
+
+7. Jangan menggandakan service, schema, type, route, atau engine yang sudah ada.
+
+8. Utamakan extension dan refactor aman terhadap sistem existing.
+
+
+
+ATURAN ARSITEKTUR
+
+
+
+Semua modul baru wajib:
+
+
+
+- memakai TypeScript strict typing;
+
+- menggunakan structured JSON sebagai kontrak utama;
+
+- memiliki schema validation;
+
+- tidak hard-code AI provider atau AI model;
+
+- menerima dependency melalui interface atau dependency injection;
+
+- tenant-aware bila data bersifat milik customer;
+
+- mendukung audit metadata;
+
+- tidak memalsukan hasil AI, biaya, status, data produksi, atau metrik;
+
+- tidak menyimpan secret di source code;
+
+- tidak membuat second source of truth;
+
+- tidak mengakses database langsung dari UI;
+
+- tidak mengikat core engine ke Fashion, Interior, atau domain tertentu.
+
+
+
+ATURAN MULTI-TENANT
+
+
+
+Untuk data customer atau organization:
+
+
+
+- tenantId wajib berasal dari authenticated context;
+
+- jangan menerima tenantId mentah dari client tanpa validasi authorization;
+
+- query harus tenant-scoped;
+
+- platform-level access harus menggunakan guard khusus;
+
+- sertakan test tenant isolation.
+
+
+
+ATURAN DATABASE
+
+
+
+- Jangan membuat migration jika tidak benar-benar diperlukan.
+
+- Migration harus idempotent atau memiliki guard yang aman.
+
+- Jangan menghapus atau mengganti kolom existing secara destruktif.
+
+- Tambahkan index untuk query yang memang membutuhkan.
+
+- Laporkan migration order dan rollback strategy.
+
+- Jangan menjalankan perubahan production secara manual.
+
+
+
+ATURAN API
+
+
+
+- Gunakan pola routing, middleware, error handler, dan authorization existing.
+
+- Request dan response harus tervalidasi.
+
+- Jangan mengubah response contract existing secara diam-diam.
+
+- Untuk contract baru, gunakan versioning atau additive extension.
+
+- Mutasi harus memiliki audit trail dan idempotency bila relevan.
+
+- Hindari endpoint raksasa yang menangani banyak tanggung jawab.
+
+
+
+ATURAN UI
+
+
+
+- Gunakan design system dan komponen existing.
+
+- Jangan membuat design system kedua.
+
+- Pertahankan responsive behavior, accessibility, loading state, empty state,
+
+  error state, dan keyboard navigation.
+
+- Jangan mengubah halaman global atau navigasi di luar scope tanpa kebutuhan nyata.
+
+- Jangan menggunakan data demo sebagai data live tanpa label yang jelas.
+
+
+
+ATURAN TEST
+
+
+
+Minimal lakukan:
+
+
+
+- unit test untuk pure logic;
+
+- schema validation test;
+
+- negative test;
+
+- authorization atau tenant-isolation test bila relevan;
+
+- integration test untuk boundary penting;
+
+- regression test untuk contract existing yang disentuh.
+
+
+
+Setelah perubahan:
+
+
+
+- jalankan test relevan;
+
+- jalankan full test suite bila layak;
+
+- jalankan typecheck;
+
+- jalankan build package yang terdampak;
+
+- bandingkan hasil dengan baseline.
+
+
+
+ATURAN GIT AKHIR
+
+
+
+Setelah semua acceptance criteria terpenuhi:
+
+
+
+git status
+
+git diff --check
+
+git diff --stat
+
+git add .
+
+git commit -m "<conventional commit yang sesuai>"
+
+git push -u origin HEAD
+
+
+
+Jangan push apabila test kritis baru gagal akibat perubahan team.
+
+
+
+FORMAT LAPORAN AKHIR
+
+
+
+Berikan laporan dengan format:
+
+
+
+FINAL TEAM REPORT
+
+
+
+Team:
+
+Branch:
+
+Commit awal:
+
+Commit akhir:
+
+Commit message:
+
+Push status:
+
+
+
+1. Baseline
+
+- Test:
+
+- Typecheck:
+
+- Build:
+
+- Pre-existing failures:
+
+
+
+2. Implementasi
+
+- Tujuan:
+
+- Yang selesai:
+
+- Yang tidak dikerjakan:
+
+
+
+3. File
+
+- File baru:
+
+- File diubah:
+
+- File dihapus:
+
+
+
+4. Kontrak
+
+- Input:
+
+- Output:
+
+- Schema:
+
+- Public exports:
+
+- API endpoints:
+
+
+
+5. Database
+
+- Migration:
+
+- Table/column/index:
+
+- Tenant isolation:
+
+- Rollback:
+
+
+
+6. Verification
+
+- Unit tests:
+
+- Integration tests:
+
+- Regression:
+
+- Typecheck:
+
+- Build:
+
+
+
+7. Compatibility
+
+- Contract existing yang dipertahankan:
+
+- Dependency untuk team lain:
+
+- Breaking change:
+
+
+
+8. Risiko
+
+- Risiko konflik merge:
+
+- Known limitations:
+
+- Follow-up:
+
+
+
+9. Integration Notes
+
+- Urutan merge yang disarankan:
+
+- Hal yang harus diverifikasi Team 39/40:
