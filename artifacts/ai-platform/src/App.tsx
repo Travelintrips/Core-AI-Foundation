@@ -86,6 +86,8 @@ import InteriorDesignPage from "@/pages/interior-design";
 import FashionDesignPage from "@/pages/fashion-design";
 // ── Team 19: Packaging Design ────────────────────────────────────────────
 import PackagingDesignPage from "@/pages/packaging-design";
+// ── Team 21: Universal Material Library ──────────────────────────────────
+import MaterialLibraryPage from "@/pages/material-library";
 // ── Team 22: Vendor Ecosystem ─────────────────────────────────────────────
 import VendorAdminPage from "@/pages/creative-vendors/VendorAdminPage";
 import VendorAdminDetailPage from "@/pages/creative-vendors/VendorAdminDetailPage";
@@ -173,6 +175,8 @@ function AdminRouter() {
         <Route path="/fashion-design" component={FashionDesignPage} />
         {/* ── Team 19: Packaging Design ───────────────────────────────── */}
         <Route path="/packaging-design" component={PackagingDesignPage} />
+        {/* ── Team 21: Universal Material Library ─────────────────────── */}
+        <Route path="/material-library" component={MaterialLibraryPage} />
         {/* ── Team 22: Vendor Ecosystem ───────────────────────────────── */}
         <Route path="/creative-vendors/:id" component={VendorAdminDetailPage} />
         <Route path="/creative-vendors" component={VendorAdminPage} />
