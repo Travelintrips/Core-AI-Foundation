@@ -1,0 +1,186 @@
+TEAM 18 — UNIVERSAL ANNOTATION AND COMMENT SYSTEM
+
+BRANCH WAJIB:
+feature/team-18-annotation-system
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun annotation system universal untuk artifact review.
+
+Annotation dapat berupa:
+
+- point pin;
+- rectangle;
+- region reference;
+- free-text comment;
+- reply;
+- status;
+- assignee;
+- priority;
+- version anchoring;
+- frame/page anchoring.
+
+Freehand drawing kompleks bukan scope V1.
+
+==================================================
+CONTRACT
+==================================================
+
+Minimal:
+
+Annotation
+AnnotationAnchor
+AnnotationGeometry
+AnnotationThread
+AnnotationComment
+AnnotationStatus
+AnnotationPriority
+AnnotationPermission
+AnnotationMutation
+AnnotationSelection
+
+Anchor harus dapat menunjuk:
+
+- artifact;
+- version;
+- frame/page/view;
+- normalized coordinates;
+- renderer element/region opaque ID.
+
+Gunakan normalized coordinates, bukan hanya pixel absolut.
+
+==================================================
+ANNOTATION STATES
+==================================================
+
+Minimal:
+
+- open;
+- acknowledged;
+- resolved;
+- reopened;
+- archived.
+
+Jangan mengganti client review status.
+
+Annotation status terpisah dari review decision.
+
+==================================================
+THREAD
+==================================================
+
+Dukung:
+
+- comment;
+- reply;
+- edit own comment bila diizinkan;
+- resolve;
+- reopen;
+- assign;
+- mention boundary bila existing system mendukung;
+- timestamps;
+- actor;
+- deleted/redacted state.
+
+Jangan membuat rich-text editor besar.
+
+==================================================
+WORKSPACE INTEGRATION
+==================================================
+
+Team 11:
+
+- gunakan CanvasOverlayHost;
+- jangan membuat canvas kedua.
+
+Team 13:
+
+- annotation dapat muncul sebagai optional virtual layer.
+
+Team 15:
+
+- annotation melekat pada version yang benar.
+
+Team 16:
+
+- annotation summary dapat digunakan saat review.
+
+Jika dependency belum tersedia, gunakan adapter lokal sempit.
+
+==================================================
+GEOMETRY
+==================================================
+
+Pure utilities:
+
+- normalizePoint;
+- denormalizePoint;
+- clampAnchor;
+- transformAnchor;
+- validateGeometry;
+- calculateAnnotationBounds;
+- migrateAnchorBetweenViewportSizes;
+- detectOutsideContent.
+
+==================================================
+SECURITY
+==================================================
+
+- sanitize comment;
+- no raw HTML;
+- permissions;
+- tenant isolation;
+- no cross-project anchor;
+- actor identity dari backend;
+- no client-authoritative createdBy;
+- rate-limit reuse bila public review;
+- no token exposure.
+
+==================================================
+ACCESSIBILITY
+==================================================
+
+- annotation pin focusable;
+- accessible label;
+- keyboard select;
+- comment thread navigation;
+- resolve/reopen announced;
+- not color-only;
+- screen-reader summary list.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. normalized point;
+2. clamp;
+3. resize migration;
+4. invalid geometry;
+5. create pin;
+6. create rectangle;
+7. thread reply;
+8. resolve;
+9. reopen;
+10. permission denied;
+11. version anchoring;
+12. frame anchoring;
+13. selected annotation;
+14. hidden/unavailable artifact;
+15. unsafe HTML;
+16. actor spoof rejection at adapter boundary;
+17. keyboard access;
+18. overlay rendering;
+19. comment regression;
+20. no cross-project association.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-review): add universal annotation system"
+git push -u origin HEAD
