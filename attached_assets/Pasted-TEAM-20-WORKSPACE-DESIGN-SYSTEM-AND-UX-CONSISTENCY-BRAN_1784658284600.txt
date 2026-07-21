@@ -1,0 +1,263 @@
+TEAM 20 — WORKSPACE DESIGN SYSTEM AND UX CONSISTENCY
+
+BRANCH WAJIB:
+feature/team-20-workspace-design-system
+
+==================================================
+TUJUAN
+==================================================
+
+Audit dan rapikan pengalaman visual Team 11–19 agar konsisten dengan design
+system repository.
+
+Team 20 bukan membuat design system baru.
+
+Team 20 membuat workspace-specific primitives yang dibutuhkan tetapi tetap
+berdasarkan token, Shadcn, Tailwind, icon, dan accessibility pattern existing.
+
+==================================================
+PENTING
+==================================================
+
+Karena branch Team 11–19 mungkin belum di-merge, Team 20 harus:
+
+- audit komponen existing pada baseline;
+- membangun reusable workspace primitives;
+- tidak menyalin source code team lain;
+- menyediakan integration specification;
+- menghindari perubahan luas pada aplikasi;
+- tidak mendesain ulang seluruh portal.
+
+==================================================
+AUDIT
+==================================================
+
+Audit:
+
+- color tokens;
+- spacing;
+- typography;
+- borders;
+- shadows;
+- dark/light mode;
+- responsive breakpoints;
+- buttons;
+- icon sizes;
+- tooltips;
+- drawers;
+- sheets;
+- tabs;
+- status badges;
+- skeletons;
+- empty/error states;
+- keyboard focus;
+- density patterns.
+
+==================================================
+WORKSPACE PRIMITIVES
+==================================================
+
+Bangun atau standardisasi minimal:
+
+- WorkspacePanel;
+- WorkspacePanelHeader;
+- WorkspaceToolbarGroup;
+- WorkspaceToolbarButton;
+- WorkspaceIconButton;
+- WorkspaceStatusBadge;
+- WorkspaceEmptyState;
+- WorkspaceErrorState;
+- WorkspaceLoadingState;
+- WorkspaceUnavailableState;
+- WorkspaceSection;
+- WorkspaceDivider;
+- WorkspaceResizeHandle style contract;
+- WorkspaceDrawer/Sheet integration;
+- WorkspaceTooltip;
+- WorkspaceKeyboardHint.
+
+Gunakan existing primitives sebagai dasar.
+
+==================================================
+DENSITY
+==================================================
+
+Dukung minimal:
+
+- comfortable;
+- compact.
+
+Jangan membuat puluhan variant.
+
+==================================================
+STATUS VISUALS
+==================================================
+
+Status harus konsisten untuk:
+
+- draft;
+- generating;
+- ready;
+- in review;
+- approved;
+- revision requested;
+- failed;
+- archived;
+- unavailable;
+- read-only.
+
+Status mapping harus berasal dari canonical mapping atau adapter.
+
+Jangan membuat status bisnis baru.
+
+==================================================
+RESPONSIVE
+==================================================
+
+Definisikan pola:
+
+Desktop:
+- multi-panel;
+- toolbar horizontal;
+- status bar.
+
+Tablet:
+- collapsible panels;
+- compact toolbar.
+
+Mobile:
+- canvas/viewer utama;
+- property/layer/review via sheet/tab;
+- no horizontal page overflow;
+- touch target memadai.
+
+==================================================
+THEME
+==================================================
+
+- light mode;
+- dark mode;
+- high contrast consideration;
+- reduced motion;
+- browser zoom 200%;
+- readable disabled state;
+- no hard-coded arbitrary color bila token tersedia.
+
+==================================================
+ACCESSIBILITY AUDIT
+==================================================
+
+Pastikan primitive:
+
+- focus-visible;
+- aria-label;
+- tooltip bukan satu-satunya label;
+- status tidak hanya warna;
+- minimum touch size;
+- logical focus order;
+- screen-reader labels;
+- keyboard usable;
+- motion optional.
+
+==================================================
+DOCUMENTATION
+==================================================
+
+Buat Workspace UX Guidelines:
+
+- component usage;
+- spacing;
+- density;
+- toolbar;
+- panel;
+- empty/error/loading;
+- status;
+- responsive;
+- accessibility;
+- anti-pattern;
+- handoff Team 11–19;
+- visual QA checklist.
+
+==================================================
+STORY/FIXTURE
+==================================================
+
+Jika repository memiliki Storybook/demo pattern, tambahkan fixtures sesuai pola.
+
+Jika tidak ada, jangan memasang Storybook baru.
+
+Gunakan test render fixture atau internal showcase page hanya bila aman.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. primitives render;
+2. variants;
+3. compact density;
+4. disabled state;
+5. loading;
+6. error;
+7. empty;
+8. unavailable;
+9. status mapping;
+10. dark mode-compatible class contract;
+11. keyboard focus;
+12. accessible names;
+13. responsive classes/layout;
+14. reduced motion;
+15. no hard-coded service/domain;
+16. existing design system regression.
+
+==================================================
+FILE OWNERSHIP
+==================================================
+
+Boleh:
+
+- workspace UI primitives;
+- shared styles memakai existing tokens;
+- documentation;
+- tests;
+- minimal replacement pada area workspace existing bila aman.
+
+Dilarang:
+
+- mengubah global brand;
+- mengganti seluruh Tailwind config tanpa alasan;
+- membuat component library kedua;
+- membuat business logic;
+- membuat canvas, property, layer, asset, review, export, annotation engine;
+- mengubah API/database/auth.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-workspace): add workspace design primitives"
+git push -u origin HEAD
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+- baseline;
+- audit token/component existing;
+- primitives;
+- reused components;
+- new variants;
+- accessibility;
+- responsive strategy;
+- dark/light mode;
+- files;
+- tests;
+- bundle/dependencies;
+- breaking changes;
+- Team 11–19 handoff;
+- Team 39 visual integration checks;
+- Team 40 final UX regression checklist.
