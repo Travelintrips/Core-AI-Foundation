@@ -62,6 +62,8 @@ import DesignTemplateEditor from "@/pages/design-template-editor";
 import DesignTemplates from "@/pages/design-templates";
 import DesignTemplateDetail from "@/pages/design-template-detail";
 
+// ── Team 17: Universal Design Export Workspace ───────────────────────────
+import ExportWorkspacePage from "@/pages/export-workspace";
 // ── Team 03: Commercial Automation ───────────────────────────────────────
 import CommercialAutomationPage from "@/pages/creative-commercial/CommercialAutomationPage";
 // ── Team 05: Brand Intelligence V2 ───────────────────────────────────────
@@ -78,17 +80,25 @@ import DesignPatternsPage from "@/pages/design-patterns";
 import DesignTokensPage from "@/pages/design-tokens";
 import FontPairsPage from "@/pages/design-tokens/font-pairs";
 import ColorPalettesPage from "@/pages/design-tokens/color-palettes";
+// ── Team 16: Design Review Workspace ─────────────────────────────────────
+import ReviewWorkspacePage from "@/pages/review-workspace";
 // ── Team 15: Graphic Design ───────────────────────────────────────────────
 import GraphicDesignPage from "@/pages/graphic-design";
+// ── Team 15: Version Timeline ─────────────────────────────────────────────
+import VersionTimelinePage from "@/pages/version-timeline";
 // ── Team 17: Interior Design ─────────────────────────────────────────────
 import InteriorDesignPage from "@/pages/interior-design";
 // ── Team 18: Fashion Design ──────────────────────────────────────────────
 import FashionDesignPage from "@/pages/fashion-design";
 // ── Team 19: Packaging Design ────────────────────────────────────────────
 import PackagingDesignPage from "@/pages/packaging-design";
+// ── Team 21: Universal Material Library ──────────────────────────────────
+import MaterialLibraryPage from "@/pages/material-library";
 // ── Team 22: Vendor Ecosystem ─────────────────────────────────────────────
 import VendorAdminPage from "@/pages/creative-vendors/VendorAdminPage";
 import VendorAdminDetailPage from "@/pages/creative-vendors/VendorAdminDetailPage";
+// ── Team 35: Design Observability & Operations ───────────────────────────
+import DesignObservabilityPage from "@/pages/design-observability";
 // ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
 import CustomsTariff from "@/pages/customs-tariff";
 import TarifKalkulator from "@/pages/tarif-kalkulator";
@@ -165,17 +175,25 @@ function AdminRouter() {
         <Route path="/design-tokens/font-pairs" component={FontPairsPage} />
         <Route path="/design-tokens/color-palettes" component={ColorPalettesPage} />
         <Route path="/design-tokens" component={DesignTokensPage} />
+        {/* ── Team 16: Design Review Workspace ────────────────────────── */}
+        <Route path="/review-workspace/:reviewId" component={ReviewWorkspacePage} />
         {/* ── Team 15: Graphic Design ─────────────────────────────────── */}
         <Route path="/graphic-design" component={GraphicDesignPage} />
+        {/* ── Team 15: Version Timeline ───────────────────────────────── */}
+        <Route path="/version-timeline" component={VersionTimelinePage} />
         {/* ── Team 17: Interior Design ────────────────────────────────── */}
         <Route path="/interior-design" component={InteriorDesignPage} />
         {/* ── Team 18: Fashion Design ─────────────────────────────────── */}
         <Route path="/fashion-design" component={FashionDesignPage} />
         {/* ── Team 19: Packaging Design ───────────────────────────────── */}
         <Route path="/packaging-design" component={PackagingDesignPage} />
+        {/* ── Team 21: Universal Material Library ─────────────────────── */}
+        <Route path="/material-library" component={MaterialLibraryPage} />
         {/* ── Team 22: Vendor Ecosystem ───────────────────────────────── */}
         <Route path="/creative-vendors/:id" component={VendorAdminDetailPage} />
         <Route path="/creative-vendors" component={VendorAdminPage} />
+        {/* ── Team 35: Design Observability ──────────────────────────── */}
+        <Route path="/design-observability" component={DesignObservabilityPage} />
         {/* ── Customs Tariff (BTKI) ───────────────────────────────────── */}
         <Route path="/customs-tariff" component={CustomsTariff} />
         <Route path="/tarif-kalkulator" component={TarifKalkulator} />
@@ -183,6 +201,8 @@ function AdminRouter() {
         <Route path="/design-render-batches/new" component={DesignRenderBatchesNew} />
         <Route path="/design-render-batches/:id" component={DesignRenderBatchDetail} />
         <Route path="/design-render-batches" component={DesignRenderBatches} />
+        {/* ── Team 17: Universal Design Export Workspace ────────────────── */}
+        <Route path="/export-workspace" component={ExportWorkspacePage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

@@ -22,6 +22,9 @@ interface PersistedState {
   skippedQuestionIds: string[];
   completed: boolean;
   // pendingChange intentionally excluded
+  // clarificationRequest intentionally excluded (transient)
+  /** Team 04: persisted confidence map for adaptive re-ordering across restore. */
+  confidenceMap?: Partial<Record<string, number>>;
 }
 
 function toPersistedState(state: AssistantConversationState): PersistedState {
@@ -32,13 +35,16 @@ function toPersistedState(state: AssistantConversationState): PersistedState {
     answeredQuestionIds: state.answeredQuestionIds,
     skippedQuestionIds: state.skippedQuestionIds,
     completed: state.completed,
+    confidenceMap: state.confidenceMap,
   };
 }
 
 function fromPersistedState(raw: PersistedState): AssistantConversationState {
   return {
     ...raw,
-    pendingChange: null, // NEVER restore a pending change — spec §17
+    pendingChange: null,          // NEVER restore a pending change — spec §17
+    clarificationRequest: null,   // Team 04: transient, never restored
+    confidenceMap: raw.confidenceMap ?? {},
   };
 }
 

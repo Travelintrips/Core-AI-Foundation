@@ -1,0 +1,169 @@
+TEAM 04 — ADAPTIVE QUESTION & GUIDED BRIEF ENGINE
+
+BRANCH WAJIB:
+feature/team-04-adaptive-question-engine
+
+PERAN TEAM
+
+Kembangkan AI Guided Brief Assistant existing menjadi Adaptive Question Engine
+yang memilih pertanyaan berdasarkan schema, jawaban sebelumnya, project type,
+dan information gap.
+
+PROJECT BRIEF
+
+Sistem existing sudah memiliki:
+
+- question-planner.ts;
+- SERVICE_QUESTION_ORDER;
+- conditionally visible fields;
+- answer mapper;
+- conversation reducer;
+- session storage;
+- assistant session hook;
+- quick replies;
+- change preview;
+- review dan completion summary.
+
+Jangan membuat assistant kedua. Extend sistem existing dan pertahankan kontrak
+yang sudah digunakan UI.
+
+TUJUAN
+
+AdaptiveQuestionEngine harus:
+
+1. Mengonsumsi Dynamic Brief Schema.
+2. Mengidentifikasi required information yang belum lengkap.
+3. Memilih next-best-question secara deterministic.
+4. Mendukung project-specific wording.
+5. Menghindari pertanyaan yang tidak relevan.
+6. Menghindari menanyakan informasi yang sudah tersedia.
+7. Menghasilkan quick replies dari schema.
+8. Mendukung clarification question.
+9. Mendukung conflict preview sebelum mengganti jawaban.
+10. Mengakhiri sesi ketika completion policy terpenuhi.
+11. Tidak mengarang jawaban customer.
+12. Tidak bergantung langsung pada AI provider.
+
+MODES
+
+Minimal dukung:
+
+- deterministic guided mode;
+- optional AI-assisted clarification mode melalui injected adapter;
+- review mode;
+- correction mode.
+
+AI tidak boleh menjadi syarat agar core question planner berfungsi.
+
+QUESTION PRIORITY
+
+Buat scoring atau ordered rules dengan mempertimbangkan:
+
+- required dan currently visible;
+- dependency untuk membuka pertanyaan berikutnya;
+- impact terhadap workflow;
+- field yang dibutuhkan untuk pricing/feasibility;
+- contradiction;
+- low-confidence parsed answer;
+- user-skip policy.
+
+Project-specific examples:
+
+Fashion:
+Pertanyaan ukuran dan jenis produk harus lebih dahulu daripada detail campaign.
+
+Interior:
+Dimensi dan jenis ruang harus tersedia sebelum material/visualization detail.
+
+Packaging:
+Jenis produk, ukuran, dan struktur harus tersedia sebelum dieline/render spec.
+
+Branding:
+Tujuan, audience, dan positioning harus lebih dahulu daripada aplikasi aset.
+
+Jangan hard-code logic domain di planner core. Gunakan metadata schema atau
+plugin-provided priority rules.
+
+ANSWER MAPPING
+
+Extend mapper existing untuk:
+
+- parse structured choices;
+- unit/dimension normalization;
+- currency range;
+- multi-value response;
+- confirm replace/merge;
+- preserve original user answer;
+- confidence score bila parser menyediakannya;
+- validation feedback.
+
+PRIVACY DAN HONESTY
+
+- Jangan mengirim seluruh project/tenant data ke AI clarification adapter tanpa kebutuhan.
+- Gunakan field allowlist.
+- Catat ketika AI assistance digunakan.
+- Jangan menyimpan hidden chain-of-thought.
+- Simpan hanya structured result, confidence, dan audit metadata yang relevan.
+
+FILE OWNERSHIP
+
+Boleh:
+
+- existing brief assistant core;
+- question planner;
+- answer mapper;
+- assistant schema adapter;
+- reducer actions yang relevan;
+- tests;
+- minimal UI integration agar contract baru bekerja.
+
+Tidak boleh:
+
+- redesign panel secara besar;
+- membangun Dynamic Brief Schema milik Team 03;
+- membuat AI provider implementation;
+- mengubah project workflow;
+- membuat plugin domain penuh.
+
+ACCEPTANCE CRITERIA
+
+1. Existing assistant behavior tetap bekerja.
+2. Question order berasal dari schema/metadata, bukan service switch besar.
+3. Fashion, Interior, Packaging, dan Branding menghasilkan urutan relevan.
+4. Hidden/non-applicable field tidak ditanyakan.
+5. Jawaban invalid menghasilkan clarification, bukan silent acceptance.
+6. Conflict menghasilkan preview.
+7. Session restore tetap kompatibel.
+8. Planner deterministic dengan input yang sama.
+9. Optional AI adapter dapat dimatikan.
+10. Sesi selesai hanya bila completion policy terpenuhi atau user memilih review.
+
+TEST WAJIB
+
+- deterministic ordering;
+- service-specific schema metadata;
+- skip logic;
+- visibility change setelah jawaban;
+- invalid answer;
+- conflict merge/replace;
+- session restore;
+- AI adapter unavailable;
+- user skip allowed;
+- mandatory field tidak dapat di-skip;
+- completion;
+- no duplicate question loop.
+
+OUTPUT UNTUK TEAM LAIN
+
+Laporkan:
+
+- planner API;
+- metadata yang dibutuhkan dari Team 03/domain plugin;
+- answer change contract;
+- session version;
+- UI compatibility;
+- optional AI adapter interface.
+
+COMMIT YANG DISARANKAN
+
+feat(brief-assistant): add adaptive schema-driven questioning

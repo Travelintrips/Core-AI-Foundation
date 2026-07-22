@@ -1,0 +1,191 @@
+TEAM 36 — DESIGN SECURITY, TENANT ISOLATION, AND POLICY
+
+BRANCH WAJIB:
+feature/team-36-design-security
+
+==================================================
+TUJUAN
+==================================================
+
+Audit dan harden security Universal Design Platform.
+
+Team 36 tidak membangun auth system baru.
+
+Gunakan:
+
+- RequestContext;
+- tenant guards;
+- platform scope guard;
+- RBAC;
+- token security;
+- audit service;
+- signed URL;
+- repository isolation;
+- rate limiting;
+- secret service.
+
+==================================================
+AUDIT TARGET
+==================================================
+
+Audit design-related code yang tersedia pada baseline:
+
+- project;
+- artifact;
+- plugin;
+- workflow;
+- brief;
+- workspace APIs;
+- material/component library;
+- review;
+- export;
+- AI execution;
+- rendering;
+- cost;
+- operations;
+- public review;
+- storage access.
+
+Jika branch team lain belum terintegrasi, buat security checklist dan test
+harness terhadap contract/pattern existing. Jangan menyalin branch lain.
+
+==================================================
+THREAT MODEL
+==================================================
+
+Minimal ancaman:
+
+- cross-tenant read;
+- cross-tenant write;
+- IDOR;
+- platform scope misuse;
+- actor spoofing;
+- tenantId injection;
+- unsafe plugin contribution;
+- arbitrary module loading;
+- prompt injection through artifact metadata;
+- unsafe HTML/SVG;
+- signed URL leakage;
+- expired token reuse;
+- duplicate execution;
+- cost abuse;
+- oversized upload;
+- resource exhaustion;
+- raw provider payload exposure;
+- public review token brute force;
+- audit trail gaps.
+
+==================================================
+POLICY CONTRACT
+==================================================
+
+Minimal:
+
+DesignSecurityPolicy
+DesignResourceScope
+DesignPermission
+DesignSecurityDecision
+DesignSecurityReason
+DesignPolicyEvaluator
+DesignSecurityAuditEvent
+DesignRateLimitPolicy
+DesignResourceLimitPolicy
+
+Jangan membuat permission vocabulary tandingan bila RBAC existing sudah cukup.
+
+Gunakan adapter atau mapping.
+
+==================================================
+TENANT ISOLATION
+==================================================
+
+Verifikasi:
+
+- tenant ID berasal dari RequestContext;
+- repository selalu menerima context;
+- query selalu scoped;
+- update/delete memakai tenant scope;
+- event/cost/job/artifact tidak dapat cross-tenant;
+- platform scope explicit;
+- tenant null fail-closed;
+- public token tidak menjadi tenant authority.
+
+==================================================
+PLUGIN SECURITY
+==================================================
+
+Plugin contribution harus:
+
+- static/compiled;
+- manifest validated;
+- contract version checked;
+- known registry;
+- no remote JavaScript;
+- no arbitrary import path;
+- no arbitrary SQL;
+- no raw secret;
+- limited capability;
+- permission-aware.
+
+==================================================
+AI SECURITY
+==================================================
+
+Verifikasi:
+
+- prompt context sanitized;
+- system instruction tidak dapat diubah oleh artifact metadata;
+- provider key dari secret service;
+- output validated;
+- cost/budget guard;
+- no raw chain-of-thought;
+- no arbitrary tool execution;
+- no direct provider call dari frontend/plugin.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. Tenant A tidak membaca Tenant B.
+2. Tenant A tidak mengubah Tenant B.
+3. Tenant A tidak menghapus Tenant B.
+4. tenantId body injection diabaikan/ditolak.
+5. null tenant fail-closed.
+6. platform actor valid.
+7. tenant actor ditolak untuk platform action.
+8. actor spoof ditolak.
+9. unsafe plugin path ditolak.
+10. remote module ditolak.
+11. raw HTML tidak dirender.
+12. unsafe SVG ditangani.
+13. signed URL expiry.
+14. public token invalid/expired/revoked.
+15. rate limiting.
+16. resource limit.
+17. duplicate execution.
+18. provider secret redaction.
+19. audit event tercatat.
+20. cross-project annotation/asset association ditolak.
+
+==================================================
+OUTPUT
+==================================================
+
+Hasil Team 36 harus terdiri dari:
+
+- security fixes yang terbukti perlu;
+- reusable policy utilities bila belum ada;
+- tests;
+- threat model document;
+- security integration checklist;
+- tidak melakukan redesign besar.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "security(design-platform): harden tenant isolation and policies"
+git push -u origin HEAD

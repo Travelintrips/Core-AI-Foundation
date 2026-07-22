@@ -1,0 +1,182 @@
+TEAM 33 — UNIVERSAL DESIGN QUALITY ASSURANCE ENGINE
+
+BRANCH WAJIB:
+feature/team-33-design-quality-engine
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun Quality Assurance Engine universal untuk memvalidasi artifact dan output
+design sebelum review atau export.
+
+QA Engine harus mendukung:
+
+- schema validation;
+- artifact completeness;
+- workflow requirement;
+- technical metadata;
+- output format;
+- resolution;
+- accessibility;
+- brand constraints;
+- compliance contribution;
+- plugin-specific rules;
+- AI-assisted checks melalui adapter.
+
+Jangan membuat compliance certification palsu.
+
+==================================================
+AUDIT
+==================================================
+
+Audit:
+
+- existing Creative AI QC agent;
+- image QC score;
+- document validator;
+- presentation OOXML validator;
+- artifact statuses;
+- guardrails;
+- review system;
+- plugin framework;
+- capability matrix;
+- existing validation utilities.
+
+==================================================
+CONTRACT
+==================================================
+
+Minimal:
+
+DesignQualityRule
+DesignQualityRuleSet
+DesignQualityCheckRequest
+DesignQualityFinding
+DesignQualitySeverity
+DesignQualityCategory
+DesignQualityResult
+DesignQualityScore
+DesignQualityRuleRegistry
+DesignQualityEvaluator
+DesignQualityEvidence
+
+==================================================
+SEVERITY
+==================================================
+
+Minimal:
+
+- info;
+- warning;
+- error;
+- blocking.
+
+Jangan memetakan semua warning menjadi failure.
+
+==================================================
+CATEGORY
+==================================================
+
+Minimal:
+
+- schema;
+- completeness;
+- consistency;
+- technical;
+- visual;
+- accessibility;
+- brand;
+- compliance;
+- export;
+- workflow;
+- provenance;
+- security.
+
+==================================================
+RULE REGISTRY
+==================================================
+
+Rule dapat berasal dari:
+
+- core;
+- workflow;
+- plugin;
+- export format;
+- organization policy;
+- brand policy.
+
+Registry harus:
+
+- unique rule ID;
+- versioned;
+- deterministic order;
+- capability requirement;
+- applicability;
+- severity;
+- auto-fix declaration;
+- source attribution.
+
+==================================================
+AI-ASSISTED QA
+==================================================
+
+AI check harus melalui Team 31/AI execution adapter.
+
+AI result tidak boleh dianggap fakta absolut.
+
+AI finding harus memiliki:
+
+- confidence;
+- reason;
+- evidence;
+- limitation;
+- model provenance;
+- human review recommendation bila perlu.
+
+==================================================
+SCORING
+==================================================
+
+Scoring harus:
+
+- deterministic untuk rule-based checks;
+- transparan;
+- configurable;
+- tidak menghapus blocking finding karena average score tinggi;
+- membedakan unavailable check dari passed check.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. rule registration;
+2. duplicate rule;
+3. applicability;
+4. warning;
+5. blocking error;
+6. unavailable check;
+7. rule exception handling;
+8. plugin rule contribution;
+9. workflow rule;
+10. export rule;
+11. score calculation;
+12. blocking overrides score;
+13. evidence handling;
+14. AI confidence;
+15. no false certification;
+16. tenant policy isolation;
+17. deterministic result;
+18. no raw provider payload;
+19. existing QC regression;
+20. serialization.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-quality): add universal quality assurance engine"
+git push -u origin HEAD

@@ -1,0 +1,184 @@
+TEAM 24 — FASHION DESIGN DOMAIN PLUGIN
+
+BRANCH WAJIB:
+feature/team-24-fashion-plugin
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun Fashion Design Plugin pertama sebagai implementasi domain di atas
+Universal Design Engine.
+
+Plugin harus menggunakan core contracts.
+
+Jangan memasukkan field Fashion ke core platform.
+
+==================================================
+SCOPE
+==================================================
+
+Bangun:
+
+- plugin manifest;
+- fashion brief schema;
+- workflow definition;
+- artifact type registry;
+- capability contribution;
+- material category contribution;
+- component category contribution;
+- property section contribution;
+- renderer metadata contribution;
+- export presets;
+- domain examples;
+- tests;
+- documentation.
+
+==================================================
+WORKFLOW
+==================================================
+
+Minimal workflow:
+
+1. Brief
+2. Research/Reference
+3. Moodboard
+4. Creative Direction
+5. Concept Sketch
+6. Technical Drawing
+7. Colorway
+8. Material Assignment
+9. Visualization
+10. Review
+11. Export
+
+Workflow harus configurable.
+
+Jangan membuat execution engine kedua.
+
+==================================================
+BRIEF
+==================================================
+
+Minimal fields dapat mencakup:
+
+- product category;
+- target user;
+- season;
+- style direction;
+- silhouette;
+- color direction;
+- material preference;
+- size range;
+- market segment;
+- production constraints;
+- sustainability;
+- reference assets.
+
+Gunakan schema plugin, bukan core fields.
+
+==================================================
+ARTIFACT TYPES
+==================================================
+
+Minimal:
+
+- fashion_moodboard;
+- fashion_creative_direction;
+- fashion_concept_sketch;
+- fashion_technical_drawing;
+- fashion_colorway;
+- fashion_material_board;
+- fashion_visualization;
+- fashion_campaign_asset;
+- fashion_production_spec.
+
+==================================================
+PROPERTY CONTRIBUTION
+==================================================
+
+Contoh sections:
+
+- silhouette;
+- garment details;
+- dimensions;
+- colorway;
+- material;
+- construction;
+- production notes.
+
+Canvas/core tidak boleh dipaksa memahami semantic Fashion.
+
+==================================================
+MATERIAL
+==================================================
+
+Gunakan Team 21 material contracts jika tersedia.
+
+Plugin boleh menambahkan metadata contoh:
+
+- stretch;
+- weight;
+- drape;
+- opacity;
+- composition;
+- care;
+- finish.
+
+Jangan menjadikan property ini mandatory bagi domain lain.
+
+==================================================
+COMPONENTS
+==================================================
+
+Plugin dapat mendefinisikan kategori seperti:
+
+- neckline;
+- sleeve;
+- collar;
+- pocket;
+- closure;
+- trim.
+
+Semuanya berada di plugin contribution.
+
+==================================================
+AI
+==================================================
+
+Plugin hanya mendeskripsikan capability/prompt template boundary.
+
+Jangan hard-code model/provider.
+
+Jangan memanggil AI provider langsung.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. manifest validation;
+2. contract version;
+3. dependency validation;
+4. brief validation;
+5. conditional brief fields;
+6. workflow DAG;
+7. no workflow cycle;
+8. artifact registry;
+9. property sections;
+10. material contribution;
+11. component contribution;
+12. export presets;
+13. plugin load;
+14. unsupported capability;
+15. no Fashion fields leaked into core;
+16. examples serialize/parse.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-plugins): add fashion design plugin"
+git push -u origin HEAD

@@ -1,0 +1,130 @@
+TEAM 36 — FINAL VERIFICATION ONLY
+
+Jangan implementasi ulang.
+
+Lanjutkan dari perubahan terakhir.
+
+Perubahan terakhir adalah:
+
+design-studio.security-matrix.test.ts
+
+sudah ditambahkan mock:
+
+createDesignProject
+
+==================================================
+STEP 1
+==================================================
+
+Pastikan perubahan terakhir benar-benar tersimpan.
+
+Review hanya file:
+
+design-studio.security-matrix.test.ts
+
+Verifikasi bahwa mock factory sekarang juga mem-mock:
+
+createDesignProject
+
+dan route POST /projects tidak lagi mengakses database nyata.
+
+==================================================
+STEP 2
+==================================================
+
+Jalankan hanya:
+
+design-studio.security-matrix.test.ts
+
+Laporkan:
+
+- total tests
+- passed
+- failed
+- skipped
+- duration
+
+Jika masih gagal:
+
+laporkan nama test dan root cause.
+
+Jangan mengubah test lain.
+
+==================================================
+STEP 3
+==================================================
+
+Jika matrix test sudah PASS seluruhnya,
+
+jalankan:
+
+1. seluruh Team 36 security tests
+2. route tests yang disentuh
+3. api-server tests sesuai baseline
+
+Bandingkan dengan baseline.
+
+Pastikan tidak ada regresi Team 36.
+
+==================================================
+STEP 4
+==================================================
+
+Jalankan:
+
+typecheck
+
+build
+
+git diff --check
+
+==================================================
+STEP 5
+==================================================
+
+Jika semua lolos:
+
+git status
+
+git add .
+
+commit:
+
+security(design-platform): finalize policy verification
+
+==================================================
+STEP 6
+==================================================
+
+Push:
+
+git push -u origin HEAD
+
+Jika gagal authentication:
+
+laporkan commit hash lokal.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+- Branch
+- Commit
+- Push
+- Security matrix result
+- Total tests
+- Typecheck
+- Build
+- Threat model
+- Security checklist
+- Remaining risks
+
+Gunakan salah satu status:
+
+READY FOR TEAM 39 INTEGRATION
+
+atau
+
+REVISION REQUIRED

@@ -1,0 +1,156 @@
+TEAM 07 — DOMAIN PLUGIN FRAMEWORK
+
+BRANCH WAJIB:
+feature/team-07-plugin-framework
+
+PERAN TEAM
+
+Bangun framework plugin yang memungkinkan Fashion, Interior, Packaging,
+Furniture, Architecture, Branding, dan domain masa depan mendaftarkan konfigurasi
+tanpa mengubah core engine.
+
+PROJECT BRIEF
+
+Target platform menggunakan satu Universal Design Engine dengan domain plugin.
+
+Plugin bukan executable package bebas yang dapat menjalankan arbitrary code.
+Plugin internal adalah modul terkontrol yang mendaftarkan manifest, schema,
+workflow, capability references, asset/component/material catalogs, renderer
+adapters, dan export profiles melalui contract yang tervalidasi.
+
+TUJUAN
+
+Implementasikan:
+
+1. DesignPlugin interface/manifest integration.
+2. Plugin registry.
+3. Plugin loader internal.
+4. Plugin version compatibility.
+5. Enable/disable feature flag.
+6. Tenant/service availability policy.
+7. Registration hooks yang aman.
+8. Plugin health/diagnostic status.
+9. Duplicate/collision handling.
+10. Legacy service-type adapter.
+
+PLUGIN CONTRIBUTIONS
+
+Framework harus mampu menerima kontribusi berikut secara opsional:
+
+- brief schemas;
+- workflow definitions;
+- capability references;
+- artifact schemas;
+- material categories;
+- component categories;
+- property panel definitions;
+- renderer adapters;
+- export profiles;
+- localization metadata;
+- validation rules.
+
+Tidak semua kontribusi harus diimplementasikan penuh sekarang. Buat contract dan
+registration boundary yang dapat diperluas.
+
+SECURITY
+
+- Jangan load kode plugin dari URL arbitrary.
+- Jangan eval manifest.
+- Jangan menerima module path dari client.
+- Hanya plugin yang dikompilasi dan terdaftar dalam server package.
+- Plugin availability harus tenant/service authorized.
+- Client hanya menerima safe manifest projection.
+- Internal executor/configuration jangan bocor ke client.
+
+PLUGIN LIFECYCLE
+
+Minimal status:
+
+- registered;
+- enabled;
+- disabled;
+- incompatible;
+- unhealthy.
+
+Loader harus fail-closed untuk manifest invalid dan tidak menjatuhkan seluruh
+aplikasi bila satu optional plugin gagal.
+
+LEGACY SERVICE MAPPING
+
+Map service catalog existing ke plugin ID secara additive.
+
+Contoh:
+
+- fashion_design → fashion
+- interior_design → interior
+- packaging_design → packaging
+- brand_identity → branding
+
+Gunakan registry/alias map terpusat, bukan switch tersebar.
+
+Jangan mengubah service slug existing tanpa migration dan compatibility plan.
+
+FILE OWNERSHIP
+
+Boleh:
+
+- plugin framework;
+- loader;
+- registry;
+- safe client projection;
+- diagnostics;
+- legacy alias adapter;
+- tests;
+- docs;
+- contoh minimal test plugin.
+
+Tidak boleh:
+
+- membangun plugin Fashion/Interior produksi;
+- membuat UI workspace;
+- membuat renderer;
+- mengubah core engine besar-besaran;
+- load marketplace third-party plugin;
+- mengubah service catalog production secara destruktif.
+
+ACCEPTANCE CRITERIA
+
+1. Plugin valid dapat terdaftar dan di-resolve.
+2. Invalid/incompatible plugin ditolak tanpa crash global.
+3. Duplicate plugin ID/version ditangani.
+4. Plugin contribution diteruskan ke registry terkait melalui adapter.
+5. Safe manifest client tidak berisi server implementation details.
+6. Availability tenant/service dapat diverifikasi.
+7. Existing service slug dapat dipetakan.
+8. Core tidak memiliki import langsung ke domain plugin tertentu.
+9. Framework mendukung lazy internal resolution bila sesuai arsitektur.
+10. Dokumentasi berisi template membuat plugin baru.
+
+TEST WAJIB
+
+- valid plugin;
+- invalid manifest;
+- duplicate plugin;
+- incompatible contract version;
+- disabled plugin;
+- tenant unavailable;
+- service alias;
+- contribution registration;
+- optional plugin failure isolation;
+- safe client projection.
+
+OUTPUT UNTUK TEAM 31–35
+
+Sediakan:
+
+- template folder/plugin skeleton;
+- required exports;
+- manifest example;
+- registration call;
+- test harness;
+- prohibited imports;
+- compatibility checklist.
+
+COMMIT YANG DISARANKAN
+
+feat(design-plugins): add domain plugin framework

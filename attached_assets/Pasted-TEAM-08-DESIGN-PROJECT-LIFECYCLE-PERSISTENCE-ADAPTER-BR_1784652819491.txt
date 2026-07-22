@@ -1,0 +1,159 @@
+TEAM 08 — DESIGN PROJECT LIFECYCLE & PERSISTENCE ADAPTER
+
+BRANCH WAJIB:
+feature/team-08-project-lifecycle
+
+PERAN TEAM
+
+Bangun lifecycle application service dan persistence adapter agar Universal
+Design Platform menggunakan project, stage, artifact, dan review data existing
+secara konsisten.
+
+PROJECT BRIEF
+
+Repository sudah memiliki kemungkinan sumber berikut:
+
+- creative projects;
+- creative project steps;
+- assets;
+- AI jobs;
+- reviews/comments;
+- quotations/orders;
+- workflow execution status;
+- canonical events.
+
+Jangan membuat tabel project baru hanya karena nama lama berbeda. Audit dan pilih
+canonical ownership.
+
+TUJUAN
+
+Menyediakan application service yang menghubungkan:
+
+Universal Design Engine
+↔ existing project persistence
+↔ stage/project status
+↔ artifacts
+↔ reviews
+↔ audit/events
+
+AUDIT WAJIB
+
+1. Temukan seluruh table/model project creative.
+2. Tentukan canonical project ID.
+3. Temukan status mapping backend dan frontend.
+4. Temukan tenant/customer relation.
+5. Temukan project step dan asset relationships.
+6. Temukan review state.
+7. Identifikasi race condition, missing indexes, dan status duplication.
+8. Buat keputusan reuse, adapter, atau additive column.
+
+LIFECYCLE
+
+Definisikan mapping yang jelas untuk:
+
+- draft;
+- brief_in_progress;
+- ready;
+- active;
+- waiting_for_input;
+- generating;
+- in_review;
+- revision_requested;
+- approved;
+- completed;
+- failed;
+- cancelled.
+
+Gunakan status existing sebagai source of truth bila memungkinkan. Jika design
+layer membutuhkan status lebih detail, gunakan derived status atau additive
+metadata, bukan membuat dua status independen.
+
+PERSISTENCE PORTS
+
+Implementasikan adapter untuk ports Team 02 sejauh kontrak tersedia, atau buat
+interface lokal yang mudah diselaraskan nanti:
+
+- project load/save;
+- stage load/save;
+- artifact attach/list;
+- event append;
+- idempotency record;
+- lifecycle transition transaction.
+
+TRANSACTION SAFETY
+
+- Transition project/stage dan event harus atomic bila berada dalam transaksi.
+- Gunakan transaction executor existing.
+- Jangan diam-diam fallback ke plain DB client.
+- Optimistic concurrency atau equivalent guard harus dipertimbangkan.
+- Duplicate command tidak membuat duplicate asset/event.
+
+MULTI-TENANT
+
+- Semua query customer project wajib tenant scoped.
+- Cross-tenant project ID harus menghasilkan not found/forbidden sesuai policy.
+- Platform scope memakai guard existing.
+- Tambahkan isolation tests.
+
+MIGRATION
+
+Migration hanya bila audit membuktikan kekurangan yang nyata, misalnya:
+
+- design plugin ID;
+- workflow version;
+- schema version;
+- optimistic version;
+- lifecycle metadata.
+
+Setiap field harus additive, nullable/default aman, dan tidak merusak record lama.
+
+FILE OWNERSHIP
+
+Boleh:
+
+- lifecycle application service;
+- repository adapter;
+- status mapping;
+- transaction/idempotency support;
+- additive migration;
+- tests;
+- docs.
+
+Tidak boleh:
+
+- membangun engine domain;
+- redesign UI;
+- membuat project table kedua;
+- menghapus status existing;
+- memodifikasi quotation/order lifecycle;
+- mengubah client review semantics tanpa adapter.
+
+ACCEPTANCE CRITERIA
+
+1. Satu canonical project ID digunakan end-to-end.
+2. Status design dipetakan secara documented dan deterministic.
+3. Transition atomic.
+4. Cross-tenant isolation teruji.
+5. Duplicate command tidak menghasilkan side effect ganda.
+6. Existing creative project tetap terbaca.
+7. Existing portal response tidak berubah secara breaking.
+8. Migration aman untuk existing rows.
+9. Artifact/review relation dipertahankan.
+10. Repository dapat digunakan core engine tanpa DB coupling.
+
+TEST WAJIB
+
+- load project;
+- create/init lifecycle metadata;
+- valid transition;
+- invalid transition;
+- stale version/concurrency;
+- idempotent command;
+- event atomicity;
+- tenant isolation;
+- legacy project mapping;
+- rollback on failure.
+
+COMMIT YANG DISARANKAN
+
+feat(design-projects): add lifecycle persistence adapter

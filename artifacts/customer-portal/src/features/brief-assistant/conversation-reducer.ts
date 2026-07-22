@@ -105,10 +105,41 @@ export function assistantReducer(
       return INITIAL_CONVERSATION_STATE;
 
     case "RESTORE":
-      // Restoring persisted session — pendingChange is NEVER auto-applied
+      // Restoring persisted session — pendingChange and clarificationRequest are NEVER auto-applied
       return {
         ...action.state,
-        pendingChange: null, // safety: never restore a pending change
+        pendingChange: null,          // safety: never restore a pending change
+        clarificationRequest: null,   // transient — not persisted
+      };
+
+    // ── Team 04: Adaptive Engine actions ────────────────────────────────────
+
+    case "ENTER_CORRECTION_MODE":
+      // Jump directly to a specific field for re-answering without full reset
+      return {
+        ...state,
+        mode: "correction",
+        stage: "question",
+        currentQuestionId: action.targetField,
+        pendingChange: null,
+        clarificationRequest: null,
+      };
+
+    case "CLARIFICATION_REQUESTED":
+      // AI adapter has a follow-up question before the answer can be previewed
+      return {
+        ...state,
+        stage: "clarification" as typeof state.stage,
+        clarificationRequest: action.request,
+        pendingChange: null,
+      };
+
+    case "CLARIFICATION_ANSWERED":
+      // User answered the clarification; return to question stage with the enriched answer
+      return {
+        ...state,
+        stage: "question",
+        clarificationRequest: null,
       };
 
     default:

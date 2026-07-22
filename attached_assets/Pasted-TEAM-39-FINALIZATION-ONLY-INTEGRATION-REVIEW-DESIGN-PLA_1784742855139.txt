@@ -1,0 +1,361 @@
+TEAM 39 — FINALIZATION ONLY
+INTEGRATION REVIEW DESIGN PLATFORM V1
+
+BRANCH WAJIB:
+integration-review/design-platform-v1
+
+==================================================
+STATUS
+==================================================
+
+Regression utama sudah dipulihkan.
+
+JANGAN merge ulang.
+
+JANGAN checkout branch lain.
+
+JANGAN mengulang Batch 1–8.
+
+Lanjutkan hanya dari state repository saat ini.
+
+==================================================
+PHASE 1 — VERIFY CURRENT STATE
+==================================================
+
+Jalankan:
+
+git branch --show-current
+git status --short
+git log --oneline -10
+git diff --check
+
+Pastikan branch:
+
+integration-review/design-platform-v1
+
+==================================================
+PHASE 2 — FINAL TYPECHECK
+==================================================
+
+Jalankan seluruh typecheck.
+
+Bedakan dengan jelas:
+
+A.
+Pre-existing baseline
+
+B.
+Regression Team 39
+
+Jika masih ada error:
+
+laporkan:
+
+- file
+- line
+- root cause
+- baseline proof
+
+Jangan mengklaim pre-existing tanpa bukti.
+
+==================================================
+PHASE 3 — FINAL BUILD
+==================================================
+
+Jalankan:
+
+- library build
+- api-server build
+- frontend build yang terdampak
+
+Laporkan:
+
+PASS / FAIL
+
+beserta penyebabnya.
+
+==================================================
+PHASE 4 — ROUTE INVENTORY
+==================================================
+
+Bangun inventory final seluruh route.
+
+Verifikasi:
+
+- tidak ada route hilang
+- tidak ada duplicate
+- middleware benar
+- tenant middleware tetap aktif
+- security middleware tetap aktif
+
+==================================================
+PHASE 5 — REGISTRY AUDIT
+==================================================
+
+Audit:
+
+Plugin registry
+
+Renderer registry
+
+Workflow registry
+
+Feature registry
+
+Route registry
+
+Worker registry
+
+Quality registry
+
+Capability registry
+
+Laporkan:
+
+- registered
+- missing
+- duplicate
+
+==================================================
+PHASE 6 — DUPLICATE CONTRACT AUDIT
+==================================================
+
+Pastikan hanya ada SATU canonical contract untuk:
+
+Project
+
+Artifact
+
+Workflow
+
+Stage
+
+Plugin
+
+Capability
+
+Renderer
+
+Material
+
+Component
+
+Annotation
+
+Review
+
+Export
+
+Security Policy
+
+Cost
+
+Observability
+
+AI Execution
+
+Tenant
+
+RequestContext
+
+Repository Context
+
+==================================================
+PHASE 7 — DEPENDENCY GRAPH
+==================================================
+
+Bangun dependency graph aktual.
+
+Verifikasi:
+
+- tidak ada circular dependency
+- merge order final
+- ownership jelas
+
+==================================================
+PHASE 8 — SECURITY VERIFICATION
+==================================================
+
+Pastikan Team 36 tidak lagi mengalami regression.
+
+Verifikasi:
+
+✓ tenant isolation
+
+✓ IDOR protection
+
+✓ SVG sanitization
+
+✓ safeCssColor
+
+✓ safeHttpsUrl
+
+✓ safeFontFamily
+
+✓ xmlEscape
+
+✓ safeNum
+
+✓ canvasStateToSvg
+
+✓ audit logging
+
+✓ resource limits
+
+✓ rate limiting
+
+==================================================
+PHASE 9 — TEST SUMMARY
+==================================================
+
+Laporkan:
+
+Targeted Team 36 tests
+
+105 / 105
+
+Full repository tests
+
+5300 / 5300
+
+Bandingkan dengan baseline.
+
+==================================================
+PHASE 10 — INTEGRATION MATRIX
+==================================================
+
+Buat tabel:
+
+Team
+
+Branch
+
+Merged Commit
+
+Conflict
+
+Resolution
+
+Regression
+
+Recovered
+
+Status
+
+untuk Team 01–38.
+
+==================================================
+PHASE 11 — FINAL INTEGRATION AUDIT REPORT
+==================================================
+
+Buat laporan lengkap:
+
+1.
+Integration baseline
+
+2.
+Merged branches
+
+3.
+Conflict summary
+
+4.
+Regression summary
+
+5.
+Files restored
+
+6.
+Security recovery
+
+7.
+Route audit
+
+8.
+Registry audit
+
+9.
+Dependency graph
+
+10.
+Duplicate contract audit
+
+11.
+Migration audit
+
+12.
+Typecheck
+
+13.
+Build
+
+14.
+Tests
+
+15.
+Known baseline failures
+
+16.
+Remaining risks
+
+17.
+Manual actions
+
+18.
+Recommendation untuk Team 40
+
+==================================================
+PHASE 12 — COMMIT
+==================================================
+
+Jika ada perubahan:
+
+git add .
+
+git commit -m "chore(design-platform): finalize integration audit"
+
+==================================================
+PHASE 13 — PUSH
+==================================================
+
+git push origin integration-review/design-platform-v1
+
+Jika gagal:
+
+laporkan:
+
+- commit hash
+- alasan
+- status LOCAL ONLY
+
+==================================================
+FINAL STATUS
+==================================================
+
+Gunakan hanya:
+
+READY FOR TEAM 40
+
+atau
+
+REVISION REQUIRED
+
+READY hanya jika:
+
+✓ regression selesai
+
+✓ Team 36 security pulih
+
+✓ registry lengkap
+
+✓ route lengkap
+
+✓ build sukses
+
+✓ typecheck sesuai baseline
+
+✓ 5300/5300 tests PASS
+
+✓ audit report selesai
+
+✓ branch berhasil dipush

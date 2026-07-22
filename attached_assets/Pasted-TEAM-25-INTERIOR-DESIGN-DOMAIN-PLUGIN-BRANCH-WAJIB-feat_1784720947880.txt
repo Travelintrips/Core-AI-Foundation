@@ -1,0 +1,128 @@
+TEAM 25 — INTERIOR DESIGN DOMAIN PLUGIN
+
+BRANCH WAJIB:
+feature/team-25-interior-plugin
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun Interior Design Plugin di atas Universal Design Platform.
+
+Semua field, artifact, workflow, property, dan component khusus interior harus
+berada di plugin.
+
+==================================================
+WORKFLOW
+==================================================
+
+Minimal:
+
+1. Brief
+2. Site/Space Information
+3. Style Research
+4. Moodboard
+5. Space Planning
+6. Material Direction
+7. Lighting Direction
+8. Furniture Selection
+9. Visualization
+10. Review
+11. Documentation
+12. Export
+
+==================================================
+BRIEF
+==================================================
+
+Contoh:
+
+- space type;
+- dimensions;
+- occupants;
+- style preference;
+- functional requirements;
+- budget range;
+- location/climate;
+- existing conditions;
+- color preference;
+- material preference;
+- lighting needs;
+- accessibility;
+- sustainability.
+
+==================================================
+ARTIFACT TYPES
+==================================================
+
+Minimal:
+
+- interior_moodboard;
+- interior_space_plan;
+- interior_material_board;
+- interior_furniture_board;
+- interior_lighting_plan;
+- interior_elevation;
+- interior_visualization;
+- interior_specification;
+- interior_presentation.
+
+==================================================
+PROPERTY CONTRIBUTION
+==================================================
+
+Contoh:
+
+- room/zone metadata;
+- dimensions;
+- surface material;
+- furniture reference;
+- lighting;
+- color;
+- finish;
+- notes.
+
+Semua menggunakan opaque IDs dan plugin schema.
+
+==================================================
+COMPONENTS
+==================================================
+
+Contoh categories:
+
+- seating;
+- table;
+- storage;
+- lighting;
+- decor;
+- fixture;
+- partition.
+
+Jangan membuat furniture database besar; cukup contract/contribution dan fixture.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+- manifest;
+- brief;
+- workflow DAG;
+- artifact types;
+- property sections;
+- material categories;
+- component categories;
+- capability;
+- export presets;
+- no Interior fields leaked to core;
+- compatibility version;
+- examples.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-plugins): add interior design plugin"
+git push -u origin HEAD

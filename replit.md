@@ -1,54 +1,64 @@
 # Creative AI Studio — Enterprise Platform
 
-An enterprise AI platform for creative and logistics business operations. Built as a pnpm monorepo with four services.
+A full-stack AI-powered creative services platform built as a pnpm monorepo.
+
+## Project overview
+
+The platform enables clients to request creative AI services (branding, design, company profiles, etc.), manages the full commercial workflow (quotation → payment → AI generation → delivery), and provides an admin dashboard for operators.
 
 ## Architecture
 
-| Service | Path | URL |
-|---|---|---|
-| **Customer Portal** | `artifacts/customer-portal` | `/` — public-facing landing page & client workspace |
-| **AI Platform (Admin)** | `artifacts/ai-platform` | `/admin/` — internal staff dashboard |
-| **API Server** | `artifacts/api-server` | `/api` — Express/Node.js backend |
-| **Mockup Sandbox** | `artifacts/mockup-sandbox` | `/__mockup` — design component preview |
+| Artifact | Path | Preview Path | Description |
+|---|---|---|---|
+| API Server | `artifacts/api-server` | `/api` | Express + Drizzle ORM, connects to Supabase PostgreSQL |
+| AI Platform (admin) | `artifacts/ai-platform` | `/admin/` | React + Vite admin dashboard |
+| Customer Portal | `artifacts/customer-portal` | `/` | Client-facing React + Vite frontend |
+| Cargo Rate Finder | `artifacts/cargo-finder` | `/cargo-finder/` | Standalone cargo rate calculator |
+| Mockup Sandbox | `artifacts/mockup-sandbox` | `/__mockup` | Design canvas / component previews |
 
-## Stack
+## Running the project
 
-- **Frontend:** React + Vite + Tailwind CSS (TypeScript)
-- **Backend:** Express.js + Drizzle ORM (TypeScript, built with esbuild)
-- **Database:** Supabase (PostgreSQL) — separate dev and prod instances
-- **AI Providers:** OpenAI, Anthropic, Gemini, Mistral, Cohere, Replicate
-- **Storage:** Supabase Storage (object storage)
+All services start via their configured workflows. After a fresh clone or import:
 
-## Running the Project
-
-All four services start automatically via their configured workflows. No manual steps needed.
-
-To install dependencies after pulling new changes:
 ```bash
-pnpm install
+pnpm install   # install all workspace dependencies
 ```
 
-## Key Environment Variables
+Then restart all workflows from the Replit interface.
 
-| Variable | Purpose |
-|---|---|
-| `SUPABASE_DEV_DATABASE_URL` | Dev database (development env) |
-| `SUPABASE_PROD_DATABASE_URL` | Prod database (production env) |
-| `ADMIN_API_KEY` + `VITE_ADMIN_API_KEY` | Admin dashboard authentication |
-| `OPENAI_API_KEY` | OpenAI (and other AI provider keys also set) |
-| `SESSION_SECRET` | Express session signing |
+## Key environment variables
 
-## Admin Login
+All secrets are managed in Replit's environment secrets. The project needs:
 
-The internal admin portal (`/admin/`) uses email/password auth.  
-Default dev credentials are set in `INITIAL_INTERNAL_ADMIN_EMAIL` / `INITIAL_INTERNAL_ADMIN_PASSWORD`.
+- `SUPABASE_DATABASE_URL_DEV` / `SUPABASE_DEV_DATABASE_URL` — dev Supabase PostgreSQL (both names aliased)
+- `SUPABASE_DATABASE_URL` / `SUPABASE_PROD_DATABASE_URL` — production Supabase PostgreSQL
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `REPLICATE_API_TOKEN`, `COHERE_API_KEY` — AI providers
+- `ADMIN_API_KEY` + `VITE_ADMIN_API_KEY` — admin API authentication (same value)
+- `SESSION_SECRET` — Express session signing
+- `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_PORT`, `SMTP_FROM` — email (Hostinger)
+- `FONNTE_TOKEN` — WhatsApp notifications
 
-To seed the database (providers, models, agents):
-```bash
-pnpm --filter @workspace/api-server run seed
-```
+## Database
 
-## User Preferences
+- **Provider**: Supabase PostgreSQL
+- **Schema**: `ai_platform` (not `public`) — all raw SQL must set `search_path`
+- **Dev/prod switching**: controlled by `NODE_ENV`
+- To seed initial data: `pnpm --filter @workspace/api-server run seed`
 
-- Keep existing monorepo structure (pnpm workspace)
-- Do not restructure or migrate the stack
+## Tech stack
+
+- **Runtime**: Node.js 20, pnpm workspaces
+- **Backend**: Express 5, Drizzle ORM, Zod, Pino logging
+- **Frontend**: React 18, Vite 7, TailwindCSS, shadcn/ui, Wouter (routing)
+- **AI**: OpenAI, Anthropic, Google Gemini, Replicate, Mistral, Cohere
+- **Storage**: Supabase Storage (S3-compatible)
+- **Email**: Nodemailer via Hostinger SMTP
+- **PDF**: PDFKit, pdf-lib
+- **Build**: esbuild (api-server), Vite (frontends)
+
+## User preferences
+
+- Keep existing project structure — do not restructure or migrate
+- Use pnpm for all package operations
+- Never import zod directly in api-server routes — use `@workspace/api-zod` schemas only
+- Admin auth is one global `adminAuthWithExceptions` mount in `app.ts`, never per-route

@@ -1,0 +1,232 @@
+TEAM 31 — UNIVERSAL DESIGN AI ORCHESTRATION ADAPTER
+
+BRANCH WAJIB:
+feature/team-31-design-ai-orchestration
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun orchestration adapter yang menghubungkan Universal Design Platform dengan
+AI Platform existing.
+
+Adapter harus dapat menjalankan capability design melalui:
+
+- AI Execution Service;
+- Intelligent Router;
+- Model Router;
+- AI Job Engine;
+- Dispatcher Runtime;
+- Cost Service;
+- Guardrails;
+- Audit Service;
+- Client Memory;
+- Capability Matrix.
+
+Jangan membuat AI runtime kedua.
+
+==================================================
+AUDIT WAJIB
+==================================================
+
+Audit:
+
+- aiExecutionService;
+- intelligentRouter;
+- aiModelRouter;
+- aiModelService;
+- aiJobEngine;
+- dispatcher;
+- capability matrix;
+- guardrails;
+- budget blocking;
+- retry/timeout;
+- idempotency;
+- cost records;
+- audit records;
+- creativeWorkflowRunner;
+- existing Creative AI agents;
+- worker registry;
+- Team 01 capability contract bila tersedia.
+
+Catat baseline:
+
+- branch;
+- commit;
+- tests;
+- typecheck;
+- build;
+- pre-existing failures.
+
+==================================================
+SCOPE
+==================================================
+
+Bangun:
+
+DesignAiExecutionRequest
+DesignAiExecutionContext
+DesignAiCapabilityBinding
+DesignAiExecutionPlan
+DesignAiExecutionResult
+DesignAiExecutionError
+DesignAiExecutionAdapter
+DesignAiCapabilityResolver
+DesignAiJobPayload
+DesignAiOutputEnvelope
+
+==================================================
+REQUEST CONTRACT
+==================================================
+
+Request minimal:
+
+- tenant context;
+- projectId;
+- workflowId;
+- stageId;
+- capabilityId;
+- pluginId;
+- input artifacts;
+- structured brief context;
+- structured parameters;
+- requested output types;
+- idempotencyKey;
+- budget policy;
+- quality policy;
+- correlationId;
+- actor context.
+
+Jangan menerima raw provider API key.
+
+Jangan menerima provider/model sebagai authoritative request dari customer.
+
+Provider preference hanya boleh dipertimbangkan jika policy existing mengizinkan.
+
+==================================================
+CAPABILITY RESOLUTION
+==================================================
+
+Resolver harus:
+
+- mencari capability canonical;
+- memvalidasi plugin ownership;
+- memvalidasi contract version;
+- memvalidasi input artifact;
+- memvalidasi output artifact;
+- memvalidasi guardrail;
+- memvalidasi tenant;
+- memvalidasi budget;
+- menentukan execution mode;
+- menghasilkan explicit failure.
+
+Jangan silent fallback ke capability yang berbeda.
+
+==================================================
+EXECUTION PLAN
+==================================================
+
+Plan dapat mencakup:
+
+- single agent;
+- sequential agents;
+- parallel independent tasks;
+- validation step;
+- transformation step;
+- QC step;
+- human review requirement.
+
+Team 31 tidak boleh membuat workflow engine kedua.
+
+Execution plan harus berasal dari workflow/capability definition existing.
+
+==================================================
+OUTPUT
+==================================================
+
+Output harus:
+
+- structured;
+- versioned;
+- mempunyai provenance;
+- mempunyai model/provider metadata yang aman;
+- mempunyai cost record reference;
+- mempunyai job ID;
+- mempunyai artifact descriptors;
+- mempunyai validation status;
+- mempunyai warning;
+- tidak mengandung secret;
+- tidak menyimpan raw chain-of-thought.
+
+==================================================
+ERROR MODEL
+==================================================
+
+Minimal:
+
+- capability_not_found;
+- capability_incompatible;
+- invalid_input;
+- budget_exceeded;
+- guardrail_blocked;
+- provider_unavailable;
+- model_unavailable;
+- timeout;
+- rate_limited;
+- job_failed;
+- invalid_output;
+- canceled;
+- tenant_scope_violation;
+- duplicate_request_conflict.
+
+==================================================
+IDEMPOTENCY
+==================================================
+
+Idempotency harus mencegah:
+
+- duplicate job;
+- duplicate provider execution;
+- duplicate artifact;
+- duplicate cost record;
+- duplicate event.
+
+Jangan hanya mengecek UI state.
+
+Gunakan canonical idempotency pattern existing.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. valid capability resolution;
+2. missing capability;
+3. incompatible contract version;
+4. invalid plugin ownership;
+5. invalid input artifact;
+6. budget blocked;
+7. guardrail blocked;
+8. provider unavailable;
+9. model routing;
+10. idempotent duplicate;
+11. retryable failure;
+12. non-retryable failure;
+13. timeout;
+14. canceled job;
+15. structured output validation;
+16. provenance;
+17. cost record linkage;
+18. tenant isolation;
+19. no provider secret leakage;
+20. no direct provider bypass;
+21. existing AI execution regression.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-ai): add universal AI orchestration adapter"
+git push -u origin HEAD

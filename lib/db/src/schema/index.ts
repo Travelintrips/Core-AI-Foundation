@@ -91,3 +91,7 @@ export * from "./creative-render-sessions";
 export * from "./ai-goals";
 export * from "./ai-service-normalization";
 export * from "./ai-discovery-analytics";
+export * from "./design-cost-attribution";
+export * from "./ai-entity-versions";
+export * from "./annotations";
+export * from "./ai-review-workspace-meta";

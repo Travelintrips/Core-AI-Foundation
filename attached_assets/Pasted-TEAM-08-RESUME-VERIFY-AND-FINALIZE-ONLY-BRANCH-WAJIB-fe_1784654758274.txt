@@ -1,0 +1,316 @@
+TEAM 08 — RESUME, VERIFY, AND FINALIZE ONLY
+
+BRANCH WAJIB:
+feature/team-08-project-lifecycle
+
+KONTEKS
+
+Implementasi Team 08 — Design Project Lifecycle & Persistence Adapter telah
+dikerjakan pada sesi sebelumnya.
+
+Hasil terakhir yang dilaporkan:
+
+- 134 test files
+- 3770 tests passing
+- 96 test baru
+- build berhasil
+- modul design lifecycle tidak memiliki TypeScript error baru
+- error typecheck yang tersisa diklaim pre-existing
+- Drizzle schema diperbarui untuk kolom lifecycle baru
+- migration SQL telah dibuat
+- proses berhenti karena daily quota habis ketika menjalankan final git operations
+
+PENTING
+
+Jangan mengulang implementasi dari awal.
+Jangan membuat desain atau service baru.
+Jangan mengganti branch.
+Jangan merge.
+Jangan rebase.
+Jangan force push.
+
+Tujuan sesi ini hanya:
+
+1. Memverifikasi hasil pekerjaan yang sudah ada.
+2. Menyelesaikan kekurangan kecil apabila benar-benar ditemukan.
+3. Menjalankan final verification.
+4. Commit dan push ke branch Team 08.
+5. Menghasilkan FINAL TEAM REPORT lengkap.
+
+==================================================
+PHASE 1 — VERIFY BRANCH DAN WORKTREE
+==================================================
+
+Jalankan:
+
+git branch --show-current
+git status --short
+git rev-parse HEAD
+git log --oneline -5
+
+Branch aktif harus tepat:
+
+feature/team-08-project-lifecycle
+
+Jika branch berbeda:
+
+- berhenti;
+- jangan checkout sendiri;
+- laporkan branch aktif dan status worktree.
+
+Jika branch benar, lanjutkan.
+
+Jangan menghapus atau mereset perubahan existing.
+
+==================================================
+PHASE 2 — INSPECT EXISTING IMPLEMENTATION
+==================================================
+
+Periksa seluruh perubahan Team 08 yang belum di-commit:
+
+git diff --stat
+git diff --name-status
+git diff --check
+
+Identifikasi:
+
+- lifecycle application service;
+- repository/persistence adapter;
+- status mapping;
+- transaction/idempotency logic;
+- migration SQL;
+- Drizzle schema changes;
+- unit/integration tests;
+- documentation.
+
+Pastikan tidak ada perubahan yang berasal dari Team 07 atau scope team lain.
+
+Jika terdapat file di luar scope Team 08:
+
+- jangan otomatis menghapus;
+- audit asal perubahan;
+- laporkan;
+- pisahkan hanya jika aman dan terbukti bukan bagian Team 08.
+
+==================================================
+PHASE 3 — DATABASE AND MIGRATION AUDIT
+==================================================
+
+Karena Team 08 menambahkan atau memperbarui schema database, verifikasi secara
+khusus:
+
+1. Migration bersifat additive.
+2. Tidak ada DROP, destructive rename, atau perubahan tipe berisiko.
+3. Kolom baru nullable atau memiliki default yang aman bagi row lama.
+4. Migration memiliki guard/idempotency sesuai pola repository.
+5. Drizzle schema dan migration konsisten.
+6. Naming mengikuti tabel canonical existing.
+7. Tidak membuat tabel project kedua.
+8. Tidak menggandakan lifecycle status yang sudah menjadi source of truth.
+9. Index hanya ditambahkan bila ada query nyata yang memerlukannya.
+10. Migration order dan rollback strategy terdokumentasi.
+
+Tampilkan secara ringkas kolom/table/index yang ditambahkan.
+
+Jangan menjalankan migration terhadap production.
+
+==================================================
+PHASE 4 — ARCHITECTURE VERIFICATION
+==================================================
+
+Pastikan implementasi memenuhi brief:
+
+- memakai canonical project ID existing;
+- tenantId berasal dari RequestContext/authenticated context;
+- cross-tenant access ditolak;
+- platform scope memakai guard existing;
+- transaction executor tidak fallback diam-diam ke plain DB client;
+- project/stage transition dan event ditulis atomically;
+- optimistic concurrency atau equivalent protection tersedia;
+- idempotency mencegah duplicate side effects;
+- existing project/status/review/artifact contract tetap kompatibel;
+- tidak membuat workflow engine kedua;
+- tidak membuat project persistence source of truth kedua.
+
+Periksa secara khusus bahwa RequestContext existing tetap digunakan dan Team 08
+tidak membuat authentication context baru.
+
+==================================================
+PHASE 5 — FINAL TEST AND TYPECHECK
+==================================================
+
+Jalankan test paling spesifik terlebih dahulu:
+
+1. Semua test baru Team 08.
+2. Test repository/lifecycle/status mapping terkait.
+3. Test tenant isolation.
+4. Test transaction rollback.
+5. Test idempotency dan concurrency.
+6. Full api-server test suite.
+
+Kemudian jalankan:
+
+- typecheck package/modul yang terdampak;
+- build library database bila diperlukan;
+- typecheck api-server;
+- build api-server;
+- build package lain yang benar-benar terdampak.
+
+Bandingkan dengan baseline sebelumnya.
+
+Baseline yang telah dilaporkan:
+
+- 130 test files
+- 3674 tests passing
+- build clean
+- beberapa TypeScript failure pre-existing di luar Team 08
+
+Hasil sebelumnya setelah implementasi:
+
+- 134 test files
+- 3770 tests passing
+- 96 test baru
+
+Jangan menyebut semua error yang tersisa sebagai pre-existing tanpa bukti.
+Untuk setiap error tersisa, tunjukkan bahwa:
+
+- file tersebut tidak diubah Team 08; dan
+- error sudah ada pada baseline atau berasal dari package build ordering existing.
+
+==================================================
+PHASE 6 — DIFF QUALITY
+==================================================
+
+Jalankan:
+
+git diff --check
+git status --short
+git diff --stat
+
+Pastikan:
+
+- tidak ada conflict marker;
+- tidak ada generated file yang tidak seharusnya;
+- tidak ada secret;
+- tidak ada debug log;
+- tidak ada file temporary;
+- tidak ada migration hasil eksperimen;
+- tidak ada perubahan lockfile tanpa dependency yang nyata;
+- tidak ada perubahan unrelated.
+
+==================================================
+PHASE 7 — COMMIT DAN PUSH
+==================================================
+
+Hanya jika seluruh verification lolos:
+
+git add .
+git commit -m "feat(design-projects): add lifecycle persistence adapter"
+git push -u origin HEAD
+
+Jika commit sebelumnya ternyata sudah dibuat, jangan membuat duplicate commit.
+Verifikasi dengan:
+
+git log --oneline -5
+git status --short
+
+Jika branch sudah di-push, cukup laporkan commit dan remote status.
+
+DILARANG:
+
+- merge ke integration;
+- merge ke main;
+- checkout branch lain;
+- rebase;
+- cherry-pick;
+- force push;
+- mengubah history branch.
+
+==================================================
+FINAL TEAM REPORT
+==================================================
+
+Berikan laporan berikut:
+
+FINAL TEAM REPORT
+
+Team:
+Branch:
+Commit awal:
+Commit akhir:
+Commit message:
+Push status:
+
+1. Baseline
+- Tests:
+- Typecheck:
+- Build:
+- Pre-existing failures:
+
+2. Implementasi
+- Tujuan:
+- Lifecycle service:
+- Persistence adapter:
+- Status mapping:
+- Transaction handling:
+- Idempotency:
+- Optimistic concurrency:
+- Tenant isolation:
+- Legacy compatibility:
+
+3. File
+- File baru:
+- File diubah:
+- File dihapus:
+- File di luar scope, bila ada:
+
+4. Database
+- Migration file:
+- Table:
+- Columns:
+- Indexes:
+- Defaults/nullability:
+- Idempotency guard:
+- Migration order:
+- Rollback strategy:
+
+5. Contracts
+- Repository ports:
+- Input:
+- Output:
+- Errors:
+- Lifecycle statuses:
+- Events:
+- Public exports:
+
+6. Verification
+- Test baru:
+- Total tests:
+- Tenant-isolation tests:
+- Transaction tests:
+- Idempotency tests:
+- Concurrency tests:
+- Typecheck:
+- Build:
+- Diff check:
+
+7. Compatibility
+- Canonical project ID:
+- Existing statuses preserved:
+- Existing reviews/assets preserved:
+- Existing API behavior:
+- Breaking changes:
+
+8. Risks
+- Merge conflicts:
+- Lockfile/schema conflicts:
+- Known limitations:
+- Follow-up:
+
+9. Integration Notes
+- Dependency pada Team 01/02/05/10:
+- Suggested merge order:
+- Hal yang wajib diperiksa Team 39:
+- Hal yang wajib diperiksa Team 40:
+
+Jangan menyatakan pekerjaan selesai sebelum commit dan push terverifikasi.

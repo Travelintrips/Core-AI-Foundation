@@ -1,0 +1,209 @@
+{
+  "team": 28,
+  "name": "Furniture & Product Design Plugin",
+  "branch": "feature/team-28-product-design-plugin",
+  "domain": "furniture_product_design",
+  "description": "AI-assisted design workflow plugin for furniture and industrial/consumer product design. Covers a 12-step workflow from Brief to Export, with 9 artifact types, 6 component categories (structural, hardware, connector, mechanism, surface, accessory), and 10 material contributions. Does NOT provide CAD runtime, parametric modelling, or simulation engines.",
+
+  "ownership": {
+    "domainFolder": "artifacts/api-server/src/domains/furniture-product-design/",
+    "pluginManifest": "artifacts/api-server/src/domains/furniture-product-design/plugin-manifest.ts",
+    "domainSchema": "artifacts/api-server/src/domains/furniture-product-design/schema.ts",
+    "domainService": "artifacts/api-server/src/domains/furniture-product-design/service.ts",
+    "domainComponents": "artifacts/api-server/src/domains/furniture-product-design/components.ts",
+    "domainValidation": "artifacts/api-server/src/domains/furniture-product-design/validation.ts",
+    "authGuard": "artifacts/api-server/src/domains/furniture-product-design/authGuard.ts",
+    "apiRoutes": "artifacts/api-server/src/routes/product-design-plugin.ts",
+    "migration": "integration/migrations/team-28.sql",
+    "openapi": "integration/openapi/team-28.yaml",
+    "manifest": "integration/manifests/team-28.json",
+    "tests": "artifacts/api-server/src/domains/furniture-product-design/__tests__/furnitureProductDesign.test.ts"
+  },
+
+  "routesToMount": {
+    "file": "artifacts/api-server/src/routes/product-design-plugin.ts",
+    "exportName": "productDesignPluginRouter",
+    "mountIn": "artifacts/api-server/src/routes/index.ts",
+    "instruction": "Add: import productDesignPluginRouter from './product-design-plugin.js'; then router.use(productDesignPluginRouter); at the end of the file.",
+    "publicRouteExceptions": [
+      {
+        "method": "GET",
+        "pattern": "/^\\/ai\\/product-design-plugin\\/manifest$/",
+        "addTo": "artifacts/api-server/src/middleware/adminAuth.ts",
+        "array": "PUBLIC_ROUTE_RULES",
+        "comment": "Plugin manifest — public metadata, no customer data exposed."
+      },
+      {
+        "method": "GET",
+        "pattern": "/^\\/ai\\/product-design-plugin\\/components$/",
+        "addTo": "artifacts/api-server/src/middleware/adminAuth.ts",
+        "array": "PUBLIC_ROUTE_RULES",
+        "comment": "Component definitions — public registry metadata."
+      },
+      {
+        "method": "GET",
+        "pattern": "/^\\/ai\\/product-design-plugin\\/components\\/[^/]+$/",
+        "addTo": "artifacts/api-server/src/middleware/adminAuth.ts",
+        "array": "PUBLIC_ROUTE_RULES",
+        "comment": "Single component definition — public registry metadata."
+      },
+      {
+        "method": "POST",
+        "pattern": "/^\\/ai\\/product-design-plugin\\/projects$/",
+        "addTo": "artifacts/api-server/src/middleware/adminAuth.ts",
+        "array": "PUBLIC_ROUTE_RULES",
+        "comment": "Create project — customer-facing form submission."
+      },
+      {
+        "method": "POST",
+        "pattern": "/^\\/ai\\/product-design-plugin\\/projects\\/[^/]+\\/brief$/",
+        "addTo": "artifacts/api-server/src/middleware/adminAuth.ts",
+        "array": "PUBLIC_ROUTE_RULES",
+        "comment": "Submit brief — token-authenticated, customer-facing."
+      },
+      {
+        "method": "GET",
+        "pattern": "/^\\/ai\\/product-design-plugin\\/projects\\/[^/]+$/",
+        "addTo": "artifacts/api-server/src/middleware/adminAuth.ts",
+        "array": "PUBLIC_ROUTE_RULES",
+        "comment": "View project by token — IDOR-guarded customer access."
+      },
+      {
+        "method": "GET",
+        "pattern": "/^\\/ai\\/product-design-plugin\\/projects\\/[^/]+\\/outputs$/",
+        "addTo": "artifacts/api-server/src/middleware/adminAuth.ts",
+        "array": "PUBLIC_ROUTE_RULES",
+        "comment": "View project outputs by token — IDOR-guarded customer access."
+      }
+    ]
+  },
+
+  "pagesToRegister": [
+    {
+      "portal": "ai-platform",
+      "file": "artifacts/ai-platform/src/pages/product-design-plugin/index.tsx",
+      "importAs": "ProductDesignPlugin",
+      "importPath": "@/pages/product-design-plugin",
+      "route": "/product-design-plugin",
+      "addTo": "artifacts/ai-platform/src/App.tsx",
+      "instruction": "Add import and <Route path='/product-design-plugin' component={ProductDesignPlugin} /> inside AdminRouter.",
+      "status": "DEFERRED — frontend page scaffolding is out of scope for Team 28. Team 39 to create."
+    }
+  ],
+
+  "schemaExportsRequested": {
+    "sourceFile": "artifacts/api-server/src/domains/furniture-product-design/schema.ts",
+    "requestedBarrelEntry": "export * from \"./furniture-product-design\";",
+    "barrelFile": "lib/db/src/schema/index.ts",
+    "schemaFilePlacement": "lib/db/src/schema/furniture-product-design.ts",
+    "instruction": "Copy domain schema from the domain folder to lib/db/src/schema/furniture-product-design.ts, then add barrel export. Run drizzle-kit push or hand-write DDL (recommended — see drizzle-push-false-positive memory note).",
+    "tables": ["pd_plugin_projects", "pd_plugin_briefs", "pd_plugin_outputs"]
+  },
+
+  "componentRegistryIntegration": {
+    "note": "Team 8 (componentRegistry.ts) currently defines ComponentDomain as 'graphic'|'interior'|'fashion'|'packaging'. Team 28's components use a local 'product_design' domain adapter.",
+    "requestedChange": "Add 'product_design' to ComponentDomain type in artifacts/api-server/src/services/design-components/types.ts and to ALL_DOMAINS constant.",
+    "integrationFile": "artifacts/api-server/src/services/design-components/componentRegistry.ts",
+    "instruction": "After Team 8 adds 'product_design' to ComponentDomain, import PD_COMPONENT_REGISTRY from the domain folder and register each entry in the global registry.",
+    "adapter": "artifacts/api-server/src/domains/furniture-product-design/components.ts exports PD_COMPONENT_REGISTRY with PdComponentDefinition (structurally compatible with ComponentDefinition)."
+  },
+
+  "dependencyRequests": [
+    {
+      "requestId": "IR-28-01",
+      "priority": "P2",
+      "target": "Team 8 / Component Library",
+      "file": "artifacts/api-server/src/services/design-components/types.ts",
+      "issue": "ComponentDomain type does not include 'product_design'. Team 28 uses a local adapter type.",
+      "requestedChange": "Add 'product_design' to ComponentDomain union and ALL_DOMAINS array.",
+      "workaround": "Local PdComponentDefinition type in components.ts mirrors ComponentDefinition structure for forward compatibility."
+    }
+  ],
+
+  "database": {
+    "schema": "ai_platform",
+    "migrationFile": "integration/migrations/team-28.sql",
+    "migrationStatus": "draft — do NOT apply; Team 24/39 to apply via controlled migration process",
+    "tables": [
+      {
+        "name": "pd_plugin_projects",
+        "description": "Furniture/product design projects with lifecycle tracking and access token",
+        "columns": ["id", "title", "product_category", "client_name", "client_email", "notes", "status", "current_step", "completed_steps", "access_token", "exported_at", "export_package_url", "admin_notes", "assigned_designer", "created_at", "updated_at"]
+      },
+      {
+        "name": "pd_plugin_briefs",
+        "description": "Structured design brief with all 13 brief fields from the plugin spec",
+        "columns": ["id", "project_id", "product_category", "target_user", "environment", "primary_function", "width_mm", "depth_mm", "height_mm", "weight_kg", "custom_dimensions", "ergonomics_notes", "load_usage_notes", "primary_materials", "finish_preferences", "manufacturing_process", "production_volume", "budget_currency", "budget_estimate", "budget_notes", "sustainability_goals", "safety_requirements", "compliance_standards", "reference_urls", "additional_notes", "created_at", "updated_at"]
+      },
+      {
+        "name": "pd_plugin_outputs",
+        "description": "Generated AI outputs per workflow step and artifact type",
+        "columns": ["id", "project_id", "workflow_step", "artifact_type", "content", "validation_results", "disclaimers", "ai_model_used", "generation_duration_ms", "is_approved", "is_latest", "review_notes", "created_at", "updated_at"]
+      }
+    ]
+  },
+
+  "apiEndpoints": [
+    { "method": "GET",   "path": "/api/ai/product-design-plugin/manifest",                              "auth": "public",  "description": "Plugin manifest — workflow, artifacts, components, capabilities" },
+    { "method": "GET",   "path": "/api/ai/product-design-plugin/components",                            "auth": "public",  "description": "List all component definitions" },
+    { "method": "GET",   "path": "/api/ai/product-design-plugin/components/:type",                      "auth": "public",  "description": "Get component definition by type" },
+    { "method": "POST",  "path": "/api/ai/product-design-plugin/projects",                              "auth": "public",  "description": "Create new project" },
+    { "method": "POST",  "path": "/api/ai/product-design-plugin/projects/:token/brief",                 "auth": "token",   "description": "Submit/update project brief (token IDOR guard)" },
+    { "method": "GET",   "path": "/api/ai/product-design-plugin/projects/:token",                       "auth": "token",   "description": "View project and brief by token" },
+    { "method": "GET",   "path": "/api/ai/product-design-plugin/projects/:token/outputs",               "auth": "token",   "description": "View project outputs by token" },
+    { "method": "GET",   "path": "/api/ai/product-design-plugin/admin/projects",                        "auth": "admin",   "description": "List all projects (paginated)" },
+    { "method": "GET",   "path": "/api/ai/product-design-plugin/admin/projects/:id",                    "auth": "admin",   "description": "Get project with brief and outputs" },
+    { "method": "PATCH", "path": "/api/ai/product-design-plugin/admin/projects/:id/status",             "auth": "admin",   "description": "Update project status" },
+    { "method": "POST",  "path": "/api/ai/product-design-plugin/admin/projects/:id/generate",           "auth": "admin",   "description": "Generate AI output for a workflow step (rate-limited)" },
+    { "method": "GET",   "path": "/api/ai/product-design-plugin/admin/projects/:id/outputs/:step",      "auth": "admin",   "description": "Get latest output for a step" },
+    { "method": "PATCH", "path": "/api/ai/product-design-plugin/admin/outputs/:outputId/approve",       "auth": "admin",   "description": "Approve an output" },
+    { "method": "POST",  "path": "/api/ai/product-design-plugin/admin/projects/:id/export",             "auth": "admin",   "description": "Export all approved outputs" }
+  ],
+
+  "integrationNotes": [
+    "Domain schema is at artifacts/api-server/src/domains/furniture-product-design/schema.ts — self-contained, does NOT use @workspace/db barrel for table definitions.",
+    "productDesignPluginRouter must be registered in artifacts/api-server/src/routes/index.ts by Team 39.",
+    "7 public route exceptions must be added to PUBLIC_ROUTE_RULES in adminAuth.ts by Team 39.",
+    "DB tables must be created by running integration/migrations/team-28.sql against Supabase — controlled by Team 39.",
+    "ComponentDomain integration requires Team 8 cooperation (IR-28-01) — currently using local adapter.",
+    "AI generation falls back to rule-based output when OPENAI_API_KEY is unavailable.",
+    "Plugin does NOT provide CAD, parametric modelling, or simulation. assertNoCadRuntime() is called in generateStepOutput().",
+    "Access token is the sole IDOR guard for customer-facing routes — never accept numeric projectId from public callers.",
+    "Export requires project status = 'approved' — review gate cannot be bypassed."
+  ],
+
+  "testTargets": [
+    "manifest: plugin manifest structure and completeness",
+    "brief: all 13 brief fields validated",
+    "workflow: 12 steps present, sequential, unique keys",
+    "artifact registry: all 9 artifact types registered",
+    "component contribution: all 6 categories registered with valid definitions",
+    "material contribution: all 10 materials with grades and sustainability notes",
+    "technical view metadata: view type, unit, scale, annotation validation",
+    "capability requirement: required AI capabilities declared",
+    "no CAD runtime: assertSupportedCapability and assertNoCadRuntime guards",
+    "no core leakage: domain is self-contained, status transitions guard review gate",
+    "version compatibility: semver fields present and consistent"
+  ],
+
+  "risks": [
+    {
+      "risk": "ComponentDomain type not yet extended to include 'product_design' (Team 8 dependency)",
+      "severity": "low",
+      "mitigation": "Local PdComponentDefinition adapter is structurally compatible — migration to global registry is additive when IR-28-01 is resolved."
+    },
+    {
+      "risk": "DB migration not yet applied — routes will fail at DB layer until migration is run",
+      "severity": "medium",
+      "mitigation": "Routes return 500 with clear error messages. Run integration/migrations/team-28.sql before enabling routes."
+    },
+    {
+      "risk": "AI generation falls back to rule-based output silently",
+      "severity": "low",
+      "mitigation": "aiModelUsed field in output records 'rule-based-fallback' — admin can see which outputs used fallback."
+    }
+  ],
+
+  "version": "1.0.0",
+  "createdAt": "2026-07-22"
+}

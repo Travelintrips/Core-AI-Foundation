@@ -1,0 +1,527 @@
+TEAM 39 — REVISION 1
+UNIVERSAL DESIGN PLATFORM
+FINAL INTEGRATION STABILIZATION & AUDIT
+
+BRANCH WAJIB:
+integration-review/design-platform-v1
+
+==================================================
+STATUS SAAT INI
+==================================================
+
+Seluruh branch Team 01–38 telah di-merge.
+
+JANGAN mengulang merge dari awal.
+
+JANGAN membuat backup branch baru.
+
+JANGAN checkout branch lain.
+
+Lanjutkan dari state repository saat ini.
+
+Fokus hanya pada:
+
+- menyelesaikan regression hasil merge;
+- memulihkan perubahan yang hilang;
+- menyelesaikan verification;
+- menyusun Integration Audit Report.
+
+==================================================
+PHASE 1 — VERIFY CURRENT STATE
+==================================================
+
+Jalankan:
+
+git branch --show-current
+
+git status --short
+
+git log --oneline -15
+
+git diff --check
+
+git diff --stat
+
+Pastikan branch:
+
+integration-review/design-platform-v1
+
+Jika berbeda:
+
+STOP
+
+laporkan branch aktif.
+
+==================================================
+PHASE 2 — AUDIT MERGE REGRESSIONS
+==================================================
+
+Audit seluruh regression yang muncul setelah merge.
+
+Minimal:
+
+1.
+
+routes/index.ts
+
+Verifikasi:
+
+- seluruh route Team 10 tetap ada;
+- seluruh route Team 14 tetap ada;
+- seluruh route Team 18 tetap ada;
+- Team 21 route masih ter-register;
+- Team 23 route masih ter-register;
+- Team 34 route masih ter-register;
+- Team 35 route masih ter-register.
+
+Jangan menghapus route lama.
+
+Jangan overwrite route registry.
+
+==================================================
+
+2.
+
+design-studio.ts
+
+Log sebelumnya menunjukkan:
+
+Team 36 security changes
+hilang ketika merge T37.
+
+Pulihkan seluruh perubahan Team 36.
+
+Verifikasi:
+
+- tenant isolation;
+- RequestContext;
+- platform scope;
+- policy checks;
+- audit logging;
+- resource guards;
+- SVG safety;
+- IDOR protection.
+
+==================================================
+
+3.
+
+canvasStateToSvg
+
+Log sebelumnya menunjukkan:
+
+tidak di-export.
+
+Pastikan:
+
+- export benar;
+- seluruh caller berhasil compile;
+- backward compatible.
+
+==================================================
+
+4.
+
+Barrel exports
+
+Audit seluruh:
+
+index.ts
+
+yang disentuh Team 01–38.
+
+Pastikan tidak ada export hilang.
+
+==================================================
+
+5.
+
+Plugin registry
+
+Pastikan seluruh plugin Team 24–30
+masih ter-register.
+
+==================================================
+
+6.
+
+Renderer registry
+
+Pastikan registry Team 32
+tidak hilang.
+
+==================================================
+
+7.
+
+Quality engine
+
+Pastikan Team 33 masih terhubung.
+
+==================================================
+
+8.
+
+Cost routes
+
+Pastikan Team 34 masih aktif.
+
+==================================================
+
+9.
+
+Observability routes
+
+Pastikan Team 35 masih aktif.
+
+==================================================
+PHASE 3 — SEMANTIC DIFF
+==================================================
+
+Jangan hanya mencari conflict marker.
+
+Bandingkan semantic content.
+
+Audit file yang sebelumnya conflict:
+
+routes/index.ts
+
+design-studio.ts
+
+package.json
+
+pnpm-lock.yaml
+
+tsconfig
+
+worker registry
+
+plugin registry
+
+feature registry
+
+barrel exports
+
+navigation
+
+migration chain
+
+Untuk setiap file:
+
+laporkan:
+
+- perubahan yang dipertahankan;
+- perubahan yang hilang;
+- perubahan yang dipulihkan.
+
+==================================================
+PHASE 4 — TEST FAILURE CLASSIFICATION
+==================================================
+
+Jalankan full tests.
+
+Kelompokkan menjadi:
+
+A.
+
+Pre-existing baseline
+
+harus mempunyai baseline proof.
+
+B.
+
+Integration regressions
+
+harus mempunyai root cause.
+
+Jangan menandai failure sebagai pre-existing
+tanpa bukti.
+
+==================================================
+PHASE 5 — FIX REGRESSIONS
+==================================================
+
+Perbaiki hanya:
+
+- regression hasil merge;
+- missing exports;
+- missing route registration;
+- lost security changes;
+- broken imports;
+- barrel exports;
+- registry wiring.
+
+JANGAN:
+
+- redesign;
+- refactor besar;
+- rewrite subsystem;
+- mengubah business logic.
+
+==================================================
+PHASE 6 — DUPLICATE CONTRACT AUDIT
+==================================================
+
+Verifikasi hanya ada SATU canonical contract untuk:
+
+Project
+
+Artifact
+
+Workflow
+
+Stage
+
+Brief
+
+Plugin
+
+Capability
+
+Renderer
+
+Material
+
+Component
+
+Annotation
+
+Review
+
+Export
+
+AI Execution
+
+Quality
+
+Cost
+
+Observability
+
+Security Policy
+
+Event
+
+RequestContext
+
+Tenant
+
+Repository Context
+
+Laporkan duplicate bila ada.
+
+==================================================
+PHASE 7 — FULL VERIFICATION
+==================================================
+
+Jalankan:
+
+pnpm install
+
+library builds
+
+typecheck
+
+API build
+
+Frontend builds
+
+Full tests
+
+git diff --check
+
+dependency cycle check
+
+migration consistency
+
+secret scan
+
+==================================================
+PHASE 8 — SECURITY VERIFICATION
+==================================================
+
+Pastikan hasil Team 36 tetap utuh.
+
+Verifikasi:
+
+tenant isolation
+
+platform scope
+
+IDOR
+
+plugin security
+
+AI security
+
+SVG safety
+
+resource limits
+
+rate limiting
+
+audit logging
+
+public token handling
+
+signed URL
+
+==================================================
+PHASE 9 — ROUTE INVENTORY
+==================================================
+
+Bangun inventory seluruh route.
+
+Pastikan tidak ada:
+
+- duplicate route;
+- shadowed route;
+- missing route;
+- conflicting middleware.
+
+==================================================
+PHASE 10 — BUILD INTEGRATION MATRIX
+==================================================
+
+Laporkan:
+
+Team
+
+Branch
+
+Merged commit
+
+Conflict
+
+Resolution
+
+Regression
+
+Status
+
+Untuk Team 01–38.
+
+==================================================
+PHASE 11 — FINAL AUDIT REPORT
+==================================================
+
+Buat laporan lengkap:
+
+1.
+Integration baseline
+
+2.
+Merge order
+
+3.
+Dependency graph
+
+4.
+Conflict resolution log
+
+5.
+Duplicate contract audit
+
+6.
+Registry audit
+
+7.
+Route audit
+
+8.
+Security audit
+
+9.
+Migration audit
+
+10.
+Typecheck
+
+11.
+Tests
+
+12.
+Build
+
+13.
+Regression summary
+
+14.
+Files repaired
+
+15.
+Remaining risks
+
+16.
+Manual actions
+
+17.
+Recommendation untuk Team 40
+
+==================================================
+PHASE 12 — FINAL STATUS
+==================================================
+
+Gunakan hanya salah satu:
+
+READY FOR TEAM 40
+
+atau
+
+REVISION REQUIRED
+
+atau
+
+BLOCKED
+
+READY hanya jika:
+
+✅ seluruh regression merge selesai
+
+✅ routes lengkap
+
+✅ Team 36 security pulih
+
+✅ exports lengkap
+
+✅ registry lengkap
+
+✅ build sukses
+
+✅ typecheck sesuai baseline
+
+✅ test sesuai baseline
+
+✅ audit report selesai
+
+==================================================
+COMMIT
+==================================================
+
+Jika ada perbaikan:
+
+git add .
+
+git commit -m "chore(design-platform): stabilize integration and resolve merge regressions"
+
+git push origin integration-review/design-platform-v1
+
+==================================================
+PENTING
+==================================================
+
+Jangan melakukan merge ulang.
+
+Jangan mengulang Batch 1–8.
+
+Jangan menghapus commit merge.
+
+Lakukan hanya:
+
+- recovery;
+- stabilization;
+- verification;
+- audit;
+- reporting.
+
+Tujuan akhir adalah menghasilkan branch integration-review/design-platform-v1 yang benar-benar stabil dan siap diserahkan kepada Team 40 untuk Final Release Verification.

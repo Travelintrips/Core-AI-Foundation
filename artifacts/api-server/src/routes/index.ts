@@ -75,8 +75,25 @@ import designTemplatesAiAssistRouter from "./design-templates-ai-assist";
 import creativeMarketplaceRouter from "./creative-marketplace";
 import cargoRatesRouter from "./cargo-rates";
 import serviceNormalizationRouter from "./service-normalization.js";
+import { designQualityRouter } from "./design-quality.js";
 // ── Team 05: Discovery Analytics & Feature Flags ──────────────────────────
 import discoveryAnalyticsRouter from "./discoveryAnalytics.js";
+// ── Team 10: Universal Design API Contracts & Orchestration Boundary ──────
+import universalDesignRouter from "./universal-design/index.js";
+// ── Team 14: Universal Asset Browser ─────────────────────────────────────
+import assetBrowserRouter from "./asset-browser.js";
+// ── Team 18: Universal Annotation and Comment System ─────────────────────────
+import { annotationRouter } from "../domains/annotation-system/index.js";
+// ── Team 21: Universal Material Library ───────────────────────────────────
+import materialLibraryRouter from "./material-library.js";
+// ── Team 23: Design Knowledge & Recommendation Adapter ────────────────────────
+import designKnowledgeRouter from "./design-knowledge.js";
+// ── Team 17 / Team 34: Universal Design Export Workspace ─────────────────────
+import exportWorkspaceRouter from "./export-workspace/index.js";
+// ── Team 34: Design Cost, Usage, and Budget Attribution ───────────────────────
+import designCostAttributionRouter from "./design-cost-attribution.js";
+// ── Team 35: Design Observability & Operations ────────────────────────────────
+import designObservabilityOpsRouter from "./design-observability.js";
 
 // ── Team 01: Creative Workflow V2 ──────────────────────────────────────────
 import { creativeWorkflowV2Router, creativeWorkflowPublicRouter } from "./creative-workflow-v2/index.js";
@@ -94,10 +111,14 @@ import brandIntelligenceV2Router from "./brand-intelligence-v2/index.js";
 import assetIntelligenceV2Router from "./asset-intelligence-v2/index.js";
 // ── Team 07: Design Blueprints ────────────────────────────────────────────
 import designBlueprintsRouter from "./design-blueprints/index.js";
+// ── Team 07: Domain Plugin Framework ─────────────────────────────────────
+import { designPluginsRouter } from "../domains/design-plugins/index.js";
 // ── Team 08: Design Components ───────────────────────────────────────────
 import designComponentsRouter from "./design-components/router.js";
 // ── Team 09: Design Patterns ─────────────────────────────────────────────
 import designPatternsRouter from "./design-patterns/index.js";
+// ── Team 09: Design Version History & Revision System ────────────────────
+import designVersioningRouter from "./design-versioning.js";
 // ── Team 10: Design Tokens (Typography & Palette) ────────────────────────
 import designTokensRouter from "./design-tokens/index.js";
 // ── Team 11: Universal Template Matching ─────────────────────────────────
@@ -108,6 +129,8 @@ import layoutComposerRouter from "./layout-composer/index.js";
 import dynamicDesignComposerRouter from "./dynamic-design-composer/index.js";
 // ── Team 14: Universal Renderer ──────────────────────────────────────────
 import universalRendererRouter from "./universal-renderer/index.js";
+// ── Team 16: Design Review and Approval Workspace ────────────────────────
+import reviewWorkspaceRouter from "./review-workspace.js";
 // ── Team 15: Graphic Design Domain ───────────────────────────────────────
 import graphicDesignRouter from "../domains/graphic-design/routes.js";
 // ── Team 17: Interior Design ─────────────────────────────────────────────
@@ -118,6 +141,8 @@ import fashionDesignRouter from "./fashion-design.js";
 import packagingDesignRouter from "./packaging-design.js";
 // ── Team 22: Creative Vendor Ecosystem ───────────────────────────────────
 import { vendorRouter } from "../domains/creative-vendors/index.js";
+// ── Team 27: Branding & Identity Plugin ──────────────────────────────────
+import brandingIdentityRouter from "../domains/branding-identity/routes.js";
 // ── V5.0: Enterprise Template Knowledge Library ───────────────────────────
 import templateKnowledgeRouter from "./template-knowledge.js";
 import seedKnowledgeRouter from "./seedKnowledge.js";
@@ -218,10 +243,14 @@ router.use(brandIntelligenceV2Router);
 router.use(assetIntelligenceV2Router);
 // ── Team 07: Design Blueprints ────────────────────────────────────────────
 router.use(designBlueprintsRouter);
+// ── Team 07: Domain Plugin Framework ─────────────────────────────────────
+router.use(designPluginsRouter);
 // ── Team 08: Design Components ───────────────────────────────────────────
 router.use(designComponentsRouter);
 // ── Team 09: Design Patterns ─────────────────────────────────────────────
 router.use(designPatternsRouter);
+// ── Team 09: Design Version History & Revision System ────────────────────
+router.use(designVersioningRouter);
 // ── Team 10: Design Tokens ───────────────────────────────────────────────
 router.use(designTokensRouter);
 // ── Team 11: Universal Template Matching ─────────────────────────────────
@@ -232,6 +261,8 @@ router.use(layoutComposerRouter);
 router.use(dynamicDesignComposerRouter);
 // ── Team 14: Universal Renderer ──────────────────────────────────────────
 router.use(universalRendererRouter);
+// ── Team 16: Design Review and Approval Workspace ────────────────────────
+router.use(reviewWorkspaceRouter);
 // ── Team 15: Graphic Design Domain ───────────────────────────────────────
 router.use(graphicDesignRouter);
 // ── Team 17: Interior Design ─────────────────────────────────────────────
@@ -242,6 +273,8 @@ router.use(fashionDesignRouter);
 router.use(packagingDesignRouter);
 // ── Team 22: Creative Vendor Ecosystem — after portfolioGalleryRouter ─────
 router.use(vendorRouter);
+// ── Team 27: Branding & Identity Plugin ──────────────────────────────────
+router.use(brandingIdentityRouter);
 // ── V5.0: Enterprise Template Knowledge Library ───────────────────────────
 router.use("/template-knowledge", templateKnowledgeRouter);
 router.use("/seed", seedKnowledgeRouter);
@@ -250,9 +283,27 @@ router.use(imagePreviewPipelineRouter);
 // ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
 router.use(customsRouter);
 router.use(cargoRatesRouter);
+// ── Team 33: Universal Design Quality Assurance Engine ───────────────────────
+router.use(designQualityRouter);
 // ── Team 04: Service Normalization & Solution Collections ─────────────────────
 router.use(serviceNormalizationRouter);
 // ── Team 05: Discovery Analytics & Feature Flags ──────────────────────────────
 router.use(discoveryAnalyticsRouter);
+// ── Team 10: Universal Design API Contracts & Orchestration Boundary ──────────
+router.use(universalDesignRouter);
+// ── Team 14: Universal Asset Browser ──────────────────────────────────────────
+router.use(assetBrowserRouter);
+// ── Team 18: Universal Annotation and Comment System ─────────────────────────
+router.use(annotationRouter);
+// ── Team 21: Universal Material Library ───────────────────────────────────────
+router.use(materialLibraryRouter);
+// ── Team 23: Design Knowledge & Recommendation Adapter ────────────────────────
+router.use(designKnowledgeRouter);
+// ── Team 17 / Team 34: Universal Design Export Workspace ─────────────────────
+router.use(exportWorkspaceRouter);
+// ── Team 34: Design Cost, Usage, and Budget Attribution ───────────────────────
+router.use(designCostAttributionRouter);
+// ── Team 35: Design Observability & Operations ────────────────────────────────
+router.use(designObservabilityOpsRouter);
 
 export default router;

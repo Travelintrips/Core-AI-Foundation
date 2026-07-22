@@ -1,0 +1,640 @@
+openapi: "3.0.3"
+info:
+  title: "Team 28 — Furniture & Product Design Plugin API"
+  version: "1.0.0"
+  description: |
+    AI-assisted design workflow for furniture and industrial/consumer product design.
+    Covers a 12-step workflow from Brief to Export.
+
+    **Important:** This plugin does NOT provide CAD, parametric modelling, or simulation engines.
+    All outputs are AI-generated structured data and text.
+
+servers:
+  - url: /api
+
+tags:
+  - name: public
+    description: Publicly accessible endpoints (no auth required)
+  - name: customer
+    description: Customer-facing endpoints (access token IDOR guard)
+  - name: admin
+    description: Admin-only endpoints (x-admin-api-key header required)
+
+paths:
+
+  /ai/product-design-plugin/manifest:
+    get:
+      tags: [public]
+      summary: Get plugin manifest
+      description: Returns the full plugin manifest including workflow, artifact types, component contributions, material contributions, and capability requirements.
+      operationId: getProductDesignPluginManifest
+      responses:
+        "200":
+          description: Plugin manifest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginManifest"
+
+  /ai/product-design-plugin/components:
+    get:
+      tags: [public]
+      summary: List component definitions
+      description: Returns all 6 product design component definitions (structural, hardware, connector, mechanism, surface, accessory).
+      operationId: listProductDesignComponents
+      responses:
+        "200":
+          description: Component definitions list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  components:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ComponentDefinition"
+
+  /ai/product-design-plugin/components/{type}:
+    get:
+      tags: [public]
+      summary: Get component definition by type
+      operationId: getProductDesignComponent
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [structural, hardware, connector, mechanism, surface, accessory]
+      responses:
+        "200":
+          description: Component definition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComponentDefinition"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/product-design-plugin/projects:
+    post:
+      tags: [customer]
+      summary: Create a new product design project
+      description: Returns the project including the access_token needed for subsequent customer operations.
+      operationId: createProductDesignProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectInput"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /ai/product-design-plugin/projects/{token}:
+    get:
+      tags: [customer]
+      summary: Get project and brief by access token
+      operationId: getProjectByToken
+      parameters:
+        - $ref: "#/components/parameters/token"
+      responses:
+        "200":
+          description: Project with brief
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  project:
+                    $ref: "#/components/schemas/Project"
+                  brief:
+                    nullable: true
+                    $ref: "#/components/schemas/Brief"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/product-design-plugin/projects/{token}/brief:
+    post:
+      tags: [customer]
+      summary: Submit or update the project brief
+      operationId: submitBrief
+      parameters:
+        - $ref: "#/components/parameters/token"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitBriefInput"
+      responses:
+        "201":
+          description: Brief saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  brief:
+                    $ref: "#/components/schemas/Brief"
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/product-design-plugin/projects/{token}/outputs:
+    get:
+      tags: [customer]
+      summary: Get latest outputs for each step (customer view)
+      operationId: getProjectOutputsByToken
+      parameters:
+        - $ref: "#/components/parameters/token"
+      responses:
+        "200":
+          description: Latest outputs (approved and pending)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  outputs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Output"
+
+  /ai/product-design-plugin/admin/projects:
+    get:
+      tags: [admin]
+      summary: List all projects (admin)
+      operationId: adminListProjects
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 100 }
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, brief_submitted, researching, concepting, developing, specifying, reviewing, approved, exported, cancelled]
+        - name: productCategory
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paginated project list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedProjects"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /ai/product-design-plugin/admin/projects/{id}:
+    get:
+      tags: [admin]
+      summary: Get project with brief and outputs (admin)
+      operationId: adminGetProject
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: Project with brief and outputs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  project:
+                    $ref: "#/components/schemas/Project"
+                  brief:
+                    nullable: true
+                    $ref: "#/components/schemas/Brief"
+                  outputs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Output"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/product-design-plugin/admin/projects/{id}/status:
+    patch:
+      tags: [admin]
+      summary: Update project status (admin)
+      operationId: adminUpdateProjectStatus
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [draft, brief_submitted, researching, concepting, developing, specifying, reviewing, approved, exported, cancelled]
+                adminNotes:
+                  type: string
+                  maxLength: 2000
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/product-design-plugin/admin/projects/{id}/generate:
+    post:
+      tags: [admin]
+      summary: Generate AI output for a workflow step (admin, rate-limited)
+      operationId: adminGenerateStepOutput
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [step]
+              properties:
+                step:
+                  type: string
+                  enum: [brief, user_market_research, functional_requirements, concept_direction, concept_sketch, form_development, material_component_selection, orthographic_technical_view, visualization, prototype_specification, review, export]
+      responses:
+        "200":
+          description: Generated output or skip notice
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Output"
+                  - type: object
+                    properties:
+                      skipped: { type: boolean }
+                      reason: { type: string }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /ai/product-design-plugin/admin/projects/{id}/outputs/{step}:
+    get:
+      tags: [admin]
+      summary: Get latest output for a workflow step (admin)
+      operationId: adminGetStepOutput
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+        - name: step
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [brief, user_market_research, functional_requirements, concept_direction, concept_sketch, form_development, material_component_selection, orthographic_technical_view, visualization, prototype_specification, review, export]
+      responses:
+        "200":
+          description: Latest output for step (or null)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  output:
+                    nullable: true
+                    $ref: "#/components/schemas/Output"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /ai/product-design-plugin/admin/outputs/{outputId}/approve:
+    patch:
+      tags: [admin]
+      summary: Approve an output (admin)
+      operationId: adminApproveOutput
+      security:
+        - adminApiKey: []
+      parameters:
+        - name: outputId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reviewNotes:
+                  type: string
+                  maxLength: 2000
+      responses:
+        "200":
+          description: Approved output
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Output"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ai/product-design-plugin/admin/projects/{id}/export:
+    post:
+      tags: [admin]
+      summary: Export all approved outputs (admin)
+      description: Project must be in 'approved' status. Returns export manifest. Sets project status to 'exported'.
+      operationId: adminExportProject
+      security:
+        - adminApiKey: []
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "200":
+          description: Export manifest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportManifest"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    adminApiKey:
+      type: apiKey
+      in: header
+      name: x-admin-api-key
+
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer }
+    token:
+      name: token
+      in: path
+      required: true
+      description: Project access token (UUID) returned at project creation
+      schema: { type: string, format: uuid }
+
+  responses:
+    ValidationError:
+      description: Request body validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing or invalid admin API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: array
+          items: {}
+
+    Project:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        productCategory: { type: string }
+        clientName: { type: string, nullable: true }
+        clientEmail: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        status: { type: string }
+        currentStep: { type: string }
+        completedSteps: { type: array, items: { type: string } }
+        accessToken: { type: string, format: uuid }
+        exportedAt: { type: string, format: date-time, nullable: true }
+        exportPackageUrl: { type: string, nullable: true }
+        adminNotes: { type: string, nullable: true }
+        assignedDesigner: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Brief:
+      type: object
+      properties:
+        id: { type: integer }
+        projectId: { type: integer }
+        productCategory: { type: string }
+        targetUser: { type: string }
+        environment: { type: string }
+        primaryFunction: { type: string }
+        widthMm: { type: number, nullable: true }
+        depthMm: { type: number, nullable: true }
+        heightMm: { type: number, nullable: true }
+        weightKg: { type: number, nullable: true }
+        primaryMaterials: { type: array, items: { type: string } }
+        manufacturingProcess: { type: string, nullable: true }
+        budgetCurrency: { type: string }
+        budgetEstimate: { type: number, nullable: true }
+        sustainabilityGoals: { type: string, nullable: true }
+        safetyRequirements: { type: string, nullable: true }
+        complianceStandards: { type: array, items: { type: string } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Output:
+      type: object
+      properties:
+        id: { type: integer }
+        projectId: { type: integer }
+        workflowStep: { type: string }
+        artifactType: { type: string }
+        content: { type: object }
+        disclaimers: { type: array, items: { type: string } }
+        aiModelUsed: { type: string, nullable: true }
+        generationDurationMs: { type: integer, nullable: true }
+        isApproved: { type: boolean }
+        isLatest: { type: boolean }
+        reviewNotes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CreateProjectInput:
+      type: object
+      required: [title, productCategory]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        productCategory:
+          type: string
+          enum: [seating, table, storage, bed, shelving, outdoor_furniture, lighting_fixture, consumer_electronics, appliance, tool, toy, medical_device, industrial, other]
+        clientName: { type: string, maxLength: 200 }
+        clientEmail: { type: string, format: email }
+        notes: { type: string, maxLength: 2000 }
+
+    SubmitBriefInput:
+      type: object
+      required: [productCategory, targetUser, environment, primaryFunction]
+      properties:
+        productCategory:
+          type: string
+          enum: [seating, table, storage, bed, shelving, outdoor_furniture, lighting_fixture, consumer_electronics, appliance, tool, toy, medical_device, industrial, other]
+        targetUser: { type: string, minLength: 1, maxLength: 1000 }
+        environment: { type: string, minLength: 1, maxLength: 500 }
+        primaryFunction: { type: string, minLength: 1, maxLength: 1000 }
+        widthMm: { type: number, minimum: 0.1, maximum: 20000 }
+        depthMm: { type: number, minimum: 0.1, maximum: 20000 }
+        heightMm: { type: number, minimum: 0.1, maximum: 10000 }
+        weightKg: { type: number, minimum: 0.01, maximum: 5000 }
+        ergonomicsNotes: { type: string, maxLength: 2000 }
+        loadUsageNotes: { type: string, maxLength: 2000 }
+        primaryMaterials:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            enum: [solid_wood, plywood, mdf, particle_board, metal, glass, fabric, leather, plastic, foam]
+        manufacturingProcess: { type: string, maxLength: 500 }
+        productionVolume: { type: string, maxLength: 500 }
+        budgetCurrency: { type: string, maxLength: 10 }
+        budgetEstimate: { type: number, minimum: 0 }
+        budgetNotes: { type: string, maxLength: 1000 }
+        sustainabilityGoals: { type: string, maxLength: 2000 }
+        safetyRequirements: { type: string, maxLength: 2000 }
+        complianceStandards:
+          type: array
+          maxItems: 20
+          items: { type: string, maxLength: 200 }
+        referenceUrls:
+          type: array
+          maxItems: 10
+          items: { type: string, format: uri }
+        additionalNotes: { type: string, maxLength: 2000 }
+
+    ComponentDefinition:
+      type: object
+      properties:
+        type: { type: string }
+        domain: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        version: { type: string }
+        tags: { type: array, items: { type: string } }
+        properties: { type: object }
+        constraints: { type: array, items: { type: object } }
+
+    PaginatedProjects:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project"
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    ExportManifest:
+      type: object
+      properties:
+        pluginId: { type: string }
+        pluginVersion: { type: string }
+        projectId: { type: integer }
+        projectTitle: { type: string }
+        productCategory: { type: string }
+        exportedAt: { type: string, format: date-time }
+        artifacts:
+          type: array
+          items:
+            type: object
+            properties:
+              workflowStep: { type: string }
+              artifactType: { type: string }
+              content: { type: object }
+              disclaimers: { type: array, items: { type: string } }
+              approvedAt: { type: string, format: date-time }
+        missingArtifacts:
+          type: array
+          items: { type: string }
+
+    PluginManifest:
+      type: object
+      properties:
+        pluginId: { type: string }
+        version: { type: string }
+        schemaVersion: { type: string }
+        domain: { type: string }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string }
+        unsupportedCapabilities: { type: array, items: { type: string } }
+        workflow: { type: array, items: { type: object } }
+        artifactTypes: { type: array, items: { type: object } }
+        componentContributions: { type: array, items: { type: object } }
+        materialContributions: { type: array, items: { type: object } }
+        capabilityRequirements: { type: array, items: { type: object } }
+        minPlatformVersion: { type: string }
+        maxPlatformVersion: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }

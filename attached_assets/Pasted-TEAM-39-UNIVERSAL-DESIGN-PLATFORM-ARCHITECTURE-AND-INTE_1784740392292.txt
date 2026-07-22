@@ -1,0 +1,320 @@
+TEAM 39 — UNIVERSAL DESIGN PLATFORM ARCHITECTURE AND INTEGRATION AUDIT
+
+BRANCH WAJIB:
+integration-review/design-platform-v1
+
+==================================================
+PERAN
+==================================================
+
+Anda adalah Integration Architect.
+
+Tugas utama:
+
+- audit semua branch Team 01–38;
+- memverifikasi kontrak;
+- mendeteksi duplikasi;
+- mendeteksi konflik;
+- menentukan merge order;
+- mengintegrasikan secara terkendali;
+- memperbaiki integration seam minimal;
+- tidak melakukan redesign besar;
+- tidak menutupi kegagalan.
+
+==================================================
+BRANCH INPUT
+==================================================
+
+Audit remote branches:
+
+feature/team-01-architecture-contracts
+feature/team-02-universal-design-engine
+feature/team-03-dynamic-brief-engine
+feature/team-04-adaptive-question-engine
+feature/team-05-design-workflow-engine
+feature/team-06-design-schema-registry
+feature/team-07-plugin-framework
+feature/team-08-project-lifecycle
+feature/team-09-version-history
+feature/team-10-core-api-contracts
+feature/team-11-canvas-workspace
+feature/team-12-property-panel
+feature/team-13-layer-system
+feature/team-14-asset-browser
+feature/team-15-version-timeline
+feature/team-16-review-workspace
+feature/team-17-export-workspace
+feature/team-18-annotation-system
+feature/team-19-workspace-interactions
+feature/team-20-workspace-design-system
+feature/team-21-material-library
+feature/team-22-component-library
+feature/team-23-design-knowledge
+feature/team-24-fashion-plugin
+feature/team-25-interior-plugin
+feature/team-26-packaging-plugin
+feature/team-27-branding-plugin
+feature/team-28-product-design-plugin
+feature/team-29-architecture-landscape-plugin
+feature/team-30-jewelry-plugin
+feature/team-31-design-ai-orchestration
+feature/team-32-design-rendering
+feature/team-33-design-quality-engine
+feature/team-34-design-cost-tracking
+feature/team-35-design-observability
+feature/team-36-design-security
+feature/team-37-design-performance
+feature/team-38-design-migration
+
+Branch yang tidak tersedia harus dilaporkan sebagai missing, bukan diabaikan.
+
+==================================================
+ATURAN INTEGRASI
+==================================================
+
+1. Fetch semua remote branch.
+2. Jangan merge ke main.
+3. Jangan force push.
+4. Buat backup branch sebelum batch integrasi.
+5. Audit commit dan diff setiap branch.
+6. Jangan cherry-pick file individual tanpa mencatat alasan.
+7. Prefer merge commit per team untuk traceability.
+8. Resolve conflict berdasarkan canonical architecture, bukan sekadar membuat
+   build hijau.
+9. Jangan menghapus test untuk melewati failure.
+10. Jangan mengubah expected output agar test palsu lolos.
+11. Jangan menandai failure sebagai pre-existing tanpa baseline proof.
+
+==================================================
+PHASE 1 — BASELINE
+==================================================
+
+Catat:
+
+- integration baseline commit;
+- full test;
+- typecheck;
+- build;
+- lint bila tersedia;
+- migration status;
+- existing known failures.
+
+==================================================
+PHASE 2 — BRANCH INVENTORY
+==================================================
+
+Untuk setiap branch, laporkan:
+
+- branch;
+- commit;
+- parent baseline;
+- files changed;
+- package changed;
+- migration;
+- dependency;
+- tests;
+- lockfile change;
+- overlap;
+- risk;
+- status: ready / revision-required / blocked.
+
+==================================================
+PHASE 3 — CONTRACT AUDIT
+==================================================
+
+Verifikasi hanya ada satu canonical contract untuk:
+
+- project context;
+- artifact;
+- stage;
+- plugin;
+- capability;
+- event;
+- command;
+- workflow;
+- brief;
+- version;
+- lifecycle;
+- material;
+- component;
+- renderer;
+- selection;
+- property;
+- layer;
+- annotation;
+- review;
+- export;
+- AI execution;
+- quality;
+- cost;
+- observability.
+
+Deteksi:
+
+- duplicate types;
+- conflicting enums;
+- duplicate registries;
+- second RequestContext;
+- second tenant model;
+- second workflow engine;
+- second project table;
+- second artifact source of truth;
+- incompatible status vocabulary.
+
+==================================================
+PHASE 4 — DEPENDENCY GRAPH
+==================================================
+
+Bangun dependency graph aktual.
+
+Verifikasi tidak ada circular dependency.
+
+Urutan konseptual:
+
+1. Team 01 contracts
+2. Team 06 schema registry
+3. Team 07 plugin framework
+4. Team 02 universal engine
+5. Team 03–05 brief/workflow
+6. Team 08–10 lifecycle/version/API
+7. Team 20 workspace primitives
+8. Team 11–19 workspace subsystems
+9. Team 21–23 shared libraries/knowledge
+10. Team 24–30 domain plugins
+11. Team 31–35 execution/rendering/QA/cost/ops
+12. Team 36 security
+13. Team 37 performance
+14. Team 38 compatibility/migration
+
+Sesuaikan berdasarkan dependency aktual.
+
+==================================================
+PHASE 5 — FILE OWNERSHIP CONFLICT
+==================================================
+
+Audit conflict pada:
+
+- package.json;
+- pnpm-lock.yaml;
+- tsconfig;
+- route registry;
+- worker registry;
+- DB schema;
+- migration chain;
+- navigation;
+- feature flags;
+- barrel exports;
+- shared types;
+- status mapping.
+
+Resolve dengan perubahan minimal.
+
+==================================================
+PHASE 6 — DATABASE AUDIT
+==================================================
+
+Verifikasi:
+
+- migration additive;
+- order benar;
+- idempotent;
+- default/nullability aman;
+- tenant indexes;
+- no duplicate table;
+- no destructive operation;
+- schema/migration parity;
+- transaction safety;
+- rollback strategy.
+
+Jangan menjalankan migration production.
+
+==================================================
+PHASE 7 — SECURITY AUDIT
+==================================================
+
+Verifikasi:
+
+- RequestContext canonical;
+- tenant isolation;
+- platform scope;
+- no tenantId trust dari body/query;
+- no provider secret;
+- no raw prompt leakage;
+- signed URL;
+- public token security;
+- rate limit;
+- plugin static loading;
+- no arbitrary module path;
+- no unsafe HTML/SVG;
+- idempotency.
+
+==================================================
+PHASE 8 — MERGE BATCH
+==================================================
+
+Sebelum setiap batch:
+
+- buat backup branch;
+- merge satu team;
+- run targeted test;
+- commit resolution jika diperlukan;
+- catat result.
+
+Jangan merge batch besar tanpa intermediate verification.
+
+==================================================
+PHASE 9 — FULL VERIFICATION
+==================================================
+
+Jalankan:
+
+- pnpm install;
+- library builds;
+- package typechecks;
+- api-server typecheck;
+- frontend typechecks;
+- full tests;
+- all builds;
+- git diff --check;
+- dependency/cycle check;
+- migration consistency;
+- security tests.
+
+==================================================
+OUTPUT
+==================================================
+
+Buat:
+
+1. Integration Audit Report
+2. Branch readiness matrix
+3. Dependency graph
+4. Merge order
+5. Conflict resolution log
+6. Duplicate-contract report
+7. Migration report
+8. Security report
+9. Test/typecheck/build report
+10. Remaining blockers
+11. Integration commit list
+12. Recommendation for Team 40
+
+==================================================
+COMMIT
+==================================================
+
+Gunakan commit per integration batch.
+
+Contoh:
+
+chore(design-platform): integrate architecture foundation
+chore(design-platform): integrate workspace modules
+chore(design-platform): integrate domain plugins
+chore(design-platform): integrate execution and operations
+
+Push hanya ke:
+
+integration-review/design-platform-v1
+
+Jangan merge ke main.
+Jangan merge ke release branch.

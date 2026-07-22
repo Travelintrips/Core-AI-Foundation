@@ -1,0 +1,348 @@
+TEAM 34 — REVISION 1
+DESIGN COST, USAGE & BUDGET ATTRIBUTION HARDENING
+
+BRANCH WAJIB:
+feature/team-34-design-cost-tracking
+
+PERINTAH UTAMA:
+
+Lanjutkan implementasi existing.
+Jangan menulis ulang modul.
+Jangan membuat tabel atau service tandingan.
+Jangan merge, rebase, cherry-pick, atau force push.
+
+==================================================
+PHASE 1 — VERIFY BRANCH AND CURRENT WORK
+==================================================
+
+Jalankan:
+
+git branch --show-current
+git status --short
+git rev-parse HEAD
+git log --oneline -5
+git diff --check
+git diff --stat
+
+Branch harus:
+
+feature/team-34-design-cost-tracking
+
+Jika berbeda, berhenti dan laporkan.
+
+Verifikasi commit lokal yang berisi implementasi Team 34.
+
+==================================================
+PHASE 2 — ENDPOINT INVENTORY
+==================================================
+
+Laporan sebelumnya menyebut 9 endpoint tetapi mencantumkan 10.
+
+Audit route file dan route mounting.
+
+Laporkan jumlah endpoint yang sebenarnya dan pastikan seluruh endpoint berikut
+benar-benar mounted:
+
+POST /ai/design-cost/record
+POST /ai/design-cost/estimate
+POST /ai/design-cost/calculate
+GET  /ai/design-cost/project/:id
+GET  /ai/design-cost/order/:id
+GET  /ai/design-cost/project/:id/detail
+POST /ai/design-cost/budget/check
+POST /ai/design-cost/budget/policy
+GET  /ai/design-cost/budget/policies
+POST /ai/design-cost/reconcile
+
+Tambahkan route registration test bila belum ada.
+
+==================================================
+PHASE 3 — BUDGET FAIL-CLOSED POLICY
+==================================================
+
+Perbaiki checkDesignBudget agar tidak universally fail-open.
+
+Required behavior:
+
+soft_warn:
+- DB/service unavailable dapat menghasilkan warning/unavailable;
+- execution policy dapat memutuskan apakah tetap berjalan.
+
+hard_block:
+- failure membaca budget harus fail-closed;
+- jangan mengembalikan allowed.
+
+require_approval:
+- failure harus menghasilkan approval_required atau unavailable;
+- jangan otomatis allowed.
+
+Gunakan structured status:
+
+allowed
+warning
+blocked
+approval_required
+unavailable
+
+Tambahkan machine-readable reason.
+
+Tambahkan tests:
+
+- soft warning DB failure;
+- hard block DB failure;
+- require approval DB failure;
+- unavailable tidak dianggap allowed.
+
+==================================================
+PHASE 4 — CANONICAL PRICING SOURCE
+==================================================
+
+Audit pricing fallback.
+
+Jangan menduplikasi hard-coded pricing dari costService.ts.
+
+Gunakan salah satu:
+
+1. resolver/export canonical dari costService;
+2. shared pricing utility;
+3. dependency-injected pricing resolver.
+
+Requirements:
+
+- database pricing preferred;
+- canonical fallback only;
+- unknown model explicit unavailable;
+- no silent substitution to another model;
+- pricingSource recorded;
+- pricingVersion recorded;
+- estimated flag recorded.
+
+Tambahkan parity tests antara existing cost service dan Team 34 calculator.
+
+==================================================
+PHASE 5 — MONEY AND CURRENCY SAFETY
+==================================================
+
+Verifikasi monetary columns menggunakan numeric/decimal yang aman.
+
+Jangan mengandalkan floating-point biasa untuk final financial totals.
+
+Define/document:
+
+- rounding mode;
+- decimal precision;
+- currency code;
+- mixed-currency summary behavior.
+
+Project/order summary harus group by currency atau menolak mixed-currency total.
+
+Jangan melakukan FX conversion tanpa:
+
+- rate source;
+- effective timestamp;
+- source currency;
+- target currency.
+
+Tambahkan tests:
+
+- decimal precision;
+- small token price;
+- large usage;
+- mixed currency;
+- rounding.
+
+==================================================
+PHASE 6 — TENANT AND PLATFORM SECURITY
+==================================================
+
+Audit semua routes dan service methods.
+
+Tenant authority harus berasal dari canonical RequestContext.
+
+Body/query/path tenant ID tidak boleh menjadi authority.
+
+Tambahkan tests:
+
+1. Tenant A tidak membaca project Tenant B.
+2. Tenant A tidak membaca order Tenant B.
+3. Tenant A tidak membuat budget policy Tenant B.
+4. Tenant A tidak mencatat attribution ke resource Tenant B.
+5. tenantId null fail-closed.
+6. tenant admin tidak menjalankan platform-wide reconciliation.
+7. valid platform actor dapat menjalankan platform reconciliation.
+8. actor spoof ditolak.
+
+Restrict reconciliation secara eksplisit:
+
+- tenant-scoped reconciliation untuk tenant actor; atau
+- platform-only reconciliation untuk global scope.
+
+==================================================
+PHASE 7 — SCHEMA AND INDEX AUDIT
+==================================================
+
+Audit schema dan migration parity.
+
+Verifikasi:
+
+- monetary types;
+- nullable columns;
+- foreign key strategy;
+- soft references;
+- deletion behavior;
+- tenant indexes;
+- project/order summary indexes;
+- job/retry reconciliation indexes;
+- policy lookup indexes.
+
+Review idempotency uniqueness.
+
+Pastikan constraint sesuai semantics:
+
+UNIQUE (tenant_id, idempotency_key)
+
+atau scope yang lebih tepat.
+
+Jangan menggunakan global unique key jika dua tenant dapat menghasilkan key yang
+sama.
+
+Documentasikan alasan bila constraint tetap global.
+
+==================================================
+PHASE 8 — BUDGET PERIOD TIMEZONE
+==================================================
+
+Definisikan period calculation secara eksplisit.
+
+Required metadata atau policy:
+
+- timezone;
+- periodStart;
+- periodEnd.
+
+Gunakan IANA timezone atau canonical tenant timezone.
+
+Tambahkan tests:
+
+- daily boundary;
+- weekly boundary;
+- monthly boundary;
+- timezone difference;
+- daylight-saving-safe behavior bila utility mendukung.
+
+==================================================
+PHASE 9 — RUNTIME INTEGRATION CONTRACT
+==================================================
+
+Jangan menyentuh file ownership team lain secara luas.
+
+Sediakan integration contract yang jelas untuk workflow runners:
+
+- before execution estimate;
+- budget check;
+- after execution usage;
+- cost calculation;
+- attribution record;
+- failed/canceled execution;
+- retries;
+- idempotency.
+
+Jika aman dan tidak konflik, lakukan satu pilot integration ke canonical execution
+path existing.
+
+Jika file tersebut berisiko konflik dengan Team 31:
+
+- jangan edit;
+- buat integration adapter;
+- buat integration fixture/test;
+- dokumentasikan exact call site untuk Team 39.
+
+Buktikan bahwa one execution dapat menghasilkan one attribution dan retry tidak
+menghasilkan duplicate attribution.
+
+==================================================
+PHASE 10 — MIGRATION VERIFICATION
+==================================================
+
+Jangan menjalankan production migration.
+
+Lakukan pada local/test/dev environment bila tersedia:
+
+- dry inspection;
+- apply;
+- schema parity;
+- rerun idempotency;
+- index verification;
+- rollback documentation.
+
+Tambahkan verification query atau migration checklist.
+
+Production action harus berstatus:
+
+MANUAL OWNER/OPS APPROVAL REQUIRED
+
+==================================================
+PHASE 11 — TEST AND BUILD
+==================================================
+
+Jalankan:
+
+- Team 34 targeted tests;
+- route/security tests;
+- cost service compatibility tests;
+- full API tests;
+- full repository tests sesuai baseline;
+- typecheck;
+- build;
+- git diff --check.
+
+Bandingkan dengan baseline 3.675 pre-existing tests dan hasil sebelumnya
+3.703 tests.
+
+Jangan mengklaim error pre-existing tanpa baseline evidence.
+
+==================================================
+PHASE 12 — COMMIT AND PUSH
+==================================================
+
+Gunakan commit additive:
+
+fix(design-costs): harden budget and attribution controls
+
+Kemudian:
+
+git push -u origin HEAD
+
+Jika authentication gagal:
+
+- jangan menaruh token dalam source;
+- jangan mencetak token;
+- laporkan push failure secara jujur;
+- berikan exact commit hash lokal.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+1. Branch dan commit
+2. Push verification
+3. Endpoint count
+4. Budget failure behavior
+5. Pricing source
+6. Money precision
+7. Currency handling
+8. Tenant isolation
+9. Platform reconciliation policy
+10. Idempotency constraint
+11. Schema/index audit
+12. Timezone behavior
+13. Runtime integration contract
+14. Migration verification
+15. Tests
+16. Typecheck
+17. Build
+18. Remaining risks
+19. Team 39 integration instructions
+20. Manual Ops actions

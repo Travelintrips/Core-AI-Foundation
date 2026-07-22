@@ -1,0 +1,159 @@
+TEAM 17 — UNIVERSAL DESIGN EXPORT WORKSPACE
+
+BRANCH WAJIB:
+feature/team-17-export-workspace
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun Export Workspace universal untuk memilih dan menjalankan export artifact.
+
+Team 17 membangun orchestration UI dan contract.
+
+Jangan membuat renderer PDF/PPTX/image baru bila engine existing sudah tersedia.
+
+==================================================
+AUDIT
+==================================================
+
+Audit:
+
+- Document Engine;
+- Presentation Engine;
+- image export;
+- zip delivery;
+- download/signed URL;
+- jobs/workers;
+- export status;
+- thumbnails;
+- artifact metadata;
+- cost tracking;
+- existing export buttons.
+
+==================================================
+FEATURE
+==================================================
+
+Dukung:
+
+- export preset;
+- format;
+- resolution;
+- dimensions;
+- page/frame selection;
+- version selection;
+- background;
+- quality;
+- compression;
+- include metadata;
+- include annotation optional;
+- filename;
+- output destination;
+- cost/runtime estimate;
+- submit;
+- progress;
+- cancel;
+- retry;
+- result/download;
+- failure diagnostics.
+
+==================================================
+FORMAT REGISTRY
+==================================================
+
+Buat ExportFormatRegistry.
+
+Format dapat berasal dari engine/plugin.
+
+Core tidak boleh hard-code semua kemampuan setiap domain.
+
+Minimal contract:
+
+ExportFormatDefinition
+ExportPreset
+ExportCapability
+ExportRequest
+ExportEstimate
+ExportJobSummary
+ExportResult
+ExportValidationResult
+
+==================================================
+HONEST CAPABILITY
+==================================================
+
+Jika konversi tidak tersedia:
+
+- tampilkan unavailable;
+- jelaskan sebab;
+- jangan membuat output palsu;
+- jangan memberi label PDF conversion bila sebenarnya spec-rendered preview;
+- pertahankan honesty pattern Presentation Engine.
+
+==================================================
+JOB INTEGRATION
+==================================================
+
+Gunakan AI Job Engine/worker/job patterns existing jika sesuai.
+
+Jangan membuat polling engine kedua.
+
+Dukung:
+
+- queued;
+- running;
+- succeeded;
+- failed;
+- canceled;
+- retrying.
+
+Jangan membuat status palsu.
+
+==================================================
+SECURITY
+==================================================
+
+- no secret storage URL;
+- signed download;
+- permission;
+- tenant isolation;
+- sanitized filename;
+- formula/CSV injection mitigation bila format tabular;
+- no arbitrary renderer/module path;
+- no direct provider call.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. format registry;
+2. duplicate format rejection;
+3. capability filtering;
+4. preset validation;
+5. invalid dimensions;
+6. unsupported export;
+7. estimate display;
+8. submit;
+9. duplicate submit/idempotency;
+10. progress;
+11. cancel;
+12. retry;
+13. failed job;
+14. successful download;
+15. expired download;
+16. permission denied;
+17. filename sanitization;
+18. honest unavailable conversion;
+19. no raw internal metadata;
+20. existing export regression.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-export): add universal export workspace"
+git push -u origin HEAD

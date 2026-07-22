@@ -1,0 +1,276 @@
+TEAM 21 — UNIVERSAL MATERIAL LIBRARY FOUNDATION
+
+BRANCH WAJIB:
+feature/team-21-material-library
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun fondasi Material Library universal yang dapat digunakan oleh:
+
+- Fashion;
+- Interior;
+- Furniture;
+- Packaging;
+- Architecture;
+- Product Design;
+- Jewelry;
+- Landscape;
+- domain design masa depan.
+
+Material Library harus domain-neutral.
+
+Jangan membuat implementasi yang hanya cocok untuk kain atau interior.
+
+==================================================
+SCOPE
+==================================================
+
+Bangun:
+
+- canonical material contract;
+- material category registry;
+- property schema;
+- material browser;
+- material detail panel;
+- filtering dan search;
+- material assignment boundary;
+- preview descriptor;
+- plugin extension contract;
+- test dan dokumentasi.
+
+Jangan membuat renderer fisik, shader engine, atau simulation engine penuh.
+
+==================================================
+AUDIT WAJIB
+==================================================
+
+Audit:
+
+- asset/material tables existing;
+- style knowledge seed;
+- template knowledge;
+- uploaded asset system;
+- property panel;
+- plugin framework;
+- design contracts;
+- Supabase/storage;
+- search/filter components;
+- tenant and platform scope;
+- existing material terminology.
+
+Catat baseline:
+
+- branch;
+- commit;
+- status;
+- tests;
+- typecheck;
+- build;
+- pre-existing failures.
+
+==================================================
+CANONICAL MATERIAL CONTRACT
+==================================================
+
+Minimal:
+
+MaterialDefinition
+MaterialCategory
+MaterialPropertyDefinition
+MaterialPropertyValue
+MaterialPreview
+MaterialSource
+MaterialAvailability
+MaterialAssignment
+MaterialCompatibility
+MaterialSustainabilityMetadata
+MaterialTechnicalMetadata
+MaterialSearchFilter
+MaterialSort
+MaterialPermission
+
+MaterialDefinition minimal:
+
+- materialId;
+- tenantId atau platform scope semantics;
+- name;
+- categoryId;
+- description;
+- status;
+- source;
+- preview;
+- properties;
+- tags;
+- compatibleDomains;
+- createdAt;
+- updatedAt;
+- version;
+- extensions.
+
+==================================================
+CATEGORY REGISTRY
+==================================================
+
+Registry harus:
+
+- menolak duplicate ID;
+- mendukung hierarchy;
+- deterministic ordering;
+- optional plugin ownership;
+- capability metadata;
+- feature stability;
+- explicit unknown category handling.
+
+Contoh kategori hanya sebagai fixture:
+
+- textile;
+- wood;
+- metal;
+- glass;
+- plastic;
+- paper;
+- stone;
+- ceramic;
+- leather;
+- composite;
+- coating;
+- finish;
+- digital material.
+
+Core tidak boleh membuat category-specific logic besar.
+
+==================================================
+PROPERTY SCHEMA
+==================================================
+
+Dukung property generik:
+
+- text;
+- number;
+- boolean;
+- enum;
+- range;
+- color;
+- measurement;
+- percentage;
+- reference;
+- texture asset;
+- metadata.
+
+Contoh data:
+
+- weight;
+- thickness;
+- roughness;
+- opacity;
+- reflectivity;
+- durability;
+- stretch;
+- fire rating;
+- recyclability.
+
+Semua contoh harus berada di category/plugin data, bukan mandatory core field.
+
+==================================================
+MATERIAL BROWSER
+==================================================
+
+Bangun UI:
+
+- search;
+- category filter;
+- tag filter;
+- source filter;
+- domain compatibility filter;
+- grid/list;
+- preview;
+- selected state;
+- empty/loading/error;
+- permission;
+- unavailable/deprecated;
+- pagination atau cursor.
+
+==================================================
+ASSIGNMENT BOUNDARY
+==================================================
+
+Expose contract untuk assignment:
+
+- targetArtifactId;
+- targetElementId atau regionId;
+- materialId;
+- materialVersion;
+- assignment properties;
+- override properties;
+- source;
+- capability;
+- validation.
+
+Jangan membuat garment, wall, floor, box-panel, atau furniture-specific target.
+
+==================================================
+SECURITY
+==================================================
+
+- tenant isolation;
+- platform material scope explicit;
+- no raw storage path;
+- safe preview;
+- no untrusted HTML;
+- no arbitrary shader code;
+- no arbitrary module loading;
+- actor identity dari RequestContext;
+- permission-aware update.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. material validation;
+2. duplicate material ID;
+3. category registration;
+4. category hierarchy;
+5. invalid property type;
+6. property value validation;
+7. search;
+8. filters;
+9. sorting;
+10. domain compatibility;
+11. unavailable material;
+12. deprecated material;
+13. material assignment;
+14. invalid target;
+15. read-only material;
+16. tenant isolation adapter;
+17. platform scope rejection;
+18. unsafe preview;
+19. plugin extension;
+20. no domain leakage.
+
+==================================================
+INTEGRATION
+==================================================
+
+Team 12:
+- property field dapat membuka material picker.
+
+Team 14:
+- material preview menggunakan asset reference.
+
+Team 24–30:
+- domain plugin dapat mendaftarkan material categories/properties.
+
+Team 01:
+- gunakan metadata, capability, stability, dan plugin dependency contract bila tersedia.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-materials): add universal material library foundation"
+git push -u origin HEAD

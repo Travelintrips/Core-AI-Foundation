@@ -1,0 +1,158 @@
+TEAM 05 — DESIGN WORKFLOW ENGINE & REGISTRY
+
+BRANCH WAJIB:
+feature/team-05-design-workflow-engine
+
+PERAN TEAM
+
+Bangun definisi dan registry workflow design yang dapat digunakan Universal
+Design Engine. Team ini tidak membangun seluruh runtime project; fokus pada
+workflow definition, dependency graph, policy, dan validation.
+
+PROJECT BRIEF
+
+Berbagai jenis project memiliki urutan berbeda:
+
+Fashion:
+Brief → Moodboard → Concept Sketch → Technical Drawing → Material
+→ Visualization → Production Spec → Campaign
+
+Interior:
+Brief → Site/Space Data → Moodboard → Space Plan → Material Board
+→ Elevation → Visualization → Specification/BOQ → Presentation
+
+Packaging:
+Brief → Product Analysis → Structure → Concept → Dieline → Material
+→ Mockup → Print Specification → Export
+
+Branding:
+Brief → Strategy → Creative Direction → Logo/Identity Concepts
+→ Selected Direction → Brand System → Guidelines → Export
+
+Workflow harus dapat memiliki optional stage, parallel stage, review gate,
+repeatable iteration, dan conditional stage.
+
+TUJUAN
+
+Implementasikan:
+
+1. WorkflowDefinition schema.
+2. WorkflowRegistry.
+3. Workflow validator.
+4. DAG/dependency validation.
+5. Stage eligibility evaluator.
+6. Conditional-stage resolver.
+7. Completion policy.
+8. Review gate policy.
+9. Workflow versioning.
+10. Legacy creative project step adapter.
+
+WORKFLOW DEFINITION MINIMAL
+
+- workflowId;
+- version;
+- pluginId;
+- supported service types;
+- stages;
+- transitions/policies;
+- required capability;
+- artifact requirements;
+- review requirement;
+- optional/repeatable;
+- activation condition;
+- completion condition;
+- fallback behavior;
+- migration metadata.
+
+VALIDATION
+
+Tolak:
+
+- duplicate stage ID;
+- missing dependency;
+- circular dependency;
+- unreachable required stage;
+- unknown capability;
+- invalid artifact requirement;
+- terminal stage dengan outgoing dependency yang tidak valid;
+- incompatible version.
+
+CONDITIONAL WORKFLOW
+
+Contoh:
+
+- Fashion technical drawing mungkin optional untuk campaign-only project,
+  tetapi mandatory untuk production-ready garment.
+- Interior BOQ optional bila customer hanya meminta concept visualization.
+- Packaging dieline mandatory untuk print-ready, optional untuk campaign mockup.
+- Branding guidelines stage optional sesuai deliverable.
+
+Condition harus memakai structured expression atau evaluator interface yang
+aman. Jangan menggunakan eval atau arbitrary JavaScript dari database.
+
+REGISTRY
+
+- Plugin dapat mendaftarkan workflow.
+- Duplicate ID/version ditolak.
+- Resolver memilih workflow berdasarkan explicit plugin/service/project goal.
+- Jangan memilih diam-diam berdasarkan string lemah.
+- Berikan explainability: alasan workflow terpilih.
+
+LEGACY ADAPTER
+
+Petakan project steps existing ke stage definitions tanpa merusak status atau
+event existing.
+
+Jangan menjalankan backfill destruktif.
+
+FILE OWNERSHIP
+
+Boleh:
+
+- workflow schema;
+- registry;
+- validator;
+- evaluator;
+- legacy adapter;
+- fixtures/examples;
+- tests.
+
+Tidak boleh:
+
+- mengubah core engine Team 02 secara luas;
+- membangun worker;
+- membangun renderer;
+- membangun domain plugin produksi;
+- mengubah UI;
+- membuat database workflow builder besar.
+
+ACCEPTANCE CRITERIA
+
+1. Empat sample workflow domain tervalidasi.
+2. Tidak ada domain switch di registry core.
+3. Cycle detection tersedia.
+4. Eligibility dapat dijelaskan.
+5. Workflow version mismatch ditangani eksplisit.
+6. Optional/conditional/review stages bekerja.
+7. Adapter existing tidak mengubah external project behavior.
+8. Registry dapat di-consume Team 02 dan Team 07.
+9. Pure logic memiliki test tanpa DB.
+10. Dokumentasi memberikan contoh menambah workflow baru.
+
+TEST WAJIB
+
+- valid linear workflow;
+- valid parallel workflow;
+- circular graph;
+- missing dependency;
+- conditional stage on/off;
+- optional stage;
+- review gate;
+- duplicate version;
+- workflow resolution;
+- legacy step mapping;
+- unsupported capability.
+
+COMMIT YANG DISARANKAN
+
+feat(design-workflow): add versioned workflow registry

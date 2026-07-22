@@ -145,6 +145,19 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
   // which would bypass auth for ALL HTTP methods; replaced with explicit GET-only rules.
   { method: "GET",  pattern: /^\/ai\/solution-collections$/ },
   { method: "GET",  pattern: /^\/ai\/solution-collections\/[^/]+$/ },
+  // Team 10 — Universal Design API (customer-facing GET routes).
+  // Plugin manifests are fully public (safe projection, no sensitive data).
+  // Project read routes are token-gated in the route handler itself via
+  // X-Design-Access-Token; adding them here only bypasses the admin key check.
+  // Mutation routes (PUT brief, POST commands, POST initialize, POST review)
+  // are NOT listed here — they require admin credentials or an access token
+  // validated in the handler.
+  { method: "GET",  pattern: /^\/ai\/design\/v1\/plugins\/[a-z0-9-]+\/manifest$/ },
+  { method: "GET",  pattern: /^\/ai\/design\/v1\/projects\/\d+$/ },
+  { method: "GET",  pattern: /^\/ai\/design\/v1\/projects\/\d+\/config$/ },
+  { method: "GET",  pattern: /^\/ai\/design\/v1\/projects\/\d+\/stages$/ },
+  { method: "GET",  pattern: /^\/ai\/design\/v1\/projects\/\d+\/artifacts$/ },
+  { method: "GET",  pattern: /^\/ai\/design\/v1\/projects\/\d+\/events$/ },
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {
