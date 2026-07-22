@@ -1,0 +1,126 @@
+TEAM 30 — JEWELRY DESIGN DOMAIN PLUGIN
+
+BRANCH WAJIB:
+feature/team-30-jewelry-plugin
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun Jewelry Design Plugin.
+
+Plugin mendukung concept sampai production specification metadata tanpa membuat
+gemological certification, pricing engine, atau CAD manufacturing engine penuh.
+
+==================================================
+WORKFLOW
+==================================================
+
+Minimal:
+
+1. Brief
+2. Reference Research
+3. Style Direction
+4. Concept Sketch
+5. Form Development
+6. Material/Gem Direction
+7. Technical View
+8. Visualization
+9. Production Specification
+10. Review
+11. Export
+
+==================================================
+BRIEF
+==================================================
+
+Contoh:
+
+- jewelry type;
+- target wearer;
+- occasion;
+- style;
+- dimensions;
+- metal preference;
+- stone/gem preference;
+- finish;
+- budget range;
+- production method;
+- personalization;
+- sustainability;
+- safety constraints.
+
+==================================================
+ARTIFACT TYPES
+==================================================
+
+Minimal:
+
+- jewelry_moodboard;
+- jewelry_concept_sketch;
+- jewelry_form_study;
+- jewelry_material_gem_board;
+- jewelry_technical_view;
+- jewelry_visualization;
+- jewelry_production_spec;
+- jewelry_presentation.
+
+==================================================
+MATERIAL CONTRIBUTION
+==================================================
+
+Contoh metadata:
+
+- metal type;
+- purity label;
+- finish;
+- stone category;
+- setting type;
+- estimated dimensions;
+- estimated weight.
+
+Gunakan label estimated bila bukan hasil perhitungan CAD/engineering tervalidasi.
+
+Jangan mengklaim sertifikasi batu atau kadar logam.
+
+==================================================
+COMPONENT CONTRIBUTION
+==================================================
+
+Contoh:
+
+- band;
+- setting;
+- clasp;
+- chain;
+- pendant;
+- stone seat;
+- decorative element.
+
+Semua berada dalam plugin.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+- manifest;
+- brief;
+- workflow;
+- artifact registry;
+- material contribution;
+- component contribution;
+- technical metadata;
+- estimation honesty;
+- no certification claims;
+- no core leakage;
+- compatibility.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-plugins): add jewelry design plugin"
+git push -u origin HEAD
