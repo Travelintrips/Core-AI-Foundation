@@ -1,0 +1,145 @@
+{
+  "team": "26",
+  "branch": "feature/team-26-packaging-plugin",
+  "domain": "Packaging Design Plugin",
+  "status": "READY",
+  "description": "Packaging Design Domain Plugin — declares the 12-step design workflow, 8 artifact types, 7 overlay zone definitions (renderer boundary metadata only), material substrate registry, 6 export presets, and compliance profiles for Indonesian food, cosmetic, and general retail packaging. No CAD/dieline engine. No new DB tables.",
+
+  "ownership": {
+    "pluginDir":      "artifacts/api-server/src/domains/packaging-design/plugin/",
+    "apiRoutes":      "artifacts/api-server/src/routes/packaging-design-plugin.ts",
+    "tests":          "artifacts/api-server/src/domains/packaging-design/plugin/__tests__/packagingPlugin.test.ts",
+    "integrationManifest": "integration/manifests/team-26.json"
+  },
+
+  "routesToMount": [
+    {
+      "file":    "artifacts/api-server/src/routes/packaging-design-plugin.ts",
+      "import":  "packagingDesignPluginRouter",
+      "mountIn": "artifacts/api-server/src/routes/index.ts",
+      "statement": "router.use(packagingDesignPluginRouter);",
+      "note": "Mount after packagingDesignRouter (Team 19). Router self-registers /ai/packaging-design-plugin/* (admin) and /ai/packaging-design-plugin/brief/validate (public)."
+    }
+  ],
+
+  "schemaExportsRequested": null,
+
+  "dependencyRequests": [],
+
+  "noNewTables": true,
+  "noMigrationRequired": true,
+
+  "pluginModules": [
+    {
+      "file":    "artifacts/api-server/src/domains/packaging-design/plugin/manifest.ts",
+      "exports": ["buildPluginManifest", "assertVersionCompatible", "PLUGIN_ID", "PLUGIN_VERSION", "PLUGIN_TEAM", "MIN_CORE_VERSION"],
+      "description": "Master manifest combining all plugin metadata."
+    },
+    {
+      "file":    "artifacts/api-server/src/domains/packaging-design/plugin/brief.ts",
+      "exports": ["PackagingBriefSchema", "validateBrief"],
+      "description": "Zod brief schema for all 12 brief fields. Additive — complements Team 19 order schema."
+    },
+    {
+      "file":    "artifacts/api-server/src/domains/packaging-design/plugin/workflow.ts",
+      "exports": ["PACKAGING_WORKFLOW", "isStepTransitionAllowed", "getStep", "getNextSteps"],
+      "description": "12-step workflow definition with transition guards."
+    },
+    {
+      "file":    "artifacts/api-server/src/domains/packaging-design/plugin/artifacts.ts",
+      "exports": ["listArtifactTypes", "getArtifactType", "isMimeAccepted", "PACKAGING_ARTIFACT_TYPE_IDS"],
+      "description": "8 packaging artifact type definitions with MIME type and metadata field registry."
+    },
+    {
+      "file":    "artifacts/api-server/src/domains/packaging-design/plugin/overlays.ts",
+      "exports": ["listOverlayDefinitions", "resolveActiveOverlays", "getOverlayDefinition", "OVERLAY_TYPE_IDS"],
+      "description": "7 overlay zone definitions (renderer boundary metadata only — no drawing engine)."
+    },
+    {
+      "file":    "artifacts/api-server/src/domains/packaging-design/plugin/material.ts",
+      "exports": ["listSubstrates", "getSubstrate", "buildMaterialContribution", "SUBSTRATE_IDS"],
+      "description": "Material substrate registry and MaterialContribution builder."
+    },
+    {
+      "file":    "artifacts/api-server/src/domains/packaging-design/plugin/export.ts",
+      "exports": ["listExportPresets", "getExportPreset", "getRequiredFiles", "EXPORT_PRESET_IDS"],
+      "description": "6 export preset definitions (print_ready, client_preview, dieline_source, digital_only, sustainability_pack, full_package)."
+    },
+    {
+      "file":    "artifacts/api-server/src/domains/packaging-design/plugin/compliance.ts",
+      "exports": ["listComplianceProfiles", "buildComplianceSheet", "recalculateOutcome", "resolveComplianceProfiles"],
+      "description": "Compliance profiles for Indonesian food, cosmetic, and general retail packaging. buildComplianceSheet produces an initial compliance sheet with all checks pending."
+    },
+    {
+      "file":    "artifacts/api-server/src/domains/packaging-design/plugin/index.ts",
+      "exports": ["*"],
+      "description": "Barrel export — import all plugin public APIs from this file."
+    }
+  ],
+
+  "routes": {
+    "admin": [
+      "GET  /ai/packaging-design-plugin/manifest",
+      "GET  /ai/packaging-design-plugin/version",
+      "GET  /ai/packaging-design-plugin/version/check?coreVersion=x.y.z",
+      "GET  /ai/packaging-design-plugin/workflow",
+      "GET  /ai/packaging-design-plugin/workflow/steps/:stepId",
+      "GET  /ai/packaging-design-plugin/workflow/transitions?from=:step&to=:step",
+      "GET  /ai/packaging-design-plugin/artifact-types",
+      "GET  /ai/packaging-design-plugin/artifact-types/:typeId",
+      "GET  /ai/packaging-design-plugin/artifact-types/:typeId/mime-check?mime=:mime",
+      "GET  /ai/packaging-design-plugin/overlays",
+      "POST /ai/packaging-design-plugin/overlays/resolve",
+      "GET  /ai/packaging-design-plugin/material-spec",
+      "POST /ai/packaging-design-plugin/material-spec/build",
+      "GET  /ai/packaging-design-plugin/export-presets",
+      "GET  /ai/packaging-design-plugin/export-presets/:presetId",
+      "GET  /ai/packaging-design-plugin/export-presets/:presetId/required-files",
+      "GET  /ai/packaging-design-plugin/compliance-profiles",
+      "POST /ai/packaging-design-plugin/compliance/build-sheet",
+      "POST /ai/packaging-design-plugin/compliance/recalculate"
+    ],
+    "public": [
+      "POST /ai/packaging-design-plugin/brief/validate"
+    ]
+  },
+
+  "integrationNotes": [
+    "This plugin is purely additive — it does NOT modify Team 19's packaging_design_orders, packaging_design_variants, or packaging_design_validation_log tables.",
+    "Overlay zone IDs (bleed, trim, safe_area, fold, cut, glue_zone, barcode_zone) intentionally match the overlay zones used in Team 19's prepress validation engine for semantic consistency.",
+    "The brief schema's `linkedOrderId` field (UUID) allows associating a plugin brief with an existing Team 19 packaging_design_orders record — no foreign key constraint enforced at DB level.",
+    "Export preset IDs may be stored in packagingDesignOrder.briefJson.exportPreset to record the client's chosen delivery format.",
+    "Compliance sheet metadata may be embedded in packagingDesignOrder.briefJson.complianceSheet — this avoids a new DB table while preserving the structured data.",
+    "No migration file is needed — this plugin declares code-level metadata only.",
+    "Admin routes require x-admin-api-key (handled by global adminAuthWithExceptions — no per-route duplication needed).",
+    "POST /ai/packaging-design-plugin/brief/validate is intentionally public (no auth) — it performs zero writes and exposes no sensitive data.",
+    "Team 39 (Integration): mount packagingDesignPluginRouter after packagingDesignRouter in routes/index.ts."
+  ],
+
+  "adapterNotes": [
+    "No adapters to other teams are required. This plugin depends only on Team 19's schema.ts for the PACKAGING_SERVICE_TYPES constant (read-only import).",
+    "If Team 19's PACKAGING_SERVICE_TYPES changes, Team 26's brief.ts packagingType enum must be updated to match."
+  ],
+
+  "testSummary": {
+    "file":          "artifacts/api-server/src/domains/packaging-design/plugin/__tests__/packagingPlugin.test.ts",
+    "categories":    11,
+    "approxTests":   65,
+    "framework":     "vitest",
+    "pureFunctions": true,
+    "dbMocking":     "not required (no DB calls in plugin)"
+  },
+
+  "risks": [
+    {
+      "severity": "low",
+      "description": "PACKAGING_SERVICE_TYPES imported from Team 19's schema.ts — if Team 19 renames or removes that export, Team 26's brief.ts compile will fail.",
+      "mitigation": "Document this dependency. If Team 19 ever moves schema.ts, update the import path in brief.ts."
+    },
+    {
+      "severity": "low",
+      "description": "compliance.ts RegulatoryBody type is imported as a type-only from brief.ts — circular-import risk if brief.ts later imports from compliance.ts.",
+      "mitigation": "The import direction is one-way (compliance imports brief type, never the reverse). Enforce this with a lint rule or tsconfig paths if needed."
+    }
+  ]
+}
