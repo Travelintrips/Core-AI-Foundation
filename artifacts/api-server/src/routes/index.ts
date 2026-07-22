@@ -118,6 +118,8 @@ import fashionDesignRouter from "./fashion-design.js";
 import packagingDesignRouter from "./packaging-design.js";
 // ── Team 22: Creative Vendor Ecosystem ───────────────────────────────────
 import { vendorRouter } from "../domains/creative-vendors/index.js";
+// ── Team 27: Branding & Identity Plugin ──────────────────────────────────
+import brandingIdentityRouter from "../domains/branding-identity/routes.js";
 // ── V5.0: Enterprise Template Knowledge Library ───────────────────────────
 import templateKnowledgeRouter from "./template-knowledge.js";
 import seedKnowledgeRouter from "./seedKnowledge.js";
@@ -242,6 +244,8 @@ router.use(fashionDesignRouter);
 router.use(packagingDesignRouter);
 // ── Team 22: Creative Vendor Ecosystem — after portfolioGalleryRouter ─────
 router.use(vendorRouter);
+// ── Team 27: Branding & Identity Plugin ──────────────────────────────────
+router.use(brandingIdentityRouter);
 // ── V5.0: Enterprise Template Knowledge Library ───────────────────────────
 router.use("/template-knowledge", templateKnowledgeRouter);
 router.use("/seed", seedKnowledgeRouter);
