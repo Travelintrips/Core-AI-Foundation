@@ -77,6 +77,8 @@ import cargoRatesRouter from "./cargo-rates";
 import serviceNormalizationRouter from "./service-normalization.js";
 // ── Team 05: Discovery Analytics & Feature Flags ──────────────────────────
 import discoveryAnalyticsRouter from "./discoveryAnalytics.js";
+// ── Team 10: Universal Design API Contracts & Orchestration Boundary ──────
+import universalDesignRouter from "./universal-design/index.js";
 
 // ── Team 01: Creative Workflow V2 ──────────────────────────────────────────
 import { creativeWorkflowV2Router, creativeWorkflowPublicRouter } from "./creative-workflow-v2/index.js";
@@ -262,5 +264,7 @@ router.use(cargoRatesRouter);
 router.use(serviceNormalizationRouter);
 // ── Team 05: Discovery Analytics & Feature Flags ──────────────────────────────
 router.use(discoveryAnalyticsRouter);
+// ── Team 10: Universal Design API Contracts & Orchestration Boundary ──────────
+router.use(universalDesignRouter);
 
 export default router;
