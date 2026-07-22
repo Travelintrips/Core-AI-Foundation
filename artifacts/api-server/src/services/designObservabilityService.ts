@@ -15,7 +15,9 @@ import {
   aiExecutionLogsTable,
   aiCostRecordsTable,
   aiAuditLogsTable,
+  aiEventsTable,
   creativeRenderSessionsTable,
+  designRenderZipExportsTable,
 } from "@workspace/db";
 
 // ── Contract Types ────────────────────────────────────────────────────────────
@@ -722,6 +724,111 @@ export async function detectIncidents(windowHours: number): Promise<DesignIncide
     }
   }
 
+  // ── Rule: Timeout spike ───────────────────────────────────────────────────────
+  // Detect when timeout rate in last 1h exceeds 5% of all execution calls
+  const [timeoutRow] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      timeouts: sql<number>`count(*) filter (where status = 'timeout')::int`,
+    })
+    .from(aiExecutionLogsTable)
+    .where(gte(aiExecutionLogsTable.createdAt, windowStart(1)));
+
+  const totalExec = timeoutRow?.total ?? 0;
+  const totalTimeouts = timeoutRow?.timeouts ?? 0;
+  if (totalExec >= 10 && totalTimeouts / totalExec > 0.05) {
+    const rate = ((totalTimeouts / totalExec) * 100).toFixed(1);
+    incidents.push({
+      id: `timeout-spike-${now}`,
+      ruleKey: "timeout_spike",
+      severity: totalTimeouts / totalExec > 0.2 ? "critical" : "high",
+      title: `Timeout spike: ${rate}% of AI calls timed out`,
+      description: `${totalTimeouts} of ${totalExec} execution calls in the last hour returned a timeout status (${rate}%). Check AI provider latency or network stability.`,
+      detectedAt: now,
+      affectedResource: "ai-execution",
+      suppressed: false,
+    });
+  }
+
+  // ── Rule: Plugin load failure (stale/error workers) ──────────────────────────
+  // Workers that are stale (last heartbeat > 2 min ago) AND currently assigned to a job
+  const [pluginFailRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(aiWorkersTable)
+    .where(
+      and(
+        sql`status = 'stale'`,
+        sql`current_job IS NOT NULL`,
+      ),
+    );
+
+  const pluginFailCount = pluginFailRow?.count ?? 0;
+  if (pluginFailCount > 0) {
+    incidents.push({
+      id: `plugin-load-failure-${now}`,
+      ruleKey: "plugin_load_failure",
+      severity: pluginFailCount >= 3 ? "critical" : "high",
+      title: `Plugin load failure: ${pluginFailCount} stale worker${pluginFailCount > 1 ? "s" : ""} holding jobs`,
+      description: `${pluginFailCount} worker${pluginFailCount > 1 ? "s" : ""} ${pluginFailCount > 1 ? "are" : "is"} stale (no heartbeat) but still assigned to active jobs. Jobs may be orphaned.`,
+      detectedAt: now,
+      affectedResource: "worker-cluster",
+      suppressed: false,
+    });
+  }
+
+  // ── Rule: Event stream lag ────────────────────────────────────────────────────
+  // Events that are pending/failed to publish for > 5 minutes indicate stream lag
+  const eventLagSince = new Date(Date.now() - 5 * 60 * 1000);
+  const [eventLagRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(aiEventsTable)
+    .where(
+      and(
+        sql`status IN ('pending', 'processing')`,
+        lte(aiEventsTable.createdAt, eventLagSince),
+      ),
+    );
+
+  const lagCount = eventLagRow?.count ?? 0;
+  if (lagCount > 0) {
+    incidents.push({
+      id: `event-stream-lag-${now}`,
+      ruleKey: "event_stream_lag",
+      severity: lagCount > 50 ? "critical" : lagCount > 10 ? "high" : "medium",
+      title: `Event stream lag: ${lagCount} event${lagCount > 1 ? "s" : ""} unprocessed >5 min`,
+      description: `${lagCount} event${lagCount > 1 ? "s" : ""} ${lagCount > 1 ? "are" : "is"} still in pending or processing state after more than 5 minutes. The event bus may be backlogged or consumers offline.`,
+      detectedAt: now,
+      affectedResource: "event-bus",
+      suppressed: false,
+    });
+  }
+
+  // ── Rule: Invalid output spike ────────────────────────────────────────────────
+  // QC-failed jobs spike: >15% of qc_review jobs failing in last 1h
+  const [invalidRow] = await db
+    .select({
+      total: sql<number>`count(*) filter (where job_type = 'qc_review')::int`,
+      invalid: sql<number>`count(*) filter (where job_type = 'qc_review' and status = 'failed')::int`,
+    })
+    .from(aiJobsTable)
+    .where(gte(aiJobsTable.createdAt, windowStart(1)));
+
+  const qcTotalShort = invalidRow?.total ?? 0;
+  const qcInvalid = invalidRow?.invalid ?? 0;
+  if (qcTotalShort >= 5 && qcInvalid / qcTotalShort > 0.15) {
+    const rate = ((qcInvalid / qcTotalShort) * 100).toFixed(1);
+    incidents.push({
+      id: `invalid-output-spike-${now}`,
+      ruleKey: "invalid_output_spike",
+      severity: qcInvalid / qcTotalShort > 0.4 ? "critical" : "high",
+      title: `Invalid output spike: ${rate}% QC failure rate`,
+      description: `${qcInvalid} of ${qcTotalShort} QC review jobs failed in the last hour (${rate}%). AI output quality may have degraded — check prompt templates and provider responses.`,
+      detectedAt: now,
+      affectedResource: "qc-system",
+      suppressed: false,
+    });
+  }
+
   return deduplicateIncidents(incidents);
 }
 
@@ -803,6 +910,51 @@ export async function getDesignMetrics(windowHours: number): Promise<DesignOpera
     name: "qc_blocking_rate",
     value: qcTotal > 0 ? Math.round((qcBlocking / qcTotal) * 10000) / 100 : null,
     unit: "%",
+    windowHours,
+    recordedAt: now,
+  });
+
+  // Export success rate: design_render_zip_exports in window
+  const [exportRow] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      completed: sql<number>`count(*) filter (where status = 'completed')::int`,
+    })
+    .from(designRenderZipExportsTable)
+    .where(gte(designRenderZipExportsTable.createdAt, windowStart(windowHours)));
+
+  const expTotal = exportRow?.total ?? 0;
+  const expCompleted = exportRow?.completed ?? 0;
+  metrics.push({
+    name: "export_success_rate",
+    value: expTotal > 0 ? Math.round((expCompleted / expTotal) * 10000) / 100 : null,
+    unit: "%",
+    windowHours,
+    recordedAt: now,
+  });
+
+  // Review turnaround: avg time (ms) from render session creation → concept_selected
+  // Approximated via creative_render_sessions: sessions that reached concept_selected in window
+  const [turnRow] = await db
+    .select({
+      avgTurnaroundMs: sql<number | null>`
+        avg(
+          extract(epoch from (updated_at - created_at)) * 1000
+        ) filter (
+          where session_status = 'concept_selected'
+        )
+      `,
+    })
+    .from(creativeRenderSessionsTable)
+    .where(gte(creativeRenderSessionsTable.createdAt, windowStart(windowHours)));
+
+  metrics.push({
+    name: "review_turnaround",
+    value:
+      turnRow?.avgTurnaroundMs != null
+        ? Math.round(Number(turnRow.avgTurnaroundMs))
+        : null,
+    unit: "ms",
     windowHours,
     recordedAt: now,
   });
