@@ -1,0 +1,210 @@
+TEAM 14 — UNIVERSAL ASSET BROWSER AND LIBRARY
+
+BRANCH WAJIB:
+feature/team-14-asset-browser
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun Asset Browser reusable untuk menemukan, memilih, mengunggah, dan
+menghubungkan asset ke project design.
+
+Asset mencakup:
+
+- image;
+- document;
+- PDF;
+- video preview;
+- font reference;
+- material preview;
+- icon;
+- logo;
+- reference;
+- generated artifact;
+- external approved asset.
+
+Jangan membuat storage service kedua.
+
+==================================================
+AUDIT
+==================================================
+
+Audit:
+
+- upload components;
+- asset tables/API;
+- signed URLs;
+- Supabase/storage utilities;
+- image galleries;
+- search/filter;
+- pagination;
+- file validation;
+- malware/security patterns;
+- asset permissions;
+- existing Creative AI asset UI.
+
+==================================================
+FEATURE
+==================================================
+
+Bangun:
+
+AssetBrowserShell
+AssetGrid
+AssetList
+AssetCard
+AssetPreview
+AssetFilters
+AssetSearch
+AssetPicker
+AssetUploadAdapter
+AssetSourceRegistry
+
+Dukung:
+
+- grid/list;
+- search;
+- filter type;
+- filter source;
+- sort;
+- pagination/cursor;
+- multi-select optional;
+- single-select;
+- preview;
+- upload entry point;
+- selected state;
+- empty/loading/error;
+- permission denied;
+- archived/unavailable asset.
+
+==================================================
+SOURCE REGISTRY
+==================================================
+
+Asset source dapat berasal dari:
+
+- project assets;
+- brand library;
+- generated artifacts;
+- uploaded references;
+- shared approved library;
+- plugin-contributed source.
+
+Jangan membuat arbitrary external URL source.
+
+Source registry harus deterministic dan permission-aware.
+
+==================================================
+UPLOAD
+==================================================
+
+Gunakan API/upload service existing.
+
+Validasi:
+
+- MIME;
+- extension;
+- size;
+- filename;
+- duplicate;
+- unsupported format;
+- upload failure;
+- canceled upload.
+
+Jangan menyimpan base64 besar dalam state.
+
+Jangan menerima SVG mentah untuk injection.
+
+==================================================
+ASSET CONTRACT
+==================================================
+
+Minimal:
+
+AssetSummary
+AssetReference
+AssetSource
+AssetType
+AssetAvailability
+AssetSelection
+AssetFilter
+AssetSort
+AssetPermission
+AssetPreviewDescriptor
+
+Jangan menggandakan canonical artifact contract.
+
+Gunakan adapter jika perlu.
+
+==================================================
+SECURITY
+==================================================
+
+- signed/authenticated URL;
+- no secret path;
+- no raw storage bucket exposure bila tidak diperlukan;
+- tenant authority dari backend;
+- sanitize filename;
+- safe media rendering;
+- revoke object URL;
+- no arbitrary HTML preview;
+- permission check per asset;
+- no cross-tenant selection.
+
+==================================================
+INTEGRATION
+==================================================
+
+Team 11:
+
+- asset dipilih untuk workspace/artifact;
+- jangan membuat canvas.
+
+Team 12:
+
+- asset reference field dapat membuka Asset Picker.
+
+Team 17:
+
+- export asset dapat muncul sebagai source yang sesuai.
+
+Team 24+ domain plugins:
+
+- dapat menyediakan filter/source metadata melalui contract.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. search;
+2. filter;
+3. sort;
+4. pagination;
+5. single-select;
+6. multi-select;
+7. unsupported type;
+8. preview unavailable;
+9. upload validation;
+10. oversized file;
+11. MIME mismatch;
+12. duplicate handling;
+13. upload cancellation;
+14. object URL cleanup;
+15. signed URL expiry state;
+16. permission denied;
+17. archived asset;
+18. unsafe SVG/HTML safety;
+19. source registry duplicate;
+20. accessibility;
+21. existing upload regression.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-assets): add universal asset browser"
+git push -u origin HEAD

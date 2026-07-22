@@ -79,6 +79,8 @@ import serviceNormalizationRouter from "./service-normalization.js";
 import discoveryAnalyticsRouter from "./discoveryAnalytics.js";
 // ── Team 10: Universal Design API Contracts & Orchestration Boundary ──────
 import universalDesignRouter from "./universal-design/index.js";
+// ── Team 14: Universal Asset Browser ─────────────────────────────────────
+import assetBrowserRouter from "./asset-browser.js";
 
 // ── Team 01: Creative Workflow V2 ──────────────────────────────────────────
 import { creativeWorkflowV2Router, creativeWorkflowPublicRouter } from "./creative-workflow-v2/index.js";
@@ -264,7 +266,12 @@ router.use(cargoRatesRouter);
 router.use(serviceNormalizationRouter);
 // ── Team 05: Discovery Analytics & Feature Flags ──────────────────────────────
 router.use(discoveryAnalyticsRouter);
+<<<<<<< HEAD
 // ── Team 10: Universal Design API Contracts & Orchestration Boundary ──────────
 router.use(universalDesignRouter);
+=======
+// ── Team 14: Universal Asset Browser ──────────────────────────────────────────
+router.use(assetBrowserRouter);
+>>>>>>> origin/feature/team-14-asset-browser
 
 export default router;
