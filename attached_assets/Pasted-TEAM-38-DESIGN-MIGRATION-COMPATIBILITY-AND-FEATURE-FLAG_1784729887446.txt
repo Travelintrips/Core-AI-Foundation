@@ -1,0 +1,170 @@
+TEAM 38 — DESIGN MIGRATION, COMPATIBILITY, AND FEATURE FLAGS
+
+BRANCH WAJIB:
+feature/team-38-design-migration
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun migration dan compatibility strategy agar Universal Design Platform dapat
+diperkenalkan tanpa merusak Creative AI existing.
+
+Team 38 tidak mengganti semua flow sekaligus.
+
+==================================================
+AUDIT
+==================================================
+
+Audit:
+
+- Creative AI project data;
+- legacy brief;
+- project steps;
+- assets;
+- reviews;
+- template knowledge;
+- workflow statuses;
+- customer portal routes;
+- admin portal routes;
+- feature flags;
+- configuration;
+- migration utilities;
+- backfill patterns;
+- canonical normalizer;
+- version contracts.
+
+==================================================
+SCOPE
+==================================================
+
+Bangun:
+
+DesignCompatibilityAdapter
+LegacyDesignProjectAdapter
+LegacyArtifactAdapter
+LegacyBriefAdapter
+LegacyWorkflowAdapter
+DesignFeatureFlag
+DesignMigrationPlan
+DesignMigrationResult
+DesignMigrationIssue
+DesignReadinessCheck
+
+==================================================
+COMPATIBILITY
+==================================================
+
+Adapter harus:
+
+- read legacy data;
+- map ke canonical contract;
+- preserve original IDs;
+- preserve tenant;
+- preserve timestamps;
+- preserve review/artifact status;
+- mark inferred/defaulted fields;
+- report unmappable data;
+- tidak mengarang data.
+
+==================================================
+DUAL READ / CUTOVER
+==================================================
+
+Rancang strategy:
+
+1. legacy read;
+2. adapter read;
+3. optional dual-read comparison;
+4. feature-flagged canonical view;
+5. controlled cutover;
+6. rollback;
+7. post-cutover verification.
+
+Jangan melakukan dual-write tanpa explicit transaction/idempotency design.
+
+==================================================
+FEATURE FLAGS
+==================================================
+
+Minimal flag boundary:
+
+- universal_design_workspace;
+- dynamic_design_brief;
+- design_plugin_runtime;
+- design_material_library;
+- design_component_library;
+- design_ai_orchestration;
+- design_export_workspace.
+
+Gunakan feature flag system existing bila tersedia.
+
+Jangan membuat hard-coded environment switch tersebar.
+
+==================================================
+MIGRATION
+==================================================
+
+Jika migration DB diperlukan:
+
+- additive;
+- idempotent;
+- no destructive drop;
+- nullable/default safe;
+- batchable;
+- resumable;
+- audit result;
+- dry-run;
+- tenant scoped;
+- rollback strategy.
+
+Jangan menjalankan migration production.
+
+==================================================
+READINESS CHECK
+==================================================
+
+Per tenant/project:
+
+- required identity;
+- compatible status;
+- valid artifact refs;
+- workflow mapping;
+- review mapping;
+- storage availability;
+- plugin mapping;
+- contract version;
+- unresolved issues.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. legacy project mapping;
+2. legacy artifact mapping;
+3. legacy brief mapping;
+4. status preservation;
+5. ID preservation;
+6. timestamp preservation;
+7. unmappable field report;
+8. inferred value marking;
+9. feature flag off;
+10. feature flag on;
+11. tenant scoped migration;
+12. dry run;
+13. idempotent rerun;
+14. partial failure/resume;
+15. rollback metadata;
+16. no fabricated data;
+17. existing Creative AI flow preserved;
+18. readiness report.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-migration): add compatibility and rollout foundation"
+git push -u origin HEAD
