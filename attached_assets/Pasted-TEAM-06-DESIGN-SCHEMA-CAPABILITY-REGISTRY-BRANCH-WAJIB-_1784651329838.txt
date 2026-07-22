@@ -1,0 +1,177 @@
+TEAM 06 — DESIGN SCHEMA & CAPABILITY REGISTRY
+
+BRANCH WAJIB:
+feature/team-06-design-schema-registry
+
+PERAN TEAM
+
+Bangun registry terpusat untuk schema dan capability yang dibutuhkan oleh
+plugin, workflow, AI agent, renderer, asset, dan export engine.
+
+PROJECT BRIEF
+
+Platform sudah mempunyai AI capability matrix dengan banyak capabilities dan
+guardrails. Jangan membuat capability system yang terpisah tanpa integrasi.
+
+Universal Design Platform membutuhkan mapping antara:
+
+- project domain;
+- brief schema;
+- workflow stage;
+- AI capability;
+- artifact schema;
+- renderer;
+- exporter;
+- supported output formats.
+
+TUJUAN
+
+Buat registry yang memungkinkan sistem menjawab:
+
+- capability apa yang dibutuhkan suatu stage;
+- input schema yang harus dipenuhi;
+- output artifact schema yang dihasilkan;
+- executor apa yang kompatibel;
+- renderer/exporter apa yang tersedia;
+- versi contract apa yang didukung.
+
+AUDIT WAJIB
+
+Temukan:
+
+- ai_capabilities;
+- capability matrix seed;
+- ai model router;
+- guardrail system;
+- job types;
+- worker registry;
+- document/presentation job registry;
+- asset types;
+- existing validation schemas.
+
+Tentukan mana yang diperluas dan mana yang hanya direferensikan.
+
+Jangan menggandakan ai_capabilities sebagai tabel baru kecuali bukti arsitektur
+menunjukkan kebutuhan yang tidak dapat diatasi secara additive.
+
+IMPLEMENTASI
+
+1. DesignSchemaRegistry
+   - schema ID/version;
+   - schema category;
+   - validator;
+   - compatibility metadata.
+
+2. DesignCapabilityRegistry
+   - capability ID;
+   - existing AI capability reference;
+   - stage applicability;
+   - input/output schema;
+   - execution kind;
+   - renderer/export dependencies;
+   - guardrails;
+   - cost observability requirement.
+
+3. Capability resolver
+   - exact resolution;
+   - compatibility;
+   - explicit unsupported result;
+   - explainability.
+
+4. Capability availability checker
+   - configuration availability;
+   - model/worker availability melalui ports;
+   - no provider hard-coding.
+
+5. Registration collision protection.
+
+SCHEMA CATEGORIES
+
+Minimal evaluasi:
+
+- brief;
+- workflow;
+- artifact;
+- material;
+- component;
+- annotation;
+- technical specification;
+- export manifest.
+
+Team ini tidak perlu mendefinisikan isi domain secara lengkap, tetapi harus
+menyediakan registration mechanism.
+
+EXECUTION KIND
+
+Contoh:
+
+- pure;
+- AI text;
+- AI image;
+- render;
+- document;
+- presentation;
+- export;
+- human review;
+- composite.
+
+Gunakan enum/union extensible yang disepakati. Hindari string bebas tanpa validasi.
+
+INTEGRASI AI CAPABILITY EXISTING
+
+- Reuse capability IDs bila semantic sama.
+- Buat namespace baru hanya untuk capability design yang memang baru.
+- Jangan mengubah seed existing secara destruktif.
+- Jika seed tambahan dibutuhkan, harus idempotent.
+- Model selection tetap ditangani intelligent/model router existing.
+
+FILE OWNERSHIP
+
+Boleh:
+
+- schema/capability registry;
+- adapters ke AI capability existing;
+- validation;
+- compatibility resolver;
+- seed additive bila benar-benar diperlukan;
+- tests;
+- docs.
+
+Tidak boleh:
+
+- mengimplementasikan AI executor;
+- mengimplementasikan domain plugin;
+- membuat renderer;
+- membuat UI;
+- mengganti model router;
+- membuat cost engine kedua.
+
+ACCEPTANCE CRITERIA
+
+1. Existing AI capability system direuse.
+2. Registry dapat memvalidasi referensi dari workflow/plugin.
+3. Unknown capability ditolak secara eksplisit.
+4. Capability dapat menunjukkan required input/output schema.
+5. Availability check tidak melakukan provider call langsung.
+6. Registration collision terlindungi.
+7. Version compatibility teruji.
+8. Sample Fashion/Interior/Packaging capability dapat didaftarkan sebagai fixture.
+9. Tidak ada duplicate source of truth.
+10. Dokumentasi menjelaskan ownership capability.
+
+TEST WAJIB
+
+- register schema;
+- duplicate registration;
+- register capability;
+- missing schema;
+- incompatible version;
+- availability unavailable;
+- resolver explanation;
+- legacy AI capability mapping;
+- guardrail metadata;
+- serialization stability.
+
+COMMIT YANG DISARANKAN
+
+feat(design-registry): add schema and capability registry
