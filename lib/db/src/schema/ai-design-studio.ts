@@ -11,9 +11,15 @@ import { appSchema } from "./_pg-schema.js";
 /**
  * V4.5 AI Design Studio — design projects and version history.
  * Canvas state stored as JSONB (element tree).
+ *
+ * Team 36 (Design Security): added tenant_id column to ai_design_projects
+ * for multi-tenant isolation. Versions are scoped through project ownership
+ * — no separate tenant_id needed on the versions table.
  */
 export const aiDesignProjects = appSchema.table("ai_design_projects", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
+  /** Server-resolved tenant identifier — never taken from client input. */
+  tenantId: text("tenant_id").notNull().default("default"),
   name: text("name").notNull(),
   description: text("description"),
   canvasWidth: integer("canvas_width").notNull().default(1920),
