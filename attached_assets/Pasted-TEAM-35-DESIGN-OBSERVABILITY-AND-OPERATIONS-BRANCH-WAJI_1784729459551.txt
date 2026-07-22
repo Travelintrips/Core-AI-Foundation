@@ -1,0 +1,185 @@
+TEAM 35 — DESIGN OBSERVABILITY AND OPERATIONS
+
+BRANCH WAJIB:
+feature/team-35-design-observability
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun observability layer untuk Universal Design Platform.
+
+Harus memungkinkan admin melihat:
+
+- workflow health;
+- job status;
+- stage latency;
+- failure rate;
+- retry;
+- stuck jobs;
+- renderer failures;
+- AI provider failures;
+- QC failure;
+- export failures;
+- cost anomalies;
+- event stream health;
+- plugin health.
+
+Gunakan AI Operations Center dan telemetry pattern existing.
+
+Jangan membuat monitoring platform kedua.
+
+==================================================
+AUDIT
+==================================================
+
+Audit:
+
+- AI Operations Center;
+- dispatcher status;
+- worker cluster;
+- job queue;
+- SSE runtime stream;
+- canonical events;
+- logging;
+- audit service;
+- analytics endpoints;
+- health endpoints;
+- current admin monitor pages.
+
+==================================================
+CONTRACT
+==================================================
+
+Minimal:
+
+DesignOperationMetric
+DesignOperationEvent
+DesignOperationHealth
+DesignWorkflowHealth
+DesignStageHealth
+DesignPluginHealth
+DesignRendererHealth
+DesignProviderHealth
+DesignIncident
+DesignOperationalAlert
+DesignObservabilityAdapter
+
+==================================================
+METRICS
+==================================================
+
+Minimal:
+
+- throughput;
+- queue depth;
+- success rate;
+- failure rate;
+- retry rate;
+- cancellation rate;
+- p50/p95 latency;
+- stage duration;
+- cost per run;
+- artifact generation count;
+- QC blocking rate;
+- review turnaround;
+- export success;
+- stale/stuck count.
+
+==================================================
+HEALTH
+==================================================
+
+Status minimal:
+
+- healthy;
+- degraded;
+- unavailable;
+- unknown.
+
+Unknown tidak boleh dianggap healthy.
+
+==================================================
+INCIDENT DETECTION
+==================================================
+
+Dukung rule-based detection:
+
+- job stuck;
+- repeated provider failure;
+- renderer failure spike;
+- queue growth;
+- timeout spike;
+- cost anomaly;
+- missing worker;
+- plugin load failure;
+- event stream lag;
+- invalid output spike.
+
+Jangan membuat auto-remediation berbahaya.
+
+==================================================
+UI
+==================================================
+
+Bangun atau perluas admin operations view secara minimal:
+
+- overview cards;
+- health table;
+- workflow/stage metrics;
+- incident list;
+- filtering;
+- time range;
+- drill-down link;
+- empty/error/loading;
+- honest unavailable state.
+
+Jangan membuat data dummy menjadi live.
+
+==================================================
+SECURITY
+==================================================
+
+- admin/platform authorization;
+- tenant-scoped view;
+- no raw prompt;
+- no API key;
+- no full customer sensitive payload;
+- redact stack trace untuk non-platform actor;
+- correlation IDs aman ditampilkan;
+- audit access.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. metric aggregation;
+2. p95 calculation;
+3. unknown health;
+4. degraded health;
+5. stuck job;
+6. provider failure spike;
+7. queue anomaly;
+8. cost anomaly;
+9. plugin failure;
+10. tenant scope;
+11. platform scope;
+12. redaction;
+13. empty state;
+14. time filter;
+15. unavailable telemetry;
+16. deterministic incident;
+17. duplicate incident suppression;
+18. existing ops center compatibility;
+19. no demo-as-live;
+20. accessibility.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-ops): add design observability operations"
+git push -u origin HEAD
