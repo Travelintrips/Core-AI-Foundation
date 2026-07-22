@@ -1,0 +1,349 @@
+TEAM 12 — UNIVERSAL PROPERTY PANEL ENGINE
+
+BRANCH WAJIB:
+feature/team-12-property-panel
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun Property Panel universal untuk Universal Design Workspace.
+
+Property Panel harus dapat menampilkan dan mengubah properti:
+
+- project;
+- artifact;
+- frame/view;
+- selected element;
+- selected region;
+- layer;
+- material assignment;
+- typography;
+- dimensions;
+- metadata;
+- review status;
+- plugin extension properties.
+
+Property Panel harus domain-neutral.
+
+Dilarang membuat panel khusus Fashion, Interior, Packaging, atau Branding di core.
+
+==================================================
+DEPENDENCY
+==================================================
+
+Team 11 menyediakan Canvas Workspace dan selection events.
+
+Jika kontrak Team 11 belum tersedia:
+
+- buat WorkspaceSelectionAdapter minimal;
+- gunakan stable opaque IDs;
+- jangan membuat Canvas Workspace kedua;
+- dokumentasikan penggantian adapter saat integrasi.
+
+Gunakan @workspace/design-contracts jika tersedia.
+
+==================================================
+AUDIT WAJIB
+==================================================
+
+Audit:
+
+- form components existing;
+- React Hook Form/Zod usage;
+- settings/property panels;
+- accordion, tabs, drawer, sheet;
+- asset editor;
+- existing autosave;
+- optimistic update;
+- permissions;
+- validation errors;
+- undo history;
+- design tokens.
+
+Catat baseline:
+
+- branch;
+- commit;
+- test;
+- typecheck;
+- build;
+- pre-existing failure.
+
+==================================================
+ARSITEKTUR
+==================================================
+
+Bangun:
+
+PropertyPanelShell
+├── PropertySectionRegistry
+├── PropertyFieldRendererRegistry
+├── PropertySection
+├── PropertyFieldRendererHost
+├── ValidationSummary
+├── SaveStatus
+└── ReadOnlyState
+
+Minimal contract:
+
+PropertyPanelContext
+PropertySectionDefinition
+PropertyFieldDefinition
+PropertyValue
+PropertyPatch
+PropertyValidationResult
+PropertyFieldRenderer
+PropertyFieldRendererRegistry
+
+==================================================
+PROPERTY FIELD TYPES
+==================================================
+
+Dukung minimal:
+
+- text;
+- textarea;
+- number;
+- boolean;
+- select;
+- multi-select;
+- color;
+- date;
+- dimensions;
+- percentage;
+- range;
+- asset reference;
+- enum;
+- read-only metadata;
+- custom plugin renderer.
+
+Jangan membuat rich text editor baru.
+
+Jangan membuat color engine kompleks jika component existing tersedia.
+
+==================================================
+PROPERTY REGISTRY
+==================================================
+
+Registry harus:
+
+- menerima section dari core dan plugin;
+- menolak duplicate ID;
+- mempunyai ordering;
+- mendukung visibility condition;
+- mendukung read-only condition;
+- mendukung capability requirement;
+- mendukung feature stability;
+- menghasilkan diagnostic bila renderer tidak tersedia.
+
+Dilarang membuat switch besar berdasarkan service type.
+
+==================================================
+EDITING MODEL
+==================================================
+
+Pisahkan:
+
+1. canonical current values;
+2. local draft;
+3. dirty fields;
+4. validation state;
+5. pending save;
+6. save failure;
+7. conflict state.
+
+Dukung:
+
+- immediate update;
+- explicit save;
+- autosave optional;
+- cancel/reset;
+- partial patch;
+- optimistic concurrency token;
+- stale version conflict;
+- permission denied;
+- read-only artifact.
+
+Jangan menyimpan seluruh artifact baru untuk perubahan satu field jika backend
+mendukung patch.
+
+==================================================
+VALIDATION
+==================================================
+
+Gunakan schema dari plugin/contract.
+
+Validation wajib:
+
+- field-level;
+- section-level;
+- cross-field bila disediakan schema;
+- human-readable errors;
+- tidak menampilkan raw Zod error;
+- invalid values tidak dikirim;
+- numeric bounds;
+- required condition;
+- enum restriction;
+- unsafe string handling.
+
+==================================================
+SELECTION INTEGRATION
+==================================================
+
+Property Panel harus merespons:
+
+- selectedArtifactId;
+- selectedFrameId;
+- selectedElementId;
+- selectedRegionId;
+- selectedLayerId.
+
+Selection ID bersifat opaque.
+
+Core tidak boleh memahami arti sleeve, wall, box-panel, logo-mark, atau sofa.
+
+==================================================
+PLUGIN EXTENSION
+==================================================
+
+Plugin dapat mendaftarkan:
+
+- property sections;
+- field schemas;
+- field renderers;
+- validation;
+- visibility condition;
+- capability requirement;
+- default values.
+
+Plugin tidak boleh mengimpor internal state Property Panel.
+
+Gunakan public registry API.
+
+==================================================
+SECURITY
+==================================================
+
+- Jangan render raw HTML.
+- Jangan percaya label dari plugin tanpa sanitization.
+- Jangan expose secret metadata.
+- Jangan gunakan tenantId dari client sebagai authority.
+- Jangan kirim field yang tidak diizinkan.
+- Jangan memungkinkan arbitrary component/module loading dari URL.
+
+==================================================
+ACCESSIBILITY
+==================================================
+
+- label dan input terhubung;
+- error announcement;
+- keyboard navigation;
+- focus invalid field;
+- disabled/read-only semantics;
+- accordion accessible;
+- save status live region;
+- tidak hanya mengandalkan warna.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. register section;
+2. duplicate section rejection;
+3. ordering;
+4. visibility condition;
+5. capability gating;
+6. field renderer resolution;
+7. unsupported field renderer;
+8. draft update;
+9. dirty tracking;
+10. reset;
+11. partial patch;
+12. validation failure;
+13. cross-field validation;
+14. read-only mode;
+15. permission denied;
+16. stale version conflict;
+17. autosave debounce cleanup;
+18. selection change;
+19. plugin section;
+20. unsafe HTML tidak dirender;
+21. accessibility labels;
+22. error focus;
+23. existing forms tidak regression.
+
+==================================================
+FILE OWNERSHIP
+==================================================
+
+Boleh:
+
+- property panel module;
+- registries;
+- hooks;
+- pure utilities;
+- tests;
+- minimal workspace integration;
+- documentation.
+
+Dilarang:
+
+- membuat canvas;
+- membuat layer engine;
+- membuat material database;
+- membuat annotation system;
+- membuat backend persistence baru tanpa kebutuhan nyata;
+- mengubah lifecycle source of truth;
+- membuat domain plugin lengkap.
+
+==================================================
+ACCEPTANCE
+==================================================
+
+Selesai jika:
+
+- domain-neutral;
+- schema-driven;
+- plugin-extensible;
+- selection-aware;
+- validation kuat;
+- patch-based;
+- conflict-aware;
+- read-only jujur;
+- accessible;
+- tidak ada regression;
+- test/typecheck/build berhasil;
+- commit dan push berhasil.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-workspace): add universal property panel"
+git push -u origin HEAD
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+- baseline;
+- audit;
+- files;
+- public contracts;
+- property types;
+- registry;
+- validation;
+- save model;
+- selection integration;
+- plugin integration;
+- tests;
+- dependencies;
+- risks;
+- Team 39 integration notes;
+- Team 40 regression notes.
