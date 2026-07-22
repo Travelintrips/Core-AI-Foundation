@@ -1,0 +1,115 @@
+TEAM 27 — BRANDING AND IDENTITY DOMAIN PLUGIN
+
+BRANCH WAJIB:
+feature/team-27-branding-plugin
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun Branding & Identity Plugin.
+
+Plugin mencakup brand strategy sampai identity application dan guideline.
+
+Jangan menggandakan Brand Strategist/Creative Director agents existing.
+
+Gunakan agent capability melalui adapter.
+
+==================================================
+WORKFLOW
+==================================================
+
+Minimal:
+
+1. Brand Brief
+2. Research
+3. Brand Strategy
+4. Positioning
+5. Verbal Direction
+6. Visual Direction
+7. Logo Concepts
+8. Color System
+9. Typography
+10. Identity Applications
+11. Brand Guideline
+12. Review
+13. Export
+
+==================================================
+BRIEF
+==================================================
+
+Contoh:
+
+- company/product;
+- industry;
+- audience;
+- positioning;
+- personality;
+- values;
+- competitors;
+- tone;
+- naming status;
+- preferred style;
+- color constraints;
+- usage channels.
+
+==================================================
+ARTIFACT TYPES
+==================================================
+
+Minimal:
+
+- brand_strategy;
+- brand_positioning;
+- brand_voice;
+- brand_moodboard;
+- logo_concept;
+- logo_system;
+- color_system;
+- typography_system;
+- identity_application;
+- brand_guideline;
+- campaign_direction.
+
+==================================================
+PROPERTY CONTRIBUTION
+==================================================
+
+Contoh:
+
+- logo variation;
+- color token;
+- typography role;
+- spacing rule;
+- clear space;
+- application context;
+- usage rule;
+- prohibited usage.
+
+Jangan mengubah global application design tokens.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+- manifest;
+- brief;
+- workflow;
+- artifact registry;
+- property sections;
+- strategy/visual separation;
+- guideline export;
+- no duplicated agent runtime;
+- no branding fields leaked to core;
+- version compatibility.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-plugins): add branding identity plugin"
+git push -u origin HEAD
