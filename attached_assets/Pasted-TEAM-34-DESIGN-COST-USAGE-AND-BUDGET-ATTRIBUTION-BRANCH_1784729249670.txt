@@ -1,0 +1,203 @@
+TEAM 34 — DESIGN COST, USAGE, AND BUDGET ATTRIBUTION
+
+BRANCH WAJIB:
+feature/team-34-design-cost-tracking
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun attribution layer agar setiap design execution dapat ditelusuri biaya dan
+pemakaiannya berdasarkan:
+
+- order;
+- tenant;
+- project;
+- workflow;
+- stage;
+- artifact;
+- capability;
+- agent;
+- provider;
+- model;
+- job;
+- retry;
+- export/render operation.
+
+Gunakan AI Cost Service dan ai_cost_records existing.
+
+Jangan membuat sistem billing atau cost ledger kedua.
+
+==================================================
+AUDIT
+==================================================
+
+Audit:
+
+- ai_cost_records;
+- costService;
+- token usage;
+- model pricing;
+- capability matrix;
+- AI jobs;
+- project/workflow;
+- image analytics;
+- provider metadata;
+- retries;
+- budget blocking;
+- existing admin analytics.
+
+==================================================
+CONTRACT
+==================================================
+
+Minimal:
+
+DesignUsageAttribution
+DesignCostAttribution
+DesignExecutionUsage
+DesignBudgetPolicy
+DesignBudgetSnapshot
+DesignCostSummary
+DesignCostBreakdown
+DesignCostEstimate
+DesignCostReconciliationResult
+DesignCostAttributionAdapter
+
+==================================================
+ATTRIBUTION DIMENSIONS
+==================================================
+
+Minimal:
+
+- tenantId;
+- projectId;
+- orderId optional;
+- workflowId;
+- stageId;
+- artifactId optional;
+- capabilityId;
+- pluginId;
+- agentId optional;
+- jobId;
+- attempt;
+- providerId;
+- modelId;
+- operationType;
+- correlationId;
+- idempotencyKey.
+
+==================================================
+USAGE
+==================================================
+
+Dukung:
+
+- input tokens;
+- output tokens;
+- cached tokens bila provider mendukung;
+- image generation count;
+- render count;
+- seconds/runtime;
+- storage/output bytes;
+- request count;
+- retry count.
+
+Jangan mengarang usage yang provider tidak laporkan.
+
+Gunakan null/unavailable secara eksplisit.
+
+==================================================
+COST
+==================================================
+
+Dukung:
+
+- estimated cost;
+- provider reported cost;
+- calculated cost;
+- adjusted cost;
+- final attributable cost;
+- currency;
+- pricing version;
+- pricing source;
+- calculation timestamp.
+
+Jangan hard-code harga model di banyak file.
+
+Gunakan pricing source canonical.
+
+==================================================
+RECONCILIATION
+==================================================
+
+Deteksi:
+
+- job tanpa cost;
+- cost tanpa job;
+- duplicate cost;
+- retry double charge;
+- missing attribution;
+- currency mismatch;
+- estimate vs actual variance;
+- canceled execution with cost;
+- partial provider usage.
+
+==================================================
+BUDGET
+==================================================
+
+Budget policy dapat berlaku pada:
+
+- tenant;
+- project;
+- order;
+- workflow;
+- stage;
+- capability.
+
+Dukung:
+
+- soft warning;
+- hard block;
+- per-run limit;
+- daily/monthly policy boundary;
+- approval required;
+- remaining budget.
+
+Jangan membuat finance accounting journal.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. complete attribution;
+2. missing optional dimensions;
+3. duplicate cost detection;
+4. retry attribution;
+5. canceled execution;
+6. provider usage unavailable;
+7. estimated cost;
+8. actual cost;
+9. pricing version;
+10. variance;
+11. currency mismatch;
+12. budget warning;
+13. budget block;
+14. project summary;
+15. order summary;
+16. tenant isolation;
+17. no secret metadata;
+18. idempotent record;
+19. existing cost service compatibility;
+20. image analytics compatibility.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-costs): add design usage cost attribution"
+git push -u origin HEAD
