@@ -81,6 +81,8 @@ import discoveryAnalyticsRouter from "./discoveryAnalytics.js";
 import universalDesignRouter from "./universal-design/index.js";
 // ── Team 14: Universal Asset Browser ─────────────────────────────────────
 import assetBrowserRouter from "./asset-browser.js";
+// ── Team 18: Universal Annotation and Comment System ─────────────────────────
+import { annotationRouter } from "../domains/annotation-system/index.js";
 
 // ── Team 01: Creative Workflow V2 ──────────────────────────────────────────
 import { creativeWorkflowV2Router, creativeWorkflowPublicRouter } from "./creative-workflow-v2/index.js";
@@ -274,5 +276,7 @@ router.use(discoveryAnalyticsRouter);
 router.use(universalDesignRouter);
 // ── Team 14: Universal Asset Browser ──────────────────────────────────────────
 router.use(assetBrowserRouter);
+// ── Team 18: Universal Annotation and Comment System ─────────────────────────
+router.use(annotationRouter);
 
 export default router;
