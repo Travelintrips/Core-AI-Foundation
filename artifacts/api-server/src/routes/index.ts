@@ -83,6 +83,10 @@ import universalDesignRouter from "./universal-design/index.js";
 import assetBrowserRouter from "./asset-browser.js";
 // ── Team 18: Universal Annotation and Comment System ─────────────────────────
 import { annotationRouter } from "../domains/annotation-system/index.js";
+// ── Team 21: Universal Material Library ───────────────────────────────────
+import materialLibraryRouter from "./material-library.js";
+// ── Team 23: Design Knowledge & Recommendation Adapter ────────────────────────
+import designKnowledgeRouter from "./design-knowledge.js";
 
 // ── Team 01: Creative Workflow V2 ──────────────────────────────────────────
 import { creativeWorkflowV2Router, creativeWorkflowPublicRouter } from "./creative-workflow-v2/index.js";
@@ -278,5 +282,9 @@ router.use(universalDesignRouter);
 router.use(assetBrowserRouter);
 // ── Team 18: Universal Annotation and Comment System ─────────────────────────
 router.use(annotationRouter);
+// ── Team 21: Universal Material Library ───────────────────────────────────────
+router.use(materialLibraryRouter);
+// ── Team 23: Design Knowledge & Recommendation Adapter ────────────────────────
+router.use(designKnowledgeRouter);
 
 export default router;
