@@ -1,0 +1,471 @@
+TEAM 42 — FINAL PRODUCTION SMOKE TEST
+DESIGN PLATFORM V1
+
+Production Branch:
+main
+
+Production Commit:
+1e95a00
+
+Release:
+v1.0.0-rc1
+
+==================================================
+MISSION
+==================================================
+
+JANGAN melakukan coding.
+
+JANGAN membuat migration.
+
+JANGAN mengubah database.
+
+JANGAN mengubah schema.
+
+JANGAN mengubah source code.
+
+JANGAN deploy ulang kecuali benar-benar diperlukan.
+
+Tugas Team 42 adalah melakukan VALIDASI PRODUCTION END-TO-END bahwa seluruh Design Platform V1 berjalan normal setelah deployment dan post-migration remediation.
+
+Jika ditemukan bug:
+
+JANGAN langsung memperbaiki.
+
+Dokumentasikan terlebih dahulu.
+
+==================================================
+PHASE 1 — ENVIRONMENT HEALTH
+==================================================
+
+Verifikasi:
+
+✓ Production URL dapat diakses
+✓ API Health endpoint
+✓ Database connection
+✓ Supabase connection
+✓ Storage bucket
+✓ Authentication service
+✓ AI Provider configuration
+✓ Environment variables
+✓ Queue/Worker aktif
+✓ Scheduler aktif (jika ada)
+
+Laporkan:
+
+PASS / FAIL
+
+==================================================
+PHASE 2 — AUTHENTICATION
+==================================================
+
+Verifikasi:
+
+✓ Login Platform Admin
+✓ Login Tenant Admin
+✓ Session refresh
+✓ Logout
+✓ Expired token
+✓ Invalid token
+✓ Revoked token
+
+Pastikan:
+
+401
+403
+200
+
+sesuai.
+
+==================================================
+PHASE 3 — TENANT ISOLATION
+==================================================
+
+Buat minimal dua tenant.
+
+Verifikasi:
+
+Tenant A
+
+tidak dapat:
+
+- melihat Project Tenant B
+- melihat Asset Tenant B
+- melihat Review Tenant B
+- melihat Template Tenant B
+- melihat Workflow Tenant B
+- melihat Cost Tenant B
+
+Pastikan seluruh endpoint:
+
+fail-closed.
+
+==================================================
+PHASE 4 — DESIGN STUDIO
+==================================================
+
+Verifikasi:
+
+✓ Create Project
+
+✓ Update Project
+
+✓ Create Version
+
+✓ Load Version
+
+✓ Duplicate Version
+
+✓ Delete Version
+
+✓ Restore Version
+
+✓ Asset Browser
+
+✓ Component Browser
+
+✓ Material Browser
+
+✓ Annotation
+
+✓ Review
+
+==================================================
+PHASE 5 — TEMPLATE ENGINE
+==================================================
+
+Verifikasi:
+
+✓ Template List
+
+✓ Template Detail
+
+✓ Template Version
+
+✓ Favorite
+
+✓ Search
+
+✓ Category
+
+✓ Preview
+
+==================================================
+PHASE 6 — RENDER ENGINE
+==================================================
+
+Verifikasi:
+
+✓ Render Batch
+
+✓ Render Queue
+
+✓ Render Item
+
+✓ Retry
+
+✓ Cancel
+
+✓ Progress
+
+✓ Thumbnail
+
+==================================================
+PHASE 7 — AI PLATFORM
+==================================================
+
+Verifikasi:
+
+✓ AI Providers
+
+✓ AI Models
+
+✓ AI Router
+
+✓ AI Agents
+
+✓ Creative AI
+
+✓ Prompt execution
+
+✓ Structured output
+
+✓ Cost tracking
+
+✓ Guardrails
+
+==================================================
+PHASE 8 — SVG SECURITY
+==================================================
+
+Verifikasi:
+
+safeCssColor
+
+safeHttpsUrl
+
+safeFontFamily
+
+xmlEscape
+
+safeNum
+
+canvasStateToSvg
+
+Pastikan:
+
+script injection ditolak
+
+foreignObject ditolak
+
+javascript: URL ditolak
+
+unsafe CSS ditolak
+
+==================================================
+PHASE 9 — SECURITY
+==================================================
+
+Verifikasi:
+
+✓ IDOR
+
+✓ SSRF
+
+✓ Rate limiting
+
+✓ Body limit
+
+✓ Upload validation
+
+✓ Plugin security
+
+✓ AI security
+
+✓ Audit logging
+
+==================================================
+PHASE 10 — PERFORMANCE
+==================================================
+
+Verifikasi:
+
+API latency
+
+Database latency
+
+AI latency
+
+Render latency
+
+Memory
+
+CPU
+
+Queue
+
+Storage
+
+Tidak perlu benchmark ekstrem.
+
+Cukup memastikan tidak ada bottleneck fatal.
+
+==================================================
+PHASE 11 — OBSERVABILITY
+==================================================
+
+Verifikasi:
+
+✓ Audit Log
+
+✓ Error Log
+
+✓ AI Cost
+
+✓ Metrics
+
+✓ Queue Monitoring
+
+✓ Worker Status
+
+==================================================
+PHASE 12 — DATABASE
+==================================================
+
+Verifikasi:
+
+✓ ai_design_projects
+
+✓ ai_design_versions
+
+✓ design_templates
+
+✓ design_template_versions
+
+✓ design_render_batches
+
+✓ design_render_items
+
+✓ ai_brand_dna
+
+✓ ai_asset_intelligence
+
+✓ ai_templates
+
+✓ ai_template_analytics
+
+✓ ai_customer_documents
+
+✓ ai_production_pipelines
+
+Pastikan:
+
+CRUD berjalan.
+
+==================================================
+PHASE 13 — API
+==================================================
+
+Lakukan smoke test seluruh endpoint utama.
+
+Pastikan:
+
+2xx
+
+4xx
+
+5xx
+
+sesuai kontrak.
+
+Tidak boleh ada:
+
+500
+
+yang tidak diketahui penyebabnya.
+
+==================================================
+PHASE 14 — RELEASE VALIDATION
+==================================================
+
+Pastikan:
+
+✓ Build yang terdeploy sama dengan commit:
+
+1e95a00
+
+✓ Tag:
+
+v1.0.0-rc1
+
+sesuai.
+
+==================================================
+PHASE 15 — FINAL REPORT
+==================================================
+
+Buat laporan:
+
+1.
+Executive Summary
+
+2.
+Environment
+
+3.
+Authentication
+
+4.
+Tenant Isolation
+
+5.
+Design Studio
+
+6.
+Template Engine
+
+7.
+Render Engine
+
+8.
+AI Platform
+
+9.
+Security
+
+10.
+Performance
+
+11.
+Observability
+
+12.
+Database
+
+13.
+API
+
+14.
+Known Issues
+
+15.
+Remaining Risks
+
+16.
+Go Live Recommendation
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Gunakan hanya salah satu:
+
+✅ READY FOR PRODUCTION TRAFFIC
+
+atau
+
+⚠️ READY WITH KNOWN LIMITATIONS
+
+atau
+
+❌ PRODUCTION BLOCKED
+
+READY FOR PRODUCTION TRAFFIC hanya jika:
+
+✓ Semua smoke test lulus
+
+✓ Tidak ada data corruption
+
+✓ Tidak ada tenant leakage
+
+✓ Tidak ada security regression
+
+✓ Tidak ada endpoint kritikal yang gagal
+
+✓ Tidak ada 500 error yang tidak dijelaskan
+
+✓ AI Platform berjalan normal
+
+✓ Design Platform berjalan normal
+
+✓ Audit log aktif
+
+✓ Cost tracking aktif
+
+✓ Queue aktif
+
+✓ Storage aktif
+
+==================================================
+DELIVERABLE
+==================================================
+
+Simpan laporan sebagai:
+
+PRODUCTION_SMOKE_TEST_REPORT_V1.md
+
+Jika seluruh validasi PASS, rekomendasikan:
+
+"GO LIVE APPROVED"
+
+beserta daftar monitoring yang harus dipantau selama 24 jam pertama setelah traffic production dialihkan.
