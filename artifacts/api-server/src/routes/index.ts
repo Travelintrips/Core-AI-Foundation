@@ -266,10 +266,8 @@ router.use(cargoRatesRouter);
 router.use(serviceNormalizationRouter);
 // ── Team 05: Discovery Analytics & Feature Flags ──────────────────────────────
 router.use(discoveryAnalyticsRouter);
-<<<<<<< HEAD
 // ── Team 10: Universal Design API Contracts & Orchestration Boundary ──────────
 router.use(universalDesignRouter);
-=======
 // ── Team 14: Universal Asset Browser ──────────────────────────────────────────
 router.use(assetBrowserRouter);
 >>>>>>> origin/feature/team-14-asset-browser
