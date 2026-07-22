@@ -13,7 +13,7 @@
       "path": "./lib/api-zod"
     },
     {
-      "path": "./lib/design-workflow"
+      "path": "./lib/design-components"
     }
   ]
 }
