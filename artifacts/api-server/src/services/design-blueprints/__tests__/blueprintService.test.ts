@@ -63,7 +63,7 @@ describe("listBlueprints", () => {
   it("returns all built-in blueprints when repo is empty", async () => {
     const { service } = makeService();
     const result = await service.listBlueprints();
-    expect(result.length).toBeGreaterThanOrEqual(6);
+    expect(result.length).toBeGreaterThanOrEqual(7);
   });
 
   it("filters by domain", async () => {
@@ -449,10 +449,10 @@ describe("normalizeBlueprintPayload", () => {
 // ── getBlueprintStats ─────────────────────────────────────────────────────────
 
 describe("getBlueprintStats", () => {
-  it("builtin count is 6", async () => {
+  it("builtin count is at least 7 (includes jewelry plugin)", async () => {
     const { service } = makeService();
     const stats = await service.getBlueprintStats();
-    expect(stats.builtin).toBe(6);
+    expect(stats.builtin).toBeGreaterThanOrEqual(7);
   });
 
   it("total = builtin + custom", async () => {

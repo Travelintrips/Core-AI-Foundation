@@ -11,6 +11,7 @@ import { interiorBlueprint } from "./interior.js";
 import { fashionBlueprint } from "./fashion.js";
 import { packagingBlueprint } from "./packaging.js";
 import { productDesignBlueprint } from "./product-design.js";
+import { jewelryBlueprint } from "./jewelry.js";
 import type { Blueprint, BlueprintDomain } from "../types.js";
 
 export const BUILTIN_BLUEPRINTS: readonly Blueprint[] = Object.freeze([
@@ -20,6 +21,7 @@ export const BUILTIN_BLUEPRINTS: readonly Blueprint[] = Object.freeze([
   fashionBlueprint,
   packagingBlueprint,
   productDesignBlueprint,
+  jewelryBlueprint,
 ]);
 
 export const BUILTIN_BLUEPRINT_MAP: ReadonlyMap<string, Blueprint> = new Map(
