@@ -32,6 +32,7 @@ export const BLUEPRINT_DOMAINS = [
   "fashion",
   "packaging",
   "product_design",
+  "jewelry",
 ] as const;
 
 export type BlueprintDomain = (typeof BLUEPRINT_DOMAINS)[number];
