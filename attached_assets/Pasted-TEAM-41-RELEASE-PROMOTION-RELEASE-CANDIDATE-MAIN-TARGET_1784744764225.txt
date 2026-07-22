@@ -1,0 +1,256 @@
+TEAM 41 — RELEASE PROMOTION
+RELEASE CANDIDATE → MAIN
+
+TARGET BRANCH:
+main
+
+SOURCE BRANCH:
+integration-review/design-platform-v1
+
+Release Candidate Commit:
+cf017a6
+
+==================================================
+MISSION
+==================================================
+
+Promosikan Release Candidate ke branch main.
+
+JANGAN melakukan coding baru.
+
+JANGAN mengubah business logic.
+
+JANGAN melakukan refactor.
+
+JANGAN memperbaiki bug baru.
+
+JANGAN mengubah dependency.
+
+Hanya lakukan release promotion dengan verifikasi penuh.
+
+==================================================
+PHASE 1 — VERIFY REPOSITORY STATE
+==================================================
+
+Jalankan:
+
+git status --short
+
+git branch --show-current
+
+git fetch --all --prune
+
+git log --oneline --decorate --graph -20
+
+Pastikan:
+
+- working tree bersih
+- source branch adalah:
+  integration-review/design-platform-v1
+- commit cf017a6 ada
+- remote sinkron
+
+==================================================
+PHASE 2 — VERIFY RELEASE CANDIDATE
+==================================================
+
+Pastikan commit terakhir Release Candidate adalah:
+
+cf017a6
+
+Verifikasi bahwa commit tersebut berisi:
+
+- Team 01–38
+- Team 39 Integration
+- Team 40 Release Verification
+
+Pastikan:
+
+5300/5300 tests PASS
+
+tidak ada regression terbuka.
+
+==================================================
+PHASE 3 — CHECK MAIN
+==================================================
+
+Checkout main.
+
+Fetch terbaru.
+
+Bandingkan:
+
+origin/main
+
+vs
+
+origin/integration-review/design-platform-v1
+
+Laporkan:
+
+- berapa commit behind
+- berapa commit ahead
+- apakah ada divergensi
+- apakah main berubah setelah Release Candidate dibuat
+
+Jika main berubah:
+
+JANGAN merge.
+
+STOP.
+
+Laporkan conflict risk.
+
+==================================================
+PHASE 4 — MERGE PREVIEW
+==================================================
+
+Jalankan merge preview.
+
+Pastikan:
+
+- tidak ada conflict
+- tidak ada overwrite
+- tidak ada file hilang
+- tidak ada route hilang
+- tidak ada registry hilang
+
+==================================================
+PHASE 5 — MERGE
+==================================================
+
+Jika seluruh verifikasi PASS
+dan tidak ada conflict:
+
+Checkout:
+
+main
+
+Pastikan terbaru:
+
+git pull origin main
+
+Merge:
+
+git merge --no-ff integration-review/design-platform-v1
+
+Gunakan merge commit.
+
+JANGAN squash.
+
+JANGAN rebase.
+
+==================================================
+PHASE 6 — POST MERGE VERIFICATION
+==================================================
+
+Jalankan kembali:
+
+typecheck
+
+API build
+
+Frontend build
+
+Full tests
+
+Pastikan hasil tetap:
+
+5300 / 5300 PASS
+
+==================================================
+PHASE 7 — PUSH
+==================================================
+
+Jika seluruh verifikasi PASS:
+
+git push origin main
+
+==================================================
+PHASE 8 — TAG RELEASE
+==================================================
+
+Jika push berhasil:
+
+Buat Git tag:
+
+v1.0.0-rc1
+
+(jika ini Release Candidate pertama)
+
+atau
+
+v1.0.0
+
+(jika langsung menjadi Production Release)
+
+Push tag ke remote.
+
+==================================================
+PHASE 9 — FINAL REPORT
+==================================================
+
+Laporkan:
+
+A.
+Commit sebelum merge
+
+B.
+Commit sesudah merge
+
+C.
+Merge commit hash
+
+D.
+Apakah main berhasil diperbarui
+
+E.
+Push status
+
+F.
+Tag status
+
+G.
+Typecheck
+
+H.
+Build
+
+I.
+Test
+
+J.
+Conflict
+
+K.
+Files changed setelah merge
+
+L.
+Final Verdict
+
+Gunakan salah satu:
+
+✅ RELEASE PROMOTED TO MAIN
+
+atau
+
+⚠️ MERGE BLOCKED
+
+atau
+
+❌ CONFLICT DETECTED
+
+==================================================
+IMPORTANT
+==================================================
+
+Jangan melakukan merge jika:
+
+- main sudah berubah dan belum direview
+- terdapat conflict
+- test gagal
+- build gagal
+- typecheck menghasilkan regression baru
+
+Jika salah satu kondisi di atas terjadi,
+STOP dan laporkan penyebabnya tanpa melakukan push.
