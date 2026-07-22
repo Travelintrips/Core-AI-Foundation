@@ -78,6 +78,8 @@ import DesignPatternsPage from "@/pages/design-patterns";
 import DesignTokensPage from "@/pages/design-tokens";
 import FontPairsPage from "@/pages/design-tokens/font-pairs";
 import ColorPalettesPage from "@/pages/design-tokens/color-palettes";
+// ── Team 16: Design Review Workspace ─────────────────────────────────────
+import ReviewWorkspacePage from "@/pages/review-workspace";
 // ── Team 15: Graphic Design ───────────────────────────────────────────────
 import GraphicDesignPage from "@/pages/graphic-design";
 // ── Team 15: Version Timeline ─────────────────────────────────────────────
@@ -167,6 +169,8 @@ function AdminRouter() {
         <Route path="/design-tokens/font-pairs" component={FontPairsPage} />
         <Route path="/design-tokens/color-palettes" component={ColorPalettesPage} />
         <Route path="/design-tokens" component={DesignTokensPage} />
+        {/* ── Team 16: Design Review Workspace ────────────────────────── */}
+        <Route path="/review-workspace/:reviewId" component={ReviewWorkspacePage} />
         {/* ── Team 15: Graphic Design ─────────────────────────────────── */}
         <Route path="/graphic-design" component={GraphicDesignPage} />
         {/* ── Team 15: Version Timeline ───────────────────────────────── */}
