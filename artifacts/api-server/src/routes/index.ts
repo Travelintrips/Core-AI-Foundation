@@ -75,6 +75,7 @@ import designTemplatesAiAssistRouter from "./design-templates-ai-assist";
 import creativeMarketplaceRouter from "./creative-marketplace";
 import cargoRatesRouter from "./cargo-rates";
 import serviceNormalizationRouter from "./service-normalization.js";
+import { designQualityRouter } from "./design-quality.js";
 // ── Team 05: Discovery Analytics & Feature Flags ──────────────────────────
 import discoveryAnalyticsRouter from "./discoveryAnalytics.js";
 
@@ -250,6 +251,8 @@ router.use(imagePreviewPipelineRouter);
 // ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
 router.use(customsRouter);
 router.use(cargoRatesRouter);
+// ── Team 33: Universal Design Quality Assurance Engine ───────────────────────
+router.use(designQualityRouter);
 // ── Team 04: Service Normalization & Solution Collections ─────────────────────
 router.use(serviceNormalizationRouter);
 // ── Team 05: Discovery Analytics & Feature Flags ──────────────────────────────
