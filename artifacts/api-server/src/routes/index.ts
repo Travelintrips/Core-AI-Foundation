@@ -270,6 +270,5 @@ router.use(discoveryAnalyticsRouter);
 router.use(universalDesignRouter);
 // ── Team 14: Universal Asset Browser ──────────────────────────────────────────
 router.use(assetBrowserRouter);
->>>>>>> origin/feature/team-14-asset-browser
 
 export default router;
