@@ -1,0 +1,152 @@
+{
+  "team": "29",
+  "branch": "feature/team-29-architecture-landscape-plugin",
+  "domain": "Architecture & Landscape Design",
+  "description": "Architecture & Landscape Design Plugin. Provides schema, 12-step workflow, artifact types, material/component contribution, overlay metadata, and preview-labelled outputs for architecture and landscape design projects. Does NOT provide BIM, GIS, CAD, structural calculation, or engineering engines.",
+
+  "ownership": {
+    "apiDomain":    "artifacts/api-server/src/domains/architecture-landscape/",
+    "apiRoutes":    "artifacts/api-server/src/routes/architecture-landscape.ts",
+    "domainSchema": "artifacts/api-server/src/domains/architecture-landscape/schema.ts",
+    "validators":   "artifacts/api-server/src/domains/architecture-landscape/validators.ts",
+    "service":      "artifacts/api-server/src/domains/architecture-landscape/architectureLandscapeService.ts",
+    "migration":    "integration/migrations/team-29.sql",
+    "manifest":     "integration/manifests/team-29.json",
+    "tests":        "artifacts/api-server/src/__tests__/architecture-landscape.test.ts"
+  },
+
+  "routesToMount": [
+    {
+      "file":       "artifacts/api-server/src/routes/architecture-landscape.ts",
+      "import":     "architectureLandscapeRouter",
+      "mountIn":    "artifacts/api-server/src/routes/index.ts",
+      "statement":  "router.use(architectureLandscapeRouter);",
+      "note":       "Mount after packagingDesignRouter (if present). Router self-registers /ai/architecture-landscape/* (admin) and /public/architecture-landscape/* (public) prefixes."
+    }
+  ],
+
+  "schemaExportsRequested": {
+    "sourceFile": "artifacts/api-server/src/domains/architecture-landscape/schema.ts",
+    "targetBarrel": "lib/db/src/schema/index.ts",
+    "note": "Domain-local schema defines all three tables using pgSchema('ai_platform') locally. If Team 24 centralises schema, copy schema.ts into lib/db/src/schema/architecture-landscape.ts and add 'export * from \"./architecture-landscape\"' to index.ts.",
+    "exports": [
+      "architectureLandscapeProjectsTable",
+      "architectureLandscapeArtifactsTable",
+      "architectureLandscapeComponentsTable",
+      "ARCHITECTURE_WORKFLOW_STEPS",
+      "ARCHITECTURE_PROJECT_STATUSES",
+      "ARCHITECTURE_ARTIFACT_TYPES",
+      "ARCHITECTURE_PROJECT_TYPES",
+      "ARCHITECTURE_CLIMATE_TYPES",
+      "FORBIDDEN_ARTIFACT_LABELS",
+      "ArchitectureWorkflowStep",
+      "ArchitectureProjectStatus",
+      "ArchitectureArtifactType",
+      "ArchitectureProjectType",
+      "ArchitectureLandscapeProject",
+      "ArchitectureLandscapeArtifact",
+      "ArchitectureLandscapeComponent",
+      "OverlayMetadata",
+      "ArchitectureBriefJson",
+      "SiteContextJson",
+      "ConstraintsJson"
+    ]
+  },
+
+  "integrationNotes": [
+    "Admin routes (/ai/architecture-landscape/*) are protected by global adminAuthWithExceptions middleware — no per-route duplication needed.",
+    "Public routes (/public/architecture-landscape/*) do NOT require auth — client brief submission and project-ref status tracking only.",
+    "Migration draft at integration/migrations/team-29.sql — additive only, no DROP/TRUNCATE, all IF NOT EXISTS.",
+    "export_ready status gate: enforced in advanceWorkflowStep() — only reachable after all 12 steps complete in order.",
+    "Artifact honesty check enforced in addArtifact() — labels containing 'construction drawing', 'structural calculation', 'permit-ready drawing', or 'certified landscape plan' are rejected.",
+    "No BIM, GIS, CAD, structural calculation, or engineering engine is called anywhere in this plugin.",
+    "Component contribution uses upsert on component_code — safe to call repeatedly (idempotent).",
+    "Overlay metadata is built dynamically in addArtifact() and getOverlayMetadata() — no separate overlay table needed.",
+    "ARCHITECTURE_PREVIEW_DISCLAIMER must be included in any client-facing response that includes preview artifacts."
+  ],
+
+  "adapterDocumentation": {
+    "note": "Team 39 temporary adapter hooks below are per Rule 8 of the parallel execution rules.",
+    "adapters": [
+      {
+        "name": "ArchitectureLandscapePluginAdapter",
+        "purpose": "Thin adapter for cross-plugin calls until Team 39 wires the event bus",
+        "location": "No separate adapter file needed — getPluginManifest() and getOverlayMetadata() serve as the stable contract surface",
+        "contract": {
+          "getManifest": "GET /ai/architecture-landscape/manifest",
+          "getOverlay":  "GET /ai/architecture-landscape/projects/:id/overlay",
+          "listComponents": "GET /ai/architecture-landscape/components"
+        }
+      }
+    ]
+  },
+
+  "tables": [
+    "ai_platform.architecture_landscape_projects",
+    "ai_platform.architecture_landscape_artifacts",
+    "ai_platform.architecture_landscape_components"
+  ],
+
+  "routes": {
+    "admin": [
+      "GET  /ai/architecture-landscape/manifest",
+      "GET  /ai/architecture-landscape/projects",
+      "POST /ai/architecture-landscape/projects",
+      "GET  /ai/architecture-landscape/projects/:id",
+      "PATCH /ai/architecture-landscape/projects/:id",
+      "DELETE /ai/architecture-landscape/projects/:id",
+      "POST /ai/architecture-landscape/projects/:id/advance",
+      "GET  /ai/architecture-landscape/projects/:id/artifacts",
+      "POST /ai/architecture-landscape/projects/:id/artifacts",
+      "GET  /ai/architecture-landscape/projects/:id/overlay",
+      "POST /ai/architecture-landscape/validate/brief",
+      "POST /ai/architecture-landscape/validate/constraints",
+      "POST /ai/architecture-landscape/validate/artifact-label",
+      "GET  /ai/architecture-landscape/components",
+      "POST /ai/architecture-landscape/components",
+      "GET  /ai/architecture-landscape/analytics"
+    ],
+    "public": [
+      "POST /public/architecture-landscape/submit",
+      "GET  /public/architecture-landscape/projects/:projectRef"
+    ]
+  },
+
+  "workflowSteps": [
+    "brief",
+    "site_context",
+    "constraints",
+    "research",
+    "concept",
+    "program_zoning",
+    "spatial_direction",
+    "material_landscape_direction",
+    "visualization",
+    "documentation",
+    "review",
+    "export"
+  ],
+
+  "artifactTypes": [
+    "architecture_site_context",
+    "architecture_concept",
+    "architecture_program",
+    "architecture_zoning",
+    "architecture_plan_preview",
+    "architecture_elevation_preview",
+    "architecture_material_board",
+    "architecture_visualization",
+    "landscape_concept",
+    "landscape_zoning",
+    "landscape_planting_direction",
+    "architecture_presentation"
+  ],
+
+  "invariants": [
+    "export_ready status MUST NOT be set before all 12 workflow steps are completed in order",
+    "Artifact labels MUST NOT contain 'construction drawing', 'structural calculation', 'permit-ready drawing', or 'certified landscape plan'",
+    "architecture_plan_preview and architecture_elevation_preview artifact labels MUST include 'preview', 'draft', 'concept', or 'direction' language",
+    "No BIM, GIS, CAD, or structural calculation engine must be called from this plugin",
+    "All client-facing artifact responses MUST include ARCHITECTURE_PREVIEW_DISCLAIMER"
+  ]
+}
