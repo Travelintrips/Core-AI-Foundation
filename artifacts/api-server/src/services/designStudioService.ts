@@ -43,6 +43,56 @@ export interface CanvasState {
   elements: DesignElement[];
 }
 
+// ── SVG Sanitization Helpers ──────────────────────────────────────────────────
+//
+// All canvas element properties that flow into SVG attribute or text content
+// positions MUST pass through one of these helpers. Unsanitized user data in
+// SVG attributes can produce XSS when the SVG is rendered directly in a browser,
+// and CSS url() values in fill/stroke can trigger SSRF fetches by SVG renderers.
+
+/** Allows hex, rgb/rgba, hsl/hsla, named colors, "transparent", and "none". */
+const SAFE_CSS_COLOR_RE =
+  /^(#[0-9a-fA-F]{3,8}|rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}(?:\s*,\s*[\d.]+)?\s*\)|hsla?\(\s*[\d.]+\s*,\s*[\d.]+%\s*,\s*[\d.]+%(?:\s*,\s*[\d.]+)?\s*\)|transparent|none|[a-zA-Z]{2,30})$/;
+
+/** Allows font names: alphanumeric, spaces, commas, single/double quotes, dashes, underscores, dots. */
+const SAFE_FONT_FAMILY_RE = /^[a-zA-Z0-9 ,'"\-_.]{1,200}$/;
+
+/** Only https:// external URLs are allowed in image href attributes. */
+const SAFE_HTTPS_URL_RE = /^https:\/\/.{1,1000}$/;
+
+function safeCssColor(value: string | undefined, fallback: string): string {
+  if (value === undefined || value === null) return fallback;
+  const trimmed = String(value).trim();
+  return SAFE_CSS_COLOR_RE.test(trimmed) ? trimmed : fallback;
+}
+
+function safeFontFamily(value: string | undefined, fallback: string): string {
+  if (value === undefined || value === null) return fallback;
+  return SAFE_FONT_FAMILY_RE.test(String(value)) ? String(value) : fallback;
+}
+
+/** Returns the URL string if it is a safe https:// URL, or null otherwise. */
+function safeHttpsUrl(value: string | undefined): string | null {
+  if (!value) return null;
+  return SAFE_HTTPS_URL_RE.test(String(value)) ? String(value) : null;
+}
+
+/** Escapes characters that are special in XML attribute values and text content. */
+function xmlEscape(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Ensures a value is a finite number, returning a fallback otherwise. */
+function safeNum(value: unknown, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function defaultCanvas(w = 1920, h = 1080): CanvasState {
@@ -52,18 +102,20 @@ function defaultCanvas(w = 1920, h = 1080): CanvasState {
 // ── Project CRUD ──────────────────────────────────────────────────────────────
 
 export interface ListProjectsOptions {
+  tenantId: string;
   status?: string;
   page?: number;
   pageSize?: number;
 }
 
-export async function listDesignProjects(opts: ListProjectsOptions = {}) {
-  const { status, page = 1, pageSize = 20 } = opts;
+export async function listDesignProjects(opts: ListProjectsOptions) {
+  const { tenantId, status, page = 1, pageSize = 20 } = opts;
   const offset = (page - 1) * pageSize;
 
+  const tenantFilter = eq(aiDesignProjects.tenantId, tenantId);
   const where = status
-    ? eq(aiDesignProjects.status, status)
-    : undefined;
+    ? and(tenantFilter, eq(aiDesignProjects.status, status))
+    : tenantFilter;
 
   const [rows, countResult] = await Promise.all([
     db
@@ -85,10 +137,10 @@ export async function listDesignProjects(opts: ListProjectsOptions = {}) {
 
   // Batch-fetch version counts and current-version element counts in 2 queries
   // instead of 2*N per-project queries (N+1 elimination).
-  const projectIds = rows.map((r) => r.id);
+  const projectIds = rows.map((r: (typeof rows)[number]) => r.id);
   const currentVersionIds = rows
-    .map((r) => r.currentVersionId)
-    .filter((id): id is number => id != null);
+    .map((r: (typeof rows)[number]) => r.currentVersionId)
+    .filter((v: number | null | undefined): v is number => v != null);
 
   const [versionCountRows, currentVersionRows] = await Promise.all([
     db
@@ -104,13 +156,17 @@ export async function listDesignProjects(opts: ListProjectsOptions = {}) {
           .select({ id: aiDesignVersions.id, elementCount: aiDesignVersions.elementCount })
           .from(aiDesignVersions)
           .where(inArray(aiDesignVersions.id, currentVersionIds))
-      : Promise.resolve([]),
+      : Promise.resolve([] as { id: number; elementCount: number | null }[]),
   ]);
 
-  const versionCountMap = new Map(versionCountRows.map((r) => [r.projectId, r.count]));
-  const elementCountMap = new Map(currentVersionRows.map((r) => [r.id, r.elementCount]));
+  const versionCountMap = new Map(
+    versionCountRows.map((r: { projectId: number; count: number }) => [r.projectId, r.count]),
+  );
+  const elementCountMap = new Map(
+    currentVersionRows.map((r: { id: number; elementCount: number | null }) => [r.id, r.elementCount]),
+  );
 
-  const enriched = rows.map((p) => ({
+  const enriched = rows.map((p: (typeof rows)[number]) => ({
     ...p,
     versionCount: versionCountMap.get(p.id) ?? 0,
     elementCount: p.currentVersionId != null ? (elementCountMap.get(p.currentVersionId) ?? 0) : 0,
@@ -124,11 +180,11 @@ export async function listDesignProjects(opts: ListProjectsOptions = {}) {
   };
 }
 
-export async function getDesignProject(id: number) {
+export async function getDesignProject(id: number, tenantId: string) {
   const [project] = await db
     .select()
     .from(aiDesignProjects)
-    .where(eq(aiDesignProjects.id, id))
+    .where(and(eq(aiDesignProjects.id, id), eq(aiDesignProjects.tenantId, tenantId)))
     .limit(1);
 
   if (!project) return null;
@@ -155,6 +211,7 @@ export async function getDesignProject(id: number) {
 }
 
 export async function createDesignProject(input: {
+  tenantId: string;
   name: string;
   description?: string;
   canvasWidth?: number;
@@ -170,6 +227,7 @@ export async function createDesignProject(input: {
   const [project] = await db
     .insert(aiDesignProjects)
     .values({
+      tenantId: input.tenantId,
       name: input.name,
       description: input.description,
       canvasWidth: w,
@@ -210,6 +268,7 @@ export async function createDesignProject(input: {
 
 export async function updateDesignProject(
   id: number,
+  tenantId: string,
   input: {
     name?: string;
     description?: string;
@@ -221,25 +280,27 @@ export async function updateDesignProject(
   const [updated] = await db
     .update(aiDesignProjects)
     .set({ ...input, updatedAt: new Date() })
-    .where(eq(aiDesignProjects.id, id))
+    .where(and(eq(aiDesignProjects.id, id), eq(aiDesignProjects.tenantId, tenantId)))
     .returning();
 
   if (!updated) return null;
   return { ...updated, versionCount: 0, elementCount: 0 };
 }
 
-export async function archiveDesignProject(id: number) {
-  await db
+export async function archiveDesignProject(id: number, tenantId: string) {
+  const [updated] = await db
     .update(aiDesignProjects)
     .set({ status: "archived", updatedAt: new Date() })
-    .where(eq(aiDesignProjects.id, id));
+    .where(and(eq(aiDesignProjects.id, id), eq(aiDesignProjects.tenantId, tenantId)))
+    .returning();
+  if (!updated) return null;
   return { ok: true };
 }
 
 // ── Canvas / Version management ───────────────────────────────────────────────
 
-export async function getDesignCanvas(projectId: number) {
-  const project = await getDesignProject(projectId);
+export async function getDesignCanvas(projectId: number, tenantId: string) {
+  const project = await getDesignProject(projectId, tenantId);
   if (!project) return null;
 
   if (!project.currentVersionId) {
@@ -274,9 +335,10 @@ export async function getDesignCanvas(projectId: number) {
 export async function saveDesignCanvas(
   projectId: number,
   canvasState: CanvasState,
+  tenantId: string,
   label?: string,
 ) {
-  const project = await getDesignProject(projectId);
+  const project = await getDesignProject(projectId, tenantId);
   if (!project) return null;
 
   // Next version number
@@ -326,8 +388,18 @@ export interface ListVersionsOptions {
 
 export async function listDesignVersions(
   projectId: number,
+  tenantId: string,
   opts: ListVersionsOptions = {},
 ) {
+  // Lightweight ownership check — confirms the project exists for this tenant
+  // without the full enrichment queries that getDesignProject performs.
+  const [ownerCheck] = await db
+    .select({ id: aiDesignProjects.id })
+    .from(aiDesignProjects)
+    .where(and(eq(aiDesignProjects.id, projectId), eq(aiDesignProjects.tenantId, tenantId)))
+    .limit(1);
+  if (!ownerCheck) return null;
+
   const { page = 1, pageSize = 30 } = opts;
   const offset = (page - 1) * pageSize;
 
@@ -360,7 +432,11 @@ export async function listDesignVersions(
   };
 }
 
-export async function getDesignVersion(projectId: number, versionId: number) {
+export async function getDesignVersion(projectId: number, versionId: number, tenantId: string) {
+  // Verify project ownership before fetching the version.
+  const project = await getDesignProject(projectId, tenantId);
+  if (!project) return null;
+
   const [version] = await db
     .select()
     .from(aiDesignVersions)
@@ -379,22 +455,24 @@ export async function getDesignVersion(projectId: number, versionId: number) {
 export async function restoreDesignVersion(
   projectId: number,
   versionId: number,
+  tenantId: string,
 ) {
-  const version = await getDesignVersion(projectId, versionId);
+  const version = await getDesignVersion(projectId, versionId, tenantId);
   if (!version) return null;
 
   const state = version.canvasState as CanvasState;
-  return saveDesignCanvas(projectId, state, `Restored v${version.versionNumber}`);
+  return saveDesignCanvas(projectId, state, tenantId, `Restored v${version.versionNumber}`);
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
 
 export async function exportDesign(
   projectId: number,
+  tenantId: string,
   format: "png" | "pdf" | "svg" | "json",
   _scale = 1,
 ) {
-  const canvas = await getDesignCanvas(projectId);
+  const canvas = await getDesignCanvas(projectId, tenantId);
   if (!canvas) return null;
 
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
@@ -419,38 +497,85 @@ export async function exportDesign(
   return { format, url: dataUrl, dataUrl: null, expiresAt: expiresAt.toISOString() };
 }
 
+/**
+ * Converts a CanvasState to a sanitized SVG string.
+ *
+ * Security hardening (Team 36):
+ *   - CSS color attributes (fill, stroke, color, background) are validated
+ *     against an allowlist regex. Invalid values fall back to a safe default.
+ *     This prevents CSS url() SSRF and other injection via color values.
+ *   - font-family is validated against an allowlist of safe characters.
+ *   - image href is restricted to https:// URLs only to prevent
+ *     data: URI injection and non-https fetches by SVG renderers.
+ *   - All string values placed in text content or attribute positions are
+ *     XML-escaped to prevent XSS.
+ *   - Numeric values are checked for finiteness before being serialized.
+ */
 export function canvasStateToSvg(state: CanvasState): string {
-  const { width, height, background, elements } = state;
-  const sorted = [...elements]
-    .filter((e) => e.visible)
-    .sort((a, b) => a.zIndex - b.zIndex);
+  const width = safeNum(state.width, 1920);
+  const height = safeNum(state.height, 1080);
+  const background = safeCssColor(state.background, "#ffffff");
+
+  const sorted = Array.isArray(state.elements)
+    ? [...state.elements]
+        .filter((e) => e.visible)
+        .sort((a, b) => safeNum(a.zIndex) - safeNum(b.zIndex))
+    : [];
 
   const elementsSvg = sorted
     .map((el) => {
-      const transform = el.rotation
-        ? ` transform="rotate(${el.rotation} ${el.x + el.width / 2} ${el.y + el.height / 2})"`
+      const x = safeNum(el.x);
+      const y = safeNum(el.y);
+      const w = safeNum(el.width, 10);
+      const h = safeNum(el.height, 10);
+      const rotation = safeNum(el.rotation);
+      const opacity = safeNum(el.opacity, 1);
+
+      const transform = rotation
+        ? ` transform="rotate(${rotation} ${x + w / 2} ${y + h / 2})"`
         : "";
-      const opacity = el.opacity !== 1 ? ` opacity="${el.opacity}"` : "";
+      const opacityAttr = opacity !== 1 ? ` opacity="${opacity}"` : "";
 
       if (el.type === "rect" || el.type === "frame") {
-        return `<rect x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}" fill="${el.fill ?? "#e5e7eb"}" stroke="${el.stroke ?? "none"}" stroke-width="${el.strokeWidth ?? 0}" rx="${el.borderRadius ?? 0}"${transform}${opacity}/>`;
+        const fill = safeCssColor(el.fill, "#e5e7eb");
+        const stroke = safeCssColor(el.stroke, "none");
+        const strokeWidth = safeNum(el.strokeWidth);
+        const rx = safeNum(el.borderRadius);
+        return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" rx="${rx}"${transform}${opacityAttr}/>`;
       }
+
       if (el.type === "circle") {
-        const cx = el.x + el.width / 2;
-        const cy = el.y + el.height / 2;
-        return `<ellipse cx="${cx}" cy="${cy}" rx="${el.width / 2}" ry="${el.height / 2}" fill="${el.fill ?? "#e5e7eb"}" stroke="${el.stroke ?? "none"}" stroke-width="${el.strokeWidth ?? 0}"${transform}${opacity}/>`;
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        const fill = safeCssColor(el.fill, "#e5e7eb");
+        const stroke = safeCssColor(el.stroke, "none");
+        const strokeWidth = safeNum(el.strokeWidth);
+        return `<ellipse cx="${cx}" cy="${cy}" rx="${w / 2}" ry="${h / 2}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"${transform}${opacityAttr}/>`;
       }
+
       if (el.type === "line") {
-        return `<line x1="${el.x}" y1="${el.y}" x2="${el.x + el.width}" y2="${el.y + el.height}" stroke="${el.stroke ?? "#000000"}" stroke-width="${el.strokeWidth ?? 2}"${transform}${opacity}/>`;
+        const stroke = safeCssColor(el.stroke, "#000000");
+        const strokeWidth = safeNum(el.strokeWidth, 2);
+        return `<line x1="${x}" y1="${y}" x2="${x + w}" y2="${y + h}" stroke="${stroke}" stroke-width="${strokeWidth}"${transform}${opacityAttr}/>`;
       }
+
       if (el.type === "text") {
-        return `<text x="${el.x}" y="${el.y + (el.fontSize ?? 16)}" font-size="${el.fontSize ?? 16}" font-family="${el.fontFamily ?? "sans-serif"}" fill="${el.color ?? "#000000"}"${transform}${opacity}>${(el.text ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;")}</text>`;
+        const fontSize = safeNum(el.fontSize, 16);
+        const fontFamily = xmlEscape(safeFontFamily(el.fontFamily, "sans-serif"));
+        const color = safeCssColor(el.color, "#000000");
+        const textContent = xmlEscape(el.text ?? "");
+        return `<text x="${x}" y="${y + fontSize}" font-size="${fontSize}" font-family="${fontFamily}" fill="${color}"${transform}${opacityAttr}>${textContent}</text>`;
       }
-      if (el.type === "image" && el.src) {
-        return `<image href="${el.src}" x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}"${transform}${opacity}/>`;
+
+      if (el.type === "image") {
+        const href = safeHttpsUrl(el.src);
+        if (!href) return ""; // skip images with non-https or missing src
+        return `<image href="${xmlEscape(href)}" x="${x}" y="${y}" width="${w}" height="${h}"${transform}${opacityAttr}/>`;
       }
+
       return "";
     })
+    .filter(Boolean)
     .join("\n  ");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -463,7 +588,8 @@ export function canvasStateToSvg(state: CanvasState): string {
 // ── AI Regenerate ─────────────────────────────────────────────────────────────
 
 export async function aiRegenerateElement(
-  _projectId: number,
+  projectId: number,
+  tenantId: string,
   input: {
     elementId: string;
     elementType: "text" | "image" | "style";
@@ -473,6 +599,10 @@ export async function aiRegenerateElement(
     tone?: string;
   },
 ) {
+  // Verify the caller owns this project before invoking AI.
+  const project = await getDesignProject(projectId, tenantId);
+  if (!project) return null;
+
   const openaiKey = process.env["OPENAI_API_KEY"];
 
   if (!openaiKey) {

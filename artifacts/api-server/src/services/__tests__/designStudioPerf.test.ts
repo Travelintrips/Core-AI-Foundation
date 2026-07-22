@@ -40,7 +40,7 @@ vi.mock("@workspace/db", () => ({
   aiDesignProjects: {
     id: "id", name: "name", status: "status", updatedAt: "updatedAt",
     currentVersionId: "currentVersionId", canvasWidth: "canvasWidth",
-    canvasHeight: "canvasHeight",
+    canvasHeight: "canvasHeight", tenantId: "tenantId",
   },
   aiDesignVersions: {
     id: "id", projectId: "projectId", versionNumber: "versionNumber",
@@ -122,7 +122,7 @@ describe("listDesignProjects — N+1 elimination (test 1, 11, 12)", () => {
       projects.map((p) => ({ id: p.currentVersionId, elementCount: 7 })),
     ];
 
-    const result = await listDesignProjects({ page: 1, pageSize: 20 });
+    const result = await listDesignProjects({ tenantId: "tenant-test", page: 1, pageSize: 20 });
 
     // [1] Exactly 4 select calls — N+1 eliminated
     expect(vi.mocked(db.select)).toHaveBeenCalledTimes(4);
@@ -139,7 +139,7 @@ describe("listDesignProjects — N+1 elimination (test 1, 11, 12)", () => {
       [{ count: 0 }], // count
     ];
 
-    const result = await listDesignProjects({ page: 5, pageSize: 20 });
+    const result = await listDesignProjects({ tenantId: "tenant-test", page: 5, pageSize: 20 });
 
     // Only 2 calls when list is empty — no enrichment
     expect(vi.mocked(db.select)).toHaveBeenCalledTimes(2);
@@ -155,7 +155,7 @@ describe("listDesignProjects — N+1 elimination (test 1, 11, 12)", () => {
 
     // Must not throw; status param must be forwarded to the query
     await expect(
-      listDesignProjects({ status: "active", page: 1, pageSize: 20 }),
+      listDesignProjects({ tenantId: "tenant-test", status: "active", page: 1, pageSize: 20 }),
     ).resolves.toMatchObject({ total: 0 });
 
     // Exactly 2 calls (no enrichment on empty list)
@@ -174,26 +174,28 @@ describe("listDesignVersions — pagination (tests 2, 3)", () => {
       makeVersion(1, 30 - i),
     );
 
-    resultQueue = [versions, [{ count: 87 }]];
+    // Queue: [lightweight ownership check, versions rows, count]
+    resultQueue = [[{ id: 1 }], versions, [{ count: 87 }]];
 
-    const result = await listDesignVersions(1, { page: 1, pageSize: 30 });
+    const result = await listDesignVersions(1, "tenant-1", { page: 1, pageSize: 30 });
 
-    expect(result.items).toHaveLength(30);
-    expect(result.total).toBe(87);
-    expect(result.page).toBe(1);
-    expect(result.pageSize).toBe(30);
+    expect(result!.items).toHaveLength(30);
+    expect(result!.total).toBe(87);
+    expect(result!.page).toBe(1);
+    expect(result!.pageSize).toBe(30);
     // Most-recent version comes first
-    expect(result.items[0]!.versionNumber).toBe(30);
+    expect(result!.items[0]!.versionNumber).toBe(30);
   });
 
   it("[2] cursor pagination — page 2 uses correct offset", async () => {
-    resultQueue = [[], [{ count: 87 }]];
+    // Queue: [lightweight ownership check, versions rows, count]
+    resultQueue = [[{ id: 1 }], [], [{ count: 87 }]];
 
-    const result = await listDesignVersions(1, { page: 2, pageSize: 30 });
+    const result = await listDesignVersions(1, "tenant-1", { page: 2, pageSize: 30 });
 
-    expect(result.page).toBe(2);
-    expect(result.items).toHaveLength(0);
-    expect(result.total).toBe(87);
+    expect(result!.page).toBe(2);
+    expect(result!.items).toHaveLength(0);
+    expect(result!.total).toBe(87);
   });
 
   it("[3] large list deterministic — 1 000 versions return paginated 30-row slice", async () => {
@@ -203,16 +205,17 @@ describe("listDesignVersions — pagination (tests 2, 3)", () => {
       makeVersion(99, 1000 - i),
     );
 
-    resultQueue = [mockSlice, [{ count: 1000 }]];
+    // Queue: [lightweight ownership check, versions rows, count]
+    resultQueue = [[{ id: 99 }], mockSlice, [{ count: 1000 }]];
 
-    const result = await listDesignVersions(99, { page: 1, pageSize: PAGE_SIZE });
+    const result = await listDesignVersions(99, "tenant-1", { page: 1, pageSize: PAGE_SIZE });
 
-    expect(result.items).toHaveLength(PAGE_SIZE);
-    expect(result.total).toBe(1000);
+    expect(result!.items).toHaveLength(PAGE_SIZE);
+    expect(result!.total).toBe(1000);
     // Slice starts at most-recent version
-    expect(result.items[0]!.versionNumber).toBe(1000);
-    // Only 2 DB calls for any page size — not proportional to total versions
-    expect(vi.mocked(db.select)).toHaveBeenCalledTimes(2);
+    expect(result!.items[0]!.versionNumber).toBe(1000);
+    // 3 DB calls: tenant ownership check + versions slice + count (not proportional to total versions)
+    expect(vi.mocked(db.select)).toHaveBeenCalledTimes(3);
   });
 });
 
