@@ -32,9 +32,11 @@ import {
   getTenantCostSummary,
   getProjectCostBreakdown,
   checkDesignBudget,
+  checkBudgetDecision,
   getBudgetPolicies,
   createBudgetPolicy,
   reconcileDesignCosts,
+  reconcileDesignCostsWithScope,
 } from "../services/designCostAttributionService.js";
 import { resolveAuthenticatedTenantContext } from "../security/tenantResolution.js";
 import { db, designCostAttributionsTable } from "@workspace/db";
@@ -360,6 +362,143 @@ router.post("/ai/design-cost/budget/policies", async (req: Request, res: Respons
     res.status(201).json(policy);
   } catch (err) {
     serverError(res, err, "create policy");
+  }
+});
+
+// ── Phase 2: Spec-required endpoint aliases ───────────────────────────────────
+//
+// The original implementation used descriptive URL paths that differ from the
+// canonical spec-required paths.  The aliases below add the spec paths while
+// keeping the descriptive paths operational for backward compatibility.
+
+// POST /ai/design-cost/record  (alias for /ai/design-cost/attribution)
+router.post("/ai/design-cost/record", async (req: Request, res: Response) => {
+  const ctx    = resolveAuthenticatedTenantContext(req);
+  const parsed = RecordAttributionBody.safeParse(req.body);
+  if (!parsed.success) { badRequest(res, parsed.error.message); return; }
+
+  const { attribution, usage, cost, operationStatus, costRecordId } = parsed.data;
+  try {
+    const result = await recordDesignCostAttribution({
+      attribution: { ...attribution, tenantId: ctx.tenantId },
+      usage:       { ...usage },
+      cost:        { ...cost, pricingCalculatedAt: cost.pricingCalculatedAt ? new Date(cost.pricingCalculatedAt) : null },
+      operationStatus,
+      costRecordId: costRecordId ?? null,
+    });
+    res.status(201).json(result);
+  } catch (err) { serverError(res, err, "record (spec alias)"); }
+});
+
+// POST /ai/design-cost/calculate
+router.post("/ai/design-cost/calculate", async (req: Request, res: Response) => {
+  const parsed = EstimateBody.safeParse(req.body);
+  if (!parsed.success) { badRequest(res, parsed.error.message); return; }
+  try {
+    const result = await calculateDesignCost(parsed.data);
+    res.json(result);
+  } catch (err) { serverError(res, err, "calculate"); }
+});
+
+// GET /ai/design-cost/project/:id  (summary alias)
+router.get("/ai/design-cost/project/:id", async (req: Request, res: Response) => {
+  const ctx = resolveAuthenticatedTenantContext(req);
+  const { id } = req.params as { id: string };
+  try {
+    const summary = await getProjectCostSummary(id, ctx.tenantId);
+    res.json(summary);
+  } catch (err) { serverError(res, err, "project summary (spec alias)"); }
+});
+
+// GET /ai/design-cost/order/:id  (summary alias)
+router.get("/ai/design-cost/order/:id", async (req: Request, res: Response) => {
+  const ctx = resolveAuthenticatedTenantContext(req);
+  const { id } = req.params as { id: string };
+  try {
+    const summary = await getOrderCostSummary(id, ctx.tenantId);
+    res.json(summary);
+  } catch (err) { serverError(res, err, "order summary (spec alias)"); }
+});
+
+// GET /ai/design-cost/project/:id/detail  (breakdown alias)
+router.get("/ai/design-cost/project/:id/detail", async (req: Request, res: Response) => {
+  const ctx = resolveAuthenticatedTenantContext(req);
+  const { id } = req.params as { id: string };
+  try {
+    const breakdown = await getProjectCostBreakdown(id, ctx.tenantId);
+    res.json(breakdown);
+  } catch (err) { serverError(res, err, "project detail (spec alias)"); }
+});
+
+// POST /ai/design-cost/budget/check  (fail-closed decision endpoint)
+const BudgetCheckBody = z.object({
+  scopeType: z.enum(["tenant", "project", "order", "workflow", "stage", "capability"]),
+  scopeId:   z.string().min(1),
+  timezone:  z.string().optional(),
+});
+
+router.post("/ai/design-cost/budget/check", async (req: Request, res: Response) => {
+  const ctx    = resolveAuthenticatedTenantContext(req);
+  const parsed = BudgetCheckBody.safeParse(req.body);
+  if (!parsed.success) { badRequest(res, parsed.error.message); return; }
+
+  const { scopeType, scopeId, timezone } = parsed.data;
+  try {
+    const decision = await checkBudgetDecision(ctx.tenantId, scopeType, scopeId, timezone);
+    res.json(decision);
+  } catch (err) { serverError(res, err, "budget check decision"); }
+});
+
+// POST /ai/design-cost/budget/policy  (singular alias for createBudgetPolicy)
+router.post("/ai/design-cost/budget/policy", async (req: Request, res: Response) => {
+  const ctx    = resolveAuthenticatedTenantContext(req);
+  const parsed = BudgetPolicyBody.safeParse(req.body);
+  if (!parsed.success) { badRequest(res, parsed.error.message); return; }
+
+  try {
+    const policy = await createBudgetPolicy({ tenantId: ctx.tenantId, ...parsed.data });
+    res.status(201).json(policy);
+  } catch (err) { serverError(res, err, "create policy (spec alias)"); }
+});
+
+// POST /ai/design-cost/reconcile  (actor-scoped reconciliation)
+const ReconcileBody = z.object({
+  start:               z.string().datetime().optional(),
+  end:                 z.string().datetime().optional(),
+  varianceThresholdPct: z.number().int().min(1).max(100).optional(),
+});
+
+router.post("/ai/design-cost/reconcile", async (req: Request, res: Response) => {
+  const ctx    = resolveAuthenticatedTenantContext(req);
+  const parsed = ReconcileBody.safeParse(req.body);
+  if (!parsed.success) { badRequest(res, parsed.error.message); return; }
+
+  const actor = {
+    actorScope:    ctx.isPlatformAdmin ? "platform" as const : "tenant" as const,
+    actorTenantId: ctx.tenantId,
+  };
+
+  try {
+    const result = await reconcileDesignCostsWithScope(
+      {
+        tenantId:             actor.actorScope === "tenant" ? ctx.tenantId : undefined,
+        windowStartDate:      parsed.data.start ? new Date(parsed.data.start) : undefined,
+        windowEndDate:        parsed.data.end   ? new Date(parsed.data.end)   : undefined,
+        varianceThresholdPct: parsed.data.varianceThresholdPct,
+      },
+      actor,
+    );
+    res.json(result);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("platform_scope_forbidden")) {
+      res.status(403).json({ error: err.message });
+      return;
+    }
+    if (err instanceof Error && err.message.startsWith("tenant_mismatch")) {
+      res.status(403).json({ error: err.message });
+      return;
+    }
+    serverError(res, err, "reconcile (spec alias)");
   }
 });
 

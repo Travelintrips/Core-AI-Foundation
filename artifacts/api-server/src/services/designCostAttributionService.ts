@@ -212,6 +212,35 @@ export interface DesignCostAttributionAdapter {
   estimateCost(params: EstimateDesignCostParams): Promise<DesignCostEstimate>;
 }
 
+// ── Monetary precision ────────────────────────────────────────────────────────
+
+/**
+ * Convert a JS number to a fixed-decimal string for NUMERIC(12,8) DB storage.
+ *
+ * Rounding mode:  HALF_UP (Math.round)
+ * Decimal places: 8 (matches NUMERIC(12,8) column precision)
+ * Currency code:  stored alongside each row; default "USD"
+ * Mixed-currency: summaries MUST group by currency; cross-currency totals are
+ *                 refused — callers must filter to a single currency before
+ *                 summing. No FX conversion is ever performed by this service;
+ *                 any conversion requires an explicit rate source, effective
+ *                 timestamp, source currency, and target currency.
+ *
+ * For very small values (< 0.000000005 USD) rounding may lose the last digit.
+ * All cost computations in this service use values >= $0.000001, so this is
+ * acceptable. DB-side aggregates use NUMERIC arithmetic which has no
+ * floating-point drift.
+ */
+export function toMonetaryString(value: number, decimals = 8): string {
+  const factor = Math.pow(10, decimals);
+  const shifted = Math.round(value * factor); // HALF_UP
+  const sign    = shifted < 0 ? "-" : "";
+  const abs     = Math.abs(shifted);
+  const intPart = Math.floor(abs / factor);
+  const fracPart = String(abs % factor).padStart(decimals, "0");
+  return `${sign}${intPart}.${fracPart}`;
+}
+
 // ── Default pricing fallbacks ─────────────────────────────────────────────────
 
 const DEFAULT_INPUT_PRICE_PER_1M  = 2.5;
@@ -312,11 +341,11 @@ export async function recordDesignCostAttribution(
     retryCount:           usage.retryCount            ?? 0,
     usageAvailable:       usage.usageAvailable,
 
-    estimatedCostUsd:         cost.estimatedCostUsd        != null ? String(cost.estimatedCostUsd.toFixed(8))        : null,
-    providerReportedCostUsd:  cost.providerReportedCostUsd != null ? String(cost.providerReportedCostUsd.toFixed(8)) : null,
-    calculatedCostUsd:        cost.calculatedCostUsd       != null ? String(cost.calculatedCostUsd.toFixed(8))       : null,
-    adjustedCostUsd:          cost.adjustedCostUsd         != null ? String(cost.adjustedCostUsd.toFixed(8))         : null,
-    finalAttributableCostUsd: cost.finalAttributableCostUsd != null ? String(cost.finalAttributableCostUsd.toFixed(8)) : null,
+    estimatedCostUsd:         cost.estimatedCostUsd        != null ? toMonetaryString(cost.estimatedCostUsd)        : null,
+    providerReportedCostUsd:  cost.providerReportedCostUsd != null ? toMonetaryString(cost.providerReportedCostUsd) : null,
+    calculatedCostUsd:        cost.calculatedCostUsd       != null ? toMonetaryString(cost.calculatedCostUsd)       : null,
+    adjustedCostUsd:          cost.adjustedCostUsd         != null ? toMonetaryString(cost.adjustedCostUsd)         : null,
+    finalAttributableCostUsd: cost.finalAttributableCostUsd != null ? toMonetaryString(cost.finalAttributableCostUsd) : null,
 
     currency:            cost.currency,
     pricingVersion:      cost.pricingVersion    ?? null,
@@ -394,22 +423,71 @@ export async function calculateDesignCost(params: EstimateDesignCostParams): Pro
 
 // ── Budget window helpers ─────────────────────────────────────────────────────
 
+/**
+ * UTC-based window calculation (legacy — kept for backward compatibility).
+ * New code should use getWindowBoundsInTimezone with an explicit IANA timezone.
+ */
 function getWindowBounds(limitType: LimitType, now: Date): { start: Date; end: Date } {
-  const start = new Date(now);
-  const end   = new Date(now);
+  return getWindowBoundsInTimezone(limitType, now, "UTC");
+}
+
+/**
+ * Calculate period start/end in a given IANA timezone.
+ *
+ * Uses noon-of-day as the reference point for offset calculation, which is
+ * DST-safe: DST transitions occur at 2–3 AM, not at noon.
+ *
+ * DST caveat: for zones that observe DST, daily boundaries near the
+ * transition hour (1–3 AM) may be off by up to 1 hour. This is documented
+ * and acceptable for budget-period calculations.
+ *
+ * @param limitType - "daily" | "monthly" | "per_run"
+ * @param now       - reference moment (typically the current wall-clock time)
+ * @param tz        - IANA timezone string, e.g. "Asia/Jakarta", "America/New_York"
+ */
+export function getWindowBoundsInTimezone(
+  limitType: LimitType,
+  now: Date,
+  tz = "UTC",
+): { start: Date; end: Date } {
+  if (limitType === "per_run") return { start: now, end: now };
+
+  // Local date components in target timezone
+  const dateStr = now.toLocaleDateString("en-CA", { timeZone: tz }); // "YYYY-MM-DD"
+  const [y, mo, d] = dateStr.split("-").map(Number);
+
+  /**
+   * Convert a local midnight (year, month 1-indexed, day) in `tz` to a UTC Date.
+   * Uses noon on that day as the offset reference to be DST-safe.
+   */
+  const dayStartUTC = (year: number, month: number, day: number): Date => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const noonZ    = new Date(`${year}-${pad(month)}-${pad(day)}T12:00:00Z`);
+    const noonUTC  = noonZ.toLocaleString("en-US", { timeZone: "UTC", hour12: false });
+    const noonLocal = noonZ.toLocaleString("en-US", { timeZone: tz,  hour12: false });
+    const offsetMs = new Date(noonLocal).getTime() - new Date(noonUTC).getTime();
+    // Midnight on this local date expressed as UTC
+    const midnightZ = new Date(`${year}-${pad(month)}-${pad(day)}T00:00:00Z`);
+    return new Date(midnightZ.getTime() - offsetMs);
+  };
 
   if (limitType === "daily") {
-    start.setUTCHours(0, 0, 0, 0);
-    end.setUTCHours(23, 59, 59, 999);
-  } else if (limitType === "monthly") {
-    start.setUTCDate(1);
-    start.setUTCHours(0, 0, 0, 0);
-    end.setUTCMonth(end.getUTCMonth() + 1, 0);
-    end.setUTCHours(23, 59, 59, 999);
+    const start = dayStartUTC(y, mo, d);
+    // Advance one day safely via UTC arithmetic (handles month/year rollovers)
+    const tmp = new Date(`${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}T00:00:00Z`);
+    tmp.setUTCDate(tmp.getUTCDate() + 1);
+    const end = new Date(
+      dayStartUTC(tmp.getUTCFullYear(), tmp.getUTCMonth() + 1, tmp.getUTCDate()).getTime() - 1,
+    );
+    return { start, end };
+  } else {
+    // monthly — compute first day of next month (handles December → January)
+    const start = dayStartUTC(y, mo, 1);
+    const nm    = mo === 12 ? 1    : mo + 1;
+    const ny    = mo === 12 ? y + 1 : y;
+    const end   = new Date(dayStartUTC(ny, nm, 1).getTime() - 1);
+    return { start, end };
   }
-  // per_run: no window — start = end = now (checked differently)
-
-  return { start, end };
 }
 
 /** Determine which attribution column to filter on for a given scopeType. */
@@ -799,5 +877,244 @@ export function createDesignCostAttributionAdapter(): DesignCostAttributionAdapt
     record: recordDesignCostAttribution,
     checkBudget: checkDesignBudget,
     estimateCost: estimateDesignCost,
+  };
+}
+
+// ── Fail-closed budget decision ───────────────────────────────────────────────
+
+/**
+ * Structured status returned by checkBudgetDecision.
+ *
+ * - allowed          : all policies are satisfied; execution can proceed
+ * - warning          : a soft_warn policy threshold is exceeded but not blocked
+ * - blocked          : a hard_block policy has been exceeded; execution MUST stop
+ * - approval_required: a require_approval policy is exceeded; must wait for approval
+ * - unavailable      : budget service is unavailable (DB error); caller decides
+ *
+ * Fail-closed contract:
+ *   soft_warn  : DB failure → "unavailable" (execution policy decides)
+ *   hard_block : DB failure → "unavailable" (MUST NOT return "allowed")
+ *   require_approval: DB failure → "approval_required" (MUST NOT return "allowed")
+ */
+export type BudgetDecisionStatus = "allowed" | "warning" | "blocked" | "approval_required" | "unavailable";
+
+export interface BudgetDecision {
+  status:    BudgetDecisionStatus;
+  reason:    string;   // machine-readable, snake_case
+  snapshots: DesignBudgetSnapshot[];
+}
+
+/**
+ * Evaluate a budget decision for the given scope with fail-closed semantics.
+ *
+ * Unlike checkDesignBudget (which silently fail-opens on DB errors), this
+ * function enforces fail-closed behavior for hard_block and require_approval
+ * policies: a DB failure can never produce "allowed".
+ *
+ * @param tz  Optional IANA timezone for period boundary calculation.
+ *            Defaults to UTC.
+ */
+export async function checkBudgetDecision(
+  tenantId:  string,
+  scopeType: ScopeType,
+  scopeId:   string,
+  tz = "UTC",
+): Promise<BudgetDecision> {
+  // 1. Load active policies — DB failure here is a hard fail-closed event.
+  let policies: DesignBudgetPolicyRow[] = [];
+  let policyLoadFailed = false;
+
+  try {
+    policies = await db
+      .select()
+      .from(designBudgetPoliciesTable)
+      .where(
+        and(
+          eq(designBudgetPoliciesTable.tenantId,  tenantId),
+          eq(designBudgetPoliciesTable.scopeType, scopeType),
+          eq(designBudgetPoliciesTable.scopeId,   scopeId),
+          eq(designBudgetPoliciesTable.active,    true),
+        ),
+      );
+  } catch (err) {
+    logger.warn({ err, tenantId, scopeType, scopeId }, "[design-cost-attribution] budget policy load failed");
+    policyLoadFailed = true;
+  }
+
+  // If DB failed and we cannot determine policy action types, fail-closed:
+  // we cannot know whether a hard_block or require_approval policy exists.
+  if (policyLoadFailed) {
+    return { status: "unavailable", reason: "budget_service_unavailable", snapshots: [] };
+  }
+
+  if (policies.length === 0) {
+    return { status: "allowed", reason: "no_active_policy", snapshots: [] };
+  }
+
+  const now       = new Date();
+  const snapshots: DesignBudgetSnapshot[] = [];
+
+  let worstStatus: BudgetDecisionStatus = "allowed";
+  let worstReason = "within_budget";
+
+  for (const policy of policies) {
+    const limitType  = policy.limitType  as LimitType;
+    const actionType = policy.actionType as ActionType;
+    const policyTz   = (policy as unknown as Record<string, unknown>)["timezoneIana"] as string | undefined ?? tz;
+    const { start, end } = getWindowBoundsInTimezone(limitType, now, policyTz);
+    const limitAmountUsd  = parseFloat(String(policy.limitAmountUsd));
+
+    let spentAmountUsd = 0;
+    let spendFailed    = false;
+
+    try {
+      const baseWhere = [
+        eq(designCostAttributionsTable.tenantId, tenantId),
+        scopeFilter(scopeType, scopeId),
+      ];
+      if (limitType !== "per_run") {
+        baseWhere.push(
+          gte(designCostAttributionsTable.createdAt, start),
+          lt(designCostAttributionsTable.createdAt, end),
+        );
+      }
+
+      const [row] = await db
+        .select({ total: sql<number>`coalesce(sum(final_attributable_cost_usd::numeric), 0)` })
+        .from(designCostAttributionsTable)
+        .where(and(...baseWhere));
+
+      spentAmountUsd = row ? Number(row.total) : 0;
+    } catch (err) {
+      logger.warn({ err, policyId: policy.id }, "[design-cost-attribution] budget spend query failed");
+      spendFailed = true;
+    }
+
+    // Fail-closed: if we can't read spend, enforce the policy's failure mode.
+    if (spendFailed) {
+      if (actionType === "hard_block") {
+        return { status: "blocked",           reason: "budget_service_unavailable_hard_block", snapshots };
+      }
+      if (actionType === "require_approval") {
+        return { status: "approval_required", reason: "budget_service_unavailable_require_approval", snapshots };
+      }
+      // soft_warn: return unavailable — caller decides
+      if (worstStatus === "allowed") {
+        worstStatus = "unavailable";
+        worstReason = "budget_service_unavailable_soft_warn";
+      }
+      continue;
+    }
+
+    const remainingAmountUsd = Math.max(0, limitAmountUsd - spentAmountUsd);
+    const usagePct           = limitAmountUsd > 0 ? (spentAmountUsd / limitAmountUsd) * 100 : 0;
+    const warningPct         = policy.warningThresholdPct;
+    const exceeded           = spentAmountUsd >= limitAmountUsd;
+
+    snapshots.push({
+      tenantId, scopeType, scopeId, limitType, actionType,
+      limitAmountUsd, spentAmountUsd, remainingAmountUsd,
+      usagePct, warningThresholdPct: warningPct,
+      isWarning:        usagePct >= warningPct,
+      isBlocked:        actionType === "hard_block"        && exceeded,
+      requiresApproval: actionType === "require_approval"  && exceeded,
+      currency:    policy.currency,
+      windowStart: start,
+      windowEnd:   end,
+      checkedAt:   now,
+    });
+
+    if (actionType === "hard_block" && exceeded) {
+      return { status: "blocked",           reason: "hard_block_exceeded",     snapshots };
+    }
+    if (actionType === "require_approval" && exceeded) {
+      return { status: "approval_required", reason: "approval_required_exceeded", snapshots };
+    }
+    if (actionType === "soft_warn" && usagePct >= warningPct) {
+      if (worstStatus === "allowed") { worstStatus = "warning"; worstReason = "soft_warn_threshold_exceeded"; }
+    }
+  }
+
+  return { status: worstStatus, reason: worstReason, snapshots };
+}
+
+// ── Platform-scoped reconciliation guard ──────────────────────────────────────
+
+export type ActorScope = "tenant" | "platform";
+
+export interface ReconcileActorContext {
+  actorScope: ActorScope;
+  /** For tenant actors — must match tenantId param. */
+  actorTenantId?: string;
+}
+
+/**
+ * reconcileDesignCosts is updated to enforce actor scope.
+ * Tenant actors can only reconcile their own tenantId.
+ * Platform-wide reconciliation (tenantId = undefined) requires actorScope = "platform".
+ */
+export async function reconcileDesignCostsWithScope(
+  params: { tenantId?: string; windowStartDate?: Date; windowEndDate?: Date; varianceThresholdPct?: number },
+  actor: ReconcileActorContext,
+): Promise<DesignCostReconciliationResult> {
+  // Authorization check
+  if (actor.actorScope === "tenant") {
+    if (!params.tenantId) {
+      throw new Error("platform_scope_forbidden: tenant actors must supply an explicit tenantId");
+    }
+    if (actor.actorTenantId && actor.actorTenantId !== params.tenantId) {
+      throw new Error("tenant_mismatch: actor cannot reconcile another tenant's data");
+    }
+  }
+
+  // Delegate to existing reconciler (tenant-scoped if tenantId is set)
+  const tenantId = params.tenantId ?? ""; // platform with no tenantId → scan all (platform only)
+  return reconcileDesignCosts({ ...params, tenantId });
+}
+
+// ── Runtime integration contract ──────────────────────────────────────────────
+
+/**
+ * DesignCostRuntimeContract — the interface workflow runners use to integrate
+ * with the cost attribution service.
+ *
+ * Call order for a single execution:
+ *   1. estimate()         → pre-execution cost estimate (used for budget check)
+ *   2. checkBudget()      → fail-closed budget decision; abort if blocked/approval_required
+ *   3. record()           → post-execution actual usage and cost
+ *   4. On failure/cancel: record() with operationStatus = "failed" | "cancelled"
+ *   5. On retry:          record() with attempt > 0 and a new idempotencyKey
+ *
+ * Idempotency contract:
+ *   Each call to record() uses a unique idempotencyKey per (job, attempt) pair.
+ *   Retries use attempt++ so they produce separate attribution rows — the
+ *   reconciliation scanner flags attempt>0 rows for manual review.
+ *   A duplicate record() call with the same idempotencyKey is a no-op (silently
+ *   returns the existing row's id).
+ *
+ * Failed/cancelled executions:
+ *   MUST still call record() with operationStatus = "failed" | "cancelled" and
+ *   finalAttributableCostUsd = 0 (or the actual partial cost if known).
+ *   This prevents the reconciler from flagging them as "jobs without cost".
+ *
+ * Team 39 integration call sites:
+ *   - Before execution start: estimate + checkBudget
+ *   - After execution completes: record with operationStatus = "success"
+ *   - On job failure: record with operationStatus = "failed"
+ *   - On job cancel: record with operationStatus = "cancelled"
+ *   - On retry: increment attempt and generate a new idempotencyKey
+ */
+export interface DesignCostRuntimeContract {
+  estimate(params: EstimateDesignCostParams): Promise<DesignCostEstimate>;
+  checkBudget(tenantId: string, scopeType: ScopeType, scopeId: string, tz?: string): Promise<BudgetDecision>;
+  record(params: RecordDesignCostAttributionParams): Promise<{ id: number; idempotencyKey: string }>;
+}
+
+/** Factory: create a runtime contract implementation bound to the real DB. */
+export function createDesignCostRuntimeContract(): DesignCostRuntimeContract {
+  return {
+    estimate:    estimateDesignCost,
+    checkBudget: checkBudgetDecision,
+    record:      recordDesignCostAttribution,
   };
 }
