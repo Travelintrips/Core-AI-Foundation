@@ -44,6 +44,7 @@ const AssetMarketplacePage           = lazy(() => import('@/pages/asset-marketpl
 const GalleryPage                    = lazy(() => import('@/pages/gallery'));
 const WorkspaceFavoritesPage         = lazy(() => import('@/pages/workspace/favorites'));
 const CreativePreviewPage            = lazy(() => import('@/pages/workspace/creative-preview'));
+const DesignCanvasPage               = lazy(() => import('@/pages/workspace/design-canvas'));
 const WorkspaceNotificationsPage = lazy(() => import('@/pages/workspace/notifications'));
 const WorkspaceProfilePage       = lazy(() => import('@/pages/workspace/profile'));
 const WorkspaceSupportPage       = lazy(() => import('@/pages/workspace/support'));
@@ -159,6 +160,7 @@ function Router() {
         <Route path="/workspace/:token/support" component={WorkspaceSupportPage} />
         <Route path="/workspace/:token/settings" component={WorkspaceSettingsPage} />
         <Route path="/creative-preview/:sessionId" component={CreativePreviewPage} />
+        <Route path="/workspace/:token/canvas" component={DesignCanvasPage} />
         {/* ── Team 18: Fashion & Apparel Design ──────────────────────── */}
         <Route path="/fashion-design" component={FashionDesignPage} />
         {/* ── Team 04: Portfolio V2 ───────────────────────────────────── */}
