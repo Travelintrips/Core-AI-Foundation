@@ -1,0 +1,239 @@
+TEAM 13 — UNIVERSAL DESIGN LAYER SYSTEM
+
+BRANCH WAJIB:
+feature/team-13-layer-system
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun Layer System universal untuk artifact design.
+
+Layer System bukan image editor penuh.
+
+Layer System V1 harus mampu:
+
+- menampilkan hierarchy;
+- select layer;
+- toggle visibility;
+- toggle lock;
+- rename jika diizinkan;
+- reorder;
+- group/ungroup bila capability tersedia;
+- expand/collapse;
+- menunjukkan type/status;
+- menyinkronkan selection dengan workspace;
+- menerima layer contribution dari renderer/plugin.
+
+==================================================
+DOMAIN-NEUTRAL
+==================================================
+
+Core tidak boleh memiliki layer khusus:
+
+- sleeve;
+- wall;
+- dieline panel;
+- logo symbol;
+- chair;
+- landscape zone.
+
+Gunakan generic LayerNode dengan extensions.
+
+==================================================
+CONTRACT
+==================================================
+
+Minimal:
+
+LayerTree
+LayerNode
+LayerNodeType
+LayerCapability
+LayerSelection
+LayerMutation
+LayerPatch
+LayerTreeValidationResult
+LayerProviderAdapter
+
+LayerNode minimal:
+
+- id;
+- parentId;
+- artifactId;
+- name;
+- type;
+- order;
+- visible;
+- locked;
+- selectable;
+- children;
+- capabilities;
+- metadata;
+- extensions.
+
+==================================================
+PURE UTILITIES
+==================================================
+
+Implementasikan:
+
+- flattenLayerTree;
+- buildLayerTree;
+- findLayer;
+- findAncestors;
+- findDescendants;
+- reorderLayer;
+- moveLayer;
+- validateLayerTree;
+- detectLayerCycles;
+- normalizeLayerOrder;
+- calculateSelectionAfterDelete;
+- deriveEffectiveVisibility;
+- deriveEffectiveLock.
+
+Semua deterministic dan pure.
+
+==================================================
+STATE
+==================================================
+
+Pisahkan:
+
+- canonical layer tree;
+- UI expanded state;
+- selected IDs;
+- pending mutations;
+- optimistic state;
+- conflict/error state.
+
+Jangan menyimpan React element dalam tree.
+
+==================================================
+INTEGRATION
+==================================================
+
+Team 11:
+
+- gunakan workspace selection boundary;
+- jangan membuat canvas kedua.
+
+Team 12:
+
+- expose selected layer dan property context;
+- jangan membuat property form engine.
+
+Team 18:
+
+- annotation dapat direpresentasikan sebagai layer contribution, tetapi Team 13
+  tidak membuat annotation engine.
+
+Jika kontrak belum tersedia, buat adapter sempit.
+
+==================================================
+OPERATIONS
+==================================================
+
+Dukung operation yang memiliki capability:
+
+- select;
+- show/hide;
+- lock/unlock;
+- rename;
+- reorder;
+- move;
+- group;
+- ungroup;
+- duplicate;
+- delete.
+
+Jangan tampilkan action bila unsupported.
+
+Jangan mengarang bahwa operation berhasil sebelum backend/adapter mengonfirmasi.
+
+==================================================
+VALIDATION
+==================================================
+
+Tolak:
+
+- duplicate IDs;
+- parent hilang;
+- circular hierarchy;
+- self-parent;
+- invalid order;
+- cross-artifact move tanpa izin;
+- move ke descendant;
+- mutation pada locked layer;
+- mutation tanpa capability.
+
+==================================================
+UI
+==================================================
+
+Bangun reusable LayerPanel:
+
+- hierarchical rows;
+- indentation;
+- expand/collapse;
+- visibility button;
+- lock button;
+- selected state;
+- optional drag-and-drop;
+- context actions;
+- empty/loading/error state;
+- virtualization hanya bila diperlukan.
+
+Jangan menambah drag-and-drop library besar tanpa audit.
+
+Fallback gunakan move up/down jika lebih stabil.
+
+==================================================
+ACCESSIBILITY
+==================================================
+
+- semantic tree/treeitem bila sesuai;
+- keyboard navigation;
+- left/right expand-collapse;
+- up/down navigation;
+- enter select;
+- accessible toggle labels;
+- focus indicator;
+- action menu keyboard accessible.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. build hierarchy;
+2. flatten;
+3. duplicate ID;
+4. orphan;
+5. cycle;
+6. effective visibility;
+7. effective lock;
+8. reorder;
+9. invalid cross-parent move;
+10. move to descendant rejection;
+11. locked mutation rejection;
+12. capability rejection;
+13. selection;
+14. expand/collapse;
+15. visibility toggle;
+16. lock toggle;
+17. rename;
+18. drag/move fallback;
+19. keyboard navigation;
+20. empty/loading/error;
+21. workspace selection synchronization;
+22. no domain leakage.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-workspace): add universal layer system"
+git push -u origin HEAD
