@@ -1,0 +1,179 @@
+TEAM 32 — DESIGN RENDERING AND PREVIEW ADAPTERS
+
+BRANCH WAJIB:
+feature/team-32-design-rendering
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun adapter universal antara artifact design dan renderer/preview engine.
+
+Team 32 tidak membuat semua renderer dari nol.
+
+Gunakan engine existing bila tersedia:
+
+- image generation;
+- document renderer;
+- presentation renderer;
+- PDF preview;
+- thumbnail generator;
+- storage delivery;
+- external rendering provider melalui AI execution layer.
+
+==================================================
+AUDIT
+==================================================
+
+Audit:
+
+- Presentation Engine;
+- Document Engine;
+- image generation workers;
+- thumbnail generator;
+- PDF preview fallback;
+- asset storage;
+- signed URL;
+- job worker;
+- renderer registry Team 11 bila tersedia;
+- artifact contracts;
+- export workspace boundary.
+
+==================================================
+CONTRACT
+==================================================
+
+Minimal:
+
+DesignRenderRequest
+DesignRenderTarget
+DesignRenderFormat
+DesignRenderProfile
+DesignRenderCapability
+DesignRenderJob
+DesignRenderResult
+DesignPreviewDescriptor
+DesignThumbnailDescriptor
+DesignRenderError
+DesignRendererAdapter
+DesignRendererRegistry
+
+==================================================
+RENDER TARGET
+==================================================
+
+Target dapat berupa:
+
+- artifact preview;
+- thumbnail;
+- workspace image;
+- review preview;
+- document page;
+- presentation slide;
+- technical preview;
+- mockup preview;
+- 3D preview placeholder/descriptor.
+
+Jangan mengklaim 3D render tersedia jika engine tidak tersedia.
+
+==================================================
+REGISTRY
+==================================================
+
+Registry harus:
+
+- unique renderer ID;
+- capability-based resolution;
+- deterministic priority;
+- format validation;
+- input compatibility;
+- output profile;
+- timeout;
+- retryability;
+- explicit unavailable state;
+- no arbitrary module loading.
+
+==================================================
+RENDER PROFILE
+==================================================
+
+Dukung metadata:
+
+- width;
+- height;
+- pixel ratio;
+- quality;
+- background;
+- transparency;
+- format;
+- page/frame;
+- color profile metadata;
+- purpose;
+- max file size;
+- preview/full quality distinction.
+
+Jangan memaksakan resolusi tinggi untuk semua preview.
+
+==================================================
+HONESTY
+==================================================
+
+Wajib membedakan:
+
+- native conversion;
+- rasterized preview;
+- spec-rendered preview;
+- generated approximation;
+- unavailable;
+- placeholder.
+
+Jangan memberi label “converted PDF” bila bukan hasil conversion nyata.
+
+==================================================
+SECURITY
+==================================================
+
+- sanitized file name;
+- no raw internal storage path;
+- signed URL;
+- tenant isolation;
+- input type validation;
+- no arbitrary executable payload;
+- no untrusted HTML injection;
+- no arbitrary renderer command;
+- resource limits.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. renderer registration;
+2. duplicate renderer;
+3. compatible renderer resolution;
+4. unsupported format;
+5. unsupported artifact;
+6. deterministic priority;
+7. preview profile;
+8. full render profile;
+9. honest fallback classification;
+10. thumbnail result;
+11. render failure;
+12. timeout;
+13. retryability;
+14. canceled render;
+15. signed URL result;
+16. expired output;
+17. tenant isolation;
+18. filename safety;
+19. resource limit;
+20. existing presentation/document regression.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-rendering): add rendering preview adapters"
+git push -u origin HEAD
