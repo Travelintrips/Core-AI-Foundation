@@ -127,6 +127,8 @@ import seedKnowledgeRouter from "./seedKnowledge.js";
 import imagePreviewPipelineRouter from "./image-preview-pipeline.js";
 // ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
 import customsRouter from "./customs.js";
+// ── Team 34: Design Cost, Usage, and Budget Attribution ───────────────────
+import designCostAttributionRouter from "./design-cost-attribution.js";
 
 const router: IRouter = Router();
 
@@ -258,5 +260,7 @@ router.use(serviceNormalizationRouter);
 router.use(discoveryAnalyticsRouter);
 // ── Team 17: Universal Design Export Workspace ────────────────────────────────
 router.use(exportWorkspaceRouter);
+// ── Team 34: Design Cost, Usage, and Budget Attribution ───────────────────────
+router.use(designCostAttributionRouter);
 
 export default router;
