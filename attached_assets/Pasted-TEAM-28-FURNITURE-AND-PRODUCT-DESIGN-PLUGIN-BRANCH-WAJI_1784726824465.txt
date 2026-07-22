@@ -1,0 +1,106 @@
+TEAM 28 — FURNITURE AND PRODUCT DESIGN PLUGIN
+
+BRANCH WAJIB:
+feature/team-28-product-design-plugin
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun domain plugin untuk Furniture dan Industrial/Product Design.
+
+Plugin tidak boleh membuat CAD, parametric modeling, atau simulation engine penuh.
+
+==================================================
+WORKFLOW
+==================================================
+
+Minimal:
+
+1. Brief
+2. User/Market Research
+3. Functional Requirements
+4. Concept Direction
+5. Concept Sketch
+6. Form Development
+7. Material/Component Selection
+8. Orthographic/Technical View
+9. Visualization
+10. Prototype Specification
+11. Review
+12. Export
+
+==================================================
+BRIEF
+==================================================
+
+Contoh:
+
+- product category;
+- user;
+- environment;
+- function;
+- dimensions;
+- ergonomics;
+- load/usage;
+- material;
+- manufacturing process;
+- budget;
+- sustainability;
+- safety;
+- compliance.
+
+==================================================
+ARTIFACT TYPES
+==================================================
+
+Minimal:
+
+- product_moodboard;
+- product_concept_sketch;
+- product_form_study;
+- product_component_map;
+- product_material_spec;
+- product_orthographic_view;
+- product_visualization;
+- product_prototype_spec;
+- product_production_spec.
+
+==================================================
+COMPONENTS
+==================================================
+
+Contribution dapat mencakup:
+
+- structural component;
+- hardware;
+- connector;
+- mechanism;
+- surface;
+- accessory.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+- manifest;
+- brief;
+- workflow;
+- artifact registry;
+- component contribution;
+- material contribution;
+- technical view metadata;
+- capability requirement;
+- no CAD runtime;
+- no core leakage;
+- version compatibility.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-plugins): add furniture product design plugin"
+git push -u origin HEAD
