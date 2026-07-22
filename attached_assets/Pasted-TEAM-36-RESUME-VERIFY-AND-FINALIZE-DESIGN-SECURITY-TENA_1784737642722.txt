@@ -1,0 +1,557 @@
+TEAM 36 — RESUME, VERIFY, AND FINALIZE
+DESIGN SECURITY, TENANT ISOLATION, AND POLICY
+
+BRANCH WAJIB:
+feature/team-36-design-security
+
+==================================================
+KONDISI SAAT INI
+==================================================
+
+Pekerjaan sebelumnya terhenti karena daily quota limit ketika akan menjalankan
+full test suite dan pemeriksaan TypeScript.
+
+Jangan menulis ulang implementasi dari awal.
+
+Lanjutkan dari working tree dan commit yang sudah ada.
+
+Jangan merge, rebase, cherry-pick, checkout branch lain, atau force push.
+
+==================================================
+PHASE 1 — VERIFY BRANCH AND WORKTREE
+==================================================
+
+Jalankan:
+
+git branch --show-current
+git status --short
+git rev-parse --short HEAD
+git log --oneline -10
+git diff --stat
+git diff --check
+
+Branch harus:
+
+feature/team-36-design-security
+
+Jika branch berbeda:
+
+- berhenti;
+- jangan checkout;
+- laporkan branch aktif.
+
+Catat seluruh modified, added, deleted, dan untracked files.
+
+Pastikan tidak ada perubahan unrelated.
+
+==================================================
+PHASE 2 — INVENTORY IMPLEMENTATION
+==================================================
+
+Temukan dan laporkan file yang dibuat atau diubah untuk:
+
+1. Design security policy contracts
+2. Policy evaluator
+3. Resource scope and permission mapping
+4. Rate limiting
+5. Resource limits
+6. IDOR protection
+7. Tenant isolation
+8. Platform-scope authorization
+9. Plugin security guards
+10. AI security guards
+11. SVG/HTML safety
+12. Signed URL/token handling
+13. Audit logging
+14. Security tests
+15. Threat model
+16. Security integration checklist
+
+Untuk setiap file, jelaskan:
+
+- purpose;
+- public exports;
+- dependency;
+- route/service yang menggunakannya;
+- apakah additive;
+- apakah menyentuh source of truth existing.
+
+==================================================
+PHASE 3 — REVIEW PREVIOUS PARTIAL FIXES
+==================================================
+
+Audit khusus pekerjaan yang diklaim sudah dilakukan:
+
+- bad TypeScript cast pada route;
+- policy contract module;
+- rate limiter additions;
+- audit-logged routes;
+- plugin security guards;
+- AI security guards;
+- resource limits;
+- SVG safety;
+- IDOR protection.
+
+Jangan menganggap implementasi benar hanya karena file sudah ada.
+
+Periksa:
+
+- compile correctness;
+- fail-closed behavior;
+- canonical RequestContext usage;
+- tenant authority;
+- error mapping;
+- audit event behavior;
+- duplicate utility;
+- unsafe fallback;
+- hidden global scope.
+
+==================================================
+PHASE 4 — POLICY CONTRACT VALIDATION
+==================================================
+
+Pastikan contract minimal tersedia dan tidak membuat RBAC vocabulary tandingan:
+
+DesignSecurityPolicy
+DesignResourceScope
+DesignPermission
+DesignSecurityDecision
+DesignSecurityReason
+DesignPolicyEvaluator
+DesignSecurityAuditEvent
+DesignRateLimitPolicy
+DesignResourceLimitPolicy
+
+Requirements:
+
+- structured output;
+- deterministic decision;
+- explicit allow/deny;
+- machine-readable reason;
+- tenant scope;
+- platform scope;
+- actor context;
+- resource context;
+- no client-authoritative tenant ID;
+- no second RequestContext model.
+
+Jika RBAC existing mempunyai permission names canonical, gunakan mapping/adapter,
+bukan enum baru yang bertentangan.
+
+==================================================
+PHASE 5 — TENANT ISOLATION AND IDOR
+==================================================
+
+Verifikasi seluruh design-related route/service yang disentuh.
+
+Required behavior:
+
+- tenantId berasal dari RequestContext;
+- body/query tenantId tidak menjadi authority;
+- resource lookup tenant-scoped;
+- update/delete tenant-scoped;
+- missing tenant fail-closed;
+- public token tidak menjadi tenant authority;
+- platform access explicit;
+- tenant actor tidak dapat memakai platform scope.
+
+Audit kemungkinan IDOR pada:
+
+- project;
+- artifact;
+- asset;
+- material;
+- component;
+- annotation;
+- review;
+- export;
+- cost;
+- AI execution;
+- rendering.
+
+Jangan memperluas scope ke seluruh repository kecuali reusable security utility
+memang dipakai bersama.
+
+==================================================
+PHASE 6 — PLUGIN SECURITY
+==================================================
+
+Pastikan plugin guard menolak:
+
+- remote JavaScript;
+- URL-based module;
+- arbitrary import path;
+- path traversal;
+- arbitrary SQL;
+- arbitrary executable code;
+- unknown plugin ID;
+- incompatible contract version;
+- capability escalation;
+- raw secret in manifest;
+- untrusted renderer module;
+- duplicate registry takeover.
+
+Plugin harus:
+
+- static/compiled;
+- manifest validated;
+- registry known;
+- version checked;
+- capability limited;
+- permission-aware.
+
+Tambahkan tests untuk positive dan negative cases.
+
+==================================================
+PHASE 7 — AI SECURITY
+==================================================
+
+Pastikan:
+
+- provider keys berasal dari secret service;
+- frontend/plugin tidak memanggil provider langsung;
+- artifact metadata tidak dapat mengganti system instruction;
+- structured input validation;
+- structured output validation;
+- no raw chain-of-thought persistence;
+- no raw provider secret;
+- no unrestricted tool execution;
+- budget guard;
+- resource guard;
+- timeout/retry guard;
+- prompt context delimiting/sanitization;
+- actor/tenant context preserved.
+
+Jangan membuat AI runtime kedua.
+
+==================================================
+PHASE 8 — SVG, HTML, AND MEDIA SAFETY
+==================================================
+
+Verifikasi implementasi SVG:
+
+- raw SVG tidak di-inject ke DOM;
+- script/event handler ditolak;
+- external references ditolak bila unsafe;
+- data URL policy explicit;
+- safe image rendering;
+- unsupported SVG state jujur;
+- object URLs direvoke;
+- HTML comments/metadata disanitasi;
+- no dangerouslySetInnerHTML untuk untrusted content.
+
+Tambahkan regression test untuk:
+
+- script tag;
+- onload/onerror;
+- foreignObject;
+- javascript URL;
+- external href;
+- safe raster image;
+- unsupported SVG behavior.
+
+==================================================
+PHASE 9 — RATE LIMITING AND RESOURCE LIMITS
+==================================================
+
+Rate limit harus menggunakan existing limiter pattern.
+
+Verifikasi minimal:
+
+- public review token endpoint;
+- expensive design execution endpoint;
+- export/render request;
+- upload boundary bila disentuh.
+
+Resource limits minimal:
+
+- maximum upload size;
+- supported MIME;
+- maximum request payload;
+- maximum number of artifacts/assets;
+- maximum execution concurrency boundary;
+- maximum render dimensions;
+- maximum comment/metadata length.
+
+Requirements:
+
+- structured error;
+- no silent truncation;
+- tenant/user-aware key;
+- public token-aware key;
+- cleanup;
+- testable configuration;
+- no unlimited default on config failure.
+
+==================================================
+PHASE 10 — AUDIT LOGGING
+==================================================
+
+Security-sensitive decisions harus menghasilkan audit event bila sesuai:
+
+- denied cross-tenant access;
+- platform-scope denial;
+- invalid plugin load;
+- resource-limit rejection;
+- rate-limit rejection;
+- token invalid/revoked attempt;
+- actor spoof attempt;
+- unsafe upload/metadata rejection.
+
+Jangan memasukkan ke audit log:
+
+- provider secret;
+- raw token;
+- full prompt;
+- sensitive artifact payload.
+
+Pastikan audit failure tidak membuka authorization.
+
+==================================================
+PHASE 11 — MANDATORY TEST MATRIX
+==================================================
+
+Pastikan minimal 20 test berikut benar-benar ada dan berjalan:
+
+1. Tenant A tidak membaca Tenant B.
+2. Tenant A tidak mengubah Tenant B.
+3. Tenant A tidak menghapus Tenant B.
+4. tenantId body injection ditolak atau diabaikan.
+5. null tenant fail-closed.
+6. valid platform actor diizinkan.
+7. tenant actor ditolak untuk platform action.
+8. actor spoof ditolak.
+9. unsafe plugin path ditolak.
+10. remote plugin module ditolak.
+11. raw HTML tidak dirender.
+12. unsafe SVG ditolak/diamankan.
+13. signed URL expiry ditangani.
+14. public token invalid/expired/revoked.
+15. rate limiting bekerja.
+16. resource limit bekerja.
+17. duplicate execution diblok/idempotent.
+18. provider secret direduksi.
+19. audit event tercatat.
+20. cross-project annotation/asset association ditolak.
+
+Tambahkan juga bila belum ada:
+
+21. plugin contract version mismatch;
+22. capability escalation rejection;
+23. hard resource config failure fail-closed;
+24. rate limiter key isolation;
+25. audit failure tidak mengubah deny menjadi allow.
+
+Jangan membuat test yang hanya menguji mock tanpa melewati guard/service nyata.
+
+==================================================
+PHASE 12 — TYPECHECK
+==================================================
+
+Jalankan typecheck targeted untuk semua package yang berubah.
+
+Kemudian jalankan canonical repository typecheck sesuai package scripts.
+
+Laporkan:
+
+- command;
+- exit code;
+- total errors;
+- errors terkait Team 36;
+- pre-existing errors dengan baseline proof.
+
+Perbaiki semua error yang diperkenalkan Team 36.
+
+Jangan memperbaiki error unrelated kecuali benar-benar menghalangi verification.
+
+==================================================
+PHASE 13 — TEST EXECUTION
+==================================================
+
+Jalankan bertahap:
+
+1. Team 36 targeted policy tests
+2. Route security tests
+3. Plugin security tests
+4. AI security tests
+5. SVG/media tests
+6. Tenant isolation tests
+7. Full api-server test suite
+8. Full repository test suite sesuai baseline
+
+Catat jumlah:
+
+- test files;
+- tests passed;
+- failed;
+- skipped;
+- duration.
+
+Jangan hanya menulis “all tests pass” tanpa angka.
+
+==================================================
+PHASE 14 — BUILD AND STATIC VERIFICATION
+==================================================
+
+Jalankan:
+
+- affected library builds;
+- api-server build;
+- affected frontend build bila disentuh;
+- git diff --check;
+- dependency/cycle check bila tersedia;
+- secret scan pattern;
+- migration/schema check bila schema disentuh.
+
+Pastikan:
+
+- tidak ada secret;
+- tidak ada raw token;
+- tidak ada debug bypass;
+- tidak ada test-only guard di production path;
+- tidak ada console log sensitif;
+- tidak ada remote module loader.
+
+==================================================
+PHASE 15 — DOCUMENTATION REVIEW
+==================================================
+
+Pastikan threat model document mencakup:
+
+- assets;
+- trust boundaries;
+- actors;
+- attack surfaces;
+- threats;
+- mitigations;
+- residual risks;
+- assumptions;
+- out-of-scope;
+- verification mapping.
+
+Pastikan security integration checklist mencakup Team 39:
+
+- route mounting;
+- RequestContext;
+- repository scope;
+- plugin registry;
+- AI adapter;
+- signed URL;
+- rate limiting;
+- resource limits;
+- audit events;
+- environment/config;
+- regression tests.
+
+Jangan mengklaim seluruh platform aman hanya berdasarkan scoped audit.
+
+==================================================
+PHASE 16 — FINAL DIFF REVIEW
+==================================================
+
+Jalankan:
+
+git status --short
+git diff --stat
+git diff --check
+git diff
+git log --oneline -5
+
+Periksa:
+
+- accidental file;
+- unrelated changes;
+- duplicate utility;
+- commented-out code;
+- temporary fixtures;
+- generated artifacts;
+- secret;
+- hard-coded tenant;
+- hard-coded admin;
+- bypass;
+- TODO kritis.
+
+==================================================
+PHASE 17 — COMMIT
+==================================================
+
+Jika semua verification berhasil:
+
+git add .
+git commit -m "security(design-platform): harden tenant isolation and policies"
+
+Jika commit implementation sebelumnya sudah ada, gunakan commit finalisasi yang
+sesuai, misalnya:
+
+git add .
+git commit -m "test(design-security): complete policy and isolation verification"
+
+Jangan amend commit kecuali diminta eksplisit.
+
+==================================================
+PHASE 18 — PUSH
+==================================================
+
+Jalankan:
+
+git push -u origin HEAD
+
+Jika push gagal:
+
+- jangan menaruh token di source;
+- jangan mencetak credential;
+- laporkan error;
+- laporkan commit hash lokal;
+- status tetap LOCAL ONLY.
+
+Verifikasi remote bila push berhasil:
+
+git ls-remote --heads origin feature/team-36-design-security
+
+==================================================
+FINAL REPORT
+==================================================
+
+Gunakan format:
+
+A. Branch and commit
+B. Push verification
+C. Baseline
+D. Files changed
+E. Policy contracts
+F. Tenant isolation
+G. IDOR protection
+H. Platform-scope policy
+I. Plugin security
+J. AI security
+K. SVG/HTML/media safety
+L. Rate limiting
+M. Resource limits
+N. Audit logging
+O. Threat model
+P. Security checklist
+Q. Mandatory test matrix
+R. Targeted test results
+S. Full test results
+T. Typecheck
+U. Build
+V. Static/security verification
+W. Pre-existing failures
+X. Remaining risks
+Y. Team 39 integration notes
+Z. Final status
+
+Gunakan salah satu final status:
+
+READY FOR TEAM 39 INTEGRATION
+REVISION REQUIRED
+BLOCKED — VERIFICATION ENVIRONMENT
+BLOCKED — PUSH AUTHENTICATION
+
+Jangan gunakan READY jika:
+
+- full tests belum dijalankan;
+- typecheck belum selesai;
+- build belum selesai;
+- mandatory tests gagal;
+- branch belum dipush atau push belum diverifikasi.
