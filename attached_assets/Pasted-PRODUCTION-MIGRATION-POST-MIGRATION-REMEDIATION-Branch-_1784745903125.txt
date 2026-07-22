@@ -1,0 +1,130 @@
+PRODUCTION MIGRATION — POST-MIGRATION REMEDIATION
+
+Branch:
+main
+
+Release:
+v1.0.0-rc1
+
+Jangan membuat fitur baru.
+Jangan mengubah business logic.
+Jangan menjalankan ulang seluruh migration secara buta.
+
+==================================================
+TASK 1 — FIX SALES MANAGER SEED
+==================================================
+
+Audit:
+
+scripts/migrations/seed-ai-sales-manager.sql
+
+Seed masih menggunakan tabel stale:
+
+ai_digital_employees
+
+Canonical production table:
+
+ai_employees
+
+Perbaiki seed agar:
+
+- menggunakan ai_employees;
+- memakai kolom canonical yang benar;
+- idempotent;
+- tidak membuat duplicate employee;
+- tidak menimpa employee existing;
+- dapat dijalankan ulang dengan aman.
+
+Verifikasi hasil dengan SELECT terukur.
+
+==================================================
+TASK 2 — FIX MIGRATION RUNNER
+==================================================
+
+Audit:
+
+scripts/src/migrate-prod.ts
+
+Perbaiki bug statement parsing yang menyebabkan:
+
+syntax error at or near FROM
+
+Jangan memotong SQL berdasarkan satu baris SELECT.
+
+Pastikan runner:
+
+- mengeksekusi statement utuh;
+- menangani multiline SQL;
+- tidak meninggalkan orphan FROM/WHERE;
+- berhenti pada DDL failure nyata;
+- membedakan already-applied dari failed;
+- mencatat hasil tiap migration secara akurat.
+
+Tambahkan regression test untuk multiline SELECT dan ALTER TABLE.
+
+==================================================
+TASK 3 — RESOLVE DESIGN TEMPLATE SCHEMA DRIFT
+==================================================
+
+Audit canonical schema untuk:
+
+design_templates
+
+Tentukan apakah deleted_at seharusnya ada.
+
+Jika canonical schema mendukung soft delete:
+
+- tambahkan deleted_at secara idempotent;
+- buat partial index WHERE deleted_at IS NULL.
+
+Jika canonical schema tidak mendukung soft delete:
+
+- revisi migration/index agar sesuai source of truth.
+
+Jangan menebak.
+Gunakan Drizzle schema dan service behavior sebagai source of truth.
+
+==================================================
+TASK 4 — VERIFY PRODUCTION
+==================================================
+
+Setelah perbaikan:
+
+- jalankan hanya migration/seed yang sebelumnya gagal;
+- jangan menjalankan seluruh runner tanpa need;
+- verifikasi Sales Manager record;
+- verifikasi design_templates column;
+- verifikasi partial index;
+- verifikasi migration status;
+- jalankan API health check;
+- jalankan targeted tests;
+- jalankan build.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+1. File yang diperbaiki
+2. Root cause runner
+3. Seed sebelum/sesudah
+4. Canonical decision untuk deleted_at
+5. Migration yang dijalankan ulang
+6. Record Sales Manager
+7. Index yang berhasil dibuat
+8. Test
+9. Build
+10. Commit dan push
+
+Gunakan verdict:
+
+✅ POST-MIGRATION REMEDIATION COMPLETE
+
+atau
+
+⚠️ REMEDIATION PARTIAL
+
+atau
+
+❌ REMEDIATION FAILED
