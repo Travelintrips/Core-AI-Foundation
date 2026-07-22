@@ -1,0 +1,173 @@
+TEAM 22 — UNIVERSAL DESIGN COMPONENT AND OBJECT LIBRARY
+
+BRANCH WAJIB:
+feature/team-22-component-library
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun library universal untuk reusable design components dan objects.
+
+Contoh:
+
+- garment part reference;
+- furniture object;
+- architectural component;
+- packaging element;
+- branding element;
+- product component;
+- jewelry component;
+- landscape object.
+
+Core harus domain-neutral.
+
+==================================================
+SCOPE
+==================================================
+
+Bangun:
+
+ComponentDefinition
+ComponentCategory
+ComponentVariant
+ComponentParameterSchema
+ComponentAssetReference
+ComponentCompatibility
+ComponentPlacementCapability
+ComponentSource
+ComponentStatus
+ComponentRegistry
+ComponentBrowser
+ComponentPicker
+ComponentInstantiationRequest
+
+==================================================
+PRINSIP
+==================================================
+
+Component library menyimpan definisi reusable.
+
+Instance component dalam artifact adalah tanggung jawab renderer/plugin/workspace.
+
+Jangan membuat scene graph atau CAD engine kedua.
+
+==================================================
+REGISTRY
+==================================================
+
+Registry harus:
+
+- unique component ID;
+- version-aware;
+- variant-aware;
+- plugin ownership;
+- category;
+- domain compatibility;
+- required capabilities;
+- dependency;
+- deprecation;
+- deterministic resolution.
+
+==================================================
+PARAMETER SCHEMA
+==================================================
+
+Dukung:
+
+- dimensions;
+- enum;
+- color;
+- material reference;
+- number;
+- boolean;
+- asset reference;
+- text;
+- custom plugin schema reference.
+
+Jangan mengeksekusi arbitrary code dari schema.
+
+==================================================
+BROWSER
+==================================================
+
+Dukung:
+
+- search;
+- category;
+- source;
+- compatible domain;
+- tag;
+- variant;
+- preview;
+- selected state;
+- unavailable/deprecated;
+- permission;
+- empty/loading/error.
+
+==================================================
+INSTANTIATION
+==================================================
+
+Expose request contract:
+
+- componentId;
+- version;
+- variantId;
+- targetArtifactId;
+- parentElementId optional;
+- parameters;
+- transform;
+- requestedBy;
+- idempotencyKey.
+
+Jangan membuat persistence implementation jika belum ada canonical service.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. component validation;
+2. duplicate ID;
+3. version selection;
+4. variant selection;
+5. parameter validation;
+6. dependency validation;
+7. compatibility filter;
+8. browser search;
+9. source filter;
+10. unavailable component;
+11. deprecated component;
+12. instantiation request;
+13. invalid parameters;
+14. duplicate idempotency key boundary;
+15. unsafe schema rejection;
+16. permission;
+17. plugin contribution;
+18. no domain-specific core fields.
+
+==================================================
+INTEGRATION
+==================================================
+
+Team 13:
+- layer nodes dapat mereferensikan component instance.
+
+Team 14:
+- previews/assets menggunakan asset references.
+
+Team 21:
+- component parameter dapat menerima material assignment.
+
+Team 24–30:
+- domain plugins menyediakan component catalogs.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-components): add universal component library"
+git push -u origin HEAD
