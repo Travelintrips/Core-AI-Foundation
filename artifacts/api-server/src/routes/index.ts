@@ -88,6 +88,12 @@ import { annotationRouter } from "../domains/annotation-system/index.js";
 import materialLibraryRouter from "./material-library.js";
 // ── Team 23: Design Knowledge & Recommendation Adapter ────────────────────────
 import designKnowledgeRouter from "./design-knowledge.js";
+// ── Team 17 / Team 34: Universal Design Export Workspace ─────────────────────
+import exportWorkspaceRouter from "./export-workspace/index.js";
+// ── Team 34: Design Cost, Usage, and Budget Attribution ───────────────────────
+import designCostAttributionRouter from "./design-cost-attribution.js";
+// ── Team 35: Design Observability & Operations ────────────────────────────────
+import designObservabilityOpsRouter from "./design-observability.js";
 
 // ── Team 01: Creative Workflow V2 ──────────────────────────────────────────
 import { creativeWorkflowV2Router, creativeWorkflowPublicRouter } from "./creative-workflow-v2/index.js";
@@ -293,5 +299,11 @@ router.use(annotationRouter);
 router.use(materialLibraryRouter);
 // ── Team 23: Design Knowledge & Recommendation Adapter ────────────────────────
 router.use(designKnowledgeRouter);
+// ── Team 17 / Team 34: Universal Design Export Workspace ─────────────────────
+router.use(exportWorkspaceRouter);
+// ── Team 34: Design Cost, Usage, and Budget Attribution ───────────────────────
+router.use(designCostAttributionRouter);
+// ── Team 35: Design Observability & Operations ────────────────────────────────
+router.use(designObservabilityOpsRouter);
 
 export default router;

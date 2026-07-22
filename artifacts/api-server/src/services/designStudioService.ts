@@ -419,7 +419,7 @@ export async function exportDesign(
   return { format, url: dataUrl, dataUrl: null, expiresAt: expiresAt.toISOString() };
 }
 
-function canvasStateToSvg(state: CanvasState): string {
+export function canvasStateToSvg(state: CanvasState): string {
   const { width, height, background, elements } = state;
   const sorted = [...elements]
     .filter((e) => e.visible)
