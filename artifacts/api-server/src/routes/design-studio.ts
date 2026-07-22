@@ -16,6 +16,7 @@ import {
   restoreDesignVersion,
   exportDesign,
   aiRegenerateElement,
+  type ListVersionsOptions,
 } from "../services/designStudioService.js";
 import {
   listBuiltinTemplates,
@@ -126,12 +127,16 @@ router.put("/ai/design/projects/:id/canvas", async (req, res) => {
 
 // ── Versions ──────────────────────────────────────────────────────────────────
 
-/** GET /api/ai/design/projects/:id/versions */
+/** GET /api/ai/design/projects/:id/versions?page=1&pageSize=30 */
 router.get("/ai/design/projects/:id/versions", async (req, res) => {
   try {
     const id = parseInt(req.params["id"] ?? "", 10);
     if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-    const result = await listDesignVersions(id);
+    const opts: ListVersionsOptions = {
+      page: Math.max(1, parseInt(String(req.query["page"] ?? "1"), 10)),
+      pageSize: Math.min(100, Math.max(1, parseInt(String(req.query["pageSize"] ?? "30"), 10))),
+    };
+    const result = await listDesignVersions(id, opts);
     res.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";

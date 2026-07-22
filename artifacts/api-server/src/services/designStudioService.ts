@@ -4,7 +4,7 @@
  */
 import { db } from "@workspace/db";
 import { aiDesignProjects, aiDesignVersions } from "@workspace/db/schema";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, inArray } from "drizzle-orm";
 import OpenAI from "openai";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -79,29 +79,42 @@ export async function listDesignProjects(opts: ListProjectsOptions = {}) {
       .where(where),
   ]);
 
-  // For each project, get the version count and element count
-  const enriched = await Promise.all(
-    rows.map(async (p) => {
-      const [versionResult, currentVersion] = await Promise.all([
-        db
-          .select({ count: sql<number>`count(*)::int` })
+  if (rows.length === 0) {
+    return { items: [], total: countResult[0]?.count ?? 0, page, pageSize };
+  }
+
+  // Batch-fetch version counts and current-version element counts in 2 queries
+  // instead of 2*N per-project queries (N+1 elimination).
+  const projectIds = rows.map((r) => r.id);
+  const currentVersionIds = rows
+    .map((r) => r.currentVersionId)
+    .filter((id): id is number => id != null);
+
+  const [versionCountRows, currentVersionRows] = await Promise.all([
+    db
+      .select({
+        projectId: aiDesignVersions.projectId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(aiDesignVersions)
+      .where(inArray(aiDesignVersions.projectId, projectIds))
+      .groupBy(aiDesignVersions.projectId),
+    currentVersionIds.length > 0
+      ? db
+          .select({ id: aiDesignVersions.id, elementCount: aiDesignVersions.elementCount })
           .from(aiDesignVersions)
-          .where(eq(aiDesignVersions.projectId, p.id)),
-        p.currentVersionId
-          ? db
-              .select({ elementCount: aiDesignVersions.elementCount })
-              .from(aiDesignVersions)
-              .where(eq(aiDesignVersions.id, p.currentVersionId))
-              .limit(1)
-          : Promise.resolve([{ elementCount: 0 }]),
-      ]);
-      return {
-        ...p,
-        versionCount: versionResult[0]?.count ?? 0,
-        elementCount: currentVersion[0]?.elementCount ?? 0,
-      };
-    }),
-  );
+          .where(inArray(aiDesignVersions.id, currentVersionIds))
+      : Promise.resolve([]),
+  ]);
+
+  const versionCountMap = new Map(versionCountRows.map((r) => [r.projectId, r.count]));
+  const elementCountMap = new Map(currentVersionRows.map((r) => [r.id, r.elementCount]));
+
+  const enriched = rows.map((p) => ({
+    ...p,
+    versionCount: versionCountMap.get(p.id) ?? 0,
+    elementCount: p.currentVersionId != null ? (elementCountMap.get(p.currentVersionId) ?? 0) : 0,
+  }));
 
   return {
     items: enriched,
@@ -306,21 +319,45 @@ export async function saveDesignCanvas(
   };
 }
 
-export async function listDesignVersions(projectId: number) {
-  const rows = await db
-    .select({
-      id: aiDesignVersions.id,
-      projectId: aiDesignVersions.projectId,
-      versionNumber: aiDesignVersions.versionNumber,
-      label: aiDesignVersions.label,
-      elementCount: aiDesignVersions.elementCount,
-      createdAt: aiDesignVersions.createdAt,
-    })
-    .from(aiDesignVersions)
-    .where(eq(aiDesignVersions.projectId, projectId))
-    .orderBy(desc(aiDesignVersions.versionNumber));
+export interface ListVersionsOptions {
+  page?: number;
+  pageSize?: number;
+}
 
-  return { items: rows, total: rows.length };
+export async function listDesignVersions(
+  projectId: number,
+  opts: ListVersionsOptions = {},
+) {
+  const { page = 1, pageSize = 30 } = opts;
+  const offset = (page - 1) * pageSize;
+
+  const [rows, countResult] = await Promise.all([
+    db
+      .select({
+        id: aiDesignVersions.id,
+        projectId: aiDesignVersions.projectId,
+        versionNumber: aiDesignVersions.versionNumber,
+        label: aiDesignVersions.label,
+        elementCount: aiDesignVersions.elementCount,
+        createdAt: aiDesignVersions.createdAt,
+      })
+      .from(aiDesignVersions)
+      .where(eq(aiDesignVersions.projectId, projectId))
+      .orderBy(desc(aiDesignVersions.versionNumber))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(aiDesignVersions)
+      .where(eq(aiDesignVersions.projectId, projectId)),
+  ]);
+
+  return {
+    items: rows,
+    total: countResult[0]?.count ?? 0,
+    page,
+    pageSize,
+  };
 }
 
 export async function getDesignVersion(projectId: number, versionId: number) {
