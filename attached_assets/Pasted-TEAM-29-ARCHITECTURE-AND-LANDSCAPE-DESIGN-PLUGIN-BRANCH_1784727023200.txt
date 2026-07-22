@@ -1,0 +1,114 @@
+TEAM 29 — ARCHITECTURE AND LANDSCAPE DESIGN PLUGIN
+
+BRANCH WAJIB:
+feature/team-29-architecture-landscape-plugin
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun Architecture & Landscape Plugin.
+
+Plugin menyediakan schema, workflow, artifact, overlays, material, dan component
+contribution.
+
+Jangan membuat BIM, GIS, CAD, structural calculation, atau engineering engine.
+
+==================================================
+WORKFLOW
+==================================================
+
+Minimal:
+
+1. Brief
+2. Site Context
+3. Constraints
+4. Research
+5. Concept
+6. Program/Zoning
+7. Spatial Direction
+8. Material/Landscape Direction
+9. Visualization
+10. Documentation
+11. Review
+12. Export
+
+==================================================
+BRIEF
+==================================================
+
+Contoh:
+
+- project type;
+- site/location;
+- area;
+- climate;
+- user;
+- program;
+- constraints;
+- regulation references;
+- style;
+- material;
+- landscape requirements;
+- sustainability;
+- accessibility.
+
+==================================================
+ARTIFACT TYPES
+==================================================
+
+Minimal:
+
+- architecture_site_context;
+- architecture_concept;
+- architecture_program;
+- architecture_zoning;
+- architecture_plan_preview;
+- architecture_elevation_preview;
+- architecture_material_board;
+- architecture_visualization;
+- landscape_concept;
+- landscape_zoning;
+- landscape_planting_direction;
+- architecture_presentation.
+
+Gunakan kata preview untuk output yang bukan dokumen teknis tervalidasi.
+
+==================================================
+HONESTY
+==================================================
+
+Jangan menyebut artifact sebagai:
+
+- construction drawing;
+- structural calculation;
+- permit-ready drawing;
+- certified landscape plan;
+
+kecuali sistem benar-benar memiliki data dan validasi profesional.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+- manifest;
+- brief;
+- site constraints;
+- workflow;
+- artifact types;
+- preview honesty;
+- material/component contribution;
+- overlay metadata;
+- no BIM/GIS engine;
+- no core leakage;
+- compatibility.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-plugins): add architecture landscape plugin"
+git push -u origin HEAD
