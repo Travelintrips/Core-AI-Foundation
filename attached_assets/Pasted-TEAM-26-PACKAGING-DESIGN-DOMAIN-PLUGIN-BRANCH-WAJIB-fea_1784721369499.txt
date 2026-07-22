@@ -1,0 +1,108 @@
+TEAM 26 — PACKAGING DESIGN DOMAIN PLUGIN
+
+BRANCH WAJIB:
+feature/team-26-packaging-plugin
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun Packaging Design Plugin.
+
+Plugin harus mendukung packaging concept sampai production-ready metadata tanpa
+membuat CAD/dieline engine penuh.
+
+==================================================
+WORKFLOW
+==================================================
+
+Minimal:
+
+1. Brief
+2. Product Requirements
+3. Market/Reference Research
+4. Visual Direction
+5. Structure Direction
+6. Dieline Input/Preview
+7. Artwork
+8. Material
+9. Mockup
+10. Compliance Review
+11. Production Specification
+12. Export
+
+==================================================
+BRIEF
+==================================================
+
+Contoh:
+
+- product type;
+- packaging type;
+- dimensions;
+- quantity;
+- target market;
+- brand;
+- regulatory requirements;
+- printing method;
+- material;
+- sustainability;
+- logistics constraints;
+- barcode/label requirements.
+
+==================================================
+ARTIFACT TYPES
+==================================================
+
+Minimal:
+
+- packaging_moodboard;
+- packaging_structure_concept;
+- packaging_dieline;
+- packaging_artwork;
+- packaging_material_spec;
+- packaging_mockup;
+- packaging_compliance_sheet;
+- packaging_production_spec.
+
+==================================================
+OVERLAYS
+==================================================
+
+Plugin dapat mendeklarasikan:
+
+- bleed;
+- trim;
+- safe area;
+- fold;
+- cut;
+- glue zone;
+- barcode zone.
+
+Team 26 hanya contribution metadata/renderer boundary, bukan menggambar engine.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+- manifest;
+- brief;
+- workflow;
+- artifact types;
+- overlay definitions;
+- production metadata;
+- material contribution;
+- export preset;
+- compliance metadata;
+- no core leakage;
+- version compatibility.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-plugins): add packaging design plugin"
+git push -u origin HEAD
