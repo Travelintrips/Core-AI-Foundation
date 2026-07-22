@@ -345,6 +345,13 @@ CREATE TABLE IF NOT EXISTS ai_platform.design_templates (
   deleted_at            TIMESTAMPTZ
 );
 
+-- Ensure deleted_at exists even if design_templates was created by a prior
+-- migration without it (canonical Drizzle schema includes deleted_at for
+-- soft-delete via softDeleteTemplate()).  ADD COLUMN IF NOT EXISTS is safe
+-- to run when the column already exists.
+ALTER TABLE ai_platform.design_templates
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS ai_platform.design_template_versions (
   id                    BIGSERIAL PRIMARY KEY,
   tenant_id             TEXT NOT NULL DEFAULT 'default',
@@ -407,8 +414,12 @@ CREATE TABLE IF NOT EXISTS ai_platform.design_render_items (
   CONSTRAINT drni_batch_row_uniq UNIQUE (batch_id, row_index)
 );
 
-CREATE INDEX IF NOT EXISTS idx_design_templates_tenant_status
-  ON ai_platform.design_templates (tenant_id, status)
+-- Soft-delete partial index: scope active-template queries to non-deleted rows.
+-- Uses (tenant_id) because 'status' may not exist on pre-migration instances
+-- of design_templates; the existing idx_design_templates_tenant_status covers
+-- the active-only path via its own WHERE predicate.
+CREATE INDEX IF NOT EXISTS idx_design_templates_soft_delete
+  ON ai_platform.design_templates (tenant_id)
   WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_design_template_versions_template_id
@@ -430,6 +441,30 @@ CREATE INDEX IF NOT EXISTS idx_design_render_items_input_hash
 
 function readSql(relativePath: string): string {
   return readFileSync(resolve(MIGRATIONS_DIR, relativePath), "utf8");
+}
+
+/**
+ * Strip standalone SELECT statements from a SQL script — multiline safe.
+ *
+ * The naive line-filter approach (`filter line => !line.startsWith("SELECT")`)
+ * only removes the first line of a multi-line SELECT, leaving orphaned
+ * FROM / WHERE / ORDER BY clauses that cause "syntax error at or near FROM".
+ *
+ * This function splits on statement-terminator semicolons so an entire
+ * multi-line SELECT block is removed in one step.
+ *
+ * Scope: safe for the controlled DDL scripts in this runner
+ * (no PL/pgSQL dollar-quoting, no semicolons embedded in string literals).
+ */
+function stripSelectStatements(sql: string): string {
+  return sql
+    .split(";")
+    .filter(stmt => {
+      const trimmed = stmt.trim();
+      return trimmed.length > 0 && !/^SELECT\b/i.test(trimmed);
+    })
+    .map(stmt => stmt.trimEnd() + ";")
+    .join("\n");
 }
 
 function banner() {
@@ -503,11 +538,10 @@ async function main() {
       continue;
     }
 
-    // Strip trailing SELECT sanity-check statements (p25 ends with one)
-    const cleanSql = sql
-      .split(/\n/)
-      .filter(line => !line.trimStart().startsWith("SELECT table_name"))
-      .join("\n");
+    // Strip trailing SELECT sanity-check statements — multiline safe.
+    // Uses statement-level splitting (on ";") instead of line-level to avoid
+    // leaving orphaned FROM / WHERE / ORDER BY clauses from multiline SELECTs.
+    const cleanSql = stripSelectStatements(sql);
 
     try {
       await client.query(cleanSql);
