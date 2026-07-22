@@ -254,5 +254,8 @@ router.use(cargoRatesRouter);
 router.use(serviceNormalizationRouter);
 // ── Team 05: Discovery Analytics & Feature Flags ──────────────────────────────
 router.use(discoveryAnalyticsRouter);
+// ── Team 35: Design Observability & Operations ────────────────────────────────
+import designObservabilityOpsRouter from "./design-observability.js";
+router.use(designObservabilityOpsRouter);
 
 export default router;

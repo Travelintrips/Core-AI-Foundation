@@ -89,6 +89,8 @@ import PackagingDesignPage from "@/pages/packaging-design";
 // ── Team 22: Vendor Ecosystem ─────────────────────────────────────────────
 import VendorAdminPage from "@/pages/creative-vendors/VendorAdminPage";
 import VendorAdminDetailPage from "@/pages/creative-vendors/VendorAdminDetailPage";
+// ── Team 35: Design Observability & Operations ───────────────────────────
+import DesignObservabilityPage from "@/pages/design-observability";
 // ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
 import CustomsTariff from "@/pages/customs-tariff";
 import TarifKalkulator from "@/pages/tarif-kalkulator";
@@ -176,6 +178,8 @@ function AdminRouter() {
         {/* ── Team 22: Vendor Ecosystem ───────────────────────────────── */}
         <Route path="/creative-vendors/:id" component={VendorAdminDetailPage} />
         <Route path="/creative-vendors" component={VendorAdminPage} />
+        {/* ── Team 35: Design Observability ──────────────────────────── */}
+        <Route path="/design-observability" component={DesignObservabilityPage} />
         {/* ── Customs Tariff (BTKI) ───────────────────────────────────── */}
         <Route path="/customs-tariff" component={CustomsTariff} />
         <Route path="/tarif-kalkulator" component={TarifKalkulator} />
