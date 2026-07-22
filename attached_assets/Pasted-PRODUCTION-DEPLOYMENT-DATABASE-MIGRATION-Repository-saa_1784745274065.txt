@@ -1,0 +1,132 @@
+PRODUCTION DEPLOYMENT — DATABASE MIGRATION
+
+Repository saat ini sudah berada pada:
+
+main
+
+Release:
+
+v1.0.0-rc1
+
+==================================================
+TUJUAN
+==================================================
+
+Jalankan seluruh migration production yang diperlukan
+untuk Design Platform V1.
+
+JANGAN membuat migration baru.
+
+JANGAN mengubah schema.
+
+JANGAN mengubah source code.
+
+==================================================
+PHASE 1 — DISCOVERY
+==================================================
+
+Cari seluruh migration yang berkaitan dengan AI Platform.
+
+Laporkan:
+
+- nama file
+- lokasi
+- urutan eksekusi
+- dependency antar migration
+
+Pastikan jumlahnya sesuai laporan Team 40
+(10 migration).
+
+==================================================
+PHASE 2 — PRE-CHECK
+==================================================
+
+Verifikasi:
+
+- DATABASE_URL mengarah ke Production Supabase
+- backup sudah tersedia
+- migration belum pernah dijalankan
+- schema target adalah ai_platform
+
+==================================================
+PHASE 3 — EXECUTION PLAN
+==================================================
+
+Buat urutan execution.
+
+JANGAN menjalankan migration secara acak.
+
+Jika ada dependency,
+jalankan sesuai dependency.
+
+==================================================
+PHASE 4 — EXECUTE
+==================================================
+
+Jalankan migration satu per satu.
+
+Setelah setiap migration:
+
+- verifikasi sukses
+- cek table
+- cek index
+- cek constraint
+- cek foreign key
+
+Jika ada migration gagal:
+
+STOP.
+
+Jangan lanjut migration berikutnya.
+
+Laporkan error.
+
+==================================================
+PHASE 5 — POST CHECK
+==================================================
+
+Pastikan seluruh tabel baru tersedia.
+
+Pastikan seluruh index berhasil dibuat.
+
+Pastikan tidak ada migration yang gagal.
+
+==================================================
+PHASE 6 — SEED
+==================================================
+
+Setelah migration selesai,
+
+jalankan:
+
+POST /api/ai/seed/all
+
+Pastikan:
+
+- material categories
+- plugin metadata
+- workflow metadata
+
+berhasil terisi.
+
+==================================================
+PHASE 7 — FINAL REPORT
+==================================================
+
+Laporkan:
+
+- migration yang dijalankan
+- migration yang dilewati
+- waktu eksekusi
+- hasil tiap migration
+- hasil seed
+- tabel yang berubah
+- status akhir
+
+Gunakan salah satu:
+
+✅ Production Migration Complete
+
+atau
+
+❌ Migration Failed
