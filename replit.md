@@ -1,54 +1,69 @@
-# Creative AI Studio — Enterprise Platform
+# AI Creative Studio — Enterprise Platform
 
-An enterprise AI platform for creative and logistics business operations. Built as a pnpm monorepo with four services.
+A full-stack AI-powered creative services platform built as a pnpm monorepo.
 
 ## Architecture
 
-| Service | Path | URL |
-|---|---|---|
-| **Customer Portal** | `artifacts/customer-portal` | `/` — public-facing landing page & client workspace |
-| **AI Platform (Admin)** | `artifacts/ai-platform` | `/admin/` — internal staff dashboard |
-| **API Server** | `artifacts/api-server` | `/api` — Express/Node.js backend |
-| **Mockup Sandbox** | `artifacts/mockup-sandbox` | `/__mockup` — design component preview |
+| Artifact | Path | Preview | Description |
+|---|---|---|---|
+| **API Server** | `artifacts/api-server` | `/api` | Express + Drizzle ORM backend |
+| **AI Platform (Admin)** | `artifacts/ai-platform` | `/admin/` | Internal staff portal |
+| **Customer Portal** | `artifacts/customer-portal` | `/` | Public-facing Creative Studio site |
+| **Cargo Rate Finder** | `artifacts/cargo-finder` | `/cargo-finder/` | Cargo pricing calculator |
+| **Mockup Sandbox** | `artifacts/mockup-sandbox` | `/__mockup` | Component preview server |
 
-## Stack
+## Shared Libraries (`lib/`)
 
-- **Frontend:** React + Vite + Tailwind CSS (TypeScript)
-- **Backend:** Express.js + Drizzle ORM (TypeScript, built with esbuild)
-- **Database:** Supabase (PostgreSQL) — separate dev and prod instances
-- **AI Providers:** OpenAI, Anthropic, Gemini, Mistral, Cohere, Replicate
-- **Storage:** Supabase Storage (object storage)
+- `lib/db` — Drizzle ORM schema + Supabase pool (schema: `ai_platform`)
+- `lib/api-spec` — OpenAPI YAML spec + orval codegen
+- `lib/api-client-react` — Generated React Query hooks
+- `lib/api-zod` — Generated Zod validation schemas
 
 ## Running the Project
 
-All four services start automatically via their configured workflows. No manual steps needed.
-
-To install dependencies after pulling new changes:
+**Install dependencies:**
 ```bash
 pnpm install
+```
+
+**Build generated code + API server (required after pulling new code):**
+```bash
+pnpm run build:generated   # regenerate API client + zod schemas
+pnpm run build:api         # compile api-server
+```
+
+**Workflows (auto-managed by Replit):**
+- Each artifact has its own workflow configured via `artifact.toml`
+- Restart them from the Replit UI or via WorkflowsRestart after code changes
+
+## Database
+
+- **Dev:** Supabase project `xssrfshdrtdfupgqwfdw` (`SUPABASE_DEV_DATABASE_URL`)
+- **Prod:** Supabase project `nzdweipzckfszczzqtuw` (`SUPABASE_PROD_DATABASE_URL`)
+- Schema: `ai_platform` (search_path is set on every connection)
+- Migrations: hand-written DDL (drizzle-kit push is NOT used — it proposes dropping the entire schema)
+
+## Seeding
+
+```bash
+pnpm --filter @workspace/api-server run seed
+# or via API: POST /api/ai/seed/all
 ```
 
 ## Key Environment Variables
 
 | Variable | Purpose |
 |---|---|
-| `SUPABASE_DEV_DATABASE_URL` | Dev database (development env) |
-| `SUPABASE_PROD_DATABASE_URL` | Prod database (production env) |
-| `ADMIN_API_KEY` + `VITE_ADMIN_API_KEY` | Admin dashboard authentication |
-| `OPENAI_API_KEY` | OpenAI (and other AI provider keys also set) |
+| `SUPABASE_DEV_DATABASE_URL` | Dev database connection |
+| `SUPABASE_PROD_DATABASE_URL` | Prod database connection |
+| `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY` | Backend + frontend admin auth |
 | `SESSION_SECRET` | Express session signing |
-
-## Admin Login
-
-The internal admin portal (`/admin/`) uses email/password auth.  
-Default dev credentials are set in `INITIAL_INTERNAL_ADMIN_EMAIL` / `INITIAL_INTERNAL_ADMIN_PASSWORD`.
-
-To seed the database (providers, models, agents):
-```bash
-pnpm --filter @workspace/api-server run seed
-```
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc. | AI provider keys |
+| `SMTP_*` | Email (Hostinger SMTP) |
 
 ## User Preferences
 
-- Keep existing monorepo structure (pnpm workspace)
-- Do not restructure or migrate the stack
+- Keep the existing monorepo structure — do not migrate or restructure
+- Use hand-written DDL for new DB tables (not drizzle-kit push)
+- Never import `zod` directly in `api-server` routes — use `@workspace/api-zod` schemas
+- Route files in api-server must omit the `/api` prefix (it's added by the app mount)
