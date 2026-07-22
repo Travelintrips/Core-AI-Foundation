@@ -1,0 +1,141 @@
+TEAM 23 — DESIGN KNOWLEDGE AND RECOMMENDATION ADAPTER
+
+BRANCH WAJIB:
+feature/team-23-design-knowledge
+
+==================================================
+TUJUAN
+==================================================
+
+Bangun adapter universal antara Design Platform dan knowledge systems existing.
+
+Tujuan:
+
+- mencari design knowledge;
+- mengambil guideline;
+- menemukan template/blueprint;
+- menghubungkan style knowledge;
+- menyediakan recommendation context;
+- menjelaskan alasan rekomendasi;
+- menjaga source attribution.
+
+Jangan membuat vector database atau knowledge system kedua.
+
+==================================================
+AUDIT
+==================================================
+
+Audit:
+
+- Template Knowledge Library;
+- styleKnowledgeSeed;
+- seedKnowledge;
+- semantic search;
+- canonicalNormalizer;
+- templateKnowledgeMatchingService;
+- AI capability matrix;
+- client memory;
+- project brief;
+- plugin framework.
+
+==================================================
+CONTRACT
+==================================================
+
+Minimal:
+
+DesignKnowledgeQuery
+DesignKnowledgeResult
+DesignKnowledgeSource
+DesignKnowledgeCitation
+DesignRecommendation
+RecommendationReason
+RecommendationConfidence
+KnowledgeScope
+KnowledgeFilter
+KnowledgeCapability
+KnowledgeAdapter
+KnowledgeProviderRegistry
+
+==================================================
+KNOWLEDGE TYPES
+==================================================
+
+Dukung:
+
+- principle;
+- style;
+- guideline;
+- pattern;
+- template;
+- blueprint;
+- material recommendation;
+- component recommendation;
+- compliance rule;
+- workflow hint;
+- anti-pattern.
+
+==================================================
+PROVIDER REGISTRY
+==================================================
+
+Registry harus:
+
+- tidak hard-code provider;
+- deterministic priority;
+- provider capability;
+- timeout/error boundary;
+- explicit unavailable state;
+- dedup result;
+- source attribution;
+- tenant/platform scope.
+
+Jangan memasukkan raw prompt atau provider secret ke output.
+
+==================================================
+RECOMMENDATION
+==================================================
+
+Recommendation harus:
+
+- mempunyai reason;
+- source;
+- confidence;
+- applicability;
+- limitations;
+- optional alternatives;
+- tidak mengklaim fakta tanpa source;
+- tidak otomatis mengubah project.
+
+Recommendation hanya advisory sampai user/agent menerima melalui workflow canonical.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. query validation;
+2. provider registration;
+3. duplicate provider;
+4. provider priority;
+5. unavailable provider;
+6. timeout handling;
+7. result dedup;
+8. source attribution;
+9. confidence bounds;
+10. recommendation reason;
+11. no-source recommendation warning;
+12. tenant scope;
+13. platform scope;
+14. no raw provider payload;
+15. no automatic mutation;
+16. compatibility with existing template knowledge.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "feat(design-knowledge): add knowledge recommendation adapter"
+git push -u origin HEAD
