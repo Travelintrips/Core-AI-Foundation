@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { Eye, EyeOff, Lock, Unlock, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -13,16 +14,117 @@ interface Props {
   onReorder: (id: string, direction: "up" | "down") => void;
 }
 
+const TYPE_ICONS: Record<string, string> = {
+  text: "T", rect: "▭", circle: "○", image: "🖼", line: "—", frame: "▢",
+};
+
 function elementTypeIcon(type: string) {
-  const icons: Record<string, string> = {
-    text: "T", rect: "▭", circle: "○", image: "🖼", line: "—", frame: "▢",
-  };
-  return icons[type] ?? "◆";
+  return TYPE_ICONS[type] ?? "◆";
 }
 
+// ── Memoized per-row component ─────────────────────────────────────────────────
+// Prevents every row from re-rendering when only one element changes or when
+// the canvas is panned/zoomed without touching the layer list.
+
+interface LayerRowProps {
+  el: DesignElement;
+  isSelected: boolean;
+  onSelect: (id: string, multi: boolean) => void;
+  onUpdate: (id: string, changes: Partial<DesignElement>) => void;
+  onDelete: (ids: string[]) => void;
+  onReorder: (id: string, direction: "up" | "down") => void;
+}
+
+const LayerRow = memo(function LayerRow({
+  el, isSelected, onSelect, onUpdate, onDelete, onReorder,
+}: LayerRowProps) {
+  return (
+    <div
+      className={cn(
+        "group flex items-center gap-1.5 px-2 py-1 cursor-pointer hover:bg-gray-50 select-none",
+        isSelected && "bg-indigo-50"
+      )}
+      onClick={(e) => onSelect(el.id, e.shiftKey || e.metaKey)}
+    >
+      {/* Type icon */}
+      <span className="text-xs w-4 text-center text-gray-400 font-mono shrink-0">
+        {elementTypeIcon(el.type)}
+      </span>
+
+      {/* Name */}
+      <span className={cn(
+        "flex-1 text-xs truncate",
+        isSelected ? "text-indigo-700 font-medium" : "text-gray-700"
+      )}>
+        {el.name}
+      </span>
+
+      {/* Actions (shown on hover) */}
+      <div className="hidden group-hover:flex items-center gap-0.5">
+        <button
+          className="p-0.5 rounded hover:bg-gray-200"
+          onClick={(e) => { e.stopPropagation(); onReorder(el.id, "up"); }}
+          title="Move up"
+        >
+          <ChevronUp className="h-3 w-3 text-gray-500" />
+        </button>
+        <button
+          className="p-0.5 rounded hover:bg-gray-200"
+          onClick={(e) => { e.stopPropagation(); onReorder(el.id, "down"); }}
+          title="Move down"
+        >
+          <ChevronDown className="h-3 w-3 text-gray-500" />
+        </button>
+        <button
+          className="p-0.5 rounded hover:bg-gray-200"
+          onClick={(e) => { e.stopPropagation(); onUpdate(el.id, { visible: !el.visible }); }}
+          title={el.visible ? "Hide" : "Show"}
+        >
+          {el.visible
+            ? <Eye className="h-3 w-3 text-gray-500" />
+            : <EyeOff className="h-3 w-3 text-gray-400" />
+          }
+        </button>
+        <button
+          className="p-0.5 rounded hover:bg-gray-200"
+          onClick={(e) => { e.stopPropagation(); onUpdate(el.id, { locked: !el.locked }); }}
+          title={el.locked ? "Unlock" : "Lock"}
+        >
+          {el.locked
+            ? <Lock className="h-3 w-3 text-gray-500" />
+            : <Unlock className="h-3 w-3 text-gray-400" />
+          }
+        </button>
+        <button
+          className="p-0.5 rounded hover:bg-red-100"
+          onClick={(e) => { e.stopPropagation(); onDelete([el.id]); }}
+          title="Delete"
+        >
+          <Trash2 className="h-3 w-3 text-gray-500 hover:text-red-500" />
+        </button>
+      </div>
+
+      {/* Static visibility/lock icons */}
+      {!el.visible && (
+        <EyeOff className="h-3 w-3 text-gray-300 shrink-0 group-hover:hidden" />
+      )}
+      {el.locked && (
+        <Lock className="h-3 w-3 text-gray-300 shrink-0 group-hover:hidden" />
+      )}
+    </div>
+  );
+});
+
+// ── Panel ──────────────────────────────────────────────────────────────────────
+
 export function LayerPanel({ elements, selectedIds, onSelect, onUpdate, onDelete, onReorder }: Props) {
-  // Sorted by zIndex descending (top layers first in panel)
-  const sorted = [...elements].sort((a, b) => b.zIndex - a.zIndex);
+  // Sorted by zIndex descending (top layers first in panel).
+  // useMemo avoids re-sorting the full array on every re-render when only
+  // selection state changes.
+  const sorted = useMemo(
+    () => [...elements].sort((a, b) => b.zIndex - a.zIndex),
+    [elements],
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -37,85 +139,17 @@ export function LayerPanel({ elements, selectedIds, onSelect, onUpdate, onDelete
               No layers yet. Use a tool to add elements.
             </p>
           )}
-          {sorted.map((el) => {
-            const isSelected = selectedIds.includes(el.id);
-            return (
-              <div
-                key={el.id}
-                className={cn(
-                  "group flex items-center gap-1.5 px-2 py-1 cursor-pointer hover:bg-gray-50 select-none",
-                  isSelected && "bg-indigo-50"
-                )}
-                onClick={(e) => onSelect(el.id, e.shiftKey || e.metaKey)}
-              >
-                {/* Type icon */}
-                <span className="text-xs w-4 text-center text-gray-400 font-mono shrink-0">
-                  {elementTypeIcon(el.type)}
-                </span>
-
-                {/* Name */}
-                <span className={cn(
-                  "flex-1 text-xs truncate",
-                  isSelected ? "text-indigo-700 font-medium" : "text-gray-700"
-                )}>
-                  {el.name}
-                </span>
-
-                {/* Actions (shown on hover) */}
-                <div className="hidden group-hover:flex items-center gap-0.5">
-                  <button
-                    className="p-0.5 rounded hover:bg-gray-200"
-                    onClick={(e) => { e.stopPropagation(); onReorder(el.id, "up"); }}
-                    title="Move up"
-                  >
-                    <ChevronUp className="h-3 w-3 text-gray-500" />
-                  </button>
-                  <button
-                    className="p-0.5 rounded hover:bg-gray-200"
-                    onClick={(e) => { e.stopPropagation(); onReorder(el.id, "down"); }}
-                    title="Move down"
-                  >
-                    <ChevronDown className="h-3 w-3 text-gray-500" />
-                  </button>
-                  <button
-                    className="p-0.5 rounded hover:bg-gray-200"
-                    onClick={(e) => { e.stopPropagation(); onUpdate(el.id, { visible: !el.visible }); }}
-                    title={el.visible ? "Hide" : "Show"}
-                  >
-                    {el.visible
-                      ? <Eye className="h-3 w-3 text-gray-500" />
-                      : <EyeOff className="h-3 w-3 text-gray-400" />
-                    }
-                  </button>
-                  <button
-                    className="p-0.5 rounded hover:bg-gray-200"
-                    onClick={(e) => { e.stopPropagation(); onUpdate(el.id, { locked: !el.locked }); }}
-                    title={el.locked ? "Unlock" : "Lock"}
-                  >
-                    {el.locked
-                      ? <Lock className="h-3 w-3 text-gray-500" />
-                      : <Unlock className="h-3 w-3 text-gray-400" />
-                    }
-                  </button>
-                  <button
-                    className="p-0.5 rounded hover:bg-red-100"
-                    onClick={(e) => { e.stopPropagation(); onDelete([el.id]); }}
-                    title="Delete"
-                  >
-                    <Trash2 className="h-3 w-3 text-gray-500 hover:text-red-500" />
-                  </button>
-                </div>
-
-                {/* Static visibility/lock icons */}
-                {!el.visible && (
-                  <EyeOff className="h-3 w-3 text-gray-300 shrink-0 group-hover:hidden" />
-                )}
-                {el.locked && (
-                  <Lock className="h-3 w-3 text-gray-300 shrink-0 group-hover:hidden" />
-                )}
-              </div>
-            );
-          })}
+          {sorted.map((el) => (
+            <LayerRow
+              key={el.id}
+              el={el}
+              isSelected={selectedIds.includes(el.id)}
+              onSelect={onSelect}
+              onUpdate={onUpdate}
+              onDelete={onDelete}
+              onReorder={onReorder}
+            />
+          ))}
         </div>
       </ScrollArea>
 

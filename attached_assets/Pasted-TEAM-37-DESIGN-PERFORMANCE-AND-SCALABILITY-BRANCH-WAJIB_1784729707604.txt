@@ -1,0 +1,162 @@
+TEAM 37 — DESIGN PERFORMANCE AND SCALABILITY
+
+BRANCH WAJIB:
+feature/team-37-design-performance
+
+==================================================
+TUJUAN
+==================================================
+
+Audit dan tingkatkan performance Universal Design Platform tanpa mengubah
+behavior bisnis.
+
+Fokus:
+
+- large artifact lists;
+- large layer trees;
+- material/component catalogs;
+- workflow event streams;
+- AI job polling/SSE;
+- image previews;
+- workspace interactions;
+- database query patterns;
+- duplicate fetch;
+- bundle size;
+- memory leak;
+- queue throughput.
+
+==================================================
+PRINSIP
+==================================================
+
+Jangan melakukan optimisasi spekulatif.
+
+Setiap perubahan harus mempunyai:
+
+- baseline;
+- bottleneck evidence;
+- measurable improvement;
+- regression test;
+- fallback.
+
+Jangan menambah cache global tanpa invalidation strategy.
+
+==================================================
+AUDIT
+==================================================
+
+Audit:
+
+- frontend bundle;
+- route chunks;
+- heavy dependencies;
+- asset list rendering;
+- image loading;
+- ResizeObserver/event listeners;
+- SSE reconnect;
+- query cache;
+- API pagination;
+- N+1 queries;
+- indexes;
+- job claim;
+- worker concurrency;
+- large JSON payload;
+- repeated schema validation;
+- serialization.
+
+==================================================
+SCOPE
+==================================================
+
+Dapat mencakup:
+
+- pagination/cursor;
+- memoization;
+- lazy loading;
+- code splitting;
+- list virtualization bila terbukti perlu;
+- image thumbnail usage;
+- request dedup;
+- query optimization;
+- index recommendation;
+- batching;
+- backpressure;
+- event cursor optimization;
+- observer cleanup;
+- payload trimming.
+
+==================================================
+DILARANG
+==================================================
+
+- mengganti framework;
+- memasang state library baru;
+- memasang cache infrastructure baru tanpa kebutuhan nyata;
+- mengubah status/job semantics;
+- mengurangi tenant filtering;
+- menghapus validation/security demi kecepatan;
+- membuat fake benchmark.
+
+==================================================
+BENCHMARK SCENARIOS
+==================================================
+
+Minimal evaluasi:
+
+- 1 artifact;
+- 100 artifacts;
+- 1.000 asset summaries;
+- 1.000 layer nodes;
+- 100 timeline entries;
+- SSE reconnect dengan duplicate events;
+- concurrent AI jobs;
+- repeated material search;
+- large preview image;
+- narrow mobile workspace.
+
+Gunakan synthetic deterministic data hanya untuk benchmark/test, jelas diberi
+label benchmark fixture.
+
+==================================================
+TEST WAJIB
+==================================================
+
+Minimal:
+
+1. no duplicate fetch;
+2. cursor pagination;
+3. large list deterministic;
+4. layer utility scalability;
+5. event dedup;
+6. SSE cleanup;
+7. observer cleanup;
+8. image lazy load;
+9. thumbnail preference;
+10. abort stale request;
+11. query batching;
+12. no tenant scope removal;
+13. bundle dependency audit;
+14. memory listener regression;
+15. job claim concurrency regression.
+
+==================================================
+DOCUMENTATION
+==================================================
+
+Buat performance report:
+
+- baseline;
+- bottleneck;
+- perubahan;
+- measurement;
+- trade-off;
+- known limit;
+- recommended production metric.
+
+==================================================
+COMMIT
+==================================================
+
+git add .
+git commit -m "perf(design-platform): improve workspace and execution scalability"
+git push -u origin HEAD

@@ -6,7 +6,7 @@
  * Versioned: every replace creates a new row; old version kept for history.
  */
 import { createHash } from "crypto";
-import { eq, and, desc, ilike, or, sql } from "drizzle-orm";
+import { eq, and, desc, asc, ilike, sql } from "drizzle-orm";
 import {
   db,
   aiAssetLibraryTable,
@@ -89,6 +89,8 @@ export interface AssetLibraryFilters {
   tags?: string[];
   sort?: "newest" | "oldest" | "name" | "size";
   projectId?: string;
+  /** Maximum rows to return. Defaults to 500. Hard cap: 1000. */
+  limit?: number;
 }
 
 export async function listAssetLibrary(
@@ -96,6 +98,7 @@ export async function listAssetLibrary(
   filters: AssetLibraryFilters = {},
 ): Promise<AssetLibraryView[]> {
   const showArchived = filters.archived === true;
+  const rowLimit = Math.min(filters.limit ?? 500, 1000);
 
   const conditions = [
     eq(aiAssetLibraryTable.emailHash, emailHash),
@@ -107,32 +110,43 @@ export async function listAssetLibrary(
   if (filters.projectId) conditions.push(eq(aiAssetLibraryTable.projectId, filters.projectId));
   if (filters.favorited === true) conditions.push(eq(aiAssetLibraryTable.favorited, true));
 
-  let rows = await db
-    .select()
-    .from(aiAssetLibraryTable)
-    .where(and(...conditions))
-    .orderBy(desc(aiAssetLibraryTable.createdAt));
-
-  // Post-filter: search by title or fileName
+  // Push text search to DB — avoids fetching all rows into JS memory
   if (filters.search) {
-    const q = filters.search.toLowerCase();
-    rows = rows.filter(
-      (r) => r.title.toLowerCase().includes(q) || r.fileName.toLowerCase().includes(q),
+    const pattern = `%${filters.search}%`;
+    conditions.push(
+      sql`(${aiAssetLibraryTable.title} ilike ${pattern} or ${aiAssetLibraryTable.fileName} ilike ${pattern})`,
     );
   }
 
-  // Post-filter: tags
+  // Push tag filter to DB via JSONB containment
   if (filters.tags && filters.tags.length > 0) {
-    rows = rows.filter((r) => {
-      const rtags = Array.isArray(r.tags) ? (r.tags as string[]) : [];
-      return filters.tags!.some((t) => rtags.includes(t));
-    });
+    // Match rows whose tags JSONB array contains at least one of the requested tags
+    conditions.push(
+      sql`${aiAssetLibraryTable.tags} ?| array[${sql.join(
+        filters.tags.map((t) => sql`${t}`),
+        sql`, `,
+      )}]`,
+    );
   }
 
-  // Sort
-  if (filters.sort === "oldest") rows = [...rows].sort((a, b) => (a.createdAt > b.createdAt ? 1 : -1));
-  else if (filters.sort === "name") rows = [...rows].sort((a, b) => a.title.localeCompare(b.title));
-  else if (filters.sort === "size") rows = [...rows].sort((a, b) => (b.fileSizeBytes ?? 0) - (a.fileSizeBytes ?? 0));
+  // Determine ORDER BY in DB rather than sorting in JS
+  let orderBy;
+  if (filters.sort === "oldest") {
+    orderBy = asc(aiAssetLibraryTable.createdAt);
+  } else if (filters.sort === "name") {
+    orderBy = asc(aiAssetLibraryTable.title);
+  } else if (filters.sort === "size") {
+    orderBy = desc(aiAssetLibraryTable.fileSizeBytes);
+  } else {
+    orderBy = desc(aiAssetLibraryTable.createdAt);
+  }
+
+  const rows = await db
+    .select()
+    .from(aiAssetLibraryTable)
+    .where(and(...conditions))
+    .orderBy(orderBy)
+    .limit(rowLimit);
 
   return rows.map(toView);
 }

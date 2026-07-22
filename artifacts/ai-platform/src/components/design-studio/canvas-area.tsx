@@ -1,11 +1,12 @@
-import { useRef, useEffect, useCallback, useState } from "react";
+import { useRef, useEffect, useCallback, useState, memo } from "react";
 import { cn } from "@/lib/utils";
 import type { DesignElement, CanvasState, ResizeHandle, ToolType, Guide } from "./types";
 import { makeElement } from "./types";
 
 // ── Element renderer ──────────────────────────────────────────────────────────
+// memo prevents sibling elements from re-rendering when only one changes.
 
-function ElementRenderer({ el }: { el: DesignElement }) {
+const ElementRenderer = memo(function ElementRenderer({ el }: { el: DesignElement }) {
   const style: React.CSSProperties = {
     position: "absolute",
     left: el.x,
@@ -46,6 +47,8 @@ function ElementRenderer({ el }: { el: DesignElement }) {
           src={el.src}
           alt={el.name}
           draggable={false}
+          loading="lazy"
+          decoding="async"
           style={{
             ...style,
             objectFit: (el.objectFit ?? "cover") as React.CSSProperties["objectFit"],
@@ -95,7 +98,7 @@ function ElementRenderer({ el }: { el: DesignElement }) {
       boxSizing: "border-box",
     }} />
   );
-}
+});
 
 // ── Resize handles ────────────────────────────────────────────────────────────
 
