@@ -1,0 +1,319 @@
+TEAM 44 — RESUME FROM QUOTA INTERRUPTION
+
+IMPORTANT CONTEXT
+
+Team 44 menemukan dua Supabase project terpisah:
+
+Development:
+xssrfshdrtdfupgqwfdw
+
+Production:
+nzdweipzckfszczzqtuw
+
+Team 43 sebelumnya memperbaiki database development, bukan production.
+
+Jangan mengulang discovery dari awal.
+Lanjutkan dari Phase 2/3/4 pada production database yang sebenarnya.
+
+Current verdict:
+GO LIVE BLOCKED until production database is verified and remediated.
+
+==================================================
+PHASE A — CONFIRM REAL PRODUCTION TARGET
+==================================================
+
+Buktikan bahwa production deployment:
+
+https://aicore.cstlogistic.co.id
+
+menggunakan Supabase project:
+
+nzdweipzckfszczzqtuw
+
+Gunakan:
+
+- deployment environment variables;
+- hostname/project ref;
+- production API database fingerprint;
+- query identity;
+- production data counts.
+
+Jangan tampilkan credential penuh.
+
+Laporkan:
+
+- project reference;
+- hostname;
+- database name;
+- search_path;
+- current_user;
+- production deployment mapping.
+
+==================================================
+PHASE B — READ-ONLY GEMINI CHECK ON PRODUCTION
+==================================================
+
+Jalankan pada project:
+
+nzdweipzckfszczzqtuw
+
+Query provider:
+
+SELECT
+  id,
+  slug,
+  name,
+  base_url,
+  api_key_env_var,
+  is_active,
+  created_at
+FROM ai_platform.ai_providers
+WHERE
+  LOWER(COALESCE(slug, '')) LIKE '%google%'
+  OR LOWER(COALESCE(slug, '')) LIKE '%gemini%'
+  OR LOWER(COALESCE(name, '')) LIKE '%gemini%'
+ORDER BY id;
+
+Query model:
+
+SELECT
+  id,
+  name,
+  provider_id,
+  is_active
+FROM ai_platform.ai_models
+WHERE LOWER(name) LIKE '%gemini%'
+ORDER BY id;
+
+Tentukan:
+
+1. apakah provider 161 ada;
+2. apakah provider 3 ada;
+3. model mana yang menunjuk ke 161;
+4. apakah ada orphan provider_id.
+
+==================================================
+PHASE C — FULL DEPENDENCY CHECK
+==================================================
+
+Jika provider 161 ada, periksa dependency production terhadap ID 161.
+
+Minimal:
+
+- ai_models
+- ai_agents
+- ai_capabilities
+- ai_employees
+- ai_execution_logs
+- ai_provider_pricing
+- ai_workflows
+- ai_jobs
+- ai_cost_records
+- tabel lain dengan provider_id
+- JSON config yang menyimpan provider reference
+
+Bedakan real foreign-key/reference dari false-positive angka 161.
+
+Jangan DELETE sebelum dependency analysis selesai.
+
+==================================================
+PHASE D — TARGETED ATOMIC FIX
+==================================================
+
+Jalankan hanya jika production memang masih memiliki duplicate.
+
+Sebelum perubahan:
+
+- backup row provider 161;
+- backup semua model yang menunjuk ke 161;
+- simpan rollback SQL;
+- catat dependency counts.
+
+Gunakan transaction:
+
+BEGIN;
+
+UPDATE ai_platform.ai_models
+SET provider_id = 3,
+    updated_at = NOW()
+WHERE provider_id = 161;
+
+Guard 1:
+
+Pastikan provider canonical ID 3 ada dan aktif.
+
+Guard 2:
+
+Pastikan tidak ada ai_models yang masih menggunakan provider_id 161.
+
+Guard 3:
+
+Pastikan tidak ada dependency aktif lain terhadap provider 161.
+
+Jika guard gagal:
+
+ROLLBACK;
+STOP.
+
+Jika aman:
+
+DELETE FROM ai_platform.ai_providers
+WHERE id = 161;
+
+Guard 4:
+
+Pastikan provider 161 sudah tidak ada.
+
+Guard 5:
+
+Pastikan tidak ada orphan provider_id pada ai_models.
+
+COMMIT;
+
+Jangan menjalankan transaction ini pada development database.
+
+==================================================
+PHASE E — PRODUCTION POST-FIX VERIFICATION
+==================================================
+
+Pada production database, pastikan:
+
+- hanya satu Google/Gemini provider canonical;
+- provider 161 tidak ada;
+- semua Gemini model menunjuk ke provider 3;
+- zero orphan reference;
+- production API tidak menampilkan provider 161;
+- provider canonical menunjukkan keyConfigured=true.
+
+Lakukan API test terhadap:
+
+https://aicore.cstlogistic.co.id
+
+Minimal:
+
+- health;
+- providers;
+- models;
+- scheduler;
+- dispatcher;
+- workers;
+- one minimal Gemini execution;
+- cost record;
+- audit/event record.
+
+Pastikan:
+
+- tidak ada unexplained HTTP 500;
+- tidak ada provider resolution error;
+- tidak ada stale cached provider response.
+
+Restart production API hanya jika diperlukan agar cache/config dimuat ulang.
+
+==================================================
+PHASE F — WORKER PROOF
+==================================================
+
+Buktikan production worker benar-benar berjalan.
+
+Jalankan satu job kecil dan catat:
+
+- job created;
+- claimed by worker;
+- started;
+- completed;
+- worker ID;
+- duration;
+- error status;
+- queue depth before/after.
+
+Local development worker offline bukan blocker jika production worker memproses job dengan benar.
+
+==================================================
+PHASE G — MEMORY MONITORING
+==================================================
+
+Karena quota sebelumnya habis sebelum observasi selesai, lanjutkan monitoring production minimal 60 menit.
+
+Ambil snapshot pada:
+
+T+0
+T+10
+T+20
+T+30
+T+40
+T+50
+T+60
+
+Catat:
+
+- heap used;
+- heap total;
+- RSS;
+- CPU;
+- uptime;
+- request count;
+- queue depth;
+- completed jobs;
+- failed jobs;
+- process restart count.
+
+Klasifikasi:
+
+STABLE:
+heap naik dan turun setelah GC, tidak ada tren naik terus.
+
+WATCH:
+heap naik konsisten tetapi masih di bawah 350 MB.
+
+BLOCKER:
+heap melebihi 350 MB dan terus naik, OOM, atau process restart.
+
+==================================================
+PHASE H — FINAL REPORT
+==================================================
+
+Update file:
+
+PRODUCTION_DATABASE_VERIFICATION_AND_GO_LIVE_REPORT.md
+
+Wajib memuat:
+
+1. Dev project identity
+2. Production project identity
+3. Bukti keduanya berbeda
+4. Production deployment mapping
+5. Production Gemini state before
+6. Dependency analysis
+7. Backup data
+8. SQL transaction yang dijalankan
+9. Production Gemini state after
+10. API verification
+11. Worker execution proof
+12. Memory snapshots 60 menit
+13. Rollback SQL
+14. Remaining limitations
+15. Final verdict
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Gunakan hanya salah satu:
+
+✅ GO LIVE APPROVED
+
+⚠️ GO LIVE WITH LIMITATIONS
+
+❌ GO LIVE BLOCKED
+
+GO LIVE APPROVED hanya jika:
+
+- production target terbukti nzdweipzckfszczzqtuw;
+- duplicate provider selesai pada production;
+- semua Gemini model menuju provider canonical;
+- zero orphan reference;
+- production API sehat;
+- production worker menyelesaikan job;
+- tidak ada unexplained HTTP 500;
+- memory tidak menunjukkan tren kritis;
+- scheduler, dispatcher, audit, dan cost tracking aktif.
