@@ -140,7 +140,7 @@ export async function listDesignProjects(opts: ListProjectsOptions) {
 
   // For each project, get the version count and element count
   const enriched = await Promise.all(
-    rows.map(async (p) => {
+    rows.map(async (p: (typeof rows)[number]) => {
       const [versionResult, currentVersion] = await Promise.all([
         db
           .select({ count: sql<number>`count(*)::int` })
