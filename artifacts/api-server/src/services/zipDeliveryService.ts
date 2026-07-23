@@ -143,7 +143,7 @@ export async function enqueueZipDelivery(projectId: string): Promise<ZipDelivery
     .set({ jobId: job.id, updatedAt: new Date() })
     .where(eq(aiZipDeliveriesTable.id, delivery.id));
 
-  await publishSafe("zip_delivery_queued", { projectId, deliveryId: delivery.id, jobId: job.id });
+  await publishSafe({ eventType: "zip_delivery_queued", sourceModule: "zip-delivery", sourceId: projectId, payload: { projectId, deliveryId: delivery.id, jobId: job.id } });
 
   return toView({ ...delivery, jobId: job.id });
 }
@@ -211,7 +211,7 @@ export async function executeZipDeliveryJob(deliveryId: number, projectId: strin
       const url = asset.imageUrl ?? asset.storagePath;
       if (!url) continue;
 
-      const ext = getExtension(asset.assetType, asset.mimeType ?? "");
+      const ext = getExtension(asset.assetType, getMimeType(asset.assetType));
       const safeName = `${asset.assetType}-v${asset.version}-${asset.id}${ext}`;
       const filePath = join(workDir, safeName);
 
@@ -224,7 +224,7 @@ export async function executeZipDeliveryJob(deliveryId: number, projectId: strin
         manifestEntries.push({
           fileName: safeName,
           type: asset.assetType,
-          mimeType: asset.mimeType ?? getMimeType(asset.assetType),
+          mimeType: getMimeType(asset.assetType),
           fileSizeBytes: buf.length,
           checksum,
         });
@@ -295,12 +295,7 @@ export async function executeZipDeliveryJob(deliveryId: number, projectId: strin
     await rm(workDir, { recursive: true, force: true });
 
     // Publish analytics event
-    await publishSafe("zip_delivery_completed", {
-      projectId,
-      deliveryId,
-      fileSizeBytes: zipSizeBytes,
-      fileCount: filesToZip.length,
-    });
+    await publishSafe({ eventType: "zip_delivery_completed", sourceModule: "zip-delivery", sourceId: projectId, payload: { projectId, deliveryId, fileSizeBytes: zipSizeBytes, fileCount: filesToZip.length } });
 
     await logAudit("zip-delivery", "zip_generated", String(deliveryId), "ai_zip_delivery", "success", {
       projectId, fileSizeBytes: zipSizeBytes,
