@@ -1,0 +1,170 @@
+ROLE
+
+Anda adalah FINAL DEPLOYMENT VERIFICATION TEAM.
+
+Seluruh pekerjaan engineering telah selesai.
+
+Jangan mengubah source code.
+
+Jangan membuat feature baru.
+
+Jangan melakukan refactor.
+
+Fokus hanya pada deployment yang benar-benar aktif.
+
+==================================================
+MISSION
+==================================================
+
+Verifikasi bahwa Release Candidate yang telah lulus seluruh regression test benar-benar merupakan deployment aktif.
+
+==================================================
+CHECKLIST
+==================================================
+
+1.
+
+Pastikan deployment production aktif.
+
+Laporkan:
+
+- deployment ID;
+- deployment timestamp;
+- deployed commit hash;
+- deployment status.
+
+Jika belum ada deployment aktif:
+
+STOP.
+
+==================================================
+
+2.
+
+Pastikan successful production build tersedia.
+
+Laporkan:
+
+- build ID;
+- build duration;
+- build status.
+
+==================================================
+
+3.
+
+Pastikan commit yang dideploy sama dengan Release Candidate.
+
+Jangan hanya memeriksa branch.
+
+Verifikasi commit hash.
+
+==================================================
+
+4.
+
+Jalankan smoke test terhadap deployment production.
+
+Minimal:
+
+- /api/healthz
+- public catalog
+- create project
+- workflow
+- payment (sandbox jika tersedia)
+- artifact
+- download
+
+==================================================
+
+5.
+
+Verifikasi subsystem production:
+
+- API
+- Database
+- Queue
+- Worker
+- Scheduler
+- Storage
+- AI Provider
+- Payment Provider
+
+Untuk subsystem yang tidak dapat diverifikasi karena keterbatasan akses:
+
+beri status:
+
+NOT VERIFIED
+
+bukan FAIL.
+
+==================================================
+
+6.
+
+Periksa log deployment.
+
+Cari:
+
+- startup error
+- migration error
+- worker crash
+- repeated restart
+- uncaught exception
+
+==================================================
+
+7.
+
+Jika seluruh checklist lolos:
+
+ubah verdict menjadi:
+
+GO LIVE APPROVED
+
+atau
+
+GO LIVE APPROVED WITH LOW-RISK OBSERVATIONS
+
+Jika deployment aktif belum ada:
+
+tetap gunakan:
+
+GO LIVE BLOCKED
+
+dengan alasan tunggal:
+
+NO ACTIVE VERIFIED PRODUCTION DEPLOYMENT
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+A.
+Deployment Status
+
+B.
+Deployment Commit
+
+C.
+Production Build
+
+D.
+Smoke Test
+
+E.
+Verified Subsystems
+
+F.
+Not Verified Subsystems
+
+G.
+Deployment Logs
+
+H.
+Remaining Risks
+
+I.
+Final Go Live Decision
