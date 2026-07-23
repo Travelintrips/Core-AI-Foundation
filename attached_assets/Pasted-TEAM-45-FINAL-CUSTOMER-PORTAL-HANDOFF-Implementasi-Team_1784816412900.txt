@@ -1,0 +1,245 @@
+TEAM 45 — FINAL CUSTOMER PORTAL HANDOFF
+
+Implementasi Team 45 sudah selesai secara lokal.
+
+Verified state:
+
+- Branch: team-45/customer-portal-consistency
+- Commit: 1f78084
+- Customer Portal tests: 430 passed
+- New regression tests: 43
+- Typecheck: clean
+- Remote push: pending because GitHub authentication is unavailable
+
+Jangan menambah feature baru.
+Jangan mengubah main.
+Jangan merge.
+Jangan mengulang implementasi.
+
+Tugas Anda hanya melakukan final contract review dan menyiapkan handoff aman untuk Team 39.
+
+==================================================
+1. VERIFY IMPLEMENTATION COMMIT
+==================================================
+
+Verifikasi bahwa commit 1f78084 memuat hanya perubahan Team 45 yang dimaksud.
+
+Catat seluruh file berubah dan klasifikasikan:
+
+- Customer Portal exclusive;
+- shared lifecycle formatting;
+- integration-sensitive;
+- test-only;
+- documentation-only.
+
+Pastikan tidak ada perubahan Billing, Workflow, Renderer, Storage, atau Admin Portal.
+
+==================================================
+2. DOCUMENT FIXED BUGS
+==================================================
+
+Dokumentasikan empat bug utama:
+
+1. Recent Projects rendered blank because dashboard used fields that do not exist on WorkspaceProject.
+2. Canonical stages after running fell back to generic styling and raw keys.
+3. StatusBadge only recognized a small subset of lifecycle states.
+4. Project Complete insight incorrectly exposed download CTA while filesUnlocked=false.
+
+For each bug include:
+
+- previous behavior;
+- root cause;
+- corrected behavior;
+- affected file;
+- regression test evidence.
+
+==================================================
+3. CANONICAL STATUS CONTRACT
+==================================================
+
+Document the complete Customer Portal mapping for:
+
+- workflow_completed;
+- production_completed;
+- deliverable_ready;
+- commercial_completed;
+- files_unlocked;
+- order_completed;
+- all intermediate canonical stages currently supported.
+
+Confirm:
+
+- workflow completion does not display order completed;
+- production completion does not imply download access;
+- deliverable ready does not imply files unlocked;
+- commercial completion does not imply production complete;
+- files unlocked does not imply all service obligations are complete;
+- order completed is the only fully closed state.
+
+Do not create a new lifecycle definition.
+
+==================================================
+4. DOWNLOAD CTA CONTRACT
+==================================================
+
+Confirm that Customer Portal download actions must follow Team 44 canonical access policy.
+
+The UI must not show an enabled final download action unless:
+
+- final deliverable is valid;
+- required artifact exists;
+- storage reference is valid;
+- files are unlocked;
+- customer is authorized;
+- tenant scope matches.
+
+If the current UI still relies only on filesUnlocked, document this as an integration requirement for Team 39 and Team 44.
+
+Do not implement Artifact or Storage logic inside Customer Portal.
+
+==================================================
+5. SHARED STATUS MAPPING REVIEW
+==================================================
+
+Mark these files as potentially shared or conflict-prone:
+
+- workspace-format.ts
+- status-badge.tsx
+
+Compare conceptually with Admin Portal status mappings owned by Team 46.
+
+Recommend one shared canonical lifecycle registry during Team 39 integration if the repository already has an appropriate shared package.
+
+Do not create a second shared package unless Team 39 approves it.
+
+==================================================
+6. PRE-EXISTING TYPECHECK FIXES
+==================================================
+
+Document the three pre-existing typecheck fixes in:
+
+- i18n.tsx
+- workspace-layout.tsx
+- downloads.tsx
+
+For each one state:
+
+- original error;
+- exact correction;
+- why runtime behavior is unchanged or improved;
+- test/build evidence.
+
+Clearly separate these from the four lifecycle bugs.
+
+==================================================
+7. UPDATE TEAM 45 REPORT
+==================================================
+
+Ensure the repository contains:
+
+TEAM45_CUSTOMER_PORTAL_AUDIT_REPORT.md
+
+The report must include:
+
+- branch;
+- baseline commit;
+- implementation commit;
+- Team 41 contract reference;
+- customer journey;
+- status mapping;
+- progress mapping;
+- payment visibility boundary;
+- artifact visibility boundary;
+- download policy;
+- notification and timeline findings;
+- tenant isolation;
+- fixed bugs;
+- files changed;
+- regression tests;
+- typecheck;
+- build;
+- conflict matrix;
+- Team 39 integration instructions;
+- remote publication status.
+
+Do not include secret values or signed URLs.
+
+==================================================
+8. BUILD VERIFICATION
+==================================================
+
+If not already completed, verify the Customer Portal production build.
+
+Report separately:
+
+- tests;
+- typecheck;
+- build;
+- pre-existing unrelated warnings.
+
+Do not claim build success unless it was actually run and passed.
+
+==================================================
+9. LOCAL FINALIZATION
+==================================================
+
+If report or documentation updates are required, create one final documentation-only local commit.
+
+Do not amend 1f78084 unless necessary.
+
+Preserve:
+
+- implementation commit;
+- optional documentation commit;
+- local branch;
+- Replit checkpoint.
+
+Do not merge to main.
+
+==================================================
+FINAL RESPONSE
+==================================================
+
+Report:
+
+A. Branch
+
+B. Baseline commit
+
+C. Implementation commit
+
+D. Optional documentation commit
+
+E. Four fixed bugs
+
+F. Pre-existing typecheck fixes
+
+G. Canonical status mapping
+
+H. Download CTA contract
+
+I. Files changed
+
+J. Shared/conflict-prone files
+
+K. Regression tests
+
+L. Typecheck
+
+M. Build
+
+N. Working tree status
+
+O. Replit checkpoint status
+
+P. Remote push status
+
+Q. Team 39 integration instructions
+
+R. Final verdict
+
+Use:
+
+PASS — LOCAL IMPLEMENTATION COMPLETE, REMOTE PUBLICATION PENDING
+
+Do not claim remote publication complete.
