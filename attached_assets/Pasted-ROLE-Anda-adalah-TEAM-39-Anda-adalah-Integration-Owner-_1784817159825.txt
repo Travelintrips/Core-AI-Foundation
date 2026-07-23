@@ -1,0 +1,592 @@
+ROLE
+
+Anda adalah TEAM 39.
+
+Anda adalah Integration Owner dan Release Integration Lead.
+
+Tugas Anda BUKAN membuat fitur baru.
+
+Tugas Anda adalah:
+
+- mengintegrasikan hasil Team 42–46;
+- menjaga kontrak Team 41;
+- melakukan semantic merge;
+- memastikan seluruh sistem bekerja sebagai satu kesatuan;
+- menghasilkan Release Candidate yang siap diuji Team 50.
+
+==================================================
+CURRENT STATUS
+==================================================
+
+Baseline Team 41 tersedia.
+
+Team berikut telah selesai secara lokal:
+
+✓ Team 42
+Billing & Commercial
+
+✓ Team 43
+Workflow, Jobs, Queue & Workers
+
+✓ Team 44
+Artifacts & Deliverables
+
+✓ Team 45
+Customer Portal
+
+✓ Team 46
+Admin Portal
+
+Masing-masing memiliki commit lokal.
+
+Jangan menganggap implementasi mereka sudah otomatis kompatibel.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Bangun satu Integration Branch yang:
+
+- mengikuti kontrak Team 41;
+- mempertahankan seluruh perbaikan Team 42–46;
+- tidak menghasilkan konflik logika;
+- tidak menghasilkan duplicate source of truth;
+- lulus seluruh regression test;
+- siap diserahkan ke Team 50.
+
+==================================================
+PHASE 1
+COLLECT IMPLEMENTATION
+==================================================
+
+Baca seluruh laporan:
+
+TEAM41_ARCHITECTURE_AUDIT_REPORT.md
+
+TEAM42_*.md
+
+TEAM43_*.md
+
+TEAM44_*.md
+
+TEAM45_*.md
+
+TEAM46_*.md
+
+Untuk setiap team buat ringkasan:
+
+- tujuan
+- file berubah
+- contract
+- ownership
+- regression tests
+- remaining risks
+
+==================================================
+PHASE 2
+CONTRACT VALIDATION
+==================================================
+
+Pastikan seluruh implementasi mengikuti Team 41.
+
+Validasi:
+
+workflow_completed
+
+production_completed
+
+deliverable_ready
+
+commercial_completed
+
+files_unlocked
+
+order_completed
+
+Tidak boleh ada team yang membuat lifecycle baru.
+
+==================================================
+PHASE 3
+FILE CONFLICT ANALYSIS
+==================================================
+
+Cari seluruh file yang disentuh lebih dari satu team.
+
+Minimal laporkan:
+
+file
+
+team
+
+jenis konflik
+
+severity
+
+ownership
+
+merge strategy
+
+Kelompokkan:
+
+LOW
+
+MEDIUM
+
+HIGH
+
+CRITICAL
+
+==================================================
+PHASE 4
+SEMANTIC MERGE
+==================================================
+
+Jangan memilih salah satu file.
+
+Gabungkan perubahan secara semantik.
+
+Contoh:
+
+Team 42
+payment
+
++
+
+Team 44
+unlock
+
++
+
+Team 46
+admin operation
+
+harus hidup bersama.
+
+Jangan overwrite.
+
+==================================================
+PHASE 5
+SOURCE OF TRUTH REVIEW
+==================================================
+
+Pastikan hanya ada satu source of truth untuk:
+
+workflow
+
+jobs
+
+payment
+
+artifacts
+
+deliverables
+
+downloads
+
+unlock
+
+customer status
+
+admin status
+
+analytics
+
+==================================================
+PHASE 6
+LIFECYCLE REVIEW
+==================================================
+
+Pastikan hubungan:
+
+workflow_completed
+
+↓
+
+production_completed
+
+↓
+
+deliverable_ready
+
+↓
+
+files_unlocked
+
+↓
+
+order_completed
+
+commercial_completed
+berjalan paralel sesuai Team 41.
+
+Tidak boleh:
+
+workflow langsung completed
+
+payment langsung unlock
+
+artifact langsung downloadable
+
+==================================================
+PHASE 7
+TEAM BOUNDARY REVIEW
+==================================================
+
+Pastikan:
+
+Team 42
+tidak mengambil workflow.
+
+Team 43
+tidak mengambil billing.
+
+Team 44
+tidak mengambil payment.
+
+Team 45
+tidak mengambil renderer.
+
+Team 46
+tidak mengambil workflow engine.
+
+==================================================
+PHASE 8
+CUSTOMER & ADMIN CONSISTENCY
+==================================================
+
+Bandingkan:
+
+Customer Portal
+
+Admin Portal
+
+Pastikan:
+
+status
+
+progress
+
+timeline
+
+payment
+
+downloads
+
+notifications
+
+selalu sama.
+
+==================================================
+PHASE 9
+SECURITY REVIEW
+==================================================
+
+Verifikasi:
+
+admin override
+
+unlock
+
+payment verification
+
+audit log
+
+token validation
+
+tenant isolation
+
+download URL
+
+signed URL
+
+==================================================
+PHASE 10
+GLOBAL REGRESSION
+==================================================
+
+Jalankan seluruh regression.
+
+Minimal:
+
+workflow
+
+payment
+
+customer
+
+admin
+
+renderer
+
+artifact
+
+downloads
+
+notifications
+
+analytics
+
+tenant
+
+==================================================
+PHASE 11
+TYPECHECK
+==================================================
+
+Pastikan:
+
+seluruh workspace typecheck.
+
+==================================================
+PHASE 12
+BUILD
+==================================================
+
+Pastikan:
+
+seluruh aplikasi build.
+
+==================================================
+PHASE 13
+END TO END
+==================================================
+
+Lakukan simulasi lengkap.
+
+Customer:
+
+Brief
+
+↓
+
+Quotation
+
+↓
+
+Approval
+
+↓
+
+Payment
+
+↓
+
+Production
+
+↓
+
+Review
+
+↓
+
+Revision
+
+↓
+
+Deliverable
+
+↓
+
+Unlock
+
+↓
+
+Download
+
+↓
+
+Completed
+
+Pastikan tidak ada status yang melompat.
+
+==================================================
+PHASE 14
+RELEASE CANDIDATE
+==================================================
+
+Buat Release Candidate.
+
+Isi:
+
+integration summary
+
+merged contracts
+
+remaining risks
+
+known issues
+
+conflict resolution
+
+release blockers
+
+==================================================
+PHASE 15
+TEAM 50 PACKAGE
+==================================================
+
+Siapkan paket untuk Team 50.
+
+Berisi:
+
+integration commit
+
+baseline
+
+release candidate
+
+known risks
+
+test evidence
+
+conflict resolution
+
+==================================================
+PHASE 16
+DOCUMENTATION
+==================================================
+
+Buat:
+
+TEAM39_INTEGRATION_REPORT.md
+
+Isi:
+
+Executive Summary
+
+Integrated Teams
+
+Files
+
+Conflict Matrix
+
+Merge Decisions
+
+Canonical Lifecycle
+
+Canonical Source of Truth
+
+Security Review
+
+Regression
+
+Typecheck
+
+Build
+
+Release Candidate
+
+Remaining Risks
+
+Instructions for Team 50
+
+==================================================
+PHASE 17
+COMMIT
+==================================================
+
+Commit:
+
+chore(integration): prepare universal creative release candidate
+
+Jangan merge ke main.
+
+==================================================
+FINAL REPORT
+==================================================
+
+A.
+Integration Branch
+
+B.
+Baseline
+
+C.
+Integrated Teams
+
+D.
+Files Reviewed
+
+E.
+Conflict Matrix
+
+F.
+Merge Decisions
+
+G.
+Lifecycle Validation
+
+H.
+Source of Truth Validation
+
+I.
+Customer/Admin Consistency
+
+J.
+Security Review
+
+K.
+Regression
+
+L.
+Typecheck
+
+M.
+Build
+
+N.
+Release Candidate
+
+O.
+Files Changed
+
+P.
+Remaining Risks
+
+Q.
+Team 50 Package
+
+R.
+Commit Hash
+
+S.
+Push Status
+
+FINAL VERDICT
+
+Gunakan salah satu:
+
+PASS — RELEASE CANDIDATE READY FOR TEAM 50
+
+PASS WITH DOCUMENTED PRE-EXISTING RISKS
+
+BLOCKED — INTEGRATION CONFLICTS
+
+BLOCKED — REGRESSION DETECTED
+
+BLOCKED — TYPECHECK FAILED
+
+==================================================
+IMPORTANT RULES
+==================================================
+
+Jangan membuat fitur baru.
+
+Jangan mengubah kontrak Team 41.
+
+Jangan membuat source of truth baru.
+
+Jangan menghapus regression test.
+
+Jangan menyembunyikan konflik.
+
+Jangan memperbaiki bug di luar hasil integrasi kecuali bug tersebut muncul akibat proses integrasi.
+
+Jika menemukan konflik antar tim:
+
+- identifikasi root cause;
+- lakukan semantic merge;
+- dokumentasikan keputusan integrasi;
+- tambahkan regression test untuk mencegah konflik yang sama terulang.
+
+Target akhir Team 39 adalah menghasilkan satu Release Candidate yang stabil, terdokumentasi, dan siap menjalani validasi independen oleh Team 50.
