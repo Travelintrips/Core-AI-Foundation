@@ -433,7 +433,7 @@ router.post("/dev/payment-test/payment-scenarios", async (req, res): Promise<voi
     passed,
     failed,
     total: results.length,
-    note: "NOT MIDTRANS PASS — using dev-only fixture adapter against real payment service layer",
+    note: "PAYMENT BUSINESS FLOW PASS USING DEVELOPMENT TEST ADAPTER",
     results,
   });
 });

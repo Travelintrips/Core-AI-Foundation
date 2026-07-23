@@ -1,0 +1,582 @@
+ROLE
+
+Anda adalah DEV E2E FINAL VERIFICATION TEAM.
+
+Lanjutkan pekerjaan dari checkpoint terakhir.
+
+Jangan mengulang eksplorasi repository dari awal.
+Jangan menghapus implementasi yang sudah selesai.
+Jangan deploy.
+Jangan publish.
+Jangan mengubah production.
+
+Checkpoint terakhir:
+
+- working tree sebelumnya clean;
+- DB-backed project idempotency sudah diimplementasikan;
+- dev payment test router sudah dimount;
+- notification tenantId sudah diperbaiki;
+- /api/internal/auth/me sudah diklasifikasikan SESSION-ONLY BY DESIGN;
+- API server sudah berhasil start;
+- idempotency table berhasil di-ensure;
+- dev payment adapter mengembalikan 401 tanpa auth, sesuai desain;
+- targeted test files sudah dibuat;
+- quota habis tepat saat targeted tests dan full regression mulai dijalankan.
+
+==================================================
+FIRST ACTION — VERIFY CURRENT STATE
+==================================================
+
+Sebelum menulis kode baru:
+
+1. Periksa current branch.
+2. Periksa working tree.
+3. Tampilkan modified dan untracked files.
+4. Tampilkan commit terakhir.
+5. Verifikasi bahwa file perubahan berikut masih ada:
+   - DB-backed idempotency service;
+   - submit handler integration;
+   - notification tenantId fix;
+   - dev payment test router;
+   - router mount;
+   - startup wiring;
+   - targeted test files.
+6. Jangan reset perubahan.
+7. Jangan checkout paksa.
+8. Jangan mengulang refactor.
+
+Jika ada perubahan yang belum committed, pertahankan dan lanjutkan verifikasi.
+
+==================================================
+PHASE 1 — RUN TARGETED TESTS
+==================================================
+
+Jalankan seluruh targeted tests yang sudah dibuat.
+
+Kelompokkan hasil berdasarkan domain:
+
+A. DEF-001 project idempotency
+
+B. DEF-004 notification mapping
+
+C. DEF-002 auth contract
+
+D. development payment adapter
+
+Laporkan:
+
+- file test;
+- jumlah test;
+- pass;
+- fail;
+- duration;
+- failure reason.
+
+Jangan hanya menampilkan summary global.
+
+==================================================
+PHASE 2 — DEF-001 CONCURRENCY PROOF
+==================================================
+
+Pastikan targeted test benar-benar melakukan concurrent request,
+bukan hanya sequential request cepat.
+
+Minimal verifikasi:
+
+1. dua request identik paralel;
+2. dua request identik selisih 10–100 ms;
+3. idempotency key sama;
+4. tenant berbeda;
+5. actor berbeda;
+6. payload berbeda;
+7. retry setelah success;
+8. retry ketika request pertama masih processing;
+9. transaction rollback;
+10. server restart behavior jika persistent record harus survive restart.
+
+Expected:
+
+- satu project canonical;
+- response duplicate mengembalikan project yang sama atau status in-progress yang canonical;
+- tidak ada duplicate workflow;
+- tidak ada duplicate job;
+- tidak ada duplicate payment schedule;
+- tidak ada duplicate audit event.
+
+Verifikasi database postcondition, bukan hanya HTTP response.
+
+==================================================
+PHASE 3 — VERIFY IDEMPOTENCY TABLE
+==================================================
+
+Audit schema dan behavior tabel idempotency.
+
+Pastikan memiliki atau setara dengan:
+
+- tenant scope;
+- actor/customer scope;
+- idempotency key atau fingerprint;
+- request hash;
+- status;
+- response/project reference;
+- createdAt;
+- updatedAt;
+- expiry/cleanup strategy jika diperlukan;
+- unique constraint yang concurrency-safe.
+
+Pastikan:
+
+- same key + different payload tidak diam-diam memakai response lama;
+- collision menghasilkan conflict yang aman;
+- failed transaction tidak ditandai success;
+- stale processing record memiliki recovery strategy;
+- table creation additive dan idempotent.
+
+Jika table dibuat saat startup:
+
+verifikasi pola tersebut sesuai arsitektur repository.
+
+Jika project menggunakan migration chain canonical:
+
+pertimbangkan memindahkan DDL ke migration additive,
+tetapi jangan lakukan refactor besar jika startup ensure memang pattern existing.
+
+Dokumentasikan keputusan.
+
+==================================================
+PHASE 4 — DEF-004 NOTIFICATION TEST
+==================================================
+
+Verifikasi notification payload dari database sampai UI.
+
+Test wajib:
+
+- type tersedia;
+- tenantId tersedia;
+- Tenant A tidak melihat Tenant B;
+- platform notification ditandai eksplisit;
+- unknown legacy type memakai safe fallback;
+- retry tidak membuat duplicate notification;
+- undefined tenantId tidak menjadi wildcard;
+- workspace API response valid.
+
+Verifikasi minimal satu response runtime nyata.
+
+==================================================
+PHASE 5 — DEF-002 AUTH CONTRACT TEST
+==================================================
+
+Karena /api/internal/auth/me sudah ditentukan SESSION-ONLY BY DESIGN:
+
+- test tanpa session harus 401/unauthenticated;
+- test dengan admin API key saja tetap tidak dianggap session;
+- test dengan valid session cookie harus berhasil;
+- jangan menambahkan API-key bypass;
+- dokumentasikan intended caller dari Admin Portal;
+- tandai DEF-002 sebagai:
+
+NOT A PRODUCT DEFECT — EXPECTED SESSION AUTH CONTRACT
+
+Pastikan tidak ada frontend caller yang salah menggunakan x-admin-key untuk endpoint ini.
+
+==================================================
+PHASE 6 — DEV PAYMENT ADAPTER TEST
+==================================================
+
+Jalankan test untuk:
+
+1. disabled by default;
+2. tidak dimount di production;
+3. unauthorized request ditolak;
+4. authorized dev/test request diterima;
+5. success;
+6. pending;
+7. failed;
+8. expired;
+9. cancelled jika didukung;
+10. duplicate callback;
+11. invalid signature;
+12. partial payment;
+13. installment completion;
+14. commercial_completed correctness;
+15. no premature files_unlocked;
+16. audit log;
+17. tenant isolation.
+
+Pastikan adapter menggunakan payment service path canonical setelah provider boundary.
+
+Jangan langsung mengubah database dari router tanpa melalui service yang benar.
+
+Final wording:
+
+PAYMENT BUSINESS FLOW PASS USING DEVELOPMENT TEST ADAPTER
+
+Jangan gunakan:
+
+MIDTRANS PASS
+
+==================================================
+PHASE 7 — FULL REGRESSION
+==================================================
+
+Setelah targeted tests lulus:
+
+jalankan full regression suite.
+
+Baseline sebelumnya:
+
+5,346 / 5,346 PASS
+
+Expected sekarang:
+
+- minimal seluruh 5,346 test lama tetap pass;
+- jumlah total test bertambah sesuai targeted tests baru;
+- 0 regression failures.
+
+Laporkan:
+
+- total;
+- passed;
+- failed;
+- skipped;
+- duration;
+- test files.
+
+Jika ada failure:
+
+bedakan:
+
+- new regression;
+- pre-existing;
+- environment;
+- flaky.
+
+Jangan mengklasifikasikan failure baru sebagai pre-existing tanpa baseline evidence.
+
+==================================================
+PHASE 8 — TYPECHECK
+==================================================
+
+Jalankan:
+
+1. build shared libraries terlebih dahulu;
+2. targeted typecheck untuk changed packages;
+3. workspace typecheck.
+
+Pisahkan hasil:
+
+A. Errors dari perubahan baru
+
+B. Pre-existing:
+- cargo-finder 3 errors;
+- mockup-sandbox errors;
+- PptxGenJS 21 namespace errors.
+
+Pastikan tidak ada error baru dari:
+
+- idempotency service;
+- routes/index.ts;
+- server index.ts;
+- notification types;
+- payment adapter;
+- tests.
+
+Jangan menyatakan global typecheck clean jika pre-existing errors masih ada.
+
+Gunakan:
+
+CHANGED SCOPE TYPECHECK CLEAN
+
+jika itu yang benar.
+
+==================================================
+PHASE 9 — BUILD
+==================================================
+
+Jalankan production-equivalent local build.
+
+Verifikasi:
+
+- API server build;
+- Customer Portal build;
+- Admin Portal build;
+- shared libs build;
+- no new build failure;
+- no import cycle;
+- no dynamic import mismatch;
+- no router mount error.
+
+Catat duration.
+
+==================================================
+PHASE 10 — CLEAN RESTART
+==================================================
+
+Restart seluruh development services secara bersih.
+
+Verifikasi:
+
+- API server;
+- Customer Portal;
+- Admin Portal;
+- worker dispatchers;
+- database;
+- queue;
+- storage;
+- dev payment adapter.
+
+Pastikan:
+
+- tidak ada startup crash;
+- tidak ada duplicate router;
+- idempotency table ensure hanya berjalan sesuai harapan;
+- tidak ada repeated migration noise;
+- tidak ada unhandled rejection.
+
+==================================================
+PHASE 11 — FINAL GAP E2E
+==================================================
+
+Setelah implementation verification selesai,
+lanjutkan hanya gap yang belum diuji.
+
+A. REVIEW
+
+Temukan canonical routes dari router registration dan frontend client.
+
+Uji:
+
+- create/open review;
+- public token;
+- comment;
+- approve;
+- revision request;
+- invalid token;
+- expired token;
+- tenant isolation;
+- audit log;
+- Customer/Admin synchronization.
+
+B. COMPLETED PROJECT FIXTURE
+
+Buat satu project development yang sah melalui service layer.
+
+Jangan hanya update status langsung di DB.
+
+Project harus menghasilkan:
+
+- quotation;
+- payment schedule;
+- payment completion via dev adapter;
+- workflow;
+- production completion;
+- valid artifacts;
+- review completion bila diwajibkan;
+- deliverable_ready;
+- files_unlocked;
+- order_completed.
+
+C. PPTX
+
+Generate file nyata.
+
+Verifikasi:
+
+- non-zero;
+- extension benar;
+- valid OOXML ZIP;
+- presentation.xml ada;
+- slide files ada;
+- MIME benar;
+- dapat diunduh.
+
+D. ZIP
+
+Generate ZIP nyata.
+
+Verifikasi:
+
+- non-zero;
+- extractable;
+- manifest benar;
+- no placeholder;
+- no temporary file;
+- no cross-tenant asset;
+- filename/extension benar.
+
+E. UNLOCK & DOWNLOAD
+
+Uji:
+
+- before artifact ready;
+- before payment complete;
+- before unlock;
+- after valid unlock;
+- expired token;
+- invalid token;
+- cross-tenant token;
+- repeated download;
+- audit log.
+
+==================================================
+PHASE 12 — HTTP 500 MONITORING
+==================================================
+
+Selama seluruh targeted dan E2E test:
+
+catat semua request.
+
+Setiap unexpected HTTP 500 harus dicatat dengan:
+
+- method;
+- endpoint;
+- scenario;
+- sanitized payload;
+- response;
+- log excerpt;
+- database state;
+- severity;
+- owner.
+
+Target:
+
+0 unexpected HTTP 500.
+
+==================================================
+PHASE 13 — WORKTREE CLEANUP
+==================================================
+
+Sebelum commit:
+
+- hapus debug logs;
+- hapus temporary artifact;
+- hapus generated ZIP/PPTX yang tidak perlu;
+- jangan commit secrets;
+- jangan commit real tokens;
+- jangan commit database dump;
+- pastikan report files intended;
+- periksa git diff.
+
+==================================================
+PHASE 14 — COMMITS
+==================================================
+
+Buat commit lokal logis.
+
+Disarankan:
+
+1. fix: add persistent project submit idempotency
+2. fix: preserve notification tenant context
+3. test: add development payment adapter and auth coverage
+4. test: close dev E2E artifact delivery gaps
+5. docs: update dev E2E verification reports
+
+Jangan push.
+Jangan merge.
+Jangan deploy.
+
+==================================================
+REPORT UPDATE
+==================================================
+
+Perbarui:
+
+DEV_E2E_VERIFICATION_REPORT.md
+DEV_E2E_FAILURES.json
+DEV_E2E_COVERAGE_MATRIX.json
+DEV_E2E_VERDICT.json
+
+Tambahkan:
+
+A. Actual checkpoint
+
+B. Files changed
+
+C. Idempotency architecture
+
+D. Database schema and unique constraints
+
+E. Concurrency test evidence
+
+F. DEF-002 final classification
+
+G. Notification runtime evidence
+
+H. Payment adapter security
+
+I. Payment business-flow evidence
+
+J. Review canonical routes
+
+K. Completed project fixture
+
+L. PPTX validation
+
+M. ZIP manifest
+
+N. Unlock/download matrix
+
+O. Tenant isolation
+
+P. Unexpected HTTP 500
+
+Q. Targeted tests
+
+R. Full regression
+
+S. Typecheck
+
+T. Build
+
+U. Service restart
+
+V. Commit hashes
+
+W. Remaining observations
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Gunakan tepat salah satu:
+
+DEV PASS — ALL CRITICAL FLOWS FUNCTION CORRECTLY
+
+DEV PASS WITH LOW-RISK OBSERVATIONS
+
+DEV BLOCKED — TARGETED TEST FAILURE
+
+DEV BLOCKED — DUPLICATE PROJECT RISK
+
+DEV BLOCKED — PAYMENT FLOW UNVERIFIED
+
+DEV BLOCKED — REVIEW FLOW UNVERIFIED
+
+DEV BLOCKED — ARTIFACT DELIVERY FLOW UNVERIFIED
+
+DEV BLOCKED — SECURITY OR TENANT ISOLATION FAILURE
+
+DEV BLOCKED — REGRESSION FAILURE
+
+DEV BLOCKED — BUILD FAILURE
+
+==================================================
+RELEASE RULE
+==================================================
+
+Jangan gunakan DEV PASS — ALL CRITICAL FLOWS FUNCTION CORRECTLY sebelum terdapat bukti bahwa:
+
+- concurrent duplicate project dicegah oleh database-backed guarantee;
+- targeted tests lulus;
+- full regression lulus;
+- payment business flow lulus dengan dev adapter;
+- review/revision lulus;
+- completed project berhasil dibuat;
+- PPTX nyata valid;
+- ZIP nyata berhasil diekstrak;
+- unlock benar;
+- download nyata berhasil;
+- Tenant B ditolak dari data/file Tenant A;
+- 0 unexpected HTTP 500;
+- tidak ada error baru pada changed scope;
+- build berhasil.
