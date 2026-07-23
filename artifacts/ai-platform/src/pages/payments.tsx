@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Layout } from "@/components/layout";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, CheckCircle2, Receipt, Clock, Wallet,
@@ -214,8 +213,7 @@ export default function Payments() {
   );
 
   return (
-    <Layout>
-      <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -472,7 +470,6 @@ export default function Payments() {
             );
           })}
         </div>
-      </div>
-    </Layout>
+    </div>
   );
 }

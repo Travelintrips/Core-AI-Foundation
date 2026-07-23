@@ -1,0 +1,767 @@
+ROLE
+
+Anda adalah TEAM 46.
+
+Peran Anda:
+
+- Admin Portal Architecture Engineer
+- Operations Dashboard Auditor
+- Workflow Operations Engineer
+- Admin Lifecycle Consistency Engineer
+- Universal Creative Operations Validator
+
+Anda bertanggung jawab memastikan seluruh Admin Portal Creative AI selalu menjadi representasi operasional yang benar sesuai canonical source of truth.
+
+Anda TIDAK bertanggung jawab membuat ulang UI.
+
+Fokus Anda adalah:
+
+- admin dashboard
+- project management
+- workflow monitoring
+- AI job monitoring
+- worker monitoring
+- quotation management
+- payment monitoring
+- review management
+- artifact management
+- deliverable management
+- customer visibility mapping
+- admin actions
+- approval flow
+- audit logs
+- analytics consistency
+- operations timeline
+- queue visibility
+
+==================================================
+DEPENDENCY
+==================================================
+
+Gunakan baseline resmi Team 39.
+
+Gunakan TEAM41_ARCHITECTURE_AUDIT_REPORT.md sebagai kontrak.
+
+Gunakan:
+
+- lifecycle canonical Team 41
+- billing canonical Team 42
+- workflow canonical Team 43
+- artifact canonical Team 44
+
+Jangan membuat lifecycle sendiri.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Pastikan Admin Portal tidak pernah menampilkan status yang berbeda dengan database canonical.
+
+Admin Portal harus menjadi pusat operasi yang akurat, bukan dashboard yang menggunakan cache lama atau data dummy.
+
+==================================================
+PHASE 1
+DISCOVERY
+==================================================
+
+Audit seluruh halaman Admin Portal.
+
+Minimal:
+
+Dashboard
+
+Projects
+
+Workflow Monitor
+
+AI Jobs
+
+Workers
+
+Customers
+
+Services
+
+Quotations
+
+Invoices
+
+Payments
+
+Payment Verification
+
+Client Reviews
+
+Approvals
+
+Artifacts
+
+Deliverables
+
+Downloads
+
+Notifications
+
+Audit Logs
+
+Analytics
+
+Reports
+
+Operations Timeline
+
+==================================================
+PHASE 2
+ADMIN JOURNEY
+==================================================
+
+Bangun flow operasional lengkap.
+
+Customer Request
+
+↓
+
+Brief
+
+↓
+
+Quotation
+
+↓
+
+Approval
+
+↓
+
+Payment
+
+↓
+
+Workflow
+
+↓
+
+AI Jobs
+
+↓
+
+Review
+
+↓
+
+Revision
+
+↓
+
+Deliverable
+
+↓
+
+Unlock
+
+↓
+
+Completed
+
+Pastikan seluruh langkah memiliki representasi operasional.
+
+==================================================
+PHASE 3
+STATUS CONSISTENCY
+==================================================
+
+Audit seluruh mapping:
+
+workflow_completed
+
+production_completed
+
+deliverable_ready
+
+commercial_completed
+
+files_unlocked
+
+order_completed
+
+Pastikan Admin Portal tidak pernah menampilkan Completed bila:
+
+workflow masih berjalan
+
+AI job gagal
+
+artifact belum ada
+
+deliverable belum siap
+
+payment belum sesuai canonical rule
+
+==================================================
+PHASE 4
+WORKFLOW MONITOR
+==================================================
+
+Audit:
+
+workflow progress
+
+step status
+
+job status
+
+retry
+
+failure
+
+queue
+
+worker
+
+renderer
+
+Pastikan seluruh informasi berasal dari canonical workflow Team 43.
+
+==================================================
+PHASE 5
+PAYMENT OPERATIONS
+==================================================
+
+Audit tampilan:
+
+Quotation
+
+Invoice
+
+Payment
+
+Remaining Balance
+
+Payment Schedule
+
+Payment Verification
+
+Milestone
+
+Partial Payment
+
+Pastikan seluruh data berasal dari canonical billing Team 42.
+
+==================================================
+PHASE 6
+PROJECT MANAGEMENT
+==================================================
+
+Audit:
+
+Project Status
+
+Priority
+
+Owner
+
+Assignment
+
+Due Date
+
+Workflow
+
+Review
+
+Revision
+
+Completion
+
+Pastikan tidak ada status hardcoded.
+
+==================================================
+PHASE 7
+ARTIFACT OPERATIONS
+==================================================
+
+Audit:
+
+Artifacts
+
+Versions
+
+Preview
+
+Final
+
+ZIP
+
+Presentation
+
+Document
+
+Image
+
+Storage
+
+Pastikan seluruh data berasal dari Team 44 canonical artifact.
+
+==================================================
+PHASE 8
+ADMIN ACTIONS
+==================================================
+
+Audit seluruh aksi admin.
+
+Misal:
+
+Approve
+
+Reject
+
+Verify Payment
+
+Unlock Files
+
+Request Revision
+
+Cancel
+
+Retry
+
+Restart
+
+Publish Deliverable
+
+Pastikan:
+
+Seluruh aksi memiliki:
+
+authorization
+
+audit log
+
+reason
+
+timestamp
+
+actor
+
+Tidak ada silent bypass.
+
+==================================================
+PHASE 9
+AUDIT LOG
+==================================================
+
+Pastikan seluruh aksi penting tercatat.
+
+Minimal:
+
+Payment Verified
+
+Unlock
+
+Revision
+
+Review
+
+Workflow Retry
+
+Renderer Retry
+
+Publish
+
+Download Override
+
+Admin Override
+
+==================================================
+PHASE 10
+OPERATIONS TIMELINE
+==================================================
+
+Audit timeline admin.
+
+Timeline harus berasal dari event nyata.
+
+Bukan status buatan.
+
+==================================================
+PHASE 11
+QUEUE & WORKERS
+==================================================
+
+Audit dashboard:
+
+queued
+
+running
+
+retry
+
+failed
+
+completed
+
+workers
+
+busy
+
+idle
+
+offline
+
+Pastikan sinkron dengan Team 43.
+
+==================================================
+PHASE 12
+ANALYTICS
+==================================================
+
+Audit:
+
+Completed
+
+In Progress
+
+Revenue
+
+Orders
+
+Pending Review
+
+Pending Payment
+
+Pending Delivery
+
+Worker Utilization
+
+Job Queue
+
+Pastikan seluruh KPI berasal dari canonical source.
+
+==================================================
+PHASE 13
+NOTIFICATIONS
+==================================================
+
+Audit seluruh notifikasi admin.
+
+Minimal:
+
+Payment Uploaded
+
+Payment Verified
+
+Review Needed
+
+Workflow Failed
+
+Worker Failed
+
+Renderer Failed
+
+Files Ready
+
+Customer Download
+
+Revision
+
+Approval
+
+==================================================
+PHASE 14
+TENANT ISOLATION
+==================================================
+
+Pastikan Admin Tenant A tidak dapat:
+
+melihat project Tenant B
+
+mengubah payment Tenant B
+
+mengubah workflow Tenant B
+
+mengakses artifact Tenant B
+
+==================================================
+PHASE 15
+PERMISSIONS
+==================================================
+
+Audit seluruh RBAC.
+
+Minimal:
+
+Platform Admin
+
+Tenant Admin
+
+Reviewer
+
+Finance
+
+Operator
+
+Designer
+
+Pastikan setiap aksi memiliki permission yang benar.
+
+==================================================
+PHASE 16
+GLOBAL ADMIN CONSISTENCY
+==================================================
+
+Cari:
+
+Completed tanpa artifact
+
+Completed tanpa payment
+
+Workflow selesai tapi dashboard pending
+
+Payment verified tapi unpaid
+
+Unlocked tanpa audit
+
+Review selesai tapi workflow berjalan
+
+Queue kosong padahal job ada
+
+Worker idle padahal running
+
+Analytics salah
+
+==================================================
+PHASE 17
+IMPLEMENTATION
+==================================================
+
+Perbaiki hanya bila root cause berada di Admin Portal.
+
+Jangan memperbaiki:
+
+Billing
+
+Workflow
+
+Renderer
+
+Artifact
+
+Storage
+
+==================================================
+PHASE 18
+REGRESSION TESTS
+==================================================
+
+Tambahkan minimal:
+
+Admin Dashboard
+
+Workflow Monitor
+
+Queue
+
+Worker
+
+Payment Monitor
+
+Review
+
+Artifact
+
+Deliverable
+
+Audit Log
+
+RBAC
+
+Tenant Isolation
+
+Analytics
+
+==================================================
+PHASE 19
+TYPECHECK
+==================================================
+
+Pastikan:
+
+Admin Portal typecheck sukses.
+
+==================================================
+PHASE 20
+BUILD
+==================================================
+
+Pastikan:
+
+Admin Portal build sukses.
+
+==================================================
+PHASE 21
+CONFLICT REVIEW
+==================================================
+
+Laporkan overlap dengan:
+
+Team 42
+
+Team 43
+
+Team 44
+
+Team 45
+
+Team 39
+
+==================================================
+PHASE 22
+DOCUMENTATION
+==================================================
+
+Buat:
+
+TEAM46_ADMIN_PORTAL_AUDIT_REPORT.md
+
+Isi minimal:
+
+Operations Flow
+
+Status Mapping
+
+Workflow Monitor
+
+Queue
+
+Workers
+
+Payment Monitor
+
+Artifacts
+
+Deliverables
+
+RBAC
+
+Audit Logs
+
+Analytics
+
+Conflict
+
+Tests
+
+Typecheck
+
+Build
+
+==================================================
+PHASE 23
+COMMIT
+==================================================
+
+Commit:
+
+fix(admin-portal): enforce canonical operations lifecycle
+
+Push ke branch Team 46.
+
+Jangan merge.
+
+==================================================
+FINAL REPORT
+==================================================
+
+A.
+Branch
+
+B.
+Baseline
+
+C.
+Team41 Commit
+
+D.
+Operations Flow
+
+E.
+Workflow Monitor
+
+F.
+Status Mapping
+
+G.
+Payment Operations
+
+H.
+Artifact Operations
+
+I.
+Admin Actions
+
+J.
+Audit Logs
+
+K.
+Queue & Workers
+
+L.
+Analytics
+
+M.
+RBAC
+
+N.
+Tenant Isolation
+
+O.
+Files Changed
+
+P.
+Regression Tests
+
+Q.
+Typecheck
+
+R.
+Build
+
+S.
+Conflict Matrix
+
+T.
+Remaining Risks
+
+U.
+Commit Hash
+
+V.
+Push Verification
+
+FINAL VERDICT
+
+PASS
+
+atau
+
+BLOCKED
+
+==================================================
+RULES
+==================================================
+
+Jangan membuat source of truth baru.
+
+Jangan membuat endpoint baru bila endpoint canonical sudah ada.
+
+Jangan menggunakan cache sebagai sumber utama.
+
+Jangan hardcode analytics.
+
+Jangan hardcode status.
+
+Jangan membuat bypass admin tanpa audit.
+
+Jangan membuat fake workflow state.
+
+Seluruh informasi yang tampil di Admin Portal harus berasal dari canonical services dan selalu konsisten dengan kondisi sistem yang sebenarnya.
+
+Jika root cause berada pada Billing, Workflow, atau Artifact, dokumentasikan dan gunakan kontrak Team 42, Team 43, atau Team 44. Jangan mengambil alih implementasi mereka.

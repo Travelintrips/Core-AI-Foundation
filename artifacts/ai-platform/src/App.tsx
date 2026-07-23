@@ -99,6 +99,18 @@ import VendorAdminPage from "@/pages/creative-vendors/VendorAdminPage";
 import VendorAdminDetailPage from "@/pages/creative-vendors/VendorAdminDetailPage";
 // ── Team 35: Design Observability & Operations ───────────────────────────
 import DesignObservabilityPage from "@/pages/design-observability";
+// ── Team 46: Admin Portal Operations ─────────────────────────────────────
+import ProjectsPage from "@/pages/projects";
+import CustomersPage from "@/pages/customers";
+import QuotationsPage from "@/pages/quotations";
+import InvoicesPage from "@/pages/invoices";
+import ApprovalsPage from "@/pages/approvals";
+import CreativeArtifactsPage from "@/pages/creative-artifacts";
+import DeliverablesPage from "@/pages/deliverables";
+import DownloadsPage from "@/pages/downloads";
+import AdminNotificationsPage from "@/pages/admin-notifications";
+import ReportsPage from "@/pages/reports";
+import OperationsTimelinePage from "@/pages/operations-timeline";
 // ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
 import CustomsTariff from "@/pages/customs-tariff";
 import TarifKalkulator from "@/pages/tarif-kalkulator";
@@ -194,6 +206,18 @@ function AdminRouter() {
         <Route path="/creative-vendors" component={VendorAdminPage} />
         {/* ── Team 35: Design Observability ──────────────────────────── */}
         <Route path="/design-observability" component={DesignObservabilityPage} />
+        {/* ── Team 46: Admin Portal Operations ────────────────────────── */}
+        <Route path="/projects" component={ProjectsPage} />
+        <Route path="/customers" component={CustomersPage} />
+        <Route path="/quotations" component={QuotationsPage} />
+        <Route path="/invoices" component={InvoicesPage} />
+        <Route path="/approvals" component={ApprovalsPage} />
+        <Route path="/artifacts" component={CreativeArtifactsPage} />
+        <Route path="/deliverables" component={DeliverablesPage} />
+        <Route path="/downloads" component={DownloadsPage} />
+        <Route path="/notifications" component={AdminNotificationsPage} />
+        <Route path="/reports" component={ReportsPage} />
+        <Route path="/operations-timeline" component={OperationsTimelinePage} />
         {/* ── Customs Tariff (BTKI) ───────────────────────────────────── */}
         <Route path="/customs-tariff" component={CustomsTariff} />
         <Route path="/tarif-kalkulator" component={TarifKalkulator} />

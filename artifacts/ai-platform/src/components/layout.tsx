@@ -37,6 +37,7 @@ import {
   PackageSearch,
   Calculator,
   History,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -95,14 +96,26 @@ const NAV_SECTIONS = [
   {
     label: "Commerce",
     items: [
+      { href: "/service-requests", label: "Service Requests", icon: ClipboardList },
+      { href: "/projects", label: "Projects", icon: FileStack },
+      { href: "/customers", label: "Customers", icon: Users2 },
+      { href: "/quotations", label: "Quotations", icon: FileText },
+      { href: "/invoices", label: "Invoices", icon: Receipt },
+      { href: "/payments", label: "Payments", icon: Wallet },
+      { href: "/approvals", label: "Approvals", icon: ShieldAlert },
       { href: "/marketplace", label: "Marketplace", icon: Store },
       { href: "/services", label: "Service Catalog", icon: Tags },
-      { href: "/service-requests", label: "Service Requests", icon: ClipboardList },
-      { href: "/payments", label: "Payments", icon: Wallet },
       { href: "/commercial", label: "Commercial", icon: TrendingUp },
-      { href: "/pricing-calculator", label: "Kalkulator Harga AI", icon: Calculator },
       { href: "/promotions", label: "Promotions", icon: Tags },
       { href: "/coupons", label: "Coupons", icon: Ticket },
+    ],
+  },
+  {
+    label: "Delivery",
+    items: [
+      { href: "/deliverables", label: "Deliverables", icon: PackageSearch },
+      { href: "/artifacts", label: "Artifacts", icon: Layers },
+      { href: "/downloads", label: "Downloads", icon: ListOrdered },
     ],
   },
   {
@@ -134,6 +147,14 @@ const NAV_SECTIONS = [
     label: "Trade Tools",
     items: [
       { href: "/customs-tariff", label: "Tarif BTKI & HS Code", icon: PackageSearch },
+    ],
+  },
+  {
+    label: "Reports",
+    items: [
+      { href: "/reports", label: "Reports", icon: BarChart2 },
+      { href: "/operations-timeline", label: "Ops Timeline", icon: History },
+      { href: "/notifications", label: "Notifications", icon: Activity },
     ],
   },
   {

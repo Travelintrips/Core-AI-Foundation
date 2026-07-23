@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Layout } from "@/components/layout";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, RefreshCw, FileText, ClipboardList, Calculator,
@@ -730,8 +729,8 @@ export default function ServiceRequestsPage() {
   const selectedFresh = selected ? (requests.find((r) => r.id === selected.id) ?? selected) : null;
 
   return (
-    <Layout>
-      <div className="p-6 md:p-8 max-w-5xl mx-auto">
+    <>
+    <div className="p-6 md:p-8 max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Service Request Funnel</h1>
@@ -830,12 +829,12 @@ export default function ServiceRequestsPage() {
             })}
           </div>
         )}
-      </div>
 
       {/* Detail Panel */}
       {selectedFresh && (
         <DetailPanel req={selectedFresh} onClose={() => setSelected(null)} />
       )}
-    </Layout>
+    </div>
+    </>
   );
 }
