@@ -1,0 +1,390 @@
+TEAM 43 — RESUME LOCALLY FROM VERIFIED BASELINE
+
+Baseline Team 41 sudah tersedia secara lokal.
+
+Verified baseline:
+
+- Baseline branch:
+  integration/creative-ai-e2e-baseline
+
+- Baseline commit:
+  3af1e2b
+
+- Canonical report:
+  TEAM41_ARCHITECTURE_AUDIT_REPORT.md
+
+- Main:
+  unchanged
+
+- Validation already completed:
+  - Design workflow tests: 90 passed
+  - Targeted API runtime tests: 126 passed
+  - Secret-pattern scan: clean
+
+Remote publication belum tersedia karena GitHub authentication tidak tersedia dan gitsafe-backup menolak non-main branches.
+
+Kondisi remote tersebut bukan blocker untuk audit dan implementasi lokal Team 43.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Lanjutkan seluruh pekerjaan Team 43 secara lokal dari baseline commit 3af1e2b.
+
+Jangan menggunakan main sebagai base.
+
+Jangan mengubah main.
+
+Jangan menunggu remote publication untuk memulai audit teknis.
+
+==================================================
+PHASE 1 — VERIFY LOCAL BASELINE
+==================================================
+
+Melalui kemampuan Replit Agent, verifikasi:
+
+- branch baseline lokal tersedia;
+- commit baseline adalah 3af1e2b;
+- TEAM41_ARCHITECTURE_AUDIT_REPORT.md tersedia dan tracked;
+- report memuat:
+  - workflow_completed;
+  - production_completed;
+  - deliverable_ready;
+  - commercial_completed;
+  - files_unlocked;
+  - order_completed;
+  - source-of-truth matrix;
+  - completion rules;
+  - ownership matrix Team 42–50;
+- working tree tidak memiliki perubahan production code yang tidak terkait.
+
+Jika commit atau report tidak sesuai, berhenti dengan verdict:
+
+BLOCKED — LOCAL BASELINE MISMATCH
+
+==================================================
+PHASE 2 — CREATE LOCAL TEAM 43 BRANCH
+==================================================
+
+Buat branch lokal:
+
+audit/team-43-workflow-jobs
+
+Branch harus dibuat dari baseline commit 3af1e2b.
+
+Jangan membuatnya dari main.
+
+Jangan merge.
+
+Jangan rebase.
+
+Jangan cherry-pick branch team lain.
+
+Catat secara eksplisit:
+
+- baseline branch;
+- baseline commit;
+- Team 43 branch;
+- Team 41 report path;
+- remote publication status.
+
+==================================================
+PHASE 3 — EXTRACT TEAM 41 CONTRACT
+==================================================
+
+Sebelum mengubah kode, ekstrak dan dokumentasikan:
+
+1. Canonical workflow source of truth.
+2. Canonical workflow-step source of truth.
+3. Canonical AI-job source of truth.
+4. Canonical worker source of truth.
+5. Canonical renderer dispatch source of truth.
+6. Workflow completion rule.
+7. Production completion eligibility.
+8. Required artifact boundary.
+9. Required distinction between:
+   - workflow_completed;
+   - production_completed;
+   - deliverable_ready;
+   - commercial_completed;
+   - files_unlocked;
+   - order_completed.
+10. Findings assigned to Team 43.
+11. Shared files that may overlap with Team 42, Team 44, Team 45, Team 46, or Team 39.
+
+Do not reinterpret the Team 41 lifecycle.
+
+==================================================
+PHASE 4 — PERFORM TEAM 43 AUDIT
+==================================================
+
+Audit the complete universal workflow runtime:
+
+- service-to-workflow resolution;
+- workflow template selection;
+- workflow initialization;
+- required and optional steps;
+- step dependencies;
+- state transitions;
+- job creation;
+- job dependency graph;
+- queue insertion;
+- atomic claiming;
+- worker capability matching;
+- concurrency;
+- lease/heartbeat behavior;
+- AI execution;
+- provider routing;
+- structured output validation;
+- renderer dispatch;
+- renderer result validation;
+- retry;
+- backoff;
+- timeout;
+- cancellation;
+- failure propagation;
+- idempotency;
+- stuck jobs;
+- orphan jobs;
+- duplicate jobs;
+- false success;
+- tenant isolation;
+- observability.
+
+==================================================
+PHASE 5 — CRITICAL COMPLETION GUARDS
+==================================================
+
+Enforce these rules:
+
+- A required failed job blocks workflow completion.
+- Queued or running required jobs block workflow completion.
+- Missing required steps block workflow completion.
+- Null or malformed AI output cannot become success.
+- Empty renderer output cannot become production success.
+- Placeholder output cannot become production success.
+- Renderer invocation success alone is not artifact success.
+- workflow_completed does not set commercial_completed.
+- workflow_completed does not unlock files.
+- workflow_completed does not directly set order_completed.
+- production_completed must not occur when required output validation fails.
+- Production completion for file-producing services must expose sufficient evidence for Team 44 to validate artifact readiness.
+
+Do not implement billing or artifact storage policy owned by other teams.
+
+==================================================
+PHASE 6 — HEALTH AND RECOVERY
+==================================================
+
+Audit and, where within Team 43 scope, implement safe handling for:
+
+- jobs stuck in queued;
+- jobs stuck in running;
+- expired worker lease;
+- worker crash;
+- retry exhaustion;
+- orphan jobs;
+- duplicate claims;
+- workflow with no jobs;
+- project completed with active jobs;
+- project completed with required failed jobs;
+- worker marked idle while holding a running job;
+- jobs completed without validated output;
+- cancellation while execution is active.
+
+All repair actions must be idempotent and audit-friendly.
+
+==================================================
+PHASE 7 — SERVICE COVERAGE
+==================================================
+
+Validate all registered Creative AI service archetypes.
+
+Do not test only Interior Design.
+
+Include representative coverage for:
+
+- image generation;
+- document generation;
+- presentation generation;
+- brand strategy;
+- copywriting;
+- video or motion services where registered;
+- fashion;
+- interior;
+- architecture;
+- social media;
+- multi-stage mixed workflows;
+- services without a renderer;
+- services requiring final rendered files.
+
+Produce a service-to-workflow coverage matrix.
+
+==================================================
+PHASE 8 — TESTS
+==================================================
+
+Add regression tests covering at minimum:
+
+- workflow initialization;
+- required-step enforcement;
+- optional-step behavior;
+- dependency ordering;
+- atomic job claim;
+- duplicate claim prevention;
+- worker capability filtering;
+- retry;
+- timeout;
+- cancellation;
+- failure propagation;
+- invalid AI output;
+- empty renderer output;
+- malformed renderer output;
+- false workflow completion;
+- active jobs blocking completion;
+- failed jobs blocking completion;
+- idempotent completion;
+- tenant isolation;
+- stuck-job detection;
+- orphan-job detection;
+- service-to-workflow mapping;
+- project completion not being triggered solely by workflow completion.
+
+Use existing test conventions.
+
+Do not weaken existing assertions.
+
+==================================================
+PHASE 9 — VERIFICATION
+==================================================
+
+Run through Replit Agent:
+
+- targeted Team 43 tests;
+- relevant workflow/job/worker/renderer tests;
+- full applicable regression suite;
+- typecheck;
+- build.
+
+Separate:
+
+- failures caused by Team 43 changes;
+- verified pre-existing failures;
+- environment limitations.
+
+Do not mark pre-existing errors as fixed unless they were actually fixed and within scope.
+
+==================================================
+PHASE 10 — DOCUMENTATION
+==================================================
+
+Create:
+
+TEAM43_WORKFLOW_JOBS_AUDIT_REPORT.md
+
+Include:
+
+- baseline branch;
+- baseline commit 3af1e2b;
+- Team 41 report reference;
+- canonical contract extraction;
+- workflow inventory;
+- job and queue architecture;
+- worker architecture;
+- renderer dispatch map;
+- findings;
+- fixes;
+- completion guards;
+- service coverage;
+- tests;
+- typecheck;
+- build;
+- conflict matrix;
+- remaining risks;
+- remote publication limitation.
+
+==================================================
+PHASE 11 — LOCAL COMMIT
+==================================================
+
+Commit Team 43 changes locally.
+
+Do not merge to main.
+
+Do not force-push.
+
+If remote authentication remains unavailable:
+
+- preserve the local branch;
+- preserve the local commit;
+- create a Replit checkpoint;
+- report the exact local commit hash;
+- report push status as blocked;
+- do not classify implementation as remotely available.
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Use one of:
+
+PASS — LOCAL IMPLEMENTATION COMPLETE, REMOTE PUBLICATION PENDING
+
+PASS — IMPLEMENTATION AND REMOTE PUBLICATION COMPLETE
+
+BLOCKED — LOCAL BASELINE MISMATCH
+
+BLOCKED — CANONICAL CONTRACT INCOMPLETE
+
+BLOCKED — IMPLEMENTATION FAILURE
+
+Do not use plain PASS without explaining remote status.
+
+==================================================
+FINAL RESPONSE
+==================================================
+
+Report:
+
+A. Team 43 branch
+
+B. Baseline branch
+
+C. Baseline commit
+
+D. Team 41 report path
+
+E. Canonical contract extracted
+
+F. Workflow findings
+
+G. Job and queue findings
+
+H. Worker findings
+
+I. Renderer findings
+
+J. Completion guards
+
+K. Files changed
+
+L. Tests
+
+M. Typecheck
+
+N. Build
+
+O. Conflict risks
+
+P. Local commit hash
+
+Q. Replit checkpoint status
+
+R. Remote push status
+
+S. Remaining blockers
+
+T. Final verdict
+
+Do not ask the user to execute shell commands.
+Perform all repository work through Replit Agent.
