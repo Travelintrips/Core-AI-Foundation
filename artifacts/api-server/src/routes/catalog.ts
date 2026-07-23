@@ -1065,7 +1065,13 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
 
   // P0-2: Fetch payment/unlock status from the linked creative project (if any).
   // createdProjectId is TEXT storing the creative_projects.project_id (UUID).
-  let filesUnlocked = false;
+  //
+  // When no creative project is linked (admin completed the request directly
+  // without going through the quotation → project → payment schedule flow),
+  // there is no payment gate to enforce.  In that case filesUnlocked = true so
+  // the results page shows "Proyek Selesai!" rather than an empty
+  // "Menunggu Pelunasan" lock screen with no schedule to pay against.
+  let filesUnlocked = !row.createdProjectId; // true when no project gate exists
   let paymentStatus: string = "pending";
   let remainingBalance: number | null = null;
 
@@ -1103,10 +1109,9 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
   }
 
   // P0-2: completionLinks are only visible once files are unlocked.
-  // Before that, customer sees the lock state + remaining balance.
-  // Exception: if no creative project was created from this request (createdProjectId is
-  // null), there is no payment gate to enforce — show links unconditionally.
-  const safeCompletionLinks = (filesUnlocked || !row.createdProjectId)
+  // filesUnlocked is already true when createdProjectId is null (see above),
+  // so this condition now covers both cases consistently.
+  const safeCompletionLinks = filesUnlocked
     ? (row.completionLinks ?? null)
     : null;
 
