@@ -14,6 +14,7 @@ interface CategorySeed {
   icon: string;
   displayOrder: number;
   visibility?: string; // "public" | "internal" | "disabled" — defaults to "internal" in DB
+  commercialStatus?: string; // "commercial_ready" | "internal_only" | "beta" | "disabled"
 }
 
 interface ServiceSeed {
@@ -38,8 +39,8 @@ interface ServiceSeed {
 }
 
 export const CATEGORIES: CategorySeed[] = [
-  { code: "creative", name: "Creative AI", description: "Brand identity, design, and content production.", icon: "palette", displayOrder: 1, visibility: "public" },
-  { code: "presentation-document", name: "Presentation & Document AI", description: "Pitch deck, proposal, laporan, dan dokumen bisnis profesional.", icon: "file-text", displayOrder: 2, visibility: "public" },
+  { code: "creative", name: "Creative AI", description: "Brand identity, design, and content production.", icon: "palette", displayOrder: 1, visibility: "public", commercialStatus: "commercial_ready" },
+  { code: "presentation-document", name: "Presentation & Document AI", description: "Pitch deck, proposal, laporan, dan dokumen bisnis profesional.", icon: "file-text", displayOrder: 2, visibility: "public", commercialStatus: "commercial_ready" },
   { code: "marketing", name: "Marketing AI", description: "Campaigns, positioning, and growth strategy.", icon: "megaphone", displayOrder: 3 },
   { code: "sales", name: "Sales AI", description: "Lead qualification, proposals, and pipeline support.", icon: "handshake", displayOrder: 4 },
   { code: "finance", name: "Finance AI", description: "Financial analysis, forecasting, and reporting.", icon: "line-chart", displayOrder: 5 },
@@ -54,7 +55,7 @@ export const CATEGORIES: CategorySeed[] = [
   { code: "data-analytics", name: "Data Analytics AI", description: "Dashboards, insights, and reporting.", icon: "bar-chart", displayOrder: 14 },
   { code: "executive", name: "Executive AI", description: "Strategic decision support for leadership.", icon: "briefcase", displayOrder: 15 },
   { code: "customer-service", name: "Customer Service AI", description: "Support automation and client communication.", icon: "headset", displayOrder: 16 },
-  { code: "graphic-design", name: "Graphic Design AI", description: "Professional print and digital design: logos, cards, flyers, banners, brochures, social kits, and more — AI-generated, brand-consistent, print-ready.", icon: "palette", displayOrder: 17, visibility: "public" },
+  { code: "graphic-design", name: "Graphic Design AI", description: "Professional print and digital design: logos, cards, flyers, banners, brochures, social kits, and more — AI-generated, brand-consistent, print-ready.", icon: "palette", displayOrder: 17, visibility: "public", commercialStatus: "commercial_ready" },
 ];
 
 // Category-level disclaimers shown next to any service/quotation in that
@@ -307,6 +308,7 @@ async function upsertCategory(seed: CategorySeed) {
         icon: seed.icon,
         displayOrder: seed.displayOrder,
         ...(seed.visibility !== undefined ? { visibility: seed.visibility } : {}),
+        ...(seed.commercialStatus !== undefined ? { commercialStatus: seed.commercialStatus } : {}),
         updatedAt: new Date(),
       })
       .where(eq(aiServiceCategoriesTable.id, existing.id))
