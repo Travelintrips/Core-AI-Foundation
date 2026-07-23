@@ -9,7 +9,9 @@
     "workspace-check": "tsx ./src/workspace-check.ts",
     "workspace-health": "tsx ./src/workspace-check.ts --health",
     "migrate:prod": "tsx ./src/migrate-prod.ts",
-    "migrate:prod:dry-run": "tsx ./src/migrate-prod.ts -- --dry-run"
+    "migrate:prod:dry-run": "tsx ./src/migrate-prod.ts -- --dry-run",
+    "security:scan-secrets": "tsx ./src/scan-secrets.ts",
+    "test:scan": "tsx --test ./src/scan-secrets.test.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",

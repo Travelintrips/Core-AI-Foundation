@@ -30,7 +30,9 @@
     "ci:verify": "pnpm run verify",
     "ci:build": "pnpm run build:workspace",
     "ci:test": "pnpm -r --if-present run test",
-    "ci:codegen": "pnpm run build:generated"
+    "ci:codegen": "pnpm run build:generated",
+
+    "security:scan-secrets": "pnpm --filter @workspace/scripts run security:scan-secrets"
   },
   "private": true,
   "dependencies": {
