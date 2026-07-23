@@ -11,6 +11,15 @@
  *     project does not belong to the resolved tenant.
  *   - Version and canvas routes verify project ownership transitively through
  *     the service layer's getDesignProject(id, tenantId) check.
+ *
+ * Team 39 (Platform Integration) additions:
+ *   - Per-endpoint design rate limiters (designRateLimiter.ts) wired onto
+ *     AI, export, and canvas-save routes. Keys are tenantId:actorId, never IP-only.
+ *   - validateCanvasResourceLimits() called on PUT canvas route before save.
+ *   - evaluateDesignPolicy() + buildDesignAuditEvent() + logAudit() wired onto
+ *     security-sensitive operations (AI regenerate, export, canvas save).
+ *   - All deny paths: audit event emitted, logAudit called fail-safe.
+ *   - Audit failure never changes deny to allow.
  */
 import { Router } from "express";
 import {
@@ -32,8 +41,78 @@ import {
   getBuiltinTemplate,
 } from "../data/design-templates.js";
 import { resolveAuthenticatedTenantContext } from "../security/tenantResolution.js";
+import {
+  evaluateDesignPolicy,
+  buildDesignAuditEvent,
+  validateCanvasResourceLimits,
+  getDesignResourceLimits,
+  type DesignSecurityPolicy,
+} from "../security/designSecurityPolicy.js";
+import { logAudit } from "../services/aiAuditService.js";
+import {
+  designAiRegenerateLimiter,
+  designExportLimiter,
+  designCanvasSaveLimiter,
+} from "../middleware/designRateLimiter.js";
 
 const router = Router();
+
+// ── Security helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Emits a design security audit event to the audit log.
+ * MUST NOT throw — audit failure must never affect the authorization decision.
+ */
+async function emitDesignAuditEvent(
+  policy: DesignSecurityPolicy,
+  decision: ReturnType<typeof evaluateDesignPolicy>,
+  context: string,
+  requestId?: string,
+): Promise<void> {
+  try {
+    const event = buildDesignAuditEvent(policy, decision, context, requestId);
+    await logAudit({
+      module: "design-security",
+      action: event.event,
+      resourceType: event.resourceScope,
+      resourceId: context,
+      status: event.decision === "allow" ? "success" : "failure",
+      details: {
+        reason: event.reason,
+        actorType: event.actorType,
+        permission: event.permission,
+        // NEVER log: raw tokens, provider keys, auth headers, full prompts
+      },
+      tenantId: event.tenantId,
+      actorId: event.actorId,
+      actorType: "internal_user",
+    });
+  } catch {
+    // Audit failure must not change the security decision.
+    // Swallowed intentionally — operational error logged separately by logAudit.
+  }
+}
+
+/**
+ * Builds a DesignSecurityPolicy from the resolved tenant context.
+ * actorType is mapped from the TenantScopedContext isPlatformAdmin flag.
+ */
+function buildPolicy(
+  ctx: ReturnType<typeof resolveAuthenticatedTenantContext>,
+  scope: DesignSecurityPolicy["resourceScope"],
+  permission: DesignSecurityPolicy["permission"],
+  resourceTenantId?: string,
+): DesignSecurityPolicy {
+  return {
+    tenantId: ctx.tenantId,
+    actorId: ctx.actorId ?? "system",
+    actorType: ctx.isPlatformAdmin ? "platform_admin" : "tenant_admin",
+    isPlatformActor: ctx.isPlatformAdmin,
+    resourceScope: scope,
+    permission,
+    resourceTenantId,
+  };
+}
 
 // ── Projects ──────────────────────────────────────────────────────────────────
 
@@ -127,14 +206,43 @@ router.get("/ai/design/projects/:id/canvas", async (req, res) => {
   }
 });
 
-/** PUT /api/ai/design/projects/:id/canvas */
-router.put("/ai/design/projects/:id/canvas", async (req, res) => {
+/** PUT /api/ai/design/projects/:id/canvas
+ *
+ * Team 39: canvas save rate limiter + resource limit validation.
+ * Payload size, canvas dimensions, and element count are checked before DB write.
+ */
+router.put("/ai/design/projects/:id/canvas", designCanvasSaveLimiter, async (req, res) => {
   try {
     const ctx = resolveAuthenticatedTenantContext(req);
-    const id = parseInt(req.params["id"] ?? "", 10);
+    const id = parseInt(String(req.params["id"] ?? ""), 10);
     if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
     const { canvasState, label } = req.body;
     if (!canvasState) { res.status(400).json({ error: "canvasState required" }); return; }
+
+    // ── Team 39: Resource limit validation ─────────────────────────────────
+    const limits = getDesignResourceLimits();
+    const stateForCheck = {
+      width:    typeof canvasState.width === "number"    ? canvasState.width    : 0,
+      height:   typeof canvasState.height === "number"   ? canvasState.height   : 0,
+      elements: Array.isArray(canvasState.elements)      ? canvasState.elements : [],
+    };
+    const limitDecision = validateCanvasResourceLimits(stateForCheck, limits);
+    if (limitDecision.action === "deny") {
+      const policy = buildPolicy(ctx, "design:canvas", "design.canvas.write");
+      void emitDesignAuditEvent(
+        { ...policy, ...{ resourceScope: "design:canvas" } },
+        { ...limitDecision, reason: "resource_limit_exceeded" },
+        `canvas_save:project:${id}`,
+        ctx.requestId,
+      );
+      res.status(limitDecision.httpStatus ?? 422).json({
+        error: "Canvas resource limit exceeded",
+        code: "RESOURCE_LIMIT_EXCEEDED",
+        detail: limitDecision.detail,
+      });
+      return;
+    }
+
     const result = await saveDesignCanvas(id, canvasState, ctx.tenantId, label);
     if (!result) { res.status(404).json({ error: "Not found" }); return; }
     res.json(result);
@@ -195,12 +303,28 @@ router.post("/ai/design/projects/:id/versions/:versionId/restore", async (req, r
 
 // ── Export ────────────────────────────────────────────────────────────────────
 
-/** POST /api/ai/design/projects/:id/export */
-router.post("/ai/design/projects/:id/export", async (req, res) => {
+/** POST /api/ai/design/projects/:id/export
+ *
+ * Team 39: export rate limiter + policy evaluation + audit event.
+ */
+router.post("/ai/design/projects/:id/export", designExportLimiter, async (req, res) => {
   try {
     const ctx = resolveAuthenticatedTenantContext(req);
-    const id = parseInt(req.params["id"] ?? "", 10);
+    const id = parseInt(String(req.params["id"] ?? ""), 10);
     if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+    // ── Team 39: Policy evaluation ─────────────────────────────────────────
+    const policy = buildPolicy(ctx, "design:export", "design.export.execute");
+    const decision = evaluateDesignPolicy(policy);
+    if (decision.action === "deny") {
+      void emitDesignAuditEvent(policy, decision, `export:project:${id}`, ctx.requestId);
+      res.status(decision.httpStatus ?? 403).json({
+        error: "Design export denied",
+        code: decision.reason,
+      });
+      return;
+    }
+
     const { format = "json", scale = 1 } = req.body;
     const result = await exportDesign(id, ctx.tenantId, format, scale);
     if (!result) { res.status(404).json({ error: "Not found" }); return; }
@@ -233,13 +357,46 @@ router.get("/ai/design/templates/builtin/:code", (req, res) => {
 
 // ── AI Regenerate ─────────────────────────────────────────────────────────────
 
-/** POST /api/ai/design/projects/:id/ai/regenerate */
-router.post("/ai/design/projects/:id/ai/regenerate", async (req, res) => {
+/** POST /api/ai/design/projects/:id/ai/regenerate
+ *
+ * Team 39: AI rate limiter + policy evaluation + audit event.
+ * Provider secret is resolved server-side only — never accepted from client body.
+ */
+router.post("/ai/design/projects/:id/ai/regenerate", designAiRegenerateLimiter, async (req, res) => {
   try {
     const ctx = resolveAuthenticatedTenantContext(req);
-    const id = parseInt(req.params["id"] ?? "", 10);
+    const id = parseInt(String(req.params["id"] ?? ""), 10);
     if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-    const result = await aiRegenerateElement(id, ctx.tenantId, req.body);
+
+    // ── Team 39: Strip any client-supplied provider key from body ──────────
+    // The AI execution service resolves the provider key from environment secrets.
+    // Accepting it from the client body would be an injection vector.
+    const { apiKey: _ignoredKey, providerKey: _ignoredPKey, ...safeBody } = req.body as Record<string, unknown>;
+
+    // ── Team 39: Policy evaluation ─────────────────────────────────────────
+    const policy = buildPolicy(ctx, "design:ai_regenerate", "design.ai.regenerate");
+    const decision = evaluateDesignPolicy(policy);
+    if (decision.action === "deny") {
+      void emitDesignAuditEvent(policy, decision, `ai_regenerate:project:${id}`, ctx.requestId);
+      res.status(decision.httpStatus ?? 403).json({
+        error: "AI regeneration denied",
+        code: decision.reason,
+      });
+      return;
+    }
+
+    const body = safeBody as Record<string, unknown>;
+    const typedInput = {
+      elementId:      typeof body["elementId"]      === "string" ? body["elementId"]      : "",
+      elementType:    (["text", "image", "style"].includes(String(body["elementType"]))
+                        ? body["elementType"]
+                        : "text") as "text" | "image" | "style",
+      prompt:         typeof body["prompt"]         === "string" ? body["prompt"]         : "",
+      currentContent: typeof body["currentContent"] === "string" ? body["currentContent"] : undefined,
+      style:          typeof body["style"]          === "string" ? body["style"]          : undefined,
+      tone:           typeof body["tone"]           === "string" ? body["tone"]           : undefined,
+    };
+    const result = await aiRegenerateElement(id, ctx.tenantId, typedInput);
     if (!result) { res.status(404).json({ error: "Not found" }); return; }
     res.json(result);
   } catch (err) {
