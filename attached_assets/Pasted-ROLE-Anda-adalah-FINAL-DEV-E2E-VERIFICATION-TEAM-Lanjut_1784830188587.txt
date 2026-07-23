@@ -1,0 +1,522 @@
+ROLE
+
+Anda adalah FINAL DEV E2E VERIFICATION TEAM.
+
+Lanjutkan dari commit lokal:
+
+c28a8d0
+
+Jangan mengulang perbaikan DEF-001.
+Jangan mengubah targeted tests yang sudah hijau.
+Jangan deploy.
+Jangan publish.
+Jangan merge.
+Jangan push.
+
+Current verified checkpoint:
+
+- DEF-001: 10/10 PASS;
+- DEF-001 stability: 3 consecutive runs PASS;
+- DEF-004 notification tests PASS;
+- DEF-002 auth contract verified as session-only by design;
+- changed-scope introduces no new type errors;
+- four main workflows are running;
+- commit c28a8d0 created.
+
+==================================================
+PHASE 1 — REPOSITORY STATE
+==================================================
+
+1. Verify current branch.
+2. Verify commit c28a8d0 is HEAD or present in history.
+3. Verify working tree.
+4. Show modified and untracked files.
+5. Do not alter the already-passing targeted tests unless a genuine regression is found.
+
+==================================================
+PHASE 2 — ALL TARGETED TEST SUMMARY
+==================================================
+
+Run all targeted suites once more:
+
+- submit idempotency;
+- notification mapping;
+- auth contract;
+- development payment adapter.
+
+Report per file:
+
+- total;
+- passed;
+- failed;
+- duration.
+
+Expected:
+
+0 failures.
+
+==================================================
+PHASE 3 — FULL REGRESSION
+==================================================
+
+Run the complete regression suite.
+
+Previous baseline:
+
+5,346 / 5,346 PASS
+
+Expected:
+
+- all previous tests remain passing;
+- new tests increase total count;
+- zero new regression failures.
+
+Report:
+
+- test files;
+- total tests;
+- passed;
+- failed;
+- skipped;
+- duration.
+
+If a failure occurs:
+
+classify it as:
+
+- caused by current changes;
+- pre-existing;
+- environment;
+- flaky.
+
+Do not classify as pre-existing without baseline evidence.
+
+==================================================
+PHASE 4 — TYPECHECK
+==================================================
+
+Run in this order:
+
+1. build shared libraries;
+2. changed-package typecheck;
+3. API server typecheck;
+4. Customer Portal typecheck;
+5. Admin Portal typecheck;
+6. workspace typecheck.
+
+Separate results into:
+
+A. New errors from current changes
+
+B. Pre-existing debt:
+- cargo-finder errors;
+- mockup-sandbox errors;
+- PptxGenJS namespace errors;
+- unbuilt lib/db/dist state if still applicable.
+
+Use honest wording:
+
+CHANGED SCOPE TYPECHECK CLEAN
+
+if global workspace is not fully clean.
+
+==================================================
+PHASE 5 — BUILD
+==================================================
+
+Run local production-equivalent builds for:
+
+- shared libraries;
+- API server;
+- Customer Portal;
+- Admin Portal.
+
+Verify:
+
+- no import error;
+- no router mount error;
+- no CommonJS/ESM mismatch;
+- no duplicate route;
+- no startup-only failure;
+- no new bundle failure.
+
+Report each build separately.
+
+==================================================
+PHASE 6 — CLEAN SERVICE RESTART
+==================================================
+
+Restart all development services cleanly.
+
+Verify:
+
+- API server;
+- Customer Portal;
+- Admin Portal;
+- workers;
+- database;
+- queue;
+- storage.
+
+Confirm:
+
+- no startup crash;
+- idempotency table ensure succeeds;
+- no duplicate router mount;
+- no unhandled rejection;
+- workers remain active.
+
+==================================================
+PHASE 7 — REVIEW ROUTE DISCOVERY
+==================================================
+
+Find the canonical review routes from:
+
+- router registrations;
+- frontend API clients;
+- public review token pages;
+- admin review monitor;
+- review services;
+- review database tables.
+
+Do not assume:
+
+/api/ai/review-workspaces
+
+is correct.
+
+Report:
+
+- canonical public route;
+- canonical admin route;
+- auth model;
+- token validation;
+- service implementation;
+- database tables.
+
+Test:
+
+- open review;
+- comment;
+- approve;
+- revision request;
+- invalid token;
+- expired token;
+- tenant isolation;
+- audit event;
+- Customer/Admin status consistency.
+
+==================================================
+PHASE 8 — COMPLETED PROJECT FIXTURE
+==================================================
+
+Create one deterministic development fixture:
+
+E2E-FINAL-DELIVERABLE-<timestamp>
+
+Use canonical service-layer transitions.
+
+Do not directly force final status in the database unless the official fixture architecture explicitly supports it.
+
+The fixture must produce:
+
+- project;
+- quotation;
+- payment schedule;
+- payment completion using development test adapter;
+- workflow;
+- completed production steps;
+- review completion where required;
+- valid final artifacts;
+- deliverable_ready;
+- files_unlocked;
+- order_completed.
+
+Record every lifecycle transition and database postcondition.
+
+==================================================
+PHASE 9 — PAYMENT BUSINESS FLOW
+==================================================
+
+Use only the development test adapter.
+
+Test:
+
+- success;
+- pending;
+- failed;
+- expired;
+- duplicate callback;
+- invalid signature;
+- partial payment;
+- installment completion;
+- commercial_completed;
+- no premature file unlock.
+
+Use exact wording:
+
+PAYMENT BUSINESS FLOW PASS USING DEVELOPMENT TEST ADAPTER
+
+Do not claim live Midtrans verification.
+
+==================================================
+PHASE 10 — REAL PPTX
+==================================================
+
+Generate a real PPTX from the completed fixture.
+
+Verify:
+
+- file exists;
+- non-zero size;
+- .pptx extension;
+- valid ZIP/OOXML;
+- [Content_Types].xml exists;
+- ppt/presentation.xml exists;
+- slide files exist;
+- relationships are valid;
+- MIME is canonical;
+- file can be downloaded.
+
+Report:
+
+- file size;
+- slide count;
+- validator result;
+- download result.
+
+==================================================
+PHASE 11 — REAL ZIP
+==================================================
+
+Generate the final delivery ZIP.
+
+Verify:
+
+- file exists;
+- non-zero;
+- extractable;
+- manifest valid;
+- correct filenames;
+- correct extensions;
+- no placeholder files;
+- no temporary files;
+- no internal-only files;
+- no cross-tenant assets;
+- canonical MIME metadata.
+
+Produce a ZIP manifest in the report.
+
+==================================================
+PHASE 12 — UNLOCK MATRIX
+==================================================
+
+Test all states:
+
+1. production incomplete;
+2. artifact not ready;
+3. payment incomplete;
+4. deliverable ready but locked;
+5. payment complete but production incomplete;
+6. invalid admin override;
+7. override without reason;
+8. override by unauthorized role;
+9. valid override with reason;
+10. all prerequisites complete.
+
+Expected:
+
+- access denied before valid conditions;
+- files unlock only after canonical prerequisites or valid override;
+- audit log records reason and actor;
+- Customer Portal CTA matches state.
+
+==================================================
+PHASE 13 — SIGNED DOWNLOAD
+==================================================
+
+Test:
+
+- valid token;
+- invalid token;
+- expired token;
+- reused token;
+- token for another tenant;
+- token for another artifact;
+- pre-unlock download;
+- post-unlock download.
+
+Verify:
+
+- correct HTTP status;
+- correct MIME;
+- correct file;
+- no path traversal;
+- no tenant leakage;
+- audit event present.
+
+==================================================
+PHASE 14 — CUSTOMER / ADMIN CONSISTENCY
+==================================================
+
+For the same fixture compare:
+
+Customer Portal:
+
+- project state;
+- workflow progress;
+- payment state;
+- review state;
+- artifact visibility;
+- download CTA;
+- completion badge.
+
+Admin Portal:
+
+- project state;
+- workflow state;
+- payment schedule;
+- review state;
+- artifact state;
+- unlock status;
+- audit trail.
+
+All visible states must derive from the canonical lifecycle.
+
+==================================================
+PHASE 15 — TENANT ISOLATION
+==================================================
+
+Create or use Tenant A and Tenant B.
+
+Verify Tenant B cannot access Tenant A:
+
+- project;
+- review;
+- notifications;
+- payment records;
+- artifact metadata;
+- ZIP;
+- PPTX;
+- signed download;
+- audit logs.
+
+Undefined tenantId must never act as wildcard.
+
+==================================================
+PHASE 16 — HTTP 500 MONITOR
+==================================================
+
+Track every request during final E2E.
+
+Target:
+
+0 unexpected HTTP 500.
+
+For every 500, record:
+
+- method;
+- endpoint;
+- scenario;
+- sanitized payload;
+- response;
+- log excerpt;
+- severity;
+- owner.
+
+==================================================
+PHASE 17 — FINAL REPORTS
+==================================================
+
+Update:
+
+DEV_E2E_VERIFICATION_REPORT.md
+DEV_E2E_FAILURES.json
+DEV_E2E_COVERAGE_MATRIX.json
+DEV_E2E_VERDICT.json
+
+Include:
+
+A. Commit checkpoint
+
+B. Targeted test results
+
+C. Full regression
+
+D. Typecheck
+
+E. Build
+
+F. Service restart
+
+G. Review route discovery
+
+H. Completed project fixture
+
+I. Payment evidence
+
+J. PPTX validation
+
+K. ZIP manifest
+
+L. Unlock matrix
+
+M. Signed download matrix
+
+N. Customer/Admin consistency
+
+O. Tenant isolation
+
+P. HTTP 500 count
+
+Q. Remaining observations
+
+R. Files changed
+
+S. Commit hashes
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Use exactly one:
+
+DEV PASS — ALL CRITICAL FLOWS FUNCTION CORRECTLY
+
+DEV PASS WITH LOW-RISK OBSERVATIONS
+
+DEV BLOCKED — REGRESSION FAILURE
+
+DEV BLOCKED — BUILD FAILURE
+
+DEV BLOCKED — PAYMENT FLOW UNVERIFIED
+
+DEV BLOCKED — REVIEW FLOW UNVERIFIED
+
+DEV BLOCKED — ARTIFACT DELIVERY FLOW UNVERIFIED
+
+DEV BLOCKED — SECURITY OR TENANT ISOLATION FAILURE
+
+==================================================
+RELEASE RULE
+==================================================
+
+Do not use:
+
+DEV PASS — ALL CRITICAL FLOWS FUNCTION CORRECTLY
+
+unless evidence confirms:
+
+- targeted tests pass;
+- full regression passes;
+- changed scope has no new type errors;
+- builds succeed;
+- services restart cleanly;
+- payment business flow passes;
+- review/revision passes;
+- real PPTX is valid;
+- real ZIP is extractable;
+- unlock behavior is correct;
+- signed download works;
+- cross-tenant access is denied;
+- zero unexpected HTTP 500.
