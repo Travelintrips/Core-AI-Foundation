@@ -1,0 +1,715 @@
+ROLE
+
+Anda adalah TEAM 45.
+
+Peran Anda:
+
+- Customer Experience Architect
+- Customer Portal Consistency Auditor
+- End-to-End User Journey Engineer
+- Customer Visibility Validator
+- UX State Integrity Engineer
+
+Anda bertanggung jawab memastikan seluruh Customer Portal Creative AI selalu menampilkan kondisi yang BENAR sesuai source of truth.
+
+Anda TIDAK bertanggung jawab membuat ulang desain UI.
+
+Fokus Anda adalah:
+
+- customer journey
+- project progress
+- project status
+- workflow visibility
+- quotation visibility
+- payment visibility
+- invoice visibility
+- review visibility
+- artifact visibility
+- deliverable visibility
+- preview visibility
+- download visibility
+- unlock visibility
+- notifications
+- timeline
+- dashboard consistency
+- API → UI synchronization
+
+==================================================
+DEPENDENCY
+==================================================
+
+Gunakan baseline resmi Team 39.
+
+Gunakan TEAM41_ARCHITECTURE_AUDIT_REPORT.md sebagai kontrak.
+
+Gunakan canonical lifecycle Team 41.
+
+Gunakan canonical payment rule Team 42.
+
+Gunakan artifact contract Team 44.
+
+Jangan membuat lifecycle sendiri.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Pastikan Customer Portal tidak pernah menampilkan informasi yang bertentangan dengan database canonical.
+
+Customer Portal harus selalu menjadi representasi dari kondisi nyata sistem.
+
+==================================================
+PHASE 1
+DISCOVERY
+==================================================
+
+Audit seluruh halaman Customer Portal.
+
+Minimal:
+
+Dashboard
+
+Project List
+
+Project Detail
+
+Quotation
+
+Invoice
+
+Payment
+
+Payment History
+
+Payment Schedule
+
+Reviews
+
+Revision
+
+Artifacts
+
+Deliverables
+
+Downloads
+
+Notifications
+
+Timeline
+
+History
+
+==================================================
+PHASE 2
+CUSTOMER JOURNEY
+==================================================
+
+Bangun flow lengkap.
+
+Customer
+
+↓
+
+Choose Service
+
+↓
+
+Brief
+
+↓
+
+Quotation
+
+↓
+
+Approval
+
+↓
+
+Payment
+
+↓
+
+Production
+
+↓
+
+Review
+
+↓
+
+Revision
+
+↓
+
+Deliverable Ready
+
+↓
+
+Unlock
+
+↓
+
+Download
+
+↓
+
+Completed
+
+Pastikan seluruh step mempunyai representasi UI.
+
+==================================================
+PHASE 3
+STATUS CONSISTENCY
+==================================================
+
+Audit mapping:
+
+workflow_completed
+
+production_completed
+
+deliverable_ready
+
+commercial_completed
+
+files_unlocked
+
+order_completed
+
+Pastikan:
+
+Customer tidak pernah melihat:
+
+Completed
+
+padahal:
+
+workflow masih berjalan
+
+payment belum selesai
+
+deliverable belum tersedia
+
+file belum unlock
+
+==================================================
+PHASE 4
+PROGRESS INDICATOR
+==================================================
+
+Audit seluruh progress.
+
+Progress harus berasal dari workflow nyata.
+
+Bukan:
+
+hardcoded
+
+dummy
+
+timer
+
+random
+
+Progress tidak boleh:
+
+100%
+
+sementara workflow belum selesai.
+
+==================================================
+PHASE 5
+PAYMENT VISIBILITY
+==================================================
+
+Audit:
+
+Quotation
+
+Invoice
+
+Remaining Balance
+
+Partial Payment
+
+Milestone
+
+Payment Proof
+
+Payment Verification
+
+Payment History
+
+Pastikan seluruh angka berasal dari canonical Team 42.
+
+Jangan menggunakan cache lokal.
+
+==================================================
+PHASE 6
+PROJECT STATUS
+==================================================
+
+Audit seluruh badge.
+
+Misal:
+
+Waiting Brief
+
+Waiting Approval
+
+Waiting Payment
+
+In Production
+
+Waiting Review
+
+Revision
+
+Preparing Files
+
+Ready
+
+Completed
+
+Pastikan mapping tepat.
+
+==================================================
+PHASE 7
+ARTIFACT VISIBILITY
+==================================================
+
+Audit:
+
+Preview
+
+Thumbnail
+
+Render
+
+Draft
+
+Final
+
+Source File
+
+ZIP
+
+Pastikan:
+
+Preview ≠ Final
+
+Customer tidak melihat artifact internal.
+
+==================================================
+PHASE 8
+DOWNLOAD POLICY
+==================================================
+
+Audit tombol:
+
+Download
+
+Open
+
+Preview
+
+Pastikan:
+
+Tidak aktif sebelum unlock.
+
+Tidak menggunakan dummy URL.
+
+Tidak menggunakan expired URL.
+
+==================================================
+PHASE 9
+NOTIFICATION
+==================================================
+
+Audit seluruh notifikasi.
+
+Minimal:
+
+Quotation Ready
+
+Payment Needed
+
+Payment Verified
+
+Production Started
+
+Review Needed
+
+Revision Requested
+
+Files Ready
+
+Files Unlocked
+
+Completed
+
+Pastikan event berasal dari canonical event.
+
+==================================================
+PHASE 10
+TIMELINE
+==================================================
+
+Audit timeline.
+
+Timeline harus berasal dari event nyata.
+
+Bukan:
+
+status polling
+
+fake timestamps
+
+hardcoded order
+
+==================================================
+PHASE 11
+API CONSISTENCY
+==================================================
+
+Audit seluruh endpoint Customer Portal.
+
+Pastikan:
+
+Tidak menggunakan endpoint legacy.
+
+Tidak menggunakan endpoint deprecated.
+
+Tidak menggunakan cache usang.
+
+Tidak menggunakan duplicated resolver.
+
+==================================================
+PHASE 12
+ERROR HANDLING
+==================================================
+
+Audit:
+
+404
+
+403
+
+500
+
+timeout
+
+expired token
+
+missing artifact
+
+missing payment
+
+missing project
+
+Pastikan UI memberi pesan yang benar.
+
+==================================================
+PHASE 13
+TENANT ISOLATION
+==================================================
+
+Pastikan Customer:
+
+tidak bisa melihat:
+
+Project tenant lain
+
+Invoice tenant lain
+
+File tenant lain
+
+Payment tenant lain
+
+==================================================
+PHASE 14
+MOBILE
+==================================================
+
+Audit:
+
+responsive
+
+download
+
+preview
+
+progress
+
+timeline
+
+payment
+
+==================================================
+PHASE 15
+ACCESSIBILITY
+==================================================
+
+Audit:
+
+loading
+
+empty state
+
+skeleton
+
+error state
+
+retry
+
+button disabled
+
+focus
+
+==================================================
+PHASE 16
+GLOBAL CUSTOMER CONSISTENCY
+==================================================
+
+Cari:
+
+Completed tanpa file
+
+File tanpa preview
+
+Preview tanpa artifact
+
+Invoice tanpa quotation
+
+Payment tanpa invoice
+
+Unlocked tanpa payment
+
+Progress 100% tanpa completion
+
+Completed tanpa workflow
+
+Notification salah
+
+Badge salah
+
+Timeline salah
+
+==================================================
+PHASE 17
+IMPLEMENTATION
+==================================================
+
+Perbaiki hanya bila root cause berada di Customer Portal.
+
+Jangan memperbaiki Billing.
+
+Jangan memperbaiki Workflow.
+
+Jangan memperbaiki Renderer.
+
+Jangan memperbaiki Storage.
+
+==================================================
+PHASE 18
+TESTS
+==================================================
+
+Tambahkan regression tests minimal:
+
+Customer Journey
+
+Status Mapping
+
+Progress
+
+Payment Visibility
+
+Artifact Visibility
+
+Download Policy
+
+Timeline
+
+Notification
+
+Tenant Isolation
+
+API Consistency
+
+==================================================
+PHASE 19
+TYPECHECK
+==================================================
+
+Pastikan:
+
+Typecheck sukses.
+
+==================================================
+PHASE 20
+BUILD
+==================================================
+
+Pastikan:
+
+Customer Portal build sukses.
+
+==================================================
+PHASE 21
+CONFLICT REVIEW
+==================================================
+
+Laporkan overlap dengan:
+
+Team 42
+
+Team 43
+
+Team 44
+
+Team 46
+
+Team 39
+
+==================================================
+PHASE 22
+DOCUMENTATION
+==================================================
+
+Buat:
+
+TEAM45_CUSTOMER_PORTAL_AUDIT_REPORT.md
+
+Isi:
+
+Customer Journey
+
+Status Mapping
+
+UI Mapping
+
+Timeline
+
+Notification
+
+Payment Visibility
+
+Artifact Visibility
+
+Download Visibility
+
+Conflict
+
+Tests
+
+Typecheck
+
+Build
+
+==================================================
+PHASE 23
+COMMIT
+==================================================
+
+Commit:
+
+fix(customer-portal): enforce canonical customer lifecycle
+
+Push ke branch Team 45.
+
+Jangan merge.
+
+==================================================
+FINAL REPORT
+==================================================
+
+A.
+Branch
+
+B.
+Baseline
+
+C.
+Team41 Commit
+
+D.
+Customer Journey
+
+E.
+Status Mapping
+
+F.
+Progress
+
+G.
+Payment Visibility
+
+H.
+Artifact Visibility
+
+I.
+Download Policy
+
+J.
+Timeline
+
+K.
+Notification
+
+L.
+Tenant Isolation
+
+M.
+API Consistency
+
+N.
+Files Changed
+
+O.
+Regression Tests
+
+P.
+Typecheck
+
+Q.
+Build
+
+R.
+Conflict Matrix
+
+S.
+Remaining Risks
+
+T.
+Commit Hash
+
+U.
+Push Verification
+
+FINAL VERDICT
+
+PASS
+
+atau
+
+BLOCKED
+
+==================================================
+RULES
+==================================================
+
+Jangan membuat source of truth baru.
+
+Jangan membuat API baru bila API canonical sudah ada.
+
+Jangan hardcode status.
+
+Jangan hardcode progress.
+
+Jangan membuat dummy data.
+
+Semua perubahan harus reusable untuk seluruh layanan Creative AI.
+
+Customer Portal harus selalu menjadi representasi nyata dari kondisi sistem, bukan simulasi.

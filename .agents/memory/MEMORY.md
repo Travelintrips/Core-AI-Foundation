@@ -20,6 +20,7 @@
 - [phase6-ai-scheduler](phase6-ai-scheduler.md) — Scheduler target_types (create_job/publish_event/webhook-audit-only/audit_log); create_job priority must be numeric, not a string label
 - [phase65-human-task-center](phase65-human-task-center.md) — Phase 6.5 rules: ALLOWED_TRANSITIONS map, slaStatus vs status for overdue metric, SSRF guard on notificationHookUrl, orval date() on format:date-time query params
 - [customer-portal](customer-portal.md) — Token handling, dashboard navigation fix (reviewTokenPlain), URL construction with REPLIT_DEV_DOMAIN, route mounting
+- [team45-portal-audit](team45-portal-audit.md) — T45 audit: status-badge/stageColor/stageLabel gaps, dashboard field mismatch, getInsight filesUnlocked guard, 43 regression tests
 - [supabase-schema-migration](supabase-schema-migration.md) — DB moved to Supabase in a dedicated `ai_platform` schema (not public); set search_path for raw SQL; dev/prod picked via NODE_ENV
 - [quotation-flow](quotation-flow.md) — penawaran (quotation) gate between submission and AI generation; approve/reject public routes must use atomic CAS updates
 - [reimport-artifact-registration](reimport-artifact-registration.md) — GitHub re-import loses artifact/workflow registration; fix with runPostMergeSetup(), not createArtifact()
