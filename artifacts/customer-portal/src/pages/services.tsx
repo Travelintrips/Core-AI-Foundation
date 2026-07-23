@@ -7,11 +7,19 @@ import {
   Scale, Truck, Package, TrendingUp, Briefcase, Headphones, BarChart2,
   RotateCcw, ChevronDown, Zap, Shield, X,
   Globe, ChevronRight, Award, Flame,
-  History, Hash, ArrowLeft, Calculator,
+  History, Hash, ArrowLeft,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "@/lib/i18n";
+import {
+  trackCatalogCategoryViewed,
+  trackCatalogServiceSelected,
+  trackSearchStarted,
+  trackSmartChoiceRecommendation,
+  trackSmartChoiceSelected,
+  trackSmartChoiceStarted,
+} from "@/lib/analytics";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -21,16 +29,8 @@ function formatPrice(value: string | number, currency: string) {
   return `$${n.toLocaleString()}`;
 }
 
-function mockRating(id: number) {
-  return ((((id * 7 + 13) % 15) + 36) / 10).toFixed(1);
-}
-
-function mockCompleted(id: number) {
-  return ((id * 11 + 7) % 180) + 42;
-}
-
-function deliveryDays(est: string): number {
-  const m = est.toLowerCase().match(/(\d+)(?:\s*[-–]\s*\d+)?\s*(menit|jam|hari|minggu|bulan)/);
+function deliveryDays(est: string | null | undefined): number {
+  const m = (est ?? "").toLowerCase().match(/(\d+)(?:\s*[-–]\s*\d+)?\s*(menit|jam|hari|minggu|bulan)/);
   if (!m) return 7;
   const value = parseInt(m[1], 10);
   switch (m[2]) {
@@ -46,11 +46,9 @@ type BadgeKind = "Enterprise" | "Pengiriman Cepat" | "Baru" | "Terpopuler" | "Tr
 
 function serviceBadge(s: CatalogService): { label: BadgeKind; color: string } | null {
   if (s.serviceFlow === "enterprise") return { label: "Enterprise", color: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" };
-  if (s.humanReview && s.id % 5 === 1) return { label: "Direview Manusia", color: "bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30" };
+  if (s.isFeatured) return { label: "Terpopuler", color: "bg-[#7C6EFA]/10 text-[#7C6EFA] border-[#7C6EFA]/30" };
+  if (s.humanReview) return { label: "Direview Manusia", color: "bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30" };
   if (deliveryDays(s.estimatedDelivery) <= 2) return { label: "Pengiriman Cepat", color: "bg-[#22D3EE]/10 text-[#22D3EE] border-[#22D3EE]/30" };
-  if (s.id % 7 === 0) return { label: "Trending", color: "bg-[#F97316]/10 text-[#F97316] border-[#F97316]/30" };
-  if (s.id % 4 === 0) return { label: "Baru", color: "bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30" };
-  if (s.id % 3 === 0) return { label: "Terpopuler", color: "bg-[#7C6EFA]/10 text-[#7C6EFA] border-[#7C6EFA]/30" };
   return null;
 }
 
@@ -168,15 +166,11 @@ function CategoryCard({
 }) {
   const Icon = getCategoryIcon(category);
   const accent = CAT_ACCENTS[accentIdx % CAT_ACCENTS.length];
-  const count = services.length;
-  const prices = services.map((s) => Number(s.startingPrice)).filter((p) => p > 0);
-  const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
-  const currency = services[0]?.currency ?? "IDR";
-  const avgRating =
-    count > 0
-      ? (services.reduce((acc, s) => acc + Number(mockRating(s.id)), 0) / count).toFixed(1)
-      : "0.0";
-  const fastestService = [...services].sort(
+  const categoryServices = category.services?.length ? category.services : services;
+  const count = category.serviceCount ?? categoryServices.length;
+  const minPrice = Number(category.startingPrice ?? 0);
+  const currency = categoryServices[0]?.currency ?? "IDR";
+  const fastestService = [...categoryServices].sort(
     (a, b) => deliveryDays(a.estimatedDelivery) - deliveryDays(b.estimatedDelivery),
   )[0];
 
@@ -231,15 +225,14 @@ function CategoryCard({
         {/* Stats row */}
         {count > 0 && (
           <div className="flex items-center gap-4 text-xs text-[#8B9BC4]">
-            <span className="flex items-center gap-1">
-              <Star className="w-3.5 h-3.5 fill-[#F59E0B] text-[#F59E0B]" />
-              <span className="font-medium text-[#F0F4FF]">{avgRating}</span>
-            </span>
             {fastestService && (
               <span className="flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5 text-[#22D3EE]" />
                 {fastestService.estimatedDelivery}
               </span>
+            )}
+            {category.exampleOutputs?.[0] && (
+              <span className="truncate">{category.exampleOutputs[0]}</span>
             )}
           </div>
         )}
@@ -273,11 +266,9 @@ function CategoryCard({
 
 // ── Service Card ──────────────────────────────────────────────────────────────
 
-function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) => void }) {
+function ServiceCard({ s, onView }: { s: CatalogService; onView: (service: CatalogService) => void }) {
   const { t } = useTranslation();
   const badge = serviceBadge(s);
-  const rating = mockRating(s.id);
-  const completed = mockCompleted(s.id);
   const CategoryIcon = getCategoryIcon({ id: s.categoryId, name: s.serviceCode, code: s.serviceCode } as ServiceCategory);
 
   return (
@@ -327,19 +318,11 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
           <p className="text-sm text-[#8B9BC4] leading-relaxed line-clamp-2">{s.shortDescription}</p>
         </div>
 
-        {/* Stats */}
+        {/* Delivery and review information */}
         <div className="flex items-center gap-3 text-xs text-[#8B9BC4] flex-wrap">
           <span className="flex items-center gap-1">
-            <Star className="w-3.5 h-3.5 fill-[#F59E0B] text-[#F59E0B]" />
-            <span className="font-medium text-[#F0F4FF]">{rating}</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <CheckCircle className="w-3.5 h-3.5 text-[#10B981]" />
-            {completed} {t("services.card.projects")}
-          </span>
-          <span className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5 text-[#22D3EE]" />
-            {s.estimatedDelivery}
+            {s.estimatedDelivery ?? "Waktu menyesuaikan"}
           </span>
           {s.humanReview && (
             <span className="flex items-center gap-1 text-[#7C6EFA]">
@@ -359,7 +342,7 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (id: number) =>
           </div>
           <Link
             href={`/services/${s.id}`}
-            onClick={() => onView(s.id)}
+            onClick={() => onView(s)}
             className="btn-primary !py-2 !px-4 !text-xs gap-1.5 flex items-center"
             aria-label={`Lihat detail untuk ${s.serviceName}`}
           >
@@ -515,6 +498,8 @@ export default function ServicesPage() {
   const [loadingMore, setLoadingMore]           = useState(false);
   const [recentlyViewed, setRecentlyViewed]     = useState<number[]>([]);
   const [templateSeed, setTemplateSeed]         = useState<{ templateId: number; templateName: string; category: string; style: string } | null>(null);
+  const [smartChoiceOpen, setSmartChoiceOpen]   = useState(false);
+  const [smartChoiceGoal, setSmartChoiceGoal]   = useState<string | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const PAGE_SIZE = 9;
@@ -602,6 +587,7 @@ export default function ServicesPage() {
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && search.trim()) {
       addRecentSearch(search.trim());
+      trackSearchStarted({ query: search.trim() });
       setSearchFocused(false);
     }
   };
@@ -627,8 +613,9 @@ export default function ServicesPage() {
       list = list.filter(
         (s) =>
           s.serviceName.toLowerCase().includes(q) ||
-          s.shortDescription.toLowerCase().includes(q) ||
-          s.serviceCode.toLowerCase().includes(q),
+          (s.shortDescription ?? "").toLowerCase().includes(q) ||
+          s.serviceCode.toLowerCase().includes(q) ||
+          (s.aliases ?? []).some((alias) => alias.toLowerCase().includes(q)),
       );
     }
 
@@ -639,9 +626,9 @@ export default function ServicesPage() {
     switch (sort) {
       case "fastest":   list.sort((a, b) => deliveryDays(a.estimatedDelivery) - deliveryDays(b.estimatedDelivery)); break;
       case "price_asc": list.sort((a, b) => Number(a.startingPrice) - Number(b.startingPrice)); break;
-      case "rating":    list.sort((a, b) => Number(mockRating(b.id)) - Number(mockRating(a.id))); break;
+      case "rating":    list.sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured) || (a.displayOrder ?? 0) - (b.displayOrder ?? 0)); break;
       case "newest":    list.sort((a, b) => b.id - a.id); break;
-      default:          list.sort((a, b) => mockCompleted(b.id) - mockCompleted(a.id));
+      default:          list.sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured) || Number(b.displayAsPrimary) - Number(a.displayAsPrimary) || (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
     }
 
     return list;
@@ -672,6 +659,36 @@ export default function ServicesPage() {
   const showDropdown       = searchFocused && !search.trim();
   const selectedCategory   = categories.find((c) => c.id === categoryId);
   const hasFilters         = maxDelivery < 30 || search.trim().length > 0;
+  const smartChoiceResults = useMemo(() => {
+    if (!smartChoiceGoal) return [];
+    const terms: Record<string, string[]> = {
+      brand: ["brand-identity", "logo-design", "brand-strategy"],
+      content: ["copywriting", "social-media-design", "ebook"],
+      visual: ["image-generation", "poster-banner", "GD-BROCHURE"],
+      documents: ["pitch-deck", "company-profile", "proposal"],
+      product: ["product-catalog", "packaging-design"],
+      specialized: ["fashion-brand-brief", "interior-concept-design"],
+    };
+    const preferredCodes = terms[smartChoiceGoal] ?? [];
+    return [...allServices]
+      .sort((a, b) =>
+        (preferredCodes.indexOf(a.serviceCode) < 0 ? 999 : preferredCodes.indexOf(a.serviceCode)) -
+        (preferredCodes.indexOf(b.serviceCode) < 0 ? 999 : preferredCodes.indexOf(b.serviceCode)) ||
+        Number(b.displayAsPrimary) - Number(a.displayAsPrimary) ||
+        (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+      .slice(0, 3);
+  }, [allServices, smartChoiceGoal]);
+
+  const openSmartChoice = () => {
+    setSmartChoiceGoal(null);
+    setSmartChoiceOpen(true);
+    trackSmartChoiceStarted();
+  };
+
+  const chooseCategory = (category: ServiceCategory) => {
+    setCategoryId(category.id);
+    trackCatalogCategoryViewed(category.code);
+  };
 
   // Determine view mode
   // "categories" = default landing grid
@@ -817,21 +834,20 @@ export default function ServicesPage() {
                 {categories.map((cat) => (
                   <button
                     key={cat.id}
-                    onClick={() => setCategoryId(cat.id)}
+                    onClick={() => chooseCategory(cat)}
                     className="text-xs px-3 py-1 rounded-full border border-[#2E4270] text-[#8B9BC4] hover:border-[#7C6EFA]/50 hover:text-[#7C6EFA] transition-all duration-150"
                   >
                     {cat.name}
                   </button>
                 ))}
-                <Link
-                  href="/tarif-kalkulator"
+                <button
+                  onClick={openSmartChoice}
                   className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border transition-all duration-150"
-                  style={{ borderColor: "rgba(34,211,238,0.40)", color: "#22D3EE", background: "rgba(34,211,238,0.06)" }}
+                  style={{ borderColor: "rgba(124,110,250,0.5)", color: "#C9BFFF", background: "rgba(124,110,250,0.10)" }}
                 >
-                  <Calculator className="w-3 h-3" />
-                  Customs &amp; PPJK AI
-                  <span className="text-[9px] font-bold px-1 py-0.5 rounded-full" style={{ background: "rgba(34,211,238,0.18)", color: "#22D3EE" }}>Baru</span>
-                </Link>
+                  <Sparkles className="w-3 h-3" />
+                  Bantu saya memilih
+                </button>
               </motion.div>
             )}
           </div>
@@ -1054,7 +1070,14 @@ export default function ServicesPage() {
                     className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5"
                   >
                     {paginated.map((s) => (
-                      <ServiceCard key={s.id} s={s} onView={trackView} />
+                      <ServiceCard
+                        key={s.id}
+                        s={s}
+                        onView={(service) => {
+                          trackView(service.id);
+                          trackCatalogServiceSelected(service.serviceCode, selectedCategory?.code);
+                        }}
+                      />
                     ))}
                   </motion.div>
 
@@ -1093,6 +1116,65 @@ export default function ServicesPage() {
             </>
           )}
         </div>
+        {smartChoiceOpen && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="smart-choice-title">
+            <button className="absolute inset-0 bg-black/70" aria-label="Tutup Smart Choice" onClick={() => setSmartChoiceOpen(false)} />
+            <div className="relative w-full max-w-2xl rounded-3xl border border-[#2E4270] bg-[#0D1526] p-6 md:p-8 shadow-2xl">
+              <div className="flex items-start justify-between gap-4 mb-6">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-[#22D3EE] font-semibold">Smart Choice</p>
+                  <h2 id="smart-choice-title" className="text-2xl font-bold text-[#F0F4FF] mt-2">Ceritakan tujuan Anda</h2>
+                  <p className="text-sm text-[#8B9BC4] mt-2">Kami memberi satu rekomendasi utama dan maksimal dua alternatif.</p>
+                </div>
+                <button onClick={() => setSmartChoiceOpen(false)} className="text-[#8B9BC4] hover:text-white" aria-label="Tutup">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              {!smartChoiceGoal ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    ["brand", "Membangun brand"],
+                    ["content", "Membuat konten & marketing"],
+                    ["visual", "Membuat visual desain"],
+                    ["documents", "Menyiapkan presentasi/dokumen"],
+                    ["product", "Menjual produk lebih rapi"],
+                    ["specialized", "Kebutuhan fashion/interior"],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      onClick={() => { setSmartChoiceGoal(value); trackSmartChoiceRecommendation(); }}
+                      className="rounded-2xl border border-[#2E4270] bg-[#131E35] px-4 py-4 text-left text-sm font-medium text-[#F0F4FF] hover:border-[#7C6EFA] hover:bg-[#7C6EFA]/10 transition-colors"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {smartChoiceResults.map((service, index) => (
+                    <Link
+                      key={service.id}
+                      href={`/services/${service.id}`}
+                      onClick={() => { trackSmartChoiceSelected(service.serviceCode); setSmartChoiceOpen(false); }}
+                      className={`flex items-center gap-4 rounded-2xl border p-4 transition-colors ${index === 0 ? "border-[#7C6EFA] bg-[#7C6EFA]/10" : "border-[#2E4270] bg-[#131E35] hover:border-[#7C6EFA]/60"}`}
+                    >
+                      <span className="w-8 h-8 rounded-full flex items-center justify-center bg-[#0D1526] text-sm font-bold text-[#22D3EE]">{index + 1}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-[#F0F4FF]">{service.serviceName}</span>
+                        <span className="block text-xs text-[#8B9BC4] mt-1 line-clamp-1">{service.shortDescription}</span>
+                      </span>
+                      {index === 0 && <span className="text-[10px] uppercase tracking-wider text-[#7C6EFA] font-bold">Utama</span>}
+                      <ArrowRight className="w-4 h-4 text-[#8B9BC4] shrink-0" />
+                    </Link>
+                  ))}
+                  <button onClick={() => setSmartChoiceGoal(null)} className="text-xs text-[#8B9BC4] hover:text-[#F0F4FF] pt-2">
+                    Pilih tujuan lain
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );

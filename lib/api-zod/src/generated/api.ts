@@ -4212,6 +4212,10 @@ export const ListServiceCategoriesResponseItem = zod.object({
   "description": zod.string().nullish(),
   "icon": zod.string().nullish(),
   "displayOrder": zod.number(),
+  "visibility": zod.string().optional(),
+  "commercialStatus": zod.string().optional(),
+  "isFeatured": zod.boolean().optional(),
+  "startingPriceOverride": zod.string().nullish(),
   "status": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -4228,7 +4232,11 @@ export const CreateServiceCategoryBody = zod.object({
   "description": zod.string().optional(),
   "icon": zod.string().optional(),
   "displayOrder": zod.number().optional(),
-  "status": zod.string().optional()
+  "status": zod.string().optional(),
+  "visibility": zod.string().optional(),
+  "commercialStatus": zod.string().optional(),
+  "isFeatured": zod.boolean().optional(),
+  "startingPriceOverride": zod.string().optional()
 })
 
 export const CreateServiceCategoryResponse = zod.object({
@@ -4238,6 +4246,10 @@ export const CreateServiceCategoryResponse = zod.object({
   "description": zod.string().nullish(),
   "icon": zod.string().nullish(),
   "displayOrder": zod.number(),
+  "visibility": zod.string().optional(),
+  "commercialStatus": zod.string().optional(),
+  "isFeatured": zod.boolean().optional(),
+  "startingPriceOverride": zod.string().nullish(),
   "status": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -4257,7 +4269,11 @@ export const UpdateServiceCategoryBody = zod.object({
   "description": zod.string().optional(),
   "icon": zod.string().optional(),
   "displayOrder": zod.number().optional(),
-  "status": zod.string().optional()
+  "status": zod.string().optional(),
+  "visibility": zod.string().optional(),
+  "commercialStatus": zod.string().optional(),
+  "isFeatured": zod.boolean().optional(),
+  "startingPriceOverride": zod.string().optional()
 })
 
 export const UpdateServiceCategoryResponse = zod.object({
@@ -4267,6 +4283,10 @@ export const UpdateServiceCategoryResponse = zod.object({
   "description": zod.string().nullish(),
   "icon": zod.string().nullish(),
   "displayOrder": zod.number(),
+  "visibility": zod.string().optional(),
+  "commercialStatus": zod.string().optional(),
+  "isFeatured": zod.boolean().optional(),
+  "startingPriceOverride": zod.string().nullish(),
   "status": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -4293,6 +4313,7 @@ export const ListServicesQueryParams = zod.object({
 export const ListServicesResponseItem = zod.object({
   "id": zod.number(),
   "categoryId": zod.number(),
+  "parentCategoryId": zod.number().nullish(),
   "serviceCode": zod.string(),
   "serviceName": zod.string(),
   "shortDescription": zod.string().nullish(),
@@ -4312,6 +4333,10 @@ export const ListServicesResponseItem = zod.object({
   "aiEmployeesInvolved": zod.array(zod.string()).nullish(),
   "deliverables": zod.array(zod.string()).nullish(),
   "revisionPolicy": zod.string().nullish(),
+  "aliases": zod.array(zod.string()).nullish(),
+  "displayAsPrimary": zod.boolean().optional(),
+  "displayOrder": zod.number().optional(),
+  "isFeatured": zod.boolean().optional(),
   "status": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -4324,6 +4349,7 @@ export const ListServicesResponse = zod.array(ListServicesResponseItem)
  */
 export const CreateServiceBody = zod.object({
   "categoryId": zod.number(),
+  "parentCategoryId": zod.number().nullish(),
   "serviceCode": zod.string(),
   "serviceName": zod.string(),
   "shortDescription": zod.string().optional(),
@@ -4342,12 +4368,17 @@ export const CreateServiceBody = zod.object({
   "aiEmployeesInvolved": zod.array(zod.string()).optional(),
   "deliverables": zod.array(zod.string()).optional(),
   "revisionPolicy": zod.string().optional(),
+  "aliases": zod.array(zod.string()).optional(),
+  "displayAsPrimary": zod.boolean().optional(),
+  "displayOrder": zod.number().optional(),
+  "isFeatured": zod.boolean().optional(),
   "status": zod.string().optional()
 })
 
 export const CreateServiceResponse = zod.object({
   "id": zod.number(),
   "categoryId": zod.number(),
+  "parentCategoryId": zod.number().nullish(),
   "serviceCode": zod.string(),
   "serviceName": zod.string(),
   "shortDescription": zod.string().nullish(),
@@ -4367,6 +4398,10 @@ export const CreateServiceResponse = zod.object({
   "aiEmployeesInvolved": zod.array(zod.string()).nullish(),
   "deliverables": zod.array(zod.string()).nullish(),
   "revisionPolicy": zod.string().nullish(),
+  "aliases": zod.array(zod.string()).nullish(),
+  "displayAsPrimary": zod.boolean().optional(),
+  "displayOrder": zod.number().optional(),
+  "isFeatured": zod.boolean().optional(),
   "status": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -4383,6 +4418,7 @@ export const GetServiceParams = zod.object({
 export const GetServiceResponse = zod.object({
   "id": zod.number(),
   "categoryId": zod.number(),
+  "parentCategoryId": zod.number().nullish(),
   "serviceCode": zod.string(),
   "serviceName": zod.string(),
   "shortDescription": zod.string().nullish(),
@@ -4402,6 +4438,10 @@ export const GetServiceResponse = zod.object({
   "aiEmployeesInvolved": zod.array(zod.string()).nullish(),
   "deliverables": zod.array(zod.string()).nullish(),
   "revisionPolicy": zod.string().nullish(),
+  "aliases": zod.array(zod.string()).nullish(),
+  "displayAsPrimary": zod.boolean().optional(),
+  "displayOrder": zod.number().optional(),
+  "isFeatured": zod.boolean().optional(),
   "status": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -4439,6 +4479,7 @@ export const UpdateServiceParams = zod.object({
 
 export const UpdateServiceBody = zod.object({
   "categoryId": zod.number(),
+  "parentCategoryId": zod.number().nullish(),
   "serviceCode": zod.string(),
   "serviceName": zod.string(),
   "shortDescription": zod.string().optional(),
@@ -4457,12 +4498,17 @@ export const UpdateServiceBody = zod.object({
   "aiEmployeesInvolved": zod.array(zod.string()).optional(),
   "deliverables": zod.array(zod.string()).optional(),
   "revisionPolicy": zod.string().optional(),
+  "aliases": zod.array(zod.string()).optional(),
+  "displayAsPrimary": zod.boolean().optional(),
+  "displayOrder": zod.number().optional(),
+  "isFeatured": zod.boolean().optional(),
   "status": zod.string().optional()
 })
 
 export const UpdateServiceResponse = zod.object({
   "id": zod.number(),
   "categoryId": zod.number(),
+  "parentCategoryId": zod.number().nullish(),
   "serviceCode": zod.string(),
   "serviceName": zod.string(),
   "shortDescription": zod.string().nullish(),
@@ -4482,6 +4528,10 @@ export const UpdateServiceResponse = zod.object({
   "aiEmployeesInvolved": zod.array(zod.string()).nullish(),
   "deliverables": zod.array(zod.string()).nullish(),
   "revisionPolicy": zod.string().nullish(),
+  "aliases": zod.array(zod.string()).nullish(),
+  "displayAsPrimary": zod.boolean().optional(),
+  "displayOrder": zod.number().optional(),
+  "isFeatured": zod.boolean().optional(),
   "status": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -5092,6 +5142,7 @@ export const GetServiceShowcaseResponse = zod.object({
   "service": zod.object({
   "id": zod.number(),
   "categoryId": zod.number(),
+  "parentCategoryId": zod.number().nullish(),
   "serviceCode": zod.string(),
   "serviceName": zod.string(),
   "shortDescription": zod.string().nullish(),
@@ -5111,6 +5162,10 @@ export const GetServiceShowcaseResponse = zod.object({
   "aiEmployeesInvolved": zod.array(zod.string()).nullish(),
   "deliverables": zod.array(zod.string()).nullish(),
   "revisionPolicy": zod.string().nullish(),
+  "aliases": zod.array(zod.string()).nullish(),
+  "displayAsPrimary": zod.boolean().optional(),
+  "displayOrder": zod.number().optional(),
+  "isFeatured": zod.boolean().optional(),
   "status": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
@@ -5174,6 +5229,7 @@ export const GetServiceShowcaseResponse = zod.object({
   "relatedServices": zod.array(zod.object({
   "id": zod.number(),
   "categoryId": zod.number(),
+  "parentCategoryId": zod.number().nullish(),
   "serviceCode": zod.string(),
   "serviceName": zod.string(),
   "shortDescription": zod.string().nullish(),
@@ -5193,6 +5249,10 @@ export const GetServiceShowcaseResponse = zod.object({
   "aiEmployeesInvolved": zod.array(zod.string()).nullish(),
   "deliverables": zod.array(zod.string()).nullish(),
   "revisionPolicy": zod.string().nullish(),
+  "aliases": zod.array(zod.string()).nullish(),
+  "displayAsPrimary": zod.boolean().optional(),
+  "displayOrder": zod.number().optional(),
+  "isFeatured": zod.boolean().optional(),
   "status": zod.string(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()

@@ -35,6 +35,8 @@ export const aiServiceCategoriesTable = appSchema.table("ai_service_categories",
   // authenticated internal-role session (see middleware/internalAuth.ts).
   visibility: text("visibility").notNull().default("internal"), // public | internal | disabled
   commercialStatus: text("commercial_status").notNull().default("internal_only"), // commercial_ready | internal_only | beta | disabled
+  isFeatured: boolean("is_featured").notNull().default(false),
+  startingPriceOverride: numeric("starting_price_override", { precision: 12, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
@@ -51,6 +53,10 @@ export const aiServicesTable = appSchema.table("ai_services", {
   id: serial("id").primaryKey(),
   tenantId: text("tenant_id"), // null = shared across all tenants
   categoryId: integer("category_id").notNull().references(() => aiServiceCategoriesTable.id, { onDelete: "cascade" }),
+  // Canonical discovery parent. Kept separate from categoryId so historical
+  // reporting and existing service ownership remain stable during catalog UX
+  // consolidation.
+  parentCategoryId: integer("parent_category_id").references(() => aiServiceCategoriesTable.id, { onDelete: "set null" }),
   serviceCode: text("service_code").notNull().unique(),
   serviceName: text("service_name").notNull(),
   shortDescription: text("short_description"),
@@ -73,6 +79,10 @@ export const aiServicesTable = appSchema.table("ai_services", {
   aiEmployeesInvolved: jsonb("ai_employees_involved").$type<string[]>(),
   deliverables: jsonb("deliverables").$type<string[]>(),
   revisionPolicy: text("revision_policy"),
+  aliases: jsonb("aliases").$type<string[]>(),
+  displayAsPrimary: boolean("display_as_primary").notNull().default(false),
+  displayOrder: integer("display_order").notNull().default(0),
+  isFeatured: boolean("is_featured").notNull().default(false),
   status: text("status").notNull().default("active"), // active | draft | archived
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

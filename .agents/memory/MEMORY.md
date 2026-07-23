@@ -84,3 +84,4 @@
 - [knowledge-library-v50-normalization](knowledge-library-v50-normalization.md) — Canonical normalizer + backfill complete; isCanonicalX bug, duplicate properti key, styleKnowledgeSeed spacingStyle fix, DB gap=0
 - [adminauth-mock-pattern](adminauth-mock-pattern.md) — vi.mock for adminAuth must ALSO export adminAuthWithExceptions (delegate to adminAuth); pass-through breaks GET 401 assertions
 - [release-verification-imported-clones](release-verification-imported-clones.md) — Imported shallow clones may lack release history; reconcile deployment metadata, live custom domains, and prior reports before go-live
+- [canonical-public-catalog](canonical-public-catalog.md) — Public discovery is six canonical categories; preserve legacy IDs and historical category links additively

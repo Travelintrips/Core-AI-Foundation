@@ -20,6 +20,14 @@ export type ServiceCategory = {
   description: string | null;
   icon: string | null;
   displayOrder: number;
+  visibility?: string;
+  commercialStatus?: string;
+  isFeatured?: boolean;
+  startingPriceOverride?: string | null;
+  serviceCount?: number;
+  exampleOutputs?: string[];
+  startingPrice?: string | null;
+  services?: CatalogService[];
 };
 
 export type CatalogService = {
@@ -37,6 +45,12 @@ export type CatalogService = {
   estimatedDelivery: string;
   humanReview: boolean;
   deliverables: string[] | null;
+  legacyCategoryId?: number;
+  parentCategoryId?: number | null;
+  aliases?: string[] | null;
+  displayAsPrimary?: boolean;
+  displayOrder?: number;
+  isFeatured?: boolean;
 };
 
 export type ServicePackage = {

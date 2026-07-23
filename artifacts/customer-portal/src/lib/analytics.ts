@@ -222,6 +222,30 @@ export function trackRequestStarted(serviceCode: string, source?: DiscoverySourc
   send({ eventName: "service_request_started", serviceCode, source });
 }
 
+export function trackCatalogCategoryViewed(categoryCode: string): void {
+  send({ eventName: "catalog_category_view", categoryCode, source: "direct_catalog" });
+}
+
+export function trackCatalogServiceViewed(serviceCode: string, categoryCode?: string): void {
+  send({ eventName: "catalog_service_view", serviceCode, categoryCode, source: "direct_catalog" });
+}
+
+export function trackCatalogServiceSelected(serviceCode: string, categoryCode?: string): void {
+  send({ eventName: "catalog_service_selected", serviceCode, categoryCode, source: "direct_catalog" });
+}
+
+export function trackSmartChoiceStarted(): void {
+  send({ eventName: "smart_choice_started", source: "direct_catalog" });
+}
+
+export function trackSmartChoiceRecommendation(categoryCode?: string): void {
+  send({ eventName: "smart_choice_recommendation", categoryCode, source: "direct_catalog" });
+}
+
+export function trackSmartChoiceSelected(serviceCode: string, categoryCode?: string): void {
+  send({ eventName: "smart_choice_selected", serviceCode, categoryCode, source: "direct_catalog" });
+}
+
 /** Solution collection became visible */
 export function trackCollectionViewed(collectionSlug: string): void {
   send({ eventName: "solution_collection_viewed", collectionSlug });

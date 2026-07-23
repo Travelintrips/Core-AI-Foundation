@@ -2899,6 +2899,11 @@ export interface AiServiceCategory {
   /** @nullable */
   icon?: string | null;
   displayOrder: number;
+  visibility?: string;
+  commercialStatus?: string;
+  isFeatured?: boolean;
+  /** @nullable */
+  startingPriceOverride?: string | null;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -2911,11 +2916,17 @@ export interface AiServiceCategoryInput {
   icon?: string;
   displayOrder?: number;
   status?: string;
+  visibility?: string;
+  commercialStatus?: string;
+  isFeatured?: boolean;
+  startingPriceOverride?: string;
 }
 
 export interface AiService {
   id: number;
   categoryId: number;
+  /** @nullable */
+  parentCategoryId?: number | null;
   serviceCode: string;
   serviceName: string;
   /** @nullable */
@@ -2945,6 +2956,11 @@ export interface AiService {
   deliverables?: string[] | null;
   /** @nullable */
   revisionPolicy?: string | null;
+  /** @nullable */
+  aliases?: string[] | null;
+  displayAsPrimary?: boolean;
+  displayOrder?: number;
+  isFeatured?: boolean;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -2952,6 +2968,8 @@ export interface AiService {
 
 export interface AiServiceInput {
   categoryId: number;
+  /** @nullable */
+  parentCategoryId?: number | null;
   serviceCode: string;
   serviceName: string;
   shortDescription?: string;
@@ -2970,6 +2988,10 @@ export interface AiServiceInput {
   aiEmployeesInvolved?: string[];
   deliverables?: string[];
   revisionPolicy?: string;
+  aliases?: string[];
+  displayAsPrimary?: boolean;
+  displayOrder?: number;
+  isFeatured?: boolean;
   status?: string;
 }
 
