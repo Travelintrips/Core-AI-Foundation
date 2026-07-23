@@ -150,6 +150,8 @@ import seedKnowledgeRouter from "./seedKnowledge.js";
 import imagePreviewPipelineRouter from "./image-preview-pipeline.js";
 // ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
 import customsRouter from "./customs.js";
+// ── DEV-ONLY: Payment test adapter (never active in production) ───────────
+import devPaymentTestRouter from "./dev-payment-test.js";
 
 const router: IRouter = Router();
 

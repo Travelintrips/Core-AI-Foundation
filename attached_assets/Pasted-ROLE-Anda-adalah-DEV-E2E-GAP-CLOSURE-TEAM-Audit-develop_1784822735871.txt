@@ -1,0 +1,558 @@
+ROLE
+
+Anda adalah DEV E2E GAP CLOSURE TEAM.
+
+Audit development sebelumnya menghasilkan:
+
+DEV PASS WITH LOW-RISK OBSERVATIONS
+
+Tetapi beberapa alur produk inti belum diuji end-to-end.
+
+Jangan deploy.
+Jangan publish.
+Jangan mengubah production.
+Jangan mengulang seluruh 30 fase dari awal.
+
+Fokus hanya menutup defect dan coverage gap yang tersisa.
+
+==================================================
+CURRENT VERIFIED BASELINE
+==================================================
+
+- Regression: 5,346 / 5,346 PASS
+- HTTP 500: 0 dari 140 request
+- Development services: 4/5 running
+- Workers: text, image, storage aktif
+- Public catalog: 3 kategori, 27 layanan
+- Internal catalog leakage: tidak ditemukan
+- Working development environment: sehat
+
+==================================================
+OPEN DEFECTS
+==================================================
+
+DEF-001
+
+Concurrent project submission dengan email dan payload yang sama,
+selisih sekitar 16 ms, menghasilkan dua project berbeda.
+
+Current severity:
+MEDIUM
+
+Re-evaluate sebagai:
+MEDIUM-HIGH
+
+Owner:
+Team 45 / project creation integration owner
+
+DEF-002
+
+GET /api/internal/auth/me mengembalikan “Not authenticated”
+ketika hanya menggunakan admin API key.
+
+Owner:
+Team 46
+
+Sebelum mengubah kode, tentukan apakah endpoint tersebut memang:
+
+- session-cookie only;
+- admin-key compatible;
+- atau memiliki endpoint admin-key lain.
+
+Jangan menganggap bug sebelum kontrak autentikasi diverifikasi.
+
+DEF-004
+
+notification.type dan notification.tenantId undefined
+pada workspace notification items.
+
+Owner:
+Team 45
+
+Pastikan penyebab berada pada:
+
+- query;
+- API serializer;
+- canonical mapper;
+- frontend adapter;
+- atau schema mismatch.
+
+Tenant ID tidak boleh hilang pada boundary keamanan.
+
+==================================================
+ENVIRONMENT GAPS
+==================================================
+
+NC-001
+Payment sandbox belum tersedia.
+
+NC-002
+Review workspace admin endpoint tidak ditemukan pada path yang diuji.
+
+NC-003
+Tidak ada completed project untuk menguji:
+
+- final artifact;
+- ZIP;
+- PPTX;
+- unlock;
+- signed download;
+- Customer Portal download.
+
+==================================================
+PHASE 1 — DEF-001 IDEMPOTENCY
+==================================================
+
+Audit seluruh jalur pembuatan dan submit project.
+
+Temukan:
+
+- create project endpoint;
+- brief submit endpoint;
+- project creation service;
+- transaction boundary;
+- existing idempotency utilities;
+- unique constraints;
+- retry behavior frontend;
+- double-click protection.
+
+Implementasikan perlindungan server-side.
+
+Jangan hanya men-disable tombol frontend.
+
+Gunakan pola yang paling sesuai dengan arsitektur existing:
+
+Option A:
+Idempotency-Key yang disimpan secara tenant-scoped.
+
+Option B:
+Client request ID dengan unique constraint.
+
+Option C:
+Deterministic deduplication fingerprint dengan window singkat.
+
+Persyaratan:
+
+- tenant-scoped;
+- user/customer-scoped;
+- payload-aware;
+- concurrency-safe;
+- transaction-safe;
+- retry-safe;
+- tidak menggabungkan request yang memang berbeda;
+- response retry harus mengembalikan project yang sama.
+
+Tambahkan test concurrency nyata.
+
+Minimal:
+
+1. dua request identik paralel;
+2. dua request identik selisih 10–100 ms;
+3. retry dengan idempotency key sama;
+4. key sama tetapi tenant berbeda;
+5. key sama tetapi payload berbeda;
+6. request berbeda tanpa key;
+7. rollback ketika create gagal.
+
+Expected:
+
+Satu project canonical.
+Tidak ada duplicate job.
+Tidak ada duplicate payment schedule.
+Tidak ada duplicate audit event yang tidak sah.
+
+==================================================
+PHASE 2 — DEF-002 AUTH CONTRACT
+==================================================
+
+Audit route:
+
+GET /api/internal/auth/me
+
+Periksa middleware dan intended caller.
+
+Tentukan apakah route digunakan oleh:
+
+- Admin Portal session;
+- internal server;
+- API-key integration;
+- atau kombinasi.
+
+Jika session-cookie only adalah desain yang benar:
+
+- jangan ubah keamanan;
+- dokumentasikan kontraknya;
+- perbaiki test agar memakai session cookie;
+- klasifikasikan DEF-002 sebagai NOT A PRODUCT DEFECT.
+
+Jika admin API key memang seharusnya diterima:
+
+- gunakan middleware canonical;
+- pastikan role dan tenant context tetap benar;
+- jangan membuat bypass auth;
+- tambahkan regression test.
+
+==================================================
+PHASE 3 — DEF-004 NOTIFICATION MAPPING
+==================================================
+
+Trace notification dari:
+
+database
+→ repository
+→ service
+→ API
+→ frontend adapter
+→ workspace UI
+
+Pastikan canonical notification memiliki:
+
+- id;
+- type;
+- tenantId;
+- actor atau source;
+- title;
+- message;
+- createdAt;
+- read state;
+- target reference jika tersedia.
+
+Pastikan:
+
+- Tenant A tidak menerima notification Tenant B;
+- undefined tenantId tidak digunakan sebagai wildcard;
+- unknown type memiliki safe fallback;
+- retry tidak membuat duplicate notification.
+
+Tambahkan unit dan integration tests.
+
+==================================================
+PHASE 4 — PAYMENT TEST HARNESS
+==================================================
+
+Jangan menunggu production keys.
+
+Periksa apakah repository sudah memiliki:
+
+- payment sandbox adapter;
+- deterministic fake provider;
+- webhook fixture;
+- payment service test double.
+
+Jika belum tersedia, buat DEVELOPMENT-ONLY payment test adapter.
+
+Persyaratan:
+
+- tidak aktif di production;
+- diaktifkan hanya dengan explicit dev/test configuration;
+- tidak menyimpan secret palsu sebagai production secret;
+- mendukung success, failed, pending, expired, duplicate callback;
+- memakai service path yang sama setelah provider boundary;
+- menghasilkan signature fixture yang tervalidasi.
+
+Uji:
+
+- full payment;
+- partial payment;
+- installment;
+- failed payment;
+- retry;
+- expired payment;
+- duplicate callback;
+- invalid signature;
+- commercial_completed;
+- files unlock prerequisite.
+
+Jangan menyatakan Midtrans live connectivity PASS.
+
+Laporkan:
+
+PAYMENT BUSINESS FLOW PASS USING DEV TEST ADAPTER
+
+bukan:
+
+MIDTRANS PASS
+
+==================================================
+PHASE 5 — REVIEW WORKSPACE DISCOVERY
+==================================================
+
+Jangan langsung membuat route baru.
+
+Cari canonical review implementation berdasarkan:
+
+- router registration;
+- service imports;
+- frontend API client;
+- Customer Portal review links;
+- admin review monitor;
+- public review token;
+- creative_ai_client_reviews;
+- creative_ai_client_comments.
+
+Identifikasi route yang benar.
+
+Jika route sudah ada tetapi test menggunakan path salah:
+
+- perbaiki test discovery;
+- dokumentasikan canonical path.
+
+Jika fungsi review memang tidak terhubung:
+
+- laporkan sebagai product gap;
+- jangan membuat arsitektur review kedua;
+- gunakan existing review domain dan schema.
+
+Uji:
+
+- create review;
+- public token open;
+- comment;
+- approve;
+- revision request;
+- invalid token;
+- expired token;
+- tenant isolation;
+- audit log;
+- status synchronization.
+
+==================================================
+PHASE 6 — CREATE DETERMINISTIC COMPLETED PROJECT
+==================================================
+
+Buat fixture atau scenario development yang menghasilkan satu project lengkap.
+
+Gunakan identifier:
+
+E2E-FINAL-DELIVERABLE-<timestamp>
+
+Project harus melalui state secara sah.
+
+Jangan langsung mengubah database ke completed tanpa service layer,
+kecuali fixture architecture existing memang secara resmi mendukungnya.
+
+Scenario harus menghasilkan:
+
+- project;
+- quotation;
+- approved commercial state;
+- payment schedule;
+- completed payment fixture;
+- workflow;
+- completed production steps;
+- valid final artifacts;
+- review approval bila diwajibkan;
+- deliverable_ready;
+- files_unlocked;
+- order_completed.
+
+Catat setiap transition dan postcondition.
+
+==================================================
+PHASE 7 — REAL PPTX VERIFICATION
+==================================================
+
+Generate PPTX nyata dari development workflow.
+
+Verifikasi:
+
+- file dibuat;
+- size lebih dari zero;
+- extension .pptx;
+- ZIP structure dapat dibuka;
+- [Content_Types].xml tersedia;
+- ppt/presentation.xml tersedia;
+- slide relationship valid;
+- jumlah slide masuk akal;
+- validator internal lulus bila tersedia;
+- download response MIME benar.
+
+Pisahkan:
+
+Runtime: PASS/FAIL
+Build: PASS/FAIL
+Typecheck: PASS/FAIL
+
+21 PptxGenJS namespace errors tetap dicatat sebagai pre-existing debt
+jika masih ada.
+
+Jangan menyatakan typecheck clean bila error tetap ada.
+
+==================================================
+PHASE 8 — REAL ZIP VERIFICATION
+==================================================
+
+Generate ZIP dari project fixture.
+
+Verifikasi:
+
+- response sukses;
+- file bukan zero-byte;
+- dapat diekstrak;
+- semua entry memiliki nama dan extension benar;
+- MIME berasal dari canonical asset type;
+- tidak ada asset.mimeType non-schema;
+- tidak ada temporary/internal file;
+- tidak ada file tenant lain;
+- tidak ada placeholder;
+- semua artifact expected tersedia.
+
+Simpan manifest hasil inspeksi.
+
+==================================================
+PHASE 9 — UNLOCK AND DOWNLOAD
+==================================================
+
+Uji seluruh kombinasi:
+
+1. artifact belum ready;
+2. payment belum lengkap;
+3. deliverable ready tetapi belum unlock;
+4. payment complete tetapi produksi belum complete;
+5. admin override tanpa reason;
+6. admin override dengan role salah;
+7. admin override sah dengan reason;
+8. seluruh prerequisite lengkap;
+9. expired signed URL;
+10. invalid token;
+11. token tenant lain;
+12. repeated download.
+
+Expected:
+
+- akses ditolak sebelum syarat lengkap;
+- file berhasil setelah unlock sah;
+- audit log tercatat;
+- Customer Portal CTA sesuai state;
+- tidak ada URL tenant lain.
+
+==================================================
+PHASE 10 — CUSTOMER AND ADMIN UI
+==================================================
+
+Gunakan project fixture yang sama.
+
+Customer Portal:
+
+- project terlihat;
+- stage benar;
+- progress benar;
+- payment state benar;
+- artifact terlihat;
+- download CTA aktif hanya setelah unlock;
+- file berhasil diunduh.
+
+Admin Portal:
+
+- project terlihat;
+- workflow state benar;
+- payment schedule benar;
+- artifact status benar;
+- unlock state benar;
+- audit log benar.
+
+Bandingkan state canonical kedua portal.
+
+==================================================
+PHASE 11 — FULL RETEST
+==================================================
+
+Setelah remediation:
+
+- jalankan targeted tests;
+- jalankan concurrency test;
+- jalankan review E2E;
+- jalankan payment fixture E2E;
+- jalankan artifact/PPTX/ZIP/download E2E;
+- jalankan tenant isolation tests;
+- jalankan full regression;
+- jalankan typecheck;
+- jalankan build;
+- restart development services;
+- ulangi main smoke test.
+
+==================================================
+REPORT
+==================================================
+
+Perbarui:
+
+DEV_E2E_VERIFICATION_REPORT.md
+DEV_E2E_FAILURES.json
+DEV_E2E_COVERAGE_MATRIX.json
+DEV_E2E_VERDICT.json
+
+Tambahkan:
+
+A. DEF-001 resolution
+
+B. DEF-002 contract decision
+
+C. DEF-004 resolution
+
+D. Payment test method
+
+E. Review canonical endpoint
+
+F. Completed project fixture
+
+G. PPTX evidence
+
+H. ZIP manifest
+
+I. Download evidence
+
+J. Unlock matrix
+
+K. Customer/Admin consistency
+
+L. Tenant isolation
+
+M. Unexpected HTTP 500
+
+N. Regression
+
+O. Typecheck
+
+P. Build
+
+Q. Remaining gaps
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Gunakan salah satu:
+
+DEV PASS — ALL CRITICAL FLOWS FUNCTION CORRECTLY
+
+DEV PASS WITH LOW-RISK OBSERVATIONS
+
+DEV BLOCKED — DUPLICATE PROJECT RISK
+
+DEV BLOCKED — PAYMENT FLOW UNVERIFIED
+
+DEV BLOCKED — REVIEW FLOW UNVERIFIED
+
+DEV BLOCKED — ARTIFACT DELIVERY FLOW UNVERIFIED
+
+DEV BLOCKED — SECURITY OR TENANT ISOLATION FAILURE
+
+==================================================
+RELEASE RULE
+==================================================
+
+Jangan menyatakan seluruh development E2E selesai sebelum terdapat bukti nyata bahwa:
+
+- satu project diproses end-to-end;
+- payment business flow telah diuji;
+- review/revision telah diuji;
+- PPTX nyata berhasil dibuat;
+- ZIP nyata berhasil diekstrak;
+- unlock bekerja sesuai prerequisite;
+- download nyata berhasil;
+- Tenant A tidak dapat mengakses file Tenant B;
+- duplicate project telah dicegah secara server-side.
+
+Jangan deploy.
+Jangan publish.

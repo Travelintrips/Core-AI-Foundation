@@ -907,7 +907,9 @@ export async function listWorkspaceInvoices(
 // ── Notifications (synthesized, read-state persisted) ────────────────────────
 
 export interface WorkspaceNotification {
+  id: string;        // alias for key — stable identifier for this notification
   key: string;
+  type: string;      // alias for category — matches frontend notification adapter convention
   category: "payment" | "project" | "review" | "revision" | "download" | "invoice" | "announcement";
   title: string;
   message: string;
@@ -930,8 +932,11 @@ export async function listWorkspaceNotifications(
 
   const notifications: WorkspaceNotification[] = [];
   for (const p of projects) {
+    const projectKey = `project:${p.projectNumber}:stage:${p.currentStage}`;
     notifications.push({
-      key: `project:${p.projectNumber}:stage:${p.currentStage}`,
+      id: projectKey,
+      key: projectKey,
+      type: "project",
       category: "project",
       title: p.brandName,
       message: `Status proyek: ${p.currentStageLabel}`,
@@ -940,8 +945,11 @@ export async function listWorkspaceNotifications(
       createdAt: p.updatedAt,
     });
     if (p.paymentStatus) {
+      const payKey = `payment:${p.projectNumber}:${p.paymentStatus}`;
       notifications.push({
-        key: `payment:${p.projectNumber}:${p.paymentStatus}`,
+        id: payKey,
+        key: payKey,
+        type: "payment",
         category: "payment",
         title: p.brandName,
         message: `Status pembayaran: ${p.paymentStatus}`,
@@ -958,9 +966,13 @@ export async function listWorkspaceNotifications(
         rejected: "Anda menolak hasil kreatif",
         revision_requested: "Revisi diminta",
       };
+      const reviewCategory = p.reviewStatus === "revision_requested" ? "revision" : "review";
+      const reviewKey = `review:${p.projectNumber}:${p.reviewStatus}`;
       notifications.push({
-        key: `review:${p.projectNumber}:${p.reviewStatus}`,
-        category: p.reviewStatus === "revision_requested" ? "revision" : "review",
+        id: reviewKey,
+        key: reviewKey,
+        type: reviewCategory,
+        category: reviewCategory,
         title: p.brandName,
         message: revisionMsgMap[p.reviewStatus] ?? `Status review: ${p.reviewStatus}`,
         projectNumber: p.projectNumber,
@@ -972,8 +984,11 @@ export async function listWorkspaceNotifications(
 
   const invoices = await listInvoicesForProjects(projects);
   for (const inv of invoices) {
+    const invKey = `invoice:${inv.invoiceNumber}:${inv.status}`;
     notifications.push({
-      key: `invoice:${inv.invoiceNumber}:${inv.status}`,
+      id: invKey,
+      key: invKey,
+      type: "invoice",
       category: "invoice",
       title: `Invoice ${inv.invoiceNumber}`,
       message: inv.status === "paid" ? "Invoice telah dibayar" : "Invoice baru diterbitkan",
@@ -985,8 +1000,11 @@ export async function listWorkspaceNotifications(
 
   const downloads = await listDownloadsForProjects(req, projects);
   for (const d of downloads.filter((d) => !d.locked)) {
+    const dlKey = `download:${d.id}:${d.status}`;
     notifications.push({
-      key: `download:${d.id}:${d.status}`,
+      id: dlKey,
+      key: dlKey,
+      type: "download",
       category: "download",
       title: d.title,
       message: "File siap diunduh",

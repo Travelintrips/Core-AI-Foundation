@@ -61,6 +61,34 @@ function buildBaseUrl(req: import("express").Request): string {
 const DASHBOARD_TOKEN_EXPIRY_DAYS = 30;
 const REVIEW_TOKEN_EXPIRY_DAYS = 60;
 
+// ── DEF-001: In-process deduplication map (60-second window) ─────────────────
+// Protects against concurrent duplicate submissions with the same identity
+// fingerprint (email + brandName + businessType). Concurrency-safe within a
+// single Node.js event loop — no shared mutable state across awaits.
+// Tenant-scoped: fingerprint includes clientEmail which is per-customer.
+
+interface DedupEntry {
+  projectId: string;
+  responseData: Record<string, unknown>;
+  expiresAt: number;
+}
+
+const _submitDedup = new Map<string, DedupEntry>();
+const SUBMIT_DEDUP_TTL_MS = 60_000;
+
+function _makeSubmitFingerprint(email: string, brand: string, bizType: string): string {
+  return createHash("sha256")
+    .update(`${email.toLowerCase().trim()}|${brand.toLowerCase().trim()}|${bizType.toLowerCase().trim()}`)
+    .digest("hex");
+}
+
+function _cleanExpiredDedupEntries(): void {
+  const now = Date.now();
+  for (const [k, v] of _submitDedup) {
+    if (v.expiresAt < now) _submitDedup.delete(k);
+  }
+}
+
 // ── POST /api/public/customer/submit ─────────────────────────────────────────
 
 router.post("/public/customer/submit", async (req, res): Promise<void> => {
@@ -97,7 +125,27 @@ router.post("/public/customer/submit", async (req, res): Promise<void> => {
     autoGenerate,
   } = parsed.data;
 
-  const projectId = randomUUID();
+  // DEF-001: Deduplication check — return existing project if same fingerprint
+  // was submitted within the last 60 seconds.
+  _cleanExpiredDedupEntries();
+  const fingerprint = _makeSubmitFingerprint(clientEmail ?? "", brandName, businessType);
+  const existingDedup = _submitDedup.get(fingerprint);
+  if (existingDedup) {
+    res.status(201).json(existingDedup.responseData);
+    return;
+  }
+
+  // Mark this fingerprint as in-flight synchronously (before any await) so a
+  // concurrent request arriving within the same event-loop tick also hits the
+  // dedup guard. We'll overwrite with the real data once the insert succeeds.
+  const placeholderProjectId = randomUUID();
+  _submitDedup.set(fingerprint, {
+    projectId: placeholderProjectId,
+    responseData: {},
+    expiresAt: Date.now() + SUBMIT_DEDUP_TTL_MS,
+  });
+
+  const projectId = placeholderProjectId;
 
   // 1. Create the creative project
   const [project] = await db
@@ -198,7 +246,7 @@ router.post("/public/customer/submit", async (req, res): Promise<void> => {
   const reviewUrl = `${base}/review/${reviewToken}`;
   const dashboardUrl = `${base}/dashboard/${dashboardToken}`;
 
-  res.status(201).json({
+  const responseData: Record<string, unknown> = {
     projectId,
     reviewToken,
     reviewUrl,
@@ -208,7 +256,17 @@ router.post("/public/customer/submit", async (req, res): Promise<void> => {
     brandName,
     clientName,
     createdAt: new Date().toISOString(),
+  };
+
+  // DEF-001: Store real data in dedup map so concurrent/retry requests get the
+  // same canonical response. Overwrites the in-flight placeholder.
+  _submitDedup.set(fingerprint, {
+    projectId,
+    responseData,
+    expiresAt: Date.now() + SUBMIT_DEDUP_TTL_MS,
   });
+
+  res.status(201).json(responseData);
 });
 
 // ── POST /api/public/customer/request-access ─────────────────────────────────
