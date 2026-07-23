@@ -1,11 +1,13 @@
 # TEAM 41 — ARCHITECTURE AUDIT REPORT
 ## Universal Creative AI Platform — Canonical Lifecycle Baseline
 
-**Branch:** `audit/team-41-shared-lifecycle`  
-**Date:** 2026-07-23  
-**Role:** Architecture Auditor & Canonical Lifecycle Engineer  
-**Scope:** Read-only. No code changes. No migrations. No commits to main.  
+**Branch:** `audit/team-41-shared-lifecycle`
+**Date:** 2026-07-23
+**Role:** Architecture Auditor & Canonical Lifecycle Engineer
+**Scope:** Read-only audit only. No production code modified. No migrations. No database changes. No runtime behavior changed.
 **Status:** ✅ PASS — Audit complete. Baseline established for Teams 42–50.
+
+> **Revision note (2026-07-23):** Completion semantics clarified (§H-A), canonical billing precedence declared (§H-B), Critical Finding Ownership Matrix added (§N-A), no-change statement made explicit (§M).
 
 ---
 
@@ -80,26 +82,26 @@ The platform is a **multi-tenant enterprise creative AI studio** operating as a 
 
 ### Complete Service Slug Registry
 
-**Presentation & Document** (humanReview=TRUE): `pd-pitch-deck`, `pd-business-proposal`, `pd-company-profile-doc`, `pd-annual-report`, `pd-executive-summary`, `pd-training-material`  
+**Presentation & Document** (humanReview=TRUE): `pd-pitch-deck`, `pd-business-proposal`, `pd-company-profile-doc`, `pd-annual-report`, `pd-executive-summary`, `pd-training-material`
 **Presentation & Document** (humanReview=FALSE): `pd-product-catalog`, `pd-meeting-deck`
 
-**Creative AI** (humanReview=TRUE): `brand-identity`, `brand-strategy`, `company-profile`, `pitch-deck`, `packaging-design`, `creative-consultation`, `fashion-brand-brief`, `interior-concept-design`, `proposal`, `product-catalog`, `annual-report`, `whitepaper`, `case-study`, `ebook`  
+**Creative AI** (humanReview=TRUE): `brand-identity`, `brand-strategy`, `company-profile`, `pitch-deck`, `packaging-design`, `creative-consultation`, `fashion-brand-brief`, `interior-concept-design`, `proposal`, `product-catalog`, `annual-report`, `whitepaper`, `case-study`, `ebook`
 **Creative AI** (humanReview=FALSE): `logo-design`, `social-media-design`, `poster-banner`, `copywriting`, `image-generation`
 
-**Marketing**: `marketing-ai-monthly`(T), `marketing-plan`, `campaign-plan`, `content-calendar`, `competitor-analysis`, `customer-persona`(F)  
-**Sales**: `sales-playbook`(T), `lead-qualification`, `proposal-drafting`(F)  
-**Finance**: `financial-analysis`, `budget-planning`, `forecasting`, `management-report`(T), `cashflow-analysis`, `profitability-analysis`, `bank-reconciliation`(F)  
-**Accounting**: `journal-review`, `trial-balance-review`, `closing-assistance`, `coa-recommendation`(T), `general-ledger-analysis`, `account-reconciliation`(F)  
-**Tax**: `vat-review`, `pph-analysis`, `tax-reconciliation`, `tax-planning`, `spt-review`(T), `invoice-validation`(F)  
-**HR**: `payroll-review`, `hr-ai-monthly`(T), `cv-screening`, `job-description`, `interview-package`, `performance-summary`(F)  
-**Legal**: `contract-review`, `agreement-drafting`, `nda-review`, `vendor-agreement`, `legal-ai-monthly`(T), `contract-summary`(F)  
-**Logistics**: `logistics-ai-monthly`(T), `freight-planning`, `vendor-comparison`, `shipment-exception`, `rfq-generation`(F)  
-**Customs**: `hs-code-classification`, `import-compliance`, `export-compliance`, `pib-review`, `lartas-checking`, `customs-ai-monthly`(T), `duty-simulation`(F)  
-**Procurement**: `spend-analysis`, `procurement-ai-monthly`(T), `rfq-preparation`, `vendor-comparison-proc`, `supplier-scorecard`(F)  
-**Trading**: `export-deal-readiness`, `trading-ai-monthly`(T), `commercial-offer`, `buyer-supplier-profile`, `margin-simulation`(F)  
-**Data Analytics**: `data-analytics-monthly`(T), `dashboard-setup`, `data-insight-report`(F)  
-**Executive**: `strategic-review`, `board-brief`(T)  
-**Customer Service**: `customer-service-ai-monthly`, `support-macro-library`(F)  
+**Marketing**: `marketing-ai-monthly`(T), `marketing-plan`, `campaign-plan`, `content-calendar`, `competitor-analysis`, `customer-persona`(F)
+**Sales**: `sales-playbook`(T), `lead-qualification`, `proposal-drafting`(F)
+**Finance**: `financial-analysis`, `budget-planning`, `forecasting`, `management-report`(T), `cashflow-analysis`, `profitability-analysis`, `bank-reconciliation`(F)
+**Accounting**: `journal-review`, `trial-balance-review`, `closing-assistance`, `coa-recommendation`(T), `general-ledger-analysis`, `account-reconciliation`(F)
+**Tax**: `vat-review`, `pph-analysis`, `tax-reconciliation`, `tax-planning`, `spt-review`(T), `invoice-validation`(F)
+**HR**: `payroll-review`, `hr-ai-monthly`(T), `cv-screening`, `job-description`, `interview-package`, `performance-summary`(F)
+**Legal**: `contract-review`, `agreement-drafting`, `nda-review`, `vendor-agreement`, `legal-ai-monthly`(T), `contract-summary`(F)
+**Logistics**: `logistics-ai-monthly`(T), `freight-planning`, `vendor-comparison`, `shipment-exception`, `rfq-generation`(F)
+**Customs**: `hs-code-classification`, `import-compliance`, `export-compliance`, `pib-review`, `lartas-checking`, `customs-ai-monthly`(T), `duty-simulation`(F)
+**Procurement**: `spend-analysis`, `procurement-ai-monthly`(T), `rfq-preparation`, `vendor-comparison-proc`, `supplier-scorecard`(F)
+**Trading**: `export-deal-readiness`, `trading-ai-monthly`(T), `commercial-offer`, `buyer-supplier-profile`, `margin-simulation`(F)
+**Data Analytics**: `data-analytics-monthly`(T), `dashboard-setup`, `data-insight-report`(F)
+**Executive**: `strategic-review`, `board-brief`(T)
+**Customer Service**: `customer-service-ai-monthly`, `support-macro-library`(F)
 **Graphic Design**: `GD-LOGO`, `GD-BCARD`, `GD-LTRHEAD`, `GD-FLYER`, `GD-POSTER`, `GD-BANNER`, `GD-BROCHURE`, `GD-SOCIAL`, `GD-CERT`, `GD-STATIONERY`(F)
 
 ### Add-on Packages (Seeded)
@@ -162,72 +164,72 @@ The platform is a **multi-tenant enterprise creative AI studio** operating as a 
 ### Workflow Templates Discovered
 
 #### 1. Creative Project Pipeline (Universal)
-**Stages:** `waiting_payment` → `deposit_paid` → `active` → `generating` → `in_review` → `approved` → `completed`  
-**Substages (creative_project_steps):** `pending` → `running` → `completed` | `failed`  
-**Worker:** `universalRenderWorker.ts`  
-**Retry:** Job retry via `claimJob` with retry counter; max retries configurable per job type  
-**Failure:** `creative_project.status = 'failed'`; `ai_jobs.status = 'failed'`  
-**Completion:** All steps `completed` + result aggregated → project status `completed`  
-**Rollback:** None — terminal states are not rolled back; admin can requeue via UI  
-**Blocking:** `waiting_payment` blocks production start; `in_review` blocks delivery  
+**Stages:** `waiting_payment` → `deposit_paid` → `active` → `generating` → `in_review` → `approved` → `completed`
+**Substages (creative_project_steps):** `pending` → `running` → `completed` | `failed`
+**Worker:** `universalRenderWorker.ts`
+**Retry:** Job retry via `claimJob` with retry counter; max retries configurable per job type
+**Failure:** `creative_project.status = 'failed'`; `ai_jobs.status = 'failed'`
+**Completion:** All steps `completed` + result aggregated → project status `completed`
+**Rollback:** None — terminal states are not rolled back; admin can requeue via UI
+**Blocking:** `waiting_payment` blocks production start; `in_review` blocks delivery
 
 #### 2. Design Template Batch Pipeline
-**Stages:** `draft` → `brief_in_progress` → `ready` → `active` → `generating` → `in_review` → `revision_requested` → `approved` → `completed`  
-**Worker:** `design-batch/batchLifecycle.ts` + `design-renderer/`  
-**Retry:** Reconciler re-queues stale `generating` items after timeout  
-**Failure:** Batch item fails individually; batch can partial-complete  
-**Completion:** All items `completed` or `failed` + no `pending` items  
-**Rollback:** None  
-**Blocking:** Tenant concurrency cap enforced by dispatcher  
+**Stages:** `draft` → `brief_in_progress` → `ready` → `active` → `generating` → `in_review` → `revision_requested` → `approved` → `completed`
+**Worker:** `design-batch/batchLifecycle.ts` + `design-renderer/`
+**Retry:** Reconciler re-queues stale `generating` items after timeout
+**Failure:** Batch item fails individually; batch can partial-complete
+**Completion:** All items `completed` or `failed` + no `pending` items
+**Rollback:** None
+**Blocking:** Tenant concurrency cap enforced by dispatcher
 
 #### 3. Quotation Workflow (Commercial)
-**Stages:** `draft` → `issued` → `viewed` → `approved` | `rejected` | `revision_requested`  
-**Trigger:** Admin action → customer email/URL with token  
-**Retry:** Admin can re-issue (new token); customer gets fresh link  
-**Failure:** `rejected` is terminal for that quotation; admin must create new  
-**Completion:** `approved` status triggers commercial gate creation  
-**Rollback:** None — approved quotations cannot be unapproved  
-**Blocking:** Gate must be `verified`/`waived` before project conversion  
+**Stages:** `draft` → `issued` → `viewed` → `approved` | `rejected` | `revision_requested`
+**Trigger:** Admin action → customer email/URL with token
+**Retry:** Admin can re-issue (new token); customer gets fresh link
+**Failure:** `rejected` is terminal for that quotation; admin must create new
+**Completion:** `approved` status triggers commercial gate creation
+**Rollback:** None — approved quotations cannot be unapproved
+**Blocking:** Gate must be `verified`/`waived` before project conversion
 
 #### 4. Client Review Workflow
-**Stages:** `not_shared` → `shared` → `viewed` → `approved` | `revision_requested` | `rejected` | `expired` | `revoked`  
-**Token:** Time-limited review token in `creative_ai_client_reviews`  
-**Retry:** Admin can "resend" — generates new token, resets to `shared`  
-**Failure:** `expired` (TTL) or `rejected`; admin must restart  
-**Completion:** `approved` — project can proceed to delivery preparation  
-**Rollback:** `revoked` by admin; superseded by re-share  
-**Blocking:** `in_review` project status blocks delivery until review resolves  
+**Stages:** `not_shared` → `shared` → `viewed` → `approved` | `revision_requested` | `rejected` | `expired` | `revoked`
+**Token:** Time-limited review token in `creative_ai_client_reviews`
+**Retry:** Admin can "resend" — generates new token, resets to `shared`
+**Failure:** `expired` (TTL) or `rejected`; admin must restart
+**Completion:** `approved` — project can proceed to delivery preparation
+**Rollback:** `revoked` by admin; superseded by re-share
+**Blocking:** `in_review` project status blocks delivery until review resolves
 
 #### 5. Payment Schedule Workflow
-**Stages:** `waiting_payment` → (customer submits proof) → `waiting_payment_verification` → (admin verifies) → `deposit_paid` → (production completes) → `waiting_remaining_payment` → `remaining_paid` → `payment_verified`  
-**Unlock trigger:** All schedule items paid → `files_unlocked = true`  
-**Retry:** Manual admin re-verification  
-**Failure:** `failed` on payment schedule row  
-**Completion:** All installments `paid` → files unlocked  
-**Rollback:** Admin manual unlock bypasses this entirely (risk: see anomalies)  
-**Blocking:** `deposit_paid` or `payment_verified` required to start AI production  
+**Stages:** `waiting_payment` → (customer submits proof) → `waiting_payment_verification` → (admin verifies) → `deposit_paid` → (production completes) → `waiting_remaining_payment` → `remaining_paid` → `payment_verified`
+**Unlock trigger:** All schedule items paid → `files_unlocked = true`
+**Retry:** Manual admin re-verification
+**Failure:** `failed` on payment schedule row
+**Completion:** All installments `paid` → files unlocked
+**Rollback:** Admin manual unlock bypasses this entirely (risk: see anomalies)
+**Blocking:** `deposit_paid` or `payment_verified` required to start AI production
 
 #### 6. Human Task (HITL) Workflow
-**Stages:** `pending` → `assigned` → `in_progress` → `completed` | `failed` | `escalated`  
-**Integration:** Linked to `ai_service_requests` and `ai_execution_plans`  
-**SLA:** `slaDeadlineAt` field; `slaStatus`: `on_time`, `warning`, `overdue`, `expired`  
-**Retry:** Reassignment to different operator  
-**Failure:** `failed` or `escalated` — triggers notification  
-**Completion:** `completed` → advances parent service request  
-**Blocking:** Service request stays in `draft` until HITL task resolves  
+**Stages:** `pending` → `assigned` → `in_progress` → `completed` | `failed` | `escalated`
+**Integration:** Linked to `ai_service_requests` and `ai_execution_plans`
+**SLA:** `slaDeadlineAt` field; `slaStatus`: `on_time`, `warning`, `overdue`, `expired`
+**Retry:** Reassignment to different operator
+**Failure:** `failed` or `escalated` — triggers notification
+**Completion:** `completed` → advances parent service request
+**Blocking:** Service request stays in `draft` until HITL task resolves
 
 #### 7. Scheduler (Cron/Interval)
-**Types:** `cron`, `interval`, `one_time`  
-**Target types:** `create_job` (numeric priority), `publish_event`, `webhook` (audit-only), `audit_log`  
-**Execution:** `aiSchedulerService.ts` polls `ai_schedules`, runs `executeDueSchedules()`  
-**Failure:** Logged to `ai_schedule_runs`; no automatic retry built-in  
+**Types:** `cron`, `interval`, `one_time`
+**Target types:** `create_job` (numeric priority), `publish_event`, `webhook` (audit-only), `audit_log`
+**Execution:** `aiSchedulerService.ts` polls `ai_schedules`, runs `executeDueSchedules()`
+**Failure:** Logged to `ai_schedule_runs`; no automatic retry built-in
 
 #### 8. Event Bus
-**Publish:** `publish()` (persists + dispatches) or `publishSafe()` (fire-and-forget, swallows errors)  
-**Subscribe:** `ai_event_subscriptions` table; matched by `eventType` pattern  
-**Dispatch:** `dispatch()` calls subscriber handlers; outcome recorded  
-**Idempotency:** `eventId` unique constraint on `ai_events`  
-**Risk:** `publishSafe` silently drops errors — downstream subscribers may not execute  
+**Publish:** `publish()` (persists + dispatches) or `publishSafe()` (fire-and-forget, swallows errors)
+**Subscribe:** `ai_event_subscriptions` table; matched by `eventType` pattern
+**Dispatch:** `dispatch()` calls subscriber handlers; outcome recorded
+**Idempotency:** `eventId` unique constraint on `ai_events`
+**Risk:** `publishSafe` silently drops errors — downstream subscribers may not execute
 
 ---
 
@@ -366,20 +368,84 @@ The platform is a **multi-tenant enterprise creative AI studio** operating as a 
 
 These rules are **extracted from code** and must be treated as the authoritative contract for Teams 42–50. Do not implement behavior that contradicts them.
 
-### CR-01: Project Completion
-> `creative_project.status = 'completed'` ONLY when ALL `creative_project_steps` for the project reach `completed` status AND the final worker aggregates results into `creative_projects.result`.  
-> **Completion is independent of payment.** A project can be `completed` while still having unpaid installments.  
+---
+
+## H-A. COMPLETION SEMANTICS (Canonical Definitions)
+
+The word "completed" has six distinct meanings in this system. Conflating them is the primary source of cross-service bugs. Teams 42–50 MUST use this vocabulary precisely.
+
+| Term | DB Signal | What It Means | What It Does NOT Imply |
+|---|---|---|---|
+| **workflow_completed** | `creative_project_steps`: all rows `completed` | Every AI generation step has finished executing | Payment received; files accessible; client satisfied |
+| **production_completed** | `creative_projects.status = 'completed'` | The technical pipeline is finished; result JSONB is populated | Payment verified; files unlocked; remaining balance paid |
+| **deliverable_ready** | `creative_ai_assets` rows exist with `render_stage = 'final'` AND stored in Supabase | Final assets exist in storage with a valid path | Files are accessible to customer (unlock required) |
+| **commercial_completed** | All `ai_payment_schedule` rows are `paid` (no `pending` or `failed` rows remain) | All contractual financial obligations are met | Production is complete; deliverables exist |
+| **files_unlocked** | `creative_projects.filesUnlocked = true` | Customer can access signed download URLs | Production is complete (admin can unlock before production finishes) |
+| **order_completed** | `creative_projects.status = 'completed'` AND `filesUnlocked = true` AND all `ai_payment_schedule` rows `paid` | Full end-to-end order lifecycle is closed | — (this is the only state that satisfies all obligations) |
+
+### Explicit Completion Rules (replacing all ambiguous "completion without payment" language)
+
+1. **Workflow completion does not imply payment completion.** `production_completed` (`creative_projects.status = 'completed'`) can and does occur before the remaining balance is collected. This is by design for `deposit` payment policy services.
+
+2. **Production completion may occur before full payment.** After `deposit_paid`, the dispatcher queues jobs and the pipeline runs to `production_completed`. The remaining balance invoice is generated post-production — not pre-production.
+
+3. **Deliverable preview availability is service-policy dependent.** For services with `humanReview=true`, a preview link (`creative_ai_client_reviews` token) may be shared before `filesUnlocked`. This preview is policy-controlled and does not constitute file delivery.
+
+4. **Final file unlock requires the canonical payment condition.** `filesUnlocked = true` is set ONLY when all `ai_payment_schedule` rows for the project have `status = 'paid'` (i.e., `unpaid.length === 0`). This is the sole automated unlock trigger.
+
+5. **Commercial/order completion requires all mandatory commercial obligations** unless the service is explicitly zero-cost OR the obligation has been waived through an audited canonical policy (admin gate waive recorded in `ai_commercial_gates` with `notes` JSON and `verified_by`).
+
+6. **Admin override must never be an unlogged direct bypass.** Admin manual unlock (`POST /api/ai/payments/project/:projectId/unlock`) MUST write a record to `ai_audit_logs` before setting `filesUnlocked = true`. If the audit write fails, the unlock must not proceed. Teams 42 and 49 must verify this invariant and add a guard if it is absent.
+
+---
+
+## H-B. CANONICAL BILLING PRECEDENCE
+
+### Authoritative Source: `ai_payment_schedule`
+
+**`ai_payment_schedule` is the authoritative source of truth for payment state.**
+
+Every payment installment is a row in `ai_payment_schedule`. The canonical payment status of a project is derived by reading ALL rows for that `projectId` and computing:
+
+```
+all_paid      = every row has status='paid'
+deposit_paid  = the row with installment_type='deposit' has status='paid'
+any_failed    = at least one row has status='failed'
+unpaid_count  = count of rows with status NOT IN ('paid', 'cancelled')
+```
+
+### Derived/Cache: `creative_projects.paymentStatus`
+
+`creative_projects.paymentStatus` is a **denormalized cache** of the above computation. It is written by `paymentScheduleService.ts` at the time of verification events. It is NOT recomputed on every read.
+
+**Consequence:** If a `verifyPayment` call updates `ai_payment_schedule` but the subsequent write to `creative_projects.paymentStatus` fails (network error, crash), the two values will diverge. **The `ai_payment_schedule` table is authoritative; `creative_projects.paymentStatus` is a stale cache until reconciled.**
+
+### Reconciliation Requirement
+
+Any service that makes a decision based on payment state MUST read `ai_payment_schedule` directly (or use `paymentScheduleService.getStatus(projectId)`) — not `creative_projects.paymentStatus` — unless the service explicitly documents that it tolerates a stale cache.
+
+**Team 42** is responsible for implementing a reconciliation job that detects and corrects divergence between `ai_payment_schedule` (authoritative) and `creative_projects.paymentStatus` (cache). See finding P-02.
+
+---
+
+## H. CANONICAL RULES (Phase 8)
+
+These rules are **extracted from code** and must be treated as the authoritative contract for Teams 42–50. Do not implement behavior that contradicts them.
+
+### CR-01: Production Completion
+> `creative_project.status = 'completed'` (production_completed) is set ONLY when ALL `creative_project_steps` for the project reach `completed` status AND the final worker aggregates results into `creative_projects.result`.
+> **This is production_completed — not order_completed.** Production completion is independent of payment completion. See §H-A for the full completion taxonomy.
 > **Source:** `creativeImageBatchWorkerService.ts`, `creativeWorkflowRunner.ts`
 
 ### CR-02: File Unlock
-> `creative_projects.files_unlocked = true` ONLY when ALL rows in `ai_payment_schedule` for the project are in a terminal paid state (`paid`), meaning `unpaid.length === 0`.  
-> **Exception:** Admin can force-unlock via `POST /api/ai/payments/project/:projectId/unlock` regardless of payment state. This is an intentional bypass with financial risk.  
+> `creative_projects.files_unlocked = true` ONLY when ALL rows in `ai_payment_schedule` for the project are in a terminal paid state (`paid`), meaning `unpaid.length === 0`.
+> **Exception:** Admin can force-unlock via `POST /api/ai/payments/project/:projectId/unlock` regardless of payment state. This is an intentional bypass with financial risk.
 > **Source:** `paymentScheduleService.ts`
 
 ### CR-03: Production Start Gate
-> AI production (first job dispatch) ONLY begins after `creative_project.status` reaches `deposit_paid` OR `payment_verified`.  
-> For `full_payment` policy: must reach `payment_verified`.  
-> For `deposit` policy: `deposit_paid` is sufficient.  
+> AI production (first job dispatch) ONLY begins after `creative_project.status` reaches `deposit_paid` OR `payment_verified`.
+> For `full_payment` policy: must reach `payment_verified`.
+> For `deposit` policy: `deposit_paid` is sufficient.
 > **Source:** `paymentGate.ts` middleware, `paymentScheduleService.ts`
 
 ### CR-04: Service Request → Project Conversion
@@ -387,56 +453,56 @@ These rules are **extracted from code** and must be treated as the authoritative
 > 1. `ai_quotations.status = 'approved'`
 > 2. `ai_commercial_gates.status IN ('verified', 'waived')`
 > 3. `ai_service_requests.createdProjectId IS NULL` (idempotency)
-> 4. For `company-profile` slug: `briefIsComplete = true` OR `briefGuardOverrideAt IS NOT NULL`  
+> 4. For `company-profile` slug: `briefIsComplete = true` OR `briefGuardOverrideAt IS NOT NULL`
 > **Source:** `serviceRequestConversionService.ts`
 
 ### CR-05: Rendering Complete
-> A render job is complete when `ai_jobs.status = 'completed'` AND `ai_jobs.result` contains a non-null output payload.  
-> For two-stage image pipeline: `render_stage = 'final'` on `creative_ai_assets` (after SVG/sharp text overlay is applied). The `noText` stage asset must NOT be delivered to customers.  
+> A render job is complete when `ai_jobs.status = 'completed'` AND `ai_jobs.result` contains a non-null output payload.
+> For two-stage image pipeline: `render_stage = 'final'` on `creative_ai_assets` (after SVG/sharp text overlay is applied). The `noText` stage asset must NOT be delivered to customers.
 > **Source:** `imagePreviewService.ts`, `creative-ai-assets.ts` schema
 
 ### CR-06: Deliverable Ready
 > Customer deliverables are only accessible when BOTH:
 > 1. `creative_projects.filesUnlocked = true`
-> 2. The deliverable asset exists in Supabase Storage with a valid signed URL  
+> 2. The deliverable asset exists in Supabase Storage with a valid signed URL
 > **Source:** `customer-workspace.ts`, `supabaseStorageService.ts`
 
 ### CR-07: Payment Verification
-> Payment is verified ONLY by admin manual action (`POST /api/ai/payments/verify`). Automated verification does NOT exist.  
-> Proof submission by customer moves project to `waiting_payment_verification` — this does NOT auto-verify.  
+> Payment is verified ONLY by admin manual action (`POST /api/ai/payments/verify`). Automated verification does NOT exist.
+> Proof submission by customer moves project to `waiting_payment_verification` — this does NOT auto-verify.
 > **Source:** `paymentScheduleService.ts`
 
 ### CR-08: Review Required Gate
-> If `ai_services.humanReview = true` (mapped to `aiOnly = false` in seed), project MUST pass through `in_review` status. Client must explicitly `approve` the review token before the project can advance to delivery.  
-> If `humanReview = false`, project skips directly from `generating` to `completed`.  
+> If `ai_services.humanReview = true` (mapped to `aiOnly = false` in seed), project MUST pass through `in_review` status. Client must explicitly `approve` the review token before the project can advance to delivery.
+> If `humanReview = false`, project skips directly from `generating` to `completed`.
 > **Source:** `creativeWorkflowRunner.ts`, `clientReviewService.ts`
 
 ### CR-09: Quotation Approval Immutability
-> Once `ai_quotations.status = 'approved'`, the quotation cannot be un-approved. A new quotation must be issued for changes.  
+> Once `ai_quotations.status = 'approved'`, the quotation cannot be un-approved. A new quotation must be issued for changes.
 > **Source:** `aiQuotationService.ts`
 
 ### CR-10: Tenant Isolation
-> `tenantId` MUST be resolved server-side via `security/tenantResolution.ts`. Never trust `tenantId` from HTTP body, query parameters, or request headers.  
-> Repository pattern in `domains/*/repository.ts` enforces per-query tenant scoping.  
+> `tenantId` MUST be resolved server-side via `security/tenantResolution.ts`. Never trust `tenantId` from HTTP body, query parameters, or request headers.
+> Repository pattern in `domains/*/repository.ts` enforces per-query tenant scoping.
 > **Source:** `wp00-wp01` canonical context pattern
 
 ### CR-11: Admin Auth Model
-> All API routes are protected by `adminAuthWithExceptions` mounted once in `app.ts`. Per-route `requireAdminApiKey` middleware does NOT exist (dead import pattern — was removed).  
-> Public exceptions (customer-facing, review tokens) are explicitly registered in the exceptions list.  
+> All API routes are protected by `adminAuthWithExceptions` mounted once in `app.ts`. Per-route `requireAdminApiKey` middleware does NOT exist (dead import pattern — was removed).
+> Public exceptions (customer-facing, review tokens) are explicitly registered in the exceptions list.
 > **Source:** `app.ts`, `adminAuth.ts`
 
 ### CR-12: Event Bus Safety
-> Use `publish()` (await) for events where downstream execution is critical.  
-> Use `publishSafe()` ONLY for non-critical notifications where silent failure is acceptable.  
-> **`publishSafe` swallows all errors** — do not use it for state-advancing events.  
+> Use `publish()` (await) for events where downstream execution is critical.
+> Use `publishSafe()` ONLY for non-critical notifications where silent failure is acceptable.
+> **`publishSafe` swallows all errors** — do not use it for state-advancing events.
 > **Source:** `aiEventBusService.ts`
 
 ### CR-13: Zod Import Rule
-> Never import `zod` or `zod/v4` directly in `artifacts/api-server/src/routes/*`. All validation schemas must come from `@workspace/api-zod`.  
+> Never import `zod` or `zod/v4` directly in `artifacts/api-server/src/routes/*`. All validation schemas must come from `@workspace/api-zod`.
 > **Source:** `api-server-zod-import-rule` memory entry
 
 ### CR-14: Job Priority
-> When creating jobs via scheduler `create_job` target type, `priority` MUST be a numeric value, not a string label.  
+> When creating jobs via scheduler `create_job` target type, `priority` MUST be a numeric value, not a string label.
 > **Source:** `phase6-ai-scheduler` memory entry
 
 ---
@@ -549,8 +615,8 @@ ai_brand_dna ──► creativeBrandIntelligenceService ──► brand kit asse
 
 | ID | Finding | Risk | Category |
 |---|---|---|---|
-| B-01 | `creative_project.status = 'completed'` is independent of payment completion. A project can be technically `completed` with an unpaid remaining balance | **CRITICAL** | Billing |
-| B-02 | Admin manual unlock (`POST /api/ai/payments/project/:projectId/unlock`) bypasses all payment verification guards — `filesUnlocked = true` without any paid invoice | **CRITICAL** | Billing |
+| B-01 | `creative_project.status = 'completed'` (production_completed) does not imply commercial_completed or order_completed. A project can reach production_completed with an unpaid remaining balance. See §H-A for the full taxonomy. Teams must not treat production_completed as a signal that all obligations are met. | **CRITICAL** | Billing |
+| B-02 | Admin manual unlock (`POST /api/ai/payments/project/:projectId/unlock`) sets `filesUnlocked = true` without requiring payment schedule completion. This is an intentional operational override but constitutes a financial risk. Requires mandatory audit log write (see CR-06 revision). | **CRITICAL** | Billing |
 | B-03 | `ai_invoices.amount` (not `total_amount`) — column name non-obvious; teams referencing wrong column will silently read wrong value | **MEDIUM** | Billing |
 | B-04 | Legacy direct-submission projects (`sourceType=direct`) skip the quotation flow — they have no `ai_quotations` row, making revenue tracking incomplete for that segment | **HIGH** | Billing |
 
@@ -633,7 +699,7 @@ ai_brand_dna ──► creativeBrandIntelligenceService ──► brand kit asse
 | SE-01 | SSRF guard (`ssrfGuard.ts`) covers webhook/URL inputs — but only routes that explicitly use the middleware. New routes accepting URLs must opt-in | **HIGH** | Security |
 | SE-02 | `ADMIN_API_KEY` = `VITE_ADMIN_API_KEY` — same secret exposed to frontend build (Vite `VITE_` prefix = bundled into client JS). This is intentional but means the admin key is visible in source-viewed production builds | **HIGH** | Security |
 | SE-03 | Admin manual unlock and gate waive endpoints have no secondary confirmation or audit trail beyond `ai_audit_logs` — no 4-eyes principle | **HIGH** | Security |
-| SE-04 | Internal user credentials seeded via env vars (`INITIAL_INTERNAL_ADMIN_EMAIL`, `INITIAL_INTERNAL_ADMIN_PASSWORD`) — these are plaintext in `.replit` config | **CRITICAL** | Security |
+| SE-04 | Internal user seed credentials are stored as plaintext environment variable values in the `.replit` platform configuration file (`[userenv.development]` section). **Location: `.replit` file, development environment block. Actual values are NOT reproduced here.** Remediation: rotate credentials immediately; store only hashed values or use Replit Secrets manager; remove plaintext values from `.replit`. | **CRITICAL** | Security |
 | SE-05 | Customer impersonation tokens (`ai-customer-impersonation-tokens.ts` table) exist — scope and expiry of impersonation not audited in this pass | **MEDIUM** | Security |
 
 ### TENANT
@@ -736,18 +802,24 @@ lib/api-client-react/src/
 ## M. NO-CODE VERIFICATION (Phase 15)
 
 ```bash
-# Verified: no files modified during audit
-git diff --stat    → (empty)
-git status --short → ?? attached_assets/... (untracked only)
+# Verified: no production files modified during audit
+git diff --stat    → (empty — no tracked file modifications)
+git diff --check   → (empty — no whitespace errors)
+git status --short → ?? TEAM41_ARCHITECTURE_AUDIT_REPORT.md (untracked, new)
+                     ?? attached_assets/... (untracked, uploaded assets only)
 git stash list     → (empty)
-
-# No migrations created
-# No database updates
-# No UI updates
-# No endpoint updates
-# No commits to main
-# Branch: audit/team-41-shared-lifecycle (isolated)
 ```
+
+**Explicit change manifest:**
+
+| Category | Changed | Detail |
+|---|---|---|
+| Production code | **zero** | No `.ts`, `.tsx`, `.js`, `.mjs` source files modified |
+| Documentation | **1 file** | `TEAM41_ARCHITECTURE_AUDIT_REPORT.md` — new file, audit report only |
+| Migrations | **zero** | No `.sql`, Drizzle migration, or schema files created or modified |
+| Database | **zero** | No DDL executed, no rows inserted/updated/deleted, no schema changes |
+| Runtime behavior | **zero** | No workflow restarts triggered for this audit; all services unchanged |
+| Commits to main | **zero** | Branch `audit/team-41-shared-lifecycle` is isolated; no merge, rebase, or squash |
 
 ---
 
@@ -767,22 +839,42 @@ git stash list     → (empty)
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
 
-### Critical Findings Summary (Must-Fix Before Production Scale)
+## N-A. CRITICAL FINDING OWNERSHIP MATRIX
 
-| ID | Summary | Assigned To |
-|---|---|---|
-| SE-04 | Plaintext admin credentials in `.replit` config | Team 49 |
-| A-03 | drizzle-kit push drops entire schema — hand-write all DDL | ALL teams |
-| B-01 | Project can be `completed` with unpaid remaining balance | Team 42 |
-| B-02 | Admin manual unlock bypasses all payment guards | Team 42 + 49 |
-| RE-01 | `noText` asset can be delivered as final if sharp fails | Team 44 |
-| RE-02 | Diffusion text-baking bypass produces unusable assets | Team 44 |
-| C-03 | No DB constraint prevents wrong `render_stage` from delivery | Team 44 |
-| AR-01 | Project can be `completed` with zero stored artifacts | Team 43 + 50 |
-| P-02 | `paymentStatus` desync between `creative_projects` and `ai_payment_schedule` | Team 42 + 50 |
-| SE-02 | `VITE_ADMIN_API_KEY` exposed in client JS bundle | Team 49 |
+All CRITICAL-rated findings require a designated owner before work begins. Teams may not self-assign findings owned by another team without explicit coordination.
+
+| Finding ID | Description | Primary Owner | Supporting Owner | Canonical Rule Ref | Acceptance Criteria |
+|---|---|---|---|---|---|
+| **SE-04** | Seed credentials stored as plaintext in platform config — location identified, values not reproduced | **Team 49** (Security) | Platform/Infra | CR-11 | Credentials rotated; plaintext removed from `.replit`; Replit Secrets manager used |
+| **A-03** | `drizzle-kit push` proposes dropping entire `ai_platform` schema on any additive migration | **ALL teams** | Database owner | — | All teams use hand-written DDL only; `drizzle-kit push` blocked in CI |
+| **B-01** | `production_completed` status does not imply `commercial_completed` or `order_completed` — see §H-A taxonomy | **Team 42** | Team 43, Team 50 | CR-01 | Order completion guard added; `order_completed` composite check documented and enforced |
+| **B-02** | Admin manual unlock sets `filesUnlocked=true` without payment requirement; requires audit-log write guard | **Team 42** | Team 49 | CR-06 | Audit log write atomically precedes unlock; unlock fails if audit write fails |
+| **RE-01** | `noText` image asset delivered as final if sharp text-overlay step fails | **Team 44** | — | CR-05 | sharp failure detection added; `noText` assets cannot be marked `render_stage='final'` on failure |
+| **RE-02** | Diffusion model text-baking bypass produces text-free, unusable deliverables | **Team 44** | — | CR-05 | Pipeline enforces overlay step; no `final` asset without successful text composition |
+| **C-03** | No DB constraint prevents wrong `render_stage` value from reaching customer delivery | **Team 44** | Database owner | CR-05, CR-06 | DB check constraint added: delivery routes query only `render_stage='final'` |
+| **AR-01** | `creative_project` can reach `production_completed` with zero `creative_ai_assets` rows | **Team 43** | Team 50 | CR-01 | Completion guard in worker validates at least one `final`-stage asset exists before setting status |
+| **P-02** | `creative_projects.paymentStatus` (cache) can diverge from `ai_payment_schedule` (authoritative) — see §H-B | **Team 42** | Team 50 | §H-B | Reconciliation job implemented; payment decisions read `ai_payment_schedule` directly |
+| **SE-02** | `VITE_ADMIN_API_KEY` is bundled into client-side JavaScript via Vite prefix convention | **Team 49** | — | CR-11 | Admin key removed from Vite build; separate read-only public token issued for any legitimate frontend need |
 
 ---
 
-*Report generated by Team 41 — Architecture Auditor & Canonical Lifecycle Engineer*  
-*Read-only audit. No source files modified. Branch: `audit/team-41-shared-lifecycle`*
+### Critical Findings Summary (Must-Fix Before Production Scale)
+
+| ID | Summary | Canonical Term | Primary Owner |
+|---|---|---|---|
+| SE-04 | Seed credentials in plaintext config — location only, values redacted | — | Team 49 |
+| A-03 | drizzle-kit push drops entire schema — hand-write all DDL | — | ALL teams |
+| B-01 | `production_completed` ≠ `order_completed` — payment not implied | §H-A CR-01 | Team 42 |
+| B-02 | Admin manual file unlock must be audit-log-gated, never a silent bypass | CR-06 | Team 42 + 49 |
+| RE-01 | `noText` stage asset delivered as final if sharp overlay fails | CR-05 | Team 44 |
+| RE-02 | Text-baking bypass produces unusable text-free deliverables | CR-05 | Team 44 |
+| C-03 | No DB constraint guards `render_stage` on delivery path | CR-05/CR-06 | Team 44 |
+| AR-01 | `production_completed` possible with zero stored final assets | CR-01 | Team 43 + 50 |
+| P-02 | `paymentStatus` cache divergence from authoritative `ai_payment_schedule` | §H-B | Team 42 + 50 |
+| SE-02 | Admin key bundled in client JS — location identified, value redacted | CR-11 | Team 49 |
+
+---
+
+*Report generated by Team 41 — Architecture Auditor & Canonical Lifecycle Engineer*
+*Production code changed: zero. Documentation changed: TEAM41_ARCHITECTURE_AUDIT_REPORT.md. Migrations changed: zero. Database changed: zero. Runtime behavior changed: zero.*
+*Branch: `audit/team-41-shared-lifecycle` — no merge, no rebase, no squash.*
