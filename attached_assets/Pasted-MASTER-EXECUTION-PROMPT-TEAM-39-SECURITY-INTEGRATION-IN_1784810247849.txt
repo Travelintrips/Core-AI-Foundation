@@ -1,0 +1,860 @@
+MASTER EXECUTION PROMPT
+TEAM 39 SECURITY INTEGRATION + INTERIOR DESIGN ORDER-FLOW REVISION
+
+PENTING
+
+Pekerjaan terdiri dari dua workstream terpisah:
+
+WORKSTREAM A
+Integrasi hasil Team 36 ke runtime oleh Team 39.
+
+WORKSTREAM B
+Perbaikan end-to-end alur pemesanan Interior Design.
+
+Kedua pekerjaan:
+
+- harus berada di branch berbeda;
+- tidak boleh dicampur dalam satu commit;
+- tidak boleh merge langsung ke main;
+- tidak boleh rebase;
+- tidak boleh cherry-pick;
+- tidak boleh force-push;
+- harus diverifikasi secara terpisah.
+
+==================================================
+WORKSTREAM A
+TEAM 39 — INTEGRATE TEAM 36 SECURITY CONTRACTS
+==================================================
+
+BRANCH:
+
+feature/team-39-platform-integration
+
+SOURCE CONTRACT:
+
+feature/team-36-design-security
+
+KONDISI TEAM 36 YANG SUDAH DIVERIFIKASI
+
+Implementasi lokal Team 36 mencakup:
+
+- design security policy;
+- tenant isolation;
+- platform-scope guards;
+- IDOR protection;
+- plugin security;
+- AI security;
+- SVG/media safety;
+- rate-limit policies;
+- resource limits;
+- signed URL/token contracts;
+- audit events;
+- threat model;
+- security tests.
+
+Hasil verifikasi:
+
+- 164 targeted tests pass;
+- 5346 full-suite tests pass;
+- production files Team 36 tidak memiliki TypeScript error;
+- API server build berhasil;
+- rate-limit policy sudah tersedia tetapi belum dipasang sebagai live middleware;
+- audit event builder sudah tersedia tetapi caller masih harus mengirim event ke audit logger.
+
+==================================================
+A1 — PRE-INTEGRATION AUDIT
+==================================================
+
+Sebelum mengubah code, audit:
+
+1. artifacts/api-server/src/security/designSecurityPolicy.ts
+2. artifacts/api-server/src/routes/design-studio.ts
+3. artifacts/api-server/src/services/designStudioService.ts
+4. route registry/index
+5. existing RequestContext
+6. existing rate limiter framework
+7. existing audit logger
+8. existing token/signed URL services
+9. existing plugin registry
+10. existing AI execution service
+
+Buat tabel:
+
+Contract Team 36
+| Existing runtime integration
+| Gap
+| Integration file
+| Risk
+
+Jangan membuat:
+
+- RequestContext kedua;
+- limiter framework kedua;
+- audit service kedua;
+- plugin registry kedua;
+- AI runtime kedua.
+
+==================================================
+A2 — RATE LIMITER LIVE WIRING
+==================================================
+
+Gunakan DESIGN_RATE_LIMIT_POLICIES dan limiter framework existing.
+
+Pasang limiter minimal pada:
+
+- design AI execution;
+- design render;
+- design export;
+- design upload;
+- public design review/token endpoint;
+- signed URL generation endpoint jika ada.
+
+Rate-limit key:
+
+Authenticated routes:
+tenantId + actorId + capability
+
+Public token routes:
+token fingerprint + IP
+
+Render/export:
+tenantId + projectId + operation
+
+Requirements:
+
+- jangan log raw token;
+- jangan gunakan raw authorization header;
+- structured HTTP 429;
+- Retry-After bila framework mendukung;
+- invalid limiter configuration fail-closed untuk expensive endpoints;
+- tenant A tidak menghabiskan quota tenant B;
+- public-token rate limit terpisah dari authenticated actor.
+
+Tambahkan integration tests yang membuktikan middleware benar-benar dipanggil
+oleh route nyata.
+
+==================================================
+A3 — AUDIT EVENT RUNTIME WIRING
+==================================================
+
+Gunakan buildDesignAuditEvent() dan audit logger existing.
+
+Emit audit event minimal untuk:
+
+- cross-tenant access denial;
+- platform-scope denial;
+- actor spoof;
+- unsafe plugin rejection;
+- unsafe SVG/media rejection;
+- resource-limit rejection;
+- rate-limit rejection;
+- invalid/expired/revoked token;
+- forbidden cross-project association;
+- AI policy denial.
+
+Audit payload tidak boleh memuat:
+
+- raw token;
+- provider key;
+- authorization header;
+- full prompt;
+- full SVG;
+- full artifact body;
+- signed URL secret.
+
+Jika audit logger gagal:
+
+- authorization denial tetap denial;
+- jangan fail-open;
+- catat internal operational error secara aman.
+
+==================================================
+A4 — REQUEST CONTEXT INTEGRATION
+==================================================
+
+Pastikan seluruh design route memakai canonical RequestContext.
+
+Tenant authority hanya boleh berasal dari context hasil autentikasi.
+
+Dilarang:
+
+ctx.tenantId ?? req.body.tenantId
+
+Dilarang:
+
+req.query.tenantId sebagai authority
+
+Semua route harus:
+
+- fail-closed jika tenant context wajib tetapi tidak ada;
+- menggunakan explicit platform actor untuk platform scope;
+- menggunakan tenant-scoped repository query;
+- tidak mengungkap keberadaan resource tenant lain.
+
+==================================================
+A5 — PLUGIN REGISTRY INTEGRATION
+==================================================
+
+Sebelum plugin dimuat:
+
+1. validatePluginManifest()
+2. validatePluginModulePath()
+3. validate contract version
+4. validate capability allowlist
+5. reject duplicate registration
+6. reject remote URL/module
+7. reject path traversal
+8. reject manifest secret
+9. reject unknown renderer
+10. reject capability escalation
+
+Jangan menambahkan dynamic import dari URL atau arbitrary path.
+
+Tambahkan registry integration tests.
+
+==================================================
+A6 — AI EXECUTION INTEGRATION
+==================================================
+
+Pasang Team 36 AI guards pada execution path existing.
+
+Pastikan:
+
+- provider secret hanya dari secret service;
+- plugin/frontend tidak mengirim raw key;
+- tenant dan actor context diteruskan;
+- budget guard dijalankan;
+- resource limits dijalankan;
+- timeout dan retry bounded;
+- structured input tervalidasi;
+- structured output tervalidasi;
+- user metadata tidak bisa mengganti system policy;
+- raw chain-of-thought tidak disimpan;
+- secret tidak masuk log.
+
+Jangan membuat execution service baru.
+
+==================================================
+A7 — SVG AND MEDIA RUNTIME CHECK
+==================================================
+
+Pastikan export/render path nyata menggunakan sanitizer Team 36.
+
+Verifikasi penolakan:
+
+- <script>;
+- onload/onerror;
+- javascript:;
+- unsafe data URL;
+- HTTP external image;
+- foreignObject;
+- CSS url() berbahaya;
+- invalid MIME;
+- extension/MIME mismatch.
+
+Pastikan:
+
+- SVG tidak dirender dengan dangerouslySetInnerHTML;
+- object URL direvoke;
+- unsupported SVG menghasilkan status eksplisit;
+- raster fallback hanya digunakan bila aman.
+
+==================================================
+A8 — RESOURCE LIMITS
+==================================================
+
+Pasang validateCanvasResourceLimits() atau equivalent pada route nyata.
+
+Minimum batas:
+
+- payload size;
+- upload size;
+- MIME type;
+- image dimensions;
+- render dimensions;
+- asset count;
+- artifact count;
+- metadata length;
+- comment length;
+- prompt length;
+- concurrency;
+- export file/page count;
+- timeout ceiling.
+
+Tidak boleh:
+
+- silent truncation;
+- unlimited fallback;
+- bypass melalui alternate route.
+
+==================================================
+A9 — TEAM 39 TESTS
+==================================================
+
+Tambahkan minimal integration tests:
+
+1. Live route menjalankan policy evaluator.
+2. Cross-tenant route ditolak.
+3. Missing tenant ditolak.
+4. Platform actor valid diizinkan.
+5. Tenant actor tidak dapat platform scope.
+6. Rate limiter benar-benar menghasilkan 429.
+7. Rate-limit tenant isolation.
+8. Invalid limiter config fail-closed.
+9. Audit event terkirim pada denial.
+10. Audit logger failure tidak menjadi allow.
+11. Invalid plugin ditolak oleh registry nyata.
+12. Unsafe SVG ditolak di export route.
+13. Oversized canvas ditolak pada save route.
+14. Provider key dari request body diabaikan/ditolak.
+15. Signed token expired/revoked ditolak.
+16. Cross-project association ditolak.
+17. Duplicate execution idempotent/diblok.
+18. No raw token/secret dalam audit payload.
+19. Public-token limiter menggunakan fingerprint.
+20. Successful valid flow tetap berjalan.
+
+==================================================
+A10 — VERIFICATION
+==================================================
+
+Jalankan:
+
+- Team 39 targeted integration tests;
+- Team 36 security tests;
+- design route tests;
+- full api-server suite;
+- affected frontend suite;
+- full repository suite;
+- affected library typecheck;
+- api-server typecheck;
+- affected frontend typecheck;
+- affected builds;
+- git diff --check.
+
+Laporkan angka aktual.
+
+==================================================
+A11 — COMMIT AND PUSH
+==================================================
+
+Commit hanya file Team 39:
+
+git add <Team 39 files only>
+git commit -m "feat(design-platform): integrate security policies and runtime guards"
+
+Push:
+
+git push -u origin feature/team-39-platform-integration
+
+Jangan merge ke main.
+
+==================================================
+WORKSTREAM A — FINAL REPORT
+==================================================
+
+A. Branch
+B. Base commit
+C. Team 36 contract inventory
+D. Files changed
+E. Rate limiter wiring
+F. Audit logging wiring
+G. RequestContext integration
+H. Tenant isolation
+I. Platform scope
+J. Plugin registry integration
+K. AI security integration
+L. SVG/media integration
+M. Resource limits
+N. Signed token integration
+O. Targeted tests
+P. Full tests
+Q. Typecheck
+R. Builds
+S. Remaining risks
+T. Commit
+U. Push verification
+V. Final verdict
+
+Allowed verdict:
+
+READY FOR RELEASE REGRESSION
+REVISION REQUIRED
+BLOCKED — PUSH AUTH
+BLOCKED — ENVIRONMENT
+
+Do not use READY if live middleware, audit logging, full tests, or builds are not
+verified.
+
+==================================================
+WORKSTREAM B
+INTERIOR DESIGN ORDER FLOW — REVISION 2
+==================================================
+
+BRANCH:
+
+fix/interior-design-order-flow
+
+Jangan mulai Workstream B sebelum:
+
+- Workstream A committed;
+- working tree bersih;
+- branch Team 39 terpisah;
+- tidak ada perubahan Team 36/39 yang ikut terbawa sebagai uncommitted files.
+
+==================================================
+B1 — REPRODUCE ORIGINAL BUG
+==================================================
+
+Reproduksi satu order Interior Design di test/non-production.
+
+Bug yang harus dibuktikan:
+
+1. Order langsung masuk ke hasil produksi.
+2. Halaman hasil kosong.
+3. Customer diminta pelunasan.
+4. Admin payment kosong.
+5. Invoice/payment linkage tidak konsisten.
+6. Project dapat terlihat selesai tanpa deliverable nyata.
+
+Catat:
+
+- request ID;
+- order ID;
+- project ID;
+- workflow ID;
+- job IDs;
+- artifact IDs;
+- deliverable IDs;
+- quotation ID;
+- invoice ID;
+- payment schedule ID;
+- payment ID;
+- tenant ID;
+- status timeline.
+
+==================================================
+B2 — FIND EXACT BACKEND ROOT CAUSE
+==================================================
+
+Trace code nyata untuk:
+
+- order creation;
+- service slug resolution;
+- workflow template selection;
+- workflow instance creation;
+- initial stage;
+- job enqueue;
+- workflow advancement;
+- output validation;
+- artifact persistence;
+- deliverable publishing;
+- quotation;
+- invoice generation;
+- payment schedule;
+- payment proof submission;
+- admin verification;
+- file unlock.
+
+Jangan hanya mengaudit frontend.
+
+Dokumentasikan setiap root cause dengan:
+
+- file;
+- function;
+- line;
+- incorrect transition;
+- affected table;
+- actual data evidence;
+- fix.
+
+==================================================
+B3 — WORKFLOW INITIALIZATION FIX
+==================================================
+
+Interior Design harus:
+
+- dimulai dari stage pertama;
+- memiliki workflow instance;
+- memiliki active initial node;
+- membuat job pertama;
+- tidak otomatis complete;
+- tidak menganggap empty workflow sebagai sukses;
+- tidak menganggap missing plugin/renderer sebagai sukses;
+- tidak menggunakan demo/mock completion.
+
+Tambahkan guard nyata pada workflow creation service.
+
+==================================================
+B4 — PRODUCTION COMPLETION GUARD
+==================================================
+
+Production hanya boleh complete jika:
+
+- semua blocking jobs sukses;
+- output contract valid;
+- output tidak null;
+- output tidak kosong;
+- artifact persistence sukses;
+- storage reference valid;
+- minimum required deliverable tersedia;
+- tidak ada failed blocking stage.
+
+Jika gagal:
+
+- status production_failed;
+- error reason tersimpan;
+- customer mendapat status jujur;
+- admin mendapat diagnostic action.
+
+==================================================
+B5 — CANONICAL BILLING RESOLVER
+==================================================
+
+Buat satu resolver backend yang digunakan customer dan admin.
+
+Output minimum:
+
+{
+  invoiceStatus,
+  paymentStatus,
+  billingStatus,
+  invoiceId,
+  totalAmount,
+  paidAmount,
+  remainingBalance,
+  proofSubmitted,
+  verificationStatus,
+  paymentDestinationAvailable,
+  filesUnlocked
+}
+
+invoiceStatus:
+
+- not_created
+- issued
+- partially_paid
+- paid
+- void
+
+paymentStatus:
+
+- not_submitted
+- submitted
+- under_review
+- verified
+- rejected
+
+billingStatus:
+
+- billing_pending
+- awaiting_payment
+- payment_under_review
+- paid
+
+Rules:
+
+- invoice tidak ada → billing_pending;
+- invoice ada + saldo > 0 + proof belum dikirim → awaiting_payment;
+- proof dikirim → payment_under_review;
+- proof ditolak → awaiting_payment/rejected state;
+- verified sebagian → partially_paid;
+- verified penuh → paid;
+- frontend tidak menentukan billing state hanya dari remainingBalance.
+
+==================================================
+B6 — FIX BACKEND REMAINING BALANCE
+==================================================
+
+Audit ai_payment_schedule dan invoice source.
+
+Pastikan backend membedakan:
+
+- unpaid;
+- proof submitted;
+- under review;
+- verified;
+- rejected;
+- partially paid.
+
+Jangan menghitung payment-under-review sebagai “customer belum melakukan
+apa-apa”.
+
+Outstanding finansial boleh tetap > 0 sampai verified, tetapi CTA harus berasal
+dari billingStatus canonical.
+
+==================================================
+B7 — CUSTOMER RESULT PAGE
+==================================================
+
+Customer UI harus mengikuti backend view model.
+
+Rendering:
+
+- production active → Sedang Diproduksi;
+- production failed → Proses Produksi Gagal;
+- production complete tetapi deliverable belum ada → File Sedang Dipersiapkan;
+- deliverable ada tetapi invoice belum ada → Tagihan Sedang Dipersiapkan;
+- invoice valid dan belum submit → Menunggu Pelunasan;
+- proof submitted → Pembayaran Sedang Diverifikasi;
+- partial payment → Menunggu Sisa Pelunasan;
+- paid → File Terbuka;
+- no deliverable → jangan tampilkan file final palsu.
+
+Hapus klaim statis:
+
+- PNG HD;
+- SVG;
+- PSD;
+- Brand Guideline;
+- Editable Source;
+
+kecuali file tersebut benar-benar ada di deliverable API.
+
+==================================================
+B8 — ADMIN PAYMENT VISIBILITY
+==================================================
+
+Pastikan Admin Panel menampilkan:
+
+- invoice;
+- total;
+- remaining balance;
+- payment schedule;
+- payment proof;
+- proof URL;
+- submitted timestamp;
+- verification status;
+- approve;
+- reject;
+- rejection reason;
+- project/order/customer linkage.
+
+Admin dan customer harus membaca source of truth yang sama.
+
+Jika payment belum ada, tampilkan alasan eksplisit:
+
+- invoice belum dibuat;
+- proof belum disubmit;
+- proof sedang direview;
+- proof ditolak;
+- payment terverifikasi.
+
+Jangan tampilkan panel kosong.
+
+==================================================
+B9 — FILE UNLOCK RULE
+==================================================
+
+File hanya boleh terbuka jika:
+
+- deliverable nyata tersedia;
+- invoice valid;
+- required payment terverifikasi penuh;
+- filesUnlocked/access grant aktif;
+- tenant/project/customer relation valid.
+
+Partial payment tidak boleh membuka semua file kecuali payment terms memang
+mendefinisikan staged delivery secara eksplisit.
+
+==================================================
+B10 — BROKEN ORDER RECOVERY
+==================================================
+
+Buat recovery service:
+
+scanBrokenCreativeOrder()
+repairBrokenCreativeOrder()
+
+Detect:
+
+- completed tanpa workflow;
+- completed tanpa jobs;
+- completed tanpa artifact;
+- artifact tanpa storage;
+- deliverable tanpa artifact;
+- awaiting_payment tanpa invoice;
+- invoice tanpa schedule;
+- proof submitted tetapi status stale;
+- paid tetapi file locked;
+- unlocked tanpa verified payment.
+
+Requirements:
+
+- dry-run default;
+- tenant-scoped;
+- idempotent;
+- audit logged;
+- no destructive delete;
+- before/after report;
+- explicit skipped reason.
+
+Jangan menjalankan apply mode di production.
+
+==================================================
+B11 — REQUIRED TESTS
+==================================================
+
+Tambahkan minimal:
+
+1. Interior Design starts at first stage.
+2. Workflow instance created.
+3. First job queued.
+4. Empty workflow fails.
+5. Missing plugin fails.
+6. Failed job blocks advancement.
+7. Null output rejected.
+8. Empty output rejected.
+9. Completed production requires artifact.
+10. Artifact requires storage reference.
+11. Deliverable required before final-ready.
+12. Invoice missing returns billing_pending.
+13. Invoice + outstanding returns awaiting_payment.
+14. Proof submitted returns payment_under_review.
+15. Under-review payment does not unlock files.
+16. Partial verified payment does not fully unlock.
+17. Full verified payment unlocks files.
+18. Customer and admin use same billing resolver.
+19. Payment proof visible in admin route.
+20. Cross-tenant invoice denied.
+21. Cross-tenant artifact denied.
+22. Body tenantId injection denied/ignored.
+23. Duplicate workflow enqueue idempotent.
+24. Duplicate invoice generation idempotent.
+25. Broken-order scan idempotent.
+26. Broken-order repair idempotent.
+27. Static file labels absent without deliverables.
+28. Production failure rendered as failure.
+29. Valid Interior Design flow passes.
+30. Order completes only after delivery/payment requirements.
+
+Tests harus melalui service/route nyata sebanyak mungkin.
+
+==================================================
+B12 — REAL E2E ACCEPTANCE
+==================================================
+
+Gunakan environment test/non-production.
+
+Lakukan:
+
+1. Customer membuat order Interior Design.
+2. Brief tersimpan.
+3. Workflow dimulai pada stage pertama.
+4. Admin melihat order.
+5. Job produksi berjalan.
+6. Artifact nyata tersimpan.
+7. Deliverable nyata tersedia.
+8. Invoice dibuat.
+9. Customer melihat amount due.
+10. Customer submit proof.
+11. Admin melihat proof.
+12. Admin verify payment.
+13. Customer status berubah paid.
+14. File terbuka.
+15. Order selesai.
+
+Lampirkan:
+
+- IDs;
+- timestamps;
+- API responses;
+- database evidence;
+- screenshot customer;
+- screenshot admin;
+- artifact/storage evidence;
+- invoice/payment evidence.
+
+Jangan menggunakan mock-only E2E sebagai bukti acceptance.
+
+==================================================
+B13 — FULL VERIFICATION
+==================================================
+
+Jalankan:
+
+- targeted Interior Design tests;
+- workflow tests;
+- artifact tests;
+- billing tests;
+- payment tests;
+- customer portal tests;
+- admin portal tests;
+- full api-server suite;
+- full customer-portal suite;
+- full bizportal suite;
+- repository typecheck;
+- production builds;
+- git diff --check.
+
+Laporkan angka aktual.
+
+==================================================
+B14 — COMMIT AND PUSH
+==================================================
+
+Commit:
+
+git add <Interior Design files only>
+git commit -m "fix(creative-orders): enforce interior design production and billing lifecycle"
+
+Push:
+
+git push -u origin fix/interior-design-order-flow
+
+Jangan merge ke main.
+
+==================================================
+WORKSTREAM B — FINAL REPORT
+==================================================
+
+A. Branch
+B. Base commit
+C. Original bug reproduction
+D. Exact root causes
+E. Files changed
+F. Tables and relationships
+G. Workflow initialization
+H. Job execution
+I. Production completion guard
+J. Artifact persistence
+K. Deliverable publishing
+L. Canonical billing resolver
+M. Payment schedule
+N. Customer result page
+O. Admin payment visibility
+P. File unlock logic
+Q. Tenant isolation
+R. Broken-order recovery
+S. Targeted tests
+T. Full tests
+U. Typecheck
+V. Builds
+W. Real E2E evidence
+X. Remaining risks
+Y. Commit
+Z. Push verification
+AA. Final verdict
+
+Allowed verdict:
+
+PASS — END-TO-END VERIFIED
+REVISION REQUIRED
+BLOCKED — ENVIRONMENT
+BLOCKED — PROVIDER
+BLOCKED — DATA
+BLOCKED — PUSH AUTH
+BLOCKED — BRANCH SAFETY
+
+Do not use PASS unless:
+
+- original bug is reproduced;
+- exact backend root cause is fixed;
+- workflow starts correctly;
+- deliverable is real;
+- invoice/payment state is canonical;
+- admin sees submitted proof;
+- full payment unlocks files;
+- full suites pass;
+- builds pass;
+- real non-production E2E is completed.
