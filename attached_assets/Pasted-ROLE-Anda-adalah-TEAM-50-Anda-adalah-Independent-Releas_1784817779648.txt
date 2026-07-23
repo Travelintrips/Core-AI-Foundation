@@ -1,0 +1,713 @@
+ROLE
+
+Anda adalah TEAM 50.
+
+Anda adalah Independent Release Gate.
+
+Anda BUKAN bagian dari Team 39.
+
+Anda tidak boleh mengasumsikan hasil Team 39 benar.
+
+Anda harus memverifikasi seluruh sistem secara independen.
+
+Anda adalah otoritas terakhir sebelum sistem dinyatakan layak masuk Production.
+
+==================================================
+CURRENT STATUS
+==================================================
+
+Team 41
+Architecture Contract
+COMPLETED
+
+Team 42
+Billing
+COMPLETED
+
+Team 43
+Workflow
+COMPLETED
+
+Team 44
+Artifact
+COMPLETED
+
+Team 45
+Customer Portal
+COMPLETED
+
+Team 46
+Admin Portal
+COMPLETED
+
+Team 39
+Integration
+COMPLETED
+
+Integration Verdict:
+
+PASS WITH DOCUMENTED PRE-EXISTING RISKS
+
+Regression:
+
+5346 / 5346 PASS
+
+Typecheck:
+
+No new errors
+
+Build:
+
+PASS
+
+==================================================
+YOUR RESPONSIBILITY
+==================================================
+
+Jangan mempercayai hasil Team 39 tanpa verifikasi.
+
+Lakukan audit independen.
+
+Cari bug yang masih lolos.
+
+Cari race condition.
+
+Cari workflow yang masih bisa dilewati.
+
+Cari payment yang salah.
+
+Cari download yang salah.
+
+Cari lifecycle yang salah.
+
+Cari security issue.
+
+Cari tenant isolation issue.
+
+==================================================
+PHASE 1
+RELEASE CONTRACT REVIEW
+==================================================
+
+Baca:
+
+TEAM39_INTEGRATION_REPORT.md
+
+TEAM41_ARCHITECTURE_AUDIT_REPORT.md
+
+Pastikan:
+
+Lifecycle
+
+Source of Truth
+
+Completion Rules
+
+Ownership
+
+sesuai implementasi.
+
+==================================================
+PHASE 2
+FULL END TO END UAT
+==================================================
+
+Lakukan simulasi nyata.
+
+Flow:
+
+Customer
+
+↓
+
+Choose Service
+
+↓
+
+Brief
+
+↓
+
+Quotation
+
+↓
+
+Approval
+
+↓
+
+Payment
+
+↓
+
+Workflow
+
+↓
+
+AI Jobs
+
+↓
+
+Review
+
+↓
+
+Revision
+
+↓
+
+Deliverable Ready
+
+↓
+
+Unlock
+
+↓
+
+Download
+
+↓
+
+Order Completed
+
+Ulangi untuk seluruh kategori Creative AI.
+
+==================================================
+PHASE 3
+SERVICE COVERAGE
+==================================================
+
+Minimal uji seluruh service utama.
+
+Contoh:
+
+Interior Design
+
+Fashion Design
+
+Logo
+
+Brand Identity
+
+Packaging
+
+Presentation
+
+Pitch Deck
+
+Social Media
+
+Copywriting
+
+Architecture
+
+Poster
+
+Banner
+
+Image Generation
+
+Document Generation
+
+Semua service yang tersedia pada registry.
+
+Jangan hanya menguji satu service.
+
+==================================================
+PHASE 4
+PAYMENT UAT
+==================================================
+
+Uji:
+
+Full payment
+
+Partial payment
+
+Installment
+
+Failed payment
+
+Expired payment
+
+Retry payment
+
+Manual verification
+
+Payment proof
+
+Unlock policy
+
+Pastikan:
+
+commercial_completed
+
+benar.
+
+==================================================
+PHASE 5
+WORKFLOW UAT
+==================================================
+
+Uji:
+
+Workflow start
+
+Queue
+
+Workers
+
+Retry
+
+Timeout
+
+Cancellation
+
+Failure
+
+Recovery
+
+Renderer
+
+AI execution
+
+Pastikan:
+
+workflow_completed
+
+tidak pernah salah.
+
+==================================================
+PHASE 6
+ARTIFACT UAT
+==================================================
+
+Pastikan:
+
+Draft
+
+Preview
+
+Final
+
+ZIP
+
+Presentation
+
+Document
+
+Download
+
+Storage
+
+Artifact validation
+
+berjalan.
+
+==================================================
+PHASE 7
+CUSTOMER PORTAL UAT
+==================================================
+
+Audit:
+
+Dashboard
+
+Timeline
+
+Progress
+
+Status
+
+Download
+
+Review
+
+Notification
+
+History
+
+Pastikan:
+
+tidak ada status salah.
+
+==================================================
+PHASE 8
+ADMIN PORTAL UAT
+==================================================
+
+Audit:
+
+Dashboard
+
+Workflow
+
+Queue
+
+Workers
+
+Payment
+
+Analytics
+
+Audit Log
+
+Artifacts
+
+Deliverables
+
+Pastikan:
+
+admin melihat kondisi nyata.
+
+==================================================
+PHASE 9
+NEGATIVE TEST
+==================================================
+
+Uji:
+
+Tenant A akses Tenant B
+
+Expired token
+
+Invalid token
+
+Broken artifact
+
+Broken renderer
+
+Missing payment
+
+Missing workflow
+
+Failed AI
+
+Zero-byte artifact
+
+Placeholder artifact
+
+Missing storage
+
+Missing download
+
+==================================================
+PHASE 10
+SECURITY
+==================================================
+
+Audit:
+
+Signed URL
+
+Download token
+
+Admin override
+
+Unlock
+
+Payment verification
+
+Tenant isolation
+
+Audit log
+
+Permission
+
+RBAC
+
+==================================================
+PHASE 11
+PERFORMANCE
+==================================================
+
+Audit:
+
+Multiple users
+
+Parallel workflow
+
+Parallel AI jobs
+
+Multiple downloads
+
+Large artifacts
+
+Queue stress
+
+Worker stress
+
+==================================================
+PHASE 12
+REGRESSION
+==================================================
+
+Jalankan seluruh regression.
+
+Pastikan:
+
+tidak ada regression baru.
+
+==================================================
+PHASE 13
+TYPECHECK
+==================================================
+
+Pastikan:
+
+workspace tetap clean.
+
+==================================================
+PHASE 14
+BUILD
+==================================================
+
+Pastikan:
+
+seluruh build sukses.
+
+==================================================
+PHASE 15
+DEPLOYMENT READINESS
+==================================================
+
+Verifikasi:
+
+Migration
+
+Seed
+
+ENV
+
+Storage
+
+Secret
+
+Cron
+
+Queue
+
+Worker
+
+Feature Flag
+
+Tidak boleh ada dependency deployment yang belum terdokumentasi.
+
+==================================================
+PHASE 16
+RELEASE BLOCKER REVIEW
+==================================================
+
+Kelompokkan:
+
+CRITICAL
+
+HIGH
+
+MEDIUM
+
+LOW
+
+Jika ada CRITICAL:
+
+STOP RELEASE.
+
+==================================================
+PHASE 17
+SMOKE TEST PLAN
+==================================================
+
+Siapkan smoke test production.
+
+Minimal:
+
+Login
+
+Create Project
+
+AI Processing
+
+Payment
+
+Workflow
+
+Artifact
+
+Download
+
+Completion
+
+==================================================
+PHASE 18
+PRODUCTION READINESS
+==================================================
+
+Jawab secara eksplisit:
+
+Apakah sistem siap Production?
+
+Jika tidak:
+
+jelaskan alasan.
+
+==================================================
+PHASE 19
+DOCUMENTATION
+==================================================
+
+Buat:
+
+TEAM50_RELEASE_GATE_REPORT.md
+
+Isi:
+
+Executive Summary
+
+Verified Teams
+
+UAT Coverage
+
+Service Coverage
+
+Negative Tests
+
+Security
+
+Performance
+
+Regression
+
+Typecheck
+
+Build
+
+Deployment Readiness
+
+Release Blockers
+
+Smoke Test
+
+Go Live Recommendation
+
+==================================================
+PHASE 20
+FINAL VERDICT
+==================================================
+
+Gunakan salah satu:
+
+PASS — READY FOR PRODUCTION
+
+PASS — READY FOR PRODUCTION WITH LOW-RISK OBSERVATIONS
+
+BLOCKED — CRITICAL RELEASE ISSUE
+
+BLOCKED — HIGH RISK
+
+BLOCKED — UAT FAILED
+
+BLOCKED — SECURITY ISSUE
+
+==================================================
+IMPORTANT RULES
+==================================================
+
+Jangan membuat feature baru.
+
+Jangan memperbaiki bug.
+
+Jangan merge branch.
+
+Jangan mengubah arsitektur.
+
+Jangan mengubah lifecycle.
+
+Jangan mengubah billing.
+
+Jangan mengubah workflow.
+
+Jangan mengubah artifact.
+
+Jangan mengubah Customer Portal.
+
+Jangan mengubah Admin Portal.
+
+Jika menemukan bug:
+
+- dokumentasikan;
+- klasifikasikan severity;
+- jelaskan root cause;
+- jelaskan owner team;
+- rekomendasikan remediation;
+
+tetapi jangan memperbaikinya.
+
+==================================================
+FINAL REPORT
+==================================================
+
+A.
+Release Candidate Reviewed
+
+B.
+Verified Teams
+
+C.
+End-to-End UAT Results
+
+D.
+Service Coverage Matrix
+
+E.
+Workflow Validation
+
+F.
+Billing Validation
+
+G.
+Artifact Validation
+
+H.
+Customer Portal Validation
+
+I.
+Admin Portal Validation
+
+J.
+Security Validation
+
+K.
+Negative Test Results
+
+L.
+Performance Results
+
+M.
+Regression Results
+
+N.
+Typecheck
+
+O.
+Build
+
+P.
+Deployment Readiness
+
+Q.
+Release Blockers
+
+R.
+Go-Live Recommendation
+
+S.
+Remaining Risks
+
+T.
+Final Verdict
+
+Jika semua lulus, berikan rekomendasi eksplisit:
+
+"READY FOR PRODUCTION"
+
+Jika tidak, jelaskan seluruh blocker secara rinci beserta owner team yang harus melakukan perbaikan.
