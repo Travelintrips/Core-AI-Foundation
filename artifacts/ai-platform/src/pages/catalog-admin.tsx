@@ -3,11 +3,9 @@ import {
   useListServiceCategories,
   useCreateServiceCategory,
   useUpdateServiceCategory,
-  useDeleteServiceCategory,
   useListServices,
   useCreateService,
   useUpdateService,
-  useDeleteService,
   useListServiceRequests,
   useUpdateServiceRequestStatus,
   useGetCatalogAnalytics,
@@ -84,7 +82,10 @@ function CategoriesTab() {
   const [editing, setEditing] = useState<AiServiceCategory | null>(null);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [form, setForm] = useState({ code: "", name: "", description: "", icon: "", displayOrder: 0 });
+  const [form, setForm] = useState({
+    code: "", name: "", description: "", icon: "", displayOrder: 0,
+    visibility: "internal", commercialStatus: "internal_only", isFeatured: false,
+  });
 
   const filtered = categories.filter((c) => {
     const q = search.toLowerCase();
@@ -95,28 +96,42 @@ function CategoriesTab() {
 
   const createMutation = useCreateServiceCategory({ mutation: { onSuccess: () => { invalidate(); setOpen(false); } } });
   const updateMutation = useUpdateServiceCategory({ mutation: { onSuccess: () => { invalidate(); setOpen(false); } } });
-  const deleteMutation = useDeleteServiceCategory({
-    mutation: {
-      onSuccess: () => invalidate(),
-      onError: (err: unknown) => toast({ title: "Delete failed", description: err instanceof Error ? err.message : "Category may have services attached.", variant: "destructive" }),
-    },
-  });
 
   function openCreate() {
     setEditing(null);
-    setForm({ code: "", name: "", description: "", icon: "", displayOrder: categories.length });
+    setForm({
+      code: "", name: "", description: "", icon: "", displayOrder: categories.length,
+      visibility: "internal", commercialStatus: "internal_only", isFeatured: false,
+    });
     setOpen(true);
   }
   function openEdit(c: AiServiceCategory) {
     setEditing(c);
-    setForm({ code: c.code, name: c.name, description: c.description ?? "", icon: c.icon ?? "", displayOrder: c.displayOrder });
+    setForm({
+      code: c.code, name: c.name, description: c.description ?? "", icon: c.icon ?? "",
+      displayOrder: c.displayOrder, visibility: c.visibility ?? "internal",
+      commercialStatus: c.commercialStatus ?? "internal_only", isFeatured: c.isFeatured ?? false,
+    });
     setOpen(true);
   }
   function save() {
     if (editing) {
-      updateMutation.mutate({ id: editing.id, data: { code: editing.code, name: form.name, description: form.description, icon: form.icon, displayOrder: form.displayOrder } });
+      updateMutation.mutate({
+        id: editing.id,
+        data: {
+          code: editing.code, name: form.name, description: form.description, icon: form.icon,
+          displayOrder: form.displayOrder, visibility: form.visibility,
+          commercialStatus: form.commercialStatus, isFeatured: form.isFeatured,
+        },
+      });
     } else {
-      createMutation.mutate({ data: { code: form.code || form.name.toLowerCase().replace(/\s+/g, "-"), name: form.name, description: form.description, icon: form.icon, displayOrder: form.displayOrder } });
+      createMutation.mutate({
+        data: {
+          code: form.code || form.name.toLowerCase().replace(/\s+/g, "-"), name: form.name,
+          description: form.description, icon: form.icon, displayOrder: form.displayOrder,
+          visibility: form.visibility, commercialStatus: form.commercialStatus, isFeatured: form.isFeatured,
+        },
+      });
     }
   }
 
@@ -149,20 +164,26 @@ function CategoriesTab() {
             <TableHead>Name</TableHead>
             <TableHead>Code</TableHead>
             <TableHead>Order</TableHead>
+            <TableHead>Public</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>}
-          {!isLoading && filtered.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">Tidak ada hasil.</TableCell></TableRow>}
+           {isLoading && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>}
+           {!isLoading && filtered.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Tidak ada hasil.</TableCell></TableRow>}
           {filtered.map((c) => (
             <TableRow key={c.id} data-testid={`row-category-${c.code}`}>
               <TableCell className="font-medium">{c.name}</TableCell>
               <TableCell className="font-mono text-xs text-muted-foreground">{c.code}</TableCell>
               <TableCell>{c.displayOrder}</TableCell>
+              <TableCell>
+                <Badge variant={c.visibility === "public" && c.commercialStatus === "commercial_ready" ? "default" : "outline"} className="text-xs">
+                  {c.visibility === "public" ? "Public" : "Internal"}
+                </Badge>
+              </TableCell>
               <TableCell className="text-right space-x-1">
                 <Button size="icon" variant="ghost" className="size-7" onClick={() => openEdit(c)} data-testid={`button-edit-category-${c.code}`}><Pencil className="size-3.5" /></Button>
-                <Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => deleteMutation.mutate({ id: c.id })} data-testid={`button-delete-category-${c.code}`}><Trash2 className="size-3.5" /></Button>
+                 <span className="text-[11px] text-muted-foreground">Archive via status</span>
               </TableCell>
             </TableRow>
           ))}
@@ -178,6 +199,27 @@ function CategoriesTab() {
             <Input placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} data-testid="input-category-description" />
             <Input placeholder="Icon (lucide name)" value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })} data-testid="input-category-icon" />
             <Input type="number" placeholder="Display order" value={form.displayOrder} onChange={(e) => setForm({ ...form, displayOrder: Number(e.target.value) })} data-testid="input-category-order" />
+            <Select value={form.visibility} onValueChange={(v) => setForm({ ...form, visibility: v })}>
+              <SelectTrigger data-testid="select-category-visibility"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="public">Public discovery</SelectItem>
+                <SelectItem value="internal">Internal</SelectItem>
+                <SelectItem value="disabled">Disabled</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={form.commercialStatus} onValueChange={(v) => setForm({ ...form, commercialStatus: v })}>
+              <SelectTrigger data-testid="select-category-commercial-status"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="commercial_ready">Commercial ready</SelectItem>
+                <SelectItem value="internal_only">Internal only</SelectItem>
+                <SelectItem value="beta">Beta</SelectItem>
+                <SelectItem value="disabled">Disabled</SelectItem>
+              </SelectContent>
+            </Select>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input type="checkbox" checked={form.isFeatured} onChange={(e) => setForm({ ...form, isFeatured: e.target.checked })} />
+              Featured category
+            </label>
             <Button className="w-full" onClick={save} disabled={createMutation.isPending || updateMutation.isPending} data-testid="button-save-category">Save</Button>
           </div>
         </DialogContent>
@@ -198,6 +240,8 @@ function ServicesTab() {
     categoryId: 0, serviceCode: "", serviceName: "", shortDescription: "",
     pricingModel: "one_time", startingPrice: "", estimatedDelivery: "", status: "active",
     serviceFlow: "custom_project" as "fixed_price" | "custom_project" | "enterprise",
+    parentCategoryId: null as number | null, aliases: "", displayAsPrimary: false,
+    displayOrder: 0, isFeatured: false,
   });
 
   const filtered = services.filter((s) => {
@@ -210,11 +254,25 @@ function ServicesTab() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListServicesQueryKey() });
   const createMutation = useCreateService({ mutation: { onSuccess: () => { invalidate(); setOpen(false); } } });
   const updateMutation = useUpdateService({ mutation: { onSuccess: () => { invalidate(); setOpen(false); } } });
-  const deleteMutation = useDeleteService({ mutation: { onSuccess: () => invalidate() } });
 
   function openCreate() {
     setEditing(null);
-    setForm({ categoryId: categories[0]?.id ?? 0, serviceCode: "", serviceName: "", shortDescription: "", pricingModel: "one_time", startingPrice: "", estimatedDelivery: "", status: "active", serviceFlow: "custom_project" });
+    setForm({
+      categoryId: categories[0]?.id ?? 0,
+      serviceCode: "",
+      serviceName: "",
+      shortDescription: "",
+      pricingModel: "one_time",
+      startingPrice: "",
+      estimatedDelivery: "",
+      status: "active",
+      serviceFlow: "custom_project",
+      parentCategoryId: null,
+      aliases: "",
+      displayAsPrimary: false,
+      displayOrder: 0,
+      isFeatured: false,
+    });
     setOpen(true);
   }
   function openEdit(s: AiService) {
@@ -224,6 +282,11 @@ function ServicesTab() {
       shortDescription: s.shortDescription ?? "", pricingModel: s.pricingModel, startingPrice: s.startingPrice ?? "",
       estimatedDelivery: s.estimatedDelivery ?? "", status: s.status,
       serviceFlow: (s.serviceFlow ?? "custom_project") as "fixed_price" | "custom_project" | "enterprise",
+      parentCategoryId: s.parentCategoryId ?? null,
+      aliases: (s.aliases ?? []).join(", "),
+      displayAsPrimary: s.displayAsPrimary ?? false,
+      displayOrder: s.displayOrder ?? 0,
+      isFeatured: s.isFeatured ?? false,
     });
     setOpen(true);
   }
@@ -232,6 +295,9 @@ function ServicesTab() {
       categoryId: form.categoryId, serviceCode: form.serviceCode, serviceName: form.serviceName,
       shortDescription: form.shortDescription, pricingModel: form.pricingModel, startingPrice: form.startingPrice || undefined,
       estimatedDelivery: form.estimatedDelivery, status: form.status, serviceFlow: form.serviceFlow,
+      parentCategoryId: form.parentCategoryId,
+      aliases: form.aliases.split(",").map((value) => value.trim()).filter(Boolean),
+      displayAsPrimary: form.displayAsPrimary, displayOrder: form.displayOrder, isFeatured: form.isFeatured,
     };
     if (editing) updateMutation.mutate({ id: editing.id, data });
     else createMutation.mutate({ data });
@@ -277,18 +343,26 @@ function ServicesTab() {
             <TableHead>Name</TableHead>
             <TableHead>Category</TableHead>
             <TableHead>Pricing</TableHead>
+            <TableHead>Discovery</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>}
-          {!isLoading && filtered.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">Tidak ada hasil.</TableCell></TableRow>}
+          {isLoading && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>}
+          {!isLoading && filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Tidak ada hasil.</TableCell></TableRow>}
           {filtered.map((s) => (
             <TableRow key={s.id} data-testid={`row-service-${s.serviceCode}`}>
               <TableCell className="font-medium">{s.serviceName}</TableCell>
               <TableCell className="text-xs text-muted-foreground">{categories.find((c) => c.id === s.categoryId)?.name ?? "—"}</TableCell>
               <TableCell className="text-xs">{s.startingPrice ? `${Number(s.startingPrice).toLocaleString()}` : "—"} · {s.pricingModel}</TableCell>
+              <TableCell>
+                <div className="flex flex-wrap gap-1">
+                  {s.displayAsPrimary && <Badge variant="default" className="text-[10px]">Primary</Badge>}
+                  {s.isFeatured && <Badge variant="secondary" className="text-[10px]">Featured</Badge>}
+                  {s.parentCategoryId && <Badge variant="outline" className="text-[10px]">Canonical</Badge>}
+                </div>
+              </TableCell>
               <TableCell>
                 <Badge variant={s.serviceFlow === "fixed_price" ? "default" : "outline"} className="text-xs capitalize">
                   {s.serviceFlow === "fixed_price" ? "Standard (checkout)" : s.serviceFlow === "enterprise" ? "Enterprise" : "Custom project"}
@@ -297,7 +371,7 @@ function ServicesTab() {
               <TableCell><Badge variant="outline" className="text-xs capitalize">{s.status}</Badge></TableCell>
               <TableCell className="text-right space-x-1">
                 <Button size="icon" variant="ghost" className="size-7" onClick={() => openEdit(s)} data-testid={`button-edit-service-${s.serviceCode}`}><Pencil className="size-3.5" /></Button>
-                <Button size="icon" variant="ghost" className="size-7 text-destructive" onClick={() => deleteMutation.mutate({ id: s.id })} data-testid={`button-delete-service-${s.serviceCode}`}><Trash2 className="size-3.5" /></Button>
+                 <span className="text-[11px] text-muted-foreground">Archive via status</span>
               </TableCell>
             </TableRow>
           ))}
@@ -314,6 +388,18 @@ function ServicesTab() {
                 {categories.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Select
+              value={form.parentCategoryId == null ? "none" : String(form.parentCategoryId)}
+              onValueChange={(v) => setForm({ ...form, parentCategoryId: v === "none" ? null : Number(v) })}
+            >
+              <SelectTrigger data-testid="select-service-parent-category"><SelectValue placeholder="Canonical public category" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No public discovery parent</SelectItem>
+                {categories.filter((c) => c.visibility === "public").map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {!editing && <Input placeholder="Service code" value={form.serviceCode} onChange={(e) => setForm({ ...form, serviceCode: e.target.value })} data-testid="input-service-code" />}
             <Input placeholder="Service name" value={form.serviceName} onChange={(e) => setForm({ ...form, serviceName: e.target.value })} data-testid="input-service-name" />
             <Input placeholder="Short description" value={form.shortDescription} onChange={(e) => setForm({ ...form, shortDescription: e.target.value })} data-testid="input-service-description" />
@@ -328,6 +414,16 @@ function ServicesTab() {
             </Select>
             <Input placeholder="Starting price (USD)" value={form.startingPrice} onChange={(e) => setForm({ ...form, startingPrice: e.target.value })} data-testid="input-service-price" />
             <Input placeholder="Estimated delivery (e.g. 3-5 days)" value={form.estimatedDelivery} onChange={(e) => setForm({ ...form, estimatedDelivery: e.target.value })} data-testid="input-service-delivery" />
+            <Input placeholder="Search aliases (comma separated)" value={form.aliases} onChange={(e) => setForm({ ...form, aliases: e.target.value })} data-testid="input-service-aliases" />
+            <Input type="number" placeholder="Discovery order" value={form.displayOrder} onChange={(e) => setForm({ ...form, displayOrder: Number(e.target.value) })} data-testid="input-service-display-order" />
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input type="checkbox" checked={form.displayAsPrimary} onChange={(e) => setForm({ ...form, displayAsPrimary: e.target.checked })} />
+              Show as primary service
+            </label>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input type="checkbox" checked={form.isFeatured} onChange={(e) => setForm({ ...form, isFeatured: e.target.checked })} />
+              Featured service
+            </label>
             <div>
               <Select value={form.serviceFlow} onValueChange={(v) => setForm({ ...form, serviceFlow: v as typeof form.serviceFlow })}>
                 <SelectTrigger data-testid="select-service-flow"><SelectValue /></SelectTrigger>

@@ -14,6 +14,8 @@ interface CategorySeed {
   icon: string;
   displayOrder: number;
   visibility?: string; // "public" | "internal" | "disabled" — defaults to "internal" in DB
+  commercialStatus?: string; // "commercial_ready" | "internal_only" | "beta" | "disabled"
+  isFeatured?: boolean;
 }
 
 interface ServiceSeed {
@@ -35,27 +37,106 @@ interface ServiceSeed {
   deliverables: string[];
   revisionPolicy: string;
   currency: string;
+  aliases?: string[];
+  displayAsPrimary?: boolean;
+  displayOrder?: number;
 }
 
 export const CATEGORIES: CategorySeed[] = [
-  { code: "creative", name: "Creative AI", description: "Brand identity, design, and content production.", icon: "palette", displayOrder: 1, visibility: "public" },
-  { code: "presentation-document", name: "Presentation & Document AI", description: "Pitch deck, proposal, laporan, dan dokumen bisnis profesional.", icon: "file-text", displayOrder: 2, visibility: "public" },
-  { code: "marketing", name: "Marketing AI", description: "Campaigns, positioning, and growth strategy.", icon: "megaphone", displayOrder: 3 },
-  { code: "sales", name: "Sales AI", description: "Lead qualification, proposals, and pipeline support.", icon: "handshake", displayOrder: 4 },
-  { code: "finance", name: "Finance AI", description: "Financial analysis, forecasting, and reporting.", icon: "line-chart", displayOrder: 5 },
-  { code: "accounting", name: "Accounting AI", description: "Bookkeeping, ledgers, and closing support.", icon: "book-open", displayOrder: 6 },
-  { code: "tax", name: "Tax AI", description: "Indonesian tax compliance and planning.", icon: "receipt", displayOrder: 7 },
-  { code: "hr", name: "HR & Payroll AI", description: "People operations and workforce support.", icon: "users", displayOrder: 8 },
-  { code: "legal", name: "Legal AI", description: "Contracts, agreements, and due diligence.", icon: "scale", displayOrder: 9 },
-  { code: "logistics", name: "Logistics AI", description: "Freight, shipment, and vendor coordination.", icon: "truck", displayOrder: 10 },
-  { code: "customs", name: "Customs & PPJK AI", description: "Import/export compliance and classification.", icon: "ship", displayOrder: 11 },
-  { code: "procurement", name: "Procurement AI", description: "Sourcing and purchasing support.", icon: "shopping-cart", displayOrder: 12 },
-  { code: "trading", name: "Trading AI", description: "Market analysis and trading support.", icon: "trending-up", displayOrder: 13 },
-  { code: "data-analytics", name: "Data Analytics AI", description: "Dashboards, insights, and reporting.", icon: "bar-chart", displayOrder: 14 },
-  { code: "executive", name: "Executive AI", description: "Strategic decision support for leadership.", icon: "briefcase", displayOrder: 15 },
-  { code: "customer-service", name: "Customer Service AI", description: "Support automation and client communication.", icon: "headset", displayOrder: 16 },
-  { code: "graphic-design", name: "Graphic Design AI", description: "Professional print and digital design: logos, cards, flyers, banners, brochures, social kits, and more — AI-generated, brand-consistent, print-ready.", icon: "palette", displayOrder: 17, visibility: "public" },
+  { code: "brand-identity", name: "Brand & Identity", description: "Bangun fondasi brand: logo, positioning, strategi, dan sistem identitas visual.", icon: "sparkles", displayOrder: 1, visibility: "public", commercialStatus: "commercial_ready", isFeatured: true },
+  { code: "content-marketing", name: "Content & Marketing", description: "Copy, konten sosial, kampanye, dan materi edukasi yang siap dipublikasikan.", icon: "megaphone", displayOrder: 2, visibility: "public", commercialStatus: "commercial_ready", isFeatured: true },
+  { code: "ai-visual-design", name: "AI Visual Design", description: "Visual AI untuk kampanye, sosial media, poster, banner, brosur, dan ilustrasi.", icon: "palette", displayOrder: 3, visibility: "public", commercialStatus: "commercial_ready", isFeatured: true },
+  { code: "presentation-documents", name: "Presentation & Business Documents", description: "Pitch deck, company profile, proposal, laporan, dan dokumen bisnis profesional.", icon: "file-text", displayOrder: 4, visibility: "public", commercialStatus: "commercial_ready", isFeatured: true },
+  { code: "product-commercial", name: "Product & Commercial Design", description: "Katalog produk, product sheet, packaging, dan aset komersial yang konsisten.", icon: "package", displayOrder: 5, visibility: "public", commercialStatus: "commercial_ready", isFeatured: true },
+  { code: "specialized-design", name: "Specialized Design", description: "Konsep khusus untuk fashion dan interior dengan arahan visual yang lebih spesifik.", icon: "layers", displayOrder: 6, visibility: "public", commercialStatus: "commercial_ready", isFeatured: true },
+  // Legacy departments remain in the database for existing orders and internal
+  // operations, but are no longer public discovery categories.
+  { code: "creative", name: "Creative AI (Legacy)", description: "Legacy category retained for historical compatibility.", icon: "palette", displayOrder: 90, visibility: "internal", commercialStatus: "internal_only" },
+  { code: "presentation-document", name: "Presentation & Document AI (Legacy)", description: "Legacy category retained for historical compatibility.", icon: "file-text", displayOrder: 91, visibility: "internal", commercialStatus: "internal_only" },
+  { code: "marketing", name: "Marketing AI", description: "Legacy department retained for internal operations.", icon: "megaphone", displayOrder: 93, visibility: "internal", commercialStatus: "internal_only", isFeatured: false },
+  { code: "sales", name: "Sales AI", description: "Legacy department retained for internal operations.", icon: "handshake", displayOrder: 94, visibility: "internal", commercialStatus: "internal_only", isFeatured: false },
+  { code: "finance", name: "Finance AI", description: "Legacy department retained for internal operations.", icon: "line-chart", displayOrder: 95, visibility: "internal", commercialStatus: "internal_only", isFeatured: false },
+  { code: "accounting", name: "Accounting AI", description: "Legacy department retained for internal operations.", icon: "book-open", displayOrder: 96, visibility: "internal", commercialStatus: "internal_only", isFeatured: false },
+  { code: "tax", name: "Tax AI", description: "Legacy department retained for internal operations.", icon: "receipt", displayOrder: 97, visibility: "internal", commercialStatus: "internal_only", isFeatured: false },
+  { code: "hr", name: "HR & Payroll AI", description: "Legacy department retained for internal operations.", icon: "users", displayOrder: 98, visibility: "internal", commercialStatus: "internal_only", isFeatured: false },
+  { code: "legal", name: "Legal AI", description: "Legacy department retained for internal operations.", icon: "scale", displayOrder: 99, visibility: "internal", commercialStatus: "internal_only", isFeatured: false },
+  { code: "logistics", name: "Logistics AI", description: "Legacy department retained for internal operations.", icon: "truck", displayOrder: 100, visibility: "internal", commercialStatus: "internal_only", isFeatured: false },
+  { code: "customs", name: "Customs & PPJK AI", description: "Legacy department retained for internal operations.", icon: "ship", displayOrder: 101, visibility: "internal", commercialStatus: "internal_only", isFeatured: false },
+  { code: "procurement", name: "Procurement AI", description: "Legacy department retained for internal operations.", icon: "shopping-cart", displayOrder: 102, visibility: "internal", commercialStatus: "internal_only", isFeatured: false },
+  { code: "trading", name: "Trading AI", description: "Legacy department retained for internal operations.", icon: "trending-up", displayOrder: 103, visibility: "internal", commercialStatus: "internal_only", isFeatured: false },
+  { code: "data-analytics", name: "Data Analytics AI", description: "Legacy department retained for internal operations.", icon: "bar-chart", displayOrder: 104, visibility: "internal", commercialStatus: "internal_only", isFeatured: false },
+  { code: "executive", name: "Executive AI", description: "Legacy department retained for internal operations.", icon: "briefcase", displayOrder: 105, visibility: "internal", commercialStatus: "internal_only", isFeatured: false },
+  { code: "customer-service", name: "Customer Service AI", description: "Legacy department retained for internal operations.", icon: "headset", displayOrder: 106, visibility: "internal", commercialStatus: "internal_only", isFeatured: false },
+  { code: "graphic-design", name: "Graphic Design AI (Legacy)", description: "Legacy category retained for historical compatibility.", icon: "palette", displayOrder: 92, visibility: "internal", commercialStatus: "internal_only" },
 ];
+
+const CANONICAL_SERVICE_PARENT: Record<string, string> = {
+  "logo-design": "brand-identity",
+  "GD-LOGO": "brand-identity",
+  "brand-identity": "brand-identity",
+  "company-profile": "presentation-documents",
+  "brand-strategy": "brand-identity",
+  "copywriting": "content-marketing",
+  "social-media-design": "content-marketing",
+  ebook: "content-marketing",
+  "image-generation": "ai-visual-design",
+  "poster-banner": "ai-visual-design",
+  "GD-FLYER": "ai-visual-design",
+  "GD-POSTER": "ai-visual-design",
+  "GD-BANNER": "ai-visual-design",
+  "GD-BROCHURE": "ai-visual-design",
+  "GD-SOCIAL": "ai-visual-design",
+  "GD-CERT": "ai-visual-design",
+  "GD-BCARD": "ai-visual-design",
+  "GD-LTRHEAD": "ai-visual-design",
+  "GD-STATIONERY": "ai-visual-design",
+  "pitch-deck": "presentation-documents",
+  "pd-pitch-deck": "presentation-documents",
+  company_profile: "presentation-documents",
+  "pd-company-profile-doc": "presentation-documents",
+  proposal: "presentation-documents",
+  "pd-business-proposal": "presentation-documents",
+  whitepaper: "presentation-documents",
+  "pd-annual-report": "presentation-documents",
+  "pd-executive-summary": "presentation-documents",
+  "pd-meeting-deck": "presentation-documents",
+  "pd-training-material": "presentation-documents",
+  "annual-report": "presentation-documents",
+  "case-study": "presentation-documents",
+  "product-catalog": "product-commercial",
+  "pd-product-catalog": "product-commercial",
+  "packaging-design": "product-commercial",
+  "fashion-brand-brief": "specialized-design",
+  "interior-concept-design": "specialized-design",
+  "creative-consultation": "brand-identity",
+};
+
+const PRIMARY_SERVICE_CODES = new Set([
+  "logo-design", "brand-identity", "brand-strategy", "copywriting",
+  "social-media-design", "image-generation", "pitch-deck", "company_profile",
+  "proposal", "product-catalog", "fashion-brand-brief", "interior-concept-design",
+]);
+
+const SERVICE_ALIASES: Record<string, string[]> = {
+  "logo-design": ["logo", "logo ai", "logo design"],
+  "brand-identity": ["identitas brand", "brand identity", "visual identity"],
+  "brand-strategy": ["strategi brand", "brand positioning", "naming"],
+  copywriting: ["copy", "caption", "landing page copy", "script", "blog"],
+  "social-media-design": ["konten media sosial", "social media content", "social media visual"],
+  "image-generation": ["pembuatan gambar ai", "ilustrasi", "ai visual"],
+  "poster-banner": ["poster", "banner", "brosur", "flyer"],
+  "pitch-deck": ["pitch deck", "business presentation", "sales presentation"],
+  company_profile: ["company profile"],
+  proposal: ["proposal bisnis"],
+  "product-catalog": ["katalog produk", "katalog layanan", "product sheet"],
+  "fashion-brand-brief": ["fashion design"],
+  "interior-concept-design": ["interior design"],
+  "creative-consultation": ["konsultasi", "bantu saya memilih"],
+  ebook: ["ebook", "e-book", "panduan edukasi"],
+  whitepaper: ["white paper"],
+  "annual-report": ["annual report", "laporan tahunan"],
+  "case-study": ["case study", "studi kasus"],
+};
 
 // Category-level disclaimers shown next to any service/quotation in that
 // category — AI output is advisory and needs human/authority verification.
@@ -307,6 +388,8 @@ async function upsertCategory(seed: CategorySeed) {
         icon: seed.icon,
         displayOrder: seed.displayOrder,
         ...(seed.visibility !== undefined ? { visibility: seed.visibility } : {}),
+        ...(seed.commercialStatus !== undefined ? { commercialStatus: seed.commercialStatus } : {}),
+        ...(seed.isFeatured !== undefined ? { isFeatured: seed.isFeatured } : {}),
         updatedAt: new Date(),
       })
       .where(eq(aiServiceCategoriesTable.id, existing.id))
@@ -316,12 +399,12 @@ async function upsertCategory(seed: CategorySeed) {
 
   const [created] = await db
     .insert(aiServiceCategoriesTable)
-    .values({ ...seed, status: "active" })
+    .values({ ...seed, status: "active", isFeatured: seed.isFeatured ?? false })
     .returning();
   return created;
 }
 
-async function upsertService(categoryId: number, seed: ServiceSeed) {
+async function upsertService(categoryId: number, parentCategoryId: number | null, seed: ServiceSeed) {
   const [existing] = await db
     .select()
     .from(aiServicesTable)
@@ -330,7 +413,16 @@ async function upsertService(categoryId: number, seed: ServiceSeed) {
   if (existing) {
     const [updated] = await db
       .update(aiServicesTable)
-      .set({ ...seed, categoryId, status: "active", updatedAt: new Date() })
+      .set({
+        ...seed,
+        categoryId,
+        parentCategoryId,
+        aliases: SERVICE_ALIASES[seed.serviceCode] ?? seed.aliases ?? [],
+        displayAsPrimary: PRIMARY_SERVICE_CODES.has(seed.serviceCode),
+        displayOrder: seed.displayOrder ?? (PRIMARY_SERVICE_CODES.has(seed.serviceCode) ? 1 : 10),
+        status: "active",
+        updatedAt: new Date(),
+      })
       .where(eq(aiServicesTable.id, existing.id))
       .returning();
     return updated;
@@ -338,7 +430,15 @@ async function upsertService(categoryId: number, seed: ServiceSeed) {
 
   const [created] = await db
     .insert(aiServicesTable)
-    .values({ ...seed, categoryId, status: "active" })
+    .values({
+      ...seed,
+      categoryId,
+      parentCategoryId,
+      aliases: SERVICE_ALIASES[seed.serviceCode] ?? seed.aliases ?? [],
+      displayAsPrimary: PRIMARY_SERVICE_CODES.has(seed.serviceCode),
+      displayOrder: seed.displayOrder ?? (PRIMARY_SERVICE_CODES.has(seed.serviceCode) ? 1 : 10),
+      status: "active",
+    })
     .returning();
   return created;
 }
@@ -464,7 +564,9 @@ export async function seedServiceCatalog() {
     if (!category) continue;
 
     for (const s of services) {
-      const service = await upsertService(category.id, s);
+      const canonicalParentCode = CANONICAL_SERVICE_PARENT[s.serviceCode];
+      const canonicalParent = canonicalParentCode ? categoryByCode.get(canonicalParentCode) : undefined;
+      const service = await upsertService(category.id, canonicalParent?.id ?? null, s);
       serviceCount += 1;
 
       const oneTime = Number(s.startingPrice);

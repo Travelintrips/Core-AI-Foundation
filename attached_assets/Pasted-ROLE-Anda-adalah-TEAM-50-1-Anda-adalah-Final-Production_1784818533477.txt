@@ -1,0 +1,476 @@
+ROLE
+
+Anda adalah TEAM 50.1.
+
+Anda adalah Final Production Readiness Team.
+
+SEMUA pekerjaan engineering telah selesai.
+
+Jangan membuat feature baru.
+Jangan melakukan refactor.
+Jangan mengubah arsitektur.
+Jangan mengubah lifecycle.
+Jangan mengubah workflow.
+
+Tugas Anda hanya memastikan Release Candidate benar-benar siap dipindahkan ke Production.
+
+Jika menemukan bug coding baru:
+
+- dokumentasikan;
+- tentukan owner team;
+- jangan memperbaiki kecuali bug tersebut bersifat sangat kecil, terisolasi, dan tidak mengubah kontrak arsitektur.
+
+==================================================
+BACKGROUND
+==================================================
+
+Team 39 telah menyelesaikan Integration.
+
+Team 50 telah melakukan Independent Release Gate.
+
+Status:
+
+✓ 5,346 regression tests PASS
+
+✓ Build PASS
+
+✓ Typecheck tidak memiliki error baru
+
+✓ Lifecycle valid
+
+✓ Customer/Admin konsisten
+
+✓ Security valid
+
+Namun masih terdapat beberapa item yang harus diverifikasi sebelum Go Live.
+
+==================================================
+MISSION
+==================================================
+
+Lakukan Operational Readiness Verification.
+
+Fokus hanya pada:
+
+1.
+Production Database
+
+2.
+Migration
+
+3.
+Seed
+
+4.
+ZIP Delivery
+
+5.
+Presentation Rendering
+
+6.
+Deployment Readiness
+
+7.
+Production Smoke Test
+
+==================================================
+PHASE 1
+PRODUCTION DATABASE
+==================================================
+
+Verifikasi bahwa database Production benar-benar memiliki schema yang sesuai dengan Release Candidate.
+
+Periksa:
+
+- seluruh migration sudah dijalankan;
+- tidak ada migration yang gagal;
+- tidak ada schema drift;
+- seluruh kolom additive dari Team 08, Design Studio, dan Team 42–46 tersedia.
+
+Pastikan endpoint berikut tidak lagi menghasilkan HTTP 500:
+
+GET /api/creative-ai/projects
+
+GET /api/ai/design/projects
+
+Jika masih gagal:
+
+STOP RELEASE.
+
+==================================================
+PHASE 2
+MIGRATION AUDIT
+==================================================
+
+Periksa:
+
+migration history
+
+migration order
+
+migration checksum
+
+duplicate migration
+
+failed migration
+
+partial migration
+
+Laporkan seluruh hasil.
+
+==================================================
+PHASE 3
+PUBLIC DATA
+==================================================
+
+Verifikasi bahwa data minimum Production tersedia.
+
+Minimal:
+
+Creative AI Service Catalog
+
+Template Library
+
+Prompt Library
+
+Knowledge Library
+
+Design Categories
+
+Style Library
+
+Brand Library
+
+Jika Production memang menggunakan data nyata, dokumentasikan bahwa seed tidak diperlukan.
+
+Jika Production membutuhkan seed:
+
+pastikan seed berhasil dijalankan.
+
+==================================================
+PHASE 4
+ZIP DELIVERY
+==================================================
+
+Audit:
+
+zipDeliveryService
+
+Pastikan:
+
+nama file benar
+
+extension benar
+
+mime type benar
+
+folder structure benar
+
+download berhasil
+
+ZIP dapat dibuka pada:
+
+Windows
+
+macOS
+
+Linux
+
+Jika mimeType tidak berasal dari schema:
+
+tentukan root cause.
+
+Jika perlu hanya sinkronisasi schema:
+
+lakukan perubahan sekecil mungkin.
+
+Jangan mengubah kontrak API.
+
+==================================================
+PHASE 5
+PRESENTATION ENGINE
+==================================================
+
+Audit:
+
+presentationRenderService
+
+Verifikasi:
+
+PptxGenJS version
+
+type definitions
+
+runtime
+
+render output
+
+Buka file PPTX hasil render.
+
+Pastikan:
+
+Microsoft PowerPoint
+
+LibreOffice (jika didukung)
+
+Google Slides import (jika relevan)
+
+Jika type error hanya technical debt:
+
+dokumentasikan.
+
+Jika runtime gagal:
+
+STOP RELEASE.
+
+==================================================
+PHASE 6
+ENVIRONMENT
+==================================================
+
+Verifikasi:
+
+DATABASE_URL
+
+SUPABASE_URL
+
+SUPABASE_KEY
+
+Storage
+
+Queue
+
+Workers
+
+Secrets
+
+Cron
+
+Signed URL
+
+AI Provider Keys
+
+Payment Keys
+
+Semua environment wajib tersedia.
+
+==================================================
+PHASE 7
+DEPLOYMENT READINESS
+==================================================
+
+Pastikan:
+
+worker aktif
+
+queue aktif
+
+storage aktif
+
+scheduler aktif
+
+cleanup aktif
+
+retry aktif
+
+==================================================
+PHASE 8
+PRODUCTION SMOKE TEST
+==================================================
+
+Lakukan satu alur lengkap.
+
+Customer
+
+↓
+
+Create Project
+
+↓
+
+Brief
+
+↓
+
+AI Processing
+
+↓
+
+Workflow
+
+↓
+
+Payment
+
+↓
+
+Artifact
+
+↓
+
+ZIP Download
+
+↓
+
+Presentation Download
+
+↓
+
+Order Completed
+
+Pastikan:
+
+tidak ada HTTP 500
+
+tidak ada timeout
+
+tidak ada broken download
+
+==================================================
+PHASE 9
+RELEASE CHECKLIST
+==================================================
+
+Checklist:
+
+□ Regression PASS
+
+□ Typecheck PASS
+
+□ Build PASS
+
+□ Production schema valid
+
+□ Migration valid
+
+□ Seed/data valid
+
+□ ZIP valid
+
+□ Presentation valid
+
+□ Customer Portal valid
+
+□ Admin Portal valid
+
+□ Security valid
+
+□ Tenant Isolation valid
+
+□ Queue valid
+
+□ Worker valid
+
+□ Storage valid
+
+□ Secrets valid
+
+□ Smoke Test PASS
+
+==================================================
+PHASE 10
+DOCUMENTATION
+==================================================
+
+Perbarui:
+
+TEAM50_RELEASE_GATE_REPORT.md
+
+Tambahkan section baru:
+
+Operational Readiness
+
+Production Verification
+
+Migration Verification
+
+ZIP Verification
+
+Presentation Verification
+
+Deployment Verification
+
+Smoke Test
+
+Go Live Checklist
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+A.
+Production Database Status
+
+B.
+Migration Status
+
+C.
+Schema Drift
+
+D.
+Public Catalog Status
+
+E.
+ZIP Verification
+
+F.
+Presentation Verification
+
+G.
+Environment Verification
+
+H.
+Deployment Verification
+
+I.
+Smoke Test Result
+
+J.
+Remaining Risks
+
+K.
+Owner Team (jika ada)
+
+L.
+Recommended Action
+
+M.
+Final Go-Live Decision
+
+Gunakan salah satu:
+
+READY FOR PRODUCTION
+
+READY FOR PRODUCTION AFTER ZIP FIX
+
+READY FOR PRODUCTION AFTER MIGRATION CONFIRMATION
+
+BLOCKED — PRODUCTION DATABASE
+
+BLOCKED — MIGRATION FAILURE
+
+BLOCKED — RUNTIME FAILURE
+
+==================================================
+IMPORTANT
+==================================================
+
+Jangan menambah feature.
+
+Jangan refactor.
+
+Jangan mengubah kontrak Team 41.
+
+Jangan mengubah lifecycle.
+
+Jangan mengubah workflow.
+
+Jangan mengubah billing.
+
+Jangan mengubah Customer Portal.
+
+Jangan mengubah Admin Portal.
+
+Hanya lakukan verifikasi operasional dan perbaikan kecil yang benar-benar diperlukan untuk memastikan Release Candidate aman dipublikasikan.

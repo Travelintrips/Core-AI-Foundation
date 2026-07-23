@@ -1,0 +1,85 @@
+{
+  "reportDate": "2026-07-23",
+  "environment": "development",
+  "commit": "5ce0aec",
+  "totalDefects": 3,
+  "totalNotConfigured": 3,
+  "totalPreExisting": 2,
+  "defects": [
+    {
+      "id": "DEF-001",
+      "severity": "MEDIUM",
+      "phase": "X — Concurrency / Idempotency",
+      "scenario": "Two concurrent POSTs to /api/public/customer/submit with identical clientEmail within 16ms",
+      "expected": "Only one project created; second request returns existing project or conflict response",
+      "actual": "Two separate projects created: 9f27053c-8037-474f-9d54-2ebbe023503c and 5ddc4366-2dbe-4ad1-b7f5-f8f95b48b26c, each with distinct reviewToken and dashboardToken",
+      "evidence": "Concurrent curl PIDs both returned HTTP 201 with different projectIds and tokens; timestamps 2026-07-23T15:55:21.594Z and 2026-07-23T15:55:21.614Z (20ms apart)",
+      "rootCauseCandidate": "No deduplication window or idempotency key on /api/public/customer/submit. The handler inserts immediately without checking for a recent pending submission from same email.",
+      "owner": "Team 45",
+      "releaseImpact": "Duplicate projects for the same customer email; potential double billing and confusing customer experience."
+    },
+    {
+      "id": "DEF-002",
+      "severity": "LOW",
+      "phase": "R — Admin Portal",
+      "scenario": "GET /api/internal/auth/me with valid x-admin-api-key header",
+      "expected": "Returns authenticated admin identity (role, id)",
+      "actual": "{\"error\":\"Not authenticated\"}",
+      "evidence": "curl -H 'x-admin-api-key: <valid>' /api/internal/auth/me → {\"error\":\"Not authenticated\"}; same endpoint with no key → 401 (different response)",
+      "rootCauseCandidate": "The /api/internal/auth/me endpoint resolves identity from session cookie (internalAuthService session), not from API key. Admin API key auth and internal user session auth are separate mechanisms.",
+      "owner": "Team 46",
+      "releaseImpact": "Admin UI panels that call /api/internal/auth/me via session may fail if session is not established. API key-authenticated admin flows are unaffected."
+    },
+    {
+      "id": "DEF-004",
+      "severity": "LOW",
+      "phase": "Q — Customer Portal / W — Notifications",
+      "scenario": "GET /api/public/customer/workspace/:token/notifications",
+      "expected": "Notification items contain populated `type` and `tenantId` fields",
+      "actual": "notification.type = undefined, notification.tenantId = undefined for all 3 notification items",
+      "evidence": "Node -e log: items.forEach(n => console.log(n.type, n.tenantId)) printed 'undefined undefined' for all 3 notifications. notification.title was correctly 'E2E Brand Alpha'.",
+      "rootCauseCandidate": "The notification serializer/mapper omits the `type` column from the SELECT or maps it under a different key (e.g., `notificationType`). Public route may intentionally strip tenantId.",
+      "owner": "Team 45",
+      "releaseImpact": "Customer Portal cannot render notification-type icons or filter by notification type. Low visibility impact."
+    }
+  ],
+  "notConfigured": [
+    {
+      "id": "NC-001",
+      "area": "H — Billing / Payment",
+      "detail": "No Midtrans sandbox credentials configured. Payment callback routes return 404. Full payment flow (full/partial/installment/failed/retry) cannot be exercised.",
+      "owner": "Operations / Team 42",
+      "recommendation": "Configure MIDTRANS_SERVER_KEY and MIDTRANS_CLIENT_KEY sandbox values to enable payment flow testing."
+    },
+    {
+      "id": "NC-002",
+      "area": "K — Review / Revision",
+      "detail": "Review workspace endpoints not found: /api/ai/review-workspaces → 404, /api/ai/client-reviews → 404, /api/ai/cp-reviews → 404. reviewToken and reviewUrl are issued at project creation but the admin review management route is missing or mounted at an undiscovered path.",
+      "owner": "Team 44",
+      "recommendation": "Verify review-workspace route mounting in routes/index.ts and document the correct admin review endpoint path."
+    },
+    {
+      "id": "NC-003",
+      "area": "M — ZIP Delivery / N — Presentation",
+      "detail": "Zero completed projects in current E2E run. ZIP delivery, PPTX generation, artifact validation, and file download cannot be tested end-to-end without a project reaching deliverable_ready state.",
+      "owner": "Team 44",
+      "recommendation": "Either seed a completed project with a real artifact, or create a fixture endpoint that bypasses the payment gate for E2E testing only."
+    }
+  ],
+  "preExisting": [
+    {
+      "id": "PE-001",
+      "area": "AA — Typecheck: cargo-finder",
+      "detail": "3 TypeScript errors: (1) AppProps not exported from react@19, (2) two null-vs-number narrowing failures in src/pages/Home.tsx:357. Pre-existing before this E2E run.",
+      "owner": "Team 37",
+      "classification": "PRE-EXISTING technical debt"
+    },
+    {
+      "id": "PE-002",
+      "area": "AA — Typecheck: mockup-sandbox",
+      "detail": "mockup-sandbox typecheck fails. Service is also not running. Pre-existing; not on E2E critical path.",
+      "owner": "Team 37",
+      "classification": "PRE-EXISTING technical debt"
+    }
+  ]
+}

@@ -1,0 +1,920 @@
+ROLE
+
+Anda adalah DEVELOPMENT E2E VERIFICATION TEAM.
+
+Aplikasi BELUM akan di-deploy.
+
+Jangan melakukan deployment.
+Jangan membuka menu Deployments.
+Jangan melakukan publish atau republish.
+Jangan menilai isDeployed sebagai blocker.
+Jangan menggunakan production sebagai dasar verdict.
+
+Tugas Anda adalah menguji seluruh aplikasi pada DEVELOPMENT ENVIRONMENT di workspace Replit sampai benar-benar diketahui apakah semua fungsi berjalan dengan benar.
+
+==================================================
+CURRENT CONTEXT
+==================================================
+
+Engineering, integration, dan release audit sebelumnya telah selesai.
+
+Known state:
+
+- regression tests: 5,346 / 5,346 PASS;
+- working tree clean;
+- development workflows berjalan;
+- database development siap;
+- schema development siap;
+- public catalog berisi 3 kategori dan 27 layanan;
+- project endpoints tidak lagi menghasilkan HTTP 500;
+- ZIP delivery sudah diperbaiki;
+- build berhasil;
+- terdapat technical debt PptxGenJS type namespace, tetapi runtime sebelumnya dinilai aman.
+
+Sekarang jangan mengaudit deployment.
+
+Fokus hanya pada aplikasi DEVELOPMENT.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Buktikan apakah seluruh fungsi aplikasi development benar-benar berjalan end-to-end.
+
+Pengujian harus memeriksa:
+
+1. UI;
+2. API;
+3. database;
+4. lifecycle;
+5. workflow;
+6. job dan worker;
+7. billing;
+8. artifact;
+9. Customer Portal;
+10. Admin Portal;
+11. security;
+12. tenant isolation;
+13. audit log;
+14. file download;
+15. error handling.
+
+Jangan hanya menjalankan unit test.
+
+==================================================
+PHASE 1 — DEVELOPMENT ENVIRONMENT PREFLIGHT
+==================================================
+
+Verifikasi environment development:
+
+- API server running;
+- Customer Portal running;
+- Admin Portal running;
+- database development connected;
+- schema development lengkap;
+- migration development diterapkan;
+- catalog tersedia;
+- queue development tersedia;
+- workers development berjalan;
+- scheduler tersedia jika diperlukan;
+- storage development tersedia;
+- AI provider atau deterministic mock tersedia;
+- payment sandbox atau payment fixture tersedia.
+
+Laporkan setiap item dengan:
+
+PASS
+FAIL
+NOT CONFIGURED
+NOT REQUIRED
+
+Status Replit production deployment tidak termasuk pemeriksaan ini.
+
+==================================================
+PHASE 2 — SAFE TEST DATA
+==================================================
+
+Gunakan tenant dan akun khusus E2E development.
+
+Jangan menggunakan data customer nyata.
+
+Siapkan minimal:
+
+- Tenant E2E A;
+- Tenant E2E B;
+- customer E2E;
+- admin E2E;
+- project E2E;
+- service/package E2E;
+- coupon E2E;
+- payment schedule E2E;
+- worker E2E.
+
+Pastikan test dapat diulang tanpa membuat duplicate data.
+
+Cleanup hanya data yang memiliki penanda E2E.
+
+Jangan menghapus data tenant lain.
+
+==================================================
+PHASE 3 — PUBLIC CATALOG
+==================================================
+
+Uji melalui UI dan API:
+
+- katalog terbuka;
+- tiga kategori publik muncul;
+- 27 layanan atau jumlah canonical terbaru muncul;
+- kategori internal tidak ikut tampil;
+- layanan dapat dibuka;
+- detail layanan tampil;
+- harga/package tampil jika memang diwajibkan;
+- tombol membuat proyek berfungsi;
+- pencarian dan filter berfungsi jika tersedia.
+
+Verifikasi response API dan data database.
+
+==================================================
+PHASE 4 — CUSTOMER AUTHENTICATION
+==================================================
+
+Uji:
+
+- registrasi jika tersedia;
+- login;
+- logout;
+- invalid credentials;
+- expired session;
+- invalid token;
+- protected route;
+- customer mencoba membuka admin route.
+
+Expected:
+
+- tidak ada HTTP 500;
+- invalid auth harus fail-closed;
+- customer tidak dapat mengakses fungsi admin;
+- pesan kesalahan dapat dipahami.
+
+==================================================
+PHASE 5 — CREATE PROJECT
+==================================================
+
+Dari Customer Portal development:
+
+1. pilih layanan;
+2. buat project;
+3. isi brief;
+4. simpan draft;
+5. buka kembali draft;
+6. submit brief;
+7. pastikan project tercipta satu kali;
+8. pastikan project muncul di Recent Projects;
+9. pastikan field id, title, status, stage, dan progress tampil benar.
+
+Verifikasi:
+
+- UI;
+- API;
+- database;
+- timeline;
+- audit/event jika diwajibkan.
+
+Uji double-click atau duplicate submission.
+
+Tidak boleh membuat dua project tanpa sengaja.
+
+==================================================
+PHASE 6 — QUOTATION AND APPROVAL
+==================================================
+
+Uji:
+
+- quotation dibuat;
+- customer dapat melihat quotation;
+- perhitungan harga benar;
+- approval berhasil;
+- rejection atau request revision berjalan jika tersedia;
+- quotation tidak dapat disetujui dua kali;
+- quotation tenant lain tidak dapat diakses.
+
+Verifikasi database dan status lifecycle setelah approval.
+
+==================================================
+PHASE 7 — BILLING AND PAYMENT
+==================================================
+
+Gunakan sandbox atau deterministic payment fixture.
+
+Uji:
+
+- full payment;
+- partial payment;
+- installment;
+- failed payment;
+- retry;
+- duplicate callback;
+- expired payment;
+- invalid payment schedule;
+- coupon valid;
+- coupon duplicate;
+- coupon expired;
+- manual verification jika tersedia;
+- unlock override oleh admin.
+
+Pastikan:
+
+- ai_payment_schedule adalah source of truth;
+- duplicate callback tidak menggandakan pembayaran;
+- duplicate coupon menghasilkan conflict response, bukan HTTP 500;
+- commercial_completed hanya aktif setelah schedule lunas;
+- payment tidak otomatis berarti production_completed;
+- admin override membutuhkan role dan reason;
+- audit log tercatat.
+
+Jika gateway sandbox tidak tersedia, gunakan fixture yang menguji service dan database postcondition.
+
+Jangan menandai live provider sebagai PASS jika hanya fixture yang diuji.
+
+==================================================
+PHASE 8 — WORKFLOW CREATION
+==================================================
+
+Setelah prerequisite terpenuhi, verifikasi:
+
+- workflow tercipta;
+- required project steps tercipta;
+- job masuk antrean;
+- worker dapat claim job;
+- job diproses;
+- progress diperbarui;
+- workflow tidak melompat langsung ke completed;
+- job tidak diproses dua worker sekaligus.
+
+Catat state sebelum dan setelah setiap langkah.
+
+==================================================
+PHASE 9 — AI EXECUTION
+==================================================
+
+Uji AI execution dengan:
+
+- development AI provider yang tersedia; atau
+- deterministic mock yang sudah disetujui.
+
+Minimal uji execution pattern:
+
+- image generation;
+- document generation;
+- presentation generation;
+- branding/strategy;
+- copywriting;
+- multi-stage creative workflow.
+
+Pastikan:
+
+- request berhasil;
+- response mengikuti schema;
+- hasil tidak kosong;
+- failure provider menghasilkan status failure yang benar;
+- retry berjalan;
+- timeout tidak ditandai completed;
+- tidak ada infinite retry;
+- biaya/token dicatat jika memang termasuk kontrak.
+
+==================================================
+PHASE 10 — WORKFLOW FAILURE AND RECOVERY
+==================================================
+
+Simulasikan secara aman:
+
+- AI provider failure;
+- worker timeout;
+- worker crash;
+- job retry;
+- max retry;
+- renderer failure;
+- cancellation;
+- restart worker;
+- stalled job recovery.
+
+Expected:
+
+- failed tidak berubah menjadi completed;
+- retry tidak menggandakan artifact;
+- cancelled project tidak terus diproses;
+- error muncul di Admin Portal;
+- Customer Portal menampilkan pesan aman, bukan raw stack trace;
+- audit/event tercatat.
+
+==================================================
+PHASE 11 — REVIEW AND REVISION
+==================================================
+
+Uji:
+
+- preview tersedia;
+- customer membuka review;
+- approve;
+- reject jika tersedia;
+- revision request;
+- komentar;
+- revision job;
+- hasil revisi;
+- final approval.
+
+Pastikan:
+
+- revision tidak menghapus histori;
+- review tenant lain tidak dapat dibuka;
+- status Customer Portal dan Admin Portal konsisten;
+- project tidak langsung order_completed setelah review saja.
+
+==================================================
+PHASE 12 — ARTIFACT VALIDATION
+==================================================
+
+Uji artifact:
+
+- draft;
+- preview;
+- final;
+- image;
+- document;
+- presentation;
+- PDF;
+- ZIP.
+
+Negative tests:
+
+- zero-byte;
+- placeholder;
+- missing storage reference;
+- invalid storage reference;
+- wrong stage;
+- artifact failure;
+- artifact tenant lain;
+- unsupported type.
+
+Pastikan invalid artifact tidak dapat membuat:
+
+deliverable_ready
+files_unlocked
+order_completed
+
+==================================================
+PHASE 13 — ZIP DELIVERY
+==================================================
+
+Buat ZIP development nyata.
+
+Jangan hanya memeriksa HTTP 200.
+
+Verifikasi:
+
+- ZIP berhasil diunduh;
+- ZIP berhasil diekstrak;
+- filename benar;
+- extension benar;
+- MIME mapping benar;
+- tidak ada asset.mimeType non-canonical;
+- tidak ada zero-byte file;
+- tidak ada file tenant lain;
+- tidak ada temporary/internal file;
+- struktur folder masuk akal.
+
+Tambahkan regression test jika kasus extension belum memiliki test.
+
+==================================================
+PHASE 14 — PRESENTATION OUTPUT
+==================================================
+
+Buat minimal satu PPTX development.
+
+Verifikasi:
+
+- render selesai;
+- file tidak zero-byte;
+- struktur ZIP/OOXML PPTX valid;
+- validator internal lulus jika tersedia;
+- metadata slide valid;
+- jumlah slide masuk akal;
+- file dapat diunduh.
+
+Catat secara terpisah:
+
+- runtime result;
+- build result;
+- typecheck result;
+- 21 PptxGenJS namespace errors jika masih ada.
+
+Jangan menyatakan typecheck clean jika error masih ada.
+
+Namun jangan memblokir seluruh dev E2E bila runtime benar-benar valid dan masalah tersebut sudah diklasifikasikan sebagai technical debt.
+
+==================================================
+PHASE 15 — FILE UNLOCK AND DOWNLOAD
+==================================================
+
+Pastikan hubungan berikut:
+
+deliverable_ready
+tidak otomatis berarti
+files_unlocked
+
+files_unlocked
+tidak otomatis berarti
+order_completed
+
+Uji:
+
+- download sebelum deliverable valid;
+- download sebelum payment lengkap;
+- download sebelum unlock;
+- download setelah unlock;
+- expired download token;
+- invalid token;
+- reuse token;
+- Tenant A mencoba download Tenant B;
+- signed URL expiration.
+
+Expected:
+
+- sebelum unlock: ditolak;
+- setelah seluruh prerequisite: berhasil;
+- tidak pernah menghasilkan URL untuk tenant salah;
+- Customer Portal tidak menampilkan CTA aktif ketika file terkunci.
+
+==================================================
+PHASE 16 — CANONICAL LIFECYCLE
+==================================================
+
+Verifikasi enam konsep canonical:
+
+1. workflow_completed;
+2. production_completed;
+3. deliverable_ready;
+4. commercial_completed;
+5. files_unlocked;
+6. order_completed.
+
+Expected:
+
+workflow_completed
+= required workflow steps selesai
+
+production_completed
+= produksi selesai
+
+deliverable_ready
+= final artifact valid tersedia
+
+commercial_completed
+= seluruh schedule pembayaran terpenuhi
+
+files_unlocked
+= akses file dibuka secara sah
+
+order_completed
+= production, commercial, deliverable, dan access obligations terpenuhi
+
+Uji bahwa tidak ada shortcut atau stage skipping.
+
+Jika sebagian konsep masih implicit, verifikasi behavior-nya, bukan hanya nama field.
+
+==================================================
+PHASE 17 — CUSTOMER PORTAL
+==================================================
+
+Audit Customer Portal development:
+
+- dashboard;
+- recent projects;
+- project detail;
+- status badge;
+- stage label;
+- progress;
+- timeline;
+- quotation;
+- payment;
+- review;
+- revision;
+- artifact;
+- download;
+- notifications;
+- empty state;
+- error state.
+
+Pastikan:
+
+- tidak ada blank field;
+- tidak ada raw stage key;
+- tidak ada CTA download palsu;
+- tidak ada status Project Complete sebelum syarat lengkap;
+- tidak ada unexpected console error;
+- tidak ada unexpected HTTP 500.
+
+==================================================
+PHASE 18 — ADMIN PORTAL
+==================================================
+
+Audit Admin Portal development:
+
+- dashboard;
+- project monitor;
+- workflow monitor;
+- job queue;
+- workers;
+- payment schedule;
+- payment verification;
+- unlock override;
+- artifact monitor;
+- deliverable status;
+- analytics;
+- audit logs;
+- tenant filter;
+- permissions.
+
+Verifikasi setiap aksi sensitif dengan akun role yang tepat.
+
+Pastikan data admin sesuai dengan database dan Customer Portal.
+
+==================================================
+PHASE 19 — CUSTOMER/ADMIN CONSISTENCY
+==================================================
+
+Untuk project E2E yang sama, bandingkan:
+
+- project status;
+- lifecycle stage;
+- progress;
+- payment state;
+- workflow state;
+- artifact state;
+- review state;
+- unlock;
+- completion.
+
+Jika UI menggunakan label berbeda tetapi state canonical sama, catat sebagai mapping presentation.
+
+Jika state aktual berbeda, FAIL.
+
+==================================================
+PHASE 20 — TENANT ISOLATION
+==================================================
+
+Gunakan Tenant A dan Tenant B.
+
+Uji lintas tenant untuk:
+
+- project;
+- quotation;
+- payment;
+- payment schedule;
+- workflow;
+- job;
+- artifact;
+- review;
+- notification;
+- analytics;
+- audit log;
+- download.
+
+Gunakan:
+
+- direct ID;
+- query/filter;
+- pagination;
+- token;
+- signed URL;
+- API;
+- UI.
+
+Setiap kebocoran lintas tenant adalah CRITICAL.
+
+==================================================
+PHASE 21 — RBAC AND SECURITY
+==================================================
+
+Uji:
+
+- customer sebagai admin;
+- admin role rendah menjalankan privileged action;
+- missing admin key;
+- invalid admin key;
+- invalid bearer token;
+- expired token;
+- unauthorized unlock;
+- unauthorized payment verification;
+- unauthorized artifact access;
+- unsafe file path;
+- path traversal payload yang aman;
+- stack trace exposure;
+- secret exposure.
+
+Jangan melakukan destructive attack.
+
+Gunakan payload development yang aman.
+
+==================================================
+PHASE 22 — AUDIT LOG
+==================================================
+
+Pastikan audit log dibuat untuk aksi penting:
+
+- quotation approval;
+- payment verification;
+- manual override;
+- file unlock;
+- workflow cancellation;
+- revision;
+- artifact finalization;
+- admin action sensitif.
+
+Audit log harus memiliki:
+
+- actor;
+- tenant;
+- action;
+- target;
+- timestamp;
+- reason jika diwajibkan;
+- result.
+
+==================================================
+PHASE 23 — NOTIFICATIONS
+==================================================
+
+Uji notification creation dan visibility.
+
+Jika integrasi eksternal tidak tersedia, verifikasi notification record/outbox.
+
+Pastikan:
+
+- event penting membuat notification sesuai kontrak;
+- notification tidak dikirim dua kali akibat retry;
+- Tenant A tidak melihat notification Tenant B;
+- failure eksternal tidak merusak transaksi utama jika desainnya asynchronous.
+
+==================================================
+PHASE 24 — CONCURRENCY AND IDEMPOTENCY
+==================================================
+
+Uji secara terkontrol:
+
+- dua submit project;
+- dua approval quotation;
+- dua payment callbacks;
+- dua workers claim job sama;
+- dua admin unlock;
+- dua revision requests;
+- repeated finalization;
+- repeated ZIP generation.
+
+Verifikasi:
+
+- tidak ada duplicate project tidak sah;
+- tidak ada duplicate payment;
+- tidak ada duplicate journal jika accounting aktif;
+- tidak ada duplicate artifact;
+- tidak ada duplicate audit action yang tidak semestinya;
+- state akhir konsisten.
+
+==================================================
+PHASE 25 — UNEXPECTED HTTP 500 DETECTOR
+==================================================
+
+Catat seluruh request selama E2E.
+
+Setiap unexpected HTTP 500 harus dianggap failure.
+
+Untuk setiap HTTP 500 laporkan:
+
+- method;
+- endpoint;
+- actor;
+- scenario;
+- sanitized payload;
+- response;
+- relevant log;
+- database state;
+- probable owner;
+- severity.
+
+HTTP 500 hanya boleh diterima jika test memang sedang menyimulasikan internal failure dan expected contract mengizinkannya.
+
+==================================================
+PHASE 26 — BROWSER EVIDENCE
+==================================================
+
+Gunakan framework E2E yang sudah tersedia.
+
+Jika belum tersedia dan repository mendukung, gunakan Playwright.
+
+Pada setiap failure simpan:
+
+- screenshot;
+- browser trace;
+- console errors;
+- failed network requests;
+- current URL;
+- scenario step;
+- sanitized test identifiers.
+
+Jangan menyimpan secret atau token utuh.
+
+==================================================
+PHASE 27 — DATABASE POSTCONDITIONS
+==================================================
+
+Jangan menganggap toast UI sebagai bukti berhasil.
+
+Setelah langkah penting, periksa database development:
+
+- projects;
+- project steps;
+- quotations;
+- payment schedules;
+- payment records;
+- jobs;
+- workers;
+- artifacts;
+- reviews;
+- notifications;
+- unlock state;
+- audit logs.
+
+Semua query harus tenant-scoped.
+
+==================================================
+PHASE 28 — COMPLETE TEST EXECUTION
+==================================================
+
+Setelah E2E scenario selesai, jalankan:
+
+1. targeted tests untuk bug yang ditemukan;
+2. full regression suite;
+3. workspace typecheck;
+4. production-equivalent local build;
+5. development clean restart;
+6. ulangi smoke flow utama setelah restart.
+
+Pisahkan hasil:
+
+- PASS;
+- FAIL;
+- SKIPPED;
+- NOT CONFIGURED;
+- PRE-EXISTING.
+
+Jangan mengubah FAIL menjadi PASS hanya karena penyebabnya environment.
+
+==================================================
+PHASE 29 — DEFECT HANDLING
+==================================================
+
+Jika menemukan defect produk:
+
+Jangan langsung memperbaiki semuanya.
+
+Dokumentasikan:
+
+- defect ID;
+- scenario;
+- expected;
+- actual;
+- evidence;
+- severity;
+- root-cause candidate;
+- owner team;
+- release impact.
+
+Owner mapping:
+
+- Billing → Team 42;
+- Workflow/jobs/workers → Team 43;
+- Artifact/download → Team 44;
+- Customer Portal → Team 45;
+- Admin Portal → Team 46;
+- Integration → Team 39;
+- Test infrastructure → Development E2E Team;
+- Environment/schema/seed → Operations or owning migration team.
+
+Hanya perbaiki test infrastructure yang salah.
+
+Untuk defect produk, berhenti pada dokumentasi kecuali ada instruksi eksplisit untuk remediation.
+
+==================================================
+PHASE 30 — REPORT
+==================================================
+
+Buat:
+
+DEV_E2E_VERIFICATION_REPORT.md
+DEV_E2E_FAILURES.json
+DEV_E2E_COVERAGE_MATRIX.json
+DEV_E2E_VERDICT.json
+
+Report harus berisi:
+
+A. Tested commit
+
+B. Development environment
+
+C. Preflight
+
+D. Test accounts and tenants
+
+E. Public catalog
+
+F. Customer flow
+
+G. Quotation
+
+H. Billing/payment
+
+I. Workflow/jobs/workers
+
+J. AI execution
+
+K. Review/revision
+
+L. Artifact
+
+M. ZIP
+
+N. Presentation
+
+O. Unlock/download
+
+P. Canonical lifecycle
+
+Q. Customer Portal
+
+R. Admin Portal
+
+S. Customer/Admin consistency
+
+T. Tenant isolation
+
+U. RBAC/security
+
+V. Audit logs
+
+W. Notifications
+
+X. Concurrency/idempotency
+
+Y. Unexpected HTTP 500
+
+Z. Regression
+
+AA. Typecheck
+
+AB. Build
+
+AC. Remaining failures
+
+AD. Owner teams
+
+AE. Final development verdict
+
+==================================================
+FINAL DEVELOPMENT VERDICT
+==================================================
+
+Gunakan tepat salah satu:
+
+DEV PASS — ALL CRITICAL FLOWS FUNCTION CORRECTLY
+
+DEV PASS WITH LOW-RISK OBSERVATIONS
+
+DEV BLOCKED — CORE FUNCTION FAILURE
+
+DEV BLOCKED — SECURITY OR TENANT ISOLATION FAILURE
+
+DEV BLOCKED — BILLING FAILURE
+
+DEV BLOCKED — WORKFLOW FAILURE
+
+DEV BLOCKED — ARTIFACT OR DOWNLOAD FAILURE
+
+DEV BLOCKED — TEST ENVIRONMENT INCOMPLETE
+
+==================================================
+IMPORTANT RULES
+==================================================
+
+- Jangan deploy.
+- Jangan publish.
+- Jangan menggunakan isDeployed sebagai blocker.
+- Jangan menguji production domain sebagai bukti utama.
+- Jangan mengubah data customer nyata.
+- Jangan menghapus test existing.
+- Jangan melemahkan assertion agar test lulus.
+- Jangan menyembunyikan test yang gagal.
+- Jangan menyebut full E2E PASS jika hanya health endpoint yang diuji.
+- Jangan menyebut payment PASS jika hanya invalid endpoint yang diuji.
+- Jangan menyebut workflow PASS jika worker tidak benar-benar memproses job.
+- Jangan menyebut artifact PASS jika file tidak benar-benar dibuat dan dibuka.
+- Jangan menyebut tenant isolation PASS jika hanya satu tenant digunakan.

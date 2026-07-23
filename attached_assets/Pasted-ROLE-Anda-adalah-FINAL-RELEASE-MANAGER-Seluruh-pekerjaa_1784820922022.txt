@@ -1,0 +1,442 @@
+ROLE
+
+Anda adalah FINAL RELEASE MANAGER.
+
+Seluruh pekerjaan Team 41–50.1 telah selesai.
+
+Jangan membuat feature baru.
+Jangan melakukan refactor.
+Jangan mengubah arsitektur.
+Jangan mengubah lifecycle.
+Jangan mengubah workflow.
+
+Tugas Anda adalah:
+
+- mempersiapkan Release Candidate final;
+- melakukan controlled merge;
+- memverifikasi deployment;
+- menjalankan post-deployment smoke test;
+- memastikan Production benar-benar sehat.
+
+==================================================
+CURRENT STATUS
+==================================================
+
+Team 41
+Architecture Contract
+COMPLETE
+
+Team 42
+Billing
+COMPLETE
+
+Team 43
+Workflow
+COMPLETE
+
+Team 44
+Artifact
+COMPLETE
+
+Team 45
+Customer Portal
+COMPLETE
+
+Team 46
+Admin Portal
+COMPLETE
+
+Team 39
+Integration
+COMPLETE
+
+Team 50
+Independent Release Gate
+COMPLETE
+
+Team 50.1
+Operational Readiness
+COMPLETE
+
+Current Release Verdict:
+
+READY FOR PRODUCTION WITH LOW-RISK OBSERVATIONS
+
+Regression:
+
+5346 / 5346 PASS
+
+Build:
+
+PASS
+
+Smoke Test:
+
+PASS
+
+Catalog:
+
+PASS
+
+ZIP:
+
+PASS
+
+Project endpoints:
+
+PASS
+
+==================================================
+MISSION
+==================================================
+
+Lakukan proses Release secara aman.
+
+Target:
+
+Production sehat.
+
+==================================================
+PHASE 1
+VERIFY FINAL COMMITS
+==================================================
+
+Verifikasi seluruh commit final.
+
+Minimal:
+
+Team39 integration
+
+Team50 product fix
+
+Team50 report
+
+Pastikan:
+
+tidak ada perubahan yang belum ter-commit.
+
+Working tree harus clean.
+
+==================================================
+PHASE 2
+FINAL RELEASE CANDIDATE
+==================================================
+
+Buat Release Candidate Final.
+
+Isi:
+
+release version
+
+included commits
+
+known low-risk observations
+
+rollback reference
+
+==================================================
+PHASE 3
+MERGE VALIDATION
+==================================================
+
+Sebelum merge:
+
+pastikan:
+
+branch benar
+
+main up to date
+
+tidak ada merge conflict
+
+tidak ada file hilang
+
+tidak ada generated file yang salah ikut.
+
+==================================================
+PHASE 4
+DATABASE
+==================================================
+
+Verifikasi Production:
+
+migration
+
+schema
+
+indexes
+
+constraints
+
+commercial_status
+
+catalog
+
+==================================================
+PHASE 5
+SEED
+==================================================
+
+Pastikan:
+
+seed hanya dijalankan bila memang diperlukan.
+
+Seed harus:
+
+idempotent
+
+tenant-safe
+
+tidak mengubah data customer.
+
+==================================================
+PHASE 6
+DEPLOYMENT
+==================================================
+
+Deploy Release Candidate.
+
+Pastikan:
+
+API
+
+Customer Portal
+
+Admin Portal
+
+Workers
+
+Queue
+
+Storage
+
+Scheduler
+
+Cron
+
+AI Providers
+
+Payment
+
+semuanya aktif.
+
+==================================================
+PHASE 7
+POST DEPLOYMENT SMOKE TEST
+==================================================
+
+Setelah deployment:
+
+jalankan:
+
+Login
+
+Public Catalog
+
+Create Project
+
+Brief
+
+Workflow
+
+AI
+
+Payment
+
+Artifact
+
+ZIP
+
+Presentation
+
+Download
+
+Completion
+
+Pastikan:
+
+tidak ada HTTP 500.
+
+==================================================
+PHASE 8
+OBSERVABILITY
+==================================================
+
+Periksa:
+
+application log
+
+worker log
+
+queue
+
+payment log
+
+storage log
+
+error rate
+
+response time
+
+==================================================
+PHASE 9
+HEALTH CHECK
+==================================================
+
+Pastikan:
+
+API health
+
+DB health
+
+Queue health
+
+Worker health
+
+Storage health
+
+AI provider connectivity
+
+Payment connectivity
+
+==================================================
+PHASE 10
+ROLLBACK PLAN
+==================================================
+
+Pastikan rollback tersedia.
+
+Laporkan:
+
+rollback commit
+
+rollback procedure
+
+rollback trigger
+
+==================================================
+PHASE 11
+DOCUMENTATION
+==================================================
+
+Buat:
+
+FINAL_RELEASE_REPORT.md
+
+Isi:
+
+Release Version
+
+Commits
+
+Deployment Time
+
+Migration
+
+Seed
+
+Smoke Test
+
+Health Check
+
+Known Risks
+
+Rollback
+
+Go Live
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+A.
+Release Version
+
+B.
+Commits Included
+
+C.
+Deployment Status
+
+D.
+Migration Status
+
+E.
+Seed Status
+
+F.
+Catalog Status
+
+G.
+Smoke Test
+
+H.
+Health Check
+
+I.
+Worker Status
+
+J.
+Queue Status
+
+K.
+Storage Status
+
+L.
+Known Low-Risk Observations
+
+M.
+Rollback Reference
+
+N.
+Working Tree
+
+O.
+Production Status
+
+P.
+Final Go Live Decision
+
+==================================================
+GO LIVE DECISION
+==================================================
+
+Gunakan salah satu:
+
+GO LIVE APPROVED
+
+GO LIVE APPROVED WITH LOW-RISK OBSERVATIONS
+
+GO LIVE BLOCKED
+
+==================================================
+IMPORTANT
+==================================================
+
+Jangan membuat feature baru.
+
+Jangan memperbaiki technical debt yang tidak menghalangi produksi.
+
+Jangan mengubah kontrak Team 41.
+
+Jangan menjalankan seed yang tidak diperlukan.
+
+Jangan mengubah data customer.
+
+Jika deployment gagal:
+
+STOP.
+
+Dokumentasikan:
+
+root cause
+
+rollback
+
+owner
+
+severity
+
+Jangan melanjutkan deployment jika health check gagal.

@@ -1,0 +1,389 @@
+CONTINUE TEAM 50.1 — FINAL OPERATIONAL READINESS
+
+Lanjutkan pekerjaan dari checkpoint terakhir.
+
+Jangan mengulang seluruh audit dari awal.
+Jangan membuat fitur baru.
+Jangan melakukan refactor besar.
+Jangan merge ke main.
+
+==================================================
+KNOWN COMPLETED WORK
+==================================================
+
+Pekerjaan berikut sudah dilaporkan selesai:
+
+- database migrations berhasil;
+- GET /api/creative-ai/projects tidak lagi 500;
+- GET /api/ai/design/projects tidak lagi 500;
+- ZIP delivery service sudah diperbaiki;
+- build setelah ZIP fix berhasil;
+- catalog seed sudah dijalankan;
+- knowledge seed sudah dijalankan;
+- libs typecheck bersih;
+- dua pemanggilan publishSafe yang salah sudah diperbaiki;
+- workers sudah kembali idle/sehat;
+- operational readiness addendum sudah mulai ditulis.
+
+Jangan mengulang perubahan tersebut kecuali verifikasi menunjukkan belum tersimpan.
+
+==================================================
+CURRENT BLOCKER
+==================================================
+
+Public catalog masih kosong karena endpoint katalog hanya menampilkan record dengan:
+
+commercial_status = 'commercial_ready'
+
+Seed yang dijalankan tidak menetapkan commercial_status tersebut.
+
+Checkpoint terakhir berhenti saat akan melakukan targeted update.
+
+==================================================
+PHASE 1 — VERIFY CURRENT WORKTREE
+==================================================
+
+Periksa kondisi repository saat ini.
+
+Identifikasi:
+
+- file yang berubah;
+- perubahan ZIP service;
+- perubahan publishSafe;
+- migration yang telah diterapkan;
+- report yang sudah diperbarui sebagian;
+- uncommitted changes;
+- apakah targeted commercial_status update sempat berjalan atau belum.
+
+Jangan menghapus perubahan yang sudah benar.
+
+==================================================
+PHASE 2 — FIX CATALOG VISIBILITY SAFELY
+==================================================
+
+Periksa canonical schema dan seed logic untuk service catalog.
+
+Tentukan apakah:
+
+A. commercial_status seharusnya memiliki default commercial_ready;
+
+B. seed seharusnya secara eksplisit menulis commercial_ready;
+
+C. data hasil seed perlu dipromosikan melalui lifecycle komersial yang sudah ada;
+
+D. targeted SQL update hanya diperlukan untuk environment ini.
+
+Jangan langsung melakukan update massal tanpa tenant atau record scope yang jelas.
+
+Untuk data E2E/dev hasil seed:
+
+- update hanya record katalog yang memang dibuat oleh seed;
+- jangan mengubah record tenant lain;
+- jangan mengubah data produksi;
+- jangan mengubah archived, rejected, atau draft catalog menjadi commercial_ready tanpa dasar.
+
+Jika root cause berasal dari seed:
+
+perbaiki seed agar idempotent dan menghasilkan katalog publik yang memang intended untuk public use.
+
+Jika hanya environment data drift:
+
+lakukan targeted environment repair dan dokumentasikan bahwa itu bukan product-code fix.
+
+==================================================
+PHASE 3 — VERIFY PUBLIC CATALOG
+==================================================
+
+Setelah perbaikan, verifikasi melalui endpoint nyata.
+
+Pastikan:
+
+- endpoint katalog mengembalikan HTTP 200;
+- jumlah item lebih dari 0;
+- item memiliki service/category/title/price atau field wajib yang benar;
+- tidak ada duplicate seed;
+- tidak ada draft/private catalog ikut tampil;
+- tenant scope benar;
+- customer portal dapat menampilkan katalog.
+
+Jangan hanya memeriksa row database.
+
+==================================================
+PHASE 4 — VERIFY DATABASE MIGRATIONS AGAIN
+==================================================
+
+Konfirmasi migration yang menyelesaikan kedua endpoint 500.
+
+Verifikasi secara aktual bahwa:
+
+GET /api/creative-ai/projects
+GET /api/ai/design/projects
+
+menghasilkan response valid setelah restart bersih.
+
+Catat:
+
+- status HTTP;
+- response schema;
+- migration yang diperlukan;
+- apakah migration aman dan idempotent.
+
+==================================================
+PHASE 5 — ZIP DELIVERY FINAL VERIFICATION
+==================================================
+
+Verifikasi perubahan zipDeliveryService.
+
+Pastikan:
+
+- tidak lagi mengakses asset.mimeType yang tidak ada;
+- MIME atau extension berasal dari field canonical yang benar;
+- fallback tidak menghasilkan extension palsu;
+- filename benar;
+- ZIP dapat dibuat;
+- ZIP dapat diekstrak;
+- seluruh file di dalam ZIP memiliki extension sesuai format aktual;
+- tidak ada zero-byte file;
+- tidak ada artifact tenant lain;
+- build dan test terkait tetap lulus.
+
+Tambahkan regression test jika belum ada.
+
+==================================================
+PHASE 6 — PUBLISHSAFE VERIFICATION
+==================================================
+
+Verifikasi dua perbaikan publishSafe.
+
+Pastikan:
+
+- pemanggilan sesuai signature satu object argument;
+- payload event tetap lengkap;
+- runtime behavior tidak berubah;
+- tidak ada silent event loss;
+- typecheck terkait benar-benar bersih.
+
+Tambahkan targeted test jika area ini belum memiliki perlindungan.
+
+==================================================
+PHASE 7 — PRESENTATION SERVICE
+==================================================
+
+Periksa kembali presentationRenderService.
+
+Team 50 sebelumnya menemukan 14 PptxGenJS namespace type errors setelah libs build.
+
+Laporkan salah satu secara jujur:
+
+- RESOLVED;
+- PRE-EXISTING TECHNICAL DEBT;
+- RUNTIME-SAFE BUT TYPECHECK-FAILING;
+- RUNTIME BLOCKER.
+
+Verifikasi minimal satu PPTX hasil render valid.
+
+Jangan menyatakan clean jika 14 error tersebut masih ada.
+
+==================================================
+PHASE 8 — CLEAN RESTART
+==================================================
+
+Lakukan restart bersih terhadap service yang diperlukan.
+
+Setelah restart verifikasi:
+
+- API server sehat;
+- workers sehat;
+- queue sehat;
+- database connection sehat;
+- catalog endpoint sehat;
+- project endpoints sehat;
+- storage sehat.
+
+Jangan hanya mengandalkan proses lama yang masih menyimpan state.
+
+==================================================
+PHASE 9 — FINAL SMOKE TEST
+==================================================
+
+Jalankan smoke test lengkap setelah seluruh perbaikan.
+
+Minimal:
+
+1. buka public catalog;
+2. pilih service;
+3. buat project;
+4. submit brief;
+5. jalankan AI/workflow dengan fixture atau provider yang tersedia;
+6. pastikan job diproses worker;
+7. buat atau verifikasi payment state;
+8. hasilkan artifact;
+9. hasilkan ZIP;
+10. unduh dan inspeksi ZIP;
+11. hasilkan atau verifikasi presentation;
+12. pastikan Customer Portal menampilkan status benar;
+13. pastikan Admin Portal menampilkan state yang sama;
+14. pastikan tidak ada unexpected HTTP 500.
+
+Jika provider eksternal tidak tersedia:
+
+gunakan deterministic test fixture atau mock yang sudah tersedia.
+
+Jangan menyebut full E2E PASS jika langkah inti hanya disimulasikan tanpa dokumentasi.
+
+==================================================
+PHASE 10 — REGRESSION, TYPECHECK, BUILD
+==================================================
+
+Jalankan:
+
+- targeted tests untuk ZIP;
+- targeted tests untuk catalog;
+- targeted tests untuk project endpoints;
+- targeted tests untuk publishSafe;
+- full regression suite;
+- typecheck;
+- production build.
+
+Laporkan angka aktual.
+
+Pisahkan:
+
+- passed;
+- failed;
+- skipped;
+- pre-existing;
+- environment-dependent.
+
+==================================================
+PHASE 11 — UPDATE RELEASE REPORT
+==================================================
+
+Lengkapi:
+
+TEAM50_RELEASE_GATE_REPORT.md
+
+Tambahkan atau selesaikan bagian:
+
+- Operational Readiness;
+- Migration Verification;
+- Schema Drift Resolution;
+- Catalog Seed and Visibility;
+- ZIP Delivery Verification;
+- Presentation Verification;
+- publishSafe Verification;
+- Clean Restart;
+- Final Smoke Test;
+- Regression;
+- Typecheck;
+- Build;
+- Remaining Risks;
+- Go-Live Checklist;
+- Final Decision.
+
+Jangan menghapus temuan sebelumnya.
+Tandai setiap temuan sebagai:
+
+RESOLVED
+ACCEPTED LOW RISK
+BLOCKING
+NOT VERIFIED
+
+==================================================
+PHASE 12 — COMMIT
+==================================================
+
+Pisahkan commit bila memungkinkan:
+
+1. Product fixes:
+   fix(release): resolve operational readiness blockers
+
+2. Test/report:
+   test(release): verify final production readiness
+
+Jangan merge ke main.
+
+Catat seluruh commit hash.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+A. Branch
+
+B. Starting commit
+
+C. Product-fix commit
+
+D. Report/test commit
+
+E. Migration status
+
+F. Project endpoint status
+
+G. Catalog status
+
+H. Seed status
+
+I. ZIP status
+
+J. publishSafe status
+
+K. Presentation status
+
+L. Worker and queue status
+
+M. Smoke test result
+
+N. Regression result
+
+O. Typecheck result
+
+P. Build result
+
+Q. Files changed
+
+R. Working tree status
+
+S. Remaining risks
+
+T. Release blockers
+
+U. Final verdict
+
+Gunakan tepat salah satu:
+
+READY FOR PRODUCTION
+
+READY FOR PRODUCTION WITH LOW-RISK OBSERVATIONS
+
+BLOCKED — PUBLIC CATALOG
+
+BLOCKED — DATABASE MIGRATION
+
+BLOCKED — ZIP DELIVERY
+
+BLOCKED — PRESENTATION RUNTIME
+
+BLOCKED — SMOKE TEST FAILED
+
+BLOCKED — VERIFICATION INCOMPLETE
+
+==================================================
+IMPORTANT
+==================================================
+
+Jangan menyatakan READY FOR PRODUCTION hanya karena migration dan build berhasil.
+
+READY hanya boleh diberikan jika:
+
+- public catalog benar-benar tampil;
+- kedua project endpoints benar-benar HTTP 200;
+- ZIP benar dan dapat dibuka;
+- smoke test final selesai;
+- tidak ada unexpected HTTP 500;
+- regression tetap lulus;
+- report selesai;
+- perubahan tersimpan dalam commit lokal.

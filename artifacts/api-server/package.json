@@ -21,6 +21,7 @@
     "migrate:builtin-templates": "tsx --tsconfig tsconfig.json src/migrate-builtin-templates.ts",
     "migrate:v44": "tsx --tsconfig tsconfig.json src/migrate-v44.ts",
     "migrate:tkl-v50": "tsx --tsconfig tsconfig.json src/migrate-tkl-v50.ts"
+    ,"migrate:catalog-ux": "tsx --tsconfig tsconfig.json src/migrate-catalog-ux.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.21.0",

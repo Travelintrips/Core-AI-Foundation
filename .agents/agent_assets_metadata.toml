@@ -36,3 +36,9 @@ id = "6-AXmKuM1pA7PlHedXbXQ"
 uri = "file://attached_assets/PT-Cahaya-Sejati-Teknologi-Company-Profile.pdf"
 type = "pdf"
 title = "Company Profile — PT Cahaya Sejati Teknologi (Sample)"
+
+[[outputs]]
+id = "PO5bBsYzulGFOLLg7eMKw"
+uri = "file://FINAL_RELEASE_REPORT.md"
+type = "text"
+title = "Final Release Report"

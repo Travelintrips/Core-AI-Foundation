@@ -13,7 +13,7 @@
  * GET        /ai/catalog/analytics
  */
 import { Router } from "express";
-import { eq, desc, and, ne, inArray } from "drizzle-orm";
+import { eq, desc, and, ne, inArray, or, asc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import {
   db,
@@ -124,11 +124,81 @@ router.get("/ai/catalog/public", async (_req, res): Promise<void> => {
     ? await db
         .select()
         .from(aiServicesTable)
-        .where(and(inArray(aiServicesTable.categoryId, publicCategoryIds), eq(aiServicesTable.status, "active")))
-        .orderBy(aiServicesTable.serviceName)
+        .where(
+          and(
+            eq(aiServicesTable.status, "active"),
+            or(
+              inArray(aiServicesTable.parentCategoryId, publicCategoryIds),
+              inArray(aiServicesTable.categoryId, publicCategoryIds),
+            ),
+          ),
+        )
+        .orderBy(asc(aiServicesTable.displayOrder), aiServicesTable.serviceName)
     : [];
 
-  res.json({ categories, services });
+  const serviceIds = services.map((service) => service.id);
+  const packages = serviceIds.length
+    ? await db
+        .select({
+          serviceId: aiServicePackagesTable.serviceId,
+          oneTimePrice: aiServicePackagesTable.oneTimePrice,
+          monthlyPrice: aiServicePackagesTable.monthlyPrice,
+          yearlyPrice: aiServicePackagesTable.yearlyPrice,
+        })
+        .from(aiServicePackagesTable)
+        .where(and(inArray(aiServicePackagesTable.serviceId, serviceIds), eq(aiServicePackagesTable.status, "active")))
+    : [];
+
+  const packageMinByService = new Map<number, number>();
+  for (const pkg of packages) {
+    const values = [pkg.oneTimePrice, pkg.monthlyPrice, pkg.yearlyPrice]
+      .map((value) => (value == null ? 0 : Number(value)))
+      .filter((value) => value > 0);
+    if (!values.length) continue;
+    const current = packageMinByService.get(pkg.serviceId);
+    const minimum = Math.min(...values);
+    if (current == null || minimum < current) packageMinByService.set(pkg.serviceId, minimum);
+  }
+
+  const publicServices = services.map((service) => {
+    const canonicalCategoryId = service.parentCategoryId && publicCategoryIds.includes(service.parentCategoryId)
+      ? service.parentCategoryId
+      : service.categoryId;
+    const packageMinimum = packageMinByService.get(service.id);
+    return {
+      ...service,
+      legacyCategoryId: service.categoryId,
+      categoryId: canonicalCategoryId,
+      startingPrice: packageMinimum != null ? String(packageMinimum) : service.startingPrice,
+    };
+  });
+  const servicesByCategory = new Map<number, typeof publicServices>();
+  for (const service of publicServices) {
+    const list = servicesByCategory.get(service.categoryId) ?? [];
+    list.push(service);
+    servicesByCategory.set(service.categoryId, list);
+  }
+
+  const publicCategories = categories.map((category) => {
+    const categoryServices = servicesByCategory.get(category.id) ?? [];
+    const prices = categoryServices
+      .map((service) => Number(service.startingPrice ?? 0))
+      .filter((price) => price > 0);
+    return {
+      ...category,
+      serviceCount: categoryServices.length,
+      exampleOutputs: categoryServices
+        .flatMap((service) => service.deliverables ?? [])
+        .filter((value, index, values) => values.indexOf(value) === index)
+        .slice(0, 4),
+      startingPrice: category.startingPriceOverride != null
+        ? String(category.startingPriceOverride)
+        : prices.length ? String(Math.min(...prices)) : null,
+      services: categoryServices,
+    };
+  });
+
+  res.json({ categories: publicCategories, services: publicServices });
 });
 
 // ── Categories ────────────────────────────────────────────────────────────────

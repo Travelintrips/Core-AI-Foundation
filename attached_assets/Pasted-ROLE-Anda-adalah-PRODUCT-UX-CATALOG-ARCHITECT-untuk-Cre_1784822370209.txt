@@ -1,0 +1,576 @@
+ROLE
+
+Anda adalah PRODUCT UX + CATALOG ARCHITECT untuk Creative AI.
+
+Tugas Anda adalah menyederhanakan katalog layanan agar:
+
+- lebih mudah dipahami user;
+- tidak terlalu banyak pilihan;
+- tidak ada layanan yang tumpang tindih;
+- layanan bernilai tinggi tetap dipertahankan;
+- layanan kecil dijadikan sub-layanan, bukan kartu utama;
+- struktur database dan histori order lama tetap aman.
+
+Jangan menghapus data secara permanen.
+Jangan menghapus histori order.
+Jangan mengubah lifecycle, billing, workflow, atau artifact contract.
+Jangan langsung hard-delete service dari database.
+
+==================================================
+CURRENT PROBLEM
+==================================================
+
+Saat ini halaman katalog menampilkan terlalu banyak kartu layanan.
+
+Beberapa layanan saling tumpang tindih, seperti:
+
+- Logo AI;
+- Identitas Brand;
+- Copywriting;
+- Konten Media Sosial;
+- Poster/Banner/Brosur;
+- Pembuatan Gambar AI;
+- Proposal Bisnis;
+- Company Profile;
+- Pitch Deck;
+- White Paper;
+- Annual Report;
+- Case Study;
+- E-Book;
+- Konsultasi Kreatif.
+
+Akibatnya:
+
+- user bingung memilih;
+- halaman terlihat padat;
+- beberapa layanan sebenarnya hanya jenis output;
+- layanan utama dan sub-layanan tidak memiliki hierarki yang jelas;
+- potensi conversion turun karena decision overload.
+
+==================================================
+TARGET STRUCTURE
+==================================================
+
+Ubah tampilan katalog publik menjadi 6 kategori utama.
+
+1. BRAND & IDENTITY
+
+Sub-layanan:
+
+- Logo AI;
+- Identitas Brand;
+- Strategi Brand;
+- Brand Guideline;
+- Brand Positioning;
+- Brand Naming jika tersedia.
+
+2. CONTENT & MARKETING
+
+Sub-layanan:
+
+- Copywriting;
+- Konten Media Sosial;
+- Caption;
+- Social Media Campaign;
+- Landing Page Copy;
+- Script;
+- Blog;
+- E-Book / Panduan Edukasi.
+
+3. AI VISUAL DESIGN
+
+Sub-layanan:
+
+- Pembuatan Gambar AI;
+- Poster;
+- Banner;
+- Brosur;
+- Flyer;
+- Thumbnail;
+- Ilustrasi;
+- Social Media Visual.
+
+4. PRESENTATION & BUSINESS DOCUMENTS
+
+Sub-layanan:
+
+- Pitch Deck;
+- Company Profile;
+- Proposal Bisnis;
+- White Paper;
+- Annual Report;
+- Case Study;
+- Business Presentation;
+- Sales Presentation.
+
+5. PRODUCT & COMMERCIAL DESIGN
+
+Sub-layanan:
+
+- Katalog Produk/Layanan;
+- Product Sheet;
+- Product Brochure;
+- Marketplace Visual;
+- Product Campaign Assets.
+
+6. SPECIALIZED DESIGN
+
+Sub-layanan:
+
+- Fashion Design;
+- Interior Design.
+
+==================================================
+SERVICES TO KEEP AS PRIMARY
+==================================================
+
+Pastikan layanan berikut tetap mudah ditemukan:
+
+- Logo / Brand Identity;
+- Brand Strategy;
+- Copywriting;
+- Social Media Content;
+- AI Visual Design;
+- Pitch Deck;
+- Company Profile;
+- Proposal Bisnis;
+- Product Catalog;
+- Fashion Design;
+- Interior Design.
+
+==================================================
+SERVICES TO DEMOTE FROM MAIN CARDS
+==================================================
+
+Jangan tampilkan sebagai kartu utama terpisah:
+
+- E-Book / Panduan Edukasi;
+- Konsultasi Kreatif;
+- Poster / Banner / Brosur;
+- White Paper;
+- Annual Report;
+- Case Study.
+
+Perlakuannya:
+
+E-Book
+→ sub-layanan Content & Marketing.
+
+Poster / Banner / Brosur
+→ sub-layanan AI Visual Design.
+
+White Paper / Annual Report / Case Study
+→ sub-layanan Presentation & Business Documents.
+
+Konsultasi Kreatif
+→ ubah menjadi fitur pendamping atau entry point “Bantu Saya Memilih Layanan”, bukan produk utama.
+
+==================================================
+CATALOG BEHAVIOR
+==================================================
+
+Pada halaman katalog publik:
+
+Tampilkan hanya 6 kartu kategori utama.
+
+Setiap kartu harus memiliki:
+
+- nama sederhana;
+- deskripsi singkat;
+- contoh hasil;
+- starting price;
+- jumlah sub-layanan;
+- CTA “Lihat Layanan”;
+- CTA opsional “Bantu Saya Memilih”.
+
+Ketika kartu dibuka:
+
+Tampilkan sub-layanan di dalam kategori tersebut.
+
+Jangan langsung menampilkan semua layanan dalam satu halaman panjang.
+
+==================================================
+SMART CHOICE
+==================================================
+
+Tambahkan opsi:
+
+“Bantu Saya Memilih”
+
+Flow singkat:
+
+1. Apa yang ingin Anda buat?
+2. Untuk kebutuhan apa?
+3. Siapa target audiensnya?
+4. Apakah Anda sudah punya brand?
+5. Output apa yang dibutuhkan?
+6. Kapan dibutuhkan?
+7. Kisaran budget?
+
+Berdasarkan jawaban, rekomendasikan maksimal:
+
+- 1 layanan utama;
+- 2 alternatif.
+
+Jangan menampilkan terlalu banyak rekomendasi.
+
+==================================================
+DATABASE SAFETY
+==================================================
+
+Jangan menghapus service lama.
+
+Tambahkan atau gunakan field seperti:
+
+- public_visibility;
+- parent_category_id;
+- display_as_primary;
+- display_order;
+- is_featured;
+- status;
+- commercial_status.
+
+Jika field belum tersedia, buat additive migration yang aman.
+
+Layanan lama harus tetap dapat digunakan oleh:
+
+- order lama;
+- invoice lama;
+- project lama;
+- workflow lama;
+- artifact lama;
+- reporting lama.
+
+==================================================
+MAPPING REQUIREMENT
+==================================================
+
+Buat mapping canonical antara service lama dan struktur baru.
+
+Contoh:
+
+logo_ai
+→ brand_identity / logo
+
+brand_identity
+→ brand_identity / identity_system
+
+brand_strategy
+→ brand_identity / strategy
+
+social_media_content
+→ content_marketing / social_media
+
+copywriting
+→ content_marketing / copywriting
+
+ebook
+→ content_marketing / ebook
+
+ai_image_generation
+→ ai_visual_design / image_generation
+
+poster_banner_brochure
+→ ai_visual_design / promotional_design
+
+pitch_deck
+→ presentation_documents / pitch_deck
+
+company_profile
+→ presentation_documents / company_profile
+
+business_proposal
+→ presentation_documents / proposal
+
+white_paper
+→ presentation_documents / white_paper
+
+annual_report
+→ presentation_documents / annual_report
+
+case_study
+→ presentation_documents / case_study
+
+product_catalog
+→ product_commercial / catalog
+
+fashion_design
+→ specialized_design / fashion
+
+interior_design
+→ specialized_design / interior
+
+==================================================
+DO NOT BREAK
+==================================================
+
+Pastikan perubahan tidak merusak:
+
+- service slug existing;
+- project creation;
+- quotation;
+- price/package;
+- workflow routing;
+- agent routing;
+- AI capability mapping;
+- payment schedule;
+- analytics;
+- search;
+- customer portal;
+- admin portal;
+- historical reporting.
+
+Gunakan alias atau mapping layer jika slug lama sudah dipakai.
+
+==================================================
+SEARCH AND FILTER
+==================================================
+
+Perbarui search agar pencarian lama tetap bekerja.
+
+Contoh:
+
+User mencari “brosur”
+→ arahkan ke AI Visual Design.
+
+User mencari “white paper”
+→ arahkan ke Presentation & Business Documents.
+
+User mencari “ebook”
+→ arahkan ke Content & Marketing.
+
+User mencari “konsultasi”
+→ arahkan ke Bantu Saya Memilih.
+
+==================================================
+UI REQUIREMENTS
+==================================================
+
+Desain harus:
+
+- modern;
+- elegan;
+- premium;
+- tidak terlalu padat;
+- mobile-friendly;
+- mudah dipahami pengguna awam;
+- konsisten dengan dark theme saat ini.
+
+Desktop:
+
+- maksimal 3 kartu per baris;
+- 6 kategori utama;
+- spacing lebih lega;
+- deskripsi maksimal 2–3 baris.
+
+Mobile:
+
+- 1 kartu per baris;
+- CTA jelas;
+- filter tidak memenuhi layar;
+- sub-layanan dapat dibuka dengan accordion atau category detail page.
+
+==================================================
+PRICING DISPLAY
+==================================================
+
+Tampilkan harga kategori sebagai:
+
+“Mulai dari Rp …”
+
+Harga kategori harus berasal dari harga sub-layanan aktif termurah yang valid.
+
+Jangan hard-code harga jika harga sudah tersedia di database.
+
+Jika tidak ada harga:
+
+tampilkan:
+
+“Hubungi kami”
+
+atau
+
+“Konsultasikan kebutuhan”
+
+sesuai aturan existing.
+
+==================================================
+ADMIN MANAGEMENT
+==================================================
+
+Tambahkan dukungan di Admin Portal untuk mengatur:
+
+- kategori utama;
+- sub-layanan;
+- visibility publik;
+- featured;
+- display order;
+- parent category;
+- nama publik;
+- deskripsi publik;
+- icon;
+- starting price override jika memang diperbolehkan;
+- status aktif/nonaktif.
+
+Jangan memaksa admin mengubah database secara manual.
+
+==================================================
+ANALYTICS
+==================================================
+
+Pastikan analytics tetap dapat membedakan:
+
+- main category;
+- service;
+- sub-service;
+- click;
+- detail view;
+- start project;
+- quotation;
+- conversion;
+- completed order.
+
+Tambahkan event bila belum tersedia:
+
+catalog_category_view
+catalog_service_view
+catalog_service_selected
+smart_choice_started
+smart_choice_recommendation
+smart_choice_selected
+
+Jangan mencatat data sensitif user.
+
+==================================================
+IMPLEMENTATION PHASES
+==================================================
+
+PHASE 1
+Audit current catalog schema, seed, API, UI, pricing, workflow mapping, and historical dependencies.
+
+PHASE 2
+Buat canonical mapping dan migration additive bila diperlukan.
+
+PHASE 3
+Perbarui seed agar 6 kategori utama tersedia secara idempotent.
+
+PHASE 4
+Perbarui public catalog API agar mengembalikan hierarki:
+
+category
+→ sub-services
+
+PHASE 5
+Perbarui halaman katalog Customer Portal.
+
+PHASE 6
+Tambahkan category detail dan sub-service selection.
+
+PHASE 7
+Tambahkan “Bantu Saya Memilih”.
+
+PHASE 8
+Perbarui Admin Portal management.
+
+PHASE 9
+Perbarui search, alias, pricing, dan analytics.
+
+PHASE 10
+Jalankan regression dan E2E development.
+
+==================================================
+TESTING
+==================================================
+
+Wajib menguji:
+
+1. hanya 6 kategori utama tampil;
+2. semua sub-layanan berada pada kategori yang benar;
+3. service lama tetap dapat ditemukan melalui search;
+4. project baru dapat dibuat dari setiap kategori;
+5. quotation menggunakan service yang benar;
+6. workflow routing tetap benar;
+7. historical project tetap dapat dibuka;
+8. harga “mulai dari” benar;
+9. internal service tidak tampil publik;
+10. tenant isolation tetap aman;
+11. mobile layout berfungsi;
+12. Smart Choice memberi maksimal 3 rekomendasi;
+13. tidak ada unexpected HTTP 500;
+14. tidak ada duplicate category atau service setelah seed dijalankan ulang.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+A. Current catalog findings
+
+B. Services retained
+
+C. Services demoted
+
+D. Canonical category mapping
+
+E. Database changes
+
+F. Seed changes
+
+G. API changes
+
+H. Customer Portal changes
+
+I. Admin Portal changes
+
+J. Search and alias behavior
+
+K. Pricing behavior
+
+L. Analytics changes
+
+M. Historical compatibility
+
+N. Tests executed
+
+O. Regression result
+
+P. Typecheck result
+
+Q. Build result
+
+R. Screenshots
+
+S. Remaining risks
+
+T. Files changed
+
+U. Commit hash
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Gunakan salah satu:
+
+CATALOG SIMPLIFICATION COMPLETE
+
+CATALOG SIMPLIFICATION COMPLETE WITH LOW-RISK OBSERVATIONS
+
+CATALOG SIMPLIFICATION BLOCKED
+
+==================================================
+IMPORTANT RULES
+==================================================
+
+- Jangan hard-delete layanan lama.
+- Jangan menghapus histori.
+- Jangan mengganti slug canonical tanpa alias.
+- Jangan membuat kategori duplikat.
+- Jangan menampilkan layanan internal ke publik.
+- Jangan hard-code harga bila sudah tersedia di database.
+- Jangan mengubah lifecycle.
+- Jangan mengubah billing.
+- Jangan mengubah workflow contract.
+- Jangan deploy.
+- Uji semuanya di development environment.
