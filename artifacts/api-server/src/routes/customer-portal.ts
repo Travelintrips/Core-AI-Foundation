@@ -565,4 +565,19 @@ router.get("/public/customer/dashboard/:dashboardToken", async (req, res): Promi
   });
 });
 
+// ── Test-only cache resets ────────────────────────────────────────────────────
+// These functions are exported ONLY for test isolation — never call them from
+// production code. They clear module-level caches so each test case starts
+// from a clean state without resetting DB-backed idempotency guarantees.
+
+/** @internal Test-only: clears the in-process dedup Map (L1 cache) between tests. */
+export function _testClearSubmitDedupCache(): void {
+  _submitDedup.clear();
+}
+
+/** @internal Test-only: clears the rate-limit map between tests. */
+export function _testClearRateLimitMap(): void {
+  rateLimitMap.clear();
+}
+
 export default router;

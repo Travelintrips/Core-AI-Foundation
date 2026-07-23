@@ -1,28 +1,36 @@
 /**
  * DEF-004 — Notification canonical mapping tests.
  *
- * Verifies that GET /api/public/customer/workspace/:token/notifications
- * returns notifications with:
- *   1. `type` field present and not undefined
- *   2. `tenantId` field present and equals the session's clientEmail
- *   3. Cross-tenant isolation — notifications scoped to the authenticated customer
- *   4. Unknown type falls back safely (no undefined, no exception)
- *   5. Retry does not duplicate notifications
- *   6. `tenantId` is never undefined for tenant-scoped notifications
- *   7. Platform notifications are clearly distinguished
+ * Tests the pure function buildWorkspaceNotificationsFromProjects directly,
+ * bypassing the DB fetch layer entirely. This avoids the internal-closure mock
+ * problem where vi.mock("customerWorkspaceService") cannot replace references
+ * captured inside listWorkspaceNotifications's closure.
+ *
+ * DEF-004 fix: extracted buildWorkspaceNotificationsFromProjects so tests
+ * pass projects/invoices/downloads as arguments rather than relying on
+ * fragile module-closure mocking of listAllWorkspaceProjects.
+ *
+ * Verifies that the pure builder:
+ *   1. `type` field is present and not undefined on all notifications
+ *   2. `tenantId` equals the authenticated customer's email
+ *   3. Cross-tenant isolation — no tenantId bleed between sessions
+ *   4. Project without paymentStatus/reviewStatus still returns notifications
+ *   5. Retry / duplicate call does not duplicate notifications (stable keys)
+ *   6. `tenantId` is never undefined for any notification
+ *   7. Notification types cover expected categories
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
-  listWorkspaceNotifications,
+  buildWorkspaceNotificationsFromProjects,
   type WorkspaceNotification,
   type WorkspaceSession,
+  type WorkspaceProject,
+  type WorkspaceInvoice,
+  type WorkspaceDownloadItem,
 } from "../../services/customerWorkspaceService.js";
 
-// ── Hoisted mocks ─────────────────────────────────────────────────────────────
-const mockListProjects = vi.hoisted(() => vi.fn());
-const mockListDownloads = vi.hoisted(() => vi.fn());
-const mockListInvoices = vi.hoisted(() => vi.fn());
+// ── Module mocks (needed so customerWorkspaceService.ts can be loaded) ────────
 const mockDbSelect = vi.hoisted(() => vi.fn());
 
 vi.mock("@workspace/db", () => ({
@@ -36,19 +44,6 @@ vi.mock("@workspace/db", () => ({
   aiAffiliatesTable: {},
   customerDashboardTokensTable: {},
 }));
-
-// Mock the heavy service deps that require DB / external calls
-vi.mock("../../services/customerWorkspaceService.js", async () => {
-  const actual = await vi.importActual<typeof import("../../services/customerWorkspaceService.js")>(
-    "../../services/customerWorkspaceService.js",
-  );
-  return {
-    ...actual,
-    listAllWorkspaceProjects: mockListProjects,
-    listWorkspaceDownloads: mockListDownloads,
-    listInvoicesForProjects: mockListInvoices,
-  };
-});
 
 vi.mock("../../lib/publicBaseUrl.js", () => ({
   getPublicBaseUrl: () => "https://test.example.com",
@@ -78,7 +73,7 @@ function makeSession(email: string): WorkspaceSession {
   };
 }
 
-function makeProject(overrides: Record<string, unknown> = {}) {
+function makeProject(overrides: Partial<WorkspaceProject> = {}): WorkspaceProject {
   return {
     projectId: "proj-001",
     projectNumber: "PRJ-001",
@@ -89,32 +84,53 @@ function makeProject(overrides: Record<string, unknown> = {}) {
     paymentStatus: "paid",
     reviewStatus: "shared",
     updatedAt: new Date().toISOString(),
+    internalProjectId: null,
+    serviceType: null,
     ...overrides,
-  };
+  } as WorkspaceProject;
+}
+
+function makeInvoice(overrides: Partial<WorkspaceInvoice> = {}): WorkspaceInvoice {
+  return {
+    invoiceNumber: "INV-001",
+    status: "pending",
+    projectNumber: "PRJ-001",
+    issuedAt: new Date().toISOString(),
+    ...overrides,
+  } as WorkspaceInvoice;
+}
+
+function makeDownload(overrides: Partial<WorkspaceDownloadItem> = {}): WorkspaceDownloadItem {
+  return {
+    id: 1,
+    title: "Final Package",
+    category: "source_files",
+    projectNumber: "PRJ-001",
+    projectName: "Test Brand",
+    version: 1,
+    status: "unlocked",
+    approvedBy: null,
+    revisionNotes: null,
+    locked: false,
+    createdAt: new Date().toISOString(),
+    ...overrides,
+  } as WorkspaceDownloadItem;
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe("DEF-004 — Notification canonical mapping", () => {
-  const req = {} as import("express").Request;
-
+describe("DEF-004 — Notification canonical mapping (pure function)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default: no read records
-    mockDbSelect.mockReturnValue({
-      from: () => ({
-        where: vi.fn().mockResolvedValue([]),
-      }),
-    });
-    mockListInvoices.mockResolvedValue([]);
-    mockListDownloads.mockResolvedValue([]);
   });
 
-  it("1. `type` field is present and not undefined on all notifications", async () => {
+  it("1. `type` field is present and not undefined on all notifications", () => {
     const session = makeSession("user@example.com");
-    mockListProjects.mockResolvedValue([makeProject()]);
+    const projects = [makeProject()];
 
-    const items = await listWorkspaceNotifications(req, session, {});
+    const items = buildWorkspaceNotificationsFromProjects(
+      projects, [], [], new Set(), session, {},
+    );
 
     expect(items.length).toBeGreaterThan(0);
     for (const item of items) {
@@ -124,11 +140,13 @@ describe("DEF-004 — Notification canonical mapping", () => {
     }
   });
 
-  it("2. `tenantId` equals the authenticated customer's email", async () => {
+  it("2. `tenantId` equals the authenticated customer's email", () => {
     const session = makeSession("tenant-a@example.com");
-    mockListProjects.mockResolvedValue([makeProject()]);
+    const projects = [makeProject()];
 
-    const items = await listWorkspaceNotifications(req, session, {});
+    const items = buildWorkspaceNotificationsFromProjects(
+      projects, [], [], new Set(), session, {},
+    );
 
     expect(items.length).toBeGreaterThan(0);
     for (const item of items) {
@@ -136,34 +154,38 @@ describe("DEF-004 — Notification canonical mapping", () => {
     }
   });
 
-  it("3. Cross-tenant isolation — tenantId does not bleed between sessions", async () => {
+  it("3. Cross-tenant isolation — tenantId does not bleed between sessions", () => {
     const sessionA = makeSession("tenant-a@example.com");
     const sessionB = makeSession("tenant-b@example.com");
 
-    mockListProjects.mockResolvedValue([makeProject({ brandName: "Brand A" })]);
-    const itemsA = await listWorkspaceNotifications(req, sessionA, {});
+    const projectsA = [makeProject({ brandName: "Brand A" })];
+    const projectsB = [makeProject({ brandName: "Brand B", projectNumber: "PRJ-002" })];
 
-    mockListProjects.mockResolvedValue([makeProject({ brandName: "Brand B", projectNumber: "PRJ-002" })]);
-    const itemsB = await listWorkspaceNotifications(req, sessionB, {});
+    const itemsA = buildWorkspaceNotificationsFromProjects(
+      projectsA, [], [], new Set(), sessionA, {},
+    );
+    const itemsB = buildWorkspaceNotificationsFromProjects(
+      projectsB, [], [], new Set(), sessionB, {},
+    );
 
     for (const n of itemsA) expect(n.tenantId).toBe("tenant-a@example.com");
     for (const n of itemsB) expect(n.tenantId).toBe("tenant-b@example.com");
 
-    // No cross-contamination
+    // No cross-contamination — tenant sets are disjoint
     const aIds = new Set(itemsA.map((n) => n.tenantId));
     const bIds = new Set(itemsB.map((n) => n.tenantId));
     expect([...aIds]).not.toEqual(expect.arrayContaining([...bIds]));
   });
 
-  it("4. Project without paymentStatus or reviewStatus still returns valid notifications", async () => {
+  it("4. Project without paymentStatus or reviewStatus still returns notifications", () => {
     const session = makeSession("user@example.com");
-    mockListProjects.mockResolvedValue([
-      makeProject({ paymentStatus: null, reviewStatus: null }),
-    ]);
+    const projects = [makeProject({ paymentStatus: null, reviewStatus: null })];
 
-    const items = await listWorkspaceNotifications(req, session, {});
+    const items = buildWorkspaceNotificationsFromProjects(
+      projects, [], [], new Set(), session, {},
+    );
 
-    // Should at minimum have the project stage notification
+    // Must at minimum have the project stage notification
     expect(items.length).toBeGreaterThan(0);
     for (const item of items) {
       expect(item.type).toBeDefined();
@@ -171,71 +193,56 @@ describe("DEF-004 — Notification canonical mapping", () => {
     }
   });
 
-  it("5. Retry / duplicate call does not duplicate notifications", async () => {
+  it("5. Retry / duplicate call does not duplicate notifications (stable keys)", () => {
     const session = makeSession("user@example.com");
-    mockListProjects.mockResolvedValue([makeProject()]);
+    const projects = [makeProject()];
 
-    const items1 = await listWorkspaceNotifications(req, session, {});
-    const items2 = await listWorkspaceNotifications(req, session, {});
+    const items1 = buildWorkspaceNotificationsFromProjects(
+      projects, [], [], new Set(), session, {},
+    );
+    const items2 = buildWorkspaceNotificationsFromProjects(
+      projects, [], [], new Set(), session, {},
+    );
 
-    // Same keys — deduped by key within each call, counts should be stable
+    // Same input → same output, same keys (pure function)
     const keys1 = items1.map((n) => n.key).sort();
     const keys2 = items2.map((n) => n.key).sort();
     expect(keys1).toEqual(keys2);
   });
 
-  it("6. tenantId is never undefined (always string | null, not missing)", async () => {
+  it("6. tenantId is never undefined (always string | null, never missing)", () => {
     const session = makeSession("check@example.com");
-    mockListProjects.mockResolvedValue([makeProject()]);
-    mockListInvoices.mockResolvedValue([{
-      invoiceNumber: "INV-001",
-      status: "pending",
-      projectNumber: "PRJ-001",
-      issuedAt: new Date().toISOString(),
-    }]);
-    mockListDownloads.mockResolvedValue([{
-      id: "dl-1",
-      status: "unlocked",
-      title: "Final Package",
-      projectNumber: "PRJ-001",
-      locked: false,
-      createdAt: new Date().toISOString(),
-    }]);
+    const projects = [makeProject()];
+    const invoices = [makeInvoice()];
+    const downloads = [makeDownload()];
 
-    const items = await listWorkspaceNotifications(req, session, {});
+    const items = buildWorkspaceNotificationsFromProjects(
+      projects, invoices, downloads, new Set(), session, {},
+    );
 
     for (const item of items) {
       // `tenantId` key must EXIST — not absent/undefined
       expect("tenantId" in item).toBe(true);
-      // Tenant-scoped notifications must not be null
+      // Tenant-scoped notifications must equal the session email
       expect(item.tenantId).toBe("check@example.com");
     }
   });
 
-  it("7. Notification types cover expected categories", async () => {
+  it("7. Notification types cover expected categories", () => {
     const session = makeSession("user@example.com");
-    mockListProjects.mockResolvedValue([makeProject()]);
-    mockListInvoices.mockResolvedValue([{
-      invoiceNumber: "INV-001",
-      status: "pending",
-      projectNumber: "PRJ-001",
-      issuedAt: new Date().toISOString(),
-    }]);
-    mockListDownloads.mockResolvedValue([{
-      id: "dl-1",
-      status: "unlocked",
-      title: "Final Package",
-      projectNumber: "PRJ-001",
-      locked: false,
-      createdAt: new Date().toISOString(),
-    }]);
+    const projects = [makeProject()];                      // → project + payment + review
+    const invoices = [makeInvoice()];                      // → invoice
+    const downloads = [makeDownload({ locked: false })];   // → download
 
-    const items = await listWorkspaceNotifications(req, session, {});
+    const items = buildWorkspaceNotificationsFromProjects(
+      projects, invoices, downloads, new Set(), session, {},
+    );
     const types = new Set(items.map((n) => n.type));
 
     // Must include at least project, payment, review, invoice, and download types
     expect(types.has("project")).toBe(true);
     expect(types.has("payment")).toBe(true);
+    expect(types.has("review")).toBe(true);
     expect(types.has("invoice")).toBe(true);
     expect(types.has("download")).toBe(true);
   });

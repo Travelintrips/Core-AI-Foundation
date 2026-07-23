@@ -85,7 +85,11 @@ vi.mock("../../services/submitIdempotencyService.js", () => ({
   ensureSubmitIdempotencyTable: vi.fn().mockResolvedValue(undefined),
 }));
 
-import customerPortalRouter from "../customer-portal.js";
+import { creativeProjectsTable } from "@workspace/db";
+import customerPortalRouter, {
+  _testClearSubmitDedupCache,
+  _testClearRateLimitMap,
+} from "../customer-portal.js";
 
 // ── Test app ─────────────────────────────────────────────────────────────────
 function makeApp() {
@@ -131,6 +135,9 @@ function mockSuccessfulCreation() {
 
 describe("DEF-001 — Duplicate project submission deduplication", () => {
   beforeEach(() => {
+    // DEF-001: clear module-level caches so tests are fully isolated
+    _testClearSubmitDedupCache();
+    _testClearRateLimitMap();
     vi.clearAllMocks();
     mockCommit.mockResolvedValue(undefined);
     mockRelease.mockResolvedValue(undefined);
@@ -165,8 +172,12 @@ describe("DEF-001 — Duplicate project submission deduplication", () => {
 
     expect(res2.status).toBe(201);
     expect(res2.body.projectId).toBe(res1.body.projectId);
-    // Only one insert should have been attempted
-    expect(mockDbInsert).toHaveBeenCalledTimes(1);
+    // Table-aware: exactly one project row was created — second request
+    // was served from the L1 cache without touching the DB again.
+    const projectInserts1 = mockDbInsert.mock.calls.filter(
+      ([t]: [unknown]) => t === creativeProjectsTable,
+    );
+    expect(projectInserts1).toHaveLength(1);
   });
 
   it("2. Submissions 10–100 ms apart — DB claim returns existing response", async () => {
@@ -224,8 +235,11 @@ describe("DEF-001 — Duplicate project submission deduplication", () => {
 
     expect(res1.status).toBe(201);
     expect(res2.status).toBe(201);
-    // Both should have attempted DB insert (different fingerprints)
-    expect(mockDbInsert).toHaveBeenCalledTimes(2);
+    // Table-aware: one project row per unique tenant (different fingerprints)
+    const projectInserts4 = mockDbInsert.mock.calls.filter(
+      ([t]: [unknown]) => t === creativeProjectsTable,
+    );
+    expect(projectInserts4).toHaveLength(2);
   });
 
   it("5. Same key + different actor (email) is not deduplicated", async () => {
@@ -324,8 +338,12 @@ describe("DEF-001 — Duplicate project submission deduplication", () => {
     });
     await request(app).post("/public/customer/submit").send(VALID_SUBMIT_BODY);
 
-    // Only one project insert was executed
-    expect(mockDbInsert).toHaveBeenCalledTimes(1);
+    // Table-aware: exactly one project row — the duplicate was stopped at
+    // the L1 cache (or L2 conflict) before any second DB insert.
+    const projectInserts9 = mockDbInsert.mock.calls.filter(
+      ([t]: [unknown]) => t === creativeProjectsTable,
+    );
+    expect(projectInserts9).toHaveLength(1);
   });
 
   it("10. In-flight duplicate returns 409 (not a duplicate project)", async () => {

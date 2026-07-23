@@ -921,21 +921,31 @@ export interface WorkspaceNotification {
   tenantId: string | null;
 }
 
-export async function listWorkspaceNotifications(
-  req: Request,
+/**
+ * Pure function: builds WorkspaceNotification[] from already-fetched data.
+ *
+ * Extracted from listWorkspaceNotifications (DEF-004 fix) so unit tests can
+ * verify mapping logic directly without going through DB or closure mocks.
+ * listWorkspaceNotifications fetches data then delegates here.
+ *
+ * @param projects  — output of listAllWorkspaceProjects
+ * @param invoices  — output of listInvoicesForProjects
+ * @param downloads — output of listDownloadsForProjects
+ * @param readKeys  — set of notification keys already read by this customer
+ * @param session   — authenticated workspace session
+ * @param filters   — optional category / read-state filter
+ */
+export function buildWorkspaceNotificationsFromProjects(
+  projects: WorkspaceProject[],
+  invoices: WorkspaceInvoice[],
+  downloads: WorkspaceDownloadItem[],
+  readKeys: ReadonlySet<string>,
   session: WorkspaceSession,
   filters: { category?: string; read?: "read" | "unread" },
-): Promise<WorkspaceNotification[]> {
-  const projects = await listAllWorkspaceProjects(req, session.clientEmail);
-  const readRows = await db
-    .select({ key: customerNotificationReadsTable.notificationKey })
-    .from(customerNotificationReadsTable)
-    .where(eq(customerNotificationReadsTable.emailHash, session.emailHash));
-  const readKeys = new Set(readRows.map((r) => r.key));
-
-  // Use Omit so individual push calls don't need tenantId — it is added
-  // in the final .map() step below (DEF-004 fix).
+): WorkspaceNotification[] {
+  // Use Omit so individual push calls don't need tenantId — added in final map.
   const notifications: Omit<WorkspaceNotification, "tenantId">[] = [];
+
   for (const p of projects) {
     const projectKey = `project:${p.projectNumber}:stage:${p.currentStage}`;
     notifications.push({
@@ -987,7 +997,6 @@ export async function listWorkspaceNotifications(
     }
   }
 
-  const invoices = await listInvoicesForProjects(projects);
   for (const inv of invoices) {
     const invKey = `invoice:${inv.invoiceNumber}:${inv.status}`;
     notifications.push({
@@ -1003,7 +1012,6 @@ export async function listWorkspaceNotifications(
     });
   }
 
-  const downloads = await listDownloadsForProjects(req, projects);
   for (const d of downloads.filter((d) => !d.locked)) {
     const dlKey = `download:${d.id}:${d.status}`;
     notifications.push({
@@ -1019,10 +1027,7 @@ export async function listWorkspaceNotifications(
     });
   }
 
-  // DEF-004: Enrich all notifications with tenantId (customer email) and
-  // final isRead state. tenantId is required so callers can distinguish
-  // tenant-scoped from platform-wide notifications and prevent cross-tenant
-  // data exposure when notifications are aggregated or forwarded.
+  // DEF-004: Enrich with tenantId (customer email) and final isRead state.
   let deduped = notifications
     .map((n) => ({ ...n, isRead: readKeys.has(n.key), tenantId: session.clientEmail }))
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -1032,6 +1037,24 @@ export async function listWorkspaceNotifications(
   if (filters.read === "unread") deduped = deduped.filter((n) => !n.isRead);
 
   return deduped;
+}
+
+export async function listWorkspaceNotifications(
+  req: Request,
+  session: WorkspaceSession,
+  filters: { category?: string; read?: "read" | "unread" },
+): Promise<WorkspaceNotification[]> {
+  const projects = await listAllWorkspaceProjects(req, session.clientEmail);
+  const readRows = await db
+    .select({ key: customerNotificationReadsTable.notificationKey })
+    .from(customerNotificationReadsTable)
+    .where(eq(customerNotificationReadsTable.emailHash, session.emailHash));
+  const readKeys = new Set(readRows.map((r) => r.key));
+  const invoices = await listInvoicesForProjects(projects);
+  const downloads = await listDownloadsForProjects(req, projects);
+  return buildWorkspaceNotificationsFromProjects(
+    projects, invoices, downloads, readKeys, session, filters,
+  );
 }
 
 export async function markNotificationRead(emailHash: string, key: string): Promise<void> {
