@@ -63,6 +63,8 @@ interface JobRequirement {
    * Fields whose name ends in "Url" are additionally checked to be HTTP(S) URLs.
    */
   requiredResultFields?: readonly string[];
+  /** True when the worker returns one or more validated storage artifacts. */
+  requiresArtifacts?: boolean;
 }
 
 /**
@@ -90,7 +92,38 @@ export const JOB_COMPLETION_REQUIREMENTS: Readonly<Record<string, JobRequirement
   zip_export:          { requiresAsset: true, requiredResultFields: ["storagePath", "permanentUrl"] },
   video_generation:    { requiresAsset: true, requiredResultFields: ["storagePath", "permanentUrl"] },
   image_batch_export:  { requiresAsset: true, requiredResultFields: ["storagePath", "permanentUrl"] },
+  design_render: { requiresAsset: true, requiredResultFields: ["outputUrl"] },
+  design_render_zip_export: { requiresAsset: true, requiredResultFields: ["zipStoragePath"] },
+  generate_project_zip: { requiresAsset: true, requiredResultFields: ["storagePath"] },
+  export_workspace_job: { requiresAsset: true, requiredResultFields: ["storagePath"] },
+  universal_render: { requiresAsset: true, requiresArtifacts: true },
+  universal_render_svg: { requiresAsset: true, requiresArtifacts: true },
+  universal_render_png: { requiresAsset: true, requiresArtifacts: true },
+  universal_render_pdf: { requiresAsset: true, requiresArtifacts: true },
+  universal_render_thumbnail: { requiresAsset: true, requiresArtifacts: true },
+  universal_render_watermarked: { requiresAsset: true, requiresArtifacts: true },
+  universal_render_print_ready: { requiresAsset: true, requiresArtifacts: true },
+  universal_render_zip: { requiresAsset: true, requiresArtifacts: true },
+  universal_render_composition: { requiresAsset: true, requiresArtifacts: true },
 };
+
+function hasValidArtifactArray(result: Record<string, unknown>): boolean {
+  const artifacts = result["artifacts"];
+  if (!Array.isArray(artifacts) || artifacts.length === 0) return false;
+
+  return artifacts.every((artifact) => {
+    if (!artifact || typeof artifact !== "object") return false;
+    const item = artifact as Record<string, unknown>;
+    const storagePath = item["storagePath"];
+    const publicUrl = item["publicUrl"];
+    return (
+      typeof storagePath === "string" &&
+      storagePath.trim().length > 0 &&
+      typeof publicUrl === "string" &&
+      (publicUrl.startsWith("http://") || publicUrl.startsWith("https://"))
+    );
+  });
+}
 
 /** True if this job type is expected to produce a file deliverable. */
 export function isFileProducingJob(jobType: string): boolean {
@@ -115,6 +148,10 @@ export function isFalseCompletionResult(result: unknown): boolean {
 
   // Stub pattern: message contains "dispatched" + ≤2 fields
   if (message.includes("dispatched") && fieldCount <= 2) return true;
+
+  if (Array.isArray(r["artifacts"])) {
+    return !hasValidArtifactArray(r);
+  }
 
   // No asset reference — missing the expected deliverable fields
   const hasAssetRef =
@@ -155,6 +192,14 @@ export function validateJobCompletion(
       DELIVERABLE_NOT_CREATED,
       `File-producing job '${jobType}' returned a stub dispatch message without a real ` +
       `deliverable. The worker has no implementation. Job cannot be marked completed.`,
+    );
+  }
+
+  if (req.requiresArtifacts && !hasValidArtifactArray(result)) {
+    throw new DeliverableValidationError(
+      DELIVERABLE_NOT_CREATED,
+      `File-producing job '${jobType}' completed without a non-empty, validated ` +
+      `artifacts[] result. No final render evidence was provided.`,
     );
   }
 

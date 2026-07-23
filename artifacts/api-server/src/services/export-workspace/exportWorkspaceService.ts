@@ -271,6 +271,7 @@ export async function submitExport(input: SubmitExportInput): Promise<SubmitExpo
     .values({
       jobCode,
       jobType: EXPORT_WORKSPACE_JOB_TYPE,
+      requiredCapability: "export_workspace",
       priority: 40,
       status: "queued",
       payloadJson,

@@ -16,11 +16,14 @@ import { db, aiJobsTable, aiExecutionPlansTable, aiDepartmentsTable } from "@wor
 import type { InsertAiJob } from "@workspace/db";
 import { computePriorityScore } from "./priorityEngine.js";
 import { logAudit } from "./aiAuditService.js";
+import { WORKER_TYPE_CAPABILITIES } from "./workerClusterService.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface EnqueueJobInput {
   jobType: string;
+  /** Capability required by the worker that can execute this job. */
+  requiredCapability?: string | null;
   payloadJson?: Record<string, unknown>;
   priority?: number;
   executionPlanId?: number | null;
@@ -75,6 +78,16 @@ async function resolveFactors(input: EnqueueJobInput) {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function enqueue(input: EnqueueJobInput) {
+  if (input.requiredCapability != null) {
+    const knownCapabilities = new Set(Object.values(WORKER_TYPE_CAPABILITIES).flat());
+    if (!knownCapabilities.has(input.requiredCapability)) {
+      throw new Error(
+        `Unknown required capability "${input.requiredCapability}". ` +
+        `Register it in WORKER_TYPE_CAPABILITIES before enqueueing jobs.`,
+      );
+    }
+  }
+
   const { execPlanPriority, deptPriority } = await resolveFactors(input);
 
   const now = new Date();
@@ -101,6 +114,7 @@ export async function enqueue(input: EnqueueJobInput) {
   const insert: InsertAiJob = {
     jobCode,
     jobType:           input.jobType,
+    requiredCapability: input.requiredCapability ?? null,
     payloadJson,
     priority:          input.priority ?? 50,
     priorityScore:     String(score),

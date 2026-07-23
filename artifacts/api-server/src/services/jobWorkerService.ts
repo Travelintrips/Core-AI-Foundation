@@ -588,10 +588,14 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
       }
       const zipResult = await executeZipDeliveryJob(zipDeliveryId, zipProjectId);
       if (!zipResult.ok) {
-        // Non-fatal: log but don't throw — project stays completed
-        logger.warn({ jobId: job.id, zipProjectId, error: zipResult.error }, "[executeJob] ZIP generation failed (non-fatal)");
+        throw new Error(zipResult.error ?? "ZIP delivery failed");
       }
-      return { message: "ZIP delivery job executed", projectId: zipProjectId, deliveryId: zipDeliveryId, ok: zipResult.ok };
+      return {
+        projectId: zipProjectId,
+        deliveryId: zipDeliveryId,
+        ok: true,
+        storagePath: zipResult.storagePath,
+      };
     }
 
     case "csv_export":
@@ -629,6 +633,22 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
       return executeZipExportJob(zipExportId, zipTenantId, zipBatchId);
     }
 
+    // Team 14: universal renderer jobs share one capability and handler while
+    // retaining distinct job types for format-specific completion contracts.
+    case "universal_render":
+    case "universal_render_svg":
+    case "universal_render_png":
+    case "universal_render_pdf":
+    case "universal_render_thumbnail":
+    case "universal_render_watermarked":
+    case "universal_render_print_ready":
+    case "universal_render_zip":
+    case "universal_render_composition": {
+      const { executeUniversalRenderJob } = await import("../workers/universal-renderer/universalRenderWorker.js");
+      const result = await executeUniversalRenderJob(job);
+      return { ...result };
+    }
+
     // ── Team 17: Universal Design Export Workspace ───────────────────────────
     case "export_workspace_job": {
       const { executeExportWorkspaceJob } = await import("./export-workspace/exportWorkspaceService.js");
@@ -636,7 +656,7 @@ export async function executeJob(job: AiJob, workerId: number): Promise<Record<s
     }
 
     default:
-      return { message: `Job type '${job.jobType}' dispatched`, jobId: job.id };
+      throw new WorkerNotImplementedError(job.jobType ?? "unknown");
   }
 }
 

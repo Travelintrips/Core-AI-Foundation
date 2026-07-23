@@ -62,6 +62,7 @@ const createJobHandler: HandlerFn = async (event, sub, config) => {
 
     const job = await enqueue({
       jobType,
+      requiredCapability,
       priority,
       payloadJson: { ...payload, requiredCapability },
     });

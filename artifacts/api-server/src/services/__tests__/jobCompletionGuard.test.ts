@@ -417,4 +417,81 @@ describe("Phase 1B — Production Safety Guards", () => {
       ).not.toThrow();
     });
   });
+
+  describe("Universal renderer and export workspace completion", () => {
+    it("rejects universal render results with no artifacts", () => {
+      expect(() =>
+        validateJobCompletion("universal_render_png", {
+          requestId: "req-1",
+          artifacts: [],
+          warnings: [],
+          durationMs: 10,
+        }),
+      ).toThrow(DeliverableValidationError);
+    });
+
+    it("rejects universal render artifacts without storage evidence", () => {
+      expect(() =>
+        validateJobCompletion("universal_render_pdf", {
+          artifacts: [{ publicUrl: "https://cdn.example.com/file.pdf" }],
+        }),
+      ).toThrow(DeliverableValidationError);
+    });
+
+    it("accepts universal render artifacts with storage path and public URL", () => {
+      expect(() =>
+        validateJobCompletion("universal_render_png", {
+          artifacts: [{
+            format: "png",
+            storagePath: "renders/job-1/image.png",
+            publicUrl: "https://cdn.example.com/renders/job-1/image.png",
+          }],
+        }),
+      ).not.toThrow();
+    });
+
+    it("rejects export workspace placeholder results", () => {
+      expect(() =>
+        validateJobCompletion("export_workspace_job", {
+          engineType: "document",
+          storagePath: null,
+          note: "Delegated to document engine.",
+        }),
+      ).toThrow(DeliverableValidationError);
+    });
+
+    it("accepts universal artifacts in false-completion audit", () => {
+      expect(isFalseCompletionResult({
+        requestId: "req-1",
+        artifacts: [{
+          storagePath: "renders/job-1/image.png",
+          publicUrl: "https://cdn.example.com/renders/job-1/image.png",
+        }],
+      })).toBe(false);
+    });
+
+    it("rejects empty universal artifacts in false-completion audit", () => {
+      expect(isFalseCompletionResult({
+        requestId: "req-1",
+        artifacts: [],
+      })).toBe(true);
+    });
+
+    it("requires evidence for design render ZIP exports", () => {
+      expect(() =>
+        validateJobCompletion("design_render_zip_export", {
+          exportId: 1,
+          status: "completed",
+        }),
+      ).toThrow(DeliverableValidationError);
+
+      expect(() =>
+        validateJobCompletion("design_render_zip_export", {
+          exportId: 1,
+          status: "completed",
+          zipStoragePath: "renders/batch-1/export.zip",
+        }),
+      ).not.toThrow();
+    });
+  });
 });

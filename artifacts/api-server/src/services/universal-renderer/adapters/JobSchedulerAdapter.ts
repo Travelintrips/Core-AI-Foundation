@@ -17,6 +17,7 @@ export class JobSchedulerAdapter implements JobSchedulerPort {
 
     const job = await enqueue({
       jobType:  input.jobType,
+      requiredCapability: input.requiredCapability ?? null,
       payloadJson: {
         ...input.payload,
         _tenantId:          tenantId,          // WP-06 tenant stamp

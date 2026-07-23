@@ -131,6 +131,7 @@ export async function enqueueZipDelivery(projectId: string): Promise<ZipDelivery
     .values({
       jobCode: `zip-${projectId}-${Date.now()}`,
       jobType: "generate_project_zip",
+      requiredCapability: "generate_project_zip",
       priority: 3,
       status: "pending",
       payloadJson: { projectId, deliveryId: delivery.id },
@@ -143,7 +144,12 @@ export async function enqueueZipDelivery(projectId: string): Promise<ZipDelivery
     .set({ jobId: job.id, updatedAt: new Date() })
     .where(eq(aiZipDeliveriesTable.id, delivery.id));
 
-  await publishSafe("zip_delivery_queued", { projectId, deliveryId: delivery.id, jobId: job.id });
+  publishSafe({
+    eventType: "zip_delivery_queued",
+    sourceModule: "zip-delivery",
+    sourceId: String(delivery.id),
+    payload: { projectId, deliveryId: delivery.id, jobId: job.id },
+  });
 
   return toView({ ...delivery, jobId: job.id });
 }
@@ -180,7 +186,10 @@ export interface ZipManifest {
  * Core ZIP generation logic called by the job worker.
  * Downloads all deliverable assets for a project, assembles a ZIP, uploads it.
  */
-export async function executeZipDeliveryJob(deliveryId: number, projectId: string): Promise<{ ok: boolean; error?: string }> {
+export async function executeZipDeliveryJob(
+  deliveryId: number,
+  projectId: string,
+): Promise<{ ok: boolean; storagePath?: string; error?: string }> {
   // Mark as generating
   await db
     .update(aiZipDeliveriesTable)
@@ -211,7 +220,8 @@ export async function executeZipDeliveryJob(deliveryId: number, projectId: strin
       const url = asset.imageUrl ?? asset.storagePath;
       if (!url) continue;
 
-      const ext = getExtension(asset.assetType, asset.mimeType ?? "");
+        const mimeType = getMimeType(asset.assetType);
+        const ext = getExtension(asset.assetType, mimeType);
       const safeName = `${asset.assetType}-v${asset.version}-${asset.id}${ext}`;
       const filePath = join(workDir, safeName);
 
@@ -224,7 +234,7 @@ export async function executeZipDeliveryJob(deliveryId: number, projectId: strin
         manifestEntries.push({
           fileName: safeName,
           type: asset.assetType,
-          mimeType: asset.mimeType ?? getMimeType(asset.assetType),
+          mimeType,
           fileSizeBytes: buf.length,
           checksum,
         });
@@ -295,18 +305,23 @@ export async function executeZipDeliveryJob(deliveryId: number, projectId: strin
     await rm(workDir, { recursive: true, force: true });
 
     // Publish analytics event
-    await publishSafe("zip_delivery_completed", {
-      projectId,
-      deliveryId,
-      fileSizeBytes: zipSizeBytes,
-      fileCount: filesToZip.length,
+    publishSafe({
+      eventType: "zip_delivery_completed",
+      sourceModule: "zip-delivery",
+      sourceId: String(deliveryId),
+      payload: {
+        projectId,
+        deliveryId,
+        fileSizeBytes: zipSizeBytes,
+        fileCount: filesToZip.length,
+      },
     });
 
     await logAudit("zip-delivery", "zip_generated", String(deliveryId), "ai_zip_delivery", "success", {
       projectId, fileSizeBytes: zipSizeBytes,
     });
 
-    return { ok: true };
+    return { ok: true, storagePath };
 
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
