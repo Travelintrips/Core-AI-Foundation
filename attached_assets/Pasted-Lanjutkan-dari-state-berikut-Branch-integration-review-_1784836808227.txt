@@ -1,0 +1,316 @@
+Lanjutkan dari state berikut:
+
+Branch:
+integration-review/design-platform-v1
+
+HEAD:
+cf017a6
+
+Working tree:
+clean sebelum remediation
+
+Confirmed findings:
+
+- hanya `.replit` yang mengandung actual plaintext secrets;
+- file lain hanya berisi environment variable names atau placeholder aman;
+- semua secret yang dibutuhkan sudah tersedia di runtime melalui Replit Secrets;
+- belum ada perubahan yang berhasil disimpan;
+- belum ada commit remediation.
+
+Fokus hanya menyelesaikan secret remediation sampai commit.
+
+Jangan mengulang repository-wide audit.
+Jangan menjalankan subagent.
+Jangan mengerjakan dispatcher, scheduler, tenant isolation, signed URL, migration, SMTP, provider registry, atau payment.
+
+==================================================
+STEP 1 — CONFIRM STATE
+==================================================
+
+Run:
+
+git branch --show-current
+git rev-parse --short HEAD
+git status --short
+
+Expected:
+
+branch = integration-review/design-platform-v1
+HEAD = cf017a6
+working tree clean
+
+Jika berbeda, laporkan sebelum melanjutkan.
+Jangan reset atau checkout branch lain.
+
+==================================================
+STEP 2 — SANITIZE .REPLIT
+==================================================
+
+Edit `.replit`.
+
+Hapus seluruh actual secret values dari tracked configuration.
+
+Secret yang harus keluar dari `.replit` termasuk seluruh actual value untuk:
+
+- AI provider API keys
+- database URLs/passwords
+- Supabase service-role credentials
+- SMTP passwords
+- Fonnte/WhatsApp tokens
+- ADMIN_API_KEY
+- SESSION_SECRET
+- webhook/token secrets
+- credential lainnya
+
+Pertahankan hanya konfigurasi non-secret seperti:
+
+- run/build commands
+- deployment target
+- ports
+- public URL
+- public allowed origins
+- NODE_ENV
+- non-secret boolean feature flags
+
+Jangan memindahkan secret ke file tracked lain.
+
+Jangan menambahkan actual secret ke:
+
+- `.env`
+- `.env.production`
+- JSON
+- markdown
+- test fixtures
+- source code
+- comments
+
+Aplikasi harus membaca secret dari runtime environment / Replit Secrets.
+
+==================================================
+STEP 3 — CREATE SAFE .ENV.EXAMPLE
+==================================================
+
+Buat atau perbaiki `.env.example`.
+
+Gunakan placeholder aman saja:
+
+OPENAI_API_KEY=<set-in-replit-secrets>
+ANTHROPIC_API_KEY=<set-in-replit-secrets>
+GEMINI_API_KEY=<set-in-replit-secrets>
+REPLICATE_API_TOKEN=<set-in-replit-secrets>
+MISTRAL_API_KEY=<set-in-replit-secrets>
+DATABASE_URL=<set-in-replit-secrets>
+SUPABASE_SERVICE_ROLE_KEY=<set-in-replit-secrets>
+SMTP_PASS=<set-in-replit-secrets>
+FONNTE_TOKEN=<set-in-replit-secrets>
+ADMIN_API_KEY=<set-in-replit-secrets>
+SESSION_SECRET=<set-in-replit-secrets>
+
+Tambahkan variable lain yang benar-benar digunakan aplikasi.
+
+Jangan gunakan contoh value yang menyerupai credential nyata.
+
+==================================================
+STEP 4 — ROTATION REPORT
+==================================================
+
+Buat:
+
+ROTATION_REQUIRED.md
+
+Isi hanya nama credential dan tindakan rotasi.
+
+Kelompokkan:
+
+1. AI providers
+2. Database/Supabase
+3. SMTP
+4. WhatsApp/Fonnte
+5. Admin/API authentication
+6. Session/token secrets
+7. Other integrations
+
+Untuk setiap credential tulis:
+
+- environment variable name
+- system/provider
+- exposure source: tracked `.replit`
+- status: NOT ROTATED
+- action required
+- owner
+- verification needed after rotation
+
+Jangan tulis actual value atau potongan nilainya.
+
+Tambahkan catatan:
+
+Because these credentials were stored in a git-tracked file, they must be treated as compromised even after removal from the current working tree.
+
+Jangan melakukan rotasi otomatis.
+
+==================================================
+STEP 5 — ADD SECRET SCANNER
+==================================================
+
+Tambahkan script:
+
+pnpm security:scan-secrets
+
+Scanner harus memindai tracked files.
+
+Minimum detection:
+
+- known secret variable assigned a non-placeholder value;
+- API key patterns;
+- database URLs containing username/password;
+- Supabase service-role JWT;
+- private key blocks;
+- SMTP password assignment;
+- admin/session secret assignment.
+
+Output hanya:
+
+- file
+- line number
+- rule ID
+
+Jangan mencetak full secret atau matched value.
+
+Scanner harus:
+
+- return non-zero jika secret ditemukan;
+- return zero jika repository bersih;
+- mengabaikan safe placeholders dalam `.env.example`;
+- tidak mengabaikan `.replit`.
+
+Tambahkan test minimal:
+
+1. mendeteksi fake secret fixture;
+2. mengabaikan placeholder aman;
+3. output tidak menampilkan full fake secret;
+4. clean fixture return zero;
+5. violating fixture return non-zero.
+
+Gunakan fake values yang jelas bukan credential nyata.
+
+==================================================
+STEP 6 — VERIFY RUNTIME SECRET AVAILABILITY
+==================================================
+
+Jangan tampilkan nilai environment.
+
+Verifikasi hanya nama variable dan status:
+
+SET
+MISSING
+
+Pastikan variable yang sebelumnya berasal dari `.replit` tetap SET melalui Replit Secrets/runtime.
+
+Jika required secret menjadi MISSING:
+
+jangan commit perubahan yang membuat runtime rusak.
+
+Gunakan verdict:
+
+BLOCKED — RUNTIME SECRETS NOT AVAILABLE
+
+Jika semua required secret tersedia, lanjutkan.
+
+==================================================
+STEP 7 — RUN VERIFICATION
+==================================================
+
+Run:
+
+pnpm security:scan-secrets
+
+Run scanner tests.
+
+Run targeted startup/config test jika ada.
+
+Run changed-scope typecheck.
+
+Run application startup smoke test dengan runtime environment.
+
+Verifikasi:
+
+- `.replit` tidak mengandung actual secret;
+- tidak ada actual secret dalam tracked working tree;
+- `.env.example` hanya placeholder;
+- `ROTATION_REQUIRED.md` tidak mengandung value;
+- scanner PASS;
+- runtime masih dapat membaca secret;
+- application startup tidak rusak;
+- tidak ada secret tercetak di log.
+
+Jangan menjalankan full regression 5,378 tests pada sesi ini kecuali masih tersedia waktu yang cukup.
+
+==================================================
+STEP 8 — REVIEW DIFF
+==================================================
+
+Run:
+
+git status --short
+git diff --stat
+git diff -- .replit .env.example ROTATION_REQUIRED.md
+git diff -- package.json
+
+Review semua file scanner dan test.
+
+Jangan tampilkan actual secret dalam output diff.
+
+Jika Git menampilkan secret lama dari removed lines, redaksikan output laporan dan jangan menyalin nilainya ke final response.
+
+Pastikan tidak ada perubahan:
+
+- payment
+- Midtrans
+- Xendit
+- Paylabs
+- dispatcher
+- scheduler
+- tenant isolation
+- signed URL
+- migration
+
+==================================================
+STEP 9 — COMMIT IMMEDIATELY
+==================================================
+
+Jika semua targeted checks PASS:
+
+git add hanya file secret remediation terkait.
+
+Commit message:
+
+security: remove tracked secrets and add repository scanning
+
+Jangan push.
+Jangan merge.
+Jangan deploy.
+
+Tampilkan:
+
+- commit hash
+- changed files
+- scanner result
+- test result
+- runtime secret availability
+- rotation-required list by variable name only
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Gunakan tepat salah satu:
+
+SECRET REMEDIATION COMMITTED — ROTATION STILL REQUIRED
+
+BLOCKED — SECRETS STILL EXPOSED
+
+BLOCKED — RUNTIME SECRETS NOT AVAILABLE
+
+BLOCKED — SECRET SCANNER FAILURE
+
+BLOCKED — TEST FAILURE
