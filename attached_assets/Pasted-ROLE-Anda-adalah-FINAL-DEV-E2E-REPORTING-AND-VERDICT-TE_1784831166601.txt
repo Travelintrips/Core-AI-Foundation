@@ -1,0 +1,520 @@
+ROLE
+
+Anda adalah FINAL DEV E2E REPORTING AND VERDICT TEAM.
+
+Lanjutkan dari checkpoint terakhir.
+
+Jangan mengulang full regression.
+Jangan mengulang targeted tests kecuali diperlukan untuk mengisi data yang benar-benar hilang.
+Jangan mengubah production code.
+Jangan deploy.
+Jangan publish.
+Jangan merge.
+Jangan push.
+
+==================================================
+VERIFIED CHECKPOINT
+==================================================
+
+Repository:
+
+- HEAD sebelumnya: c28a8d0
+- Working tree sebelumnya clean
+
+Tests:
+
+- Targeted suites: 32/32 PASS
+- Full regression: 5,378/5,378 PASS
+- Test files: 178
+- Unexpected HTTP 500: 0
+
+Build/typecheck:
+
+- lib/db built successfully
+- Typecheck/build data already collected
+- Preserve distinction between changed-scope clean and pre-existing debt
+
+Fixture:
+
+- Project ID: ab06877e
+- Full lifecycle fixture: 6/6 complete
+- filesUnlocked: true
+- project fully completed
+- AI-generated brand copy exists
+- 2 real image artifacts exist
+
+Payment:
+
+- 7/8 scenarios PASS
+- expired_payment scenario remains a known pre-existing limitation
+- Do not claim live Midtrans verification
+- Use exact wording:
+  PAYMENT BUSINESS FLOW PASS USING DEVELOPMENT TEST ADAPTER
+
+Security:
+
+- Tenant isolation confirmed
+- Signed download URL works
+- 0 unexpected HTTP 500
+
+Remaining work:
+
+- Finish PPTX evidence summary
+- Finish ZIP evidence summary
+- Finish admin/customer consistency summary
+- Write four final report files
+- Assign honest final verdict
+
+==================================================
+PHASE 1 — STATE CHECK
+==================================================
+
+1. Verify current branch.
+2. Verify HEAD.
+3. Verify working tree.
+4. Confirm report files exist:
+   - DEV_E2E_VERIFICATION_REPORT.md
+   - DEV_E2E_FAILURES.json
+   - DEV_E2E_COVERAGE_MATRIX.json
+   - DEV_E2E_VERDICT.json
+5. Do not discard any partial report edits.
+6. Do not rerun expensive suites unless data is missing.
+
+==================================================
+PHASE 2 — COMPLETE PPTX EVIDENCE
+==================================================
+
+Confirm whether a real PPTX was actually generated.
+
+Report:
+
+- source project;
+- artifact ID;
+- filename;
+- file size;
+- MIME;
+- slide count;
+- download HTTP status;
+- OOXML validation;
+- [Content_Types].xml presence;
+- ppt/presentation.xml presence;
+- slide XML files;
+- relationship validation;
+- whether file opens/extracts successfully.
+
+If PPTX was not actually generated:
+
+do not infer success.
+
+Use:
+
+PPTX E2E NOT VERIFIED
+
+and classify artifact flow accordingly.
+
+If PPTX was generated and validated:
+
+use:
+
+PPTX E2E PASS
+
+==================================================
+PHASE 3 — COMPLETE ZIP EVIDENCE
+==================================================
+
+Confirm whether a real final delivery ZIP was actually generated.
+
+Report:
+
+- source project;
+- artifact/endpoint;
+- filename;
+- file size;
+- HTTP status;
+- MIME;
+- extraction result;
+- number of entries;
+- file manifest;
+- no zero-byte files;
+- no placeholder files;
+- no temporary/internal files;
+- no cross-tenant assets;
+- correct canonical MIME metadata.
+
+If ZIP was not actually downloaded and extracted:
+
+use:
+
+ZIP E2E NOT VERIFIED
+
+Do not infer success from endpoint existence alone.
+
+==================================================
+PHASE 4 — REVIEW FLOW SUMMARY
+==================================================
+
+Document canonical review implementation discovered.
+
+Include:
+
+- public route;
+- admin route;
+- auth model;
+- token behavior;
+- DB tables;
+- approve behavior;
+- revision behavior;
+- comment behavior;
+- invalid token result;
+- expired token result;
+- tenant isolation result;
+- audit log result.
+
+If any review action was not actually executed,
+mark that action NOT TESTED.
+
+==================================================
+PHASE 5 — PAYMENT SUMMARY
+==================================================
+
+Document all eight scenarios.
+
+Suggested matrix:
+
+| Scenario | Result | Evidence |
+| success | PASS | ... |
+| pending | PASS | ... |
+| failed | PASS | ... |
+| partial | PASS | ... |
+| installment | PASS | ... |
+| duplicate callback | PASS | ... |
+| invalid signature | PASS | ... |
+| expired | LIMITATION | ... |
+
+Explain expired_payment accurately:
+
+- expected behavior;
+- actual behavior;
+- whether it is a product gap, fixture limitation, or pre-existing adapter limitation;
+- release impact.
+
+Do not downgrade or hide it.
+
+==================================================
+PHASE 6 — LIFECYCLE EVIDENCE
+==================================================
+
+For project ab06877e, record canonical states:
+
+- workflow_completed;
+- production_completed;
+- deliverable_ready;
+- commercial_completed;
+- files_unlocked;
+- order_completed.
+
+Confirm each state from actual API or DB evidence.
+
+Record:
+
+- quotation status;
+- payment schedule status;
+- production step count;
+- artifact count;
+- review state;
+- unlock state;
+- completion state.
+
+==================================================
+PHASE 7 — SIGNED DOWNLOAD MATRIX
+==================================================
+
+Report actual results for:
+
+- valid signed URL;
+- invalid token;
+- expired token;
+- pre-unlock;
+- post-unlock;
+- other tenant;
+- other artifact if tested;
+- reuse behavior if tested.
+
+Do not mark unexecuted scenarios PASS.
+
+==================================================
+PHASE 8 — CUSTOMER/ADMIN CONSISTENCY
+==================================================
+
+Compare the same project across both portals.
+
+Customer side:
+
+- project status;
+- lifecycle badge;
+- payment status;
+- workflow progress;
+- artifact visibility;
+- download CTA;
+- completion state.
+
+Admin side:
+
+- project status;
+- workflow;
+- payment schedule;
+- review;
+- artifacts;
+- unlock;
+- audit trail.
+
+Classify:
+
+CONSISTENT
+PARTIALLY CONSISTENT
+INCONSISTENT
+
+Include exact mismatches if any.
+
+==================================================
+PHASE 9 — TYPECHECK AND BUILD SUMMARY
+==================================================
+
+Do not claim global clean unless true.
+
+Separate:
+
+A. Clean changed scope
+
+B. Pre-existing debt
+
+Include:
+
+- cargo-finder issues;
+- mockup-sandbox issues;
+- PptxGenJS namespace issues;
+- any workspace-level errors found.
+
+State whether any new error was introduced by this work.
+
+==================================================
+PHASE 10 — FINAL FAILURE RECORDS
+==================================================
+
+Update DEV_E2E_FAILURES.json.
+
+Each remaining issue must include:
+
+- id;
+- title;
+- severity;
+- status;
+- category;
+- evidence;
+- owner;
+- release impact;
+- recommended action.
+
+Likely remaining issue:
+
+expired_payment scenario limitation
+
+Only include PPTX/ZIP as defects if they truly failed.
+If merely untested, classify as coverage gaps, not product defects.
+
+==================================================
+PHASE 11 — COVERAGE MATRIX
+==================================================
+
+Update DEV_E2E_COVERAGE_MATRIX.json.
+
+Each phase should be:
+
+PASS
+FAIL
+PARTIAL
+NOT_TESTED
+NOT_APPLICABLE
+
+Do not mark a phase PASS from indirect evidence.
+
+Include:
+
+- targeted tests;
+- regression;
+- typecheck;
+- build;
+- services;
+- payment;
+- review;
+- lifecycle;
+- PPTX;
+- ZIP;
+- unlock;
+- signed download;
+- tenant isolation;
+- customer/admin consistency;
+- HTTP 500 monitoring.
+
+==================================================
+PHASE 12 — VERDICT RULE
+==================================================
+
+Use:
+
+DEV PASS — ALL CRITICAL FLOWS FUNCTION CORRECTLY
+
+only if all of these are true:
+
+- targeted tests pass;
+- full regression passes;
+- no new type/build failures;
+- payment critical flow passes;
+- review flow passes;
+- lifecycle fixture completes;
+- real PPTX validated;
+- real ZIP extracted;
+- unlock validated;
+- signed download validated;
+- tenant isolation validated;
+- customer/admin consistency validated;
+- zero unexpected HTTP 500.
+
+If PPTX or ZIP is not actually verified, use:
+
+DEV PASS WITH LOW-RISK OBSERVATIONS
+
+only if those outputs are optional/non-critical for current release scope.
+
+Otherwise use:
+
+DEV BLOCKED — ARTIFACT DELIVERY FLOW UNVERIFIED
+
+If expired_payment affects release-critical lifecycle behavior,
+use an appropriate blocked verdict.
+
+==================================================
+PHASE 13 — WRITE REPORT FILES
+==================================================
+
+Complete:
+
+1. DEV_E2E_VERIFICATION_REPORT.md
+
+Sections:
+
+A. Executive Summary
+B. Repository State
+C. Targeted Tests
+D. Full Regression
+E. Typecheck
+F. Build
+G. Services
+H. Review Flow
+I. Payment Flow
+J. Lifecycle Fixture
+K. Artifact Inventory
+L. PPTX
+M. ZIP
+N. Unlock
+O. Signed Download
+P. Tenant Isolation
+Q. Customer/Admin Consistency
+R. HTTP 500 Monitoring
+S. Remaining Limitations
+T. Final Verdict
+
+2. DEV_E2E_FAILURES.json
+
+Must be valid JSON.
+
+3. DEV_E2E_COVERAGE_MATRIX.json
+
+Must be valid JSON.
+
+4. DEV_E2E_VERDICT.json
+
+Suggested fields:
+
+{
+  "verdict": "",
+  "timestamp": "",
+  "commit": "",
+  "targetedTests": {
+    "passed": 32,
+    "failed": 0
+  },
+  "regression": {
+    "passed": 5378,
+    "failed": 0,
+    "files": 178
+  },
+  "unexpectedHttp500": 0,
+  "projectId": "ab06877e",
+  "criticalFlows": {},
+  "observations": [],
+  "releaseBlockingIssues": []
+}
+
+==================================================
+PHASE 14 — VALIDATE REPORTS
+==================================================
+
+Validate:
+
+- both JSON files parse;
+- totals match;
+- verdict is consistent across all files;
+- project ID matches;
+- no secret/token is included;
+- no signed URL is included in full;
+- no raw customer PII;
+- no unsupported claim;
+- no contradiction between report and coverage matrix.
+
+==================================================
+PHASE 15 — COMMIT
+==================================================
+
+After reports are complete:
+
+- inspect git diff;
+- remove temporary files;
+- remove downloaded artifacts unless intentionally retained;
+- do not commit secrets;
+- do not commit full signed URLs;
+- commit reports locally.
+
+Suggested commit:
+
+docs: finalize development E2E verification evidence
+
+Report commit hash.
+
+Do not push.
+Do not merge.
+Do not deploy.
+
+==================================================
+FINAL RESPONSE FORMAT
+==================================================
+
+Return:
+
+1. Final verdict
+2. Key metrics
+3. Critical flow status
+4. Remaining observation
+5. Report files updated
+6. Commit hash
+7. Deployment recommendation
+
+Deployment recommendation must be one of:
+
+DO NOT DEPLOY
+
+READY FOR STAGING ONLY
+
+READY FOR PRODUCTION DEPLOYMENT
+
+Do not recommend production if PPTX/ZIP or another release-critical flow remains unverified.
