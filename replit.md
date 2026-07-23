@@ -1,64 +1,53 @@
-# Creative AI Studio — Enterprise Platform
+# AI Creative Studio — Enterprise Platform
 
-A full-stack AI-powered creative services platform built as a pnpm monorepo.
-
-## Project overview
-
-The platform enables clients to request creative AI services (branding, design, company profiles, etc.), manages the full commercial workflow (quotation → payment → AI generation → delivery), and provides an admin dashboard for operators.
+A full-stack AI creative services platform built as a pnpm monorepo. Clients submit creative project requests (branding, packaging, fashion design, company profiles, etc.) which are fulfilled through an AI-powered backend pipeline.
 
 ## Architecture
 
-| Artifact | Path | Preview Path | Description |
-|---|---|---|---|
-| API Server | `artifacts/api-server` | `/api` | Express + Drizzle ORM, connects to Supabase PostgreSQL |
-| AI Platform (admin) | `artifacts/ai-platform` | `/admin/` | React + Vite admin dashboard |
-| Customer Portal | `artifacts/customer-portal` | `/` | Client-facing React + Vite frontend |
-| Cargo Rate Finder | `artifacts/cargo-finder` | `/cargo-finder/` | Standalone cargo rate calculator |
-| Mockup Sandbox | `artifacts/mockup-sandbox` | `/__mockup` | Design canvas / component previews |
+| Artifact | Path | Preview |
+|---|---|---|
+| **Customer Portal** | `artifacts/customer-portal` | `/` |
+| **Admin / AI Platform** | `artifacts/ai-platform` | `/admin/` |
+| **API Server** | `artifacts/api-server` | `/api` |
+| **Cargo Finder** | `artifacts/cargo-finder` | `/cargo-finder/` |
+
+- **Database**: Supabase (dev + prod), `ai_platform` schema
+- **Auth**: Admin email/password login; customers via token-based workspace URLs
+- **AI providers**: OpenAI, Anthropic, Gemini, Cohere, Mistral, Replicate
 
 ## Running the project
 
-All services start via their configured workflows. After a fresh clone or import:
+Dependencies are managed by pnpm. Install once with:
 
 ```bash
-pnpm install   # install all workspace dependencies
+pnpm install
 ```
 
-Then restart all workflows from the Replit interface.
+The three main workflows start automatically:
+- `artifacts/api-server: API Server` — Express backend on port 8080
+- `artifacts/ai-platform: web` — Vite/React admin UI
+- `artifacts/customer-portal: web` — Vite/React customer-facing UI
 
-## Key environment variables
+## Admin login
 
-All secrets are managed in Replit's environment secrets. The project needs:
+Admin credentials are stored as Replit Secrets (`INITIAL_INTERNAL_ADMIN_EMAIL` / `INITIAL_INTERNAL_ADMIN_PASSWORD`). The admin API key is in `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY`. Never commit credentials to this file.
 
-- `SUPABASE_DATABASE_URL_DEV` / `SUPABASE_DEV_DATABASE_URL` — dev Supabase PostgreSQL (both names aliased)
-- `SUPABASE_DATABASE_URL` / `SUPABASE_PROD_DATABASE_URL` — production Supabase PostgreSQL
-- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `REPLICATE_API_TOKEN`, `COHERE_API_KEY` — AI providers
-- `ADMIN_API_KEY` + `VITE_ADMIN_API_KEY` — admin API authentication (same value)
-- `SESSION_SECRET` — Express session signing
-- `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_PORT`, `SMTP_FROM` — email (Hostinger)
-- `FONNTE_TOKEN` — WhatsApp notifications
+## Useful scripts
 
-## Database
+```bash
+# Seed initial data (providers, models, agents)
+pnpm --filter @workspace/api-server run seed
 
-- **Provider**: Supabase PostgreSQL
-- **Schema**: `ai_platform` (not `public`) — all raw SQL must set `search_path`
-- **Dev/prod switching**: controlled by `NODE_ENV`
-- To seed initial data: `pnpm --filter @workspace/api-server run seed`
+# Seed internal admin user
+pnpm --filter @workspace/api-server run seed:internal-admin
 
-## Tech stack
+# Typecheck entire workspace
+pnpm typecheck
 
-- **Runtime**: Node.js 20, pnpm workspaces
-- **Backend**: Express 5, Drizzle ORM, Zod, Pino logging
-- **Frontend**: React 18, Vite 7, TailwindCSS, shadcn/ui, Wouter (routing)
-- **AI**: OpenAI, Anthropic, Google Gemini, Replicate, Mistral, Cohere
-- **Storage**: Supabase Storage (S3-compatible)
-- **Email**: Nodemailer via Hostinger SMTP
-- **PDF**: PDFKit, pdf-lib
-- **Build**: esbuild (api-server), Vite (frontends)
+# Run all tests
+pnpm -r --if-present run test
+```
 
 ## User preferences
 
-- Keep existing project structure — do not restructure or migrate
-- Use pnpm for all package operations
-- Never import zod directly in api-server routes — use `@workspace/api-zod` schemas only
-- Admin auth is one global `adminAuthWithExceptions` mount in `app.ts`, never per-route
+- Keep existing project structure and stack — do not migrate or restructure without explicit request.
