@@ -32,6 +32,7 @@ import * as sseManager from "./services/sseManager.js";
 import { ensureObservabilityTables } from "./services/observabilityService.js";
 import { ensureStorageBucket } from "./lib/supabaseStorage.js";
 import { resumeIncompleteDesignRenderBatches } from "./services/design-recovery/startupResume.js";
+import { ensureSubmitIdempotencyTable } from "./services/submitIdempotencyService.js";
 
 // ── Startup recovery idempotency guard ────────────────────────────────────────
 // Prevents the recovery from running twice if the API server and job worker
@@ -63,6 +64,11 @@ app.listen(port, (err) => {
   // ── Observability tables (additive DDL, idempotent) ──────────────────────
   ensureObservabilityTables().catch((err) =>
     logger.warn({ err }, "[observability] Table init failed (non-blocking)"),
+  );
+
+  // ── Submit idempotency table (DEF-001: DB-backed dedup guarantee) ─────────
+  ensureSubmitIdempotencyTable().catch((err) =>
+    logger.warn({ err }, "[submit-idempotency] Table init failed (non-blocking)"),
   );
 
   // ── Supabase Storage bucket (create ai-assets if missing) ────────────────

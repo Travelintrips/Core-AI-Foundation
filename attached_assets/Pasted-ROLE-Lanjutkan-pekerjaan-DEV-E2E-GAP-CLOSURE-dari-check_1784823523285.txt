@@ -1,0 +1,630 @@
+ROLE
+
+Lanjutkan pekerjaan DEV E2E GAP CLOSURE dari checkpoint terakhir.
+
+Jangan memulai ulang audit dari awal.
+Jangan mengulang eksplorasi file yang sudah selesai.
+Jangan deploy.
+Jangan publish.
+Jangan mengubah production.
+
+Pekerjaan sebelumnya berhenti karena daily quota habis saat mengedit:
+
+index.ts
+
+Checkpoint terakhir menyebutkan:
+
+- project deduplication sedang diimplementasikan;
+- notification mapping sedang diperbaiki;
+- development payment test adapter sudah dibuat atau sedang dibuat;
+- router payment adapter sedang dimount;
+- import pattern di index.ts sedang diperbaiki;
+- top-level await diketahui tidak kompatibel dengan CommonJS;
+- build dan test final belum sempat dijalankan.
+
+==================================================
+FIRST ACTION — REPOSITORY RECOVERY CHECK
+==================================================
+
+Sebelum menulis kode baru:
+
+1. Periksa current branch.
+2. Periksa working tree.
+3. Tampilkan seluruh modified dan untracked files.
+4. Periksa diff dari semua perubahan gap closure.
+5. Periksa khusus index.ts untuk:
+   - duplicate imports;
+   - import di tengah file;
+   - top-level await;
+   - dynamic import yang tidak diperlukan;
+   - router mounted dua kali;
+   - router mounted setelah error handler;
+   - undefined router variable;
+   - syntax yang terpotong;
+   - CommonJS/ESM mismatch.
+6. Jangan reset atau membuang perubahan parsial.
+7. Jangan checkout file secara paksa.
+8. Pertahankan semua perubahan valid yang sudah dibuat.
+
+Buat ringkasan checkpoint aktual sebelum melanjutkan.
+
+==================================================
+SCOPE
+==================================================
+
+Selesaikan hanya area berikut:
+
+1. DEF-001 — concurrent duplicate project submission;
+2. DEF-002 — auth contract verification;
+3. DEF-004 — notification canonical mapping;
+4. development-only payment test adapter;
+5. router mounting dan server integration;
+6. targeted tests;
+7. remaining E2E gap verification.
+
+Jangan membuat feature lain.
+Jangan melakukan refactor besar.
+Jangan mengubah lifecycle canonical.
+Jangan mengubah production payment provider.
+
+==================================================
+PHASE 1 — FIX INDEX.TS SAFELY
+==================================================
+
+Audit struktur server entrypoint terlebih dahulu.
+
+Pastikan router development payment adapter:
+
+- di-import secara statis pada top-level jika arsitektur menggunakan ESM transpilation;
+- mengikuti pola import router lain di repository;
+- tidak memakai top-level await;
+- tidak memakai dynamic import kecuali repository memang menggunakan pola tersebut;
+- dimount setelah middleware dasar;
+- dimount sebelum not-found handler;
+- dimount sebelum global error handler;
+- hanya aktif pada development/test;
+- tidak pernah aktif pada production;
+- tidak dimount dua kali.
+
+Gunakan guard eksplisit, misalnya berdasarkan canonical environment helper existing.
+
+Jangan membuat environment detection kedua jika helper sudah tersedia.
+
+Expected behavior:
+
+Production:
+router tidak tersedia.
+
+Development/test:
+router tersedia hanya jika explicit dev-test configuration aktif.
+
+==================================================
+PHASE 2 — VERIFY DEF-001 IMPLEMENTATION
+==================================================
+
+Periksa implementasi deduplication yang telah dibuat.
+
+Jangan menerima solusi yang hanya menggunakan in-memory Map sebagai proteksi utama jika aplikasi dapat memiliki:
+
+- multiple workers;
+- multiple server instances;
+- restart;
+- horizontal scaling;
+- concurrent database transactions.
+
+In-memory Map boleh digunakan sebagai optimization lokal,
+tetapi bukan satu-satunya concurrency guarantee.
+
+Server-side protection harus memiliki persistent or transactional guarantee.
+
+Pilihan yang disarankan:
+
+- idempotency key table dengan unique constraint;
+- request/client ID unique tenant-scoped;
+- project request fingerprint stored transactionally;
+- existing canonical idempotency infrastructure.
+
+Persyaratan:
+
+- tenant-scoped;
+- actor/customer-scoped;
+- payload-aware;
+- concurrency-safe;
+- retry-safe;
+- transaction-safe;
+- tidak menggabungkan dua request berbeda;
+- tidak membuat duplicate workflow;
+- tidak membuat duplicate job;
+- tidak membuat duplicate payment schedule;
+- tidak membuat duplicate audit event.
+
+Jika perubahan sebelumnya hanya berupa in-memory dedup map:
+
+jangan langsung menghapusnya,
+tetapi tambahkan database-backed guarantee atau gunakan infrastruktur idempotency existing.
+
+Pastikan duplicate retry mengembalikan project canonical yang sama.
+
+==================================================
+PHASE 3 — DEF-001 RESPONSE HANDLING
+==================================================
+
+Periksa response dari submit/create handler.
+
+Pastikan dedup cache atau idempotency record menyimpan hasil nyata:
+
+- project ID;
+- canonical status;
+- response payload;
+- created timestamp;
+- request fingerprint;
+- actor/tenant scope.
+
+Jangan menyimpan placeholder atau response sebelum transaksi selesai.
+
+Jangan menyimpan successful dedup record jika transaction rollback.
+
+Jika request kedua datang ketika request pertama masih processing:
+
+gunakan mekanisme aman:
+
+- wait/poll existing idempotency record;
+- conflict/in-progress response;
+- atau transaction-safe retrieval.
+
+Jangan membuat project kedua.
+
+==================================================
+PHASE 4 — DEF-004 NOTIFICATION FIX
+==================================================
+
+Audit seluruh notification push calls yang sudah diubah.
+
+Pastikan tidak ada callsite yang tertinggal.
+
+Canonical notification item harus memiliki:
+
+- id;
+- type;
+- tenantId;
+- title;
+- message;
+- createdAt;
+- read/readAt;
+- source atau actor jika tersedia;
+- target reference jika tersedia.
+
+Pastikan:
+
+- type tidak undefined;
+- tenantId tidak undefined untuk tenant-scoped notification;
+- platform notification dibedakan secara eksplisit;
+- unknown legacy type memakai safe fallback;
+- undefined tenantId tidak dianggap global wildcard;
+- Tenant A tidak menerima notification Tenant B.
+
+Periksa:
+
+- service;
+- repository;
+- API response;
+- serializer;
+- frontend adapter;
+- workspace notification component.
+
+Jangan hanya memperbaiki TypeScript shape jika runtime payload tetap salah.
+
+==================================================
+PHASE 5 — DEF-002 AUTH CONTRACT
+==================================================
+
+Verifikasi intended contract untuk:
+
+GET /api/internal/auth/me
+
+Cari penggunaan endpoint pada:
+
+- Admin Portal;
+- internal frontend API client;
+- session middleware;
+- admin API-key middleware;
+- tests;
+- documentation.
+
+Putuskan salah satu:
+
+A. SESSION-ONLY BY DESIGN
+
+Jika benar:
+- jangan menambahkan API-key bypass;
+- pastikan valid session cookie berhasil;
+- perbarui test expectation;
+- klasifikasikan DEF-002 sebagai NOT A PRODUCT DEFECT.
+
+B. ADMIN API KEY SUPPORTED BY DESIGN
+
+Jika benar:
+- gunakan middleware canonical;
+- bentuk actor/tenant context dengan benar;
+- jangan melemahkan auth;
+- tambahkan tests.
+
+Dokumentasikan keputusan dan bukti callsite.
+
+==================================================
+PHASE 6 — DEVELOPMENT PAYMENT ADAPTER
+==================================================
+
+Audit adapter yang sudah dibuat.
+
+Adapter wajib:
+
+- development/test only;
+- disabled by default;
+- membutuhkan explicit enable flag;
+- tidak bisa aktif ketika NODE_ENV=production;
+- tidak memakai production secret;
+- tidak mengubah Midtrans integration;
+- menggunakan payment service path canonical setelah provider boundary.
+
+Support scenario:
+
+- success;
+- pending;
+- failed;
+- expired;
+- cancelled jika kontrak mendukung;
+- duplicate callback;
+- invalid signature;
+- partial payment;
+- installment payment.
+
+Pastikan:
+
+- duplicate callback idempotent;
+- payment schedule source of truth;
+- payment record tidak tergandakan;
+- commercial_completed hanya benar ketika schedule lengkap;
+- file unlock tidak terjadi terlalu cepat;
+- audit event tercatat.
+
+Jangan menamakan hasil:
+
+MIDTRANS PASS
+
+Gunakan:
+
+PAYMENT BUSINESS FLOW PASS USING DEVELOPMENT TEST ADAPTER
+
+==================================================
+PHASE 7 — ROUTE SECURITY
+==================================================
+
+Route dev payment adapter tidak boleh publik secara bebas.
+
+Minimal protection:
+
+- development/test environment guard;
+- explicit enable flag;
+- admin/test secret atau canonical test auth;
+- tenant context;
+- rate limit jika sesuai;
+- no production mounting.
+
+Pastikan payload tidak dapat memilih arbitrary tenant tanpa authorization.
+
+Pastikan response tidak membocorkan:
+
+- secrets;
+- raw provider config;
+- stack trace;
+- internal credentials.
+
+==================================================
+PHASE 8 — BUILD FIRST
+==================================================
+
+Setelah integration selesai:
+
+1. Jalankan formatter/lint yang relevan.
+2. Jalankan targeted typecheck untuk file yang berubah.
+3. Jalankan API server build.
+4. Jalankan workspace build yang relevan.
+
+Jika build gagal:
+
+- hentikan E2E;
+- perbaiki hanya error yang berasal dari perubahan ini;
+- jangan menyamarkan sebagai pre-existing tanpa baseline evidence.
+
+Catat PptxGenJS, cargo-finder, dan mockup-sandbox secara terpisah jika memang pre-existing.
+
+==================================================
+PHASE 9 — TARGETED TESTS
+==================================================
+
+Tambahkan atau selesaikan tests berikut.
+
+DEF-001:
+
+1. parallel identical submissions;
+2. submissions 10–100 ms apart;
+3. same idempotency key;
+4. same key different tenant;
+5. same key different actor;
+6. same key different payload;
+7. transaction rollback;
+8. server retry;
+9. duplicate submission does not duplicate job;
+10. duplicate submission does not duplicate payment schedule.
+
+DEF-004:
+
+1. notification type present;
+2. tenantId present;
+3. cross-tenant isolation;
+4. unknown type fallback;
+5. retry does not duplicate notification.
+
+Payment adapter:
+
+1. disabled by default;
+2. absent in production;
+3. unauthorized call rejected;
+4. success;
+5. pending;
+6. failed;
+7. expired;
+8. duplicate callback;
+9. invalid signature;
+10. partial payment;
+11. installment completion;
+12. commercial completion correctness.
+
+DEF-002:
+
+Test sesuai auth contract final.
+
+==================================================
+PHASE 10 — SERVER STARTUP
+==================================================
+
+Restart development services secara bersih.
+
+Verifikasi:
+
+- API server starts;
+- no syntax error;
+- no router mount error;
+- no duplicate route;
+- no startup crash;
+- database connected;
+- workers connected;
+- dev payment adapter status sesuai configuration.
+
+Periksa logs setelah startup.
+
+==================================================
+PHASE 11 — GAP CLOSURE E2E
+==================================================
+
+Jangan mengulang semua 30 fase.
+
+Jalankan hanya flow yang belum lengkap:
+
+1. project creation;
+2. concurrent duplicate protection;
+3. quotation;
+4. payment through development adapter;
+5. commercial completion;
+6. workflow/job processing;
+7. review endpoint discovery;
+8. review/revision;
+9. final artifact;
+10. PPTX;
+11. ZIP;
+12. unlock;
+13. signed download;
+14. cross-tenant denial;
+15. Customer/Admin consistency.
+
+Jika completed project belum ada:
+
+buat fixture development melalui service layer canonical.
+
+Jangan langsung memaksa status database menjadi completed tanpa lifecycle services.
+
+==================================================
+PHASE 12 — REVIEW ROUTE DISCOVERY
+==================================================
+
+Cari route canonical berdasarkan router registration dan frontend client.
+
+Jangan berasumsi route:
+
+/api/ai/review-workspaces
+
+adalah benar.
+
+Laporkan:
+
+- canonical route;
+- caller;
+- auth model;
+- public token route;
+- admin route;
+- service;
+- database tables.
+
+Jika route sudah ada:
+uji route yang benar.
+
+Jika benar-benar tidak terhubung:
+laporkan sebagai gap dan owner.
+Jangan membuat review domain kedua.
+
+==================================================
+PHASE 13 — REAL ARTIFACT EVIDENCE
+==================================================
+
+Untuk satu project E2E:
+
+PPTX:
+
+- generated;
+- non-zero;
+- valid OOXML;
+- slide files present;
+- MIME correct;
+- downloadable.
+
+ZIP:
+
+- generated;
+- non-zero;
+- extractable;
+- manifest valid;
+- no cross-tenant file;
+- no temporary file;
+- no placeholder.
+
+Download:
+
+- blocked before unlock;
+- allowed after prerequisites;
+- expired token denied;
+- invalid token denied;
+- Tenant B denied;
+- audit record present.
+
+==================================================
+PHASE 14 — REGRESSION
+==================================================
+
+Setelah targeted E2E selesai:
+
+- run full regression;
+- expected baseline: 5,346 tests, plus new tests;
+- run typecheck;
+- run build;
+- restart services;
+- rerun development smoke test.
+
+Jangan menghapus tests agar jumlah tetap sama.
+Jumlah test seharusnya bertambah jika regression coverage ditambahkan.
+
+==================================================
+PHASE 15 — WORKTREE AND COMMIT
+==================================================
+
+Setelah semua selesai:
+
+- periksa git diff;
+- pastikan tidak ada debug logs;
+- pastikan tidak ada test secret;
+- pastikan tidak ada generated artifact besar ikut commit;
+- pastikan report files memang intended;
+- working tree clean setelah commit.
+
+Buat commit lokal terpisah secara logis jika memungkinkan:
+
+1. project idempotency;
+2. notification/auth correction;
+3. dev payment test adapter;
+4. E2E tests and reports.
+
+Jangan push.
+Jangan merge.
+Jangan deploy.
+
+==================================================
+REPORT UPDATE
+==================================================
+
+Perbarui:
+
+DEV_E2E_VERIFICATION_REPORT.md
+DEV_E2E_FAILURES.json
+DEV_E2E_COVERAGE_MATRIX.json
+DEV_E2E_VERDICT.json
+
+Tambahkan:
+
+A. Resume checkpoint
+
+B. Files recovered
+
+C. DEF-001 architecture
+
+D. Concurrency proof
+
+E. DEF-002 contract decision
+
+F. DEF-004 mapping fix
+
+G. Payment adapter security
+
+H. Review canonical route
+
+I. Completed project fixture
+
+J. PPTX evidence
+
+K. ZIP manifest
+
+L. Unlock/download evidence
+
+M. Tenant isolation
+
+N. Targeted tests
+
+O. Regression
+
+P. Typecheck
+
+Q. Build
+
+R. Services status
+
+S. Files changed
+
+T. Commit hashes
+
+U. Remaining observations
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Gunakan salah satu:
+
+DEV PASS — ALL CRITICAL FLOWS FUNCTION CORRECTLY
+
+DEV PASS WITH LOW-RISK OBSERVATIONS
+
+DEV BLOCKED — PARTIAL IMPLEMENTATION OR BUILD FAILURE
+
+DEV BLOCKED — DUPLICATE PROJECT RISK
+
+DEV BLOCKED — PAYMENT FLOW UNVERIFIED
+
+DEV BLOCKED — REVIEW FLOW UNVERIFIED
+
+DEV BLOCKED — ARTIFACT DELIVERY FLOW UNVERIFIED
+
+DEV BLOCKED — SECURITY OR TENANT ISOLATION FAILURE
+
+==================================================
+CRITICAL RULES
+==================================================
+
+- Jangan deploy.
+- Jangan publish.
+- Jangan reset perubahan parsial.
+- Jangan memakai top-level await di CommonJS entrypoint.
+- Jangan mount development payment adapter di production.
+- Jangan mengandalkan in-memory Map sebagai satu-satunya idempotency guarantee.
+- Jangan menyatakan PASS sebelum build dan tests selesai.
+- Jangan menyatakan payment PASS tanpa menguji postcondition database.
+- Jangan menyatakan artifact PASS tanpa membuat dan membuka file nyata.
+- Jangan menyatakan review PASS sebelum menemukan route canonical.

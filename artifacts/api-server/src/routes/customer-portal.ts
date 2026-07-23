@@ -24,6 +24,11 @@ import {
 import { generateReviewToken, hashToken } from "../services/clientReviewService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
 import { logAudit } from "../services/aiAuditService.js";
+import {
+  claimFingerprint,
+  commitFingerprint,
+  releaseFingerprint,
+} from "../services/submitIdempotencyService.js";
 // P0-1: runCreativeBriefWorkflow and runImageDesignerPipeline intentionally
 // NOT imported here — autoGenerate is gated behind payment verification.
 // AI production starts only via POST /ai/payments/:id/verify.
@@ -125,19 +130,36 @@ router.post("/public/customer/submit", async (req, res): Promise<void> => {
     autoGenerate,
   } = parsed.data;
 
-  // DEF-001: Deduplication check — return existing project if same fingerprint
-  // was submitted within the last 60 seconds.
+  // DEF-001: L1 — in-process deduplication (fast guard within single process)
   _cleanExpiredDedupEntries();
   const fingerprint = _makeSubmitFingerprint(clientEmail ?? "", brandName, businessType);
   const existingDedup = _submitDedup.get(fingerprint);
-  if (existingDedup) {
+  if (existingDedup && Object.keys(existingDedup.responseData).length > 0) {
     res.status(201).json(existingDedup.responseData);
     return;
   }
 
-  // Mark this fingerprint as in-flight synchronously (before any await) so a
-  // concurrent request arriving within the same event-loop tick also hits the
-  // dedup guard. We'll overwrite with the real data once the insert succeeds.
+  // DEF-001: L2 — DB-backed idempotency (multi-instance / restart-safe)
+  // Atomically claims the fingerprint; guarantees only one project is created
+  // even across concurrent requests on multiple server instances.
+  const dedupExpiry = new Date(Date.now() + SUBMIT_DEDUP_TTL_MS);
+  const dbClaim = await claimFingerprint(fingerprint, dedupExpiry);
+  if (!dbClaim.claimed) {
+    if (dbClaim.responseData && Object.keys(dbClaim.responseData).length > 0) {
+      // Another instance already created this project — return its canonical response
+      res.status(201).json(dbClaim.responseData);
+      return;
+    }
+    // First request is still in-flight on another instance
+    res.status(409).json({
+      error: "Duplicate submission in progress. Please retry in a few seconds.",
+      code: "DUPLICATE_SUBMISSION_IN_FLIGHT",
+    });
+    return;
+  }
+
+  // Mark as in-flight in L1 cache synchronously so same-process concurrent
+  // requests within the same event-loop tick also hit the dedup guard.
   const placeholderProjectId = randomUUID();
   _submitDedup.set(fingerprint, {
     projectId: placeholderProjectId,
@@ -169,6 +191,8 @@ router.post("/public/customer/submit", async (req, res): Promise<void> => {
     .returning();
 
   if (!project) {
+    // Release fingerprint claim so the customer can retry immediately
+    await releaseFingerprint(fingerprint);
     res.status(500).json({ error: "Failed to create project" });
     return;
   }
@@ -258,13 +282,14 @@ router.post("/public/customer/submit", async (req, res): Promise<void> => {
     createdAt: new Date().toISOString(),
   };
 
-  // DEF-001: Store real data in dedup map so concurrent/retry requests get the
-  // same canonical response. Overwrites the in-flight placeholder.
+  // DEF-001: Commit real data to L1 (in-process) and L2 (DB) so any subsequent
+  // duplicate — on this instance or another — gets the same canonical response.
   _submitDedup.set(fingerprint, {
     projectId,
     responseData,
     expiresAt: Date.now() + SUBMIT_DEDUP_TTL_MS,
   });
+  await commitFingerprint(fingerprint, projectId, responseData);
 
   res.status(201).json(responseData);
 });

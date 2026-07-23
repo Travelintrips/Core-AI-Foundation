@@ -916,6 +916,9 @@ export interface WorkspaceNotification {
   projectNumber: string | null;
   isRead: boolean;
   createdAt: string;
+  /** DEF-004: Tenant identifier (customer email) — prevents cross-tenant leakage.
+   *  Populated for all workspace-scoped notifications; null for platform-wide announcements. */
+  tenantId: string | null;
 }
 
 export async function listWorkspaceNotifications(
@@ -930,7 +933,9 @@ export async function listWorkspaceNotifications(
     .where(eq(customerNotificationReadsTable.emailHash, session.emailHash));
   const readKeys = new Set(readRows.map((r) => r.key));
 
-  const notifications: WorkspaceNotification[] = [];
+  // Use Omit so individual push calls don't need tenantId — it is added
+  // in the final .map() step below (DEF-004 fix).
+  const notifications: Omit<WorkspaceNotification, "tenantId">[] = [];
   for (const p of projects) {
     const projectKey = `project:${p.projectNumber}:stage:${p.currentStage}`;
     notifications.push({
@@ -1014,8 +1019,12 @@ export async function listWorkspaceNotifications(
     });
   }
 
+  // DEF-004: Enrich all notifications with tenantId (customer email) and
+  // final isRead state. tenantId is required so callers can distinguish
+  // tenant-scoped from platform-wide notifications and prevent cross-tenant
+  // data exposure when notifications are aggregated or forwarded.
   let deduped = notifications
-    .map((n) => ({ ...n, isRead: readKeys.has(n.key) }))
+    .map((n) => ({ ...n, isRead: readKeys.has(n.key), tenantId: session.clientEmail }))
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 
   if (filters.category) deduped = deduped.filter((n) => n.category === filters.category);

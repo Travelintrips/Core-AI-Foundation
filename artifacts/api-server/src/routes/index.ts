@@ -308,4 +308,11 @@ router.use(designCostAttributionRouter);
 // ── Team 35: Design Observability & Operations ────────────────────────────────
 router.use(designObservabilityOpsRouter);
 
+// ── DEV-ONLY: Payment test adapter ───────────────────────────────────────────
+// Never mounted in production. Requires explicit DEV_PAYMENT_TEST_ENABLED=true
+// in addition to NODE_ENV !== "production" (double guard against accidental use).
+if (process.env["NODE_ENV"] !== "production") {
+  router.use(devPaymentTestRouter);
+}
+
 export default router;
