@@ -165,7 +165,10 @@ router.post("/ai/payments/project/:projectId/unlock", async (req, res): Promise<
   const unlockedBy = typeof body.unlockedBy === "string" ? body.unlockedBy.trim() : "";
   const reason = typeof body.reason === "string" ? body.reason.trim() : "";
 
+  // B-02 fix: both unlockedBy and reason are required for admin override.
+  // Reason is mandatory so that every manual unlock has an auditable justification.
   if (!unlockedBy) { res.status(400).json({ error: "unlockedBy is required" }); return; }
+  if (!reason) { res.status(400).json({ error: "reason is required — every admin override must have an auditable justification" }); return; }
 
   const [project] = await db
     .update(creativeProjectsTable)

@@ -150,6 +150,8 @@ import seedKnowledgeRouter from "./seedKnowledge.js";
 import imagePreviewPipelineRouter from "./image-preview-pipeline.js";
 // ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
 import customsRouter from "./customs.js";
+// ── Team 44: Artifact & Deliverable Health Scanner ────────────────────────
+import artifactHealthRouter from "./artifactHealth.js";
 
 const router: IRouter = Router();
 
@@ -282,6 +284,8 @@ router.use("/seed", seedKnowledgeRouter);
 router.use(imagePreviewPipelineRouter);
 // ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
 router.use(customsRouter);
+// ── Team 44: Artifact & Deliverable Health Scanner ────────────────────────
+router.use(artifactHealthRouter);
 router.use(cargoRatesRouter);
 // ── Team 33: Universal Design Quality Assurance Engine ───────────────────────
 router.use(designQualityRouter);

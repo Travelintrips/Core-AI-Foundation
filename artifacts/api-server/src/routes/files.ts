@@ -13,7 +13,7 @@
  */
 import { Router } from "express";
 import { eq } from "drizzle-orm";
-import { db, creativeProjectsTable } from "@workspace/db";
+import { db, creativeProjectsTable, creativeAiAssetsTable } from "@workspace/db";
 import { logAudit } from "../services/aiAuditService.js";
 import {
   generateDownloadToken,
@@ -143,7 +143,11 @@ router.post("/ai/files/generate-token", uploadLimiter, async (req, res): Promise
 
   // Ensure project exists and files are unlocked before issuing a token
   const [project] = await db
-    .select({ id: creativeProjectsTable.id, filesUnlocked: creativeProjectsTable.filesUnlocked })
+    .select({
+      id: creativeProjectsTable.id,
+      projectId: creativeProjectsTable.projectId,
+      filesUnlocked: creativeProjectsTable.filesUnlocked,
+    })
     .from(creativeProjectsTable)
     .where(eq(creativeProjectsTable.id, projectId))
     .limit(1);
@@ -159,6 +163,35 @@ router.post("/ai/files/generate-token", uploadLimiter, async (req, res): Promise
       code: "FILES_LOCKED",
     });
     return;
+  }
+
+  // Arbitrary key injection guard: verify that the requested fileUrl is a known
+  // asset URL belonging to this project (imageUrl or storagePath column).
+  // This prevents admins from accidentally or maliciously minting tokens for
+  // URLs that do not belong to this project.
+  if (project.projectId) {
+    const projectAssets = await db
+      .select({ imageUrl: creativeAiAssetsTable.imageUrl, storagePath: creativeAiAssetsTable.storagePath })
+      .from(creativeAiAssetsTable)
+      .where(eq(creativeAiAssetsTable.projectId, project.projectId));
+
+    const knownUrls = new Set<string>();
+    for (const a of projectAssets) {
+      if (a.imageUrl) knownUrls.add(a.imageUrl);
+      if (a.storagePath) knownUrls.add(a.storagePath);
+    }
+
+    if (knownUrls.size > 0 && !knownUrls.has(fileUrl)) {
+      await logAudit("files", "token_denied_unknown_url", String(projectId), "signed_url", "failure", {
+        fileUrl: fileUrl.slice(0, 80),
+        reason: "fileUrl is not a known asset URL for this project",
+      });
+      res.status(403).json({
+        error: "fileUrl is not a recognized asset URL for this project — arbitrary object key injection denied.",
+        code: "INVALID_FILE_URL",
+      });
+      return;
+    }
   }
 
   const token = generateDownloadToken(projectId, fileUrl, Math.min(ttlSeconds, 86400));
