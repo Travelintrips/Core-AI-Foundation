@@ -1,0 +1,86 @@
+TEAM 41 — REMOTE PUBLICATION COMPLETION
+
+Final audit work is already complete.
+
+Current verified state:
+
+- Branch: audit/team-41-shared-lifecycle
+- Base commit: a57cc7c
+- Final local commit: bafc079
+- Report: TEAM41_ARCHITECTURE_AUDIT_REPORT.md
+- Production code changed: zero
+- Documentation changed: one file
+- Migrations changed: zero
+- Database changed: zero
+- Runtime behavior changed: zero
+- Main changed: zero
+
+Your only remaining task is to make the existing Team 41 branch and commit available through the configured Git remote.
+
+Do not modify the report.
+Do not modify production code.
+Do not amend the commit unless strictly required because the commit is invalid.
+Do not merge to main.
+Do not rebase.
+Do not squash.
+Do not create a replacement audit report.
+
+==================================================
+TASK
+==================================================
+
+1. Verify that the active branch is:
+
+   audit/team-41-shared-lifecycle
+
+2. Verify that the branch contains commit:
+
+   bafc079
+
+3. Verify that the only intended repository change in that commit is:
+
+   TEAM41_ARCHITECTURE_AUDIT_REPORT.md
+
+4. Publish the existing branch to the configured GitHub remote using Replit's Git integration.
+
+5. If GitHub authentication requires user authorization through the Replit Git pane:
+
+   - do not create another branch;
+   - do not change main;
+   - do not recreate the commit;
+   - clearly request only the required Replit/GitHub authorization;
+   - preserve the existing local branch and commit.
+
+6. After publication, verify that the remote branch is visible and points to the same commit:
+
+   audit/team-41-shared-lifecycle
+   bafc079
+
+7. Confirm that the report is tracked in the remote branch.
+
+==================================================
+FINAL RESPONSE
+==================================================
+
+Report:
+
+- local branch;
+- local commit;
+- remote branch;
+- remote commit;
+- report path;
+- whether remote and local hashes match;
+- whether the working tree is clean;
+- whether any additional files were changed;
+- whether main remained untouched;
+- push/publication status.
+
+Allowed final verdicts:
+
+PASS — TEAM 41 REMOTE BRANCH PUBLISHED
+
+BLOCKED — GITHUB AUTHORIZATION REQUIRED
+
+BLOCKED — REMOTE ACCESS FAILED
+
+Do not claim PASS unless the remote branch can be verified.
