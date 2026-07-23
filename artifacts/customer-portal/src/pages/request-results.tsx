@@ -26,6 +26,8 @@ import {
   AlertCircle,
   Unlock,
   ArrowLeft,
+  Clock,
+  XCircle,
 } from "lucide-react";
 
 function formatCurrency(amount: number | null | undefined, currency = "IDR") {
@@ -34,47 +36,88 @@ function formatCurrency(amount: number | null | undefined, currency = "IDR") {
   return `${currency} ${amount.toLocaleString()}`;
 }
 
-// ── RC-2/RC-3 fix: derive canonical display state from server fields ──────────
+// ── RC-1/RC-2/RC-3/RC-4 fix: derive canonical display state from server fields ──
 //
-// Priority order (highest first):
-//   complete          — filesUnlocked = true
-//   production_in_progress — project still running (not completed/failed)
-//   billing_pending   — production done but no invoice/schedule record yet
-//   awaiting_payment  — invoice exists and balance > 0
+// Priority order (highest first — spec Phase 6):
+//   production_failed     — project.status === "failed" (blocking error)
+//   complete              — filesUnlocked = true (files available)
+//   payment_under_review  — proof submitted, admin verifying
+//   production_in_progress— project still running
+//   billing_pending       — production done but no invoice/schedule record yet
+//   awaiting_payment      — invoice exists and balance > 0
+//   unknown               — inconsistent / no data
 //
-// This prevents the "Menunggu Pelunasan" screen from appearing when there is
-// no invoice and no balance — which was the original bug where customers saw a
-// payment demand with zero information to act on.
+// RC-1 fix: check waiting_payment_verification BEFORE inspecting remainingBalance.
+// RC-2 fix: check "failed" production status explicitly.
+// RC-4 fix: expose production_failed as a separate render state.
 
-type DisplayState = "complete" | "production_in_progress" | "billing_pending" | "awaiting_payment";
+export type DisplayState =
+  | "complete"
+  | "production_in_progress"
+  | "production_failed"
+  | "payment_under_review"
+  | "billing_pending"
+  | "awaiting_payment"
+  | "unknown";
 
+// Statuses that mean active production is underway (not yet a billing/result state).
+// RC-1: "waiting_payment_verification" is intentionally excluded — it is a post-proof
+// state, not a production state, and must be handled separately.
 const PRODUCTION_IN_PROGRESS_STATUSES = new Set([
-  "waiting_payment", "deposit_paid", "payment_verified", "ready_to_build",
-  "running", "orchestrating", "building", "in_progress", "generating_document",
+  "waiting_payment",
+  "deposit_paid",
+  "payment_verified",
+  "ready_to_build",
+  "running",
+  "orchestrating",
+  "building",
+  "in_progress",
+  "generating_document",
   "generating_presentation",
 ]);
 
-function deriveDisplayState(d: ReturnType<typeof useRequestDetail>["data"]): DisplayState {
-  if (!d) return "production_in_progress";
+// RC-2: Statuses that mean production failed and need admin/customer action.
+const PRODUCTION_FAILED_STATUSES = new Set([
+  "failed",
+  "error",
+  "blocked_by_budget",
+]);
+
+export function deriveDisplayState(d: ReturnType<typeof useRequestDetail>["data"]): DisplayState {
+  if (!d) return "unknown";
+
   const filesUnlocked = (d as any).filesUnlocked === true;
+  // RC-2: Check hard failure before anything else.
+  const productionStatus: string | null = (d as any).productionStatus ?? null;
+  if (productionStatus && PRODUCTION_FAILED_STATUSES.has(productionStatus)) {
+    return "production_failed";
+  }
+
   if (filesUnlocked) return "complete";
 
-  const productionStatus: string | null = (d as any).productionStatus ?? null;
+  // RC-1: Payment proof submitted but not yet verified — project is in
+  // "waiting_payment_verification". The schedule is still "pending" so
+  // remainingBalance > 0, but the customer has already acted. Show the
+  // verification-in-progress state, not the payment demand.
+  if (productionStatus === "waiting_payment_verification") {
+    return "payment_under_review";
+  }
+
   const invoiceExists: boolean = (d as any).invoiceExists === true;
   const remainingBalance: number | null = (d as any).remainingBalance ?? null;
 
-  // If no linked project, or if the linked project is still in a pre-completion status → in progress
+  // Still in active production.
   if (!productionStatus || PRODUCTION_IN_PROGRESS_STATUSES.has(productionStatus)) {
     return "production_in_progress";
   }
 
-  // Production is done (completed/failed/outputs_ready) but no billing record yet
+  // Production is done but no billing record yet.
   if (!invoiceExists) return "billing_pending";
 
-  // Invoice exists — show the payment screen if there's an outstanding balance
+  // Invoice exists — show payment demand only when outstanding balance > 0.
   if (remainingBalance !== null && remainingBalance > 0) return "awaiting_payment";
 
-  // Invoice exists but balance is 0 — payment received but files not yet unlocked (admin pending)
+  // Invoice exists but balance is 0 — payment received but files not yet unlocked (admin pending).
   return "billing_pending";
 }
 
@@ -109,19 +152,27 @@ export default function RequestResultsPage() {
           </div>
         ) : (
           <>
-            {/* Header — title driven by canonical display state, not just filesUnlocked */}
+            {/* Header — title driven by canonical display state */}
             <div className="flex items-start gap-4 mb-10">
               <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
                 displayState === "complete"
                   ? "bg-green-100 dark:bg-green-900/30"
                   : displayState === "awaiting_payment"
                   ? "bg-yellow-100 dark:bg-yellow-900/30"
+                  : displayState === "payment_under_review"
+                  ? "bg-purple-100 dark:bg-purple-900/30"
+                  : displayState === "production_failed"
+                  ? "bg-red-100 dark:bg-red-900/30"
                   : "bg-blue-100 dark:bg-blue-900/30"
               }`}>
                 {displayState === "complete"
                   ? <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
                   : displayState === "awaiting_payment"
                   ? <Lock className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+                  : displayState === "payment_under_review"
+                  ? <Clock className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                  : displayState === "production_failed"
+                  ? <XCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
                   : <Loader2 className="w-6 h-6 text-blue-600 dark:text-blue-400 animate-spin" />
                 }
               </div>
@@ -131,6 +182,10 @@ export default function RequestResultsPage() {
                     ? "Proyek Selesai!"
                     : displayState === "awaiting_payment"
                     ? "Menunggu Pelunasan"
+                    : displayState === "payment_under_review"
+                    ? "Pembayaran Sedang Diverifikasi"
+                    : displayState === "production_failed"
+                    ? "Terjadi Kesalahan"
                     : displayState === "billing_pending"
                     ? "Tagihan Sedang Dipersiapkan"
                     : "Sedang Diproduksi"}
@@ -141,6 +196,27 @@ export default function RequestResultsPage() {
                 </p>
               </div>
             </div>
+
+            {/* RC-2: Production failed — explicit error state */}
+            {displayState === "production_failed" && (
+              <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-2xl p-6 mb-6">
+                <div className="flex items-start gap-3 mb-4">
+                  <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+                  <div>
+                    <h2 className="font-semibold text-red-900 dark:text-red-200 mb-1">
+                      Proses Produksi Gagal
+                    </h2>
+                    <p className="text-sm text-red-800 dark:text-red-300 leading-relaxed">
+                      Terjadi kesalahan saat memproses proyek Anda. Tim kami telah diberitahu dan
+                      akan meninjau masalah ini. Hubungi kami jika Anda membutuhkan bantuan segera.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <DashboardAccessButton email={(data as any).customerEmail} className="w-full" />
+                </div>
+              </div>
+            )}
 
             {/* Production in progress notice */}
             {displayState === "production_in_progress" && (
@@ -178,6 +254,28 @@ export default function RequestResultsPage() {
               </div>
             )}
 
+            {/* RC-1: Payment under review — proof submitted, waiting admin verification */}
+            {displayState === "payment_under_review" && (
+              <div className="bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 rounded-2xl p-6 mb-6">
+                <div className="flex items-start gap-3 mb-4">
+                  <Clock className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5 shrink-0" />
+                  <div>
+                    <h2 className="font-semibold text-purple-900 dark:text-purple-200 mb-1">
+                      Pembayaran Sedang Diverifikasi
+                    </h2>
+                    <p className="text-sm text-purple-800 dark:text-purple-300 leading-relaxed">
+                      Bukti transfer Anda telah kami terima. Tim kami sedang memverifikasi
+                      pembayaran Anda. Proses verifikasi membutuhkan maksimal 1×24 jam kerja.
+                      File akan dibuka otomatis setelah verifikasi selesai.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <DashboardAccessButton email={(data as any).customerEmail} className="w-full" />
+                </div>
+              </div>
+            )}
+
             {/* P0-6: File Lock Screen — only shown when there IS an invoice and a balance to pay */}
             {displayState === "awaiting_payment" && (
               <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-2xl p-6 mb-6">
@@ -194,8 +292,8 @@ export default function RequestResultsPage() {
                   </div>
                 </div>
 
-                {/* Remaining balance */}
-                {(data as any).remainingBalance != null && (data as any).remainingBalance > 0 && (
+                {/* Remaining balance — only shown when invoiceExists AND remainingBalance > 0 */}
+                {(data as any).invoiceExists && (data as any).remainingBalance != null && (data as any).remainingBalance > 0 && (
                   <div className="bg-white dark:bg-yellow-900/20 rounded-xl p-4 mb-4 flex items-center justify-between gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground">Sisa yang harus dibayar</p>
@@ -207,10 +305,12 @@ export default function RequestResultsPage() {
                   </div>
                 )}
 
-                {/* Bank transfer destinations */}
-                <div className="mb-4">
-                  <PaymentInstructionCard />
-                </div>
+                {/* Bank transfer destinations — only when invoiceExists */}
+                {(data as any).invoiceExists && (
+                  <div className="mb-4">
+                    <PaymentInstructionCard />
+                  </div>
+                )}
 
                 {/* Pay remaining CTA */}
                 <div className="rounded-xl border border-yellow-300 dark:border-yellow-700 p-4 bg-white/60 dark:bg-yellow-900/10">
@@ -224,7 +324,6 @@ export default function RequestResultsPage() {
                   </ol>
                 </div>
 
-                {/* Dashboard shortcut — sends a magic-link email so customer can access their workspace */}
                 <div className="mt-4">
                   <DashboardAccessButton email={(data as any).customerEmail} className="w-full" />
                 </div>
@@ -280,8 +379,9 @@ export default function RequestResultsPage() {
               </div>
             ) : null}
 
-            {/* Locked deliverable preview (files exist but locked) */}
-            {!(data as any).filesUnlocked && data.completionNotes && (
+            {/* RC-3 fix: Locked deliverable preview — only when awaiting_payment (invoice confirmed)
+                NOT when completionNotes is truthy, since notes exist at all stages. */}
+            {displayState === "awaiting_payment" && (
               <div className="bg-card border border-card-border rounded-2xl p-6 mb-6 shadow-sm opacity-60">
                 <div className="flex items-center gap-2 mb-4">
                   <Lock className="w-4 h-4 text-muted-foreground" />
