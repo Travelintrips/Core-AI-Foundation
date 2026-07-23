@@ -1,0 +1,374 @@
+REVISION 2 — INTERIOR DESIGN ORDER FLOW
+BACKEND CONSISTENCY, REAL E2E, FULL VERIFICATION
+
+IMPORTANT
+
+Commit lokal saat ini:
+
+e7f9efe — fix(creative-orders): enforce canonical production billing flow
+
+Commit dibuat pada branch main dan belum dipush.
+
+Jangan push langsung ke main.
+Jangan merge, rebase, cherry-pick, atau force-push tanpa persetujuan integrator.
+
+Tujuan revisi ini adalah menutup kekurangan laporan sebelumnya.
+
+==================================================
+PHASE 1 — BRANCH SAFETY
+==================================================
+
+Jalankan:
+
+git branch --show-current
+git status --short
+git rev-parse --short HEAD
+git log --oneline -5
+
+Jika masih berada di main:
+
+- jangan push;
+- jangan membuat commit tambahan sampai strategi branch diputuskan;
+- laporkan bahwa commit e7f9efe berada di main lokal;
+- rekomendasikan pemindahan oleh integrator ke branch:
+  fix/interior-design-order-flow
+
+Jangan melakukan checkout atau history rewrite tanpa persetujuan eksplisit.
+
+==================================================
+PHASE 2 — PROVE THE ORIGINAL ROOT CAUSE
+==================================================
+
+Masalah asli:
+
+1. Interior Design langsung masuk ke hasil produksi.
+2. Hasil produksi kosong.
+3. Customer melihat Menunggu Pelunasan.
+4. Admin payment kosong.
+
+Audit ulang berdasarkan code path nyata.
+
+Temukan exact file dan function yang:
+
+- membuat project;
+- memilih workflow Interior Design;
+- membuat workflow steps;
+- menentukan initial project status;
+- enqueue AI jobs;
+- menandai workflow completed;
+- membuat artifact;
+- membuat invoice;
+- membuat payment schedule.
+
+Jangan hanya menguji DAG constant.
+
+Buktikan apakah order benar-benar:
+
+- dimulai pada stage brief;
+- memiliki workflow instances;
+- memiliki queued jobs;
+- tidak otomatis completed;
+- tidak maju jika output kosong.
+
+Jika root cause berada di backend, implementasikan backend fix.
+
+==================================================
+PHASE 3 — FIX BACKEND PAYMENT STATE
+==================================================
+
+Backend saat ini masih mengembalikan remainingBalance > 0 setelah payment proof
+disubmit.
+
+Jangan hanya mengandalkan frontend precedence.
+
+Buat billing state canonical, minimal:
+
+invoice_status:
+- not_created
+- issued
+- partially_paid
+- paid
+- void
+
+payment_status:
+- not_submitted
+- submitted
+- under_review
+- verified
+- rejected
+
+billing_status:
+- billing_pending
+- awaiting_payment
+- payment_under_review
+- paid
+
+Pastikan API customer detail mengembalikan status eksplisit.
+
+Rules:
+
+- payment proof submitted → payment_under_review;
+- jangan menyebut awaiting_payment selama proof sedang direview;
+- remainingBalance tetap boleh menunjukkan outstanding finansial, tetapi jangan
+  digunakan sendiri untuk menentukan CTA;
+- submitted schedule harus dapat dibedakan dari unpaid schedule;
+- admin dan customer menggunakan billing resolver yang sama.
+
+Tambahkan canonical resolver service, jangan duplikasi logika di frontend.
+
+==================================================
+PHASE 4 — VERIFY ADMIN PAYMENT VISIBILITY
+==================================================
+
+Trace Admin Panel nyata.
+
+Buktikan setelah submit proof:
+
+- payment record/schedule dapat ditemukan admin;
+- status under_review terlihat;
+- bukti transfer URL/attachment terlihat;
+- nominal terlihat;
+- invoice/order/project linkage benar;
+- tenant benar;
+- tombol approve/reject bekerja;
+- verification mengubah status canonical.
+
+Tambahkan route/service integration tests.
+
+Tambahkan component test Admin Panel bila frontend berubah.
+
+==================================================
+PHASE 5 — REAL ARTIFACT AND DELIVERABLE GUARDS
+==================================================
+
+Production completion harus dicegah di service/runner nyata jika:
+
+- no job;
+- job failed;
+- output null;
+- output {};
+- artifact insert gagal;
+- artifact tidak memiliki storage reference;
+- required deliverable belum tersedia.
+
+Jangan hanya membuat helper dalam test.
+
+Tambahkan guard pada production path canonical.
+
+Tambahkan integration tests yang memanggil service/route nyata.
+
+==================================================
+PHASE 6 — REAL INTERIOR DESIGN WORKFLOW TEST
+==================================================
+
+Buat test melalui actual workflow creation service.
+
+Test harus membuktikan:
+
+1. order Interior Design dibuat;
+2. service slug di-resolve;
+3. workflow template dipilih;
+4. workflow instance dibuat;
+5. initial stage = brief;
+6. downstream stage belum aktif;
+7. job pertama dibuat;
+8. project belum completed;
+9. empty workflow menghasilkan error;
+10. failed job tidak memajukan workflow.
+
+Jangan hanya menguji constant INTERIOR_WORKFLOW secara langsung.
+
+==================================================
+PHASE 7 — RECOVERY IMPLEMENTATION
+==================================================
+
+Scanner saja belum cukup.
+
+Implementasikan atau dokumentasikan explicit recovery service:
+
+dryRunBrokenCreativeOrders(...)
+repairBrokenCreativeOrder(...)
+
+Minimum recovery cases:
+
+- completed without artifact;
+- awaiting payment without invoice;
+- invoice without schedule;
+- payment proof submitted but status stale;
+- artifact without storage;
+- workflow without jobs.
+
+Requirements:
+
+- tenant-scoped;
+- idempotent;
+- audit logged;
+- dry-run default;
+- no destructive delete;
+- before/after result;
+- explicit skipped reason.
+
+Jangan jalankan apply mode pada production.
+
+==================================================
+PHASE 8 — TENANT ISOLATION TESTS
+==================================================
+
+Tambahkan database/service-level tests:
+
+- Tenant A request cannot read Tenant B artifact.
+- Tenant A request cannot read Tenant B invoice.
+- Tenant A cannot submit proof to Tenant B schedule.
+- Tenant A admin cannot verify Tenant B payment.
+- Missing tenant context fails closed.
+- Body tenantId injection is ignored or rejected.
+
+Pastikan tests melewati repository/query nyata, bukan sekadar helper comparison.
+
+==================================================
+PHASE 9 — BUILD DEPENDENCIES FIRST
+==================================================
+
+Jangan menyatakan TS6305 pre-existing sebelum build dependency.
+
+Jalankan canonical dependency build, misalnya:
+
+pnpm --filter @repo/db build
+pnpm --filter @repo/api-client build
+pnpm --filter @repo/api-client-react build
+
+Gunakan nama package aktual repository.
+
+Setelah itu jalankan ulang:
+
+- api-server typecheck;
+- customer-portal typecheck;
+- bizportal typecheck.
+
+Laporkan error setelah dependency build.
+
+==================================================
+PHASE 10 — FULL TEST SUITES
+==================================================
+
+Jalankan:
+
+1. targeted lifecycle tests;
+2. customer portal targeted tests;
+3. payment service tests;
+4. catalog route tests;
+5. workflow runner tests;
+6. artifact tests;
+7. admin payment tests;
+8. full api-server suite;
+9. full customer-portal suite;
+10. full bizportal suite;
+11. canonical repository test command.
+
+Laporkan:
+
+- test files;
+- total tests;
+- passed;
+- failed;
+- skipped;
+- duration.
+
+Jangan menyatakan no regression tanpa full suite.
+
+==================================================
+PHASE 11 — PRODUCTION BUILDS
+==================================================
+
+Jalankan:
+
+- affected libraries build;
+- api-server build;
+- customer-portal build;
+- bizportal build.
+
+Laporkan command dan exit code.
+
+==================================================
+PHASE 12 — REAL END-TO-END ACCEPTANCE
+==================================================
+
+Gunakan environment test/non-production.
+
+Lakukan transaksi nyata:
+
+1. Customer membuat Interior Design order.
+2. Brief tersimpan.
+3. Workflow dimulai dari brief.
+4. Admin melihat order.
+5. Production job berjalan.
+6. Artifact nyata tersimpan.
+7. Deliverable terlihat.
+8. Invoice nyata dibuat.
+9. Customer melihat amount due.
+10. Customer submit payment proof.
+11. Admin melihat proof dan status under review.
+12. Admin verifies payment.
+13. Customer refresh/poll menerima status paid.
+14. File terbuka.
+15. Order completed hanya pada akhir flow.
+
+Lampirkan:
+
+- request ID;
+- project ID;
+- workflow ID;
+- job IDs;
+- artifact IDs;
+- invoice ID;
+- schedule/payment ID;
+- status timeline;
+- API evidence;
+- screenshot customer;
+- screenshot admin.
+
+Jangan menggunakan mocked E2E sebagai bukti acceptance.
+
+==================================================
+PHASE 13 — FINAL REPORT
+==================================================
+
+Gunakan format:
+
+A. Branch safety
+B. Commit status
+C. Exact backend root cause
+D. Workflow initialization fix
+E. Production completion guard
+F. Artifact persistence
+G. Canonical billing resolver
+H. Payment submission state
+I. Admin visibility
+J. Tenant isolation
+K. Recovery service
+L. Targeted tests
+M. Full tests
+N. Typecheck after dependency build
+O. Production builds
+P. Real end-to-end evidence
+Q. Remaining risks
+R. Final verdict
+
+Final verdict:
+
+PASS — END-TO-END VERIFIED
+REVISION REQUIRED
+BLOCKED — ENVIRONMENT
+BLOCKED — PROVIDER
+BLOCKED — DATA
+BLOCKED — BRANCH SAFETY
+
+Do not use PASS unless:
+
+- backend state inconsistency is fixed;
+- actual workflow creation is tested;
+- full suites pass;
+- builds pass;
+- admin payment visibility is proven;
+- a real test transaction completes end-to-end;
+- commit is safely located on an approved feature branch.
