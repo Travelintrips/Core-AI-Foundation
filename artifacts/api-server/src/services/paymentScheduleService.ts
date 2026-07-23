@@ -8,7 +8,7 @@
  * per spec: "AI Build TIDAK boleh berjalan jika payment belum verified atau
  * deposit belum diterima."
  */
-import { eq, and, ne } from "drizzle-orm";
+import { eq, and, ne, inArray } from "drizzle-orm";
 import {
   db,
   aiPaymentScheduleTable,
@@ -121,6 +121,10 @@ export async function getScheduleForProject(projectId: number): Promise<AiPaymen
 // ── submitProof ───────────────────────────────────────────────────────────────
 // Customer records a payment reference (bank transfer id / PO number). Does
 // NOT mark the installment paid — an admin must verify it.
+//
+// WB-1 fix: set status → "proof_submitted" so the admin pending-worklist can
+// distinguish "customer acted" from "waiting for customer".  Also accept
+// status="failed" (rejected proof) so the customer can resubmit.
 
 export async function submitPaymentProof(
   scheduleId: number,
@@ -128,12 +132,13 @@ export async function submitPaymentProof(
   proofImageUrl?: string | null,
 ): Promise<AiPaymentSchedule | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const setPayload: any = { reference, updatedAt: new Date() };
+  const setPayload: any = { reference, status: "proof_submitted", updatedAt: new Date() };
   if (proofImageUrl) setPayload.proofImageUrl = proofImageUrl;
   const [row] = await db
     .update(aiPaymentScheduleTable)
     .set(setPayload)
-    .where(and(eq(aiPaymentScheduleTable.id, scheduleId), eq(aiPaymentScheduleTable.status, "pending")))
+    // Accept "failed" so a customer can resubmit after admin rejection.
+    .where(and(eq(aiPaymentScheduleTable.id, scheduleId), inArray(aiPaymentScheduleTable.status, ["pending", "failed"])))
     .returning();
   if (!row) return null;
 
@@ -197,7 +202,11 @@ export async function verifyPayment(
   if (!project) return null;
 
   const allInstallments = await getScheduleForProject(project.id);
-  const unpaid = allInstallments.filter((s) => s.status !== "paid" && s.status !== "cancelled");
+  // WB-1: "proof_submitted" is still unpaid — treat it identically to "pending"
+  // so remaining-balance and file-unlock computations stay correct.
+  const unpaid = allInstallments.filter(
+    (s) => s.status !== "paid" && s.status !== "cancelled",
+  );
   const anyPaid = allInstallments.some((s) => s.status === "paid");
   const fullyPaid = unpaid.length === 0;
 
@@ -363,6 +372,8 @@ export async function rejectPayment(
   rejectedBy: string,
   reason: string,
 ): Promise<AiPaymentSchedule | null> {
+  // WB-1: Set to "failed" so the customer can see rejection and resubmit via
+  // submitPaymentProof (which now accepts "pending" OR "failed").
   const [schedule] = await db
     .update(aiPaymentScheduleTable)
     .set({

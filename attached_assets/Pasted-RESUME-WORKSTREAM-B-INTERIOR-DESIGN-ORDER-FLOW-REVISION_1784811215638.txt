@@ -1,0 +1,603 @@
+RESUME WORKSTREAM B
+INTERIOR DESIGN ORDER FLOW — REVISION 2
+
+KONDISI TERAKHIR
+
+Workstream A Team 39 telah selesai:
+
+- 45 Team 39 tests pass;
+- 75 Team 36 tests pass;
+- full suite 5391/5391 pass;
+- commit dan push diklaim selesai.
+
+Workstream B telah dimulai pada branch baru dan berhenti saat membaca:
+
+- Interior Design service;
+- payment schedule service;
+- customer portal request results page;
+- related order-flow files.
+
+Jangan mengulang Workstream A.
+Jangan mengubah file Team 39.
+Jangan kembali ke branch Team 39.
+Lanjutkan hanya Workstream B.
+
+==================================================
+PHASE 1 — VERIFY BRANCH AND SEPARATION
+==================================================
+
+Jalankan:
+
+git branch --show-current
+git status --short
+git rev-parse --short HEAD
+git log --oneline --decorate -10
+git diff --stat
+git diff --check
+
+Branch yang diharapkan:
+
+fix/interior-design-order-flow
+
+Pastikan:
+
+- working tree tidak berisi perubahan Team 39;
+- Workstream A sudah committed;
+- tidak ada stash;
+- tidak ada conflict marker;
+- tidak ada partial file edit.
+
+Jika branch berbeda atau working tree tercampur:
+
+STOP.
+Jangan checkout, merge, rebase, atau cherry-pick.
+Laporkan state repository.
+
+==================================================
+PHASE 2 — DOCUMENT FILES ALREADY REVIEWED
+==================================================
+
+Sebelum coding, catat file yang sudah dibaca pada sesi sebelumnya:
+
+- Interior Design router/service;
+- workflow definition;
+- project lifecycle service;
+- payment schedule service;
+- catalog request detail route;
+- customer portal request-results page;
+- admin payment route/page;
+- artifact/deliverable services.
+
+Buat tabel:
+
+File | Function | Current behavior | Suspected gap | Needs change
+
+Jangan mengklaim root cause sebelum data flow lengkap terbukti.
+
+==================================================
+PHASE 3 — REPRODUCE ORIGINAL BUG
+==================================================
+
+Reproduksi order Interior Design di test/non-production.
+
+Bug:
+
+1. Order langsung masuk ke hasil produksi.
+2. Halaman hasil kosong.
+3. Customer melihat Menunggu Pelunasan.
+4. Admin payment kosong.
+5. File final diklaim tersedia padahal tidak ada.
+6. Status selesai muncul tanpa artifact/deliverable nyata.
+
+Catat:
+
+- requestId;
+- orderId;
+- projectId;
+- workflowId;
+- workflow step IDs;
+- job IDs;
+- artifact IDs;
+- deliverable IDs;
+- quotationId;
+- invoiceId;
+- paymentScheduleId;
+- paymentId;
+- tenantId;
+- timestamps;
+- status transitions.
+
+==================================================
+PHASE 4 — FIND EXACT ROOT CAUSES
+==================================================
+
+Trace actual code path:
+
+order creation
+→ service resolution
+→ workflow template
+→ workflow instance
+→ initial stage
+→ job enqueue
+→ job execution
+→ output validation
+→ artifact persistence
+→ deliverable publishing
+→ invoice generation
+→ payment schedule
+→ proof submission
+→ admin verification
+→ file unlock
+→ order completion
+
+Untuk setiap root cause, tulis:
+
+- symptom;
+- exact file;
+- function;
+- line range;
+- affected table;
+- wrong state transition;
+- why it happens;
+- proposed fix;
+- regression test.
+
+Minimum audit areas:
+
+A. Interior Design workflow initialization  
+B. Empty or missing workflow behavior  
+C. Job success criteria  
+D. Artifact persistence  
+E. Deliverable availability  
+F. Invoice generation  
+G. Payment schedule state  
+H. Customer status mapping  
+I. Admin payment visibility  
+J. File unlock logic
+
+==================================================
+PHASE 5 — WORKFLOW INITIALIZATION FIX
+==================================================
+
+Interior Design harus:
+
+- resolve service slug secara canonical;
+- menemukan workflow template;
+- membuat workflow instance;
+- memulai stage pertama;
+- membuat initial job;
+- tidak langsung complete;
+- tidak menganggap empty workflow sukses;
+- tidak menganggap missing plugin/renderer sukses;
+- tidak memakai demo/mock fallback.
+
+Tambahkan fail-closed behavior:
+
+- workflow template missing → workflow_configuration_error;
+- initial job creation failed → production_initialization_failed;
+- renderer missing → renderer_unavailable;
+- no required steps → invalid_workflow_definition.
+
+==================================================
+PHASE 6 — PRODUCTION COMPLETION GUARD
+==================================================
+
+Production hanya complete jika:
+
+- seluruh blocking job sukses;
+- output contract valid;
+- output tidak null;
+- output tidak kosong;
+- required output fields tersedia;
+- artifact insert sukses;
+- storage reference valid;
+- minimum required deliverable tersedia;
+- tidak ada failed blocking stage.
+
+Jika gagal:
+
+- status production_failed;
+- structured reason tersimpan;
+- customer melihat error yang jujur;
+- admin melihat diagnostic action;
+- workflow tidak maju otomatis.
+
+Guard harus berada di service/runner nyata, bukan hanya helper test.
+
+==================================================
+PHASE 7 — ARTIFACT AND DELIVERABLE FIX
+==================================================
+
+Audit dan perbaiki:
+
+- artifact table;
+- project outputs;
+- storage path/URL;
+- MIME;
+- file size;
+- preview;
+- final deliverable;
+- version;
+- tenant/project relation.
+
+Rules:
+
+- artifact tanpa storage reference invalid;
+- zero-byte file invalid;
+- missing MIME invalid;
+- final-ready membutuhkan deliverable nyata;
+- customer file list berasal dari deliverable API;
+- tidak ada hard-coded PNG/SVG/PSD/Brand Guideline.
+
+==================================================
+PHASE 8 — CANONICAL BILLING RESOLVER
+==================================================
+
+Buat satu backend resolver yang dipakai customer dan admin.
+
+Output minimum:
+
+{
+  invoiceStatus,
+  paymentStatus,
+  billingStatus,
+  invoiceId,
+  paymentScheduleId,
+  totalAmount,
+  paidAmount,
+  remainingBalance,
+  proofSubmitted,
+  verificationStatus,
+  paymentDestinationAvailable,
+  filesUnlocked
+}
+
+invoiceStatus:
+
+- not_created
+- issued
+- partially_paid
+- paid
+- void
+
+paymentStatus:
+
+- not_submitted
+- submitted
+- under_review
+- verified
+- rejected
+
+billingStatus:
+
+- billing_pending
+- awaiting_payment
+- payment_under_review
+- partially_paid
+- paid
+
+Rules:
+
+- invoice tidak ada → billing_pending;
+- invoice ada + saldo > 0 + belum submit proof → awaiting_payment;
+- proof submitted → payment_under_review;
+- proof rejected → awaiting_payment + rejected reason;
+- verified sebagian → partially_paid;
+- verified penuh → paid;
+- frontend tidak menentukan billingStatus sendiri dari remainingBalance.
+
+==================================================
+PHASE 9 — PAYMENT SCHEDULE CONSISTENCY
+==================================================
+
+Audit ai_payment_schedule atau tabel canonical terkait.
+
+Pastikan status membedakan:
+
+- unpaid;
+- proof_submitted;
+- under_review;
+- verified;
+- rejected;
+- partially_paid;
+- paid.
+
+Outstanding finansial boleh tetap > 0 saat proof under review, tetapi CTA customer
+harus menggunakan billingStatus canonical.
+
+Customer dan admin harus membaca record yang sama.
+
+==================================================
+PHASE 10 — CUSTOMER RESULT PAGE
+==================================================
+
+Gunakan backend view model.
+
+Rendering:
+
+- production active → Sedang Diproduksi;
+- production failed → Proses Produksi Gagal;
+- production complete, no deliverable → File Sedang Dipersiapkan;
+- deliverable ada, no invoice → Tagihan Sedang Dipersiapkan;
+- invoice valid, no proof → Menunggu Pelunasan;
+- proof submitted → Pembayaran Sedang Diverifikasi;
+- verified partial → Menunggu Sisa Pelunasan;
+- paid → File Terbuka;
+- no deliverable → tidak ada daftar file final.
+
+Hapus klaim statis file yang tidak berasal dari deliverable API.
+
+==================================================
+PHASE 11 — ADMIN PAYMENT VISIBILITY
+==================================================
+
+Admin Panel harus menampilkan:
+
+- invoice;
+- total;
+- remaining balance;
+- schedule;
+- payment proof;
+- proof URL/file;
+- submitted timestamp;
+- verification status;
+- approve;
+- reject;
+- rejection reason;
+- order/project/customer relation.
+
+Jika tidak ada payment, tampilkan alasan:
+
+- invoice belum dibuat;
+- proof belum disubmit;
+- proof sedang direview;
+- proof ditolak;
+- payment terverifikasi.
+
+Jangan tampilkan panel kosong tanpa diagnosis.
+
+==================================================
+PHASE 12 — FILE UNLOCK RULE
+==================================================
+
+Files unlock hanya jika:
+
+- deliverable nyata tersedia;
+- invoice valid;
+- required payment verified penuh;
+- filesUnlocked/access grant aktif;
+- tenant/project/customer relation valid.
+
+Partial payment tidak membuka semua file kecuali staged delivery memang
+dikonfigurasi secara eksplisit.
+
+==================================================
+PHASE 13 — BROKEN ORDER RECOVERY
+==================================================
+
+Implementasikan:
+
+scanBrokenCreativeOrder()
+repairBrokenCreativeOrder()
+
+Detect:
+
+- completed tanpa workflow;
+- completed tanpa jobs;
+- completed tanpa artifact;
+- artifact tanpa storage;
+- deliverable tanpa artifact;
+- awaiting_payment tanpa invoice;
+- invoice tanpa schedule;
+- proof submitted tetapi status stale;
+- paid tetapi locked;
+- unlocked tanpa verified payment.
+
+Requirements:
+
+- dry-run default;
+- tenant-scoped;
+- idempotent;
+- audit logged;
+- no destructive delete;
+- before/after report;
+- explicit skipped reasons.
+
+Jangan menjalankan apply mode pada production.
+
+==================================================
+PHASE 14 — REQUIRED TESTS
+==================================================
+
+Tambahkan minimal 30 tests:
+
+1. Interior Design starts at first stage.
+2. Workflow instance created.
+3. First job queued.
+4. Empty workflow fails.
+5. Missing template fails.
+6. Missing plugin fails.
+7. Failed job blocks advancement.
+8. Null output rejected.
+9. Empty output rejected.
+10. Production complete requires artifact.
+11. Artifact requires storage reference.
+12. Deliverable required before final-ready.
+13. Missing invoice returns billing_pending.
+14. Invoice + outstanding returns awaiting_payment.
+15. Submitted proof returns payment_under_review.
+16. Under-review payment does not unlock.
+17. Rejected proof returns actionable state.
+18. Partial verified payment stays locked.
+19. Full verified payment unlocks.
+20. Customer and admin use same resolver.
+21. Payment proof visible in admin route.
+22. Cross-tenant invoice denied.
+23. Cross-tenant artifact denied.
+24. Body tenantId injection denied or ignored.
+25. Duplicate workflow enqueue idempotent.
+26. Duplicate invoice generation idempotent.
+27. Broken-order scan idempotent.
+28. Broken-order repair idempotent.
+29. No static file labels without deliverables.
+30. Order completes only after delivery/payment conditions.
+
+Gunakan actual services/routes/repositories sebanyak mungkin.
+
+==================================================
+PHASE 15 — TARGETED VERIFICATION
+==================================================
+
+Jalankan:
+
+1. workflow initialization tests;
+2. workflow runner tests;
+3. artifact/deliverable tests;
+4. billing resolver tests;
+5. payment schedule tests;
+6. customer results tests;
+7. admin payment tests;
+8. recovery tests;
+9. tenant isolation tests;
+10. Interior Design integration tests.
+
+Laporkan:
+
+- command;
+- exit code;
+- tests;
+- passed;
+- failed;
+- skipped;
+- duration.
+
+==================================================
+PHASE 16 — FULL VERIFICATION
+==================================================
+
+Jalankan:
+
+- full api-server suite;
+- full customer-portal suite;
+- full bizportal suite;
+- full repository suite;
+- affected library builds;
+- api-server typecheck;
+- customer-portal typecheck;
+- bizportal typecheck;
+- production builds;
+- git diff --check.
+
+Jangan menyatakan no regression tanpa angka aktual.
+
+==================================================
+PHASE 17 — REAL NON-PRODUCTION E2E
+==================================================
+
+Lakukan transaksi nyata:
+
+1. Customer membuat Interior Design order.
+2. Brief tersimpan.
+3. Workflow mulai dari stage pertama.
+4. Admin melihat order.
+5. Production job berjalan.
+6. Artifact nyata tersimpan.
+7. Deliverable nyata tersedia.
+8. Invoice dibuat.
+9. Customer melihat amount due.
+10. Customer submit proof.
+11. Admin melihat proof.
+12. Admin verify.
+13. Customer melihat paid.
+14. File terbuka.
+15. Order completed.
+
+Lampirkan:
+
+- IDs;
+- timestamps;
+- API responses;
+- database evidence;
+- screenshot customer;
+- screenshot admin;
+- storage evidence;
+- invoice/payment evidence.
+
+Jika provider tidak tersedia, laporkan BLOCKED — PROVIDER.
+Jangan mengganti real E2E dengan mock-only test.
+
+==================================================
+PHASE 18 — COMMIT AND PUSH
+==================================================
+
+Review:
+
+git status --short
+git diff --stat
+git diff --check
+git diff
+
+Commit hanya Workstream B:
+
+git add <Interior Design files only>
+git commit -m "fix(creative-orders): enforce interior design production and billing lifecycle"
+
+Push:
+
+git push -u origin fix/interior-design-order-flow
+
+Jangan merge ke main.
+
+==================================================
+FINAL REPORT
+==================================================
+
+A. Branch
+B. Base commit
+C. Original reproduction
+D. Exact root causes
+E. Files changed
+F. Tables and relationships
+G. Workflow initialization
+H. Job execution
+I. Production completion guard
+J. Artifact persistence
+K. Deliverable publishing
+L. Canonical billing resolver
+M. Payment schedule consistency
+N. Customer result page
+O. Admin payment visibility
+P. File unlock
+Q. Tenant isolation
+R. Recovery service
+S. Targeted tests
+T. Full tests
+U. Typecheck
+V. Builds
+W. Real E2E evidence
+X. Remaining risks
+Y. Commit
+Z. Push verification
+AA. Final verdict
+
+Allowed verdict:
+
+PASS — END-TO-END VERIFIED
+REVISION REQUIRED
+BLOCKED — ENVIRONMENT
+BLOCKED — PROVIDER
+BLOCKED — DATA
+BLOCKED — PUSH AUTH
+BLOCKED — BRANCH SAFETY
+
+Do not use PASS unless:
+
+- original backend bug is fixed;
+- workflow starts correctly;
+- real artifact and deliverable exist;
+- canonical billing resolver is active;
+- admin sees submitted proof;
+- verified payment unlocks files;
+- full suites pass;
+- builds pass;
+- real non-production E2E completes.

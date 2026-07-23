@@ -63,8 +63,12 @@ export type DisplayState =
 // Statuses that mean active production is underway (not yet a billing/result state).
 // RC-1: "waiting_payment_verification" is intentionally excluded — it is a post-proof
 // state, not a production state, and must be handled separately.
+// WB-3 fix: "waiting_payment" removed — it means the customer has NOT yet paid,
+// so it is a billing gate state, not a production state. With invoiceExists+balance>0
+// the logic below correctly shows "awaiting_payment"; without an invoice it shows
+// "billing_pending". Putting it here caused Bug #3 ("Sedang Diproduksi" instead of
+// "Menunggu Pelunasan" while the customer still owed their deposit/full payment).
 const PRODUCTION_IN_PROGRESS_STATUSES = new Set([
-  "waiting_payment",
   "deposit_paid",
   "payment_verified",
   "ready_to_build",

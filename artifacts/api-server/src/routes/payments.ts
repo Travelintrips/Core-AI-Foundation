@@ -43,10 +43,12 @@ function parseId(raw: string | string[] | undefined): number | null {
 // non-cancelled installment — the "Payment Verification" worklist.
 
 router.get("/ai/payments/pending", async (_req, res): Promise<void> => {
+  // WB-1: include "proof_submitted" so the admin worklist surfaces schedules
+  // where the customer has already submitted proof but admin hasn't acted yet.
   const rows = await db
     .select()
     .from(aiPaymentScheduleTable)
-    .where(inArray(aiPaymentScheduleTable.status, ["pending", "partially_paid", "failed"]));
+    .where(inArray(aiPaymentScheduleTable.status, ["pending", "proof_submitted", "partially_paid", "failed"]));
 
   const projectIds = [...new Set(rows.map((r) => r.projectId))];
   const projects = projectIds.length > 0
@@ -115,7 +117,7 @@ router.get("/ai/payments/kpi", async (_req, res): Promise<void> => {
     .select({
       totalPaidRaw: sql<string>`COALESCE(SUM(CASE WHEN status = 'paid' THEN amount::numeric ELSE 0 END), 0)`,
       totalPendingRaw: sql<string>`COALESCE(SUM(CASE WHEN status != 'paid' AND status != 'cancelled' THEN amount::numeric ELSE 0 END), 0)`,
-      countPending: sql<number>`COUNT(CASE WHEN status IN ('pending','partially_paid','failed') THEN 1 END)::int`,
+      countPending: sql<number>`COUNT(CASE WHEN status IN ('pending','proof_submitted','partially_paid','failed') THEN 1 END)::int`,
     })
     .from(aiPaymentScheduleTable);
 

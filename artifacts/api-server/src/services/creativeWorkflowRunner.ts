@@ -84,7 +84,7 @@ const FASHION_PIPELINE: AgentStep[] = [
   { slug: "fashion-quality-control",   label: "Fashion Quality Control" },
 ];
 
-const INTERIOR_PIPELINE: AgentStep[] = [
+export const INTERIOR_PIPELINE: AgentStep[] = [
   { slug: "interior-concept-architect",   label: "Design Concept" },
   { slug: "interior-space-planner",       label: "Space Planning" },
   { slug: "interior-material-specialist", label: "Material Specification" },
@@ -420,6 +420,19 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
 
   if (documentType === "interior_design") {
     await db.update(creativeProjectsTable).set({ status: "running" }).where(eq(creativeProjectsTable.id, projectDbId));
+
+    // WB-2 guard: an empty pipeline would silently set anyFailed=false and
+    // advance the project to generating_document with zero AI output.
+    if (INTERIOR_PIPELINE.length === 0) {
+      await db.update(creativeProjectsTable)
+        .set({ status: "failed" })
+        .where(eq(creativeProjectsTable.id, projectDbId));
+      await logAudit("creative-ai", "workflow_config_error", String(projectDbId), "creative_project", "failure", {
+        reason: "INTERIOR_PIPELINE is empty — no agent steps configured",
+      });
+      throw new Error("INTERIOR_PIPELINE is empty — cannot start Interior Design workflow");
+    }
+
     createExecutionPlanForCreativeProject(project.projectId, `${project.goal} — ${project.brandName} Interior Design`).catch(() => {});
     const guardrails = await readGuardrails();
     const { stepOutputs, anyFailed } = await runInteriorDesignWorkflow(
@@ -427,6 +440,19 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
       (project.briefJson as Record<string, string>) ?? {},
       { maxCostPerWorkflow: guardrails.maxCostPerWorkflow, maxRetries: 2, timeoutMs: 120000 },
     );
+
+    // WB-2 guard: QC step producing empty output means no meaningful content
+    // was generated. Mark as failed instead of silently advancing.
+    const qcOutput = stepOutputs["interior-quality-control"];
+    const qcIsEmpty = !qcOutput || Object.keys(qcOutput).length === 0;
+    const effectivelyFailed = anyFailed || qcIsEmpty;
+
+    if (qcIsEmpty && !anyFailed) {
+      await logAudit("creative-ai", "interior_qc_empty_output", String(projectDbId), "creative_project", "failure", {
+        reason: "Interior QC step produced empty output — treating workflow as failed",
+      });
+    }
+
     const aggregatedResult = {
       interiorConceptArchitect:   stepOutputs["interior-concept-architect"] ?? null,
       interiorSpacePlanner:       stepOutputs["interior-space-planner"] ?? null,
@@ -434,9 +460,9 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
       interiorCopywriter:         stepOutputs["interior-copywriter"] ?? null,
       interiorQcReview:           stepOutputs["interior-quality-control"] ?? null,
     };
-    const finalStatus = anyFailed ? "failed" : "generating_document";
+    const finalStatus = effectivelyFailed ? "failed" : "generating_document";
     await db.update(creativeProjectsTable).set({ status: finalStatus, result: aggregatedResult }).where(eq(creativeProjectsTable.id, projectDbId));
-    if (!anyFailed) {
+    if (!effectivelyFailed) {
       const { runImageDesignerPipeline } = await import("./imageDesignerService.js");
       runImageDesignerPipeline(projectDbId, project.projectId, 2).catch(() => {}).finally(() => {
         enqueue({ jobType: "pdf_export", payloadJson: { projectId: projectDbId, documentType: "interior_design" }, priority: 60 }).catch(() => {});
