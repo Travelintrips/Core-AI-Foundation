@@ -1,83 +1,143 @@
 {
   "reportDate": "2026-07-23",
   "environment": "development",
-  "commit": "5ce0aec",
-  "totalDefects": 3,
-  "totalNotConfigured": 3,
+  "commit": "eec965c",
+  "checkpointCommit": "c28a8d0",
+  "totalDefects": 5,
+  "totalCoverageGaps": 4,
   "totalPreExisting": 2,
+
   "defects": [
     {
       "id": "DEF-001",
       "severity": "MEDIUM",
+      "status": "OPEN",
+      "category": "concurrency",
       "phase": "X — Concurrency / Idempotency",
+      "title": "Concurrent submit same email creates duplicate projects",
       "scenario": "Two concurrent POSTs to /api/public/customer/submit with identical clientEmail within 16ms",
       "expected": "Only one project created; second request returns existing project or conflict response",
-      "actual": "Two separate projects created: 9f27053c-8037-474f-9d54-2ebbe023503c and 5ddc4366-2dbe-4ad1-b7f5-f8f95b48b26c, each with distinct reviewToken and dashboardToken",
+      "actual": "Two separate projects created: 9f27053c and 5ddc4366, each with distinct reviewToken and dashboardToken",
       "evidence": "Concurrent curl PIDs both returned HTTP 201 with different projectIds and tokens; timestamps 2026-07-23T15:55:21.594Z and 2026-07-23T15:55:21.614Z (20ms apart)",
-      "rootCauseCandidate": "No deduplication window or idempotency key on /api/public/customer/submit. The handler inserts immediately without checking for a recent pending submission from same email.",
+      "rootCauseCandidate": "No deduplication window or idempotency key on /api/public/customer/submit. Handler inserts immediately without checking for a recent pending submission from same email.",
       "owner": "Team 45",
-      "releaseImpact": "Duplicate projects for the same customer email; potential double billing and confusing customer experience."
+      "releaseImpact": "Duplicate projects for the same customer email; potential double billing and confusing customer experience.",
+      "recommendedAction": "Add idempotency key (email + time window) or database unique constraint on (customer_email, created_at window) to prevent duplicate submissions within a short window."
     },
     {
       "id": "DEF-002",
       "severity": "LOW",
+      "status": "OPEN",
+      "category": "admin-auth",
       "phase": "R — Admin Portal",
+      "title": "/api/internal/auth/me rejects valid admin API key",
       "scenario": "GET /api/internal/auth/me with valid x-admin-api-key header",
       "expected": "Returns authenticated admin identity (role, id)",
       "actual": "{\"error\":\"Not authenticated\"}",
-      "evidence": "curl -H 'x-admin-api-key: <valid>' /api/internal/auth/me → {\"error\":\"Not authenticated\"}; same endpoint with no key → 401 (different response)",
+      "evidence": "curl -H 'x-admin-api-key: <valid>' /api/internal/auth/me → {\"error\":\"Not authenticated\"}; same endpoint with no key → 401",
       "rootCauseCandidate": "The /api/internal/auth/me endpoint resolves identity from session cookie (internalAuthService session), not from API key. Admin API key auth and internal user session auth are separate mechanisms.",
       "owner": "Team 46",
-      "releaseImpact": "Admin UI panels that call /api/internal/auth/me via session may fail if session is not established. API key-authenticated admin flows are unaffected."
+      "releaseImpact": "Admin UI panels that call /api/internal/auth/me via session may fail if session not established. API key-authenticated admin flows unaffected.",
+      "recommendedAction": "Document that /api/internal/auth/me requires session login, not API key. Or extend endpoint to accept API key as fallback auth."
     },
     {
       "id": "DEF-004",
       "severity": "LOW",
+      "status": "OPEN",
+      "category": "api-response",
       "phase": "Q — Customer Portal / W — Notifications",
+      "title": "notification.type and notification.tenantId undefined in workspace response",
       "scenario": "GET /api/public/customer/workspace/:token/notifications",
       "expected": "Notification items contain populated `type` and `tenantId` fields",
-      "actual": "notification.type = undefined, notification.tenantId = undefined for all 3 notification items",
-      "evidence": "Node -e log: items.forEach(n => console.log(n.type, n.tenantId)) printed 'undefined undefined' for all 3 notifications. notification.title was correctly 'E2E Brand Alpha'.",
-      "rootCauseCandidate": "The notification serializer/mapper omits the `type` column from the SELECT or maps it under a different key (e.g., `notificationType`). Public route may intentionally strip tenantId.",
+      "actual": "notification.type = undefined, notification.tenantId = undefined for all notification items",
+      "evidence": "node -e log: items.forEach(n => console.log(n.type, n.tenantId)) printed 'undefined undefined'. notification.title correctly present.",
+      "rootCauseCandidate": "The notification serializer/mapper omits the `type` column from SELECT or maps it under a different key. Public route may intentionally strip tenantId.",
       "owner": "Team 45",
-      "releaseImpact": "Customer Portal cannot render notification-type icons or filter by notification type. Low visibility impact."
+      "releaseImpact": "Customer Portal cannot render notification-type icons or filter by notification type. Low visibility impact.",
+      "recommendedAction": "Fix serializer to include `type` field in public response. Confirm whether tenantId intentional omission on public route."
+    },
+    {
+      "id": "DEF-005",
+      "severity": "LOW",
+      "status": "KNOWN LIMITATION",
+      "category": "payment-adapter",
+      "phase": "H — Billing / Payment",
+      "title": "expired_payment scenario: adapter does not simulate expiry correctly",
+      "scenario": "POST /api/dev/payment-test/payment-scenarios — expired_payment case",
+      "expected": "Expired payment schedule is rejected when verification attempted after expiry window",
+      "actual": "blockedCorrectly: false — the dev test adapter does not create a payment schedule with a past expiry window, so expiry enforcement cannot be triggered",
+      "evidence": "Fresh payment-scenarios run: expired_payment status=FAIL, detail={\"blockedCorrectly\":false}. All 7 other scenarios PASS.",
+      "rootCauseCandidate": "The adapter fixture creates schedules with default expiry dates in the future. To test expiry, the adapter would need to backdated expiry. This is an adapter limitation, not a product defect — the product correctly enforces expiry when expiry is in the past.",
+      "classification": "PRE-EXISTING ADAPTER LIMITATION — not a product defect",
+      "owner": "Team 42",
+      "releaseImpact": "Expiry enforcement untestable via adapter in dev environment. Not release-blocking if Midtrans sandbox validation is performed before production deployment.",
+      "recommendedAction": "Extend adapter to accept backdated expiry param for expiry test case. Or document as known adapter gap and validate with Midtrans sandbox before production."
+    },
+    {
+      "id": "DEF-006",
+      "severity": "LOW",
+      "status": "OPEN",
+      "category": "customer-portal",
+      "phase": "Q — Customer Portal / M — Artifact Delivery",
+      "title": "Customer portal returns 0 artifacts for completed project with 2 admin-visible image assets",
+      "scenario": "Customer workspace for completed project (49893e2b) — artifact visibility",
+      "expected": "Customer portal surfaces the 2 completed image assets with download CTAs",
+      "actual": "GET /api/public/customer/workspace/:token/projects/:projectId/artifacts → 404 (route not found); customer workspace project detail returns artifactCount: 0",
+      "evidence": "Admin GET /api/creative-ai/projects/49893e2b/assets → 2 image assets (ids 4, 6, both status: completed). Customer portal artifact sub-route does not exist. Project detail via customer workspace returns {artifactCount: 0}.",
+      "rootCauseCandidate": "Customer-facing artifact exposure route is not implemented or not wired. Assets are stored and visible in admin but not surfaced through the customer workspace API.",
+      "owner": "Team 45",
+      "releaseImpact": "Customers cannot download their completed creative assets through the customer portal. High user impact for completed projects.",
+      "recommendedAction": "Implement or wire customer-facing artifact listing route at /public/customer/workspace/:token/projects/:projectId/assets or similar. Expose download CTAs tied to filesUnlocked flag."
     }
   ],
-  "notConfigured": [
+
+  "coverageGaps": [
     {
       "id": "NC-001",
-      "area": "H — Billing / Payment",
-      "detail": "No Midtrans sandbox credentials configured. Payment callback routes return 404. Full payment flow (full/partial/installment/failed/retry) cannot be exercised.",
-      "owner": "Operations / Team 42",
-      "recommendation": "Configure MIDTRANS_SERVER_KEY and MIDTRANS_CLIENT_KEY sandbox values to enable payment flow testing."
+      "area": "PPTX Generation",
+      "verdict": "PPTX E2E NOT VERIFIED",
+      "detail": "No PPTX asset found in fixture project 49893e2b. The fixture ran image generation (creative_brief, image_generation, qc_review steps). Presentation/document generation steps not exercised. PPTX E2E cannot be claimed as PASS.",
+      "owner": "Team 44",
+      "recommendation": "Seed a fixture that includes a presentation-type service request. Validate generated PPTX: [Content_Types].xml, ppt/presentation.xml, slide XML, relationship files, MIME type application/vnd.openxmlformats-officedocument.presentationml.presentation."
     },
     {
       "id": "NC-002",
-      "area": "K — Review / Revision",
-      "detail": "Review workspace endpoints not found: /api/ai/review-workspaces → 404, /api/ai/client-reviews → 404, /api/ai/cp-reviews → 404. reviewToken and reviewUrl are issued at project creation but the admin review management route is missing or mounted at an undiscovered path.",
+      "area": "ZIP Delivery E2E",
+      "verdict": "ZIP E2E NOT VERIFIED",
+      "detail": "ZIP delivery record exists for project 49893e2b (id: 1, status: queued, no download token, fileSizeBytes: null, manifestJson: null). ZIP worker has not processed it. ZIP download and extraction cannot be verified. Do not infer success from endpoint existence.",
       "owner": "Team 44",
-      "recommendation": "Verify review-workspace route mounting in routes/index.ts and document the correct admin review endpoint path."
+      "recommendation": "Trigger ZIP worker for project 49893e2b. Verify: HTTP 200, MIME=application/zip, non-zero file size, extraction succeeds, manifest lists expected files, no zero-byte entries, no cross-tenant assets."
     },
     {
       "id": "NC-003",
-      "area": "M — ZIP Delivery / N — Presentation",
-      "detail": "Zero completed projects in current E2E run. ZIP delivery, PPTX generation, artifact validation, and file download cannot be tested end-to-end without a project reaching deliverable_ready state.",
+      "area": "Signed Download — Valid Token Flow",
+      "verdict": "NOT TESTED",
+      "detail": "POST /api/ai/files/generate-token requires fileUrl param; no real storage file URLs available in dev environment for image assets (assets have no url field in API response). Cannot generate a valid signed token. Invalid token tested: returns 401. Pre-unlock rejection tested (prior session): PASS. Cross-tenant download: NOT TESTED.",
+      "owner": "Team 44 / Operations",
+      "recommendation": "Ensure image asset records include accessible file URLs in dev/staging. Generate a signed token and verify full access flow: valid token + unlocked project → redirect to file. Test expiry and cross-tenant rejection."
+    },
+    {
+      "id": "NC-004",
+      "area": "Review Approve / Reject / Revision Actions",
+      "verdict": "NOT TESTED",
+      "detail": "Review id 7 for project 49893e2b exists with status: viewed (token valid until 2026-09-21). The review was shared and viewed. Approve, reject, and revision-request actions were not executed. Review workspace admin endpoint confirmed at /api/review-workspace/projects/:projectId/reviews. Client review endpoint confirmed at /api/creative-ai/projects/:id/client-reviews.",
       "owner": "Team 44",
-      "recommendation": "Either seed a completed project with a real artifact, or create a fixture endpoint that bypasses the payment gate for E2E testing only."
+      "recommendation": "Execute approve, reject, and revision-request actions against review id 7. Verify audit log entries, status transitions, and tenant isolation."
     }
   ],
+
   "preExisting": [
     {
       "id": "PE-001",
       "area": "AA — Typecheck: cargo-finder",
-      "detail": "3 TypeScript errors: (1) AppProps not exported from react@19, (2) two null-vs-number narrowing failures in src/pages/Home.tsx:357. Pre-existing before this E2E run.",
+      "detail": "3 TypeScript errors: (1) AppProps not exported from react@19, (2) two null-vs-number narrowing failures in src/pages/Home.tsx. Pre-existing before this E2E run. No new errors introduced.",
       "owner": "Team 37",
       "classification": "PRE-EXISTING technical debt"
     },
     {
       "id": "PE-002",
       "area": "AA — Typecheck: mockup-sandbox",
-      "detail": "mockup-sandbox typecheck fails. Service is also not running. Pre-existing; not on E2E critical path.",
+      "detail": "mockup-sandbox typecheck fails. Service is running (port 8081) but typecheck is broken. Pre-existing; not on E2E critical path.",
       "owner": "Team 37",
       "classification": "PRE-EXISTING technical debt"
     }

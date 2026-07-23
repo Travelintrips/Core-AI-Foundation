@@ -1,417 +1,287 @@
 {
   "reportDate": "2026-07-23",
   "environment": "development",
-  "commit": "5ce0aec",
+  "commit": "eec965c",
+  "checkpointCommit": "c28a8d0",
+  "fixtureProjectId": "49893e2b-f335-45c1-966f-d2482b16ac43",
   "phases": [
     {
       "phase": 1,
       "name": "Development Environment Preflight",
       "status": "PASS",
       "items": {
-        "api_server_running": "PASS",
-        "customer_portal_running": "PASS",
-        "admin_portal_running": "PASS",
-        "database_connected": "PASS",
-        "schema_complete": "PASS",
-        "migration_applied": "PASS",
-        "catalog_available": "PASS",
+        "api_server_running": "PASS — port 8080, /api/healthz → ok",
+        "customer_portal_running": "PASS — port 23434",
+        "admin_portal_running": "PASS — port 20785",
+        "cargo_finder_running": "PASS — port 20404",
+        "mockup_sandbox_running": "PASS — port 8081 (typecheck pre-existing failure, not critical)",
+        "database_connected": "PASS — /api/healthz/full → db: ok",
+        "schema_complete": "PASS — schema: ok",
+        "catalog_available": "PASS — 3 categories, 27 services",
         "queue_available": "PASS",
-        "workers_running": "PASS",
+        "workers_running": "PASS — text_worker, image_worker, storage_worker active",
         "scheduler_available": "PASS",
-        "storage_available": "PASS",
-        "ai_providers_available": "PASS",
-        "payment_sandbox": "NOT CONFIGURED",
-        "mockup_sandbox": "FAIL"
+        "storage_available": "PASS — Supabase bucket confirmed",
+        "ai_providers_available": "PASS — OpenAI, Anthropic, Gemini, Mistral, Replicate, Cohere",
+        "payment_sandbox": "NOT CONFIGURED — no Midtrans credentials; dev adapter used",
+        "smtp_email": "NOT VERIFIED — configured, not tested end-to-end"
       }
     },
     {
       "phase": 2,
-      "name": "Safe Test Data",
+      "name": "Targeted Test Suite",
       "status": "PASS",
       "items": {
-        "e2e_customers_created": "PASS",
-        "e2e_projects_created": "PASS",
-        "e2e_markers_present": "PASS",
-        "data_isolated_from_real_customers": "PASS",
-        "cleanup_scope_defined": "PASS"
+        "targeted_suites_pass": "PASS — 32 / 32",
+        "targeted_suites_fail": 0,
+        "source": "checkpoint c28a8d0"
       }
     },
     {
       "phase": 3,
-      "name": "Public Catalog",
+      "name": "Full Regression",
       "status": "PASS",
       "items": {
-        "catalog_accessible": "PASS",
-        "three_categories": "PASS",
-        "twenty_seven_services": "PASS",
-        "no_internal_categories": "PASS",
-        "service_detail_fields": "PASS",
-        "api_response_shape": "PASS"
+        "total_tests": "5378 / 5378 PASS",
+        "test_files": "178 / 178",
+        "unexpected_failures": 0,
+        "source": "checkpoint c28a8d0"
       }
     },
     {
       "phase": 4,
-      "name": "Customer Authentication",
-      "status": "PASS",
+      "name": "Typecheck",
+      "status": "PARTIAL",
       "items": {
-        "workspace_token_issuance": "PASS",
-        "invalid_token_rejected": "PASS",
-        "request_access_flow": "PASS",
-        "protected_routes": "PASS",
-        "customer_cannot_access_admin": "PASS",
-        "login_registration_ui": "NOT REQUIRED"
+        "workspace_libs_tsc_build": "PASS",
+        "api_server": "PASS — no errors",
+        "ai_platform": "PASS — no errors",
+        "customer_portal": "PASS — no errors",
+        "cargo_finder": "FAIL — PE-001 pre-existing (AppProps + null narrowing, 3 errors)",
+        "mockup_sandbox": "FAIL — PE-002 pre-existing",
+        "pptxgenjs_namespace_errors": "PRE-EXISTING — 21 errors, runtime verified safe",
+        "new_errors_introduced": "NONE — all failures are pre-existing"
       }
     },
     {
       "phase": 5,
-      "name": "Create Project",
+      "name": "Build",
       "status": "PASS",
       "items": {
-        "service_selection_ui": "PASS",
-        "project_creation_api": "PASS",
-        "project_appears_in_workspace": "PASS",
-        "project_fields_complete": "PASS",
-        "draft_flow": "NOT REQUIRED",
-        "duplicate_submission": "FAIL — DEF-001"
+        "api_server_esbuild": "PASS — dist/index.mjs 7.6mb",
+        "frontend_builds": "NOT_APPLICABLE — dev mode (Vite)"
       }
     },
     {
       "phase": 6,
-      "name": "Quotation and Approval",
-      "status": "PARTIAL",
+      "name": "Services",
+      "status": "PASS",
       "items": {
-        "quotation_admin_route": "PASS",
-        "legacy_quotation_frozen_by_design": "PASS",
-        "service_catalog_flow": "PARTIAL",
-        "customer_quotation_view": "NOT TESTED",
-        "double_approval_guard": "NOT TESTED",
-        "tenant_isolation": "NOT TESTED"
+        "api_server": "PASS",
+        "customer_portal": "PASS",
+        "admin_portal": "PASS",
+        "cargo_finder": "PASS",
+        "mockup_sandbox": "PASS — running (typecheck debt pre-existing)"
       }
     },
     {
       "phase": 7,
-      "name": "Billing and Payment",
-      "status": "PARTIAL",
+      "name": "Public Catalog",
+      "status": "PASS",
       "items": {
-        "payment_schedules_exist": "PASS",
-        "duplicate_callback_protection": "PASS",
-        "full_payment": "NOT CONFIGURED",
-        "partial_payment": "NOT CONFIGURED",
-        "installment": "NOT CONFIGURED",
-        "failed_payment": "NOT CONFIGURED",
-        "coupon_valid": "NOT CONFIGURED",
-        "coupon_duplicate": "NOT CONFIGURED",
-        "manual_verification": "NOT TESTED",
-        "admin_unlock_override": "NOT TESTED"
+        "catalog_accessible": "PASS — GET /api/ai/catalog/public → 200",
+        "three_categories": "PASS — Creative AI, Presentation & Document AI, Graphic Design AI",
+        "twenty_seven_services": "PASS",
+        "no_internal_categories": "PASS",
+        "api_response_shape": "PASS"
       }
     },
     {
       "phase": 8,
-      "name": "Workflow Creation",
-      "status": "PASS",
+      "name": "Payment",
+      "status": "PARTIAL",
       "items": {
-        "workflow_created": "PASS",
-        "jobs_enter_queue": "PASS",
-        "worker_claims_job": "PASS",
-        "job_processed": "PASS",
-        "progress_updated": "PASS",
-        "no_premature_completion": "PASS",
-        "no_two_worker_claim": "PASS"
+        "test_method": "PAYMENT BUSINESS FLOW PASS USING DEVELOPMENT TEST ADAPTER",
+        "full_payment": "PASS — paymentStatus: paid, filesUnlocked: true",
+        "deposit_payment": "PASS — paymentStatus: partially_paid, productionStarted: true",
+        "installment_two_steps": "PASS — paymentStatus: paid, filesUnlocked: true",
+        "failed_payment": "PASS — paymentStatus: failed",
+        "duplicate_callback": "PASS — duplicateBlocked: true",
+        "expired_payment": "FAIL — DEF-005: blockedCorrectly: false (pre-existing adapter limitation)",
+        "invalid_signature": "PASS — simulated; gateway-side in production",
+        "files_unlock_gate": "PASS — filesUnlockedAfterDepositOnly: false (correct)",
+        "scenarios_pass": "7 / 8",
+        "live_midtrans_verification": "NOT PERFORMED — dev adapter only"
       }
     },
     {
       "phase": 9,
-      "name": "AI Execution",
-      "status": "PASS",
+      "name": "Review Flow",
+      "status": "PARTIAL",
       "items": {
-        "llm_inference": "PASS",
-        "image_generation": "PASS",
-        "qc_review": "PASS",
-        "creative_brief": "PASS",
-        "provider_failure_marks_failed": "PASS",
-        "retry_works": "PASS",
-        "max_retry_enforced": "PASS",
-        "no_infinite_retry": "PASS",
-        "document_generation_e2e": "NOT TESTED",
-        "presentation_generation_e2e": "NOT TESTED"
+        "public_route": "PASS — /api/public/review/:token (confirmed mounted)",
+        "admin_route": "PASS — /api/review-workspace/projects/:projectId/reviews → works",
+        "client_review_route": "PASS — /api/creative-ai/projects/:id/client-reviews → id 7 returned",
+        "auth_model": "reviewTokenPlain for customer; x-admin-api-key for admin",
+        "token_behavior": "PASS — tokenExpiresAt: 2026-09-21, status: viewed",
+        "db_tables": "creativeAiClientReviewsTable confirmed",
+        "approve_behavior": "NOT TESTED — review in viewed state; approve action not executed",
+        "revision_behavior": "NOT TESTED",
+        "comment_behavior": "NOT TESTED",
+        "invalid_token_result": "NOT TESTED in this session",
+        "expired_token_result": "NOT TESTED",
+        "tenant_isolation_result": "NOT TESTED",
+        "audit_log_result": "NOT TESTED"
       }
     },
     {
       "phase": 10,
-      "name": "Workflow Failure and Recovery",
+      "name": "Lifecycle Fixture",
       "status": "PASS",
       "items": {
-        "provider_503_failure": "PASS — job #6 failed correctly",
-        "retry_exhaustion": "PASS",
-        "failed_not_completed": "PASS",
-        "startup_stale_recovery": "PASS — 0 stale on startup",
-        "error_visible_admin": "PASS",
-        "customer_safe_message": "PASS — no stack trace"
+        "fixture_project_id": "49893e2b-f335-45c1-966f-d2482b16ac43",
+        "fixture_brand_name": "E2E-FINAL-DELIVERABLE-1784830486778",
+        "workflow_completed": "PASS — status: completed",
+        "production_completed": "PASS — result field present with AI brand copy, QC score 88",
+        "deliverable_ready": "PASS — 2 image assets (ids 4, 6, both status: completed)",
+        "commercial_completed": "PASS — paymentStatus: paid",
+        "files_unlocked": "PASS — filesUnlocked: true",
+        "order_completed": "PASS — status: completed",
+        "quotation_status": "N/A — full-lifecycle fixture uses direct payment (no quotation flow)",
+        "payment_schedule_status": "paid (verified via payment adapter)",
+        "production_step_count": "4 steps (creative_brief, image_generation × 2, qc_review — confirmed by result structure)",
+        "artifact_count": "2 image assets",
+        "review_state": "viewed — id 7, shared and viewed, not yet approved",
+        "unlock_state": "filesUnlocked: true",
+        "completion_state": "status: completed"
       }
     },
     {
       "phase": 11,
-      "name": "Review and Revision",
-      "status": "NOT CONFIGURED",
+      "name": "PPTX",
+      "status": "NOT_TESTED",
+      "verdict": "PPTX E2E NOT VERIFIED",
       "items": {
-        "review_token_issued": "PASS",
-        "review_admin_endpoint": "FAIL — DEF-NC-002",
-        "customer_review_flow": "NOT TESTED",
-        "revision_flow": "NOT TESTED"
+        "source_project": "49893e2b-f335-45c1-966f-d2482b16ac43",
+        "pptx_asset_found": "FAIL — no PPTX asset in project (2 image assets only)",
+        "fixture_type": "Image generation fixture — no presentation service request",
+        "ooxml_validation": "NOT TESTED",
+        "content_types_xml": "NOT TESTED",
+        "slide_xml_files": "NOT TESTED",
+        "relationship_validation": "NOT TESTED",
+        "download_http_status": "NOT TESTED",
+        "note": "PPTX E2E NOT VERIFIED — classify as coverage gap NC-001, not product defect. Presentation service requires separate fixture."
       }
     },
     {
       "phase": 12,
-      "name": "Artifact Validation",
-      "status": "PARTIAL",
+      "name": "ZIP Delivery",
+      "status": "NOT_TESTED",
+      "verdict": "ZIP E2E NOT VERIFIED",
       "items": {
-        "storage_bucket_present": "PASS",
-        "artifact_endpoint": "PASS",
-        "zero_total_artifacts": "PASS — expected (no completed projects)",
-        "zero_byte_guard": "NOT TESTED",
-        "tenant_isolation": "NOT TESTED"
+        "source_project": "49893e2b-f335-45c1-966f-d2482b16ac43",
+        "zip_endpoint_admin": "PASS — GET /api/ai/zip-deliveries/:projectId → 200",
+        "zip_delivery_record": "PASS — id: 1, status: queued, retryCount: 0",
+        "download_token": "ABSENT — null",
+        "file_size_bytes": "ABSENT — null",
+        "manifest_json": "ABSENT — null",
+        "zip_extraction": "NOT TESTED — no download token issued",
+        "filename_extension": "NOT TESTED",
+        "mime_mapping": "NOT TESTED",
+        "no_zero_byte": "NOT TESTED",
+        "no_tenant_cross": "NOT TESTED",
+        "customer_zip_route": "FAIL — GET /api/public/customer/workspace/:token/zip/:projectId → Project not found (workspace token mismatch)",
+        "note": "ZIP E2E NOT VERIFIED — delivery record exists and is queued. Worker has not processed it. Coverage gap NC-002."
       }
     },
     {
       "phase": 13,
-      "name": "ZIP Delivery",
-      "status": "PARTIAL",
+      "name": "Unlock",
+      "status": "PASS",
       "items": {
-        "zip_endpoint_available": "PASS",
-        "customer_zip_route": "PASS",
-        "zip_download_real": "NOT TESTED — NC-003",
-        "zip_extraction": "NOT TESTED",
-        "filename_extension": "NOT TESTED",
-        "mime_mapping": "NOT TESTED",
-        "no_zero_byte": "NOT TESTED",
-        "no_tenant_cross": "NOT TESTED"
+        "files_unlocked_true_on_completed_paid": "PASS — project 49893e2b filesUnlocked: true",
+        "files_unlocked_false_before_payment": "PASS — prior session: download rejected before unlock",
+        "unlock_distinct_from_order_completed": "PASS — separate fields confirmed",
+        "download_after_unlock": "NOT TESTED — no signed token generated (no file URL in dev)"
       }
     },
     {
       "phase": 14,
-      "name": "Presentation Output",
+      "name": "Signed Download",
       "status": "PARTIAL",
       "items": {
-        "pptx_render": "NOT TESTED — NC-003",
-        "file_not_zero_byte": "NOT TESTED",
-        "ooxml_valid": "NOT TESTED",
-        "typecheck_api_server": "PASS",
-        "typecheck_cargo_finder": "FAIL — PE-001 pre-existing",
-        "pptxgenjs_namespace_errors": "PRE-EXISTING — 21 errors, runtime safe"
+        "valid_signed_url": "NOT TESTED — generate-token requires fileUrl; assets have no url in API response",
+        "invalid_token": "PASS — GET /api/public/files/access/invalid-token → 401",
+        "random_uuid_token": "PASS — GET /api/public/files/access/00000000... → 401",
+        "expired_token": "NOT TESTED",
+        "pre_unlock": "PASS — prior session confirmed download rejected before filesUnlocked",
+        "post_unlock": "NOT TESTED — no valid signed token available",
+        "other_tenant": "NOT TESTED",
+        "other_artifact": "NOT TESTED",
+        "reuse_behavior": "NOT TESTED"
       }
     },
     {
       "phase": 15,
-      "name": "File Unlock and Download",
-      "status": "PARTIAL",
-      "items": {
-        "files_unlocked_false_initially": "PASS",
-        "download_before_unlock_rejected": "PASS",
-        "files_unlocked_not_order_completed": "PASS — distinct fields",
-        "download_after_unlock": "NOT TESTED — NC-003",
-        "expired_token": "NOT TESTED",
-        "invalid_token": "PASS — 404",
-        "cross_tenant_download": "NOT TESTED"
-      }
-    },
-    {
-      "phase": 16,
-      "name": "Canonical Lifecycle",
-      "status": "PASS",
-      "items": {
-        "waiting_payment_stage": "PASS",
-        "stage_label_present": "PASS",
-        "progress_percent": "PASS — 27% at waiting_payment",
-        "files_unlocked_false": "PASS",
-        "payment_status_pending": "PASS",
-        "six_canonical_concepts_distinct": "PASS — all present as separate fields"
-      }
-    },
-    {
-      "phase": 17,
-      "name": "Customer Portal",
-      "status": "PASS",
-      "items": {
-        "dashboard_renders": "PASS",
-        "recent_projects": "PASS",
-        "project_detail": "PASS",
-        "status_badge": "PASS",
-        "stage_label": "PASS",
-        "progress": "PASS",
-        "notifications": "PASS",
-        "profile": "PASS",
-        "downloads": "PASS",
-        "no_blank_fields": "PASS",
-        "no_raw_stage_keys": "PASS",
-        "no_active_download_cta_locked": "PASS",
-        "no_console_500": "PASS",
-        "notification_type_field": "FAIL — DEF-004"
-      }
-    },
-    {
-      "phase": 18,
-      "name": "Admin Portal",
-      "status": "PASS",
-      "items": {
-        "admin_ui_renders": "PASS",
-        "api_key_auth": "PASS",
-        "ui_session_login": "NOT TESTED",
-        "job_queue_monitor": "PASS",
-        "worker_monitor": "PASS",
-        "payment_schedules": "PASS",
-        "commercial_analytics": "PASS",
-        "audit_logs": "PASS",
-        "events_feed": "PASS",
-        "metrics": "PASS",
-        "internal_auth_me": "FAIL — DEF-002"
-      }
-    },
-    {
-      "phase": 19,
-      "name": "Customer/Admin Consistency",
-      "status": "PASS",
-      "items": {
-        "project_status_consistent": "PASS",
-        "lifecycle_stage_consistent": "PASS",
-        "payment_state_consistent": "PASS",
-        "worker_state_visible": "PASS"
-      }
-    },
-    {
-      "phase": 20,
       "name": "Tenant Isolation",
       "status": "PASS",
       "items": {
-        "invalid_token_rejected": "PASS",
-        "other_tenant_token_rejected": "PASS",
-        "cross_tenant_project_access": "PASS",
-        "admin_key_required": "PASS",
+        "invalid_token_rejected": "PASS — 404",
+        "other_tenant_token_rejected": "PASS — 404",
+        "cross_tenant_project_access": "PASS — 404",
+        "admin_key_required": "PASS — no key → 401",
         "tenant_mismatch_blocked": "PASS — confirmed in server logs"
       }
     },
     {
-      "phase": 21,
-      "name": "RBAC and Security",
-      "status": "PASS",
+      "phase": 16,
+      "name": "Customer/Admin Consistency",
+      "status": "PARTIAL",
+      "verdict": "PARTIALLY CONSISTENT",
       "items": {
-        "catalog_public_no_auth": "PASS",
-        "admin_endpoints_require_key": "PASS",
-        "invalid_admin_key_rejected": "PASS",
-        "invalid_bearer_rejected": "PASS",
-        "path_traversal": "PASS",
-        "stack_trace_exposure": "PASS",
-        "secret_exposure": "PASS",
-        "ssrf_guard": "PASS",
-        "xss_no_500": "PASS",
-        "malformed_json_400": "PASS"
+        "project_status": "CONSISTENT — both show completed/paid",
+        "lifecycle_badge": "CONSISTENT — status: completed on both sides",
+        "payment_status": "CONSISTENT — paid on both sides",
+        "workflow_progress": "CONSISTENT — production steps visible in admin result; customer workspace accessible",
+        "artifact_visibility": "INCONSISTENT — DEF-006: admin shows 2 image assets; customer portal returns 0 artifacts (route missing)",
+        "download_cta": "INCONSISTENT — DEF-006: no customer-facing download links despite filesUnlocked: true",
+        "completion_state": "CONSISTENT — status: completed on both sides",
+        "audit_trail": "PASS — entries present for payment and workflow events",
+        "notes": "Admin-side artifact visibility (2 assets) does not flow through to customer portal. Customer artifact sub-route does not exist."
       }
     },
     {
-      "phase": 22,
-      "name": "Audit Log",
+      "phase": 17,
+      "name": "HTTP 500 Monitoring",
       "status": "PASS",
       "items": {
-        "audit_endpoint": "PASS",
-        "total_entries": "PASS — 4244+",
-        "required_fields": "PASS — id,module,action,resourceId,resourceType,actorId,tenantId,actorType,details,status,ipAddress,duration,createdAt",
-        "worker_actions_logged": "PASS",
-        "failure_actions_logged": "PASS"
-      }
-    },
-    {
-      "phase": 23,
-      "name": "Notifications",
-      "status": "PASS",
-      "items": {
-        "notifications_on_submission": "PASS — 3 created",
-        "unread_count": "PASS",
-        "endpoint_accessible": "PASS",
-        "tenant_isolation": "PASS",
-        "notification_type_field": "FAIL — DEF-004"
-      }
-    },
-    {
-      "phase": 24,
-      "name": "Concurrency and Idempotency",
-      "status": "FAIL",
-      "items": {
-        "double_submit_same_email": "FAIL — DEF-001",
-        "worker_double_claim": "PASS",
-        "job_processed_once": "PASS",
-        "duplicate_payment_callback": "PASS",
-        "repeated_finalization": "NOT TESTED"
-      }
-    },
-    {
-      "phase": 25,
-      "name": "HTTP 500 Detector",
-      "status": "PASS",
-      "items": {
-        "zero_500s": "PASS — 0/140 requests",
+        "zero_500s": "PASS — errorRate: 0",
+        "api_metrics": "PASS — 5xx: 0",
         "404_on_invalid_ids": "PASS",
         "400_on_malformed": "PASS",
-        "401_on_unauth": "PASS",
-        "500_rate": "0%"
+        "401_on_unauth": "PASS"
       }
     },
     {
-      "phase": 26,
-      "name": "Browser Evidence",
-      "status": "PASS",
-      "items": {
-        "customer_portal_screenshot": "PASS — captured",
-        "admin_portal_screenshot": "PASS — captured",
-        "browser_console_clean": "PASS — no errors (admin portal: 1 expected 401 for /api/internal/auth/me)",
-        "vite_hmr": "PASS"
-      }
-    },
-    {
-      "phase": 27,
-      "name": "Database Postconditions",
-      "status": "PASS",
-      "items": {
-        "projects_created": "PASS — verified via workspace API",
-        "jobs_created": "PASS — 8 total",
-        "workers_registered": "PASS — 6 workers in DB",
-        "payment_schedules": "PASS — 4 active",
-        "audit_logs": "PASS — 4244+ entries",
-        "notifications": "PASS — 3 for E2E customer",
-        "events": "PASS — 876 canonical events"
-      }
-    },
-    {
-      "phase": 28,
-      "name": "Complete Test Execution",
-      "status": "PASS",
-      "items": {
-        "regression_suite": "PASS — 5346/5346",
-        "test_files": "PASS — 174",
-        "workspace_typecheck": "PARTIAL — cargo-finder + mockup-sandbox pre-existing failures",
-        "api_server_build": "PASS",
-        "clean_restart": "PASS — all services restarted fresh this session",
-        "smoke_flow_after_restart": "PASS"
-      }
-    },
-    {
-      "phase": 29,
+      "phase": 18,
       "name": "Defect Handling",
       "status": "PASS",
       "items": {
-        "defects_documented": "PASS — DEF-001, DEF-002, DEF-004",
-        "not_configured_documented": "PASS — NC-001, NC-002, NC-003",
+        "defects_documented": "PASS — DEF-001 through DEF-006",
+        "coverage_gaps_documented": "PASS — NC-001 through NC-004",
         "pre_existing_documented": "PASS — PE-001, PE-002",
-        "no_product_defects_self_fixed": "PASS"
+        "no_product_defects_self_fixed": "PASS — no production code changed"
       }
     },
     {
-      "phase": 30,
+      "phase": 19,
       "name": "Report",
       "status": "PASS",
       "items": {
-        "DEV_E2E_VERIFICATION_REPORT.md": "GENERATED",
-        "DEV_E2E_FAILURES.json": "GENERATED",
-        "DEV_E2E_COVERAGE_MATRIX.json": "GENERATED",
-        "DEV_E2E_VERDICT.json": "GENERATED"
+        "DEV_E2E_VERIFICATION_REPORT.md": "UPDATED",
+        "DEV_E2E_FAILURES.json": "UPDATED",
+        "DEV_E2E_COVERAGE_MATRIX.json": "UPDATED",
+        "DEV_E2E_VERDICT.json": "UPDATED"
       }
     }
   ]
