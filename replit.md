@@ -1,64 +1,51 @@
-# Creative AI Studio — Enterprise Platform
+# Creative AI Studio — Universal Design Platform
 
-A full-stack AI-powered creative services platform built as a pnpm monorepo.
-
-## Project overview
-
-The platform enables clients to request creative AI services (branding, design, company profiles, etc.), manages the full commercial workflow (quotation → payment → AI generation → delivery), and provides an admin dashboard for operators.
+An AI-powered creative services platform for PT. CST Logistic, enabling clients to order design work (branding, packaging, fashion, interior, company profiles, etc.) through an AI-assisted workflow.
 
 ## Architecture
 
-| Artifact | Path | Preview Path | Description |
-|---|---|---|---|
-| API Server | `artifacts/api-server` | `/api` | Express + Drizzle ORM, connects to Supabase PostgreSQL |
-| AI Platform (admin) | `artifacts/ai-platform` | `/admin/` | React + Vite admin dashboard |
-| Customer Portal | `artifacts/customer-portal` | `/` | Client-facing React + Vite frontend |
-| Cargo Rate Finder | `artifacts/cargo-finder` | `/cargo-finder/` | Standalone cargo rate calculator |
-| Mockup Sandbox | `artifacts/mockup-sandbox` | `/__mockup` | Design canvas / component previews |
+pnpm monorepo with four artifacts:
 
-## Running the project
+| Artifact | Path | Preview |
+|---|---|---|
+| Customer Portal | `artifacts/customer-portal` | `/` |
+| Admin Dashboard | `artifacts/ai-platform` | `/admin/` |
+| API Server | `artifacts/api-server` | `/api` |
+| Cargo Rate Finder | `artifacts/cargo-finder` | `/cargo-finder/` |
 
-All services start via their configured workflows. After a fresh clone or import:
+Shared libraries in `lib/`: `db` (Drizzle ORM schema), `api-client-react` (generated hooks), `api-zod`, `api-spec`.
 
-```bash
-pnpm install   # install all workspace dependencies
-```
+## Running the Project
 
-Then restart all workflows from the Replit interface.
+All four services start automatically via their registered Replit workflows. No manual start needed.
 
-## Key environment variables
-
-All secrets are managed in Replit's environment secrets. The project needs:
-
-- `SUPABASE_DATABASE_URL_DEV` / `SUPABASE_DEV_DATABASE_URL` — dev Supabase PostgreSQL (both names aliased)
-- `SUPABASE_DATABASE_URL` / `SUPABASE_PROD_DATABASE_URL` — production Supabase PostgreSQL
-- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `REPLICATE_API_TOKEN`, `COHERE_API_KEY` — AI providers
-- `ADMIN_API_KEY` + `VITE_ADMIN_API_KEY` — admin API authentication (same value)
-- `SESSION_SECRET` — Express session signing
-- `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_PORT`, `SMTP_FROM` — email (Hostinger)
-- `FONNTE_TOKEN` — WhatsApp notifications
+- **Customer Portal** — client-facing landing page, service catalog, and project workspace
+- **Admin Dashboard** — staff/admin login at `/admin/`, uses `ADMIN_API_KEY` auth
+- **API Server** — Express 5 backend, builds then starts (`dist/index.mjs`)
+- **Cargo Rate Finder** — standalone cargo rate calculator
 
 ## Database
 
-- **Provider**: Supabase PostgreSQL
-- **Schema**: `ai_platform` (not `public`) — all raw SQL must set `search_path`
-- **Dev/prod switching**: controlled by `NODE_ENV`
-- To seed initial data: `pnpm --filter @workspace/api-server run seed`
+Supabase PostgreSQL, `ai_platform` schema. Separate dev and prod instances:
+- Dev: `SUPABASE_DEV_DATABASE_URL`
+- Prod: `SUPABASE_PROD_DATABASE_URL`
 
-## Tech stack
+## Key Environment Variables (already set)
 
-- **Runtime**: Node.js 20, pnpm workspaces
-- **Backend**: Express 5, Drizzle ORM, Zod, Pino logging
-- **Frontend**: React 18, Vite 7, TailwindCSS, shadcn/ui, Wouter (routing)
-- **AI**: OpenAI, Anthropic, Google Gemini, Replicate, Mistral, Cohere
-- **Storage**: Supabase Storage (S3-compatible)
-- **Email**: Nodemailer via Hostinger SMTP
-- **PDF**: PDFKit, pdf-lib
-- **Build**: esbuild (api-server), Vite (frontends)
+- `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY` — admin dashboard auth
+- `SUPABASE_DEV_DATABASE_URL` / `SUPABASE_PROD_DATABASE_URL` — database connections
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, etc. — AI providers
+- `SMTP_*` — Hostinger email (info@cstlogistic.co.id)
+- `SESSION_SECRET` — session signing
 
-## User preferences
+## Admin Login
 
-- Keep existing project structure — do not restructure or migrate
-- Use pnpm for all package operations
-- Never import zod directly in api-server routes — use `@workspace/api-zod` schemas only
-- Admin auth is one global `adminAuthWithExceptions` mount in `app.ts`, never per-route
+Email: `abing2267@gmail.com`  
+Password: `admin12345`  
+(stored in `INITIAL_INTERNAL_ADMIN_EMAIL` / `INITIAL_INTERNAL_ADMIN_PASSWORD`)
+
+## User Preferences
+
+- Keep the project's existing structure and stack — do not restructure or migrate.
+- Never import `zod/v4` directly in api-server routes; use `@workspace/api-zod` schemas only.
+- After a GitHub re-import, run `runPostMergeSetup()` to restore artifact/workflow registration.
