@@ -1,0 +1,402 @@
+ROLE
+
+Lanjutkan Production Readiness Remediation dari checkpoint terakhir.
+
+Fokus hanya pada Priority 1:
+
+REMOVE TRACKED SECRET EXPOSURE
+
+Jangan mengerjakan dispatcher, scheduler, tenant isolation, signed URL, migration runner, SMTP, provider registry, performance, atau phase lain dulu.
+
+Tujuan sesi ini adalah menghasilkan satu commit aman khusus pembersihan secret agar pekerjaan tidak kembali hilang saat quota habis.
+
+Known state:
+
+- remediation branch baru sudah dibuat dari main;
+- working tree awal bersih;
+- .replit adalah tracked file;
+- .replit mengandung secret asli dalam plaintext;
+- proses berhenti sebelum remediation selesai;
+- tidak ada commit remediation sebelumnya yang dapat dipulihkan.
+
+==================================================
+PHASE 1 — RECOVER EXACT STATE
+==================================================
+
+Sebelum mengubah file:
+
+1. Tampilkan current branch.
+2. Tampilkan HEAD commit.
+3. Jalankan git status --short.
+4. Tampilkan git diff --stat.
+5. Jangan reset.
+6. Jangan checkout branch lain.
+7. Jangan membuat branch baru jika remediation branch sudah aktif.
+
+Catat:
+
+- branch;
+- starting commit;
+- modified files;
+- untracked files.
+
+==================================================
+PHASE 2 — INVENTORY SECRET EXPOSURE
+==================================================
+
+Audit tracked repository tanpa mencetak nilai rahasia.
+
+Periksa:
+
+- .replit
+- .env
+- .env.*
+- replit.nix
+- package.json scripts
+- TOML
+- YAML
+- JSON
+- markdown
+- source files
+- tests
+- fixtures
+- reports
+
+Cari nama variable berikut:
+
+OPENAI_API_KEY
+ANTHROPIC_API_KEY
+GEMINI_API_KEY
+GOOGLE_API_KEY
+REPLICATE_API_TOKEN
+MISTRAL_API_KEY
+COHERE_API_KEY
+SMTP_PASS
+SMTP_PASSWORD
+FONNTE_TOKEN
+ADMIN_API_KEY
+DATABASE_URL
+SUPABASE_DATABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+SESSION_SECRET
+JWT_SECRET
+WEBHOOK_SECRET
+PRIVATE_KEY
+PASSWORD
+TOKEN
+SECRET
+
+Jangan tampilkan actual value.
+
+Output inventory:
+
+| Variable | File | Tracked | Value Present | Rotation Required |
+
+Gunakan hanya:
+
+YES
+NO
+UNKNOWN
+
+Jika secret pernah ada di tracked Git, Rotation Required harus YES meskipun nilainya nanti dihapus.
+
+==================================================
+PHASE 3 — INSPECT REPLIT SECRET STORE
+==================================================
+
+Periksa apakah variable yang diperlukan sudah tersedia melalui Replit Secrets atau environment runtime.
+
+Jangan tampilkan nilainya.
+
+Laporkan hanya:
+
+| Variable | Available in Runtime | Used by Application |
+
+Jika suatu variable belum tersedia di Replit Secrets:
+
+- jangan menghapus nilainya dari tracked file sampai ada safe replacement plan;
+- tandai sebagai MIGRATION REQUIRED;
+- jangan menyebabkan aplikasi kehilangan akses diam-diam.
+
+Namun jangan mempertahankan secret plaintext sebagai solusi final.
+
+==================================================
+PHASE 4 — SANITIZE .REPLIT
+==================================================
+
+Hapus semua secret asli dari `.replit`.
+
+Boleh dipertahankan hanya konfigurasi non-secret, misalnya:
+
+- run command;
+- deployment command;
+- port;
+- module config;
+- boolean feature flag non-rahasia;
+- public URL;
+- public origin;
+- NODE_ENV;
+- names of environment variables, tanpa actual secret value.
+
+Jangan menyimpan placeholder yang terlihat seperti secret asli.
+
+Untuk secret, gunakan environment lookup atau dokumentasikan bahwa nilainya berasal dari Replit Secrets.
+
+Contoh aman:
+
+OPENAI_API_KEY is read from runtime environment.
+
+Bukan:
+
+OPENAI_API_KEY="actual-key"
+
+Jangan mengubah business logic aplikasi.
+
+==================================================
+PHASE 5 — ADD SAFE EXAMPLE FILE
+==================================================
+
+Buat atau perbaiki:
+
+.env.example
+
+Rules:
+
+- tidak ada nilai asli;
+- hanya nama variable;
+- gunakan placeholder deskriptif;
+- jangan gunakan format yang menyerupai key nyata.
+
+Contoh:
+
+OPENAI_API_KEY=<set-in-replit-secrets>
+DATABASE_URL=<set-in-replit-secrets>
+SMTP_PASS=<set-in-replit-secrets>
+
+Pisahkan:
+
+- Required production variables
+- Optional variables
+- Public non-secret variables
+- Worker/scheduler flags
+
+==================================================
+PHASE 6 — STARTUP SECRET VALIDATION
+==================================================
+
+Audit startup validation yang sudah ada.
+
+Tambahkan validasi minimal apabila belum tersedia.
+
+Di production:
+
+- missing required secret harus menghasilkan pesan jelas;
+- readiness harus gagal;
+- log hanya nama variable;
+- jangan pernah log value;
+- jangan mencetak connection string;
+- jangan mencetak password;
+- jangan mencetak token prefix.
+
+Jangan refactor startup architecture secara besar.
+
+Tambahkan test minimal untuk:
+
+1. required variable exists;
+2. required variable missing;
+3. diagnostic output is redacted;
+4. optional variable missing does not fail.
+
+==================================================
+PHASE 7 — SECRET SCANNER
+==================================================
+
+Tambahkan script repository:
+
+pnpm security:scan-secrets
+
+Scanner harus memeriksa tracked files.
+
+Scanner minimal mendeteksi:
+
+- plaintext assignments untuk known secret variables;
+- OpenAI-style key patterns;
+- Anthropic-style key patterns;
+- Google API key patterns;
+- Supabase service-role JWT patterns;
+- database URL dengan username/password;
+- SMTP password assignment;
+- admin secret assignment;
+- private key blocks.
+
+Rules:
+
+- output hanya filename, line number, rule ID;
+- jangan mencetak full match;
+- redacted preview maksimal beberapa karakter aman;
+- exit code non-zero jika temuan valid;
+- abaikan `.env.example` hanya jika isinya placeholder aman;
+- support allowlist untuk false positive yang terdokumentasi;
+- jangan allowlist `.replit`.
+
+Tambahkan tests untuk scanner:
+
+- detects fake secret fixture;
+- ignores safe placeholders;
+- does not print full secret;
+- exits non-zero on violation;
+- exits zero on clean repository fixture.
+
+==================================================
+PHASE 8 — ROTATION REPORT
+==================================================
+
+Buat:
+
+ROTATION_REQUIRED.md
+
+Isi:
+
+1. Semua nama credential yang pernah tersimpan di tracked file.
+2. Sistem pemilik credential.
+3. Dampak jika tidak dirotasi.
+4. Instruksi rotasi manual.
+5. Status:
+
+   - NOT ROTATED
+   - ROTATED
+   - NOT APPLICABLE
+
+Jangan isi actual value.
+Jangan mencoba rotasi otomatis.
+Jangan menghapus bukti bahwa credential pernah terpapar.
+
+Minimal kategori:
+
+- AI providers
+- Supabase / database
+- SMTP
+- WhatsApp/Fonnte
+- Admin API
+- Session/token secrets
+- Other integration keys
+
+==================================================
+PHASE 9 — GIT HISTORY ASSESSMENT
+==================================================
+
+Periksa apakah `.replit` dengan secret pernah masuk commit sebelumnya.
+
+Jangan menampilkan nilai secret dari history.
+
+Laporkan:
+
+- first known exposed commit jika dapat ditemukan;
+- latest known exposed commit;
+- whether remote history contains exposure;
+- rotation required;
+- whether history rewrite is recommended.
+
+Jangan melakukan history rewrite.
+Jangan force-push.
+Jangan menghapus remote history.
+
+Jika repository pernah dibagikan atau di-push, anggap credential compromised.
+
+==================================================
+PHASE 10 — VERIFICATION
+==================================================
+
+Run:
+
+1. secret scanner;
+2. startup secret validation tests;
+3. lib/db build;
+4. targeted API test for env validation;
+5. current baseline smoke test jika cukup waktu.
+
+Required checks:
+
+- no actual secrets in tracked working tree;
+- `.replit` contains no real secret;
+- `.env.example` contains placeholders only;
+- reports contain no secret;
+- scanner passes;
+- application still starts with runtime environment;
+- no new TypeScript errors in changed files.
+
+Do not run the entire 5,378-test suite in this session unless all secret remediation checks have passed and sufficient quota remains.
+
+==================================================
+PHASE 11 — REVIEW DIFF
+==================================================
+
+Before commit:
+
+1. Show git diff --stat.
+2. Review full diff.
+3. Search again for secret patterns.
+4. Verify no actual values appear in output.
+5. Remove debug files.
+6. Remove temporary fixtures outside test fixture directories.
+7. Validate markdown and JSON.
+8. Confirm no payment gateway changes.
+9. Confirm no unrelated code changes.
+
+==================================================
+PHASE 12 — COMMIT IMMEDIATELY
+==================================================
+
+Once targeted checks pass, commit this phase immediately.
+
+Commit message:
+
+security: remove tracked secrets and add repository scanning
+
+Do not wait for other remediation phases.
+
+Do not push.
+Do not merge.
+Do not deploy.
+
+After commit, show:
+
+- branch;
+- commit hash;
+- changed files;
+- scanner result;
+- targeted test result;
+- remaining rotation actions.
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Use exactly one:
+
+SECRET REMEDIATION COMMITTED — ROTATION STILL REQUIRED
+
+BLOCKED — SECRETS STILL EXPOSED
+
+BLOCKED — RUNTIME SECRETS NOT AVAILABLE
+
+BLOCKED — SECRET SCANNER FAILURE
+
+BLOCKED — TEST FAILURE
+
+Do not declare production ready.
+
+==================================================
+PAYMENT EXCLUSION
+==================================================
+
+Do not add or modify:
+
+- Midtrans;
+- Xendit;
+- Paylabs;
+- payment gateway;
+- payment webhook;
+- manual payment flow.
+
+Payment is entirely out of scope for this session.
