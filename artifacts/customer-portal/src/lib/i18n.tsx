@@ -21,7 +21,7 @@ import { en as enLocale } from "@/locales/en";
 export type Lang = "id" | "en";
 export type Translations = typeof idLocale;
 
-const LOCALES: Record<Lang, Translations> = { id: idLocale, en: enLocale };
+const LOCALES: Record<Lang, Translations> = { id: idLocale, en: enLocale as unknown as Translations };
 const LS_KEY = "cs_lang";
 
 /** Resolve a dot-separated key against a nested object — returns raw value. */

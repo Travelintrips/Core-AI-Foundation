@@ -71,8 +71,25 @@ function getInsight(
       message: "Dokumen belum berhasil dibuat. Tim produksi telah menerima laporan kegagalan dan proses dapat dijalankan ulang oleh admin.",
     };
   }
-  if (stage === "completed" || stage === "delivered") {
+  if (stage === "completed" || stage === "delivered" || stage === "order_completed") {
+    if (!filesUnlocked) {
+      return {
+        variant: "warning",
+        icon: <Shield className="w-4 h-4" />,
+        title: "Project Complete — Files Unlocking",
+        message: "Your project is done! Files will unlock once your payment is fully verified.",
+      };
+    }
     return { variant: "success", icon: <CheckCircle2 className="w-4 h-4" />, title: "Project Complete", message: "Your project has been delivered. Download your files below." };
+  }
+  if (stage === "files_unlocked") {
+    return { variant: "success", icon: <CheckCircle2 className="w-4 h-4" />, title: "Files Unlocked", message: "All your deliverables are ready to download." };
+  }
+  if (stage === "deliverable_ready" || stage === "commercial_completed") {
+    return { variant: "success", icon: <Package className="w-4 h-4" />, title: "Files Ready", message: "Your deliverables are ready. Complete payment to unlock your files." };
+  }
+  if (stage === "workflow_completed" || stage === "production_completed") {
+    return { variant: "info", icon: <Sparkles className="w-4 h-4" />, title: "Production Complete", message: "The AI team has finished. Your files are being prepared for delivery." };
   }
   if (!filesUnlocked && (paymentStatus === "pending" || paymentStatus === "waiting_verification")) {
     return { variant: "action", icon: <CreditCard className="w-4 h-4" />, title: "Payment Verification Pending", message: "Your payment is being verified. Files will unlock once confirmed." };

@@ -575,6 +575,7 @@ export const en = {
       downloads: "Downloads",
       invoices: "Invoices",
       brandKit: "Brand Kit",
+      brandIntelligence: "Brand Intelligence",
       notifications: "Notifications",
       affiliate: "Affiliate",
       referral: "Referral",

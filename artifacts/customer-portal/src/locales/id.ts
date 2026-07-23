@@ -575,6 +575,7 @@ export const id = {
       downloads: "Unduhan",
       invoices: "Faktur",
       brandKit: "Brand Kit",
+      brandIntelligence: "Brand Intelligence",
       notifications: "Notifikasi",
       affiliate: "Afiliasi",
       referral: "Referral",

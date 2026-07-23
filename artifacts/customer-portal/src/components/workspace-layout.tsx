@@ -22,7 +22,7 @@ export function WorkspaceLayout({ token, children }: { token: string; children: 
     { href: "/downloads",     label: t('workspace.nav.downloads'),      icon: Download },
     { href: "/invoices",      label: t('workspace.nav.invoices'),       icon: Receipt },
     { href: "/brand-kit",     label: t('workspace.nav.brandKit'),       icon: Palette },
-    { href: "/brand-intelligence", label: t('workspace.nav.brandIntelligence', 'Brand Intelligence'), icon: Brain },
+    { href: "/brand-intelligence", label: t('workspace.nav.brandIntelligence'), icon: Brain },
    { href: "/favorites",     label: t('workspace.nav.favorites'),        icon: Heart },
     { href: "/notifications", label: t('workspace.nav.notifications'),  icon: Bell },
     { href: "/affiliate",     label: t('workspace.nav.affiliate'),      icon: Award },
