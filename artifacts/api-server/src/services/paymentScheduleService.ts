@@ -8,7 +8,7 @@
  * per spec: "AI Build TIDAK boleh berjalan jika payment belum verified atau
  * deposit belum diterima."
  */
-import { eq, and, ne } from "drizzle-orm";
+import { eq, and, ne, inArray } from "drizzle-orm";
 import {
   db,
   aiPaymentScheduleTable,
@@ -128,12 +128,18 @@ export async function submitPaymentProof(
   proofImageUrl?: string | null,
 ): Promise<AiPaymentSchedule | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const setPayload: any = { reference, updatedAt: new Date() };
+  const setPayload: any = { reference, status: "pending", updatedAt: new Date() };
   if (proofImageUrl) setPayload.proofImageUrl = proofImageUrl;
+  // Allow resubmission after rejection: "failed" schedules can be resubmitted
+  // (admin rejected the previous proof, not the payment itself). The schedule
+  // is reset back to "pending" so admin sees it in the verification worklist.
   const [row] = await db
     .update(aiPaymentScheduleTable)
     .set(setPayload)
-    .where(and(eq(aiPaymentScheduleTable.id, scheduleId), eq(aiPaymentScheduleTable.status, "pending")))
+    .where(and(
+      eq(aiPaymentScheduleTable.id, scheduleId),
+      inArray(aiPaymentScheduleTable.status, ["pending", "failed"]),
+    ))
     .returning();
   if (!row) return null;
 
@@ -314,12 +320,24 @@ export async function generateInvoiceForSchedule(scheduleId: number) {
     .limit(1);
   if (!schedule) return null;
 
+  // ── Idempotency guard ─────────────────────────────────────────────────────
+  // If an invoice was already generated for this schedule, return it — never
+  // create a duplicate. paymentScheduleId has a logical one-to-one relationship
+  // with an invoice even though the FK is nullable.
+  const [existing] = await db
+    .select()
+    .from(aiInvoicesTable)
+    .where(eq(aiInvoicesTable.paymentScheduleId, scheduleId))
+    .limit(1);
+  if (existing) return existing;
+
+  // ── Invoice number generation ──────────────────────────────────────────────
+  // Anchor the invoice number to the payment schedule's primary key so the
+  // number is collision-free even under concurrent calls. The DB UNIQUE
+  // constraint on invoice_number is the final backstop.
   const year = new Date().getFullYear();
-  const countRow = await db
-    .select({ id: aiInvoicesTable.id })
-    .from(aiInvoicesTable);
-  const seq = countRow.length + 1;
-  const invoiceNumber = `INV-${year}-${String(seq).padStart(4, "0")}`;
+  const invoiceNumber = `INV-${year}-S${String(schedule.id).padStart(6, "0")}`;
+
   const invoiceType = schedule.status === "paid"
     ? (INVOICE_TYPE_BY_PAYMENT_TYPE[schedule.paymentType] === "final" ? "receipt" : INVOICE_TYPE_BY_PAYMENT_TYPE[schedule.paymentType] ?? "final")
     : (INVOICE_TYPE_BY_PAYMENT_TYPE[schedule.paymentType] ?? "final");

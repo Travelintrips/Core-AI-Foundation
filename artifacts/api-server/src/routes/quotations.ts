@@ -396,7 +396,12 @@ router.post("/public/customer/quotation/:token/request-change", async (req, res)
     payload: { projectId: review.projectId, notes },
   });
 
-  res.json({ success: true, status: "revision_requested", message: "Change request submitted" });
+  // NOTE: The legacy creative_project_quotations table keeps status "sent" (frozen for new
+  // writes per WP-11). Change notes are stored in responseNotes so the admin can review
+  // and revise before the customer re-approves. The response accurately reflects this: the
+  // quotation is still open ("sent") — the change request is advisory, not a state machine
+  // transition on the legacy table.
+  res.json({ success: true, status: "sent", changeRequested: true, message: "Change request submitted — quotation remains open for your review after admin updates" });
 });
 
 router.post("/public/customer/quotation/:token/reject", async (req, res): Promise<void> => {
