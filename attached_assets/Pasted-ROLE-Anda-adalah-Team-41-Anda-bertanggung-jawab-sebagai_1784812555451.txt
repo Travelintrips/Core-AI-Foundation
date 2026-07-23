@@ -1,0 +1,725 @@
+ROLE
+
+Anda adalah Team 41.
+
+Anda bertanggung jawab sebagai Architecture Auditor dan Canonical Lifecycle Engineer.
+
+Anda TIDAK boleh memperbaiki bug implementasi.
+
+Anda hanya boleh:
+
+- audit
+- memetakan arsitektur
+- menemukan root cause
+- menentukan canonical rule
+- membuat baseline untuk seluruh team berikutnya.
+
+Seluruh hasil Anda akan menjadi kontrak resmi untuk:
+
+Team 42
+Team 43
+Team 44
+Team 45
+Team 46
+Team 47
+Team 48
+Team 49
+Team 50
+
+================================================
+
+BRANCH
+
+Buat branch baru
+
+audit/team-41-shared-lifecycle
+
+Jangan bekerja pada main.
+
+Jangan merge.
+
+Jangan rebase.
+
+Jangan squash.
+
+================================================
+
+SEBELUM MULAI
+
+Tampilkan:
+
+git branch --show-current
+
+git status --short
+
+git rev-parse --short HEAD
+
+git log --oneline -10
+
+================================================
+
+OBJECTIVE
+
+Audit seluruh Universal Creative AI Architecture.
+
+Cari seluruh lifecycle.
+
+Cari seluruh workflow.
+
+Cari seluruh source of truth.
+
+Cari seluruh dependency.
+
+Cari seluruh state transition.
+
+Cari seluruh shared services.
+
+Cari seluruh canonical services.
+
+Temukan semua area yang dapat menyebabkan bug lintas service.
+
+================================================
+
+RULES
+
+JANGAN:
+
+- mengubah UI
+- mengubah database
+- mengubah workflow
+- mengubah renderer
+- mengubah payment
+- mengubah customer portal
+- mengubah admin portal
+
+Anda hanya membaca.
+
+Jika menemukan bug,
+
+laporkan.
+
+Jangan memperbaiki.
+
+================================================
+
+PHASE 1
+
+SERVICE INVENTORY
+
+Inventaris seluruh service Creative AI.
+
+Untuk setiap service tampilkan:
+
+Service Name
+
+Slug
+
+Category
+
+Workflow Template
+
+Workflow Version
+
+AI Agents
+
+Renderer
+
+Output Type
+
+Deliverable Type
+
+Storage Type
+
+Billing Required
+
+Partial Payment
+
+Review Required
+
+Customer Portal
+
+Admin Portal
+
+Owner Module
+
+================================================
+
+PHASE 2
+
+ARCHETYPE CLASSIFICATION
+
+Kelompokkan seluruh service menjadi:
+
+Image Design
+
+Brand Design
+
+Interior Design
+
+Fashion Design
+
+Architecture
+
+Presentation
+
+Document
+
+Marketing
+
+Strategy
+
+Copywriting
+
+Rendering
+
+Video
+
+Animation
+
+Hybrid
+
+Multi-stage
+
+Payment-heavy
+
+Review-heavy
+
+================================================
+
+PHASE 3
+
+RISK SCORING
+
+Hitung score.
+
+Tambahkan:
+
+Workflow Complexity
+
+Renderer Dependency
+
+AI Dependency
+
+Billing Dependency
+
+Storage Dependency
+
+Review Dependency
+
+Plugin Dependency
+
+External Service Dependency
+
+Legacy Dependency
+
+Canonical Dependency
+
+Beri label:
+
+LOW
+
+MEDIUM
+
+HIGH
+
+CRITICAL
+
+================================================
+
+PHASE 4
+
+WORKFLOW DISCOVERY
+
+Temukan seluruh workflow.
+
+Untuk setiap workflow tampilkan:
+
+Workflow Name
+
+Template
+
+Stages
+
+Transitions
+
+Retry Rules
+
+Failure Rules
+
+Completion Rules
+
+Rollback Rules
+
+Blocking Conditions
+
+================================================
+
+PHASE 5
+
+STATE MACHINE
+
+Buat state transition matrix.
+
+Minimal:
+
+Created
+
+Waiting Brief
+
+Brief Complete
+
+Quotation
+
+Waiting Approval
+
+Approved
+
+Workflow Started
+
+AI Processing
+
+Rendering
+
+Review
+
+Revision
+
+Preparing Deliverables
+
+Awaiting Payment
+
+Payment Review
+
+Paid
+
+Unlocked
+
+Completed
+
+Cancelled
+
+Failed
+
+Untuk setiap transition tampilkan:
+
+Allowed Event
+
+Required Condition
+
+Side Effect
+
+Failure Condition
+
+Retry
+
+================================================
+
+PHASE 6
+
+SHARED SERVICES
+
+Cari seluruh shared service.
+
+Misalnya:
+
+Workflow Service
+
+Billing Service
+
+Artifact Service
+
+Storage Service
+
+Payment Service
+
+Notification Service
+
+AI Execution Service
+
+Review Service
+
+Renderer
+
+Scheduler
+
+Queue
+
+Worker
+
+Repository
+
+================================================
+
+PHASE 7
+
+SOURCE OF TRUTH
+
+Cari source of truth untuk:
+
+Order
+
+Project
+
+Workflow
+
+Job
+
+Artifact
+
+Deliverable
+
+Invoice
+
+Payment
+
+Review
+
+Unlock
+
+Customer Status
+
+Admin Status
+
+================================================
+
+PHASE 8
+
+CANONICAL RULES
+
+Definisikan canonical rules.
+
+Misalnya:
+
+Completed hanya jika ...
+
+Unlocked hanya jika ...
+
+Awaiting Payment hanya jika ...
+
+Rendering selesai hanya jika ...
+
+Deliverable Ready hanya jika ...
+
+Payment Verified hanya jika ...
+
+Jangan mengubah code.
+
+Hanya dokumentasikan.
+
+================================================
+
+PHASE 9
+
+GLOBAL DEPENDENCY GRAPH
+
+Bangun dependency graph.
+
+Contoh:
+
+Customer Order
+
+↓
+
+Project
+
+↓
+
+Workflow
+
+↓
+
+Job
+
+↓
+
+Renderer
+
+↓
+
+Artifact
+
+↓
+
+Deliverable
+
+↓
+
+Invoice
+
+↓
+
+Payment
+
+↓
+
+Unlock
+
+↓
+
+Completed
+
+================================================
+
+PHASE 10
+
+GLOBAL ANOMALY DISCOVERY
+
+Cari seluruh kemungkinan anomali.
+
+Misalnya:
+
+Completed tanpa artifact
+
+Completed tanpa workflow
+
+Workflow tanpa jobs
+
+Jobs tanpa output
+
+Output tanpa artifact
+
+Artifact tanpa storage
+
+Invoice tanpa payment schedule
+
+Payment tanpa invoice
+
+Unlocked tanpa payment
+
+Customer completed tetapi admin pending
+
+Admin paid tetapi customer locked
+
+Renderer selesai tanpa deliverable
+
+Semua hanya READ ONLY.
+
+================================================
+
+PHASE 11
+
+ARCHITECTURE FINDINGS
+
+Kelompokkan temuan menjadi:
+
+Architecture
+
+Workflow
+
+Billing
+
+Storage
+
+Artifacts
+
+Review
+
+Notifications
+
+Payment
+
+Portal
+
+Workers
+
+Queue
+
+Rendering
+
+Security
+
+Tenant
+
+Canonical
+
+Legacy
+
+================================================
+
+PHASE 12
+
+TEAM DEPENDENCY MAP
+
+Buat rekomendasi:
+
+Team 42 mengerjakan ...
+
+Team 43 mengerjakan ...
+
+Team 44 mengerjakan ...
+
+Team 45 mengerjakan ...
+
+Team 46 mengerjakan ...
+
+Team 47 mengerjakan ...
+
+Team 48 mengerjakan ...
+
+Team 49 mengerjakan ...
+
+Team 50 mengerjakan ...
+
+================================================
+
+PHASE 13
+
+FILES
+
+Laporkan:
+
+File yang dibaca.
+
+Folder yang dibaca.
+
+Shared modules.
+
+Canonical modules.
+
+Legacy modules.
+
+Jangan mengubah file.
+
+================================================
+
+PHASE 14
+
+OUTPUT
+
+Buat laporan:
+
+1.
+Architecture Diagram
+
+2.
+Workflow Diagram
+
+3.
+Dependency Diagram
+
+4.
+Canonical Rule Book
+
+5.
+State Transition Matrix
+
+6.
+Shared Services Matrix
+
+7.
+Source of Truth Matrix
+
+8.
+Risk Matrix
+
+9.
+Anomaly Report
+
+10.
+Recommendations
+
+================================================
+
+PHASE 15
+
+VALIDATION
+
+Pastikan:
+
+Tidak ada file berubah.
+
+Tidak ada migration.
+
+Tidak ada database update.
+
+Tidak ada UI update.
+
+Tidak ada endpoint update.
+
+Tidak ada commit.
+
+================================================
+
+FINAL REPORT
+
+A.
+
+Repository Baseline
+
+B.
+
+Architecture Summary
+
+C.
+
+Service Inventory
+
+D.
+
+Workflow Inventory
+
+E.
+
+Canonical Rules
+
+F.
+
+Shared Services
+
+G.
+
+Source of Truth
+
+H.
+
+Risk Score
+
+I.
+
+Architecture Risks
+
+J.
+
+Cross-service Risks
+
+K.
+
+Recommended Team Split
+
+L.
+
+Files Read
+
+M.
+
+No-code Verification
+
+N.
+
+Final Verdict
+
+PASS
+
+atau
+
+BLOCKED
+
+Catatan:
+
+PASS berarti audit selesai.
+
+Bukan berarti implementasi sudah benar.
+
+================================================
+
+PENTING
+
+Jangan memperbaiki bug.
+
+Jangan mengubah source code.
+
+Jangan membuat commit.
+
+Jangan push.
+
+Anda hanya menghasilkan baseline resmi yang akan dipakai Team 42–50.
