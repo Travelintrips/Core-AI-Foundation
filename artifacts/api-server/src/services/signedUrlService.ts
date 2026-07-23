@@ -2,20 +2,22 @@
  * signedUrlService.ts — P0-2 Signed URL generation & verification.
  *
  * Generates short-lived, HMAC-signed download tokens for final project files.
- * Tokens are self-contained (no DB table needed):
+ * Tokens are self-contained:
  *
- *   token = base64url(JSON({ pid, url, exp })) + "." + base64url(HMAC-SHA256(SECRET, payload))
+ *   token = base64url(JSON({ id, pid, url, exp })) + "." + base64url(HMAC-SHA256(SECRET, payload))
  *
- * Revocation is supported via an in-memory deny-list (process lifetime).
- * For persistent revocation across restarts, the caller should persist the
- * denied token IDs in the audit log and call revokeToken() on startup.
+ * Revocation is backed by the `ai_platform.signed_url_revocations` DB table
+ * so that revocations persist across process restarts.  The in-memory set is
+ * seeded from the DB on startup (call `loadRevokedTokens()` in app bootstrap).
  */
 import { createHmac, randomBytes } from "crypto";
+import { pool } from "@workspace/db";
+import { logger } from "../lib/logger.js";
 
 const SECRET = process.env["SESSION_SECRET"] ?? process.env["ADMIN_API_KEY"] ?? "insecure-dev-only-secret";
 const DEFAULT_TTL_SECONDS = 3600; // 1 hour
 
-/** In-process revocation set (token IDs). Clear on restart — acceptable for short-lived tokens. */
+/** In-process revocation set (token IDs). Seeded from DB on startup via loadRevokedTokens(). */
 const revokedTokenIds = new Set<string>();
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
@@ -100,15 +102,79 @@ export function verifyDownloadToken(token: string): VerifyResult {
 
 // ── Revoke ───────────────────────────────────────────────────────────────────────
 
-/** Revoke a token by its nonce id (extracted from payload). */
-export function revokeToken(token: string): boolean {
+/**
+ * Revoke a token and persist the revocation to DB so it survives restarts.
+ * Returns false if the token is already invalid (expired or bad signature).
+ */
+export async function revokeToken(
+  token: string,
+  opts: { revokedBy?: string; reason?: string } = {},
+): Promise<boolean> {
   const result = verifyDownloadToken(token);
   if (!result.valid || !result.payload) return false;
-  revokedTokenIds.add(result.payload.id);
+
+  const { id, pid } = result.payload;
+  revokedTokenIds.add(id);
+
+  try {
+    await pool.query(
+      `INSERT INTO ai_platform.signed_url_revocations (token_id, project_id, revoked_by, reason)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (token_id) DO NOTHING`,
+      [id, pid, opts.revokedBy ?? null, opts.reason ?? null],
+    );
+  } catch (err) {
+    // Log but don't throw — the in-memory revocation already took effect.
+    logger.error({ err, tokenId: id }, "[signedUrl] Failed to persist revocation to DB");
+  }
+
   return true;
 }
 
-/** Revoke by nonce id directly (e.g. from audit log). */
-export function revokeTokenById(id: string): void {
+/** Revoke by nonce id directly (e.g. from audit log or admin action). Persists to DB. */
+export async function revokeTokenById(
+  id: string,
+  opts: { projectId?: number; revokedBy?: string; reason?: string } = {},
+): Promise<void> {
   revokedTokenIds.add(id);
+
+  try {
+    await pool.query(
+      `INSERT INTO ai_platform.signed_url_revocations (token_id, project_id, revoked_by, reason)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (token_id) DO NOTHING`,
+      [id, opts.projectId ?? null, opts.revokedBy ?? null, opts.reason ?? null],
+    );
+  } catch (err) {
+    logger.error({ err, tokenId: id }, "[signedUrl] Failed to persist revocation to DB");
+  }
+}
+
+/**
+ * Seed the in-memory revocation set from the DB.
+ * Call once during app startup (before handling requests) to ensure
+ * revocations issued before this process started are honoured.
+ */
+export async function loadRevokedTokens(): Promise<number> {
+  try {
+    // Only load non-expired-equivalent revocations (tokens with exp > now-TTL still matter)
+    const result = await pool.query<{ token_id: string }>(
+      `SELECT token_id FROM ai_platform.signed_url_revocations
+       WHERE revoked_at > NOW() - INTERVAL '24 hours'`,
+    );
+    for (const row of result.rows) {
+      revokedTokenIds.add(row.token_id);
+    }
+    logger.info({ count: result.rows.length }, "[signedUrl] Loaded revoked tokens from DB");
+    return result.rows.length;
+  } catch (err) {
+    // Table may not exist yet in fresh deployments — non-fatal.
+    logger.warn({ err }, "[signedUrl] Could not load revoked tokens from DB (table may not exist yet)");
+    return 0;
+  }
+}
+
+/** Return current in-memory revocation count (for monitoring). */
+export function getRevokedCount(): number {
+  return revokedTokenIds.size;
 }

@@ -357,34 +357,33 @@ export async function rebalanceJobs(): Promise<number> {
 export async function getClusterStatus(): Promise<ClusterStatus[]> {
   const workers = await db.select().from(aiWorkersTable);
 
-  // Group by cluster
-  const byCluster: Record<string, typeof workers> = {};
+  // Group by cluster — use explicit AiWorker[] so callbacks are typed correctly.
+  const byCluster: Record<string, AiWorker[]> = {};
   for (const w of workers) {
     const c = w.clusterId;
     if (!byCluster[c]) byCluster[c] = [];
-    byCluster[c].push(w);
+    byCluster[c]!.push(w);
   }
 
-  const now = new Date();
-
-  return Object.entries(byCluster).map(([clusterId, wlist]) => {
-    const totalCapacity = wlist.reduce((s, w) => s + w.maxConcurrentJobs, 0);
-    const usedCapacity  = wlist.reduce((s, w) => s + w.runningJobs, 0);
-    const nodes = [...new Set(wlist.map((w) => w.nodeId))];
+  return Object.entries(byCluster).map(([clusterId, wlist]: [string, AiWorker[]]) => {
+    const totalCapacity = wlist.reduce((s: number, w: AiWorker) => s + w.maxConcurrentJobs, 0);
+    const usedCapacity  = wlist.reduce((s: number, w: AiWorker) => s + w.runningJobs, 0);
+    // nodeId is text().notNull() → string; explicit annotation silences TS2322.
+    const nodes: string[] = [...new Set(wlist.map((w: AiWorker) => w.nodeId))];
 
     return {
       clusterId,
       totalWorkers:   wlist.length,
-      onlineWorkers:  wlist.filter((w) => w.status === "online" || w.status === "idle").length,
-      idleWorkers:    wlist.filter((w) => w.status === "idle").length,
-      busyWorkers:    wlist.filter((w) => w.status === "busy").length,
-      staleWorkers:   wlist.filter((w) => w.status === "stale").length,
-      offlineWorkers: wlist.filter((w) => w.status === "offline").length,
+      onlineWorkers:  wlist.filter((w: AiWorker) => w.status === "online" || w.status === "idle").length,
+      idleWorkers:    wlist.filter((w: AiWorker) => w.status === "idle").length,
+      busyWorkers:    wlist.filter((w: AiWorker) => w.status === "busy").length,
+      staleWorkers:   wlist.filter((w: AiWorker) => w.status === "stale").length,
+      offlineWorkers: wlist.filter((w: AiWorker) => w.status === "offline").length,
       totalCapacity,
       usedCapacity,
       capacityPct: totalCapacity > 0 ? Math.round((usedCapacity / totalCapacity) * 100) : 0,
       nodes,
-    };
+    } satisfies ClusterStatus;
   });
 }
 

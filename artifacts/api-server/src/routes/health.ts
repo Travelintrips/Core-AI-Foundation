@@ -3,6 +3,7 @@
  *
  * GET /healthz        — lightweight liveness probe (no DB call)
  * GET /healthz/full   — readiness probe: DB connectivity + table access + uptime
+ *                       + dispatcher/scheduler status
  *
  * WP-13: enhanced health endpoint used as deployment gate signal.
  * The /healthz/full endpoint is called by pre-deploy-check.sh before traffic
@@ -13,6 +14,8 @@
 import { Router, type IRouter } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
 import { pool } from "@workspace/db";
+import { getStatus as getDispatcherStatus } from "../services/jobDispatcherService.js";
+import { getStatus as getSchedulerStatus } from "../services/aiSchedulerService.js";
 
 const router: IRouter = Router();
 
@@ -27,7 +30,7 @@ router.get("/healthz", (_req, res) => {
 
 // ── GET /healthz/full — readiness (DB + service checks) ──────────────────────
 router.get("/healthz/full", async (_req, res) => {
-  const checks: Record<string, { status: "ok" | "fail"; latencyMs?: number; detail?: string }> = {};
+  const checks: Record<string, { status: "ok" | "fail" | "degraded"; latencyMs?: number; detail?: string; running?: boolean }> = {};
   let overallStatus: "ok" | "degraded" | "fail" = "ok";
 
   // ── 1. DB connectivity ─────────────────────────────────────────────────────
@@ -93,7 +96,69 @@ router.get("/healthz/full", async (_req, res) => {
     checks["env"] = { status: "ok" };
   }
 
-  // ── 4. Process metrics ────────────────────────────────────────────────────
+  // ── 4. Dispatcher status ───────────────────────────────────────────────────
+  try {
+    const dispatcherSt = await getDispatcherStatus();
+    const isRunning = dispatcherSt.running;
+    const isProd = process.env["NODE_ENV"] === "production";
+    const dispatcherEnabled = process.env["AI_DISPATCHER_ENABLED"] === "true";
+
+    if (isProd && dispatcherEnabled && !isRunning) {
+      checks["dispatcher"] = {
+        status: "fail",
+        running: false,
+        detail: "AI_DISPATCHER_ENABLED=true but dispatcher is not running",
+      };
+      if (overallStatus === "ok") overallStatus = "degraded";
+    } else {
+      checks["dispatcher"] = {
+        status: isRunning ? "ok" : "degraded",
+        running: isRunning,
+        detail: !isRunning
+          ? (dispatcherEnabled ? "Not running (will start shortly)" : "Disabled — AI_DISPATCHER_ENABLED not set")
+          : undefined,
+      };
+    }
+  } catch (err: unknown) {
+    checks["dispatcher"] = {
+      status: "fail",
+      detail: err instanceof Error ? err.message : "status check failed",
+    };
+    if (overallStatus === "ok") overallStatus = "degraded";
+  }
+
+  // ── 5. Scheduler status ───────────────────────────────────────────────────
+  try {
+    const schedulerSt = await getSchedulerStatus();
+    const isRunning = schedulerSt.running;
+    const isProd = process.env["NODE_ENV"] === "production";
+    const schedulerEnabled = process.env["AI_SCHEDULER_ENABLED"] === "true";
+
+    if (isProd && schedulerEnabled && !isRunning) {
+      checks["scheduler"] = {
+        status: "fail",
+        running: false,
+        detail: "AI_SCHEDULER_ENABLED=true but scheduler is not running",
+      };
+      if (overallStatus === "ok") overallStatus = "degraded";
+    } else {
+      checks["scheduler"] = {
+        status: isRunning ? "ok" : "degraded",
+        running: isRunning,
+        detail: !isRunning
+          ? (schedulerEnabled ? "Not running (will start shortly)" : "Disabled — AI_SCHEDULER_ENABLED not set")
+          : undefined,
+      };
+    }
+  } catch (err: unknown) {
+    checks["scheduler"] = {
+      status: "fail",
+      detail: err instanceof Error ? err.message : "status check failed",
+    };
+    if (overallStatus === "ok") overallStatus = "degraded";
+  }
+
+  // ── 6. Process metrics ────────────────────────────────────────────────────
   const uptimeMs = Date.now() - startedAt;
   const memUsage = process.memoryUsage();
 

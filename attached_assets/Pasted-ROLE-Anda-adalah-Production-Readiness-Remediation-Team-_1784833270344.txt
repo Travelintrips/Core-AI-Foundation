@@ -1,0 +1,849 @@
+ROLE
+
+Anda adalah Production Readiness Remediation Team.
+
+Tugas Anda adalah memperbaiki blocker teknis yang benar-benar menghambat production readiness.
+
+Jangan mengimplementasikan payment gateway baru.
+Jangan menambahkan Midtrans.
+Jangan menambahkan Xendit.
+Jangan menambahkan Paylabs.
+Jangan mengubah alur pembayaran manual yang sudah ada.
+Jangan mengubah business decision bahwa pembayaran diverifikasi manual oleh admin.
+
+Payment gateway otomatis secara eksplisit dikeluarkan dari scope pekerjaan ini.
+
+==================================================
+SOURCE OF TRUTH
+==================================================
+
+Gunakan laporan Production Readiness Audit terbaru sebagai dasar.
+
+Fokus remediation:
+
+1. AI Dispatcher production configuration
+2. AI Scheduler production configuration
+3. Secret exposure di .replit / version control
+4. TypeScript errors pada production-critical services
+5. Migration tracking dan rollback safety
+6. Signed URL revocation persistence
+7. Creative project tenant isolation
+8. Duplicate Gemini provider registry
+9. SMTP verification
+10. Production runtime verification
+
+Di luar scope:
+
+- automated payment gateway
+- Midtrans
+- Xendit
+- Paylabs
+- perubahan payment business model
+- redesign besar
+- deploy ke production
+
+==================================================
+MASTER RULES
+==================================================
+
+1. Jangan langsung deploy.
+2. Jangan merge ke main.
+3. Gunakan branch remediation terpisah.
+4. Jangan menghapus fitur yang berjalan.
+5. Jangan mematikan test.
+6. Jangan menurunkan assertion.
+7. Jangan mengubah behavior bisnis pembayaran manual.
+8. Jangan menghapus audit trail.
+9. Jangan menaruh secret baru di repository.
+10. Setiap fix harus memiliki test atau bukti runtime.
+
+Suggested branch:
+
+fix/production-readiness-remediation
+
+==================================================
+PHASE 1 — BASELINE & SAFETY CHECK
+==================================================
+
+Sebelum mengubah apa pun:
+
+1. Catat current branch.
+2. Catat HEAD commit.
+3. Periksa working tree.
+4. Catat modified/untracked files.
+5. Verifikasi baseline tests:
+   - targeted suites
+   - full regression
+6. Verifikasi build baseline.
+7. Simpan baseline error count TypeScript.
+8. Jangan reset file milik user.
+9. Jangan menghapus audit report.
+
+Output:
+
+BASELINE_REPORT.md
+
+Isi:
+
+- commit
+- branch
+- test count
+- build status
+- type error count
+- active workflows
+- known blockers
+
+==================================================
+PHASE 2 — FIX AI DISPATCHER & SCHEDULER CONFIG
+==================================================
+
+Audit actual startup code:
+
+- artifacts/api-server/src/index.ts
+- worker startup service
+- dispatcher service
+- scheduler service
+- deployment configuration
+- artifact.toml
+- .replit
+- production environment handling
+
+Pastikan production memiliki explicit config:
+
+AI_DISPATCHER_ENABLED=true
+AI_SCHEDULER_ENABLED=true
+
+Tetapi:
+
+- jangan hardcode true di source code;
+- jangan membuat production fail-open;
+- gunakan environment variable;
+- fail loudly jika production membutuhkan worker tetapi config tidak tersedia;
+- health/readiness endpoint harus menampilkan status dispatcher dan scheduler.
+
+Tambahkan startup validation:
+
+Jika NODE_ENV=production dan:
+
+AI_DISPATCHER_ENABLED !== "true"
+
+atau:
+
+AI_SCHEDULER_ENABLED !== "true"
+
+maka:
+
+- readiness harus FAIL;
+- log harus jelas;
+- proses dapat fail-fast jika arsitektur deployment memang single-process;
+- atau tetap hidup tetapi /healthz/full harus status not-ready jika worker terpisah.
+
+Pilih behavior berdasarkan arsitektur deployment yang nyata, bukan asumsi.
+
+Required tests:
+
+1. dev environment default behavior;
+2. production enabled;
+3. production disabled;
+4. invalid value;
+5. scheduler started once;
+6. dispatcher started once;
+7. no duplicate startup;
+8. graceful shutdown.
+
+==================================================
+PHASE 3 — REMOVE SECRET EXPOSURE
+==================================================
+
+Audit seluruh repository untuk:
+
+- API keys
+- DB URLs
+- passwords
+- admin keys
+- SMTP passwords
+- WhatsApp tokens
+- AI provider keys
+- Supabase service role keys
+- session secrets
+- private tokens
+
+Cari di:
+
+- .replit
+- replit.nix
+- .env*
+- JSON
+- YAML
+- TOML
+- markdown
+- tests
+- fixtures
+- source comments
+- build config
+- git history indicators
+
+Search patterns:
+
+OPENAI_API_KEY
+ANTHROPIC_API_KEY
+GEMINI_API_KEY
+REPLICATE_API_TOKEN
+MISTRAL_API_KEY
+SMTP_PASS
+FONNTE_TOKEN
+ADMIN_API_KEY
+DATABASE_URL
+SUPABASE
+SESSION_SECRET
+SECRET
+PASSWORD
+TOKEN
+
+Required remediation:
+
+1. Hapus plaintext secret dari tracked files.
+2. Ganti dengan variable references saja.
+3. Gunakan Replit Secrets / encrypted environment storage.
+4. Tambahkan `.env.example` tanpa nilai rahasia.
+5. Tambahkan secret validation pada startup.
+6. Jangan mencetak secret ke log.
+7. Mask secret dalam diagnostic endpoint.
+8. Pastikan report tidak menyimpan credential.
+9. Jika secret pernah masuk Git:
+   - tandai seluruh secret sebagai compromised;
+   - buat ROTATION_REQUIRED.md;
+   - jangan mencoba melakukan rotasi otomatis tanpa credential owner;
+   - laporkan daftar secret yang harus dirotasi.
+
+Tambahkan secret scanning script, misalnya:
+
+pnpm security:scan-secrets
+
+Script harus gagal jika menemukan:
+
+- known API key prefixes;
+- plaintext password assignments;
+- service role JWT;
+- private URL credentials.
+
+Jangan mengandalkan filename saja.
+
+==================================================
+PHASE 4 — FIX TYPESCRIPT ERRORS IN CRITICAL PATHS
+==================================================
+
+Prioritas file:
+
+- workerClusterService.ts
+- zipDeliveryService.ts
+- templateService.ts
+- templateRegistryService.ts
+- job/dispatcher services
+- artifact delivery services
+- signed URL services
+
+Pertama:
+
+1. Build lib/db dengan benar memakai project references.
+2. Pisahkan TS6305 akibat build order dari genuine errors.
+3. Jalankan typecheck ulang.
+4. Catat genuine error count.
+
+Perbaiki:
+
+- implicit any;
+- unknown[] vs string[];
+- unsafe casts;
+- nullable assumptions;
+- untyped DB rows;
+- unchecked JSON payloads;
+- incorrect return types.
+
+Rules:
+
+- jangan mengganti semuanya menjadi any;
+- jangan menggunakan `as any` sebagai solusi;
+- gunakan schema validation;
+- gunakan type guards;
+- gunakan inferred Drizzle types;
+- gunakan Zod untuk external payload;
+- pertahankan API contract.
+
+Target minimum:
+
+- zero new TypeScript errors;
+- zero TypeScript errors pada worker/dispatcher/ZIP/signed-download critical paths;
+- changed-scope typecheck clean.
+
+Jika global workspace masih memiliki debt lain:
+
+laporkan secara terpisah sebagai pre-existing.
+
+==================================================
+PHASE 5 — MIGRATION TRACKING
+==================================================
+
+Audit 12 manual migration scripts.
+
+Bangun migration tracking yang aman.
+
+Required:
+
+1. Tabel migration history, misalnya:
+   schema_migrations
+
+Fields minimum:
+
+- id
+- migration_name
+- checksum
+- applied_at
+- applied_by
+- execution_ms
+- success
+- error_message nullable
+
+2. Migration runner harus:
+   - idempotent;
+   - transaction-safe jika memungkinkan;
+   - tidak menjalankan migration dua kali;
+   - mendeteksi checksum mismatch;
+   - fail closed;
+   - memiliki dry-run;
+   - memiliki status command.
+
+Commands suggested:
+
+pnpm db:migrate:status
+pnpm db:migrate:dry-run
+pnpm db:migrate
+
+Jangan menjalankan migration ke production.
+
+Tambahkan dokumentasi:
+
+MIGRATION_RUNBOOK.md
+
+Isi:
+
+- backup prerequisite;
+- dry-run;
+- apply;
+- verify;
+- rollback strategy;
+- emergency stop.
+
+==================================================
+PHASE 6 — ROLLBACK SAFETY
+==================================================
+
+Untuk migration yang tidak mudah rollback:
+
+- dokumentasikan forward-fix strategy;
+- jangan membuat rollback palsu;
+- jangan mengklaim reversible jika tidak benar.
+
+Untuk migration baru:
+
+- sediakan down migration jika aman;
+- jika destructive, wajib backup gate;
+- jika additive, dokumentasikan reversible path.
+
+Tambahkan production migration guard:
+
+- NODE_ENV=production membutuhkan explicit confirmation flag;
+- DB target harus cocok dengan expected environment;
+- block jika URL terlihat seperti shared dev DB;
+- block jika backup confirmation tidak tersedia.
+
+==================================================
+PHASE 7 — PERSISTENT SIGNED URL REVOCATION
+==================================================
+
+Saat ini revocation in-memory hilang saat restart.
+
+Implement persistent revocation storage.
+
+Pilihan yang disarankan:
+
+signed_url_revocations table
+
+Fields:
+
+- token_hash
+- artifact_id nullable
+- tenant_id nullable
+- revoked_at
+- revoked_by
+- reason
+- expires_at
+- created_at
+
+Rules:
+
+- simpan hash token, bukan plaintext;
+- validasi revocation saat download;
+- cleanup expired revocations;
+- tenant scoped;
+- audit logged;
+- restart-safe;
+- idempotent revoke.
+
+Required tests:
+
+1. valid token works;
+2. revoked token denied;
+3. restart simulation still denied;
+4. expired revocation cleanup;
+5. other tenant cannot revoke;
+6. duplicate revoke safe;
+7. token plaintext never stored.
+
+==================================================
+PHASE 8 — CREATIVE PROJECT TENANT ISOLATION
+==================================================
+
+Audit apakah creative_projects memang tidak memiliki tenant_id.
+
+Jangan langsung menambah kolom tanpa memeriksa seluruh data model.
+
+Lakukan:
+
+1. Trace project ownership:
+   - clientEmail
+   - organization
+   - company
+   - tenant
+   - dashboard token
+   - review token
+2. Identifikasi canonical tenant source.
+3. Cari semua query creative_projects.
+4. Cari query tanpa tenant/ownership scope.
+5. Jalankan exploit-style tests Tenant A vs Tenant B.
+
+Jika tenant_id diperlukan:
+
+- buat migration additive;
+- backfill secara deterministic;
+- jangan menebak tenant;
+- row ambiguous harus masuk quarantine report;
+- tambahkan NOT NULL hanya setelah backfill aman;
+- tambahkan index;
+- tambahkan FK jika canonical tenants table tersedia.
+
+Jika tenant_id tidak diperlukan karena architecture memakai ownership canonical lain:
+
+- dokumentasikan;
+- buktikan isolation melalui tests;
+- jangan menambah kolom redundant.
+
+Required tests:
+
+- list isolation;
+- detail isolation;
+- update isolation;
+- delete isolation;
+- artifacts isolation;
+- review isolation;
+- notifications isolation;
+- signed download isolation;
+- undefined tenant never wildcard.
+
+==================================================
+PHASE 9 — DUPLICATE GEMINI PROVIDER
+==================================================
+
+Audit provider registry:
+
+- google
+- google-gemini
+- Gemini model mappings
+- capability mappings
+- routing weights
+- cost configuration
+- API key resolution
+
+Pilih satu canonical provider identity.
+
+Rules:
+
+- jangan menghapus provider yang memiliki active references tanpa migration;
+- buat alias mapping jika perlu;
+- migrate foreign references;
+- prevent duplicate seed;
+- add unique constraint pada canonical provider key;
+- preserve historical cost records.
+
+Required output:
+
+PROVIDER_REGISTRY_MIGRATION_REPORT.md
+
+Required tests:
+
+- seed idempotent;
+- no duplicate Gemini provider;
+- routing deterministic;
+- historical references readable;
+- cost tracking unchanged.
+
+==================================================
+PHASE 10 — SMTP VERIFICATION
+==================================================
+
+Audit:
+
+- SMTP host
+- port
+- TLS
+- username
+- password source
+- from address
+- retry
+- timeout
+- failure logging
+- redaction
+
+Tambahkan safe diagnostic:
+
+- connection verification;
+- authentication verification;
+- no real customer email required;
+- optional test recipient via explicit env.
+
+Jangan mengirim email ke customer tanpa explicit test address.
+
+Required classification:
+
+SMTP PASS
+SMTP CONFIGURATION FAIL
+SMTP NOT VERIFIED
+
+Jika ditemukan historical 535:
+
+- pastikan credential source benar;
+- jangan hardcode credential;
+- perbaiki TLS/port config jika salah;
+- tulis evidence.
+
+==================================================
+PHASE 11 — CUSTOMS ENDPOINT
+==================================================
+
+Audit temuan:
+
+GET /api/customs
+→ {"error":"Invalid id"}
+
+Tentukan apakah:
+
+- endpoint memang membutuhkan ID;
+- route order salah;
+- generic `/:id` menangkap root route;
+- missing list endpoint;
+- test memanggil path yang salah.
+
+Perbaiki hanya jika bug nyata.
+
+Required:
+
+- root/list route behavior jelas;
+- invalid ID returns correct 400/404;
+- valid ID works;
+- no route shadowing;
+- backward compatibility.
+
+==================================================
+PHASE 12 — PERFORMANCE BASELINE
+==================================================
+
+Jangan melakukan optimisasi besar tanpa evidence.
+
+Ukur:
+
+- health latency;
+- DB roundtrip;
+- key customer endpoints;
+- job claim;
+- worker heartbeat;
+- artifact listing;
+- ZIP generation;
+- memory at startup;
+- memory after workload;
+- event-loop lag.
+
+Output:
+
+PERFORMANCE_BASELINE.md
+
+Classify:
+
+- normal;
+- warning;
+- blocker.
+
+Untuk in-memory maps:
+
+- tambahkan size limit;
+- TTL cleanup;
+- metrics;
+- avoid unbounded growth.
+
+Jangan mengganti cache architecture secara besar kecuali ada bug nyata.
+
+==================================================
+PHASE 13 — OBSERVABILITY CLEANUP
+==================================================
+
+Audit `console.log/error/warn`.
+
+Jangan mengganti semua secara membabi buta.
+
+Prioritaskan production-critical paths:
+
+- worker;
+- dispatcher;
+- scheduler;
+- payment manual verification;
+- review;
+- artifact;
+- signed download;
+- startup;
+- security.
+
+Ganti dengan structured logger:
+
+- event name;
+- request ID;
+- job ID;
+- project ID;
+- tenant ID;
+- severity;
+- sanitized error.
+
+Never log:
+
+- tokens;
+- signed URLs;
+- credentials;
+- raw PII;
+- full prompt containing customer confidential data.
+
+Tambahkan metrics:
+
+- dispatcher running;
+- scheduler running;
+- queue depth;
+- job failures;
+- artifact generation failures;
+- signed download denial;
+- revocation hits.
+
+==================================================
+PHASE 14 — BUILD & TEST
+==================================================
+
+Run:
+
+1. secret scan;
+2. migration status test;
+3. lib builds;
+4. changed-scope typecheck;
+5. API typecheck;
+6. customer portal typecheck;
+7. admin portal typecheck;
+8. targeted remediation tests;
+9. full regression;
+10. production-equivalent builds.
+
+Baseline:
+
+- Targeted: 32/32 PASS
+- Regression: 5,378/5,378 PASS
+
+Expected:
+
+- all baseline tests remain pass;
+- new tests added;
+- zero new regression;
+- no secrets detected;
+- critical-path TypeScript clean.
+
+==================================================
+PHASE 15 — RUNTIME VERIFICATION
+==================================================
+
+Use development or isolated staging environment only.
+
+Do not use production DB.
+
+Verify:
+
+- dispatcher starts;
+- scheduler starts;
+- health reports ready;
+- one test AI job completes;
+- scheduler executes one harmless test task;
+- signed URL revoke survives restart;
+- tenant isolation remains enforced;
+- SMTP diagnostic status recorded;
+- no unexpected HTTP 500;
+- no secret printed in logs.
+
+==================================================
+PHASE 16 — UPDATE PRODUCTION CONFIG TEMPLATE
+==================================================
+
+Create a safe template without values:
+
+PRODUCTION_ENVIRONMENT_CHECKLIST.md
+
+Include:
+
+NODE_ENV=production
+AI_DISPATCHER_ENABLED=true
+AI_SCHEDULER_ENABLED=true
+ALLOWED_ORIGINS=
+PUBLIC_APP_URL=
+SESSION_SECRET=<secret store>
+ADMIN_API_KEY=<secret store>
+DATABASE_URL=<secret store>
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=<secret store>
+OPENAI_API_KEY=<secret store>
+ANTHROPIC_API_KEY=<secret store>
+GEMINI_API_KEY=<secret store>
+REPLICATE_API_TOKEN=<secret store>
+MISTRAL_API_KEY=<secret store>
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USER=
+SMTP_PASS=<secret store>
+SMTP_FROM=
+FONNTE_TOKEN=<secret store>
+
+Do not include actual values.
+
+Add validation command:
+
+pnpm readiness:env
+
+It must report only:
+
+SET
+MISSING
+INVALID
+
+Never print values.
+
+==================================================
+PHASE 17 — FINAL REMEDIATION REPORT
+==================================================
+
+Create:
+
+PRODUCTION_REMEDIATION_REPORT.md
+PRODUCTION_REMEDIATION_FAILURES.json
+PRODUCTION_REMEDIATION_COVERAGE.json
+PRODUCTION_REMEDIATION_VERDICT.json
+
+Report:
+
+A. Baseline
+B. Dispatcher fix
+C. Scheduler fix
+D. Secret removal
+E. Rotation requirement
+F. TypeScript critical-path cleanup
+G. Migration tracking
+H. Rollback safety
+I. Signed URL persistence
+J. Tenant isolation
+K. Provider registry
+L. SMTP
+M. Customs endpoint
+N. Performance
+O. Observability
+P. Tests
+Q. Builds
+R. Runtime verification
+S. Remaining issues
+T. Deployment recommendation
+
+==================================================
+FINAL VERDICT OPTIONS
+==================================================
+
+Use exactly one:
+
+READY FOR STAGING VERIFICATION
+
+READY FOR PRODUCTION READINESS RE-AUDIT
+
+BLOCKED — SECRETS STILL EXPOSED
+
+BLOCKED — DISPATCHER OR SCHEDULER NOT RUNNING
+
+BLOCKED — CRITICAL TYPE ERRORS REMAIN
+
+BLOCKED — TENANT ISOLATION FAILURE
+
+BLOCKED — MIGRATION SAFETY FAILURE
+
+BLOCKED — REGRESSION FAILURE
+
+Do not declare:
+
+READY FOR PRODUCTION DEPLOYMENT
+
+This team only performs remediation.
+Final production decision must come from a separate read-only re-audit.
+
+==================================================
+PAYMENT SCOPE EXCLUSION
+==================================================
+
+Manual payment verification remains accepted business behavior.
+
+Do not:
+
+- add payment gateway;
+- add webhook;
+- add callback;
+- add Midtrans;
+- add Xendit;
+- add Paylabs;
+- change payment statuses;
+- change invoice logic;
+- change payment schedule;
+- change file-unlock business rule.
+
+Only verify that existing manual payment flow is not broken by remediation.
+
+In the final report, state:
+
+AUTOMATED PAYMENT GATEWAY EXCLUDED FROM SCOPE BY PRODUCT DECISION.
+
+==================================================
+GIT RULES
+==================================================
+
+- Work on isolated branch.
+- Commit in logical batches.
+- Do not push.
+- Do not merge.
+- Do not deploy.
+- Report every changed file.
+- Report migration risk.
+- Report exact commit hashes.
+
+Suggested commits:
+
+1. fix: enforce production dispatcher and scheduler readiness
+2. security: remove tracked secrets and add secret scanning
+3. fix: harden critical worker and artifact types
+4. feat: add migration tracking and safety guards
+5. security: persist signed URL revocations
+6. fix: enforce creative project tenant isolation
+7. fix: consolidate Gemini provider registry
+8. chore: improve production diagnostics and readiness docs

@@ -132,6 +132,18 @@ function buildSearch(q: string): {
   };
 }
 
+// ── GET /customs — usage info ─────────────────────────────────────────────────
+router.get("/customs", (_req, res) => {
+  res.json({
+    description: "BTKI Tariff Search API",
+    endpoints: {
+      "GET /customs/hs-search?q=<keyword>": "Full-text search by keyword or HS code",
+      "GET /customs/hs/:code": "Detail for one HS code (e.g. 8471.30.00 or 847130)",
+    },
+    example: "/customs/hs-search?q=baju",
+  });
+});
+
 // ── GET /customs/hs-search?q=... ─────────────────────────────────────────────
 router.get("/customs/hs-search", async (req, res) => {
   const q        = typeof req.query.q     === "string" ? req.query.q.trim() : "";
@@ -198,7 +210,7 @@ router.get("/customs/hs-search", async (req, res) => {
     });
   } catch (err) {
     console.error("[customs/hs-search]", err);
-    res.status(500).json({ error: "Search failed" });
+    return res.status(500).json({ error: "Search failed" });
   }
 });
 
@@ -229,7 +241,7 @@ router.get("/customs/hs/:code", async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     console.error("[customs/hs/:code]", err);
-    res.status(500).json({ error: "Lookup failed" });
+    return res.status(500).json({ error: "Lookup failed" });
   }
 });
 
