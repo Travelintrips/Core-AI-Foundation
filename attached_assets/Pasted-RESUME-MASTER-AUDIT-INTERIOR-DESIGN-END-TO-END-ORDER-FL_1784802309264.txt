@@ -1,0 +1,635 @@
+RESUME MASTER AUDIT
+INTERIOR DESIGN END-TO-END ORDER FLOW
+
+IMPORTANT
+
+Pekerjaan sebelumnya terhenti karena monthly quota limit ketika:
+
+- customer portal request-results.tsx sedang diperiksa;
+- status map sedang diperbaiki;
+- locked-files section sedang diaudit;
+- regression tests belum selesai ditulis;
+- verification belum dijalankan.
+
+Jangan mengulang audit dari awal.
+Jangan menulis ulang seluruh implementasi.
+Lanjutkan dari current branch dan current working tree.
+
+Dilarang:
+
+- merge;
+- rebase;
+- cherry-pick;
+- checkout branch lain;
+- force push;
+- menghapus perubahan yang belum diverifikasi;
+- mengubah data produksi secara manual;
+- menandai order paid/completed untuk menutupi bug.
+
+==================================================
+PHASE 1 — RESUME SAFELY
+==================================================
+
+Jalankan:
+
+git branch --show-current
+git status --short
+git rev-parse --short HEAD
+git log --oneline -10
+git diff --stat
+git diff --check
+
+Laporkan:
+
+- branch aktif;
+- commit terakhir;
+- modified files;
+- added files;
+- deleted files;
+- untracked files;
+- apakah ada partial edits;
+- apakah ada syntax yang belum selesai.
+
+Jika branch berbeda dari branch audit sebelumnya:
+
+STOP.
+Jangan checkout.
+Laporkan kondisi.
+
+==================================================
+PHASE 2 — RECOVER PREVIOUS WORK CONTEXT
+==================================================
+
+Baca seluruh diff yang sudah dibuat.
+
+Identifikasi keenam root cause yang sebelumnya diklaim telah ditemukan.
+
+Untuk setiap root cause, dokumentasikan:
+
+1. symptom;
+2. exact file;
+3. function/component;
+4. line range;
+5. incorrect behavior;
+6. data/table involved;
+7. why it occurs;
+8. proposed fix;
+9. regression test;
+10. status:
+   - fixed;
+   - partially fixed;
+   - not fixed;
+   - unable to verify.
+
+Jangan menggunakan istilah “6 bugs” tanpa menjelaskan keenamnya.
+
+==================================================
+PHASE 3 — REVIEW ALL PARTIAL CHANGES
+==================================================
+
+Audit setiap file yang sudah diubah.
+
+Periksa khusus kemungkinan:
+
+- incomplete JSX;
+- broken conditional rendering;
+- invalid TypeScript cast;
+- duplicate condition;
+- stale import;
+- unreachable branch;
+- wrong status mapping;
+- frontend-only workaround;
+- hard-coded file labels;
+- unsafe optional chaining;
+- tenant context hilang;
+- API contract mismatch;
+- changed response shape tanpa consumer update.
+
+Jalankan:
+
+git diff --check
+
+Lalu targeted syntax/typecheck untuk file yang sedang diedit sebelum menambah
+perubahan baru.
+
+==================================================
+PHASE 4 — COMPLETE CUSTOMER RESULT PAGE FIX
+==================================================
+
+Selesaikan audit dan perbaikan halaman customer result, terutama:
+
+- request-results.tsx;
+- request detail hook;
+- workspace view-model builder;
+- status mapping;
+- locked-files section;
+- billing instructions;
+- deliverable list;
+- payment CTA.
+
+Customer page tidak boleh menyimpulkan kondisi hanya dari:
+
+project.status === "completed"
+
+atau:
+
+workflow.progress === 100
+
+Gunakan status terpisah:
+
+- productionStatus;
+- deliverableStatus;
+- billingStatus;
+- paymentStatus;
+- accessStatus.
+
+Required rendering rules:
+
+1. Production belum selesai:
+   tampilkan proses produksi.
+
+2. Production gagal:
+   tampilkan error/action required.
+
+3. Production selesai tetapi belum ada deliverable:
+   tampilkan “File sedang dipersiapkan”.
+
+4. Deliverable tersedia tetapi invoice belum ada:
+   tampilkan “Tagihan sedang dipersiapkan”.
+
+5. Invoice valid dan outstanding > 0:
+   tampilkan “Menunggu Pelunasan”.
+
+6. Payment submitted tetapi belum verified:
+   tampilkan “Pembayaran sedang diverifikasi”.
+
+7. Payment verified/lunas dan deliverable tersedia:
+   file dapat dibuka.
+
+8. Tidak ada deliverable:
+   jangan tampilkan daftar file final.
+
+9. Tidak ada invoice:
+   jangan tampilkan instruksi transfer.
+
+10. amountDue kosong/nol:
+    jangan meminta pelunasan.
+
+==================================================
+PHASE 5 — REMOVE STATIC FINAL-FILE CLAIMS
+==================================================
+
+Cari teks atau array statis seperti:
+
+- PNG HD;
+- SVG;
+- PSD;
+- Brand Guideline;
+- Editable Source;
+- semua file final.
+
+Daftar tersebut hanya boleh muncul bila ada deliverable nyata dengan tipe yang
+sesuai.
+
+Bangun daftar file dari API deliverables/artifacts.
+
+Setiap item minimal memiliki:
+
+- id;
+- name;
+- type;
+- mimeType;
+- size;
+- version;
+- preview availability;
+- download availability;
+- access state.
+
+Jika file belum dibuat, UI harus jujur dan tidak mengklaim file tersedia.
+
+==================================================
+PHASE 6 — COMPLETE STATUS MAP FIX
+==================================================
+
+Audit seluruh mapping status antara backend dan portal.
+
+Cari mapping yang mengubah status seperti:
+
+- completed → awaiting_payment;
+- production_completed → awaiting_payment;
+- final_ready → locked;
+- quotation_approved → payment_pending.
+
+Pastikan mapping tidak menciptakan billing state tanpa invoice.
+
+Required precedence:
+
+1. blocking production error;
+2. active production;
+3. deliverable preparation;
+4. billing preparation;
+5. awaiting payment;
+6. payment verification;
+7. files available;
+8. completed.
+
+Tambahkan explicit fallback:
+
+unknown / inconsistent
+
+dan tampilkan diagnostic-safe message, bukan status palsu.
+
+==================================================
+PHASE 7 — COMPLETE BACKEND FIXES
+==================================================
+
+Review backend changes yang sudah ditulis.
+
+Pastikan backend menerapkan guards:
+
+Production completed hanya jika:
+
+- required job sukses;
+- output contract valid;
+- artifact persisted;
+- minimum required deliverable tersedia.
+
+Awaiting payment hanya jika:
+
+- invoice exists;
+- invoice belongs to same tenant;
+- invoice belongs to same order/project;
+- invoice total > 0;
+- outstanding > 0;
+- payment destination tersedia.
+
+Files unlocked hanya jika:
+
+- payment verified;
+- paid amount memenuhi amount due;
+- deliverable nyata tersedia;
+- access grant aktif.
+
+Order completed hanya jika:
+
+- final delivery selesai;
+- tidak ada blocking stage;
+- tidak ada unpaid required invoice.
+
+Jangan hanya mengandalkan frontend guards.
+
+==================================================
+PHASE 8 — ADMIN PAYMENT AND BILLING FIX
+==================================================
+
+Audit admin panel path yang menampilkan pembayaran.
+
+Pastikan Customer Portal dan Admin Panel membaca canonical records yang sama.
+
+Trace:
+
+quotationId
+invoiceId
+paymentScheduleId
+paymentId
+orderId
+projectId
+requestId
+tenantId
+
+Periksa ID mismatch seperti:
+
+- request ID vs order ID;
+- project ID vs order ID;
+- numeric ID vs UUID;
+- order number vs database ID;
+- legacy invoice table vs canonical invoice table;
+- legacy payment table vs canonical payment table.
+
+Admin harus membedakan:
+
+- invoice belum dibuat;
+- invoice ada tetapi pembayaran belum disubmit;
+- pembayaran sudah disubmit;
+- pembayaran menunggu verifikasi;
+- pembayaran ditolak;
+- pembayaran terverifikasi;
+- invoice lunas.
+
+Jangan tampilkan section kosong tanpa penjelasan.
+
+==================================================
+PHASE 9 — INTERIOR DESIGN WORKFLOW FIX
+==================================================
+
+Audit service definition dan workflow untuk Interior Design.
+
+Pastikan:
+
+- slug/service key canonical;
+- workflow template ditemukan;
+- initial stage benar;
+- stage order benar;
+- required agents/jobs dibuat;
+- no empty workflow success;
+- no fallback-to-completed;
+- no mock/demo completion;
+- no missing-plugin success;
+- no skipped-renderer success.
+
+Tambahkan explicit failure state bila:
+
+- workflow template hilang;
+- agent registry gagal;
+- job tidak dibuat;
+- renderer tidak tersedia;
+- output contract kosong;
+- artifact persistence gagal.
+
+==================================================
+PHASE 10 — REGRESSION TESTS
+==================================================
+
+Selesaikan minimal test berikut:
+
+1. Interior Design dimulai dari stage pertama.
+2. Missing workflow template tidak dianggap selesai.
+3. Empty workflow tidak dianggap selesai.
+4. Failed job tidak memajukan workflow.
+5. Null job output ditolak.
+6. Empty object output ditolak bila required output kosong.
+7. Completed production membutuhkan artifact.
+8. Artifact membutuhkan storage reference.
+9. Customer page tidak menampilkan file statis.
+10. Customer page tidak meminta pembayaran tanpa invoice.
+11. Awaiting payment membutuhkan outstanding > 0.
+12. Zero-value invoice tidak memicu pelunasan.
+13. Invoice harus terkait tenant/order yang benar.
+14. Admin dan customer membaca invoice yang sama.
+15. Payment submission terlihat di admin.
+16. Unverified payment tidak membuka file.
+17. Partial payment tidak membuka file.
+18. Verified full payment membuka file.
+19. Cross-tenant artifact ditolak.
+20. Cross-tenant invoice ditolak.
+21. Duplicate invoice generation idempotent.
+22. Duplicate workflow enqueue idempotent.
+23. Production error tampil sebagai error.
+24. Broken order recovery bersifat idempotent.
+25. Valid Interior Design flow selesai end-to-end.
+
+Tambahkan component/integration tests untuk:
+
+- request-results.tsx;
+- locked-files section;
+- status mapping;
+- request detail view model;
+- admin payment panel.
+
+Jangan hanya menguji helper mock.
+
+==================================================
+PHASE 11 — TEST TARGETED FIRST
+==================================================
+
+Jalankan bertahap:
+
+1. status-map tests;
+2. customer result component tests;
+3. request detail API tests;
+4. workflow lifecycle tests;
+5. artifact/deliverable tests;
+6. invoice/payment tests;
+7. admin payment tests;
+8. Interior Design integration tests.
+
+Untuk setiap command laporkan:
+
+- command;
+- exit code;
+- passed;
+- failed;
+- skipped;
+- duration.
+
+Perbaiki semua failure yang disebabkan perubahan ini.
+
+==================================================
+PHASE 12 — TYPECHECK
+==================================================
+
+Jalankan targeted typecheck untuk:
+
+- API server;
+- customer portal;
+- admin/bizportal;
+- affected libraries.
+
+Kemudian jalankan canonical repository typecheck.
+
+Pisahkan:
+
+- Team audit introduced errors;
+- pre-existing errors.
+
+Pre-existing claim harus memiliki baseline proof.
+
+==================================================
+PHASE 13 — BUILD
+==================================================
+
+Jalankan:
+
+- affected libraries build;
+- API server build;
+- customer portal build;
+- admin portal build.
+
+Jangan menyatakan frontend fix selesai bila salah satu portal gagal build karena
+perubahan ini.
+
+==================================================
+PHASE 14 — REAL DATA REPRODUCTION
+==================================================
+
+Gunakan satu order Interior Design test/non-production.
+
+Catat canonical lifecycle:
+
+request
+→ order
+→ brief
+→ quotation
+→ workflow
+→ jobs
+→ artifacts
+→ deliverables
+→ invoice
+→ payment submission
+→ verification
+→ unlock
+→ completed
+
+Untuk setiap tahap, catat:
+
+- table;
+- record ID;
+- status;
+- timestamp;
+- API endpoint;
+- event/worker;
+- tenant ID.
+
+Pastikan bug lama tidak terjadi:
+
+- tidak langsung masuk hasil produksi;
+- halaman hasil tidak kosong dengan klaim selesai;
+- customer tidak diminta bayar tanpa invoice;
+- admin tidak kosong setelah payment submission.
+
+==================================================
+PHASE 15 — BROKEN ORDER RECOVERY
+==================================================
+
+Untuk order yang sudah rusak, jangan edit manual.
+
+Buat atau verifikasi idempotent repair flow:
+
+- detect completed without artifacts;
+- detect awaiting payment without invoice;
+- detect invoice without payment schedule;
+- detect payment linked to wrong identifier;
+- detect deliverable without storage;
+- detect completed without workflow jobs.
+
+Support dry-run:
+
+{
+  scanned,
+  affected,
+  proposedActions,
+  skipped,
+  errors
+}
+
+Apply mode harus:
+
+- tenant-scoped;
+- audit logged;
+- idempotent;
+- no destructive delete.
+
+==================================================
+PHASE 16 — SECURITY AND TENANT CHECK
+==================================================
+
+Pastikan setiap query yang baru/diubah:
+
+- mengambil tenantId dari RequestContext;
+- tidak mempercayai tenantId dari body/query;
+- scope order/project/invoice/payment/artifact;
+- menolak cross-tenant relation;
+- fail-closed pada missing tenant.
+
+Tambahkan cross-tenant tests.
+
+==================================================
+PHASE 17 — FINAL DIFF REVIEW
+==================================================
+
+Jalankan:
+
+git status --short
+git diff --stat
+git diff --check
+git diff
+git log --oneline -5
+
+Periksa:
+
+- incomplete code;
+- duplicate utilities;
+- stale debug logs;
+- hard-coded IDs;
+- static deliverable lists;
+- manual paid/completed flags;
+- TODO kritis;
+- unrelated changes;
+- temporary fixtures;
+- secrets.
+
+==================================================
+PHASE 18 — COMMIT AND PUSH
+==================================================
+
+Hanya setelah seluruh targeted tests, typecheck, dan build selesai:
+
+git add .
+git commit -m "fix(creative-orders): enforce canonical production billing flow"
+
+Jika implementation commit sudah dibuat, gunakan:
+
+git add .
+git commit -m "test(creative-orders): verify interior design lifecycle"
+
+Push:
+
+git push -u origin HEAD
+
+Jika push gagal:
+
+- jangan menggunakan token di source;
+- jangan mencetak credential;
+- status tetap LOCAL ONLY;
+- laporkan commit hash dan error.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Gunakan format:
+
+A. Branch and commit
+B. Push status
+C. Original reproduction
+D. Six exact root causes
+E. Files changed
+F. Tables and relationships
+G. Interior Design workflow fix
+H. Production lifecycle fix
+I. Artifact/deliverable fix
+J. Customer result page fix
+K. Static file claim removal
+L. Status mapping fix
+M. Invoice generation fix
+N. Payment/admin visibility fix
+O. Tenant isolation
+P. Broken-order recovery
+Q. Regression tests
+R. Targeted test results
+S. Full test results
+T. Typecheck
+U. Builds
+V. End-to-end evidence
+W. Remaining risks
+X. Final verdict
+
+Gunakan salah satu verdict:
+
+PASS — END-TO-END FLOW VERIFIED
+REVISION REQUIRED
+BLOCKED — ENVIRONMENT
+BLOCKED — PROVIDER
+BLOCKED — DATA
+BLOCKED — QUOTA
+
+Jangan menggunakan PASS bila:
+
+- keenam root cause tidak didokumentasikan;
+- regression tests belum selesai;
+- typecheck belum selesai;
+- build belum selesai;
+- customer masih dapat melihat file palsu;
+- awaiting payment masih dapat muncul tanpa invoice;
+- admin masih tidak melihat submitted payment;
+- Interior Design belum diuji end-to-end.
