@@ -13,6 +13,7 @@ import { Layout } from "@/components/layout";
 import { FlowStepper } from "@/components/flow-stepper";
 import { useRequestDetail } from "@/hooks/use-catalog";
 import { DashboardAccessButton } from "@/components/commercial/dashboard-access-button";
+import { PaymentInstructionCard } from "@/components/commercial/payment-instruction-card";
 import {
   Loader2,
   CheckCircle2,
@@ -114,16 +115,26 @@ export default function RequestResultsPage() {
                   </div>
                 )}
 
+                {/* Bank transfer destinations */}
+                <div className="mb-4">
+                  <PaymentInstructionCard />
+                </div>
+
                 {/* Pay remaining CTA */}
                 <div className="rounded-xl border border-yellow-300 dark:border-yellow-700 p-4 bg-white/60 dark:bg-yellow-900/10">
                   <p className="text-sm font-medium text-yellow-900 dark:text-yellow-200 mb-1">
                     Cara melakukan pelunasan:
                   </p>
                   <ol className="text-sm text-yellow-800 dark:text-yellow-300 space-y-1 list-decimal list-inside">
-                    <li>Transfer sesuai jumlah sisa tagihan ke rekening yang tertera di quotation Anda</li>
-                    <li>Submit bukti transfer melalui halaman Pembayaran</li>
+                    <li>Transfer sesuai jumlah sisa tagihan ke salah satu rekening di atas</li>
+                    <li>Buka dashboard Anda dan submit bukti transfer di halaman Pembayaran</li>
                     <li>Admin akan memverifikasi dan membuka file Anda dalam 1×24 jam</li>
                   </ol>
+                </div>
+
+                {/* Dashboard shortcut — sends a magic-link email so customer can access their workspace */}
+                <div className="mt-4">
+                  <DashboardAccessButton email={(data as any).customerEmail} className="w-full" />
                 </div>
 
                 {/* What you'll get after unlock */}

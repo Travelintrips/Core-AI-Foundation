@@ -26,6 +26,7 @@ import {
   aiQuotationItemsTable,
   creativeProjectsTable,
   aiPaymentScheduleTable,
+  aiInvoicesTable,
   insertAiServiceCategorySchema,
   insertAiServiceSchema,
   insertAiServicePackageSchema,
@@ -1090,7 +1091,8 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
       filesUnlocked = project.filesUnlocked ?? false;
       paymentStatus = project.paymentStatus ?? paymentStatus;
 
-      // Sum unpaid installments for remaining balance display
+      // Sum unpaid installments for remaining balance display.
+      // Primary: ai_payment_schedules (fixed_price flow).
       const unpaid = await db
         .select({ amount: aiPaymentScheduleTable.amount })
         .from(aiPaymentScheduleTable)
@@ -1104,6 +1106,27 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
 
       if (unpaid.length > 0) {
         remainingBalance = unpaid.reduce((sum, r) => sum + parseFloat(String(r.amount ?? "0")), 0);
+      } else {
+        // Fallback: custom_project / quotation flow stores payment in ai_invoices
+        // instead of ai_payment_schedules. Sum any issued-but-unpaid invoices.
+        const unpaidInvoices = await db
+          .select({ amount: aiInvoicesTable.amount })
+          .from(aiInvoicesTable)
+          .where(
+            and(
+              eq(aiInvoicesTable.projectId, project.id),
+              ne(aiInvoicesTable.status, "paid"),
+              ne(aiInvoicesTable.status, "void"),
+              ne(aiInvoicesTable.status, "cancelled"),
+            ),
+          );
+
+        if (unpaidInvoices.length > 0) {
+          remainingBalance = unpaidInvoices.reduce(
+            (sum, r) => sum + parseFloat(String(r.amount ?? "0")),
+            0,
+          );
+        }
       }
     }
   }
