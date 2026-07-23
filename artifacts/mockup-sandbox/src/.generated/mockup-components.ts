@@ -20,5 +20,5 @@ export const modules: ModuleMap = {
   "./components/mockups/cp-portal/ServicesCatalog.tsx": () => import("../components/mockups/cp-portal/ServicesCatalog.tsx"),
   "./components/mockups/cp-portal/SubmitBrief.tsx": () => import("../components/mockups/cp-portal/SubmitBrief.tsx"),
   "./components/mockups/cp-portal/SuccessOnboarding.tsx": () => import("../components/mockups/cp-portal/SuccessOnboarding.tsx"),
-  "./components/mockups/cp-portal/Workspace.tsx": () => import("../components/mockups/cp-portal/Workspace.tsx"),
+  "./components/mockups/cp-portal/Workspace.tsx": () => import("../components/mockups/cp-portal/Workspace.tsx")
 };
