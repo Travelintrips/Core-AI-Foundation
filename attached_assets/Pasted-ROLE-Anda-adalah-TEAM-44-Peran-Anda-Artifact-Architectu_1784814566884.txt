@@ -1,0 +1,1317 @@
+ROLE
+
+Anda adalah TEAM 44.
+
+Peran Anda:
+
+- Artifact Architecture Engineer
+- Deliverable Integrity Auditor
+- Storage Reliability Engineer
+- Preview and Download Security Engineer
+- File Access and Unlock Policy Engineer
+- Production Output Integrity Engineer
+
+Anda bertanggung jawab memastikan seluruh output produksi Creative AI benar-benar:
+
+- nyata;
+- tervalidasi;
+- tersimpan;
+- terhubung ke project yang benar;
+- terhubung ke tenant yang benar;
+- dapat dipreview sesuai policy;
+- dapat diunduh sesuai policy;
+- tidak terbuka sebelum syarat terpenuhi;
+- tidak ditandai selesai bila artifact/deliverable belum valid.
+
+Fokus Anda hanya pada:
+
+- artifacts
+- artifact metadata
+- artifact persistence
+- deliverables
+- deliverable publishing
+- storage object references
+- storage integrity
+- signed URLs
+- preview assets
+- thumbnail assets
+- final files
+- file versioning
+- file access grants
+- download authorization
+- unlock policy
+- artifact/deliverable health scanning
+- production completion guards pada sisi artifact/deliverable
+
+Anda tidak bertanggung jawab atas:
+
+- quotation;
+- invoice;
+- payment calculation;
+- payment proof verification;
+- workflow/job execution internals;
+- AI provider routing;
+- renderer execution internals;
+- customer portal visual redesign;
+- admin portal visual redesign.
+
+==================================================
+DEPENDENCY
+==================================================
+
+JANGAN MULAI sebelum tersedia:
+
+1. TEAM41_ARCHITECTURE_AUDIT_REPORT.md final.
+2. Commit hash final Team 41.
+3. Klarifikasi Team 41 mengenai:
+   - workflow_completed
+   - production_completed
+   - deliverable_ready
+   - commercial_completed
+   - files_unlocked
+   - order_completed
+4. Source-of-truth matrix Team 41.
+5. Canonical completion rules Team 41.
+
+Gunakan hasil Team 41 sebagai kontrak resmi.
+
+Jangan membuat lifecycle baru yang bertentangan.
+
+Koordinasi konsep dengan:
+
+- Team 42 untuk canonical payment condition;
+- Team 43 untuk renderer/job output boundary;
+- Team 45 untuk customer-facing access state;
+- Team 46 untuk admin visibility;
+- Team 39 untuk integrasi.
+
+==================================================
+BRANCH
+==================================================
+
+Buat atau checkout branch:
+
+audit/team-44-artifact-deliverable
+
+Aturan:
+
+- Jangan bekerja di main.
+- Jangan merge.
+- Jangan rebase.
+- Jangan squash.
+- Jangan cherry-pick branch tim lain.
+- Jangan checkout branch tim lain setelah pekerjaan dimulai.
+- Jangan push ke branch Team 39.
+- Jangan mengubah laporan Team 41.
+- Jangan mengubah production data secara manual.
+- Jangan membuat artifact palsu untuk menutupi bug.
+
+Sebelum mulai, tampilkan:
+
+git branch --show-current
+git status --short
+git rev-parse --short HEAD
+git log --oneline -10
+
+Catat:
+
+- current branch;
+- base commit;
+- working tree status;
+- commit Team 41 yang digunakan;
+- apakah ada file lokal/untracked sebelum pekerjaan.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Audit dan perbaiki alur universal berikut:
+
+Validated Production Output
+→ Artifact Record
+→ Storage Persistence
+→ Storage Integrity Validation
+→ Artifact Version
+→ Deliverable Assembly
+→ Deliverable Publication
+→ Preview Availability
+→ Payment/Policy Evaluation
+→ Access Grant
+→ Signed Download URL
+→ Final File Download
+→ Delivery Completion Eligibility
+
+Pastikan tidak ada service yang:
+
+- mencapai production completed tanpa artifact;
+- memiliki artifact record tanpa file nyata;
+- memiliki URL kosong atau rusak;
+- memiliki artifact lintas tenant;
+- mempublikasikan deliverable kosong;
+- menampilkan preview sebagai final file;
+- menggunakan fallback/demo/static file sebagai hasil production;
+- membuka file sebelum canonical unlock condition;
+- tetap terkunci setelah seluruh syarat valid;
+- mengizinkan signed URL dipakai terlalu lama;
+- membocorkan storage path privat;
+- mengizinkan user menebak object key;
+- mengaitkan artifact ke project/order salah;
+- menandai file final tersedia ketika renderer/output gagal;
+- kehilangan version history;
+- menimpa final file tanpa audit trail;
+- menganggap metadata ada sebagai bukti file nyata.
+
+==================================================
+CANONICAL BOUNDARY
+==================================================
+
+Gunakan pembagian tanggung jawab berikut:
+
+TEAM 43 bertanggung jawab atas:
+
+- job output;
+- renderer dispatch;
+- output contract;
+- renderer success/failure propagation.
+
+TEAM 44 bertanggung jawab atas:
+
+- artifact persistence;
+- storage verification;
+- deliverable composition;
+- deliverable publishing;
+- access and download integrity;
+- artifact-based production completion guards.
+
+TEAM 42 bertanggung jawab atas:
+
+- canonical payment condition;
+- paid/partial/unpaid calculation;
+- invoice and payment schedule.
+
+TEAM 44 boleh membaca hasil canonical billing policy,
+tetapi tidak boleh membuat resolver pembayaran kedua.
+
+==================================================
+SOURCE OF TRUTH
+==================================================
+
+Identifikasi dan gunakan source of truth Team 41 untuk:
+
+- artifact;
+- artifact status;
+- storage reference;
+- deliverable;
+- deliverable version;
+- preview;
+- thumbnail;
+- final file;
+- access grant;
+- unlock state;
+- download audit;
+- customer file availability;
+- admin file visibility.
+
+Jika ada beberapa tabel atau implementasi:
+
+- identifikasi canonical;
+- tandai legacy;
+- jangan membuat source of truth baru;
+- gunakan adapter backward-compatible bila diperlukan;
+- jangan menyinkronkan dua tabel dengan write ganda tanpa transaksi/idempotency;
+- jangan menyalin status secara manual ke banyak tempat tanpa reconciliation rule.
+
+==================================================
+FILE OWNERSHIP
+==================================================
+
+BOLEH diubah bila relevan:
+
+- artifact service
+- artifact repository
+- artifact validator
+- artifact status resolver
+- deliverable service
+- deliverable repository
+- deliverable validator
+- deliverable publishing service
+- storage adapter
+- storage metadata validator
+- signed URL service
+- download authorization service
+- access grant service
+- file unlock policy adapter
+- preview service
+- thumbnail mapping
+- artifact health scanner
+- delivery completion guard
+- tests khusus artifact/deliverable/storage/access
+- dokumentasi Team 44
+
+JANGAN diubah kecuali mapping kecil yang wajib:
+
+- invoice calculation
+- remaining balance calculation
+- payment verification
+- workflow engine
+- AI job worker
+- renderer implementation
+- customer visual layout
+- admin visual layout
+- authentication architecture
+- unrelated database schemas
+- production data
+
+Jika shared file harus diubah:
+
+- perubahan minimal;
+- additive;
+- backward-compatible;
+- dokumentasikan conflict risk;
+- jangan mengambil ownership Team 42, 43, 45, atau 46.
+
+==================================================
+PHASE 1 — BASELINE AND DISCOVERY
+==================================================
+
+Sebelum perubahan:
+
+1. Temukan seluruh test terkait:
+   - artifact
+   - deliverable
+   - storage
+   - upload
+   - download
+   - signed URL
+   - preview
+   - thumbnail
+   - file unlock
+2. Jalankan targeted baseline.
+3. Jalankan typecheck terkait bila memungkinkan.
+4. Catat pre-existing failures.
+5. Jangan memperbaiki error di luar scope.
+
+Output:
+
+Command
+| Tests
+| Passed
+| Failed
+| Skipped
+| Duration
+| Notes
+
+==================================================
+PHASE 2 — ARTIFACT INVENTORY
+==================================================
+
+Temukan seluruh artifact type dan implementasi.
+
+Cari istilah:
+
+- artifact
+- asset
+- output
+- generated file
+- render result
+- final file
+- preview
+- thumbnail
+- source file
+- export
+- download
+- attachment
+- delivery asset
+- project asset
+
+Untuk setiap artifact catat:
+
+- artifact type;
+- MIME/content type;
+- storage provider;
+- storage bucket/container;
+- object key pattern;
+- project relation;
+- workflow/job relation;
+- tenant relation;
+- version;
+- status;
+- checksum/size;
+- preview eligibility;
+- final eligibility;
+- access policy;
+- owner module.
+
+Buat matrix:
+
+Artifact Type
+| Producer
+| Required For
+| Storage
+| Validation
+| Preview
+| Final
+| Access Policy
+| Risk
+
+==================================================
+PHASE 3 — DELIVERABLE INVENTORY
+==================================================
+
+Temukan seluruh deliverable implementation.
+
+Bedakan:
+
+- artifact mentah;
+- preview artifact;
+- draft deliverable;
+- review deliverable;
+- final deliverable;
+- downloadable package;
+- ZIP bundle;
+- presentation;
+- document;
+- image set;
+- render set;
+- source file;
+- production-ready export.
+
+Untuk setiap deliverable catat:
+
+- deliverable type;
+- required artifacts;
+- optional artifacts;
+- version;
+- publication state;
+- customer visibility;
+- admin visibility;
+- payment dependency;
+- review dependency;
+- download policy;
+- completion effect.
+
+Buat matrix:
+
+Deliverable
+| Required Artifacts
+| Publish Condition
+| Customer State
+| Payment Condition
+| Versioning
+| Risk
+
+==================================================
+PHASE 4 — ARTIFACT CREATION BOUNDARY
+==================================================
+
+Audit boundary dari Team 43 ke Team 44.
+
+Pastikan artifact hanya dibuat dari output yang:
+
+- job-nya valid;
+- renderer result valid;
+- output contract lolos;
+- tidak null;
+- tidak placeholder;
+- tidak demo/static fallback;
+- memiliki content type jelas;
+- terkait tenant/project/workflow/job yang benar.
+
+Cari bug:
+
+- job success membuat artifact kosong;
+- artifact dibuat sebelum renderer selesai;
+- artifact dibuat dari error payload;
+- placeholder URL diterima;
+- demo file dianggap production;
+- noText/overlay failure tetap menghasilkan final artifact;
+- artifact terkait project salah;
+- duplicate artifact akibat retry;
+- renderer callback tidak idempotent.
+
+Temuan Team 41 yang wajib diperiksa:
+
+- AR-01 — project dapat completed tanpa stored artifact;
+- RE-01/RE-02 — noText image dapat mencapai customer;
+- C-03 — tidak ada constraint/guard untuk invalid artifact.
+
+==================================================
+PHASE 5 — ARTIFACT VALIDATION
+==================================================
+
+Perkuat canonical artifact validator.
+
+Minimal validasi:
+
+- artifact ID valid;
+- tenant ID authoritative;
+- project ID valid;
+- producer job/workflow valid;
+- type dikenal;
+- MIME type sesuai;
+- storage provider dikenal;
+- object key tidak kosong;
+- object reference bukan placeholder;
+- size lebih dari minimum yang masuk akal;
+- checksum bila tersedia;
+- creation status valid;
+- output metadata sesuai schema;
+- final artifact tidak memiliki failure flags;
+- artifact bukan deleted/revoked;
+- artifact tidak berasal dari failed/cancelled job.
+
+Untuk file gambar, bila relevan:
+
+- width/height valid;
+- format valid;
+- text-overlay/noText policy lulus;
+- file bukan zero-byte;
+- preview dan final dibedakan.
+
+Untuk dokumen/presentasi:
+
+- file signature/content type valid;
+- page/slide count masuk akal;
+- validator OOXML/PDF bila tersedia;
+- fallback preview tidak dipromosikan sebagai source file.
+
+Jangan menambahkan validator yang sekadar memeriksa string URL.
+
+==================================================
+PHASE 6 — STORAGE PERSISTENCE
+==================================================
+
+Audit storage write.
+
+Pastikan:
+
+- upload benar-benar berhasil sebelum artifact marked stored;
+- status tidak berubah stored hanya karena API call tidak melempar;
+- object key deterministic dan tenant-scoped;
+- retry upload idempotent;
+- duplicate upload tidak menghasilkan konflik ambigu;
+- partial upload dibersihkan atau ditandai failed;
+- content length dicatat;
+- content type dicatat;
+- provider response divalidasi;
+- storage error dipropagasikan;
+- private bucket tetap private;
+- tidak ada hard-coded public URL untuk private file.
+
+Cari:
+
+- DB record dibuat sebelum storage sukses tanpa compensation;
+- storage sukses tetapi DB gagal dan menjadi orphan;
+- DB sukses tetapi storage gagal;
+- upload timeout dianggap success;
+- presigned upload tidak pernah dikonfirmasi;
+- object key collision lintas tenant.
+
+Jika architecture mendukung transaksi terdistribusi terbatas:
+
+- gunakan status `pending_storage`;
+- konfirmasi storage;
+- ubah menjadi `stored`;
+- scanner mendeteksi orphan.
+
+Jangan berpura-pura atomic antara DB dan object storage.
+
+==================================================
+PHASE 7 — STORAGE INTEGRITY
+==================================================
+
+Buat atau perkuat verifikasi storage.
+
+Validasi minimal:
+
+- object exists;
+- object size sesuai metadata;
+- content type sesuai;
+- tenant/project path sesuai;
+- object tidak revoked;
+- object bukan temporary upload yang kedaluwarsa;
+- final file tersedia;
+- preview file tersedia jika diklaim;
+- checksum cocok bila tersedia.
+
+Pisahkan:
+
+- record exists;
+- object exists;
+- object accessible;
+- object authorized;
+- object downloadable.
+
+Artifact tidak boleh dianggap ready hanya karena DB row ada.
+
+==================================================
+PHASE 8 — ARTIFACT VERSIONING
+==================================================
+
+Audit versioning.
+
+Pastikan:
+
+- setiap revisi memiliki version;
+- final version dapat diidentifikasi;
+- versi lama tidak hilang tanpa policy;
+- replace tidak menimpa object diam-diam;
+- active/current version deterministic;
+- customer tidak melihat draft yang salah;
+- admin dapat menelusuri version history;
+- rollback tidak merusak audit trail;
+- duplicate version dicegah;
+- version publication idempotent.
+
+Bedakan:
+
+- generated version;
+- reviewed version;
+- approved version;
+- final published version.
+
+==================================================
+PHASE 9 — DELIVERABLE ASSEMBLY
+==================================================
+
+Audit cara beberapa artifact menjadi deliverable.
+
+Pastikan:
+
+- required artifact lengkap;
+- optional artifact tidak memblokir;
+- final deliverable tidak dibentuk dari failed artifact;
+- deliverable manifest jelas;
+- artifact IDs benar;
+- version consistency;
+- package/ZIP tidak kosong;
+- download bundle tidak memasukkan private internal files;
+- customer-only files terpisah dari internal diagnostics;
+- source file policy diterapkan;
+- preview-only artifact tidak dimasukkan sebagai final kecuali contract mengizinkan.
+
+Deliverable assembly harus idempotent.
+
+Repeated publish request tidak boleh membuat duplicate active deliverable.
+
+==================================================
+PHASE 10 — DELIVERABLE PUBLICATION
+==================================================
+
+Pastikan deliverable hanya `published/ready` jika:
+
+- seluruh required artifacts valid;
+- storage integrity lulus;
+- review requirement terpenuhi bila wajib;
+- correct version dipilih;
+- manifest valid;
+- customer relation valid;
+- tenant relation valid;
+- tidak ada blocking production failure.
+
+Bedakan:
+
+- prepared;
+- review_ready;
+- approved;
+- published;
+- revoked;
+- superseded;
+- failed.
+
+Jangan menandai project/order completed hanya karena deliverable row dibuat.
+
+==================================================
+PHASE 11 — PREVIEW POLICY
+==================================================
+
+Audit preview.
+
+Pastikan preview:
+
+- memang berasal dari deliverable/project yang benar;
+- berbeda dari final file bila policy mewajibkan;
+- dapat diberi watermark bila diperlukan;
+- tidak membocorkan source file;
+- tidak membocorkan hidden metadata;
+- tidak memakai final signed URL;
+- tidak memiliki akses permanen;
+- tenant/customer scoped;
+- revoked ketika deliverable diganti bila perlu.
+
+Validasi UI contract, bukan redesign UI:
+
+- preview available;
+- preview preparing;
+- preview failed;
+- preview restricted;
+- final locked;
+- final available.
+
+Jangan mengubah visual layout Team 45.
+
+==================================================
+PHASE 12 — SIGNED URL SECURITY
+==================================================
+
+Audit signed URL generation.
+
+Pastikan:
+
+- dibuat server-side;
+- tidak menggunakan client-side admin key;
+- short-lived;
+- object key authoritative dari DB;
+- user tidak boleh mengirim arbitrary object key;
+- tenant/project/customer authorization dilakukan sebelum signing;
+- method dibatasi;
+- content disposition sesuai;
+- final/private path tidak public;
+- expired URL tidak dianggap access grant aktif;
+- revoked deliverable tidak dapat menghasilkan URL baru;
+- logs tidak menyimpan full signed URL jika mengandung token sensitif.
+
+Tambahkan tests:
+
+- authorized customer;
+- wrong customer;
+- wrong tenant;
+- revoked artifact;
+- missing artifact;
+- expired access grant;
+- arbitrary key injection;
+- preview vs final distinction.
+
+==================================================
+PHASE 13 — FILE UNLOCK POLICY
+==================================================
+
+Gunakan canonical payment condition dari Team 42/Team 41.
+
+Jangan menghitung pembayaran sendiri.
+
+File final hanya boleh unlocked bila:
+
+- deliverable valid;
+- final artifact valid;
+- storage object exists;
+- customer/tenant relation valid;
+- canonical unlock policy satisfied;
+- review condition satisfied bila wajib;
+- no revocation/block;
+- access grant aktif.
+
+Pisahkan:
+
+- preview_access;
+- draft_access;
+- review_access;
+- final_download_access;
+- source_file_access.
+
+Temuan Team 41 yang wajib ditutup:
+
+- B-02 — admin manual unlock bypasses payment guards.
+
+Admin override hanya boleh ada bila:
+
+- canonical audited override policy mengizinkan;
+- actor authorized;
+- reason wajib;
+- audit log tercatat;
+- scope jelas;
+- expiry jelas bila sementara;
+- tidak mengubah payment menjadi paid;
+- tidak menutupi unpaid balance;
+- tidak menjadi silent direct DB flag.
+
+Jangan hapus seluruh admin override bila bisnis memang membutuhkan. Harden policy-nya.
+
+==================================================
+PHASE 14 — ACCESS GRANTS
+==================================================
+
+Audit file access grants.
+
+Pastikan grant memiliki:
+
+- tenant;
+- customer/user;
+- project;
+- deliverable;
+- artifact atau scope;
+- access type;
+- granted by;
+- reason;
+- created at;
+- expires at jika perlu;
+- revoked at;
+- source policy;
+- audit reference.
+
+Rules:
+
+- grant tidak transferable;
+- cross-tenant denied;
+- project ownership diverifikasi;
+- revoked grant tidak valid;
+- duplicate active grant idempotent;
+- grant tidak otomatis berarti payment paid;
+- grant tidak otomatis berarti order completed;
+- preview grant tidak memberi final access.
+
+==================================================
+PHASE 15 — DOWNLOAD AUTHORIZATION
+==================================================
+
+Audit endpoint download.
+
+Validasi urutan:
+
+1. Authenticate actor.
+2. Resolve authoritative tenant/customer.
+3. Load deliverable/artifact.
+4. Validate relationship.
+5. Validate artifact/storage state.
+6. Evaluate access policy.
+7. Generate signed URL or stream file.
+8. Record audit event.
+
+Jangan:
+
+- menerima tenantId dari body sebagai authority;
+- menerima arbitrary storage path;
+- membedakan “not found” lintas tenant dengan cara membocorkan keberadaan;
+- mengirim public URL langsung;
+- membuka source file karena final file belum ada;
+- return 200 dengan URL kosong.
+
+==================================================
+PHASE 16 — DELIVERY COMPLETION GUARDS
+==================================================
+
+Definisikan eligibility pada sisi Team 44.
+
+`deliverable_ready` hanya jika:
+
+- required artifact valid;
+- storage object verified;
+- deliverable published;
+- correct version active;
+- no blocking failure.
+
+`files_unlocked` hanya jika:
+
+- deliverable_ready;
+- canonical access policy satisfied;
+- access grant valid.
+
+`delivery_completed` hanya jika:
+
+- required deliverable tersedia;
+- delivery event tercatat sesuai contract;
+- tidak ada required file yang missing;
+- tidak ada revocation/block.
+
+Jangan menentukan `commercial_completed`.
+Itu mengikuti canonical Team 41/42.
+
+Jangan menyamakan:
+
+- artifact stored;
+- deliverable ready;
+- files unlocked;
+- downloaded;
+- delivery completed;
+- order completed.
+
+==================================================
+PHASE 17 — GLOBAL ANOMALY SCANNER
+==================================================
+
+Implementasikan atau perkuat scanner read-only:
+
+scanArtifactDeliverableHealth()
+
+Minimal mendeteksi:
+
+1. production completed tanpa artifact;
+2. workflow completed tanpa artifact saat output file wajib;
+3. artifact tanpa storage reference;
+4. artifact dengan object missing;
+5. artifact zero-byte;
+6. artifact dari failed job;
+7. duplicate active artifact version;
+8. deliverable tanpa artifacts;
+9. deliverable missing required artifact;
+10. published deliverable dengan invalid artifact;
+11. preview claim tanpa preview object;
+12. final claim tanpa final file;
+13. files unlocked tanpa canonical access condition;
+14. paid/unlock eligible tetapi tetap locked;
+15. manual override tanpa audit reason;
+16. signed URL generated untuk revoked artifact;
+17. cross-tenant association;
+18. orphan storage object bila dapat dideteksi;
+19. orphan artifact;
+20. duplicate active deliverable;
+21. demo/placeholder artifact in production;
+22. noText/overlay failure artifact published;
+23. final version ambiguity;
+24. customer visible internal-only artifact;
+25. expired/revoked access grant masih digunakan.
+
+Output:
+
+{
+  scannedAt,
+  scope,
+  findings: [
+    {
+      type,
+      severity,
+      tenantId,
+      projectId,
+      artifactId,
+      deliverableId,
+      reason,
+      recommendedAction
+    }
+  ]
+}
+
+Default read-only.
+
+Repair tidak wajib.
+
+Jika repair dibuat:
+
+- dry-run default;
+- audit logged;
+- idempotent;
+- tidak membuat artifact;
+- tidak membuat file palsu;
+- tidak mengubah payment;
+- tidak memverifikasi payment;
+- tidak membuka file tanpa policy;
+- tidak destructive delete;
+- tidak memaksa completed.
+
+==================================================
+PHASE 18 — TENANT ISOLATION
+==================================================
+
+Semua repository/service harus:
+
+- menggunakan canonical RequestContext;
+- tenant-scoped;
+- fail closed;
+- tidak mempercayai tenantId dari request body;
+- mencegah cross-tenant artifact association;
+- mencegah cross-tenant deliverable association;
+- mencegah cross-tenant signed URL;
+- mencegah access grant lintas tenant;
+- mencegah storage object collision lintas tenant.
+
+Tambahkan test:
+
+- Tenant A tidak membaca artifact Tenant B;
+- Tenant A tidak mengunduh deliverable Tenant B;
+- Tenant A tidak memperoleh signed URL Tenant B;
+- admin tenant-scoped tidak bypass;
+- platform scope explicit;
+- scanner tenant-scoped;
+- object key injection denied.
+
+==================================================
+PHASE 19 — OBSERVABILITY AND AUDIT
+==================================================
+
+Pastikan event/log tersedia untuk:
+
+- artifact pending;
+- storage upload started;
+- storage upload succeeded;
+- storage upload failed;
+- artifact validated;
+- artifact rejected;
+- deliverable assembled;
+- deliverable published;
+- deliverable revoked;
+- preview accessed;
+- final access granted;
+- final access denied;
+- signed URL generated;
+- download initiated;
+- download failed;
+- admin override created/revoked;
+- anomaly detected.
+
+Gunakan correlation IDs:
+
+- tenantId
+- customerId
+- orderId
+- projectId
+- workflowId
+- jobId
+- artifactId
+- deliverableId
+- accessGrantId
+
+Jangan log:
+
+- secret;
+- full signed token;
+- raw credential;
+- private file content.
+
+==================================================
+PHASE 20 — REQUIRED REGRESSION TESTS
+==================================================
+
+Tambahkan minimal tests berikut:
+
+1. Valid job output creates artifact.
+2. Null output cannot create artifact.
+3. Empty output cannot create artifact.
+4. Failed job cannot create final artifact.
+5. Renderer failure cannot publish artifact.
+6. noText/overlay failure cannot become final artifact.
+7. Artifact requires authoritative tenant/project relation.
+8. Artifact without storage reference invalid.
+9. Missing storage object invalidates readiness.
+10. Zero-byte object invalid.
+11. MIME mismatch rejected.
+12. Placeholder/demo object rejected in production.
+13. Retry does not duplicate active artifact.
+14. Artifact version increments deterministically.
+15. Duplicate active version prevented.
+16. Deliverable requires all mandatory artifacts.
+17. Deliverable cannot publish with failed artifact.
+18. Empty deliverable rejected.
+19. Preview distinct from final file.
+20. Preview access does not grant final access.
+21. Final signed URL requires authorization.
+22. Arbitrary object key rejected.
+23. Cross-tenant signed URL denied.
+24. Revoked artifact cannot be downloaded.
+25. Expired grant denied.
+26. Duplicate active grant idempotent.
+27. Partial/unpaid policy keeps final locked.
+28. Canonical unlock condition unlocks final file.
+29. Paid/eligible but locked anomaly detected.
+30. Unpaid but unlocked anomaly detected.
+31. Manual override requires actor, reason, and audit.
+32. Manual override does not mark payment paid.
+33. production_completed requires required artifact.
+34. deliverable_ready requires storage integrity.
+35. files_unlocked requires deliverable_ready.
+36. delivery completion does not imply commercial completion.
+37. Orphan artifact detected.
+38. Published deliverable missing file detected.
+39. Internal artifact not exposed to customer.
+40. Valid end-to-end artifact flow reaches deliverable_ready.
+
+Tambahkan test lain sesuai root cause.
+
+==================================================
+PHASE 21 — TARGETED VERIFICATION
+==================================================
+
+Jalankan:
+
+- artifact tests;
+- deliverable tests;
+- storage tests;
+- signed URL tests;
+- download authorization tests;
+- access grant tests;
+- unlock policy tests;
+- scanner tests;
+- tenant isolation tests.
+
+Laporkan angka aktual:
+
+- test files;
+- tests;
+- passed;
+- failed;
+- skipped;
+- duration.
+
+==================================================
+PHASE 22 — FULL REGRESSION
+==================================================
+
+Setelah targeted pass:
+
+1. Jalankan seluruh api-server suite.
+2. Jalankan shared library suite bila terpengaruh.
+3. Jalankan customer/admin tests bila mapping akses berubah.
+4. Jalankan full repository suite bila feasible.
+5. Catat baseline vs hasil akhir.
+6. Pisahkan pre-existing failure dari regression baru.
+
+Jangan mengklaim pass tanpa angka.
+
+==================================================
+PHASE 23 — TYPECHECK AND BUILD
+==================================================
+
+Jalankan:
+
+- shared library build jika dibutuhkan;
+- api-server typecheck;
+- customer portal typecheck bila contract berubah;
+- admin portal typecheck bila contract berubah;
+- production build terkait;
+- git diff --check.
+
+Laporkan:
+
+- new errors;
+- pre-existing errors;
+- environmental blockers.
+
+Tidak boleh ada error baru dari Team 44.
+
+==================================================
+PHASE 24 — CONFLICT REVIEW
+==================================================
+
+Identifikasi overlap dengan:
+
+- Team 42 billing/unlock input;
+- Team 43 output/renderer boundary;
+- Team 45 customer file status;
+- Team 46 admin artifact visibility;
+- Team 39 integration.
+
+Buat matrix:
+
+File
+| Change
+| Shared Team
+| Risk
+| Integration Note
+
+Jangan mengubah file Team 42/43/45/46 lebih luas dari contract mapping.
+
+==================================================
+PHASE 25 — DOCUMENTATION
+==================================================
+
+Buat:
+
+TEAM44_ARTIFACT_DELIVERABLE_AUDIT_REPORT.md
+
+Isi minimal:
+
+A. Baseline
+B. Artifact Inventory
+C. Deliverable Inventory
+D. Source of Truth
+E. Storage Architecture
+F. Artifact Validation
+G. Versioning
+H. Deliverable Publication
+I. Preview Policy
+J. Signed URL Security
+K. Unlock Policy
+L. Access Grants
+M. Download Authorization
+N. Completion Guards
+O. Health Scanner
+P. Tenant Isolation
+Q. Observability
+R. Files Changed
+S. Tests
+T. Typecheck
+U. Builds
+V. Conflict Risks
+W. Remaining Risks
+
+Jangan masukkan secret atau signed URL token.
+
+==================================================
+PHASE 26 — COMMIT AND PUSH
+==================================================
+
+Sebelum commit:
+
+git branch --show-current
+git status --short
+git diff --stat
+git diff --check
+git diff
+
+Pastikan tidak ada:
+
+- unrelated changes;
+- environment secrets;
+- generated caches;
+- production files;
+- formatting massal;
+- perubahan billing/workflow/UI di luar scope.
+
+Commit message:
+
+fix(artifacts): enforce deliverable and file access integrity
+
+Jika hanya audit:
+
+docs(audit): map artifact and deliverable lifecycle
+
+Push:
+
+git push -u origin audit/team-44-artifact-deliverable
+
+Jangan merge.
+
+==================================================
+FINAL REPORT FORMAT
+==================================================
+
+A. Branch
+
+B. Base Commit
+
+C. Team 41 Commit Used
+
+D. Baseline Tests
+
+E. Artifact Inventory
+
+F. Deliverable Inventory
+
+G. Canonical Source of Truth
+
+H. Artifact Creation Boundary
+
+I. Artifact Validation Findings
+
+J. Storage Persistence Findings
+
+K. Storage Integrity Findings
+
+L. Versioning Findings
+
+M. Deliverable Assembly Findings
+
+N. Publication Findings
+
+O. Preview Policy
+
+P. Signed URL Security
+
+Q. Unlock Policy
+
+R. Access Grant Model
+
+S. Download Authorization
+
+T. Completion Guard Changes
+
+U. Health Scanner
+
+V. Tenant Isolation
+
+W. Observability
+
+X. Files Changed
+
+Y. Tests Added
+
+Z. Targeted Test Results
+
+AA. Full Regression Results
+
+AB. Typecheck
+
+AC. Builds
+
+AD. Conflict Risk Matrix
+
+AE. Remaining Risks
+
+AF. Commit Hash
+
+AG. Push Verification
+
+AH. Final Verdict
+
+Allowed verdicts:
+
+PASS — ARTIFACT AND DELIVERY INTEGRITY VERIFIED
+
+PASS WITH NON-BLOCKING RISKS
+
+REVISION REQUIRED
+
+BLOCKED — TEAM 41 CONTRACT MISSING
+
+BLOCKED — TEAM 42 POLICY INPUT MISSING
+
+BLOCKED — STORAGE ENVIRONMENT
+
+BLOCKED — DATABASE
+
+BLOCKED — TEST ENVIRONMENT
+
+BLOCKED — PUSH AUTH
+
+==================================================
+PASS CRITERIA
+==================================================
+
+Jangan gunakan PASS kecuali:
+
+- required production output memiliki artifact;
+- artifact memiliki storage object valid;
+- artifact dari failed job ditolak;
+- placeholder/demo output ditolak;
+- noText/overlay failure tidak menjadi final artifact;
+- required deliverable tidak dapat publish dalam keadaan kosong;
+- preview dan final file dibedakan;
+- signed URL authorization tenant/customer scoped;
+- arbitrary object key tidak diterima;
+- final unlock mengikuti canonical payment/access policy;
+- manual admin override diaudit dan tidak mengubah payment;
+- completed/ready state tidak diberikan tanpa evidence file nyata;
+- cross-tenant tests pass;
+- anomaly scanner tersedia atau gap didokumentasikan;
+- targeted tests pass;
+- tidak ada regression baru;
+- typecheck tidak memiliki error baru;
+- build terkait berhasil;
+- commit dan push terverifikasi.
+
+==================================================
+IMPORTANT BOUNDARIES
+==================================================
+
+Team 44 TIDAK BOLEH:
+
+- menghitung remaining balance;
+- membuat invoice;
+- memverifikasi payment;
+- mengubah job menjadi success;
+- memaksa renderer success;
+- membuat artifact palsu;
+- menggunakan static/demo file sebagai final;
+- membuka file hanya karena admin menekan tombol tanpa policy;
+- mengubah production data secara manual;
+- melakukan destructive cleanup;
+- menganggap DB row sebagai bukti storage object;
+- menyamakan preview dengan final deliverable;
+- merge ke main atau branch integrasi.
+
+Team 44 HARUS:
+
+- menunjukkan root cause dengan file dan function;
+- memakai source of truth canonical;
+- menjaga backward compatibility;
+- menambahkan regression tests;
+- melaporkan blocker secara jujur;
+- menyerahkan commit hash ke Team 39.
