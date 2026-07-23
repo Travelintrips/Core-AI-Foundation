@@ -1,0 +1,464 @@
+ROLE
+
+Lanjutkan DEV E2E GAP CLOSURE dari checkpoint terakhir.
+
+Jangan mengulang eksplorasi repository dari awal.
+Jangan deploy.
+Jangan publish.
+Jangan reset perubahan yang sudah ada.
+Jangan menulis ulang arsitektur.
+
+Checkpoint terakhir:
+
+- DB-backed submit idempotency sudah tersedia;
+- customer portal sudah mengintegrasikan claimFingerprint, commitFingerprint, releaseFingerprint;
+- notification tenantId fix sudah tersedia;
+- dev payment test router sudah dimount;
+- targeted tests sudah dijalankan;
+- dua kelompok failure telah didiagnosis;
+- quota habis saat empat fix akan diterapkan.
+
+==================================================
+MANDATORY FIRST CHECK
+==================================================
+
+Sebelum menulis kode:
+
+1. Periksa branch.
+2. Periksa working tree.
+3. Tampilkan modified/untracked files.
+4. Periksa apakah empat fix terakhir sempat tersimpan sebagian.
+5. Jangan reset.
+6. Jangan checkout paksa.
+7. Jangan membuang test yang gagal.
+
+==================================================
+KNOWN ROOT CAUSE 1 — DEF-001 TEST ISOLATION
+==================================================
+
+Masalah:
+
+_submitDedup adalah module-level cache dan bertahan antar-test.
+
+Akibat:
+
+- test kedua dan ketiga dapat membaca data L1 cache dari test sebelumnya;
+- DB mock tidak dipanggil seperti yang diharapkan;
+- hasil test tidak independen.
+
+Implementasikan test-only cache reset yang aman.
+
+Contoh tujuan:
+
+export function _testClearSubmitDedupCache(): void
+
+atau nama setara yang konsisten dengan repository.
+
+Rules:
+
+- hanya untuk test;
+- jangan diekspos melalui public API production;
+- jangan mengubah runtime behavior;
+- jangan menjadikan in-memory cache sebagai source of truth;
+- DB-backed idempotency tetap primary guarantee.
+
+Panggil reset tersebut pada beforeEach/afterEach targeted tests.
+
+==================================================
+KNOWN ROOT CAUSE 2 — DEF-001 INSERT COUNT ASSERTION
+==================================================
+
+Satu project creation yang berhasil melakukan sekitar tiga insert:
+
+1. project;
+2. review;
+3. dashboard token/record.
+
+Test sebelumnya salah mengharapkan:
+
+db.insert dipanggil satu kali.
+
+Perbaiki assertion agar memverifikasi hal yang benar.
+
+Jangan hanya mengganti menjadi:
+
+toHaveBeenCalledTimes(3)
+
+tanpa memastikan insert mana yang project.
+
+Lebih baik:
+
+- inspeksi target table;
+- identifikasi project insert;
+- pastikan project insert hanya satu;
+- pastikan duplicate request tidak membuat project insert kedua;
+- pastikan review/dashboard record juga tidak terduplikasi secara tidak sah.
+
+Gunakan table-aware atau payload-aware assertion.
+
+==================================================
+KNOWN ROOT CAUSE 3 — DEF-004 INTERNAL CLOSURE MOCKING
+==================================================
+
+Masalah:
+
+listWorkspaceNotifications() memanggil listAllWorkspaceProjects()
+melalui referensi internal module.
+
+Mock exported function tidak mengganti referensi closure tersebut.
+
+Akibat:
+
+- test tidak menggunakan mocked project data;
+- real DB path mengembalikan zero projects;
+- notification result kosong.
+
+Jangan mengubah production service hanya agar mock bekerja secara tidak wajar.
+
+Gunakan salah satu pendekatan aman:
+
+A. Ekstrak pure function:
+
+buildWorkspaceNotificationsFromProjects(...)
+
+atau nama canonical setara.
+
+B. Dependency injection kecil pada internal helper jika repository sudah memakai pola tersebut.
+
+Rekomendasi:
+
+Ekstrak pure function yang menerima:
+
+- projects;
+- reviews;
+- jobs/workflow data;
+- current time jika diperlukan;
+- tenant context.
+
+Pure function mengembalikan WorkspaceNotification[].
+
+Kemudian:
+
+listWorkspaceNotifications()
+tetap bertanggung jawab mengambil data dari DB,
+lalu memanggil pure function tersebut.
+
+Targeted test menguji pure function secara langsung,
+tanpa DB mock yang rapuh.
+
+==================================================
+KNOWN ROOT CAUSE 4 — DEV PAYMENT NOTE
+==================================================
+
+Test mendeteksi substring:
+
+"MIDTRANS PASS"
+
+di note field development adapter.
+
+Hapus wording tersebut sepenuhnya.
+
+Gunakan wording yang jujur:
+
+PAYMENT BUSINESS FLOW PASS USING DEVELOPMENT TEST ADAPTER
+
+Pastikan tidak ada string yang dapat disalahartikan sebagai:
+
+- Midtrans live verified;
+- payment provider production verified;
+- real gateway pass.
+
+Cari seluruh repository untuk:
+
+MIDTRANS PASS
+
+Pastikan tidak tersisa pada adapter atau report baru,
+kecuali sedang mengutip prohibited wording dalam test/documentation.
+
+==================================================
+PHASE 1 — APPLY MINIMAL FIXES
+==================================================
+
+Implementasikan hanya:
+
+1. test-only dedup cache clear;
+2. correct project-insert assertions;
+3. pure notification builder;
+4. payment adapter wording correction.
+
+Jangan melakukan refactor besar.
+
+==================================================
+PHASE 2 — RUN TARGETED TESTS
+==================================================
+
+Jalankan targeted test files secara eksplisit.
+
+Jangan memakai npm argument syntax yang membuat seluruh 178 tests berjalan tanpa sengaja.
+
+Gunakan command yang benar untuk test runner repository.
+
+Kelompokkan hasil:
+
+A. Submit idempotency
+
+B. Notification mapping
+
+C. Auth session contract
+
+D. Dev payment adapter
+
+Laporkan per file:
+
+- tests;
+- passed;
+- failed;
+- duration.
+
+==================================================
+PHASE 3 — VERIFY DEF-001 BEHAVIOR
+==================================================
+
+Pastikan tests membuktikan:
+
+- concurrent identical requests menghasilkan satu project;
+- duplicate response mengarah ke project canonical yang sama;
+- DB-backed claim hanya satu yang menang;
+- in-memory cache tidak mempengaruhi isolation antar-test;
+- same key different tenant tidak collide;
+- same key different payload menghasilkan conflict atau behavior canonical;
+- failed transaction me-release fingerprint;
+- no duplicate project insert;
+- no duplicate workflow/job/payment schedule.
+
+Jangan hanya memeriksa jumlah semua db.insert calls.
+
+==================================================
+PHASE 4 — VERIFY DEF-004 BEHAVIOR
+==================================================
+
+Test pure notification builder untuk:
+
+- type populated;
+- tenantId populated;
+- unknown type fallback;
+- platform notification handling;
+- Tenant A/Tenant B isolation;
+- no undefined tenant wildcard;
+- deterministic ordering jika kontrak menuntut;
+- no duplicate notification from repeated source data.
+
+Kemudian jalankan minimal satu integration/runtime test untuk memastikan DB-to-API path tetap bekerja.
+
+==================================================
+PHASE 5 — AUTH CONTRACT
+==================================================
+
+Verifikasi kembali:
+
+GET /api/internal/auth/me
+
+Expected classification:
+
+NOT A PRODUCT DEFECT — SESSION-ONLY BY DESIGN
+
+Test:
+
+- no cookie → unauthenticated;
+- admin API key only → tetap unauthenticated;
+- valid session cookie → success;
+- frontend caller menggunakan session flow yang benar.
+
+Jangan menambahkan admin-key bypass.
+
+==================================================
+PHASE 6 — DEV PAYMENT ADAPTER
+==================================================
+
+Run tests untuk:
+
+- disabled by default;
+- not mounted in production;
+- unauthorized rejected;
+- authorized dev/test allowed;
+- success;
+- pending;
+- failed;
+- expired;
+- duplicate callback;
+- invalid signature;
+- partial payment;
+- installment completion;
+- commercial completion;
+- no premature unlock;
+- tenant isolation.
+
+Final report wording wajib:
+
+PAYMENT BUSINESS FLOW PASS USING DEVELOPMENT TEST ADAPTER
+
+==================================================
+PHASE 7 — FULL REGRESSION
+==================================================
+
+Setelah targeted tests lulus:
+
+jalankan full regression suite.
+
+Baseline:
+
+5,346 / 5,346 PASS
+
+Expected:
+
+- seluruh baseline tetap pass;
+- test count bertambah;
+- 0 failure baru.
+
+Laporkan:
+
+- total;
+- passed;
+- failed;
+- skipped;
+- duration.
+
+==================================================
+PHASE 8 — TYPECHECK AND BUILD
+==================================================
+
+Urutan:
+
+1. build shared libs;
+2. changed-scope typecheck;
+3. API build;
+4. Customer Portal build;
+5. Admin Portal build;
+6. workspace typecheck.
+
+Pisahkan:
+
+- errors dari perubahan baru;
+- pre-existing cargo-finder errors;
+- pre-existing mockup-sandbox errors;
+- pre-existing 21 PptxGenJS namespace errors.
+
+Gunakan wording:
+
+CHANGED SCOPE TYPECHECK CLEAN
+
+jika global workspace masih memiliki pre-existing debt.
+
+==================================================
+PHASE 9 — CLEAN RESTART
+==================================================
+
+Restart development services.
+
+Verifikasi:
+
+- API starts;
+- routes mount once;
+- idempotency table ensure succeeds;
+- no syntax error;
+- no duplicate router;
+- payment adapter protected;
+- workers connected;
+- no unhandled rejection.
+
+==================================================
+PHASE 10 — CONTINUE REMAINING E2E GAPS
+==================================================
+
+Setelah targeted and regression tests lulus,
+lanjutkan gap yang belum selesai:
+
+1. canonical review route discovery;
+2. review/comment/approve/revision;
+3. completed project fixture;
+4. payment completion via dev adapter;
+5. real PPTX generation;
+6. real ZIP generation and extraction;
+7. unlock matrix;
+8. signed download;
+9. Tenant B denial;
+10. Customer/Admin state consistency.
+
+Jangan menyatakan semua critical flows pass sebelum bagian ini selesai.
+
+==================================================
+REPORT UPDATE
+==================================================
+
+Perbarui:
+
+DEV_E2E_VERIFICATION_REPORT.md
+DEV_E2E_FAILURES.json
+DEV_E2E_COVERAGE_MATRIX.json
+DEV_E2E_VERDICT.json
+
+Tambahkan:
+
+A. Test failure root causes
+
+B. Cache isolation correction
+
+C. Project-insert assertion correction
+
+D. Pure notification builder
+
+E. Payment wording correction
+
+F. Targeted test results
+
+G. Regression results
+
+H. Typecheck
+
+I. Build
+
+J. Restart status
+
+K. Remaining E2E gaps
+
+L. Files changed
+
+M. Commit hash
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Gunakan salah satu:
+
+DEV PASS — ALL CRITICAL FLOWS FUNCTION CORRECTLY
+
+DEV PASS WITH LOW-RISK OBSERVATIONS
+
+DEV BLOCKED — TARGETED TEST FAILURE
+
+DEV BLOCKED — DUPLICATE PROJECT RISK
+
+DEV BLOCKED — PAYMENT FLOW UNVERIFIED
+
+DEV BLOCKED — REVIEW FLOW UNVERIFIED
+
+DEV BLOCKED — ARTIFACT DELIVERY FLOW UNVERIFIED
+
+DEV BLOCKED — REGRESSION FAILURE
+
+DEV BLOCKED — BUILD FAILURE
+
+==================================================
+IMPORTANT
+==================================================
+
+- Jangan deploy.
+- Jangan publish.
+- Jangan menghapus failing tests.
+- Jangan melemahkan assertions.
+- Jangan mengubah production auth contract.
+- Jangan menganggap semua db.insert calls adalah project insert.
+- Jangan memakai fragile module-closure mock jika pure function lebih tepat.
+- Jangan menyatakan Midtrans berhasil.
+- Jangan menyatakan DEV PASS penuh sebelum review, PPTX, ZIP, unlock, dan download terbukti.
