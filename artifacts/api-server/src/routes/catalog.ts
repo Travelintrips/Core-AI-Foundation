@@ -1076,12 +1076,19 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
   let paymentStatus: string = "pending";
   let remainingBalance: number | null = null;
 
+  // RC-3 fix: expose production status and whether any billing record exists so
+  // the customer portal can render the correct state (production_in_progress /
+  // billing_pending / awaiting_payment / complete) without guessing.
+  let productionStatus: string | null = null;
+  let invoiceExists = false;
+
   if (row.createdProjectId) {
     const [project] = await db
       .select({
         id: creativeProjectsTable.id,
         filesUnlocked: creativeProjectsTable.filesUnlocked,
         paymentStatus: creativeProjectsTable.paymentStatus,
+        status: creativeProjectsTable.status,
       })
       .from(creativeProjectsTable)
       .where(eq(creativeProjectsTable.projectId, row.createdProjectId))
@@ -1090,6 +1097,7 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
     if (project) {
       filesUnlocked = project.filesUnlocked ?? false;
       paymentStatus = project.paymentStatus ?? paymentStatus;
+      productionStatus = project.status;
 
       // Sum unpaid installments for remaining balance display.
       // Primary: ai_payment_schedules (fixed_price flow).
@@ -1103,6 +1111,14 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
             ne(aiPaymentScheduleTable.status, "cancelled"),
           ),
         );
+
+      // If any schedule rows exist, billing is in motion (invoice exists in spirit).
+      const [anySchedule] = await db
+        .select({ id: aiPaymentScheduleTable.id })
+        .from(aiPaymentScheduleTable)
+        .where(eq(aiPaymentScheduleTable.projectId, project.id))
+        .limit(1);
+      if (anySchedule) invoiceExists = true;
 
       if (unpaid.length > 0) {
         remainingBalance = unpaid.reduce((sum, r) => sum + parseFloat(String(r.amount ?? "0")), 0);
@@ -1122,10 +1138,19 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
           );
 
         if (unpaidInvoices.length > 0) {
+          invoiceExists = true;
           remainingBalance = unpaidInvoices.reduce(
             (sum, r) => sum + parseFloat(String(r.amount ?? "0")),
             0,
           );
+        } else {
+          // Check whether ANY invoice record exists (even paid ones).
+          const [anyInvoice] = await db
+            .select({ id: aiInvoicesTable.id })
+            .from(aiInvoicesTable)
+            .where(eq(aiInvoicesTable.projectId, project.id))
+            .limit(1);
+          if (anyInvoice) invoiceExists = true;
         }
       }
     }
@@ -1167,6 +1192,10 @@ router.get("/public/catalog/requests/:requestId", async (req, res): Promise<void
     filesUnlocked,                                // P0-6: for portal lock screen
     paymentStatus,                                // P0-6: current payment status
     remainingBalance,                             // P0-6: how much is owed
+    // RC-3: customer portal uses these to derive the correct display state
+    // without having to re-query the project or guess from status strings.
+    productionStatus,   // creative_projects.status or null when no project linked
+    invoiceExists,      // true when at least one ai_payment_schedule or ai_invoice row exists
     createdAt: row.createdAt,
     // Customer-facing breakdown: lineItems + basePrice from snapshot so
     // the portal can render an accurate itemised breakdown without

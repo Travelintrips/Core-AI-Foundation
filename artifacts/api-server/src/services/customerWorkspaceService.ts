@@ -121,6 +121,17 @@ function stageForStatus(status: string, sourceType: "direct" | "service_catalog"
     in_progress: "production",
     building: "production",
     running: "production",
+    // RC-4 fix: generating_document / generating_presentation are intermediate
+    // statuses emitted by creativeWorkflowRunner after the AI pipeline finishes
+    // and before the PDF/PPTX export worker marks the project completed.
+    // Mapping them to "production" keeps the timeline accurate.
+    generating_document:     "production",
+    generating_presentation: "production",
+    // outputs_ready is emitted by the public Interior Design domain flow;
+    // mapping it to "production" (done) keeps the timeline correct.
+    outputs_ready:   "production",
+    brief_submitted: "brief_completed",
+    analyzing:       "production",
     internal_review: "internal_qc",
     waiting_review: "client_review",
     waiting_client_review: "client_review",

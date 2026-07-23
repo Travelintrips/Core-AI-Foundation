@@ -1,0 +1,798 @@
+MASTER AUDIT — END-TO-END CREATIVE AI ORDER FLOW
+ORDER → BRIEF → WORKFLOW → PRODUCTION → DELIVERABLE → INVOICE → PAYMENT → CUSTOMER DELIVERY
+
+TUJUAN
+
+Lakukan audit end-to-end terhadap seluruh alur pemesanan Creative AI, khususnya
+layanan Interior Design.
+
+Masalah nyata yang harus direproduksi:
+
+1. Customer membuat pesanan Interior Design.
+2. Pesanan langsung masuk ke tahap hasil produksi.
+3. Halaman hasil produksi dapat dibuka, tetapi isinya kosong.
+4. Customer melihat status "Menunggu Pelunasan".
+5. Halaman customer menyatakan:
+   - proyek selesai;
+   - file final terkunci;
+   - file akan dibuka setelah pelunasan.
+6. Namun pada Admin Panel:
+   - data pembayaran kosong;
+   - invoice/tagihan tidak terbentuk atau tidak terlihat;
+   - hasil produksi/deliverable juga kosong.
+
+Audit harus menemukan root cause pasti, memperbaiki alurnya, dan menambahkan
+regression test.
+
+Jangan hanya memperbaiki tampilan.
+
+==================================================
+ATURAN WAJIB
+==================================================
+
+1. Mulai dengan audit read-only.
+2. Jangan langsung mengubah status database.
+3. Jangan membuat data dummy sebagai solusi produksi.
+4. Jangan hard-code khusus Interior Design jika penyebabnya ada di workflow
+   universal.
+5. Gunakan source of truth existing.
+6. Jangan membuat tabel atau status tandingan tanpa kebutuhan yang terbukti.
+7. Jangan menganggap project selesai hanya karena workflow step terakhir aktif.
+8. Jangan menganggap pembayaran diperlukan jika invoice belum terbentuk.
+9. Jangan menampilkan file terkunci jika file final sebenarnya belum ada.
+10. Semua perubahan harus backward-compatible dan tenant-safe.
+
+==================================================
+PHASE 1 — REPRODUCE THE BUG
+==================================================
+
+Reproduksi menggunakan satu order Interior Design baru.
+
+Catat:
+
+- request/order ID;
+- customer ID;
+- tenant/company ID;
+- service type;
+- brief ID;
+- project ID;
+- workflow ID;
+- workflow step IDs;
+- AI job IDs;
+- artifact IDs;
+- deliverable IDs;
+- quotation ID;
+- invoice ID;
+- payment ID;
+- review token;
+- customer portal URL;
+- admin portal URL.
+
+Buat timeline dari awal sampai kondisi error:
+
+- order created;
+- brief submitted;
+- quotation created;
+- approval;
+- payment request;
+- workflow created;
+- job queued;
+- job running;
+- output generated;
+- artifact persisted;
+- deliverable published;
+- invoice created;
+- payment verified;
+- file unlocked.
+
+Untuk setiap tahapan, tampilkan:
+
+- timestamp;
+- table;
+- record ID;
+- status before;
+- status after;
+- actor/service yang mengubah;
+- API endpoint;
+- background worker;
+- error log bila ada.
+
+==================================================
+PHASE 2 — MAP THE CANONICAL ORDER LIFECYCLE
+==================================================
+
+Cari semua status yang digunakan oleh:
+
+- customer request;
+- order;
+- creative project;
+- workflow;
+- workflow step;
+- AI job;
+- artifact;
+- deliverable;
+- quotation;
+- invoice;
+- payment;
+- customer review;
+- final delivery.
+
+Buat tabel:
+
+Domain | Table/model | Status field | Allowed statuses | Updated by | Used by UI
+
+Periksa apakah ada status yang tumpang tindih, misalnya:
+
+- completed;
+- production_completed;
+- ready_for_review;
+- final_ready;
+- awaiting_payment;
+- payment_pending;
+- paid;
+- delivered;
+- locked.
+
+Tentukan source of truth untuk:
+
+1. Pekerjaan mulai dikerjakan.
+2. Pekerjaan selesai diproduksi.
+3. Draft tersedia.
+4. File final tersedia.
+5. Invoice sudah dibuat.
+6. Pembayaran masih kurang.
+7. Pembayaran sudah lunas.
+8. File customer boleh dibuka.
+9. Order benar-benar selesai.
+
+Jangan menggunakan satu status generik "completed" untuk semua domain.
+
+==================================================
+PHASE 3 — AUDIT SERVICE-SPECIFIC WORKFLOW
+==================================================
+
+Audit konfigurasi layanan Interior Design.
+
+Bandingkan dengan layanan lain yang berjalan normal.
+
+Periksa:
+
+- service registry;
+- workflow template;
+- workflow stage generator;
+- agent assignment;
+- production pipeline;
+- deliverable mapper;
+- document/image renderer;
+- customer portal adapter;
+- admin portal adapter.
+
+Pastikan Interior Design tidak salah memakai:
+
+- workflow template dari layanan lain;
+- stage order yang salah;
+- terminal stage sebagai initial stage;
+- demo workflow;
+- fallback workflow;
+- mock output;
+- placeholder result;
+- auto-complete flag;
+- skip production flag;
+- synchronous fake completion.
+
+Cari kemungkinan seperti:
+
+- default status langsung `completed`;
+- index stage dimulai dari stage terakhir;
+- empty stage list dianggap selesai;
+- missing plugin dianggap sukses;
+- missing renderer dianggap sukses;
+- skipped agent dianggap completed;
+- job creation gagal tetapi project tetap lanjut;
+- service slug mismatch;
+- category mismatch;
+- workflow template tidak ditemukan lalu memakai fallback yang salah.
+
+Laporkan root cause berdasarkan file dan line.
+
+==================================================
+PHASE 4 — AUDIT ORDER CREATION
+==================================================
+
+Trace endpoint yang membuat pesanan.
+
+Periksa urutan transaksi:
+
+1. request created;
+2. service resolved;
+3. brief saved;
+4. quotation created;
+5. project created;
+6. workflow created;
+7. initial step created;
+8. AI job queued;
+9. customer status returned.
+
+Pastikan:
+
+- project tidak dibuat dalam status selesai;
+- workflow tidak otomatis complete;
+- initial step benar;
+- order/service type tidak hilang;
+- service plugin berhasil ditemukan;
+- transaction tidak partial;
+- kegagalan child record tidak meninggalkan order seolah sukses.
+
+Jika ada multi-table insert, pastikan atomic atau memiliki recovery state yang
+jujur.
+
+==================================================
+PHASE 5 — AUDIT WORKFLOW AND JOB EXECUTION
+==================================================
+
+Trace seluruh job untuk order yang direproduksi.
+
+Periksa:
+
+- job dibuat atau tidak;
+- queue worker mengambil job atau tidak;
+- agent/provider/model ter-resolve;
+- input tersedia;
+- output tervalidasi;
+- output tersimpan;
+- error tersimpan;
+- retry terjadi;
+- job selesai secara valid.
+
+Cari kondisi berbahaya:
+
+- missing output tetap ditandai success;
+- `{}` dianggap output valid;
+- `null` dianggap complete;
+- exception ditelan;
+- timeout dianggap success;
+- skipped job dianggap successful;
+- no renderer dianggap completed;
+- worker tidak aktif tetapi step tetap maju;
+- job status dan workflow status tidak sinkron.
+
+Aturan yang harus diberlakukan:
+
+A production step hanya boleh `completed` jika:
+
+- job sukses;
+- output contract valid;
+- required output fields tersedia;
+- artifact/deliverable persistence sukses;
+- tidak ada unresolved blocking error.
+
+==================================================
+PHASE 6 — AUDIT ARTIFACT AND DELIVERABLE CREATION
+==================================================
+
+Audit tabel dan service:
+
+- assets;
+- artifacts;
+- project outputs;
+- deliverables;
+- final files;
+- preview files;
+- thumbnails;
+- versions;
+- storage references.
+
+Untuk order Interior Design, periksa:
+
+- apakah artifact record ada;
+- apakah file URL/path ada;
+- apakah object storage file benar-benar ada;
+- apakah MIME type benar;
+- apakah file size lebih dari 0;
+- apakah preview berhasil;
+- apakah final asset berhasil;
+- apakah record tenant/project/order cocok;
+- apakah customer portal membaca tabel yang sama.
+
+Periksa apakah UI hasil produksi kosong karena:
+
+- API mengembalikan array kosong;
+- query menggunakan ID yang salah;
+- project ID dibandingkan dengan request ID;
+- filter tenant salah;
+- status filter terlalu ketat;
+- artifact type tidak dikenali;
+- Interior Design menghasilkan format berbeda;
+- output tersimpan di tabel legacy;
+- output hanya ada di AI job result JSON;
+- storage URL expired;
+- renderer belum dijalankan;
+- final deliverable tidak dipublish.
+
+Jangan menandai produksi selesai jika tidak ada minimum satu deliverable valid.
+
+==================================================
+PHASE 7 — AUDIT CUSTOMER RESULT PAGE
+==================================================
+
+Audit halaman hasil customer.
+
+Cari condition yang menampilkan:
+
+- "Menunggu Pelunasan";
+- "File Final Terkunci";
+- "Proyek Anda telah selesai dikerjakan";
+- daftar file final;
+- tombol pembayaran;
+- status project.
+
+Pastikan halaman tidak hanya membaca:
+
+- project.status === completed;
+- workflow.progress === 100;
+- lastStep.status === completed.
+
+Customer result page harus menerima view model canonical seperti:
+
+{
+  projectStatus,
+  productionStatus,
+  deliverableStatus,
+  billingStatus,
+  paymentStatus,
+  accessStatus,
+  availableDeliverables,
+  amountDue,
+  invoiceId,
+  paymentInstructions,
+  blockingReason
+}
+
+Aturan UI:
+
+1. Jika produksi belum selesai:
+   tampilkan "Sedang Diproduksi".
+
+2. Jika produksi gagal:
+   tampilkan "Produksi Memerlukan Tindakan".
+
+3. Jika produksi selesai tetapi deliverable belum tersedia:
+   tampilkan "File sedang dipersiapkan", bukan "File final terkunci".
+
+4. Jika deliverable tersedia tetapi invoice belum dibuat:
+   tampilkan "Tagihan sedang dipersiapkan".
+
+5. Jika invoice tersedia dan masih ada saldo:
+   tampilkan "Menunggu Pelunasan".
+
+6. Jika pembayaran sedang diverifikasi:
+   tampilkan "Pembayaran sedang diverifikasi".
+
+7. Jika lunas:
+   buka file final.
+
+8. Jika tidak ada file final:
+   jangan tampilkan daftar file palsu seperti PNG HD, SVG, PSD, atau Brand
+   Guideline.
+
+Daftar file harus berasal dari deliverable nyata, bukan teks statis berdasarkan
+service category.
+
+==================================================
+PHASE 8 — AUDIT QUOTATION, INVOICE, AND PAYMENT
+==================================================
+
+Trace seluruh flow komersial:
+
+- quotation;
+- quotation approval;
+- down payment;
+- payment schedule;
+- final invoice;
+- payment submission;
+- payment verification;
+- outstanding balance;
+- invoice status;
+- order payment status.
+
+Periksa:
+
+- quotation ada atau tidak;
+- amount ada atau nol;
+- invoice pernah dibuat atau tidak;
+- invoice dibuat dari quotation mana;
+- invoice terkait order/project yang benar;
+- customerId benar;
+- companyId/tenantId benar;
+- payment terms tersedia;
+- payment record hanya dibuat setelah bukti transfer atau payment gateway;
+- outstanding dihitung benar;
+- admin panel membaca source yang sama.
+
+Cari kemungkinan:
+
+- customer page menghitung billing status dari quotation;
+- admin panel membaca invoice table;
+- invoice tidak pernah dibuat;
+- payment UI membaca legacy payments;
+- pembayaran tersimpan di table lain;
+- order memakai string ID tetapi payment memakai numeric ID;
+- order number dan request ID tertukar;
+- customer route memakai project ID;
+- admin route memakai order ID;
+- invoice generator tidak dipanggil ketika final production selesai;
+- final invoice bergantung pada event yang tidak pernah emitted;
+- status `awaiting_payment` diset tanpa invoice.
+
+Aturan wajib:
+
+`awaiting_payment` hanya boleh aktif jika:
+
+- invoice exists;
+- invoice total > 0;
+- outstanding amount > 0;
+- payment destination tersedia;
+- invoice/customer/order relation valid.
+
+Jika invoice belum terbentuk:
+
+- status harus `billing_pending` atau equivalent;
+- customer tidak boleh diminta transfer berdasarkan data kosong.
+
+==================================================
+PHASE 9 — AUDIT ADMIN PANEL
+==================================================
+
+Audit halaman admin untuk:
+
+- order details;
+- project details;
+- production outputs;
+- quotation;
+- invoice;
+- payment;
+- outstanding balance;
+- workflow progress;
+- job error.
+
+Pastikan Admin Panel menampilkan secara terpisah:
+
+- Production status;
+- Deliverable status;
+- Invoice status;
+- Payment status;
+- Access status.
+
+Jangan gabungkan semua menjadi satu badge `completed`.
+
+Tambahkan diagnostic visibility untuk admin:
+
+- missing workflow;
+- failed AI job;
+- empty output;
+- artifact not persisted;
+- invoice not generated;
+- payment not submitted;
+- payment awaiting verification;
+- broken linkage;
+- missing storage file.
+
+Jika pembayaran kosong, admin harus melihat alasan yang eksplisit, misalnya:
+
+- "Invoice belum dibuat";
+- "Belum ada pembayaran yang disubmit";
+- "Payment record tidak ditemukan";
+- "Quotation belum disetujui";
+- "Relasi invoice-order tidak cocok".
+
+==================================================
+PHASE 10 — EVENT AND STATUS TRANSITION AUDIT
+==================================================
+
+Cari semua event atau function yang dapat mengubah status:
+
+- order completed;
+- workflow completed;
+- production completed;
+- final files ready;
+- invoice generated;
+- payment required;
+- payment verified;
+- files unlocked.
+
+Buat state transition table:
+
+From | Event | Preconditions | To | Side effects | Rollback behavior
+
+Required guards:
+
+A. Workflow completed:
+- all required stages completed;
+- no failed blocking stage;
+- all mandatory output contracts valid.
+
+B. Production completed:
+- minimum required artifacts persisted.
+
+C. Final ready:
+- final deliverables exist and storage objects are accessible.
+
+D. Awaiting payment:
+- valid invoice and outstanding balance exist.
+
+E. Paid:
+- verified payment total >= amount due.
+
+F. Delivered:
+- paid;
+- final deliverables accessible;
+- customer access grant active.
+
+G. Completed:
+- delivered or explicitly accepted;
+- no unresolved blocking state.
+
+Tidak boleh ada direct transition:
+
+order_created → production_completed
+
+atau:
+
+production_completed → awaiting_payment
+
+tanpa validasi artifact dan invoice.
+
+==================================================
+PHASE 11 — DATABASE RELATIONSHIP AUDIT
+==================================================
+
+Audit relasi berikut:
+
+request → order
+order → project
+project → workflow
+workflow → step
+step → job
+job → artifact
+artifact → deliverable
+order → quotation
+quotation → invoice
+invoice → payment
+payment → access unlock
+
+Periksa:
+
+- foreign key;
+- ID type;
+- tenant scope;
+- nullable fields;
+- cascade;
+- duplicate records;
+- orphan records;
+- legacy/canonical dual tables;
+- wrong join;
+- wrong ID mapping.
+
+Buat query audit untuk mendeteksi:
+
+1. completed project tanpa artifact;
+2. completed workflow tanpa successful jobs;
+3. awaiting_payment tanpa invoice;
+4. invoice tanpa order;
+5. payment tanpa invoice;
+6. paid invoice dengan saldo masih ada;
+7. unlocked deliverable tanpa pembayaran;
+8. locked deliverable tanpa invoice;
+9. artifact tanpa storage reference;
+10. Interior Design order tanpa workflow.
+
+Jangan menghapus data hasil audit.
+
+==================================================
+PHASE 12 — FIX STRATEGY
+==================================================
+
+Setelah root cause terbukti, lakukan perbaikan minimal dan canonical.
+
+Prioritas fix:
+
+1. Perbaiki workflow initialization.
+2. Perbaiki job/output validation.
+3. Perbaiki artifact persistence.
+4. Perbaiki invoice generation trigger.
+5. Perbaiki status transition guard.
+6. Perbaiki customer view model.
+7. Perbaiki Admin Panel diagnostics.
+8. Perbaiki legacy/canonical adapter bila ada.
+
+Jangan memperbaiki hanya dengan:
+
+- menambah kondisi frontend;
+- memasukkan data dummy;
+- membuat invoice palsu;
+- otomatis menandai paid;
+- otomatis membuka file;
+- menyembunyikan error.
+
+==================================================
+PHASE 13 — RECOVERY FOR EXISTING BROKEN ORDERS
+==================================================
+
+Buat recovery tool atau idempotent repair function untuk order yang sudah rusak.
+
+Kategori recovery:
+
+A. Project complete tetapi tidak ada job:
+- reset ke production_pending;
+- enqueue workflow secara idempotent.
+
+B. Job sukses tetapi artifact belum tersimpan:
+- re-persist dari validated job output jika tersedia.
+
+C. Artifact ada tetapi deliverable belum dipublish:
+- publish deliverable secara idempotent.
+
+D. Deliverable ada tetapi invoice belum dibuat:
+- generate invoice dari quotation/order canonical.
+
+E. Status awaiting_payment tanpa invoice:
+- ubah ke billing_pending;
+- jangan meminta customer transfer.
+
+F. Payment sudah ada tetapi tidak terkait:
+- lakukan relink hanya jika match dapat dibuktikan;
+- jangan menebak berdasarkan nominal saja.
+
+Recovery harus:
+
+- dry-run terlebih dahulu;
+- tenant-scoped;
+- idempotent;
+- audit logged;
+- tidak menghapus data;
+- menghasilkan before/after report.
+
+==================================================
+PHASE 14 — REQUIRED REGRESSION TESTS
+==================================================
+
+Tambahkan minimal test berikut:
+
+1. Interior Design order dimulai pada stage pertama.
+2. Missing workflow template tidak dianggap sukses.
+3. Empty workflow tidak dianggap completed.
+4. Failed AI job tidak memajukan workflow.
+5. Null output tidak dianggap sukses.
+6. Empty JSON output tidak dianggap deliverable.
+7. Production complete membutuhkan artifact valid.
+8. Artifact harus memiliki storage reference.
+9. Customer page tidak menampilkan file statis tanpa deliverable.
+10. Customer tidak melihat awaiting payment tanpa invoice.
+11. Awaiting payment membutuhkan outstanding > 0.
+12. Invoice terkait order dan tenant yang benar.
+13. Admin panel melihat invoice yang sama dengan customer.
+14. Payment submission muncul di admin.
+15. Payment verification membuka file.
+16. Partial payment tetap terkunci.
+17. Overpayment ditangani dengan benar.
+18. Failed render menampilkan production error.
+19. Cross-tenant artifact tidak terbaca.
+20. Cross-tenant invoice tidak terbaca.
+21. Duplicate invoice generation idempotent.
+22. Duplicate workflow enqueue idempotent.
+23. Existing broken order dapat direcovery.
+24. Valid final delivery flow end-to-end.
+25. Interior Design menghasilkan deliverable sesuai contract.
+
+Gunakan integration test nyata sebanyak mungkin.
+
+Jangan hanya menguji mock return value.
+
+==================================================
+PHASE 15 — END-TO-END ACCEPTANCE TEST
+==================================================
+
+Lakukan satu transaksi baru dari awal:
+
+1. Customer memilih Interior Design.
+2. Customer mengisi brief.
+3. Order tersimpan.
+4. Admin menerima order.
+5. Quotation terbentuk.
+6. Customer menyetujui quotation.
+7. Workflow dimulai pada stage pertama.
+8. AI/production job berjalan.
+9. Draft/output muncul.
+10. Deliverable final tersimpan.
+11. Invoice terbentuk.
+12. Customer melihat jumlah tagihan.
+13. Customer submit pembayaran.
+14. Admin melihat pembayaran.
+15. Admin memverifikasi pembayaran.
+16. Customer dapat membuka file.
+17. File dapat diunduh.
+18. Order berubah menjadi completed hanya pada akhir flow.
+
+Lampirkan bukti:
+
+- API responses;
+- database IDs;
+- status timeline;
+- screenshot customer;
+- screenshot admin;
+- invoice;
+- payment record;
+- artifact list;
+- final file access.
+
+==================================================
+PHASE 16 — FINAL VERIFICATION
+==================================================
+
+Jalankan:
+
+- targeted tests;
+- full API tests;
+- customer portal tests;
+- admin portal tests;
+- typecheck;
+- build;
+- migration/schema verification jika ada;
+- git diff --check.
+
+Laporkan angka:
+
+- test files;
+- tests passed;
+- tests failed;
+- skipped;
+- build result;
+- typecheck result.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Gunakan format:
+
+A. Executive summary
+B. Reproduction result
+C. Exact root cause
+D. Affected files
+E. Affected tables
+F. Current lifecycle map
+G. Incorrect status transitions
+H. Workflow findings
+I. AI job findings
+J. Artifact/deliverable findings
+K. Quotation findings
+L. Invoice findings
+M. Payment findings
+N. Customer portal findings
+O. Admin portal findings
+P. Database linkage findings
+Q. Fixes implemented
+R. Recovery strategy
+S. Regression tests
+T. End-to-end acceptance evidence
+U. Typecheck
+V. Build
+W. Remaining risks
+X. Final verdict
+
+Final verdict hanya salah satu:
+
+PASS — END-TO-END FLOW VERIFIED
+REVISION REQUIRED
+BLOCKED BY DATA
+BLOCKED BY PROVIDER
+BLOCKED BY ENVIRONMENT
+
+Jangan menyatakan PASS jika:
+
+- customer masih dapat melihat hasil kosong;
+- status awaiting payment aktif tanpa invoice;
+- admin payment masih kosong setelah customer submit;
+- file terbuka sebelum lunas;
+- completed dapat terjadi tanpa deliverable;
+- Interior Design belum diuji end-to-end.

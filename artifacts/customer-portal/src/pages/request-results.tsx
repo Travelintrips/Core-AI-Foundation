@@ -34,9 +34,55 @@ function formatCurrency(amount: number | null | undefined, currency = "IDR") {
   return `${currency} ${amount.toLocaleString()}`;
 }
 
+// ── RC-2/RC-3 fix: derive canonical display state from server fields ──────────
+//
+// Priority order (highest first):
+//   complete          — filesUnlocked = true
+//   production_in_progress — project still running (not completed/failed)
+//   billing_pending   — production done but no invoice/schedule record yet
+//   awaiting_payment  — invoice exists and balance > 0
+//
+// This prevents the "Menunggu Pelunasan" screen from appearing when there is
+// no invoice and no balance — which was the original bug where customers saw a
+// payment demand with zero information to act on.
+
+type DisplayState = "complete" | "production_in_progress" | "billing_pending" | "awaiting_payment";
+
+const PRODUCTION_IN_PROGRESS_STATUSES = new Set([
+  "waiting_payment", "deposit_paid", "payment_verified", "ready_to_build",
+  "running", "orchestrating", "building", "in_progress", "generating_document",
+  "generating_presentation",
+]);
+
+function deriveDisplayState(d: ReturnType<typeof useRequestDetail>["data"]): DisplayState {
+  if (!d) return "production_in_progress";
+  const filesUnlocked = (d as any).filesUnlocked === true;
+  if (filesUnlocked) return "complete";
+
+  const productionStatus: string | null = (d as any).productionStatus ?? null;
+  const invoiceExists: boolean = (d as any).invoiceExists === true;
+  const remainingBalance: number | null = (d as any).remainingBalance ?? null;
+
+  // If no linked project, or if the linked project is still in a pre-completion status → in progress
+  if (!productionStatus || PRODUCTION_IN_PROGRESS_STATUSES.has(productionStatus)) {
+    return "production_in_progress";
+  }
+
+  // Production is done (completed/failed/outputs_ready) but no billing record yet
+  if (!invoiceExists) return "billing_pending";
+
+  // Invoice exists — show the payment screen if there's an outstanding balance
+  if (remainingBalance !== null && remainingBalance > 0) return "awaiting_payment";
+
+  // Invoice exists but balance is 0 — payment received but files not yet unlocked (admin pending)
+  return "billing_pending";
+}
+
 export default function RequestResultsPage() {
   const { requestId } = useParams<{ requestId: string }>();
   const { data, isLoading, isError } = useRequestDetail(requestId);
+
+  const displayState: DisplayState = deriveDisplayState(data);
 
   return (
     <Layout>
@@ -63,21 +109,31 @@ export default function RequestResultsPage() {
           </div>
         ) : (
           <>
-            {/* Header */}
+            {/* Header — title driven by canonical display state, not just filesUnlocked */}
             <div className="flex items-start gap-4 mb-10">
               <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
-                (data as any).filesUnlocked
+                displayState === "complete"
                   ? "bg-green-100 dark:bg-green-900/30"
-                  : "bg-yellow-100 dark:bg-yellow-900/30"
+                  : displayState === "awaiting_payment"
+                  ? "bg-yellow-100 dark:bg-yellow-900/30"
+                  : "bg-blue-100 dark:bg-blue-900/30"
               }`}>
-                {(data as any).filesUnlocked
+                {displayState === "complete"
                   ? <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
-                  : <Lock className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+                  : displayState === "awaiting_payment"
+                  ? <Lock className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
+                  : <Loader2 className="w-6 h-6 text-blue-600 dark:text-blue-400 animate-spin" />
                 }
               </div>
               <div>
                 <h1 className="text-3xl font-serif font-medium mb-1">
-                  {(data as any).filesUnlocked ? "Proyek Selesai!" : "Menunggu Pelunasan"}
+                  {displayState === "complete"
+                    ? "Proyek Selesai!"
+                    : displayState === "awaiting_payment"
+                    ? "Menunggu Pelunasan"
+                    : displayState === "billing_pending"
+                    ? "Tagihan Sedang Dipersiapkan"
+                    : "Sedang Diproduksi"}
                 </h1>
                 <p className="text-muted-foreground">
                   Kode permintaan:{" "}
@@ -86,8 +142,44 @@ export default function RequestResultsPage() {
               </div>
             </div>
 
-            {/* P0-6: File Lock Screen — show when files are locked */}
-            {!(data as any).filesUnlocked && (
+            {/* Production in progress notice */}
+            {displayState === "production_in_progress" && (
+              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-6 mb-6">
+                <div className="flex items-start gap-3">
+                  <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0 animate-spin" />
+                  <div>
+                    <h2 className="font-semibold text-blue-900 dark:text-blue-200 mb-1">
+                      Sedang Diproduksi
+                    </h2>
+                    <p className="text-sm text-blue-800 dark:text-blue-300 leading-relaxed">
+                      Tim AI kami sedang mengerjakan proyek Anda. Proses ini membutuhkan
+                      beberapa menit. Halaman ini akan diperbarui otomatis.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Billing pending — production done but invoice not yet generated */}
+            {displayState === "billing_pending" && (
+              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-6 mb-6">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                  <div>
+                    <h2 className="font-semibold text-blue-900 dark:text-blue-200 mb-1">
+                      Tagihan Sedang Dipersiapkan
+                    </h2>
+                    <p className="text-sm text-blue-800 dark:text-blue-300 leading-relaxed">
+                      Proyek Anda telah selesai diproduksi. Tim kami sedang menyiapkan tagihan
+                      final. Anda akan menerima notifikasi begitu tagihan tersedia.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* P0-6: File Lock Screen — only shown when there IS an invoice and a balance to pay */}
+            {displayState === "awaiting_payment" && (
               <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-2xl p-6 mb-6">
                 <div className="flex items-start gap-3 mb-4">
                   <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5 shrink-0" />
@@ -96,8 +188,8 @@ export default function RequestResultsPage() {
                       File Final Terkunci
                     </h2>
                     <p className="text-sm text-yellow-800 dark:text-yellow-300 leading-relaxed">
-                      Proyek Anda telah selesai dikerjakan. File final (PNG HD, SVG, Brand Guideline,
-                      dan semua deliverable) akan dibuka segera setelah pelunasan diverifikasi oleh tim kami.
+                      Proyek Anda telah selesai dikerjakan. File final akan dibuka segera setelah
+                      pelunasan diverifikasi oleh tim kami.
                     </p>
                   </div>
                 </div>
@@ -137,10 +229,10 @@ export default function RequestResultsPage() {
                   <DashboardAccessButton email={(data as any).customerEmail} className="w-full" />
                 </div>
 
-                {/* What you'll get after unlock */}
+                {/* What you'll get after unlock — no hardcoded file types */}
                 <div className="mt-4 flex items-center gap-2 text-sm text-yellow-700 dark:text-yellow-400">
                   <Unlock className="w-4 h-4 shrink-0" />
-                  <span>Setelah lunas: PNG HD, SVG, PSD, Brand Guideline, Editable Source, dan semua file final</span>
+                  <span>Setelah lunas, semua file final proyek Anda akan terbuka secara otomatis.</span>
                 </div>
               </div>
             )}
