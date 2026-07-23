@@ -1,0 +1,551 @@
+ROLE
+
+Anda adalah Team 42.
+
+Anda bertanggung jawab atas seluruh Billing Lifecycle pada Universal Creative AI.
+
+Anda adalah satu-satunya tim yang boleh melakukan audit dan perbaikan terhadap:
+
+- quotation
+- invoice
+- payment schedule
+- payment proof
+- billing state
+- remaining balance
+- partial payment
+- milestone payment
+- payment verification
+- unlock policy
+
+==================================================
+
+BRANCH
+
+Buat branch:
+
+audit/team-42-billing-payment
+
+Jangan bekerja pada main.
+
+Jangan merge.
+
+Jangan squash.
+
+==================================================
+
+DEPENDENCY
+
+WAJIB membaca hasil Team 41 terlebih dahulu.
+
+Gunakan:
+
+- Canonical Lifecycle
+- Canonical State Machine
+- Canonical Completion Rules
+- Source of Truth
+
+Jangan membuat lifecycle sendiri.
+
+==================================================
+
+OBJECTIVE
+
+Pastikan seluruh sistem billing Creative AI memiliki satu sumber kebenaran (single source of truth) dan tidak ada perbedaan status antara Customer Portal, Admin Portal, Workflow Engine, dan Database.
+
+Temukan seluruh bug billing lintas layanan.
+
+Perbaiki hanya bila penyebabnya ada di modul billing.
+
+==================================================
+
+FILE OWNERSHIP
+
+BOLEH mengubah:
+
+- billing service
+- invoice service
+- payment schedule service
+- payment resolver
+- billing repository
+- payment repository
+- billing validator
+- payment validator
+- billing tests
+
+JANGAN mengubah:
+
+- workflow engine
+- renderer
+- AI execution
+- customer UI
+- admin UI (kecuali mapping billing)
+- artifact service
+
+==================================================
+
+PHASE 1
+
+DISCOVERY
+
+Cari seluruh module:
+
+Quotation
+
+Invoice
+
+Payment
+
+Payment Schedule
+
+Remaining Balance
+
+Milestone
+
+Payment Proof
+
+Verification
+
+Refund
+
+Adjustment
+
+Discount
+
+Tax
+
+==================================================
+
+PHASE 2
+
+SOURCE OF TRUTH
+
+Temukan source of truth untuk:
+
+quotation
+
+invoice
+
+invoice items
+
+payment schedule
+
+payments
+
+payment proof
+
+verification
+
+remaining balance
+
+customer balance
+
+admin balance
+
+Laporkan:
+
+Table
+
+Repository
+
+Service
+
+Resolver
+
+Validator
+
+Route
+
+==================================================
+
+PHASE 3
+
+BILLING FLOW
+
+Bangun flow lengkap.
+
+Minimal:
+
+Quotation
+
+↓
+
+Customer Approval
+
+↓
+
+Invoice
+
+↓
+
+Payment Schedule
+
+↓
+
+Customer Payment
+
+↓
+
+Proof Upload
+
+↓
+
+Admin Review
+
+↓
+
+Verified
+
+↓
+
+Unlock
+
+↓
+
+Completed
+
+==================================================
+
+PHASE 4
+
+STATE VALIDATION
+
+Audit seluruh state.
+
+Minimal:
+
+draft
+
+quotation
+
+approved
+
+invoice_created
+
+awaiting_payment
+
+payment_uploaded
+
+under_review
+
+verified
+
+partially_paid
+
+paid
+
+completed
+
+cancelled
+
+failed
+
+==================================================
+
+PHASE 5
+
+VALIDATION RULES
+
+Pastikan:
+
+Invoice tidak boleh muncul tanpa quotation jika service memang membutuhkan quotation.
+
+Payment Schedule tidak boleh dibuat tanpa invoice.
+
+Remaining Balance harus selalu dihitung dari source of truth.
+
+Customer dan Admin harus melihat angka yang sama.
+
+Invoice total = payment schedule total.
+
+Payment total tidak boleh melebihi invoice.
+
+Paid hanya jika seluruh syarat terpenuhi.
+
+==================================================
+
+PHASE 6
+
+PARTIAL PAYMENT
+
+Audit:
+
+DP
+
+Milestone
+
+Final Payment
+
+Pastikan:
+
+Remaining balance benar.
+
+Unlock policy benar.
+
+Tidak ada negative balance.
+
+Tidak ada unlock sebelum syarat terpenuhi.
+
+==================================================
+
+PHASE 7
+
+PAYMENT PROOF
+
+Audit:
+
+Upload
+
+Storage
+
+Verification
+
+Visibility
+
+Approval
+
+Reject
+
+History
+
+Pastikan:
+
+Customer upload selalu terlihat oleh Admin.
+
+Admin approve selalu terlihat Customer.
+
+==================================================
+
+PHASE 8
+
+UNLOCK POLICY
+
+Pastikan file hanya unlock jika:
+
+Payment Rule satisfied
+
+Invoice valid
+
+Verification valid
+
+Deliverable exists
+
+Tenant valid
+
+Customer valid
+
+==================================================
+
+PHASE 9
+
+GLOBAL BILLING AUDIT
+
+Cari:
+
+Invoice tanpa quotation
+
+Invoice tanpa payment schedule
+
+Payment tanpa invoice
+
+Payment proof orphan
+
+Duplicate invoice
+
+Duplicate payment
+
+Duplicate payment schedule
+
+Paid tapi balance masih ada
+
+Balance negatif
+
+Unlocked sebelum payment
+
+Customer paid admin unpaid
+
+Admin paid customer unpaid
+
+==================================================
+
+PHASE 10
+
+SERVICE MATRIX
+
+Audit seluruh Creative Services.
+
+Untuk setiap service tampilkan:
+
+Quotation Required
+
+Invoice Required
+
+Partial Payment
+
+Milestone
+
+Review
+
+Unlock Rule
+
+Risk
+
+==================================================
+
+PHASE 11
+
+IMPLEMENTATION
+
+Jika root cause ada pada billing:
+
+Perbaiki.
+
+Gunakan canonical service.
+
+Jangan hardcode.
+
+Jangan membuat duplicate resolver.
+
+==================================================
+
+PHASE 12
+
+REGRESSION TEST
+
+Tambahkan test minimal:
+
+Invoice creation
+
+Payment Schedule
+
+Remaining Balance
+
+Payment Proof
+
+Verification
+
+Partial Payment
+
+Milestone
+
+Unlock
+
+Duplicate Payment
+
+Duplicate Invoice
+
+Cross Tenant Payment
+
+Invoice Consistency
+
+Customer/Admin Consistency
+
+==================================================
+
+PHASE 13
+
+TYPECHECK
+
+Jalankan:
+
+Typecheck
+
+Billing tests
+
+Creative tests terkait billing
+
+==================================================
+
+PHASE 14
+
+BUILD
+
+Pastikan:
+
+Build sukses.
+
+==================================================
+
+PHASE 15
+
+COMMIT
+
+Review:
+
+git status
+
+git diff
+
+git diff --check
+
+Commit:
+
+fix(billing): canonical payment and invoice validation
+
+Push ke branch Team 42.
+
+Jangan merge.
+
+==================================================
+
+FINAL REPORT
+
+A.
+Files Changed
+
+B.
+Billing Flow
+
+C.
+Invoice Flow
+
+D.
+Payment Flow
+
+E.
+Unlock Policy
+
+F.
+Remaining Balance Rules
+
+G.
+Source of Truth
+
+H.
+Regression Tests
+
+I.
+Typecheck
+
+J.
+Build
+
+K.
+Known Risks
+
+L.
+Commit Hash
+
+M.
+Push Verification
+
+FINAL VERDICT
+
+PASS
+
+atau
+
+BLOCKED
+
+==================================================
+
+RULES
+
+Tidak boleh membuat source of truth baru.
+
+Tidak boleh mengubah workflow.
+
+Tidak boleh mengubah renderer.
+
+Tidak boleh mengubah AI execution.
+
+Semua perubahan harus reusable untuk seluruh Creative AI Services.
