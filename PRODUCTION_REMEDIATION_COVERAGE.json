@@ -1,0 +1,131 @@
+{
+  "generated": "2026-07-23",
+  "branch": "production-readiness-remediation",
+  "baseCommit": "b5f5c11",
+  "baselineTests": {
+    "files": 178,
+    "total": 5378,
+    "passed": 5378,
+    "failed": 0,
+    "skipped": 0
+  },
+  "remediationGroups": [
+    {
+      "id": "A",
+      "name": "Dispatcher/Scheduler readiness",
+      "testFiles": [
+        "services/__tests__/dispatcher.production.test.ts",
+        "services/__tests__/scheduler.production.test.ts"
+      ],
+      "status": "ADDED",
+      "coverageAreas": ["dev-default", "prod-enabled", "prod-missing", "prod-invalid", "duplicate-startup", "shutdown"]
+    },
+    {
+      "id": "B",
+      "name": "Secret removal and scanning",
+      "testFiles": [],
+      "status": "DOCUMENTED",
+      "coverageAreas": ["rotation-required", "git-exposure-documented"],
+      "notes": "No automated test possible — requires external provider credential rotation by operator"
+    },
+    {
+      "id": "C",
+      "name": "Critical TypeScript fixes",
+      "testFiles": [],
+      "status": "FIXED",
+      "coverageAreas": ["string-array-narrowing", "customs-return-paths", "tenantId-graphic-design"],
+      "notes": "Type fixes only — no behavior change, no new tests needed"
+    },
+    {
+      "id": "D",
+      "name": "Migration tracking",
+      "testFiles": [],
+      "status": "DOCUMENTED",
+      "coverageAreas": ["runbook", "idempotent-ddl"],
+      "notes": "Existing migrateSchemaToProd.ts handles migration. MIGRATION_RUNBOOK.md added."
+    },
+    {
+      "id": "E",
+      "name": "Migration safety/rollback docs",
+      "testFiles": [],
+      "status": "DOCUMENTED",
+      "coverageAreas": ["rollback-sql", "dry-run", "additive-only"],
+      "notes": "MIGRATION_RUNBOOK.md documents rollback for all remediation DDL"
+    },
+    {
+      "id": "F",
+      "name": "Signed URL revocation persistence",
+      "testFiles": [
+        "services/__tests__/signedUrlRevocation.test.ts"
+      ],
+      "status": "ADDED",
+      "coverageAreas": ["revoke-persists", "load-on-startup", "db-fallback", "restart-simulation", "duplicate-idempotent", "expiry-cleanup"]
+    },
+    {
+      "id": "G",
+      "name": "Creative project tenant isolation",
+      "testFiles": [],
+      "status": "DOCUMENTED",
+      "coverageAreas": ["uuid-capability-token", "missing-tenant_id-column"],
+      "notes": "creative_projects uses UUID projectId as capability token. Full tenant_id migration deferred — requires product input on backfill ownership model."
+    },
+    {
+      "id": "H",
+      "name": "Gemini provider consolidation",
+      "testFiles": [],
+      "status": "VERIFIED",
+      "coverageAreas": ["alias-mapping", "single-key"],
+      "notes": "aiSecretService.ts already maps google/google-gemini/gemini slugs to GEMINI_API_KEY. No duplicate seed found."
+    },
+    {
+      "id": "I",
+      "name": "SMTP diagnostics",
+      "testFiles": [
+        "routes/__tests__/smtp-diagnostic.test.ts"
+      ],
+      "status": "ADDED",
+      "coverageAreas": ["configured", "not-configured", "no-auth", "no-password-leak"]
+    },
+    {
+      "id": "J",
+      "name": "Customs endpoint",
+      "testFiles": [],
+      "status": "VERIFIED",
+      "coverageAreas": ["route-order", "hs-search", "hs-code", "invalid-id"],
+      "notes": "routes/customs.ts already implements /customs/hs-search and /customs/hs/:code correctly. TS7030 errors fixed."
+    },
+    {
+      "id": "K",
+      "name": "Performance safeguards",
+      "testFiles": [],
+      "status": "VERIFIED",
+      "coverageAreas": ["cache-size-bound", "asset-scan-limit", "remote-asset-limit"],
+      "notes": "Already implemented: DUPLICATE_CANDIDATE_LIMIT, cacheMaxBytes=100MB, maxRemoteAssetBytes=10MB"
+    },
+    {
+      "id": "L",
+      "name": "Observability",
+      "testFiles": [],
+      "status": "VERIFIED",
+      "coverageAreas": ["pino-structured-logging", "request-id", "audit-log"],
+      "notes": "lib/logger.ts uses pino. Audit logging in aiAuditService.ts."
+    },
+    {
+      "id": "M",
+      "name": "Environment readiness tooling",
+      "testFiles": [],
+      "status": "ADDED",
+      "coverageAreas": ["production-checklist"],
+      "notes": "PRODUCTION_ENVIRONMENT_CHECKLIST.md added with all required env vars documented."
+    },
+    {
+      "id": "N",
+      "name": "Reports/documentation",
+      "testFiles": [],
+      "status": "ADDED",
+      "coverageAreas": ["rotation-required", "migration-runbook", "baseline-report", "environment-checklist", "remediation-report", "verdict"],
+      "notes": "All 10 required report files written."
+    }
+  ],
+  "paymentScopeExclusion": "AUTOMATED PAYMENT GATEWAY EXCLUDED FROM SCOPE BY PRODUCT DECISION."
+}

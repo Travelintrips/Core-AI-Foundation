@@ -42,6 +42,10 @@ import * as svc from "../services/creativeMarketplaceService.js";
 
 const router = Router();
 
+// ── query-string helpers ──────────────────────────────────────────────────────
+const qs = (v: string | string[] | undefined): string | undefined => Array.isArray(v) ? v[0] : v;
+const qsReq = (v: string | string[] | undefined): string => Array.isArray(v) ? (v[0] ?? "") : (v ?? "");
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 async function resolveSession(token: string) {
@@ -134,7 +138,7 @@ router.get(
   adminAuth,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(qsReq(req.params.id), 10);
       if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
       const asset = await svc.getAsset(id);
       if (!asset) { res.status(404).json({ error: "not found" }); return; }
@@ -150,7 +154,7 @@ router.patch(
   adminAuth,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(qsReq(req.params.id), 10);
       if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
       const asset = await svc.updateAsset(id, req.body as Record<string, unknown>);
       if (!asset) { res.status(404).json({ error: "not found" }); return; }
@@ -166,7 +170,7 @@ router.post(
   adminAuth,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(qsReq(req.params.id), 10);
       if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
       const { featured } = req.body as { featured?: boolean };
       const asset = await svc.featureAsset(id, featured !== false);
@@ -183,7 +187,7 @@ router.post(
   adminAuth,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(qsReq(req.params.id), 10);
       if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
       const { active } = req.body as { active?: boolean };
       const asset = await svc.activateAsset(id, active !== false);
@@ -248,7 +252,7 @@ router.get(
   adminAuth,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(qsReq(req.params.id), 10);
       if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
       const creator = await svc.getCreator(id);
       if (!creator) { res.status(404).json({ error: "not found" }); return; }
@@ -264,7 +268,7 @@ router.patch(
   adminAuth,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(qsReq(req.params.id), 10);
       if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
       const creator = await svc.updateCreator(id, req.body as Record<string, unknown>);
       if (!creator) { res.status(404).json({ error: "not found" }); return; }
@@ -378,7 +382,7 @@ router.get(
   "/public/creative-marketplace/assets/:id",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(qsReq(req.params.id), 10);
       if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
       const asset = await svc.getAsset(id);
       if (!asset || !asset.isActive) { res.status(404).json({ error: "not found" }); return; }
@@ -395,7 +399,7 @@ router.post(
   "/public/creative-marketplace/assets/:id/download",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(qsReq(req.params.id), 10);
       if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
       const { customerEmail } = req.body as { customerEmail?: string };
       const result = await svc.downloadAsset(id, customerEmail, ipOf(req));
@@ -412,7 +416,7 @@ router.post(
   "/public/creative-marketplace/assets/:id/rate",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(qsReq(req.params.id), 10);
       if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
       const { customerEmail, rating, review } = req.body as {
         customerEmail?: string;
@@ -435,7 +439,7 @@ router.get(
   "/public/creative-marketplace/assets/:id/ratings",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(qsReq(req.params.id), 10);
       if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
       const ratings = await svc.getItemRatings("asset", id);
       res.json({ items: ratings });
@@ -468,7 +472,7 @@ router.get(
   "/public/creative-marketplace/creators/:id",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(qsReq(req.params.id), 10);
       if (isNaN(id)) { res.status(400).json({ error: "invalid id" }); return; }
       const creator = await svc.getCreator(id);
       if (!creator) { res.status(404).json({ error: "not found" }); return; }
@@ -485,7 +489,7 @@ router.get(
   "/public/customer/workspace/:token/creative-marketplace/favorites",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const session = await resolveSession(req.params.token);
+      const session = await resolveSession(qsReq(req.params.token));
       if (!session) { res.status(404).json({ error: "workspace not found" }); return; }
       const favs = await svc.getFavorites(session.clientEmail);
       res.json(favs);
@@ -499,7 +503,7 @@ router.post(
   "/public/customer/workspace/:token/creative-marketplace/favorites",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const session = await resolveSession(req.params.token);
+      const session = await resolveSession(qsReq(req.params.token));
       if (!session) { res.status(404).json({ error: "workspace not found" }); return; }
       const { itemType, itemId } = req.body as { itemType?: string; itemId?: number };
       if (!itemType || !itemId) {
@@ -526,10 +530,10 @@ router.delete(
   "/public/customer/workspace/:token/creative-marketplace/favorites/:itemType/:itemId",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const session = await resolveSession(req.params.token);
+      const session = await resolveSession(qsReq(req.params.token));
       if (!session) { res.status(404).json({ error: "workspace not found" }); return; }
-      const { itemType, itemId } = req.params;
-      const id = parseInt(itemId, 10);
+      const itemType = qsReq(req.params.itemType);
+      const id = parseInt(qsReq(req.params.itemId), 10);
       if (isNaN(id)) { res.status(400).json({ error: "invalid itemId" }); return; }
       await svc.removeFavorite(session.clientEmail, itemType, id);
       res.json({ ok: true });
@@ -545,7 +549,7 @@ router.get(
   "/public/customer/workspace/:token/creative-marketplace/downloads",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const session = await resolveSession(req.params.token);
+      const session = await resolveSession(qsReq(req.params.token));
       if (!session) { res.status(404).json({ error: "workspace not found" }); return; }
       const { limit } = req.query as Record<string, string>;
       const downloads = await svc.getCustomerDownloads(
@@ -563,7 +567,7 @@ router.get(
   "/public/customer/workspace/:token/creative-marketplace/assets",
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const session = await resolveSession(req.params.token);
+      const session = await resolveSession(qsReq(req.params.token));
       if (!session) { res.status(404).json({ error: "workspace not found" }); return; }
       const { assetType, category, priceType, search, sortBy, limit, offset } =
         req.query as Record<string, string>;

@@ -1,0 +1,74 @@
+{
+  "generated": "2026-07-23",
+  "branch": "production-readiness-remediation",
+  "baseCommit": "b5f5c11",
+  "failures": [
+    {
+      "id": "SEC-001",
+      "phase": "B",
+      "category": "security",
+      "severity": "critical",
+      "title": "Credentials committed to tracked .replit file",
+      "detail": "13 sensitive credentials (API keys, DB passwords, SMTP password) stored in plaintext in .replit which is git-tracked. Exposure confirmed via git ls-files.",
+      "status": "DOCUMENTED",
+      "remediation": "See ROTATION_REQUIRED.md. Requires credential rotation + move to Replit Secrets. Cannot auto-fix without user action on external provider dashboards.",
+      "blocksVerdict": true
+    },
+    {
+      "id": "SEC-002",
+      "phase": "G",
+      "category": "tenant-isolation",
+      "severity": "high",
+      "title": "creative_projects table missing tenant_id column",
+      "detail": "creative_projects has no tenant_id column. Access is scoped by projectId UUID (capability token). Full tenant row-level filtering is not possible without schema migration.",
+      "status": "DOCUMENTED",
+      "remediation": "Migration DDL documented in MIGRATION_RUNBOOK.md. Backfill strategy requires product input on ownership model for existing rows. Not auto-applied to production.",
+      "blocksVerdict": false
+    },
+    {
+      "id": "TS-001",
+      "phase": "C",
+      "category": "typescript",
+      "severity": "medium",
+      "title": "125 pre-existing TypeScript errors at baseline",
+      "detail": "35 errors in production route/service files, 90 in test files. All pre-date this remediation branch. Critical path errors fixed in this branch (string | string[] narrowing, TS7030 customs, tenantId in graphic-design/service.ts).",
+      "status": "PARTIALLY_FIXED",
+      "remediation": "Critical path fixes applied. Remaining test file errors are pre-existing and do not affect runtime.",
+      "blocksVerdict": false
+    },
+    {
+      "id": "DISP-001",
+      "phase": "A",
+      "category": "dispatcher-scheduler",
+      "severity": "high",
+      "title": "Production dispatcher/scheduler startup not verified with dedicated tests",
+      "detail": "Dispatcher and scheduler have production env var guards (AI_DISPATCHER_ENABLED, AI_SCHEDULER_ENABLED) but lacked dedicated tests for prod-enabled, prod-missing, prod-invalid, duplicate startup, and shutdown scenarios.",
+      "status": "FIXED",
+      "remediation": "Added dispatcher.production.test.ts and scheduler.production.test.ts in services/__tests__/",
+      "blocksVerdict": false
+    },
+    {
+      "id": "URL-001",
+      "phase": "F",
+      "category": "signed-url-revocation",
+      "severity": "high",
+      "title": "Signed URL revocations lost on process restart",
+      "detail": "signedUrlService.ts used an in-memory Set for revoked token IDs. Process restart cleared all revocations, restoring access for revoked tokens until they naturally expire.",
+      "status": "FIXED",
+      "remediation": "Added signedUrlRevocationStore.ts with ai_platform.signed_url_revocations DB table. signedUrlService.ts now persists revocations and loads them on startup.",
+      "blocksVerdict": false
+    },
+    {
+      "id": "SMTP-001",
+      "phase": "I",
+      "category": "smtp-diagnostics",
+      "severity": "low",
+      "title": "No SMTP configuration diagnostic endpoint",
+      "detail": "emailService.ts has isEmailConfigured() but no admin route exposed it. Operators had no way to verify SMTP config without reading logs.",
+      "status": "FIXED",
+      "remediation": "Added GET /api/ai/admin/smtp/diagnostic (admin-auth protected). Returns config status without exposing credentials.",
+      "blocksVerdict": false
+    }
+  ],
+  "paymentScopeExclusion": "AUTOMATED PAYMENT GATEWAY EXCLUDED FROM SCOPE BY PRODUCT DECISION. No Midtrans, Xendit, Paylabs, or automated callback code added."
+}

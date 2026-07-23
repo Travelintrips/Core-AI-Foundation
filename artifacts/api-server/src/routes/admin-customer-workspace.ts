@@ -26,6 +26,8 @@ import {
   aiCustomerImpersonationTokensTable,
 } from "@workspace/db";
 import { eq, and, lt } from "drizzle-orm";
+import { adminAuth } from "../middleware/adminAuth.js";
+import { isEmailConfigured } from "../services/emailService.js";
 
 const router = Router();
 
@@ -227,6 +229,19 @@ router.post("/ai/customer-workspace/customers/:customerId/rotate-token", async (
 router.get("/ai/customer-workspace-analytics", async (_req, res): Promise<void> => {
   const analytics = await computeWorkspaceAnalytics();
   res.json(analytics);
+});
+
+// ── GET /ai/admin/smtp/diagnostic ─────────────────────────────────────────────
+// Returns SMTP configuration status. Never exposes SMTP_PASS or any password.
+router.get("/ai/admin/smtp/diagnostic", adminAuth, async (_req, res): Promise<void> => {
+  const configured = isEmailConfigured();
+  res.json({
+    configured,
+    host: process.env["SMTP_HOST"] ?? null,
+    port: process.env["SMTP_PORT"] != null ? Number(process.env["SMTP_PORT"]) : null,
+    user: process.env["SMTP_USER"] ?? null,
+    from: process.env["SMTP_FROM"] ?? process.env["SMTP_USER"] ?? null,
+  });
 });
 
 export default router;

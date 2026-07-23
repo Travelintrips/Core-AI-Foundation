@@ -1,0 +1,581 @@
+ROLE
+
+Lanjutkan Production Readiness Remediation dari checkpoint terakhir.
+
+Jangan mengulang implementasi dari awal.
+Jangan langsung menambah perubahan baru.
+Jangan deploy.
+Jangan merge.
+Jangan push.
+Jangan reset.
+Jangan membuang file modified atau untracked.
+
+Kuota sebelumnya habis setelah banyak perubahan dilakukan secara paralel.
+
+Current known baseline before remediation:
+
+- baseline regression: 5,378 / 5,378 PASS
+- lib/db build: PASS
+- isolated remediation branch already created
+- production dispatcher/scheduler environment configuration reportedly added
+- multiple code and documentation fixes were written
+- final verification was NOT completed
+
+==================================================
+PHASE 1 — MANDATORY STATE RECOVERY
+==================================================
+
+Sebelum menyentuh kode:
+
+1. Tampilkan current branch.
+2. Tampilkan HEAD commit.
+3. Tampilkan git status --short.
+4. Tampilkan semua modified files.
+5. Tampilkan semua untracked files.
+6. Tampilkan diff stat.
+7. Tampilkan staged diff jika ada.
+8. Jangan reset.
+9. Jangan checkout file apa pun.
+10. Jangan commit dulu.
+
+Buat tabel:
+
+| File | Status | Intended Phase | Complete/Partial/Unknown |
+
+Identifikasi apakah ada file yang:
+
+- hanya setengah tertulis;
+- memiliki syntax error;
+- memiliki duplicate exports;
+- memiliki unresolved imports;
+- memiliki temporary debug code;
+- memiliki placeholder;
+- memiliki incomplete migration;
+- memiliki partial test.
+
+==================================================
+PHASE 2 — MAP CHANGES TO REMEDIATION PHASES
+==================================================
+
+Kelompokkan seluruh perubahan ke:
+
+A. Dispatcher/scheduler readiness
+
+B. Secret removal and secret scanning
+
+C. Critical TypeScript fixes
+
+D. Migration tracking
+
+E. Migration safety/rollback docs
+
+F. Signed URL revocation persistence
+
+G. Creative project tenant isolation
+
+H. Gemini provider consolidation
+
+I. SMTP diagnostics
+
+J. Customs endpoint fix
+
+K. Performance safeguards
+
+L. Observability
+
+M. Environment readiness tooling
+
+N. Reports/documentation
+
+Untuk setiap kelompok, laporkan:
+
+- files changed;
+- implementation status;
+- tests added;
+- migration added;
+- runtime risk;
+- missing work.
+
+==================================================
+PHASE 3 — SYNTAX AND IMPORT GATE
+==================================================
+
+Sebelum test:
+
+1. Run formatter/check if available.
+2. Run targeted TypeScript parse/build for changed files.
+3. Detect:
+   - syntax errors;
+   - duplicate identifiers;
+   - missing exports;
+   - unresolved modules;
+   - broken imports;
+   - invalid JSON;
+   - invalid package scripts.
+
+Fix only structural breakage caused by partial writes.
+
+Do not refactor unrelated code.
+
+==================================================
+PHASE 4 — SECURITY CHECK FIRST
+==================================================
+
+Because secret handling is release-critical:
+
+1. Inspect `.replit`.
+2. Inspect `.env*`.
+3. Inspect tracked config files.
+4. Run `git grep` for known secret variable names.
+5. Check whether actual values remain in tracked files.
+6. Check whether secrets were copied into:
+   - reports;
+   - tests;
+   - fixtures;
+   - logs;
+   - example files.
+
+Never print actual secret values.
+
+Output only:
+
+- variable name;
+- file;
+- exposed yes/no;
+- tracked yes/no;
+- rotation required yes/no.
+
+If actual secrets remain in tracked files:
+
+status:
+
+BLOCKED — SECRETS STILL EXPOSED
+
+Do not continue toward readiness verdict until fixed.
+
+If secrets were historically committed:
+
+preserve:
+
+ROTATION_REQUIRED.md
+
+Do not rotate automatically.
+
+==================================================
+PHASE 5 — DISPATCHER/SCHEDULER VERIFICATION
+==================================================
+
+Verify actual implementation, not only env documentation.
+
+Check:
+
+- production env template;
+- startup validation;
+- readiness endpoint;
+- dispatcher starts exactly once;
+- scheduler starts exactly once;
+- graceful shutdown;
+- disabled/missing production config behavior;
+- no hardcoded production true.
+
+Required tests:
+
+- development default;
+- production enabled;
+- production missing;
+- production invalid;
+- duplicate startup prevention;
+- shutdown.
+
+Required runtime evidence in isolated dev/staging:
+
+- dispatcher status running;
+- scheduler status running;
+- health/readiness reflects both.
+
+==================================================
+PHASE 6 — MIGRATION SAFETY REVIEW
+==================================================
+
+Inspect all new migration-related files.
+
+Confirm:
+
+- migration history table schema is valid;
+- checksum behavior deterministic;
+- migration runner idempotent;
+- dry-run performs no writes;
+- status performs no writes;
+- production guard exists;
+- no production migration executed;
+- no destructive statement runs automatically;
+- failed migrations are recorded safely;
+- partial migrations cannot be marked successful.
+
+If implementation is incomplete, finish minimally and add tests.
+
+Do not run against production.
+
+==================================================
+PHASE 7 — SIGNED URL REVOCATION REVIEW
+==================================================
+
+Verify:
+
+- plaintext token is never persisted;
+- only token hash stored;
+- tenant scope enforced;
+- artifact scope enforced where applicable;
+- duplicate revoke idempotent;
+- expiry cleanup safe;
+- database lookup integrated into download path;
+- old in-memory-only path removed or retained only as cache;
+- process restart does not restore access.
+
+Run targeted tests including restart simulation.
+
+==================================================
+PHASE 8 — TENANT ISOLATION REVIEW
+==================================================
+
+Do not assume adding tenant_id was correct.
+
+Verify actual ownership architecture.
+
+For creative projects:
+
+- list;
+- detail;
+- update;
+- delete;
+- review;
+- notifications;
+- artifacts;
+- signed download.
+
+Run Tenant A vs Tenant B tests.
+
+Confirm:
+
+- undefined tenant is never wildcard;
+- legacy rows handled safely;
+- backfill does not guess ownership;
+- ambiguous records quarantined or denied;
+- indexes/migrations are safe.
+
+If tenant_id was added, verify all queries use it consistently.
+
+==================================================
+PHASE 9 — PROVIDER REGISTRY REVIEW
+==================================================
+
+Verify Gemini consolidation:
+
+- one canonical provider key;
+- aliases supported if needed;
+- no duplicate seed;
+- historical records still readable;
+- model routing deterministic;
+- cost tracking unchanged;
+- unique constraint safe.
+
+Do not delete referenced provider rows without migration evidence.
+
+==================================================
+PHASE 10 — SMTP AND CUSTOMS
+==================================================
+
+SMTP:
+
+- config source only from environment;
+- no credential logs;
+- connection diagnostic;
+- auth diagnostic;
+- no customer email sent;
+- explicit test recipient only;
+- historical 535 classified accurately.
+
+Customs:
+
+- verify route order;
+- verify `/api/customs` behavior;
+- verify valid ID;
+- invalid ID;
+- list/root route;
+- no route shadowing;
+- backward compatibility.
+
+Only keep customs changes if a real bug was proven.
+
+==================================================
+PHASE 11 — TARGETED REMEDIATION TESTS
+==================================================
+
+Run targeted tests by remediation group.
+
+Report per file:
+
+- total;
+- passed;
+- failed;
+- skipped;
+- duration.
+
+Required groups:
+
+1. production readiness env
+2. dispatcher
+3. scheduler
+4. secret scanner
+5. migration runner
+6. signed URL revocation
+7. tenant isolation
+8. provider registry
+9. SMTP diagnostic
+10. customs routes
+11. performance cache limits
+12. structured logging
+
+Do not proceed if any release-critical targeted suite fails.
+
+==================================================
+PHASE 12 — TYPECHECK
+==================================================
+
+Run in correct order:
+
+1. build lib/db
+2. typecheck lib/db
+3. typecheck API changed scope
+4. typecheck worker/dispatcher/scheduler
+5. typecheck ZIP/artifact/signed URL
+6. typecheck Customer Portal
+7. typecheck Admin Portal
+8. workspace typecheck
+
+Report:
+
+- baseline error count;
+- current error count;
+- errors fixed;
+- errors introduced;
+- remaining pre-existing errors.
+
+Required status:
+
+CRITICAL PATH TYPECHECK CLEAN
+
+Do not hide errors using:
+
+- any;
+- ts-ignore;
+- ts-nocheck;
+- unsafe casts.
+
+==================================================
+PHASE 13 — FULL REGRESSION
+==================================================
+
+Run the complete suite.
+
+Baseline:
+
+5,378 / 5,378 PASS
+178 files
+
+Expected:
+
+- all baseline tests pass;
+- remediation tests increase count;
+- zero new regression failures.
+
+If failures occur:
+
+classify each as:
+
+- remediation regression;
+- pre-existing;
+- environment;
+- flaky.
+
+Do not call something pre-existing without evidence.
+
+==================================================
+PHASE 14 — PRODUCTION-EQUIVALENT BUILD
+==================================================
+
+Build:
+
+- shared libs;
+- API server;
+- Customer Portal;
+- Admin Portal;
+- other release-relevant apps.
+
+Verify:
+
+- no missing env at build time;
+- no missing import;
+- no bundle error;
+- no startup error;
+- no duplicate route;
+- no migration execution during build;
+- no secret embedded in bundle.
+
+==================================================
+PHASE 15 — ISOLATED RUNTIME VERIFICATION
+==================================================
+
+Use development or isolated staging only.
+
+Never production DB.
+
+Verify:
+
+- API starts;
+- dispatcher runs;
+- scheduler runs;
+- one harmless AI test job completes;
+- one scheduler test task runs;
+- signed URL revoke survives restart;
+- cross-tenant request denied;
+- SMTP diagnostic returns honest result;
+- customs route works;
+- health/readiness reports correct status;
+- no unexpected HTTP 500;
+- no secret in logs.
+
+==================================================
+PHASE 16 — REVIEW PAYMENT SCOPE EXCLUSION
+==================================================
+
+Payment gateway remains out of scope.
+
+Confirm no code was added for:
+
+- Midtrans;
+- Xendit;
+- Paylabs;
+- webhook gateway;
+- automated callback.
+
+Existing manual payment flow must remain unchanged.
+
+Final report must state exactly:
+
+AUTOMATED PAYMENT GATEWAY EXCLUDED FROM SCOPE BY PRODUCT DECISION.
+
+Do not classify manual-only payment as a remediation failure.
+
+==================================================
+PHASE 17 — REPORTS
+==================================================
+
+Complete or repair:
+
+- BASELINE_REPORT.md
+- ROTATION_REQUIRED.md
+- MIGRATION_RUNBOOK.md
+- PROVIDER_REGISTRY_MIGRATION_REPORT.md
+- PERFORMANCE_BASELINE.md
+- PRODUCTION_ENVIRONMENT_CHECKLIST.md
+- PRODUCTION_REMEDIATION_REPORT.md
+- PRODUCTION_REMEDIATION_FAILURES.json
+- PRODUCTION_REMEDIATION_COVERAGE.json
+- PRODUCTION_REMEDIATION_VERDICT.json
+
+Validate:
+
+- JSON parses;
+- no secrets;
+- no signed URLs;
+- no customer PII;
+- no unsupported claims;
+- consistent totals;
+- consistent verdict.
+
+==================================================
+PHASE 18 — DIFF REVIEW
+==================================================
+
+Before commit:
+
+1. Review full diff.
+2. Remove debug logs.
+3. Remove temporary scripts.
+4. Remove downloaded test artifacts.
+5. Ensure no secret values.
+6. Ensure no production DB changes.
+7. Ensure no payment gateway changes.
+8. Ensure migrations are additive and guarded.
+9. List every changed file and purpose.
+
+==================================================
+PHASE 19 — LOGICAL COMMITS
+==================================================
+
+Commit only after all gates pass.
+
+Use logical commits, for example:
+
+1. fix: enforce dispatcher and scheduler readiness
+2. security: remove tracked secrets and add scanning
+3. fix: harden critical runtime types
+4. feat: add safe migration tracking
+5. security: persist signed URL revocations
+6. fix: enforce creative project tenant isolation
+7. fix: consolidate Gemini provider registry
+8. chore: add production readiness diagnostics and reports
+
+Do not push.
+Do not merge.
+Do not deploy.
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Use exactly one:
+
+READY FOR STAGING VERIFICATION
+
+READY FOR PRODUCTION READINESS RE-AUDIT
+
+BLOCKED — SECRETS STILL EXPOSED
+
+BLOCKED — DISPATCHER OR SCHEDULER NOT RUNNING
+
+BLOCKED — CRITICAL TYPE ERRORS REMAIN
+
+BLOCKED — TENANT ISOLATION FAILURE
+
+BLOCKED — MIGRATION SAFETY FAILURE
+
+BLOCKED — REGRESSION FAILURE
+
+BLOCKED — PARTIAL REMEDIATION STATE
+
+Do not declare production-ready.
+
+==================================================
+FINAL RESPONSE
+==================================================
+
+Return:
+
+1. Final remediation verdict
+2. Branch
+3. Starting commit
+4. Ending commit(s)
+5. Files changed
+6. Test totals
+7. Typecheck result
+8. Build result
+9. Runtime result
+10. Secret exposure status
+11. Dispatcher/scheduler status
+12. Tenant isolation status
+13. Migration safety status
+14. Remaining blockers
+15. Payment scope exclusion confirmation
+16. Recommended next action

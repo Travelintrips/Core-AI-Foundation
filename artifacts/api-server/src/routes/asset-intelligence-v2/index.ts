@@ -53,6 +53,9 @@ import { resolveWorkspaceSession } from "../../services/customerWorkspaceService
 
 const router = Router();
 
+// ── query-string helpers ──────────────────────────────────────────────────────
+const qs = (v: string | string[] | undefined): string | undefined => Array.isArray(v) ? v[0] : v;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function parseAssetId(raw: string | undefined): number | null {
@@ -82,7 +85,7 @@ async function withSession(req: import("express").Request, res: import("express"
 
 // ── POST /ai/asset-intelligence/v2/analyze/:assetId ──────────────────────────
 router.post("/ai/asset-intelligence/v2/analyze/:assetId", adminAuth, async (req, res): Promise<void> => {
-  const assetId = parseAssetId(req.params["assetId"]);
+  const assetId = parseAssetId(qs(req.params["assetId"]));
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
 
   const { assetSource, clientId, reanalyze, skipSafety, skipLicensing } = req.body as {
@@ -233,7 +236,7 @@ router.post("/ai/asset-intelligence/v2/version-chains", adminAuth, async (req, r
 
 // POST /ai/asset-intelligence/v2/version-chains/:chainId/members
 router.post("/ai/asset-intelligence/v2/version-chains/:chainId/members", adminAuth, async (req, res): Promise<void> => {
-  const chainId = parseAssetId(req.params["chainId"]);
+  const chainId = parseAssetId(qs(req.params["chainId"]));
   if (!chainId) { res.status(400).json({ error: "Invalid chainId" }); return; }
 
   const { assetId, assetSource, versionType, versionLabel, role } = req.body as {
@@ -268,7 +271,7 @@ router.get("/ai/asset-intelligence/v2/licensing/:assetId", async (req, res): Pro
 
 // PUT /ai/asset-intelligence/v2/licensing/:assetId
 router.put("/ai/asset-intelligence/v2/licensing/:assetId", adminAuth, async (req, res): Promise<void> => {
-  const assetId = parseAssetId(req.params["assetId"]);
+  const assetId = parseAssetId(qs(req.params["assetId"]));
   if (!assetId) { res.status(400).json({ error: "Invalid assetId" }); return; }
 
   const { assetSource, clientId, licenseType, licenseOwner, attribution, usageRights, restrictions, expiresAt, notes } =
