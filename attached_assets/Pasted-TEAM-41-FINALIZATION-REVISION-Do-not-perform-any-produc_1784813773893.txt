@@ -1,0 +1,80 @@
+TEAM 41 — FINALIZATION REVISION
+
+Do not perform any production implementation.
+
+1. Re-open TEAM41_ARCHITECTURE_AUDIT_REPORT.md.
+
+2. Clarify the canonical meaning of completion by separating:
+
+   - workflow_completed
+   - production_completed
+   - deliverable_ready
+   - commercial_completed
+   - files_unlocked
+   - order_completed
+
+3. Replace any ambiguous statement such as:
+
+   "Completion without payment is allowed"
+
+   with explicit rules:
+
+   - Workflow completion does not imply payment completion.
+   - Production completion may occur before full payment.
+   - Deliverable preview availability is service-policy dependent.
+   - Final file unlock requires the canonical payment condition.
+   - Commercial/order completion requires all mandatory commercial
+     obligations unless the service is explicitly zero-cost or waived
+     through an audited canonical policy.
+   - Admin override must never be an unlogged direct bypass.
+
+4. Declare the canonical billing precedence:
+
+   - Identify whether ai_payment_schedule is authoritative.
+   - Treat creative_projects.paymentStatus as derived/cache if that is
+     what the code actually implements.
+   - Document reconciliation requirements when they disagree.
+   - Do not invent a new source of truth.
+
+5. Add a Critical Finding Ownership Matrix mapping every critical
+   finding to Team 42–50 or a separate security/database owner.
+
+6. Correct the no-change statement to explicitly report:
+
+   - production code changed: zero
+   - documentation changed: TEAM41_ARCHITECTURE_AUDIT_REPORT.md
+   - migrations changed: zero
+   - database changed: zero
+   - runtime behavior changed: zero
+
+7. Do not expose secret values in the report. Only identify locations
+   and remediation requirements.
+
+8. Run:
+
+   git status --short
+   git diff --check
+   git diff -- TEAM41_ARCHITECTURE_AUDIT_REPORT.md
+
+9. Commit only the audit report:
+
+   git add TEAM41_ARCHITECTURE_AUDIT_REPORT.md
+   git commit -m "docs(audit): define universal creative lifecycle baseline"
+
+10. Push:
+
+   git push -u origin audit/team-41-shared-lifecycle
+
+11. Final response must contain:
+
+   - branch
+   - base commit
+   - final commit hash
+   - pushed remote branch
+   - files changed
+   - clarification of completion semantics
+   - canonical billing source-of-truth conclusion
+   - critical finding ownership matrix
+   - confirmation that no runtime code, migration, or database data changed
+
+Do not merge.
