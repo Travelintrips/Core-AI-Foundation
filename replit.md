@@ -1,64 +1,67 @@
-# Creative AI Studio — Enterprise Platform
+# Creative AI Studio — AI Platform
 
-A full-stack AI-powered creative services platform built as a pnpm monorepo.
+A full-stack AI platform built as a pnpm monorepo. Provides an admin dashboard, customer portal, job/workflow engine, design AI agents, and a cargo rate finder.
 
-## Project overview
+## Stack
 
-The platform enables clients to request creative AI services (branding, design, company profiles, etc.), manages the full commercial workflow (quotation → payment → AI generation → delivery), and provides an admin dashboard for operators.
+- **Runtime**: Node.js 20, pnpm workspace
+- **API**: Express (TypeScript, ESBuild), serves at `/api`
+- **Admin UI**: React + Vite, serves at `/admin/`
+- **Customer Portal**: React + Vite, serves at `/`
+- **Cargo Finder**: React + Vite, serves at `/cargo-finder/`
+- **Database**: Supabase (PostgreSQL, `ai_platform` schema), dev + prod instances
+- **AI Providers**: OpenAI, Anthropic, Gemini, Mistral, Cohere, Replicate
 
-## Architecture
+## How to Run
 
-| Artifact | Path | Preview Path | Description |
-|---|---|---|---|
-| API Server | `artifacts/api-server` | `/api` | Express + Drizzle ORM, connects to Supabase PostgreSQL |
-| AI Platform (admin) | `artifacts/ai-platform` | `/admin/` | React + Vite admin dashboard |
-| Customer Portal | `artifacts/customer-portal` | `/` | Client-facing React + Vite frontend |
-| Cargo Rate Finder | `artifacts/cargo-finder` | `/cargo-finder/` | Standalone cargo rate calculator |
-| Mockup Sandbox | `artifacts/mockup-sandbox` | `/__mockup` | Design canvas / component previews |
+All services start automatically via Replit workflows. In development:
 
-## Running the project
+| Service | Workflow name | URL |
+|---|---|---|
+| API Server | `artifacts/api-server: API Server` | `/api` |
+| Admin Dashboard | `artifacts/ai-platform: web` | `/admin/` |
+| Customer Portal | `artifacts/customer-portal: web` | `/` |
+| Cargo Finder | `artifacts/cargo-finder: web` | `/cargo-finder/` |
 
-All services start via their configured workflows. After a fresh clone or import:
+## Key Environment Variables
 
-```bash
-pnpm install   # install all workspace dependencies
-```
+Already configured in the Replit environment:
 
-Then restart all workflows from the Replit interface.
-
-## Key environment variables
-
-All secrets are managed in Replit's environment secrets. The project needs:
-
-- `SUPABASE_DATABASE_URL_DEV` / `SUPABASE_DEV_DATABASE_URL` — dev Supabase PostgreSQL (both names aliased)
-- `SUPABASE_DATABASE_URL` / `SUPABASE_PROD_DATABASE_URL` — production Supabase PostgreSQL
-- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `REPLICATE_API_TOKEN`, `COHERE_API_KEY` — AI providers
-- `ADMIN_API_KEY` + `VITE_ADMIN_API_KEY` — admin API authentication (same value)
-- `SESSION_SECRET` — Express session signing
-- `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `SMTP_PORT`, `SMTP_FROM` — email (Hostinger)
+- `SUPABASE_DEV_DATABASE_URL` / `SUPABASE_PROD_DATABASE_URL` — database connections
+- `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY` — admin authentication
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, etc. — AI providers
+- `SMTP_*` — email via Hostinger
 - `FONNTE_TOKEN` — WhatsApp notifications
 
-## Database
+## Shared Libraries (lib/)
 
-- **Provider**: Supabase PostgreSQL
-- **Schema**: `ai_platform` (not `public`) — all raw SQL must set `search_path`
-- **Dev/prod switching**: controlled by `NODE_ENV`
-- To seed initial data: `pnpm --filter @workspace/api-server run seed`
+- `lib/db` — Drizzle ORM schema + pool (Supabase)
+- `lib/api-spec` — OpenAPI spec (`openapi.yaml`) — source of truth for all routes
+- `lib/api-zod` — Generated Zod schemas from OpenAPI
+- `lib/api-client-react` — Generated React Query hooks from OpenAPI
+- `lib/design-components` — Shared UI components
 
-## Tech stack
+## Useful Scripts
 
-- **Runtime**: Node.js 20, pnpm workspaces
-- **Backend**: Express 5, Drizzle ORM, Zod, Pino logging
-- **Frontend**: React 18, Vite 7, TailwindCSS, shadcn/ui, Wouter (routing)
-- **AI**: OpenAI, Anthropic, Google Gemini, Replicate, Mistral, Cohere
-- **Storage**: Supabase Storage (S3-compatible)
-- **Email**: Nodemailer via Hostinger SMTP
-- **PDF**: PDFKit, pdf-lib
-- **Build**: esbuild (api-server), Vite (frontends)
+```bash
+# Install all dependencies
+pnpm install
 
-## User preferences
+# Seed the database (providers, models, agents)
+pnpm --filter @workspace/api-server run seed
+
+# Regenerate API client from OpenAPI spec
+pnpm run build:generated
+
+# Run all tests
+pnpm -r --if-present run test
+
+# Full typecheck
+pnpm run typecheck
+```
+
+## User Preferences
 
 - Keep existing project structure — do not restructure or migrate
-- Use pnpm for all package operations
-- Never import zod directly in api-server routes — use `@workspace/api-zod` schemas only
-- Admin auth is one global `adminAuthWithExceptions` mount in `app.ts`, never per-route
+- Use pnpm for all package management
+- Never write secrets or credentials into `.replit` directly
