@@ -1,0 +1,277 @@
+ROLE
+
+Lanjutkan pekerjaan DEV E2E GAP CLOSURE dari checkpoint terakhir.
+
+Jangan mengulang eksplorasi repository dari awal.
+Jangan deploy.
+Jangan publish.
+Jangan reset perubahan.
+Jangan menghapus failing tests.
+Jangan melemahkan assertion hanya agar test hijau.
+
+Checkpoint terakhir:
+
+- DEF-004 notification tests: 7/7 PASS;
+- pure notification builder sudah diekstrak;
+- DEF-001 test cache isolation sudah diperbaiki sebagian;
+- table-aware assertions sudah diperbaiki sebagian;
+- DEF-001 masih memiliki 3 failing tests;
+- quota habis saat membaca full failure output dan failure-handling code pada route.
+
+==================================================
+MANDATORY FIRST CHECK
+==================================================
+
+1. Periksa branch.
+2. Periksa working tree.
+3. Tampilkan modified dan untracked files.
+4. Pastikan perubahan terakhir masih tersimpan.
+5. Jalankan hanya DEF-001 targeted test untuk mendapatkan full failure output.
+6. Jangan menjalankan full regression dulu.
+7. Jangan menulis kode sebelum membaca ketiga failure secara lengkap.
+
+==================================================
+PHASE 1 — CAPTURE EXACT FAILURES
+==================================================
+
+Untuk masing-masing dari 3 failure, catat:
+
+- test name;
+- expected;
+- actual;
+- stack trace;
+- mocked function state;
+- route response;
+- DB mock calls;
+- cache state;
+- fingerprint state.
+
+Jangan menebak root cause dari summary pendek.
+
+==================================================
+PHASE 2 — TRACE FAILURE HANDLING
+==================================================
+
+Baca seluruh failure path pada submit/create route.
+
+Verifikasi urutan berikut:
+
+claimFingerprint
+→ project transaction
+→ related inserts
+→ commitFingerprint
+→ response
+
+Pada error:
+
+- releaseFingerprint harus dipanggil;
+- in-memory cache tidak boleh menyimpan success;
+- partial project tidak boleh tersisa;
+- duplicate retry harus dapat mencoba ulang;
+- error response harus konsisten.
+
+Periksa kemungkinan:
+
+- releaseFingerprint tidak terpanggil pada semua catch path;
+- commitFingerprint dipanggil terlalu awal;
+- cache diisi sebelum seluruh insert selesai;
+- test mock tidak sesuai shape return sebenarnya;
+- transaction mock tidak menjalankan callback seperti production;
+- duplicate path mengembalikan status berbeda dari assertion;
+- response payload berbeda antara first request dan dedup retry.
+
+==================================================
+PHASE 3 — FIX TESTS OR CODE BASED ON REAL CAUSE
+==================================================
+
+Aturan keputusan:
+
+Jika production code salah:
+- perbaiki production code;
+- tambahkan regression assertion.
+
+Jika test mock salah:
+- perbaiki mock agar mencerminkan real DB/service contract;
+- jangan mengubah production code hanya untuk test.
+
+Jika assertion salah:
+- ubah assertion ke canonical behavior;
+- jangan sekadar menurunkan strictness.
+
+Jika async race menyebabkan flaky test:
+- gunakan barrier/deferred promise;
+- jangan memakai arbitrary sleep sebagai satu-satunya sinkronisasi.
+
+==================================================
+PHASE 4 — REQUIRED DEF-001 TEST COVERAGE
+==================================================
+
+Pastikan targeted suite membuktikan:
+
+1. concurrent identical requests → satu project;
+2. retry setelah success → project yang sama;
+3. request saat first request masih processing;
+4. same key different tenant;
+5. same key different actor;
+6. same key different payload;
+7. project insert hanya satu;
+8. review/dashboard tidak duplicate;
+9. failure me-release fingerprint;
+10. retry setelah failure berhasil;
+11. commit hanya setelah transaction sukses;
+12. no stale L1 cache between tests.
+
+Gunakan table-aware and payload-aware assertions.
+
+==================================================
+PHASE 5 — DB-BACKED GUARANTEE VERIFICATION
+==================================================
+
+Pastikan test tidak hanya menguji in-memory cache.
+
+Minimal satu test harus menunjukkan:
+
+- L1 cache kosong;
+- DB idempotency record existing;
+- duplicate request mengambil canonical project dari persistent record.
+
+Minimal satu test harus menunjukkan:
+
+- two concurrent claims;
+- hanya satu claim menang berdasarkan unique constraint/transaction;
+- request kedua tidak membuat project baru.
+
+==================================================
+PHASE 6 — RUN DEF-001 ONLY
+==================================================
+
+Jalankan hanya file DEF-001.
+
+Target:
+
+- seluruh test PASS;
+- tidak ada flaky;
+- jalankan minimal 3 kali berturut-turut.
+
+Laporkan:
+
+Run 1:
+passed/failed/duration
+
+Run 2:
+passed/failed/duration
+
+Run 3:
+passed/failed/duration
+
+Jika hasil tidak konsisten:
+status tetap BLOCKED.
+
+==================================================
+PHASE 7 — RERUN ALL TARGETED TESTS
+==================================================
+
+Setelah DEF-001 hijau:
+
+jalankan:
+
+- DEF-001 idempotency;
+- DEF-004 notifications;
+- DEF-002 auth contract;
+- dev payment adapter.
+
+Laporkan per file.
+
+Expected:
+
+- DEF-004 tetap 7/7 PASS;
+- tidak ada regression dari pure builder;
+- auth tetap session-only;
+- dev payment wording tidak mengandung klaim Midtrans live.
+
+==================================================
+PHASE 8 — CHANGED-SCOPE TYPECHECK
+==================================================
+
+Jalankan changed-scope typecheck.
+
+Pastikan tidak ada error baru dari:
+
+- customer-portal route;
+- submit idempotency service;
+- pure notification builder;
+- test-only cache reset;
+- targeted tests.
+
+Jangan menyatakan global clean bila pre-existing debt masih ada.
+
+==================================================
+PHASE 9 — COMMIT ONLY AFTER GREEN
+==================================================
+
+Setelah seluruh targeted tests hijau:
+
+- inspect git diff;
+- hapus debug logs;
+- jangan commit test artifacts;
+- commit perubahan secara lokal.
+
+Suggested commit:
+
+fix: stabilize submit idempotency and notification tests
+
+Jangan push.
+Jangan merge.
+Jangan deploy.
+
+==================================================
+REPORT UPDATE
+==================================================
+
+Perbarui report dengan:
+
+A. Three remaining failure root causes
+
+B. Production-code changes
+
+C. Test-mock changes
+
+D. Assertion changes
+
+E. DEF-001 three-run stability proof
+
+F. DEF-004 retained 7/7 result
+
+G. All targeted test result
+
+H. Changed-scope typecheck
+
+I. Files changed
+
+J. Commit hash
+
+K. Remaining E2E gaps
+
+==================================================
+FINAL STATUS
+==================================================
+
+Gunakan salah satu:
+
+TARGETED TESTS PASS — READY FOR FULL REGRESSION
+
+DEV BLOCKED — DEF-001 TEST FAILURE
+
+DEV BLOCKED — IDEMPOTENCY RACE STILL PRESENT
+
+DEV BLOCKED — FLAKY CONCURRENCY TEST
+
+==================================================
+IMPORTANT
+==================================================
+
+- Jangan menjalankan full regression sebelum DEF-001 hijau.
+- Jangan memakai sleep acak untuk menyembunyikan race.
+- Jangan menghapus test failure path.
+- Jangan mengandalkan L1 cache untuk membuktikan idempotency.
+- Jangan menyatakan PASS jika salah satu dari 3 consecutive runs gagal.
