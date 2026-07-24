@@ -1,0 +1,413 @@
+ROLE
+
+Lakukan PRODUCTION READINESS RE-AUDIT untuk Creative AI Studio.
+
+Audit ini bersifat READ-ONLY.
+
+Jangan mengubah file.
+Jangan membuat branch.
+Jangan membuat commit.
+Jangan menjalankan migration.
+Jangan deploy.
+Jangan merge.
+Jangan memperbaiki bug.
+
+Gunakan kondisi repository saat ini sebagai satu-satunya sumber kebenaran.
+
+Semua temuan harus memiliki evidence nyata (file, line, test, build, atau runtime).
+
+==================================================
+AUDIT SCOPE (STRICT)
+==================================================
+
+Audit HANYA komponen yang termasuk release Creative AI.
+
+IN SCOPE:
+
+1. Repository
+2. Build
+3. TypeScript
+4. API Server
+5. AI Platform
+6. Creative AI
+7. Security
+8. Authentication
+9. Authorization
+10. Tenant Isolation
+11. Signed URL / Storage
+12. AI Workers
+13. Dispatcher
+14. Scheduler
+15. Queue
+16. AI Routing
+17. Provider Registry
+18. AI Cost Tracking
+19. Artifact Delivery
+20. Creative Marketplace
+21. Review Workflow
+22. Memory
+23. Presentation Engine
+24. Document Engine
+25. Migration Safety
+26. Environment Configuration
+27. Startup / Shutdown
+28. Logging
+29. Health
+30. Readiness
+31. Performance
+32. Tests
+33. Production Deployment Readiness
+
+==================================================
+OUT OF SCOPE
+==================================================
+
+JANGAN mengaudit:
+
+- BizPortal
+- Finance
+- Accounting
+- General Ledger
+- Journal
+- Tax
+- PPN
+- PPh
+- Bank Reconciliation
+- Dana Talang
+- Expense
+- Sport Center
+- Logistics
+- Driver
+- POD
+- PPJK
+- HS Code
+- Marketplace selain Creative Marketplace
+- Payment Gateway (Midtrans/Xendit/Paylabs)
+- Manual Payment Flow
+
+Jika menemukan file dari modul di atas:
+
+SKIP.
+
+Jangan dijadikan blocker.
+
+==================================================
+PHASE 1
+==================================================
+
+Repository baseline
+
+Laporkan:
+
+- branch
+- commit
+- git status
+- modified files
+- untracked files
+
+==================================================
+PHASE 2
+==================================================
+
+Build
+
+Audit:
+
+- workspace build
+- api build
+- ai-platform build
+- dependency
+- bundle
+
+==================================================
+PHASE 3
+==================================================
+
+TypeScript
+
+Laporkan:
+
+- total error
+- package
+- file
+- severity
+
+Bedakan:
+
+- pre-existing
+- release blocker
+
+==================================================
+PHASE 4
+==================================================
+
+Security
+
+Audit:
+
+- tracked secrets
+- .replit
+- .env
+- API key
+- JWT
+- database credentials
+- Supabase
+- SMTP
+- webhook secret
+- session secret
+
+Pastikan:
+
+tidak ada plaintext secret di tracked repository.
+
+==================================================
+PHASE 5
+==================================================
+
+Authentication & Authorization
+
+Audit:
+
+- auth middleware
+- RBAC
+- admin auth
+- JWT
+- API key
+- fail-open
+- fail-close
+
+==================================================
+PHASE 6
+==================================================
+
+Tenant Isolation
+
+Audit:
+
+- creative projects
+- reviews
+- artifacts
+- audit logs
+- automation
+- zip delivery
+- marketplace
+- coupons
+- AI memory
+
+Pastikan seluruh query menggunakan tenant scope di database.
+
+Memory filtering bukan solusi.
+
+==================================================
+PHASE 7
+==================================================
+
+Storage
+
+Audit:
+
+- Supabase Storage
+- bucket visibility
+- signed URL
+- expiration
+- revoke
+- persistence
+- download authorization
+
+==================================================
+PHASE 8
+==================================================
+
+AI Platform
+
+Audit:
+
+- dispatcher
+- scheduler
+- workers
+- queue
+- retry
+- heartbeat
+- provider routing
+- provider registry
+- cost tracking
+- dead letter queue
+
+==================================================
+PHASE 9
+==================================================
+
+API
+
+Audit:
+
+- try/catch
+- async handler
+- validation
+- pagination
+- route shadowing
+- duplicate route
+- response consistency
+
+==================================================
+PHASE 10
+==================================================
+
+Migration
+
+Audit:
+
+- migration history
+- rollback
+- idempotency
+- transaction safety
+
+==================================================
+PHASE 11
+==================================================
+
+Performance
+
+Audit:
+
+- N+1 query
+- missing indexes
+- sql.raw
+- cache
+- startup
+- memory
+
+==================================================
+PHASE 12
+==================================================
+
+Observability
+
+Audit:
+
+- logging
+- tracing
+- metrics
+- request id
+- health
+- readiness
+- uncaughtException
+- unhandledRejection
+
+==================================================
+PHASE 13
+==================================================
+
+Creative AI Workflow
+
+Audit:
+
+- project lifecycle
+- review workflow
+- artifact generation
+- AI orchestration
+- document generation
+- presentation generation
+- export
+- marketplace
+- asset delivery
+
+==================================================
+PHASE 14
+==================================================
+
+Tests
+
+Audit:
+
+- unit
+- integration
+- regression
+- smoke
+- missing coverage
+
+==================================================
+PHASE 15
+==================================================
+
+Release Readiness
+
+Kelompokkan menjadi:
+
+CRITICAL
+
+HIGH
+
+MEDIUM
+
+LOW
+
+Untuk setiap temuan tampilkan:
+
+- severity
+- component
+- evidence
+- impact
+- recommendation
+- estimated effort
+
+==================================================
+FALSE POSITIVE FILTER
+==================================================
+
+Sebelum memasukkan suatu temuan sebagai blocker:
+
+Pastikan:
+
+1. Masuk dalam audit scope.
+
+2. Benar-benar mempengaruhi Creative AI production.
+
+3. Ada evidence nyata.
+
+4. Bukan sekadar technical debt.
+
+5. Bukan future improvement.
+
+6. Bukan optimization.
+
+Jika tidak memenuhi seluruh syarat di atas:
+
+Masukkan ke:
+
+NON-BLOCKING OBSERVATIONS
+
+==================================================
+FINAL VERDICT
+==================================================
+
+Gunakan salah satu:
+
+READY FOR PRODUCTION
+
+READY FOR STAGING
+
+NOT READY FOR PRODUCTION
+
+BLOCKED
+
+==================================================
+IMPORTANT
+==================================================
+
+Jangan mencampurkan audit ERP/BizPortal dengan audit Creative AI.
+
+Jangan menjadikan modul di luar scope sebagai release blocker.
+
+Jangan memberikan rekomendasi implementasi.
+
+Audit saja.
+
+Semua temuan harus disertai evidence yang dapat diverifikasi.
+
+Laporan akhir harus dipisahkan menjadi:
+
+1. Release Blockers
+2. Non-Blocking Observations
+3. Strengths
+4. Overall Verdict
