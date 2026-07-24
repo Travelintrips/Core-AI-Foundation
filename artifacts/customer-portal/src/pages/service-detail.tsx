@@ -1010,7 +1010,7 @@ export default function ServiceDetailPage() {
             {/* How It Works */}
             <section id="workflow">
               <SectionHead icon={ChevronRight} title="How It Works" />
-              <ServiceWorkflow />
+              <ServiceWorkflow serviceCode={service?.serviceCode} />
             </section>
 
             {/* Live AI Preview */}

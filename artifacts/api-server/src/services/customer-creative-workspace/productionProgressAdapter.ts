@@ -10,11 +10,26 @@ import { eq } from "drizzle-orm";
 import { db, creativeProjectStepsTable } from "@workspace/db";
 import type { ProductionProgress, ProductionStage, StageStatus } from "./types.js";
 
-const STEP_DESCRIPTIONS: Record<string, string> = {
+export const STEP_DESCRIPTIONS: Record<string, string> = {
+  // ── Generic 4-agent pipeline ──────────────────────────────────────────────
   "Brand Strategy":      "Menganalisis brand dan menentukan positioning strategis untuk proyek Anda.",
   "Creative Direction":  "Merancang konsep kreatif, visual, dan panduan desain.",
   "Copy Production":     "Membuat teks konten, caption, dan narasi brand yang kuat.",
   "Quality Control":     "Memeriksa kualitas semua output sebelum pengiriman ke Anda.",
+
+  // ── Interior Design pipeline (INTERIOR_PIPELINE) ──────────────────────────
+  "Design Concept":         "Arsitek konsep kami mengembangkan visi desain menyeluruh, tema, dan mood board yang sesuai dengan kebutuhan ruang Anda.",
+  "Space Planning":         "Perencana ruang menyusun tata letak optimal — sirkulasi, zona fungsional, dan keseimbangan proporsi setiap area.",
+  "Material Specification": "Spesialis material mengkurasi palet material, finishing, tekstur, dan furnitur yang sesuai anggaran dan gaya yang dipilih.",
+  "Design Copy":            "Copywriter interior menyusun deskripsi ruang, konsep naratif, dan dokumen presentasi desain yang meyakinkan.",
+  "Interior Quality Control": "Tim QC memeriksa konsistensi desain, kepatuhan anggaran, dan kesiapan dokumen sebelum pengiriman ke Anda.",
+
+  // ── Fashion Design pipeline ───────────────────────────────────────────────
+  "Fashion Brand Strategy":    "Menganalisis segmen pasar fashion, positioning brand, dan competitive landscape.",
+  "Fashion Creative Direction": "Merancang arah kreatif koleksi, palet warna, dan mood board fashion.",
+  "Collection Copy":           "Menyusun deskripsi koleksi, product copy, dan narasi brand fashion.",
+  "Trend Analysis":            "Menganalisis tren fashion global yang relevan dengan koleksi dan target pasar.",
+  "Fashion Quality Control":   "Memeriksa konsistensi koleksi, brand fit, dan kesiapan dokumen fashion.",
 };
 
 // creative_project_steps.status vocabulary from schema

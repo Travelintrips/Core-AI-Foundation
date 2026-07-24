@@ -1,6 +1,8 @@
-import { CheckCircle2, FileText, Brain, Palette, Image, PenLine, ShieldCheck, MessageSquare, RotateCcw, Package } from "lucide-react";
+import { CheckCircle2, FileText, Brain, Palette, Image, PenLine, ShieldCheck, MessageSquare, RotateCcw, Package, Sofa, Layout, Layers, BookOpen } from "lucide-react";
 
-const WORKFLOW_STEPS = [
+// ── Generic (brand/creative) pipeline steps ───────────────────────────────────
+
+const GENERIC_WORKFLOW_STEPS = [
   {
     icon: FileText,
     label: "Creative Brief",
@@ -66,7 +68,95 @@ const WORKFLOW_STEPS = [
   },
 ];
 
-export function ServiceWorkflow() {
+// ── Interior Design pipeline steps ───────────────────────────────────────────
+
+const INTERIOR_WORKFLOW_STEPS = [
+  {
+    icon: FileText,
+    label: "Interior Brief",
+    description: "You submit space type, area, style preferences, and must-have features.",
+    color: "text-blue-500",
+    bg: "bg-blue-500/10",
+  },
+  {
+    icon: Brain,
+    label: "Design Concept",
+    description: "Interior Concept Architect develops the overarching vision, theme, and mood board.",
+    color: "text-violet-500",
+    bg: "bg-violet-500/10",
+  },
+  {
+    icon: Layout,
+    label: "Space Planning",
+    description: "Space Planner maps optimal layouts — circulation zones, functional areas, and proportions.",
+    color: "text-pink-500",
+    bg: "bg-pink-500/10",
+  },
+  {
+    icon: Layers,
+    label: "Material Specification",
+    description: "Material Specialist curates finishes, textures, and furniture within your budget and style.",
+    color: "text-orange-500",
+    bg: "bg-orange-500/10",
+  },
+  {
+    icon: PenLine,
+    label: "Design Copy",
+    description: "Interior Copywriter crafts space descriptions, concept narrative, and presentation documents.",
+    color: "text-yellow-600",
+    bg: "bg-yellow-500/10",
+  },
+  {
+    icon: ShieldCheck,
+    label: "Quality Control",
+    description: "Design consistency, budget compliance, and document readiness checked before delivery.",
+    color: "text-green-600",
+    bg: "bg-green-500/10",
+  },
+  {
+    icon: MessageSquare,
+    label: "Client Review",
+    description: "You review the interior concept document and request revisions if needed.",
+    color: "text-teal-500",
+    bg: "bg-teal-500/10",
+  },
+  {
+    icon: RotateCcw,
+    label: "Revision",
+    description: "Our team refines the concept based on your feedback.",
+    color: "text-cyan-500",
+    bg: "bg-cyan-500/10",
+  },
+  {
+    icon: Sofa,
+    label: "Final Delivery",
+    description: "Interior concept document, material palette, and spatial narrative delivered.",
+    color: "text-primary",
+    bg: "bg-primary/10",
+  },
+];
+
+// ── Service code → steps mapping ──────────────────────────────────────────────
+
+const INTERIOR_SERVICE_CODES = new Set(["interior-design", "interior-concept-design"]);
+
+function getWorkflowSteps(serviceCode?: string) {
+  if (serviceCode && INTERIOR_SERVICE_CODES.has(serviceCode)) {
+    return INTERIOR_WORKFLOW_STEPS;
+  }
+  return GENERIC_WORKFLOW_STEPS;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+interface ServiceWorkflowProps {
+  /** Optional catalog serviceCode to show service-specific steps. */
+  serviceCode?: string;
+}
+
+export function ServiceWorkflow({ serviceCode }: ServiceWorkflowProps = {}) {
+  const steps = getWorkflowSteps(serviceCode);
+
   return (
     <section>
       <div className="flex items-center gap-2 mb-6">
@@ -80,9 +170,9 @@ export function ServiceWorkflow() {
         <div className="absolute left-5 top-6 bottom-6 w-0.5 bg-gradient-to-b from-blue-500/30 via-primary/20 to-primary/40 hidden sm:block" />
 
         <div className="space-y-4">
-          {WORKFLOW_STEPS.map((step, i) => {
+          {steps.map((step, i) => {
             const Icon = step.icon;
-            const isLast = i === WORKFLOW_STEPS.length - 1;
+            const isLast = i === steps.length - 1;
             return (
               <div key={i} className="flex items-start gap-4 relative">
                 {/* Icon node */}

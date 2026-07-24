@@ -1,0 +1,251 @@
+ROLE
+
+Perform a targeted verification and minimal remediation for the Interior Design workflow.
+
+Do not redesign the whole workflow system.
+Do not touch unrelated services.
+Do not assume the stale-dist hypothesis is proven until runtime evidence confirms it.
+
+==================================================
+CURRENT FINDINGS
+==================================================
+
+Confirmed in source:
+
+- service code:
+  interior-concept-design
+
+- document type mapping:
+  interior-concept-design → interior_design
+
+- Interior Design workflow exists:
+  runInteriorDesignWorkflow()
+
+- expected pipeline:
+  1. Design Concept
+  2. Space Planning
+  3. Material Specification
+  4. Design Copy
+  5. Interior Quality Control
+
+Existing project rows contain the generic pipeline:
+
+- Brand Strategy
+- Creative Direction
+- Copy Production
+- Quality Control
+
+The current hypothesis is that the project ran against stale compiled dist.
+
+This hypothesis must now be proven or disproven.
+
+==================================================
+PHASE 1 — RUNTIME PROOF
+==================================================
+
+Inspect the currently running API and worker process.
+
+Report:
+
+1. exact startup command
+2. whether it runs source or dist
+3. exact build artifact used
+4. build timestamp
+5. current git commit
+6. whether API and worker use the same compiled artifact
+7. whether any old worker process is still alive
+
+Do not rely only on source inspection.
+
+==================================================
+PHASE 2 — TRACE DOCUMENT TYPE RESOLUTION
+==================================================
+
+For the existing Interior Design project, trace:
+
+project.sourceType
+project.serviceRequestId
+service request ID
+service code
+resolved documentType
+selected workflow function
+selected pipeline name
+
+Do not log secrets or full customer data.
+
+Add temporary safe diagnostic logging only if necessary, limited to:
+
+- project ID
+- service code
+- resolved document type
+- selected workflow name
+
+Remove temporary logs after verification.
+
+==================================================
+PHASE 3 — NEW ISOLATED VERIFICATION ORDER
+==================================================
+
+Create exactly one new isolated Interior Design test order after confirming the current build is active.
+
+Do not reuse the old project for this proof.
+
+Use:
+
+Service:
+interior-concept-design
+
+Expected workflow:
+
+1. Design Concept
+2. Space Planning
+3. Material Specification
+4. Design Copy
+5. Interior Quality Control
+
+After workflow dispatch, query creative_project_steps directly.
+
+PASS only if the inserted rows exactly match the Interior Design pipeline.
+
+Fail if any generic step appears:
+
+- Brand Strategy
+- Creative Direction
+- Copy Production
+- Quality Control
+
+==================================================
+PHASE 4 — VERIFY WORKER CONSISTENCY
+==================================================
+
+Confirm that:
+
+- API resolves interior_design correctly
+- worker receives interior_design
+- worker selects runInteriorDesignWorkflow()
+- no generic fallback occurs
+- no stale worker process handles the job
+- no queued old job overwrites steps
+
+Check whether jobs created before rebuild are being processed after rebuild using old payloads.
+
+==================================================
+PHASE 5 — MINIMAL UI FIX
+==================================================
+
+Only after runtime routing is proven correct:
+
+Update productionProgressAdapter.ts with descriptions for:
+
+- Design Concept
+- Space Planning
+- Material Specification
+- Design Copy
+- Interior Quality Control
+
+Descriptions must be specific to Interior Design.
+
+Also inspect ServiceWorkflow on the service-detail page.
+
+Do not use one generic 9-step workflow for every service.
+
+Add service-specific branching for interior-concept-design or use the canonical workflow registry if already available.
+
+Do not duplicate workflow definitions unnecessarily.
+
+==================================================
+PHASE 6 — OLD PROJECT HANDLING
+==================================================
+
+Do not silently rewrite old project history.
+
+For the existing project that contains generic steps, choose one explicit strategy:
+
+A. Mark as legacy execution
+B. Re-run via admin-controlled workflow restart
+C. Create corrected replacement steps while preserving audit history
+
+Do not directly overwrite completed rows without audit evidence.
+
+Report the safest option.
+
+==================================================
+PHASE 7 — TESTS
+==================================================
+
+Add or run tests proving:
+
+1. interior-concept-design resolves to interior_design
+2. interior_design selects runInteriorDesignWorkflow()
+3. inserted steps are exactly:
+   - Design Concept
+   - Space Planning
+   - Material Specification
+   - Design Copy
+   - Interior Quality Control
+4. generic pipeline is not selected
+5. unknown document types still use documented fallback
+6. UI descriptions exist for all Interior Design steps
+7. service-detail workflow is service-specific
+
+Run:
+
+- workflow resolver tests
+- creative workflow runner tests
+- production progress adapter tests
+- relevant customer portal tests
+- API build
+- customer portal build/typecheck
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+## 1. Root Cause Verdict
+
+Choose one:
+
+- PROVEN: stale API dist
+- PROVEN: stale worker process
+- PROVEN: document type resolver failure
+- PROVEN: service/project data mismatch
+- PROVEN: generic fallback bug
+- NOT PROVEN
+
+## 2. Runtime Evidence
+
+- API command
+- worker command
+- active commit
+- active build artifact
+- resolved service code
+- resolved document type
+- selected workflow
+
+## 3. New Test Project Evidence
+
+- project ID
+- workflow job ID
+- exact creative_project_steps rows
+- final workflow selected
+
+## 4. Files Changed
+
+List only minimal changes.
+
+## 5. Old Project Recommendation
+
+Explain whether to preserve, re-run, or migrate it.
+
+## 6. Final Verdict
+
+Choose exactly one:
+
+- INTERIOR WORKFLOW VERIFIED — READY
+- INTERIOR WORKFLOW FIXED — READY
+- INTERIOR WORKFLOW STILL USING GENERIC PIPELINE
+- VERIFICATION BLOCKED
+
+Do not claim the stale-dist root cause unless runtime evidence proves it.
