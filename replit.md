@@ -25,9 +25,11 @@ All services start automatically via Replit workflows. In development:
 
 ## Key Environment Variables
 
-`SESSION_SECRET` is configured in the Replit environment. The API workflow
-also requires `SUPABASE_DEV_DATABASE_URL` before it can start; production uses
-`SUPABASE_PROD_DATABASE_URL` (or the documented legacy production alias).
+Development runs load the tracked root `.env.development` file automatically
+through the API package's `node --env-file` command, so a fresh clone does not
+need manual `.env` copying for local development. Production uses
+`SUPABASE_PROD_DATABASE_URL` (or the documented legacy production alias) from
+the deployment environment.
 Admin authentication and provider features additionally require their
 corresponding `ADMIN_API_KEY`, `VITE_ADMIN_API_KEY`, AI provider, SMTP, and
 WhatsApp secrets when those features are used.
