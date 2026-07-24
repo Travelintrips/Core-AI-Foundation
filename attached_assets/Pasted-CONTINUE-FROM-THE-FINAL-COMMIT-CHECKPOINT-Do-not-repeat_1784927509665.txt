@@ -1,0 +1,188 @@
+CONTINUE FROM THE FINAL COMMIT CHECKPOINT.
+
+Do not repeat implementation or tests unless needed to verify the final repository state.
+
+The previous session already completed:
+
+- removed the wrongly committed attached_assets instruction file
+- replaced real-looking fixture IDs with safe deterministic test values
+- 59 Interior Design tests passed
+- 133 relevant tests passed
+- API build passed
+- security scan found no credentials in the diff
+- unrelated customer-portal typecheck errors were classified as pre-existing
+
+The session stopped immediately before or during the final commit.
+
+==================================================
+PHASE 1 — VERIFY LOCAL REPOSITORY STATE
+==================================================
+
+Run:
+
+git status --short
+git diff --stat
+git diff --name-only
+git diff --cached --stat
+git diff --cached --name-only
+
+Report whether:
+
+- there are unstaged changes
+- there are staged changes
+- the working tree is clean
+- the attached_assets instruction file still exists
+- any generated or temporary file remains
+
+Do not modify source code unless the cleanup is incomplete.
+
+==================================================
+PHASE 2 — VERIFY FILE REMOVAL
+==================================================
+
+Confirm the wrongly committed attached_assets instruction file is:
+
+- deleted from the working tree
+- staged for deletion or already committed
+- absent from the final Git tree
+
+Run an exact search for the filename and relevant instruction text.
+
+Also confirm no duplicate copy exists elsewhere.
+
+==================================================
+PHASE 3 — VERIFY FINAL COMMIT
+==================================================
+
+Inspect recent history:
+
+git log --oneline -5
+git show --stat --oneline HEAD
+
+Determine whether the cleanup commit already exists.
+
+If the commit does not exist:
+
+1. Stage only the intended cleanup and test-fixture changes.
+2. Create one focused commit.
+
+Suggested message:
+
+chore(creative-ai): clean release artifacts and test fixtures
+
+Do not amend unrelated commits.
+Do not squash automatically.
+
+==================================================
+PHASE 4 — VERIFY REMOTE STATE
+==================================================
+
+Run:
+
+git fetch origin
+git status -sb
+git rev-parse HEAD
+git rev-parse origin/main
+
+If local HEAD contains the cleanup commit but origin/main does not:
+
+- push the cleanup commit to origin/main only if the current branch is main and there is no divergence;
+- if the branch diverged, stop and report instead of force-pushing.
+
+Never use:
+
+git push --force
+git reset --hard origin/main
+git rebase without explicit need
+
+==================================================
+PHASE 5 — FINAL SECURITY CHECK
+==================================================
+
+Inspect the final commit diff for:
+
+- API keys
+- bearer tokens
+- admin credentials
+- passwords
+- environment values
+- customer personal data
+- real request/project/payment IDs
+- attached instruction artifacts
+- temporary E2E output
+
+Also run:
+
+git grep -n "attached_assets"
+git ls-files | grep "^attached_assets/"
+
+Classify any remaining tracked attached_assets files as:
+
+- intentional project documentation
+- unrelated pre-existing artifact
+- release-blocking accidental file
+
+Do not delete all attached_assets blindly.
+Only verify the specific accidental instruction file is gone.
+
+==================================================
+PHASE 6 — FINAL SMOKE CHECK
+==================================================
+
+Run only the minimal final checks:
+
+- relevant 133 tests
+- API build
+
+Do not rerun the entire monorepo unless the final diff changed production code.
+
+Record customer-portal typecheck errors separately as pre-existing if unchanged.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+## Repository State
+
+- branch
+- working tree status
+- staged status
+- local HEAD
+- origin/main HEAD
+
+## Cleanup Commit
+
+- commit hash
+- commit message
+- files changed
+- confirmation that the accidental attached_assets file is removed
+
+## Verification
+
+- relevant tests
+- API build
+- security scan
+- pre-existing unrelated failures
+
+## Remote Status
+
+Choose exactly one:
+
+- CLEANUP COMMITTED AND PUSHED
+- CLEANUP COMMITTED LOCALLY — PUSH REQUIRED
+- CLEANUP ALREADY PRESENT ON ORIGIN/MAIN
+- CLEANUP NOT COMMITTED
+- REMOTE DIVERGENCE — MANUAL REVIEW REQUIRED
+
+## Final Verdict
+
+Choose exactly one:
+
+- READY FOR RELEASE
+- READY AFTER PUSH
+- NOT READY — ACCIDENTAL FILE STILL TRACKED
+- NOT READY — DIRTY WORKING TREE
+- NOT READY — SECURITY ISSUE
+- NOT READY — REMOTE DIVERGENCE
