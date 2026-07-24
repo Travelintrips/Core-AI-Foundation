@@ -1,68 +1,60 @@
-# Creative AI Studio — AI Platform
+# Creative AI Studio
 
-A full-stack AI platform built as a pnpm monorepo. Provides an admin dashboard, customer portal, job/workflow engine, design AI agents, and a cargo rate finder.
+AI-powered creative agency platform for CST Logistic. Customers submit creative briefs, AI agents execute the work, and results flow through a commercial approval pipeline.
 
-## Stack
+## Architecture
 
-- **Runtime**: Node.js 20, pnpm workspace
-- **API**: Express (TypeScript, ESBuild), serves at `/api`
-- **Admin UI**: React + Vite, serves at `/admin/`
-- **Customer Portal**: React + Vite, serves at `/`
-- **Cargo Finder**: React + Vite, serves at `/cargo-finder/`
-- **Database**: Supabase (PostgreSQL, `ai_platform` schema), dev + prod instances
-- **AI Providers**: OpenAI, Anthropic, Gemini, Mistral, Cohere, Replicate
+pnpm monorepo with six artifacts:
 
-## How to Run
+| Artifact | Path | Preview | Description |
+|---|---|---|---|
+| Customer Portal | `artifacts/customer-portal` | `/` | Public-facing landing page + client workspace |
+| AI Platform (Admin) | `artifacts/ai-platform` | `/admin/` | Internal staff/admin portal |
+| API Server | `artifacts/api-server` | `/api` | Express + esbuild backend, Supabase DB |
+| Cargo Rate Finder | `artifacts/cargo-finder` | `/cargo-finder/` | Standalone cargo rate calculator |
+| Customer Mobile | `artifacts/customer-mobile` | `/mobile/` | Expo React Native app |
+| Mockup Sandbox | `artifacts/mockup-sandbox` | `/__mockup` | Design component preview server |
 
-All services start automatically via Replit workflows. In development:
+Shared libraries live in `lib/`: `api-spec`, `api-client-react`, `api-zod`, `db`, `design-components`, `design-workflow`.
 
-| Service | Workflow name | URL |
-|---|---|---|
-| API Server | `artifacts/api-server: API Server` | `/api` |
-| Admin Dashboard | `artifacts/ai-platform: web` | `/admin/` |
-| Customer Portal | `artifacts/customer-portal: web` | `/` |
-| Cargo Finder | `artifacts/cargo-finder: web` | `/cargo-finder/` |
-
-## Key Environment Variables
-
-Development runs load the tracked root `.env.development` file automatically
-through the API package's `node --env-file` command, so a fresh clone does not
-need manual `.env` copying for local development. Production uses
-`SUPABASE_PROD_DATABASE_URL` (or the documented legacy production alias) from
-the deployment environment.
-Admin authentication and provider features additionally require their
-corresponding `ADMIN_API_KEY`, `VITE_ADMIN_API_KEY`, AI provider, SMTP, and
-WhatsApp secrets when those features are used.
-
-## Shared Libraries (lib/)
-
-- `lib/db` — Drizzle ORM schema + pool (Supabase)
-- `lib/api-spec` — OpenAPI spec (`openapi.yaml`) — source of truth for all routes
-- `lib/api-zod` — Generated Zod schemas from OpenAPI
-- `lib/api-client-react` — Generated React Query hooks from OpenAPI
-- `lib/design-components` — Shared UI components
-
-## Useful Scripts
+## How to run (development)
 
 ```bash
-# Install all dependencies
+# Install all workspace dependencies (run once after clone/import)
 pnpm install
 
-# Seed the database (providers, models, agents)
-pnpm --filter @workspace/api-server run seed
+# Build shared TypeScript libraries (required before starting any service)
+pnpm run typecheck:libs
 
-# Regenerate API client from OpenAPI spec
-pnpm run build:generated
-
-# Run all tests
-pnpm -r --if-present run test
-
-# Full typecheck
-pnpm run typecheck
+# Start all services via the workflow buttons in the UI, or individually:
+pnpm --filter @workspace/api-server run dev       # API on port 8080
+pnpm --filter @workspace/ai-platform run dev      # Admin UI on port 20785
+pnpm --filter @workspace/customer-portal run dev  # Portal on port 23434
+pnpm --filter @workspace/cargo-finder run dev     # Cargo finder on port 20404
 ```
 
-## User Preferences
+The API server reads secrets from `.env.development` in dev (`--env-file` flag).
 
-- Keep existing project structure — do not restructure or migrate
-- Use pnpm for all package management
-- Never write secrets or credentials into `.replit` directly
+## Environment / Secrets
+
+Non-secret config is in `.replit` under `[userenv]`. Secrets required (see `.env.example` for full list):
+
+- **Database**: `SUPABASE_DEV_DATABASE_URL`, `SUPABASE_DATABASE_URL` (prod)
+- **AI Providers**: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `REPLICATE_API_TOKEN`
+- **Auth**: `ADMIN_API_KEY`, `VITE_ADMIN_API_KEY` (same value, frontend needs the VITE_ prefix), `SESSION_SECRET`
+- **Email**: `SMTP_PASS`
+- **WhatsApp**: `FONNTE_TOKEN`
+
+In development, all secrets are read from `.env.development` (not committed to production).
+
+## Key conventions
+
+- Never import `zod` directly in `artifacts/api-server` routes — use `@workspace/api-zod` schemas only.
+- Run `pnpm run typecheck:libs` (`tsc --build`) before `pnpm typecheck` or the api-server typecheck; lib types must be compiled first.
+- Admin auth is a single global middleware mount (`adminAuthWithExceptions`) in `app.ts`, never per-route.
+- Route files omit the app-level `/api` prefix — it's added at mount time.
+- Database uses Supabase with `ai_platform` schema (not `public`); set `search_path` for raw SQL.
+
+## User preferences
+
+- Keep existing project structure and stack; do not restructure or migrate.
