@@ -1,0 +1,99 @@
+Pasted-ROLE-Restore-plaintext-DEVELOPMENT-environment-configur_1784908409410.txt
+ROLE
+
+Restore plaintext DEVELOPMENT environment configuration into Git.
+
+This repository is currently PRIVATE and this is for DEVELOPMENT ONLY.
+
+Do not include any production credentials.
+
+==================================================
+REQUIREMENTS
+==================================================
+
+Create:
+
+.env.development
+
+Store only development/sandbox values in this file.
+
+Expected variables:
+
+OPENAI_API_KEY
+ANTHROPIC_API_KEY
+GEMINI_API_KEY
+MISTRAL_API_KEY
+REPLICATE_API_TOKEN
+
+SUPABASE_DEV_DATABASE_URL
+SUPABASE_URL_DEV
+SUPABASE_SERVICE_ROLE_KEY_DEV
+
+ADMIN_API_KEY
+VITE_ADMIN_API_KEY
+SESSION_SECRET
+ALLOWED_ORIGINS
+
+SMTP development credentials only if actually used.
+
+Do not include:
+
+SUPABASE_PROD_DATABASE_URL
+SUPABASE_DATABASE_URL for production
+production service-role keys
+production SMTP credentials
+production payment credentials
+production customer data access tokens
+
+==================================================
+GIT CONFIGURATION
+==================================================
+
+Ensure .env.development is NOT ignored by .gitignore.
+
+Keep these ignored:
+
+.env
+.env.local
+.env.production
+.env.production.local
+
+Add a clear warning at the top of .env.development:
+
+# DEVELOPMENT ONLY
+# PRIVATE REPOSITORY ONLY
+# DO NOT USE PRODUCTION CREDENTIALS
+# ROTATE ALL VALUES BEFORE PRODUCTION
+
+==================================================
+RUNTIME
+==================================================
+
+Verify the development start command loads .env.development.
+
+If Vite already loads it automatically under development mode, do not add duplicate loaders.
+
+For Node/API server, verify whether the current runtime already loads this file.
+
+If not, add a minimal development-only dotenv load:
+
+- only when NODE_ENV !== "production"
+- never load .env.development in production
+- do not log secret values
+
+==================================================
+VERIFICATION
+==================================================
+
+Verify:
+
+1. Development app starts after git pull.
+2. API can connect to development Supabase.
+3. AI provider configuration is detected.
+4. No production credential exists in .env.development.
+5. .env.development is tracked by Git.
+6. .env.production remains ignored.
+7. No secret value is printed in logs.
+
+Do not deploy.
+Do not merge without approval.
