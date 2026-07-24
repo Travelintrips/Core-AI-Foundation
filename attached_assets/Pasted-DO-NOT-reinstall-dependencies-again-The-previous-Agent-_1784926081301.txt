@@ -1,0 +1,173 @@
+DO NOT reinstall dependencies again.
+
+The previous Agent already reported:
+
+- dependencies installed
+- all 6 workflows running
+- failure happened during or after the visual check
+- Replit displayed:
+  "Agent ran into an error"
+
+This may be an Agent/tool failure rather than an application failure.
+
+Perform a targeted recovery investigation only.
+
+==================================================
+PHASE 1 — CHECK CURRENT PROCESS STATE
+==================================================
+
+Inspect all currently running workflows and processes.
+
+For each service report:
+
+- workflow name
+- command
+- process ID
+- running/stopped
+- listening port
+- last 30 log lines
+- startup error, if any
+- health endpoint status
+
+Do not restart healthy services yet.
+
+==================================================
+PHASE 2 — IDENTIFY THE AGENT FAILURE POINT
+==================================================
+
+Determine what the Agent was doing immediately before it failed.
+
+Check whether the failure happened during:
+
+- browser preview
+- screenshot capture
+- page navigation
+- workflow status polling
+- log collection
+- command timeout
+- process crash
+- memory exhaustion
+- disk exhaustion
+- dependency resolution
+- Replit internal tool error
+
+Report evidence.
+
+Do not claim the application failed unless a service process actually stopped or returned an error.
+
+==================================================
+PHASE 3 — RESOURCE CHECK
+==================================================
+
+Inspect:
+
+- memory usage
+- disk usage
+- CPU usage
+- number of Node processes
+- duplicate dev servers
+- orphan processes
+- port conflicts
+- excessive log output
+
+Terminate only confirmed duplicate or orphan processes.
+
+Do not stop valid services.
+
+==================================================
+PHASE 4 — HEALTH VERIFICATION
+==================================================
+
+Verify all 6 services independently.
+
+For each one:
+
+1. Confirm process is running.
+2. Confirm expected port is listening.
+3. Request its health or root endpoint.
+4. Record HTTP status.
+5. Confirm the response is from the intended application, not an HTML fallback or another service.
+
+Do not rely only on the Replit workflow UI.
+
+==================================================
+PHASE 5 — VISUAL CHECK SAFELY
+==================================================
+
+Retry visual verification one application at a time.
+
+Do not open all previews simultaneously.
+
+For each frontend:
+
+- wait until the dev server is ready
+- open the correct URL
+- verify the page renders
+- record console errors
+- record failed network requests
+- avoid repeated screenshot loops
+
+If the browser tool itself crashes but the page responds normally through HTTP, classify it as a Replit Agent/browser-tool failure.
+
+==================================================
+PHASE 6 — RECOVERY
+==================================================
+
+If a service is stopped:
+
+- identify the exact root cause
+- restart only that service
+- do not reinstall all dependencies
+- do not delete lockfiles
+- do not change package versions unless dependency corruption is proven
+
+If all services are healthy:
+
+- do not modify source code
+- report that the previous error was an Agent execution/tool failure
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+## 1. Agent Error Classification
+
+Choose exactly one:
+
+- REPLIT_AGENT_TOOL_FAILURE
+- BROWSER_PREVIEW_FAILURE
+- COMMAND_TIMEOUT
+- RESOURCE_EXHAUSTION
+- SERVICE_PROCESS_CRASH
+- DEPENDENCY_FAILURE
+- PORT_CONFLICT
+- UNKNOWN
+
+## 2. Service Status
+
+Table:
+
+Service | Process | Port | HTTP Status | Verdict
+
+## 3. Exact Failure Evidence
+
+Show the last successful Agent action and the first failing action.
+
+## 4. Changes Made
+
+List any process restart or file change.
+
+If no source changes were required, say:
+
+NO SOURCE CODE CHANGES
+
+## 5. Final Verdict
+
+Choose exactly one:
+
+- ALL SERVICES HEALTHY — AGENT TOOL FAILED
+- SERVICES RECOVERED — ALL HEALTHY
+- ONE OR MORE SERVICES STILL FAILING
+- VERIFICATION BLOCKED
