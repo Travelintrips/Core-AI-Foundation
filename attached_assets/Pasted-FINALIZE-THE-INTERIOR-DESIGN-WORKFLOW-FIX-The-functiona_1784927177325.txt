@@ -1,0 +1,139 @@
+FINALIZE THE INTERIOR DESIGN WORKFLOW FIX.
+
+The functional verification is complete.
+
+Verified result:
+
+- payment schedule defect fixed
+- conversion now fails loudly when mandatory schedule generation fails
+- real service catalog Interior Design order completed
+- document type resolved to interior_design
+- runInteriorDesignWorkflow selected
+- exactly 5 Interior Design steps inserted
+- workflow dispatch count = 1
+- payment schedule idempotent
+- relevant tests passed
+- API build passed
+
+Do not make additional feature changes.
+
+==================================================
+PHASE 1 — CLEAN DIFF REVIEW
+==================================================
+
+Run:
+
+git status
+git diff --stat
+git diff --name-only
+git diff
+
+Classify every changed file as:
+
+- required production fix
+- required test
+- unrelated
+- generated artifact
+- temporary E2E data/config
+
+Remove or revert all unrelated and temporary changes.
+
+Do not commit:
+
+- node_modules
+- dist
+- build output
+- logs
+- screenshots
+- temporary curl output
+- E2E credentials
+- admin keys
+- environment files
+- hardcoded request/project/payment IDs
+
+==================================================
+PHASE 2 — VERIFY FINAL FILE SET
+==================================================
+
+Expected areas may include:
+
+- serviceRequestConversionService.ts
+- creative workflow routing tests
+- Interior Design lifecycle tests
+- productionProgressAdapter.ts
+- service-workflow.tsx
+- service-detail.tsx
+
+Report the exact final file list.
+
+==================================================
+PHASE 3 — FINAL REGRESSION
+==================================================
+
+Run:
+
+- Interior Design lifecycle tests
+- conversion service tests
+- payment schedule tests
+- commercial gate tests
+- workflow runner tests
+- production progress adapter tests
+- service workflow UI tests
+- API build
+- customer portal build/typecheck
+
+Separate all pre-existing unrelated failures.
+
+==================================================
+PHASE 4 — SECURITY CHECK
+==================================================
+
+Search the diff for:
+
+- API keys
+- admin tokens
+- passwords
+- bearer tokens
+- test credentials
+- customer personal data
+- temporary project UUIDs
+- payment IDs
+
+Fail the release if any are committed.
+
+==================================================
+PHASE 5 — COMMIT
+==================================================
+
+Create one focused commit.
+
+Suggested commit message:
+
+fix(creative-ai): enforce payment schedule and route interior workflow
+
+Do not merge to main automatically.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+## Final Files Changed
+
+## Tests and Builds
+
+## Security Scan
+
+## Commit Hash
+
+## Remaining Pre-existing Failures
+
+## Merge Recommendation
+
+Choose exactly one:
+
+- READY FOR MERGE REVIEW
+- NOT READY — DIRTY DIFF
+- NOT READY — TEST FAILURE
+- NOT READY — SECURITY ISSUE
