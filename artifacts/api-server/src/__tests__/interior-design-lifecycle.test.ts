@@ -473,18 +473,18 @@ describe("Test 26: full_payment policy creates exactly one schedule row", () => 
       from: () => ({ where: () => Promise.resolve([]) }),
     });
     const insertedRows = [
-      { id: 99, projectId: 10, paymentType: "full_payment", amount: "105000", currency: "IDR", status: "pending", displayOrder: 0 },
+      { id: 901, projectId: 101, paymentType: "full_payment", amount: "5000000", currency: "IDR", status: "pending", displayOrder: 0 },
     ];
     (db as any).insert.mockReturnValue({
       values: () => ({ returning: () => Promise.resolve(insertedRows) }),
     });
     const result = await generateScheduleForProject({
-      projectId: 10, paymentPolicy: "full_payment",
-      depositPercentage: 50, totalAmount: 105000, currency: "IDR",
+      projectId: 101, paymentPolicy: "full_payment",
+      depositPercentage: 50, totalAmount: 5000000, currency: "IDR",
     });
     expect(result).toHaveLength(1);
     expect(result[0].paymentType).toBe("full_payment");
-    expect(result[0].amount).toBe("105000");
+    expect(result[0].amount).toBe("5000000");
     expect(result[0].currency).toBe("IDR");
   });
 
@@ -494,15 +494,15 @@ describe("Test 26: full_payment policy creates exactly one schedule row", () => 
       from: () => ({ where: () => Promise.resolve([]) }),
     });
     const insertedRows = [
-      { id: 100, projectId: 11, paymentType: "deposit", amount: "52500", currency: "IDR", status: "pending", displayOrder: 0 },
-      { id: 101, projectId: 11, paymentType: "remaining_balance", amount: "52500", currency: "IDR", status: "pending", displayOrder: 1 },
+      { id: 902, projectId: 102, paymentType: "deposit", amount: "2500000", currency: "IDR", status: "pending", displayOrder: 0 },
+      { id: 903, projectId: 102, paymentType: "remaining_balance", amount: "2500000", currency: "IDR", status: "pending", displayOrder: 1 },
     ];
     (db as any).insert.mockReturnValue({
       values: () => ({ returning: () => Promise.resolve(insertedRows) }),
     });
     const result = await generateScheduleForProject({
-      projectId: 11, paymentPolicy: "deposit",
-      depositPercentage: 50, totalAmount: 105000, currency: "IDR",
+      projectId: 102, paymentPolicy: "deposit",
+      depositPercentage: 50, totalAmount: 5000000, currency: "IDR",
     });
     expect(result).toHaveLength(2);
     expect(result[0].paymentType).toBe("deposit");
@@ -528,8 +528,8 @@ describe("Test 27: Schedule generation failure surfaces loudly — conversion mu
     });
     await expect(
       generateScheduleForProject({
-        projectId: 12, paymentPolicy: "full_payment",
-        depositPercentage: 50, totalAmount: 105000, currency: "IDR",
+        projectId: 103, paymentPolicy: "full_payment",
+        depositPercentage: 50, totalAmount: 5000000, currency: "IDR",
       }),
     ).rejects.toThrow("DB constraint violation");
   });
@@ -642,21 +642,21 @@ describe("Test 30: Schedule generation is idempotent", () => {
   it("second generateScheduleForProject call returns existing rows without insert", async () => {
     const { db } = await import("@workspace/db");
     const existing = [
-      { id: 31, projectId: 34, paymentType: "full_payment", amount: "105000.00", currency: "IDR", status: "pending", displayOrder: 0 },
+      { id: 904, projectId: 200, paymentType: "full_payment", amount: "3000000.00", currency: "IDR", status: "pending", displayOrder: 0 },
     ];
     (db as any).select.mockReturnValue({
       from: () => ({ where: () => Promise.resolve(existing) }),
     });
     const insertSpy = vi.spyOn(db as any, "insert");
     const result = await generateScheduleForProject({
-      projectId: 34, paymentPolicy: "full_payment",
+      projectId: 200, paymentPolicy: "full_payment",
       depositPercentage: 50, totalAmount: 9_999_999, currency: "IDR",
     });
     // Returns the existing row — does NOT insert a new one
     expect(result).toEqual(existing);
     expect(insertSpy).not.toHaveBeenCalled();
     // Amount is the ORIGINAL amount, not the new totalAmount
-    expect(result[0].amount).toBe("105000.00");
+    expect(result[0].amount).toBe("3000000.00");
   });
 });
 
