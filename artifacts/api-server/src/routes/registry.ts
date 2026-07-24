@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { eq } from "drizzle-orm";
-import { db, aiProvidersTable, aiModelsTable } from "@workspace/db";
+import { eq, desc } from "drizzle-orm";
+import { db, aiProvidersTable, aiModelsTable, aiProviderHealthLogsTable } from "@workspace/db";
 import { ssrfGuard } from "../middleware/ssrfGuard.js";
 import {
   CreateProviderBody,
@@ -24,6 +24,9 @@ import {
   GetModelResponse,
   UpdateModelResponse,
   DeleteModelResponse,
+  GetProviderHealthHistoryParams,
+  GetProviderHealthHistoryQueryParams,
+  GetProviderHealthHistoryResponse,
 } from "@workspace/api-zod";
 import { aiAuditLogsTable } from "@workspace/db";
 import { runHealthCheck, runAllHealthChecks } from "../services/providerHealthService.js";
@@ -100,6 +103,27 @@ router.delete("/ai/providers/:id", async (req, res): Promise<void> => {
   DeleteProviderResponse.parse(undefined);
 });
 
+
+/**
+ * GET /ai/providers/:id/health-history
+ *
+ * Returns the last N health-check log entries for a provider (default 50).
+ */
+router.get("/ai/providers/:id/health-history", async (req, res): Promise<void> => {
+  const params = GetProviderHealthHistoryParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const query = GetProviderHealthHistoryQueryParams.safeParse(req.query);
+  const limit = query.success && query.data.limit ? Math.min(query.data.limit, 200) : 50;
+
+  const logs = await db
+    .select()
+    .from(aiProviderHealthLogsTable)
+    .where(eq(aiProviderHealthLogsTable.providerId, params.data.id))
+    .orderBy(desc(aiProviderHealthLogsTable.checkedAt))
+    .limit(limit);
+
+  res.json(GetProviderHealthHistoryResponse.parse(logs));
+});
 
 /**
  * POST /ai/providers/:id/health-check

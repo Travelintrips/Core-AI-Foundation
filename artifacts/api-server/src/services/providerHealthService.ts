@@ -6,8 +6,8 @@
  * circular imports.
  */
 
-import { eq } from "drizzle-orm";
-import { db, aiProvidersTable } from "@workspace/db";
+import { eq, lt, and } from "drizzle-orm";
+import { db, aiProvidersTable, aiProviderHealthLogsTable } from "@workspace/db";
 import { logAudit } from "./aiAuditService.js";
 
 // ── Ping ─────────────────────────────────────────────────────────────────────
@@ -75,6 +75,22 @@ export type HealthCheckResult =
   | { error: string; notFound: true };
 
 /**
+ * Prune health log entries older than 30 days for a given provider.
+ * Called automatically after each health check write.
+ */
+async function pruneOldLogs(providerId: number): Promise<void> {
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  await db
+    .delete(aiProviderHealthLogsTable)
+    .where(
+      and(
+        eq(aiProviderHealthLogsTable.providerId, providerId),
+        lt(aiProviderHealthLogsTable.checkedAt, cutoff),
+      ),
+    );
+}
+
+/**
  * Run a health check for one provider and persist results.
  * Health checks update health metadata only — they do NOT touch isActive.
  * Admin enablement (isActive) is a separate administrative decision.
@@ -99,6 +115,16 @@ export async function runHealthCheck(id: number): Promise<HealthCheckResult> {
       .set({ consecutiveFailures: newFailures, lastCheckedAt: now })
       .where(eq(aiProvidersTable.id, id));
 
+    // Log the check result
+    await db.insert(aiProviderHealthLogsTable).values({
+      providerId: id,
+      isActive: false,
+      httpStatus: null,
+      error: `Environment variable "${envVar}" is not set in Replit Secrets.`,
+      checkedAt: now,
+    });
+    pruneOldLogs(id).catch(() => {/* fire-and-forget */});
+
     return {
       providerId: id,
       slug: provider.slug,
@@ -122,6 +148,16 @@ export async function runHealthCheck(id: number): Promise<HealthCheckResult> {
     .update(aiProvidersTable)
     .set({ consecutiveFailures: newFailures, lastCheckedAt: now, lastSuccessAt })
     .where(eq(aiProvidersTable.id, id));
+
+  // Log the check result
+  await db.insert(aiProviderHealthLogsTable).values({
+    providerId: id,
+    isActive: ping.ok,
+    httpStatus: ping.httpStatus ?? null,
+    error: ping.error ?? null,
+    checkedAt: now,
+  });
+  pruneOldLogs(id).catch(() => {/* fire-and-forget */});
 
   await logAudit(
     "registry",

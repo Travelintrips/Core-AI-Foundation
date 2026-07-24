@@ -9,6 +9,7 @@ import {
   getListProvidersQueryKey,
   useListSettings,
 } from "@workspace/api-client-react";
+import { ProviderHealthHistory } from "@/components/ProviderHealthHistory";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -553,6 +554,14 @@ export default function Registry() {
                             </span>
                           </div>
                         )}
+                      </div>
+
+                      {/* Health history sparkline */}
+                      <div className="mt-2 pt-2 border-t border-border/30">
+                        <ProviderHealthHistory
+                          providerId={p.id}
+                          providerName={p.name}
+                        />
                       </div>
                     </CardContent>
                   </Card>

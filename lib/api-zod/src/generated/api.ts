@@ -12922,3 +12922,26 @@ export const GetWorkspaceCreativeMarketplaceAssetsResponse = zod.object({
 })
 
 
+
+
+/**
+ * @summary Get health-check history for a single AI provider
+ */
+export const GetProviderHealthHistoryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetProviderHealthHistoryQueryParams = zod.object({
+  "limit": zod.coerce.number().optional()
+})
+
+export const ProviderHealthLogItem = zod.object({
+  "id": zod.number(),
+  "providerId": zod.number(),
+  "isActive": zod.boolean(),
+  "httpStatus": zod.number().nullish(),
+  "error": zod.string().nullish(),
+  "checkedAt": zod.coerce.date()
+})
+
+export const GetProviderHealthHistoryResponse = zod.array(ProviderHealthLogItem)

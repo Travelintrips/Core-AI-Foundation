@@ -95,3 +95,4 @@ export * from "./design-cost-attribution";
 export * from "./ai-entity-versions";
 export * from "./annotations";
 export * from "./ai-review-workspace-meta";
+export * from "./ai-provider-health-logs";
