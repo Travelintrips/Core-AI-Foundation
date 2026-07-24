@@ -1,0 +1,201 @@
+ROLE
+
+You are performing a ROOT CAUSE ANALYSIS only.
+
+DO NOT immediately modify code.
+
+I want you to explain WHY the current behavior is happening before making any fix.
+
+==================================================
+PROBLEM
+==================================================
+
+I selected the Interior Design service.
+
+However, the project workflow shown to the customer is still:
+
+Brand Strategy
+Creative Direction
+Copy Production
+Quality Control
+
+and after those 4 generic Creative AI stages, the system immediately generates AI rendered images.
+
+This looks exactly like the generic Brand Creative pipeline.
+
+==================================================
+EXPECTED BEHAVIOR
+==================================================
+
+Based on all previous completed implementation phases, Interior Design should NOT behave like a generic Creative AI image generator.
+
+We previously completed multiple phases that introduced:
+
+- service-specific workflows
+- service-specific brief schemas
+- workflow registry
+- AI agent routing
+- dispatcher
+- execution engine
+- image generation pipeline
+- project step engine
+- runtime orchestration
+- execution summary
+- customer workspace
+
+Therefore I expect Interior Design to have its own workflow.
+
+==================================================
+QUESTION
+==================================================
+
+Why is the UI still showing:
+
+Brand Strategy
+Creative Direction
+Copy Production
+Quality Control
+
+instead of an Interior Design workflow?
+
+==================================================
+INVESTIGATION REQUIRED
+==================================================
+
+Inspect ONLY.
+
+Do not change code yet.
+
+Determine:
+
+1.
+Which workflow definition is actually being loaded?
+
+2.
+Which workflow registry entry is selected for
+interior-concept-design?
+
+3.
+Which execution template is being used?
+
+4.
+Is Interior Design mapped to:
+
+- generic creative workflow
+- image concept workflow
+- brand strategy workflow
+
+or another workflow?
+
+5.
+Which file determines these four visible stages?
+
+6.
+Are those stages:
+
+hardcoded,
+
+database driven,
+
+template driven,
+
+or generated dynamically?
+
+7.
+Was the Interior Design workflow ever implemented?
+
+If yes,
+
+why is it not being used?
+
+8.
+If it was NOT implemented,
+
+identify exactly which previous phase assumed it existed.
+
+9.
+Determine whether:
+
+the UI is wrong,
+
+the backend routing is wrong,
+
+the workflow registry is wrong,
+
+the dispatcher is wrong,
+
+or the service configuration is wrong.
+
+==================================================
+VERIFY AGAINST PREVIOUS WORK
+==================================================
+
+Compare the current implementation against all completed phases.
+
+I want to know whether:
+
+- the implementation is missing,
+
+- the implementation exists but is never selected,
+
+- the implementation exists but is overridden,
+
+- the implementation exists but the UI ignores it,
+
+- or the implementation was never actually finished.
+
+==================================================
+DO NOT GUESS
+==================================================
+
+Trace the real execution.
+
+Show the actual chain, for example:
+
+Interior Design Service
+↓
+
+Workflow Resolver
+↓
+
+Workflow Registry
+↓
+
+Execution Template
+↓
+
+Dispatcher
+↓
+
+Project Steps
+↓
+
+Customer UI
+
+==================================================
+FINAL REPORT
+==================================================
+
+Answer these questions:
+
+1.
+Why is Interior Design using Brand Strategy?
+
+2.
+Is this expected?
+
+3.
+Which file causes it?
+
+4.
+Is this a bug or by design?
+
+5.
+Which completed phase failed to connect?
+
+6.
+What is the smallest isolated fix?
+
+DO NOT FIX YET.
+
+I want the root cause first.
