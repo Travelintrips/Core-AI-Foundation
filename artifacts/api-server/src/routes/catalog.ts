@@ -389,14 +389,28 @@ async function loadServiceAndPackage(serviceId: number, packageId: number | null
  * category.visibility, leaving 18 internal_only services exploitable.
  */
 async function assertServiceIsCommerciallyEligible(
-  service: { categoryId: number; status: string },
+  service: { categoryId: number; parentCategoryId: number | null; status: string },
   res: import("express").Response,
 ): Promise<boolean> {
-  const [category] = await db
+  const categoryIds = [service.parentCategoryId, service.categoryId]
+    .filter((id): id is number => id != null)
+    .filter((id, index, ids) => ids.indexOf(id) === index);
+  const categories = await db
     .select()
     .from(aiServiceCategoriesTable)
-    .where(eq(aiServiceCategoriesTable.id, service.categoryId))
-    .limit(1);
+    .where(inArray(aiServiceCategoriesTable.id, categoryIds));
+
+  // Match the public catalog projection: a service may retain a legacy
+  // categoryId while its parentCategoryId is the canonical public category.
+  // Prefer the parent when it is eligible, but fall back to the legacy
+  // category if that is the eligible canonical category.
+  const parentCategory = service.parentCategoryId == null
+    ? null
+    : categories.find((category) => category.id === service.parentCategoryId);
+  const legacyCategory = categories.find((category) => category.id === service.categoryId);
+  const category = [parentCategory, legacyCategory].find(
+    (candidate) => candidate && isCategoryCommerciallyEligible(candidate),
+  );
 
   const ineligibilityReason = category
     ? getServiceIneligibilityReason({

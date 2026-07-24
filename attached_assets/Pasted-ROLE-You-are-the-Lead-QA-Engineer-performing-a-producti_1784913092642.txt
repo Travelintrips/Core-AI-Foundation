@@ -1,0 +1,693 @@
+ROLE
+
+You are the Lead QA Engineer performing a production-style end-to-end validation for the Creative AI Interior Design service.
+
+This is a TEST-ONLY task.
+
+Do not redesign architecture.
+Do not modify unrelated modules.
+Do not touch BizPortal accounting, tax, bank reconciliation, logistics, driver, POD, or payment gateway.
+Manual payment proof flow is in scope.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Run one complete Interior Design order from customer creation until final deliverable and review.
+
+The test must prove that:
+
+1. Customer can select Interior Design.
+2. Customer can complete the creative brief.
+3. Order/request is persisted correctly.
+4. Quotation or fixed-price commercial flow is created correctly.
+5. Payment schedule is created.
+6. Customer can upload payment proof.
+7. Ownership protection blocks another customer.
+8. Admin can verify payment.
+9. Payment status updates correctly.
+10. Creative AI workflow starts exactly once.
+11. Interior Design agents/processors execute.
+12. Generated image/design assets are stored.
+13. Customer workspace displays the deliverables.
+14. Customer can approve, reject, or request revision.
+15. Audit trail and cost/token records are generated.
+
+==================================================
+ENVIRONMENT PRECHECK
+==================================================
+
+The repository contains a tracked .env.development file.
+
+Do not ask for Replit Secrets if the required variables are already available from .env.development.
+
+Do not print credential values.
+
+Verify only as PRESENT or MISSING:
+
+- SUPABASE_DEV_DATABASE_URL
+- SUPABASE_URL_DEV
+- SUPABASE_SERVICE_ROLE_KEY_DEV
+- OPENAI_API_KEY
+- GEMINI_API_KEY
+- REPLICATE_API_TOKEN
+- ADMIN_API_KEY
+- SESSION_SECRET
+
+Confirm the API startup command actually loads:
+
+../../.env.development
+
+when executed from artifacts/api-server.
+
+Run the API from its own package directory, not from repository root.
+
+==================================================
+TEST DATA
+==================================================
+
+Create isolated test data with a unique timestamp suffix.
+
+Customer:
+
+Name:
+E2E Interior Design Customer
+
+Email:
+e2e-interior-{timestamp}@example.test
+
+Phone:
++62812{uniqueDigits}
+
+Service:
+Interior Design
+
+Project name:
+Modern Executive Office Interior
+
+Project type:
+Office Interior Design
+
+Design brief:
+
+Create a premium modern executive office interior for a technology and logistics company.
+
+Room dimensions:
+8 meters × 6 meters
+
+Ceiling height:
+3.2 meters
+
+Primary function:
+Executive office and small meeting area
+
+Occupancy:
+1 executive and up to 4 guests
+
+Required zones:
+- executive desk
+- ergonomic executive chair
+- four-person meeting area
+- storage cabinet
+- company logo wall
+- display shelving
+- concealed cable management
+
+Preferred style:
+Modern, elegant, professional, premium, minimalist
+
+Preferred colors:
+- charcoal
+- warm grey
+- natural walnut
+- subtle brass accents
+
+Materials:
+- walnut veneer
+- textured wall panels
+- dark metal
+- glass
+- premium fabric
+- warm indirect lighting
+
+Lighting:
+- natural daylight
+- warm ambient lighting
+- task lighting
+- indirect LED lighting
+
+Deliverables expected:
+- design concept
+- moodboard
+- material palette
+- floor layout
+- executive office perspective
+- meeting-zone perspective
+- design rationale
+
+Important constraints:
+- no fabricated room measurements
+- no unsupported budget claims
+- no invented brand specifications
+- preserve all customer requirements
+- output must clearly represent an office, not a bedroom or residential living room
+
+Reference image:
+Optional. Use an existing safe fixture if available.
+Do not depend on external uploads unless required by the implementation.
+
+==================================================
+PHASE 1 — SERVICE DISCOVERY
+==================================================
+
+Verify that Interior Design appears in the customer-facing service catalog.
+
+Check:
+
+- canonical service code
+- display name
+- category
+- pricing mode
+- brief schema
+- required fields
+- supported deliverables
+- active/published status
+
+Fail the test if:
+
+- Interior Design resolves to Fashion Design
+- it resolves to a generic image-only service
+- the service is inactive
+- the service ID or slug is inconsistent between frontend and backend
+
+Record:
+
+- service ID
+- service code
+- service slug
+- pricing mode
+
+==================================================
+PHASE 2 — CUSTOMER ORDER CREATION
+==================================================
+
+Create the order through the same API/UI flow used by a real customer.
+
+Prefer browser-based flow if Playwright or the existing E2E framework is available.
+
+Otherwise use HTTP/API calls that reproduce the real frontend payload.
+
+Validate:
+
+- request/order receives a unique ID
+- customer identity is persisted
+- service is Interior Design
+- brief data is persisted without loss
+- dimensions remain 8 m × 6 m × 3.2 m
+- project status is correct
+- no unrelated default values overwrite the brief
+- customer workspace token or request credential is created correctly
+
+Capture:
+
+- request UUID
+- integer service request ID
+- project ID
+- customer workspace URL/token status
+- initial project status
+
+Do not print raw authentication tokens in the final report.
+
+==================================================
+PHASE 3 — COMMERCIAL FLOW
+==================================================
+
+Determine the configured pricing flow:
+
+A. FIXED PRICE
+
+Expected:
+
+request
+→ project
+→ payment schedule
+
+B. ENTERPRISE / QUOTATION
+
+Expected:
+
+request
+→ quotation
+→ customer approval
+→ project
+→ payment schedule
+
+Validate:
+
+- price is sourced from configured service/catalog data
+- no arbitrary test price is invented
+- subtotal, tax, discount, and total are internally consistent
+- currency is correct
+- payment schedule belongs to the created project
+- customer can only access their own schedule
+
+Record:
+
+- commercial mode
+- quotation ID if applicable
+- payment schedule ID
+- amount
+- currency
+- initial payment status
+
+==================================================
+PHASE 4 — PAYMENT PROOF AND SECURITY
+==================================================
+
+Upload a harmless test payment-proof fixture.
+
+Do not use real banking data.
+
+Use a generated fixture clearly marked:
+
+E2E TEST PAYMENT PROOF — NOT A REAL TRANSACTION
+
+Validate the valid customer flow:
+
+- correct requestId or workspaceToken is submitted
+- ownership resolves to the correct project
+- proof is uploaded to the private payment bucket
+- stored value is a private object path, not a public CDN URL
+- schedule status changes to waiting_payment_verification
+- randomized storage filename is used
+
+Then run negative ownership tests:
+
+1. Submit without requestId/workspaceToken
+   Expected: 400 or 401
+
+2. Submit with invalid credential
+   Expected: 401 or 404
+
+3. Submit using Customer A credential against Customer B schedule
+   Expected: 403
+
+4. Submit forged projectId/customerId/serviceRequestId fields
+   Expected: forged fields ignored and ownership still enforced
+
+Do not expose signed URLs or tokens in logs.
+
+==================================================
+PHASE 5 — ADMIN PAYMENT VERIFICATION
+==================================================
+
+Using the real admin endpoint/service:
+
+1. Read pending verification.
+2. Generate/read a signed proof URL.
+3. Confirm signed URL is time-limited.
+4. Approve the payment.
+
+Validate atomically:
+
+- payment schedule becomes paid
+- verified timestamp is stored
+- verified actor comes from authenticated server context
+- project payment state is updated
+- creative workflow dispatch occurs
+- no partial payment/project state remains on failure
+
+Run duplicate verification:
+
+- approve the same payment a second time
+- expected: idempotent result or explicit conflict
+- workflow must not start twice
+
+Inspect job/workflow records and prove there is exactly one active workflow execution for this payment/project trigger.
+
+==================================================
+PHASE 6 — INTERIOR DESIGN WORKFLOW
+==================================================
+
+Trace the complete workflow used for Interior Design.
+
+Identify the actual agent or worker stages, for example:
+
+- brief analysis
+- interior concept development
+- spatial/layout planning
+- moodboard/material direction
+- prompt construction
+- image generation
+- quality control
+- asset packaging
+
+Use actual repository names; do not invent agent names.
+
+Validate at every stage:
+
+- input JSON schema passes
+- output JSON schema passes
+- project/service IDs remain consistent
+- room dimensions are retained
+- Interior Design constraints are retained
+- no Fashion Design or unrelated service prompt contaminates the run
+- failures produce structured error records
+- retries do not duplicate final assets
+- provider/model selection is recorded
+- token usage and cost are recorded where supported
+
+Wait for the workflow to reach a terminal state:
+
+- completed
+- failed
+- cancelled
+
+Use a reasonable timeout based on the current asynchronous worker design.
+
+Do not mark PASS while jobs are still pending.
+
+==================================================
+PHASE 7 — OUTPUT QUALITY VALIDATION
+==================================================
+
+Validate generated deliverables against the brief.
+
+Structural validation:
+
+- at least one final Interior Design asset exists
+- asset belongs to the correct project
+- asset type and MIME type are valid
+- asset file/object exists
+- preview/thumbnail resolves
+- customer workspace can retrieve it
+- unrelated customers cannot retrieve it
+
+Semantic validation:
+
+The result must visibly or descriptively include:
+
+- modern executive office
+- executive desk
+- executive chair
+- four-person meeting area
+- storage
+- logo/feature wall
+- walnut material direction
+- charcoal/warm-grey palette
+- warm indirect lighting
+- professional commercial-office character
+
+Reject as FAIL if output is primarily:
+
+- fashion/apparel
+- residential bedroom
+- residential living room
+- exterior architecture
+- empty abstract moodboard only
+- generic image unrelated to the supplied dimensions and zones
+
+Check that the system does not falsely claim:
+
+- exact construction feasibility
+- engineering approval
+- guaranteed dimensions from a perspective image
+- confirmed material pricing
+- compliance certification
+
+==================================================
+PHASE 8 — CUSTOMER WORKSPACE
+==================================================
+
+Open the customer workspace using the actual customer-access mechanism.
+
+Validate:
+
+- order is listed
+- project title is correct
+- payment is shown as paid
+- workflow progress/status is visible
+- final assets are visible
+- preview loads
+- download is available where supported
+- payment proof URL is signed/private
+- no admin-only information is exposed
+- AI provider keys, internal prompts, and system metadata are not exposed
+
+Test responsive behavior if browser automation is available:
+
+- desktop
+- mobile viewport
+
+Capture screenshots if the test framework supports them.
+
+==================================================
+PHASE 9 — REVIEW AND REVISION
+==================================================
+
+Test the customer review flow.
+
+Scenario A — Revision:
+
+Submit a revision request:
+
+“Please make the logo wall more prominent, increase the walnut material presence, and make the meeting zone feel more executive.”
+
+Validate:
+
+- revision is stored
+- project/asset status updates correctly
+- revision is linked to the correct asset/project
+- review token ownership is enforced
+- revision workflow starts at most once
+- audit event is recorded
+
+Scenario B — Approval:
+
+After revision handling is validated, approve the final result or use a separate test asset/order if the state machine does not allow approval after the chosen revision path.
+
+Validate:
+
+- approval is persisted
+- approved timestamp is stored
+- project completion state is correct
+- duplicate approval is idempotent or rejected safely
+
+==================================================
+PHASE 10 — DATABASE AND AUDIT VALIDATION
+==================================================
+
+Inspect relevant records using read-only queries.
+
+Verify consistency across the actual tables used by the application:
+
+- service request
+- creative project
+- commercial/quotation record
+- payment schedule/payment record
+- AI job/workflow
+- project steps
+- generated assets
+- customer review/revision
+- AI cost records
+- audit/event records
+
+Validate:
+
+- no orphan records
+- no duplicate project
+- no duplicate payment schedule
+- no duplicate workflow dispatch
+- no duplicate final asset caused by retry
+- all records reference the correct customer/project
+- timestamps progress logically
+- terminal statuses agree across tables
+
+Do not modify unrelated records.
+
+==================================================
+PHASE 11 — AUTOMATED REGRESSION TESTS
+==================================================
+
+Run existing tests relevant to:
+
+- Interior Design service configuration
+- order creation
+- quotation/fixed-price flow
+- payment ownership
+- payment re-upload
+- private proof storage
+- payment approval
+- workflow dispatch
+- customer workspace
+- review/revision
+- asset access control
+
+At minimum run:
+
+- payment route tests
+- payment schedule service tests
+- Creative AI workflow tests
+- customer portal tests touching order/payment/workspace
+
+Then run:
+
+- API build
+- customer portal build or typecheck
+
+Clearly separate:
+
+- new failures caused by this order flow
+- pre-existing unrelated failures
+
+Do not fix unrelated TypeScript errors during this test task.
+
+==================================================
+PHASE 12 — CLEANUP POLICY
+==================================================
+
+Do not automatically delete evidence before reporting.
+
+Label all records as E2E test data where supported.
+
+After reporting, provide exact IDs and a cleanup plan.
+
+Only delete test records if explicitly instructed.
+
+Never delete shared service configuration, provider records, templates, or production-like customer records.
+
+==================================================
+FINAL REPORT FORMAT
+==================================================
+
+Return this exact structure:
+
+# INTERIOR DESIGN E2E TEST REPORT
+
+## 1. Environment
+
+Branch:
+Commit:
+API startup:
+Database connection:
+Frontend:
+Worker:
+Environment source:
+Required variables:
+
+## 2. Test Order
+
+Customer:
+Service:
+Request UUID:
+Service request ID:
+Project ID:
+Commercial mode:
+Quotation ID:
+Payment schedule ID:
+Workspace access:
+Final status:
+
+Mask credentials and tokens.
+
+## 3. Phase Results
+
+| Phase | Status | Evidence |
+|---|---|---|
+| Service discovery | PASS/FAIL/BLOCKED | |
+| Order creation | PASS/FAIL/BLOCKED | |
+| Commercial flow | PASS/FAIL/BLOCKED | |
+| Payment proof | PASS/FAIL/BLOCKED | |
+| Ownership security | PASS/FAIL/BLOCKED | |
+| Admin verification | PASS/FAIL/BLOCKED | |
+| Workflow execution | PASS/FAIL/BLOCKED | |
+| Interior output quality | PASS/FAIL/BLOCKED | |
+| Customer workspace | PASS/FAIL/BLOCKED | |
+| Review/revision | PASS/FAIL/BLOCKED | |
+| Database consistency | PASS/FAIL/BLOCKED | |
+| Regression tests | PASS/FAIL/BLOCKED | |
+
+## 4. Workflow Trace
+
+Provide each actual stage:
+
+stage
+→ input
+→ output
+→ status
+→ duration
+→ provider/model
+→ token/cost record
+
+Do not include hidden system prompts or secret values.
+
+## 5. Payment Security Evidence
+
+Report:
+
+- valid customer upload
+- missing ownership credential
+- invalid credential
+- cross-customer attempt
+- forged identity fields
+- private object path
+- signed URL
+- duplicate approval behavior
+- workflow dispatch count
+
+## 6. Interior Design Quality Evidence
+
+Report whether each required element is present:
+
+- executive office
+- executive desk
+- four-person meeting zone
+- storage
+- logo wall
+- walnut
+- charcoal/warm-grey
+- warm lighting
+- premium professional style
+
+Include screenshots or asset references where available.
+
+## 7. Defects
+
+For every defect:
+
+Severity:
+Component:
+Reproduction steps:
+Expected:
+Actual:
+Evidence:
+Release blocker: YES/NO
+
+Do not fix defects unless they prevent the test from continuing and the fix is minimal, isolated, and explicitly documented.
+
+## 8. Tests and Builds
+
+Payment tests:
+Workflow tests:
+Portal tests:
+API build:
+Portal build/typecheck:
+Pre-existing failures:
+
+## 9. Data Created
+
+List IDs and table/domain names only.
+
+## 10. Cleanup Plan
+
+Provide safe cleanup steps without executing them.
+
+## 11. Final Verdict
+
+Choose exactly one:
+
+- E2E PASS — INTERIOR DESIGN ORDER READY
+- E2E FAIL — RELEASE BLOCKERS FOUND
+- E2E BLOCKED — ENVIRONMENT OR PROVIDER UNAVAILABLE
+
+Do not issue PASS unless the complete real flow reaches a final customer-visible deliverable and payment/workflow ownership controls are proven.
