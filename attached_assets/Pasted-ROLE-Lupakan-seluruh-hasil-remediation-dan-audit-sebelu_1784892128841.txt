@@ -1,0 +1,367 @@
+ROLE
+
+Lupakan seluruh hasil remediation dan audit sebelumnya.
+
+Anggap semua laporan sebelumnya hanya historical context.
+
+Gunakan HANYA kondisi repository saat ini sebagai sumber kebenaran.
+
+Jangan memperbaiki apa pun terlebih dahulu.
+
+Jangan membuat branch.
+
+Jangan mengubah file.
+
+Jangan membuat commit.
+
+Jangan menjalankan migration.
+
+Jangan deploy.
+
+Jangan merge.
+
+==================================================
+PHASE 1 — BASELINE
+==================================================
+
+Laporkan:
+
+- current branch
+- HEAD commit
+- git status
+- untracked files
+- modified files
+- current tag (jika ada)
+
+Pastikan repository benar-benar bersih sebelum audit.
+
+==================================================
+PHASE 2 — BUILD & TYPECHECK
+==================================================
+
+Jalankan:
+
+- install dependency bila diperlukan
+- build shared libs
+- build API
+- build portals
+- typecheck seluruh workspace
+
+Laporkan:
+
+- total error
+- warning
+- lokasi file
+- apakah pre-existing atau baru (berdasarkan git blame / history bila memungkinkan)
+
+==================================================
+PHASE 3 — TEST BASELINE
+==================================================
+
+Jalankan:
+
+- seluruh unit test
+- integration test
+- worker tests
+- API tests
+- portal tests
+
+Laporkan:
+
+- total
+- pass
+- fail
+- skipped
+- flaky
+
+==================================================
+PHASE 4 — SECURITY AUDIT
+==================================================
+
+Audit:
+
+- tracked secrets
+- .replit
+- .env*
+- API keys
+- JWT
+- DB credentials
+- SMTP
+- Supabase
+- webhook secret
+- session secret
+
+Pastikan:
+
+- tidak ada plaintext secret pada tracked repository
+
+==================================================
+PHASE 5 — TENANT SECURITY
+==================================================
+
+Audit:
+
+- tenant isolation
+- authorization
+- RBAC
+- signed URL
+- artifact access
+- review token
+- dashboard access
+
+Cari:
+
+- cross tenant access
+- missing filter
+- wildcard tenant
+- privilege escalation
+
+==================================================
+PHASE 6 — DATABASE
+==================================================
+
+Audit:
+
+- migration
+- schema
+- foreign key
+- indexes
+- transaction safety
+- rollback
+- seed
+- migration history
+
+==================================================
+PHASE 7 — API AUDIT
+==================================================
+
+Audit:
+
+- duplicate routes
+- shadowed routes
+- broken endpoints
+- missing validation
+- missing auth
+- inconsistent responses
+
+==================================================
+PHASE 8 — AI PLATFORM
+==================================================
+
+Audit:
+
+- dispatcher
+- scheduler
+- worker
+- queue
+- retry
+- timeout
+- provider registry
+- AI routing
+- cost tracking
+
+==================================================
+PHASE 9 — STORAGE
+==================================================
+
+Audit:
+
+- Supabase Storage
+- signed URL
+- revoke
+- persistence
+- upload
+- download
+- cleanup
+
+==================================================
+PHASE 10 — PERFORMANCE
+==================================================
+
+Audit:
+
+- N+1 query
+- cache
+- memory leak
+- large payload
+- blocking IO
+- startup time
+
+==================================================
+PHASE 11 — OBSERVABILITY
+==================================================
+
+Audit:
+
+- logging
+- tracing
+- metrics
+- health
+- readiness
+- error handling
+
+==================================================
+PHASE 12 — DEPLOYMENT
+==================================================
+
+Audit:
+
+- production config
+- environment
+- startup
+- shutdown
+- Docker/Replit
+- scheduler
+- dispatcher
+
+==================================================
+PHASE 13 — CUSTOMER PORTAL
+==================================================
+
+Audit seluruh flow:
+
+Customer
+↓
+
+Quotation
+↓
+
+Approval
+↓
+
+Order
+↓
+
+Payment (manual)
+
+↓
+
+Vendor
+
+↓
+
+Driver
+
+↓
+
+POD
+
+↓
+
+Invoice
+
+↓
+
+Completed
+
+Pastikan seluruh lifecycle berjalan.
+
+==================================================
+PHASE 14 — BIZPORTAL
+==================================================
+
+Audit:
+
+Finance
+
+Accounting
+
+Tax
+
+Expense
+
+Bank Recon
+
+Dana Talang
+
+Journal
+
+Approval
+
+Audit Trail
+
+==================================================
+PHASE 15 — CREATIVE AI
+==================================================
+
+Audit:
+
+workflow
+
+review
+
+artifacts
+
+presentation
+
+document engine
+
+agents
+
+memory
+
+marketplace
+
+==================================================
+PHASE 16 — RELEASE READINESS
+==================================================
+
+Berikan tabel:
+
+Critical
+
+High
+
+Medium
+
+Low
+
+Untuk setiap temuan tampilkan:
+
+Severity
+
+Component
+
+Evidence
+
+Impact
+
+Recommendation
+
+Estimated Fix
+
+==================================================
+FINAL
+==================================================
+
+Berikan hanya salah satu:
+
+READY FOR PRODUCTION
+
+READY FOR STAGING
+
+NOT READY FOR PRODUCTION
+
+BLOCKED
+
+dengan alasan yang didukung bukti.
+
+==================================================
+IMPORTANT
+==================================================
+
+Jangan memperbaiki apa pun.
+
+Jangan membuat file.
+
+Jangan membuat commit.
+
+Jangan menjalankan migration.
+
+Jangan mengubah repository.
+
+Audit saja.
+
+Semua temuan harus memiliki evidence yang nyata.
+
+Jangan mengulang temuan lama jika sudah tidak ada lagi.
