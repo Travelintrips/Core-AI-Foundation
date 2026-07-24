@@ -26,6 +26,10 @@ export const ListProvidersResponseItem = zod.object({
   "baseUrl": zod.string(),
   "apiKeyEnvVar": zod.string().nullish().describe('Name of env var holding the API key'),
   "isActive": zod.boolean(),
+  "keyConfigured": zod.boolean().optional().describe('Runtime flag — true if the API key env var is set in the process environment'),
+  "consecutiveFailures": zod.number().describe('Number of consecutive health-check failures; resets to 0 on success'),
+  "lastCheckedAt": zod.coerce.date().nullish().describe('When the most recent health check ran'),
+  "lastSuccessAt": zod.coerce.date().nullish().describe('When the most recent successful health check ran'),
   "metadata": zod.object({
 
 }).passthrough().nullish().describe('Extra provider config (JSON)'),
@@ -56,11 +60,56 @@ export const CreateProviderResponse = zod.object({
   "baseUrl": zod.string(),
   "apiKeyEnvVar": zod.string().nullish().describe('Name of env var holding the API key'),
   "isActive": zod.boolean(),
+  "keyConfigured": zod.boolean().optional().describe('Runtime flag — true if the API key env var is set in the process environment'),
+  "consecutiveFailures": zod.number().describe('Number of consecutive health-check failures; resets to 0 on success'),
+  "lastCheckedAt": zod.coerce.date().nullish().describe('When the most recent health check ran'),
+  "lastSuccessAt": zod.coerce.date().nullish().describe('When the most recent successful health check ran'),
   "metadata": zod.object({
 
 }).passthrough().nullish().describe('Extra provider config (JSON)'),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Run health checks for all registered AI providers
+ */
+export const HealthCheckAllProvidersResponseItem = zod.object({
+  "providerId": zod.number(),
+  "slug": zod.string(),
+  "keyConfigured": zod.boolean(),
+  "envVar": zod.string().optional(),
+  "httpStatus": zod.number().nullish(),
+  "isActive": zod.boolean().describe('Admin-controlled enable/disable flag — NOT a runtime health indicator'),
+  "pingOk": zod.boolean().describe('True if this specific health-check ping succeeded (HTTP 2xx from the provider API)'),
+  "consecutiveFailures": zod.number(),
+  "lastCheckedAt": zod.coerce.date().nullish(),
+  "lastSuccessAt": zod.coerce.date().nullish(),
+  "error": zod.string().nullish()
+})
+export const HealthCheckAllProvidersResponse = zod.array(HealthCheckAllProvidersResponseItem)
+
+
+/**
+ * @summary Run a health check for a single AI provider
+ */
+export const HealthCheckProviderParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const HealthCheckProviderResponse = zod.object({
+  "providerId": zod.number(),
+  "slug": zod.string(),
+  "keyConfigured": zod.boolean(),
+  "envVar": zod.string().optional(),
+  "httpStatus": zod.number().nullish(),
+  "isActive": zod.boolean().describe('Admin-controlled enable/disable flag — NOT a runtime health indicator'),
+  "pingOk": zod.boolean().describe('True if this specific health-check ping succeeded (HTTP 2xx from the provider API)'),
+  "consecutiveFailures": zod.number(),
+  "lastCheckedAt": zod.coerce.date().nullish(),
+  "lastSuccessAt": zod.coerce.date().nullish(),
+  "error": zod.string().nullish()
 })
 
 
@@ -78,6 +127,10 @@ export const GetProviderResponse = zod.object({
   "baseUrl": zod.string(),
   "apiKeyEnvVar": zod.string().nullish().describe('Name of env var holding the API key'),
   "isActive": zod.boolean(),
+  "keyConfigured": zod.boolean().optional().describe('Runtime flag — true if the API key env var is set in the process environment'),
+  "consecutiveFailures": zod.number().describe('Number of consecutive health-check failures; resets to 0 on success'),
+  "lastCheckedAt": zod.coerce.date().nullish().describe('When the most recent health check ran'),
+  "lastSuccessAt": zod.coerce.date().nullish().describe('When the most recent successful health check ran'),
   "metadata": zod.object({
 
 }).passthrough().nullish().describe('Extra provider config (JSON)'),
@@ -110,6 +163,10 @@ export const UpdateProviderResponse = zod.object({
   "baseUrl": zod.string(),
   "apiKeyEnvVar": zod.string().nullish().describe('Name of env var holding the API key'),
   "isActive": zod.boolean(),
+  "keyConfigured": zod.boolean().optional().describe('Runtime flag — true if the API key env var is set in the process environment'),
+  "consecutiveFailures": zod.number().describe('Number of consecutive health-check failures; resets to 0 on success'),
+  "lastCheckedAt": zod.coerce.date().nullish().describe('When the most recent health check ran'),
+  "lastSuccessAt": zod.coerce.date().nullish().describe('When the most recent successful health check ran'),
   "metadata": zod.object({
 
 }).passthrough().nullish().describe('Extra provider config (JSON)'),

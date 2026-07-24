@@ -1,5 +1,5 @@
 import { appSchema } from "./_pg-schema";
-import { serial, text, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { serial, integer, text, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -11,6 +11,9 @@ export const aiProvidersTable = appSchema.table("ai_providers", {
   apiKeyEnvVar: text("api_key_env_var"),
   isActive: boolean("is_active").notNull().default(true),
   metadata: jsonb("metadata"),
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -115,6 +115,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiProvider"
+  /ai/providers/health-check-all:
+    post:
+      operationId: healthCheckAllProviders
+      tags:
+        - registry
+      summary: Run health checks for all registered AI providers
+      responses:
+        "200":
+          description: Health check results for all providers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProviderHealthCheckResult"
+  /ai/providers/{id}/health-check:
+    post:
+      operationId: healthCheckProvider
+      tags:
+        - registry
+      summary: Run a health check for a single AI provider
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Health check result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderHealthCheckResult"
+        "404":
+          description: Provider not found
   /ai/providers/{id}:
     get:
       operationId: getProvider
@@ -8406,6 +8442,7 @@ components:
         - slug
         - baseUrl
         - isActive
+        - consecutiveFailures
         - createdAt
         - updatedAt
       properties:
@@ -8425,6 +8462,24 @@ components:
           description: Name of env var holding the API key
         isActive:
           type: boolean
+        keyConfigured:
+          type: boolean
+          description: Runtime flag — true if the API key env var is set in the process environment
+        consecutiveFailures:
+          type: integer
+          description: Number of consecutive health-check failures; resets to 0 on success
+        lastCheckedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description: When the most recent health check ran
+        lastSuccessAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description: When the most recent successful health check ran
         metadata:
           type:
             - object
@@ -8436,6 +8491,50 @@ components:
         updatedAt:
           type: string
           format: date-time
+    ProviderHealthCheckResult:
+      type: object
+      required:
+        - providerId
+        - slug
+        - keyConfigured
+        - isActive
+        - pingOk
+        - consecutiveFailures
+      properties:
+        providerId:
+          type: integer
+        slug:
+          type: string
+        keyConfigured:
+          type: boolean
+        envVar:
+          type: string
+        httpStatus:
+          type:
+            - integer
+            - "null"
+        isActive:
+          type: boolean
+          description: Admin-controlled enable/disable flag — NOT a runtime health indicator
+        pingOk:
+          type: boolean
+          description: True if this specific health-check ping succeeded (HTTP 2xx from the provider API)
+        consecutiveFailures:
+          type: integer
+        lastCheckedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        lastSuccessAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        error:
+          type:
+            - string
+            - "null"
     AiProviderInput:
       type: object
       required:

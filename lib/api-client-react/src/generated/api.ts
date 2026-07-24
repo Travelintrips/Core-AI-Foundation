@@ -340,6 +340,7 @@ import type {
   Promotion,
   PromotionList,
   ProviderBreakdown,
+  ProviderHealthCheckResult,
   PublicProjectReview,
   PublishEventBody,
   PublishTemplate200,
@@ -678,6 +679,146 @@ export const useCreateProvider = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateProviderMutationOptions(options));
+    }
+
+export const getHealthCheckAllProvidersUrl = () => {
+
+
+
+
+  return `/api/ai/providers/health-check-all`
+}
+
+/**
+ * @summary Run health checks for all registered AI providers
+ */
+export const healthCheckAllProviders = async ( options?: RequestInit): Promise<ProviderHealthCheckResult[]> => {
+
+  return customFetch<ProviderHealthCheckResult[]>(getHealthCheckAllProvidersUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getHealthCheckAllProvidersMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof healthCheckAllProviders>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof healthCheckAllProviders>>, TError,void, TContext> => {
+
+const mutationKey = ['healthCheckAllProviders'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof healthCheckAllProviders>>, void> = () => {
+
+
+          return  healthCheckAllProviders(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type HealthCheckAllProvidersMutationResult = NonNullable<Awaited<ReturnType<typeof healthCheckAllProviders>>>
+
+    export type HealthCheckAllProvidersMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Run health checks for all registered AI providers
+ */
+export const useHealthCheckAllProviders = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof healthCheckAllProviders>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof healthCheckAllProviders>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getHealthCheckAllProvidersMutationOptions(options));
+    }
+
+export const getHealthCheckProviderUrl = (id: number,) => {
+
+
+
+
+  return `/api/ai/providers/${id}/health-check`
+}
+
+/**
+ * @summary Run a health check for a single AI provider
+ */
+export const healthCheckProvider = async (id: number, options?: RequestInit): Promise<ProviderHealthCheckResult> => {
+
+  return customFetch<ProviderHealthCheckResult>(getHealthCheckProviderUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getHealthCheckProviderMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof healthCheckProvider>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof healthCheckProvider>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['healthCheckProvider'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof healthCheckProvider>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  healthCheckProvider(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type HealthCheckProviderMutationResult = NonNullable<Awaited<ReturnType<typeof healthCheckProvider>>>
+
+    export type HealthCheckProviderMutationError = ErrorType<void>
+
+    /**
+ * @summary Run a health check for a single AI provider
+ */
+export const useHealthCheckProvider = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof healthCheckProvider>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof healthCheckProvider>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getHealthCheckProviderMutationOptions(options));
     }
 
 export const getGetProviderUrl = (id: number,) => {

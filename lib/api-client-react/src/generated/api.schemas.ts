@@ -322,6 +322,20 @@ export interface AiProvider {
      */
   apiKeyEnvVar?: string | null;
   isActive: boolean;
+  /** Runtime flag — true if the API key env var is set in the process environment */
+  keyConfigured?: boolean;
+  /** Number of consecutive health-check failures; resets to 0 on success */
+  consecutiveFailures: number;
+  /**
+     * When the most recent health check ran
+     * @nullable
+     */
+  lastCheckedAt?: string | null;
+  /**
+     * When the most recent successful health check ran
+     * @nullable
+     */
+  lastSuccessAt?: string | null;
   /**
      * Extra provider config (JSON)
      * @nullable
@@ -329,6 +343,26 @@ export interface AiProvider {
   metadata?: AiProviderMetadata;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProviderHealthCheckResult {
+  providerId: number;
+  slug: string;
+  keyConfigured: boolean;
+  envVar?: string;
+  /** @nullable */
+  httpStatus?: number | null;
+  /** Admin-controlled enable/disable flag — NOT a runtime health indicator */
+  isActive: boolean;
+  /** True if this specific health-check ping succeeded (HTTP 2xx from the provider API) */
+  pingOk: boolean;
+  consecutiveFailures: number;
+  /** @nullable */
+  lastCheckedAt?: string | null;
+  /** @nullable */
+  lastSuccessAt?: string | null;
+  /** @nullable */
+  error?: string | null;
 }
 
 export type AiProviderInputMetadata = { [key: string]: unknown };

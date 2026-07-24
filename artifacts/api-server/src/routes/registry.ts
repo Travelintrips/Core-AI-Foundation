@@ -86,7 +86,7 @@ router.get("/ai/providers", async (_req, res): Promise<void> => {
     ...p,
     keyConfigured: p.apiKeyEnvVar ? Boolean(process.env[p.apiKeyEnvVar]) : false,
   }));
-  res.json(result);
+  res.json(ListProvidersResponse.parse(result));
 });
 
 router.post("/ai/providers", ssrfGuard(["baseUrl"]), async (req, res): Promise<void> => {
@@ -143,6 +143,98 @@ router.delete("/ai/providers/:id", async (req, res): Promise<void> => {
 });
 
 /**
+ * Shared helper: run a health check for one provider and persist results.
+ */
+async function runHealthCheck(id: number): Promise<{
+  providerId: number;
+  slug: string;
+  keyConfigured: boolean;
+  envVar: string;
+  httpStatus: number | null;
+  isActive: boolean;
+  consecutiveFailures: number;
+  lastCheckedAt: Date;
+  lastSuccessAt: Date | null;
+  error: string | null;
+} | { error: string; notFound: true }> {
+  const [provider] = await db
+    .select()
+    .from(aiProvidersTable)
+    .where(eq(aiProvidersTable.id, id))
+    .limit(1);
+
+  if (!provider) return { error: "Provider not found", notFound: true };
+
+  const envVar = provider.apiKeyEnvVar ?? "";
+  const apiKey = envVar ? (process.env[envVar] ?? "") : "";
+  const keyConfigured = Boolean(apiKey);
+  const now = new Date();
+
+  if (!keyConfigured) {
+    const newFailures = (provider.consecutiveFailures ?? 0) + 1;
+    // Health check updates health metadata only — does NOT touch isActive.
+    // Admin enablement (isActive) is a separate administrative decision.
+    await db.update(aiProvidersTable)
+      .set({ consecutiveFailures: newFailures, lastCheckedAt: now })
+      .where(eq(aiProvidersTable.id, id));
+
+    return {
+      providerId: id,
+      slug: provider.slug,
+      keyConfigured: false,
+      envVar,
+      httpStatus: null,
+      isActive: provider.isActive,   // admin flag — unchanged by health checks
+      pingOk: false,                  // explicit runtime health result
+      consecutiveFailures: newFailures,
+      lastCheckedAt: now,
+      lastSuccessAt: provider.lastSuccessAt ?? null,
+      error: `Environment variable "${envVar}" is not set in Replit Secrets.`,
+    };
+  }
+
+  const ping = await pingProvider(provider.slug, provider.baseUrl, apiKey);
+  const newFailures = ping.ok ? 0 : (provider.consecutiveFailures ?? 0) + 1;
+  const lastSuccessAt = ping.ok ? now : (provider.lastSuccessAt ?? null);
+
+  // Health check updates health metadata only — does NOT touch isActive.
+  // isActive is exclusively controlled by the admin enable/disable toggle
+  // (PATCH /ai/providers/:id). This prevents health-check-all from silently
+  // re-enabling a provider an admin has manually disabled.
+  await db
+    .update(aiProvidersTable)
+    .set({
+      consecutiveFailures: newFailures,
+      lastCheckedAt: now,
+      lastSuccessAt,
+    })
+    .where(eq(aiProvidersTable.id, id));
+
+  await logAudit(
+    "registry",
+    "provider_health_check",
+    String(id),
+    "provider",
+    ping.ok ? "success" : "failure",
+    { slug: provider.slug, httpStatus: ping.httpStatus, error: ping.error, consecutiveFailures: newFailures },
+  );
+
+  return {
+    providerId: id,
+    slug: provider.slug,
+    keyConfigured: true,
+    envVar,
+    httpStatus: ping.httpStatus,
+    isActive: provider.isActive,   // admin flag — unchanged by health checks
+    pingOk: ping.ok,               // explicit runtime health result
+    consecutiveFailures: newFailures,
+    lastCheckedAt: now,
+    lastSuccessAt,
+    error: ping.error ?? null,
+  };
+}
+
+/**
  * POST /ai/providers/:id/health-check
  *
  * Reads process.env[provider.apiKeyEnvVar], makes a real API call to the
@@ -153,61 +245,21 @@ router.post("/ai/providers/:id/health-check", async (req, res): Promise<void> =>
   const id = parseInt(req.params.id ?? "", 10);
   if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const [provider] = await db
-    .select()
-    .from(aiProvidersTable)
-    .where(eq(aiProvidersTable.id, id))
-    .limit(1);
+  const result = await runHealthCheck(id);
+  if ("notFound" in result) { res.status(404).json({ error: result.error }); return; }
+  res.json(result);
+});
 
-  if (!provider) { res.status(404).json({ error: "Provider not found" }); return; }
-
-  const envVar   = provider.apiKeyEnvVar ?? "";
-  const apiKey   = envVar ? (process.env[envVar] ?? "") : "";
-  const keyConfigured = Boolean(apiKey);
-
-  if (!keyConfigured) {
-    await db.update(aiProvidersTable)
-      .set({ isActive: false, updatedAt: new Date() })
-      .where(eq(aiProvidersTable.id, id));
-
-    res.json({
-      providerId: id,
-      slug: provider.slug,
-      keyConfigured: false,
-      envVar,
-      httpStatus: null,
-      isActive: false,
-      error: `Environment variable "${envVar}" is not set in Replit Secrets.`,
-    });
-    return;
-  }
-
-  const ping = await pingProvider(provider.slug, provider.baseUrl, apiKey);
-
-  const [updated] = await db
-    .update(aiProvidersTable)
-    .set({ isActive: ping.ok, updatedAt: new Date() })
-    .where(eq(aiProvidersTable.id, id))
-    .returning();
-
-  await logAudit(
-    "registry",
-    "provider_health_check",
-    String(id),
-    "provider",
-    ping.ok ? "success" : "failure",
-    { slug: provider.slug, httpStatus: ping.httpStatus, error: ping.error },
-  );
-
-  res.json({
-    providerId: id,
-    slug: provider.slug,
-    keyConfigured: true,
-    envVar,
-    httpStatus: ping.httpStatus,
-    isActive: updated?.isActive ?? ping.ok,
-    error: ping.error ?? null,
-  });
+/**
+ * POST /ai/providers/health-check-all
+ *
+ * Runs health checks for all registered providers in parallel and returns
+ * an array of diagnostic results.
+ */
+router.post("/ai/providers/health-check-all", async (_req, res): Promise<void> => {
+  const providers = await db.select({ id: aiProvidersTable.id }).from(aiProvidersTable);
+  const results = await Promise.all(providers.map(p => runHealthCheck(p.id)));
+  res.json(results.filter(r => !("notFound" in r)));
 });
 
 // ── Models ─────────────────────────────────────────────────────────────────
