@@ -382,10 +382,16 @@ export function useSubmitPaymentProof(token: string) {
       proofImageBase64?: string | null;
       proofImageMimeType?: string;
     }) =>
-      customFetch<{ ok: boolean; schedule: unknown; proofImageUrl: string | null }>(`/api/public/payments/${scheduleId}/submit-proof`, {
+      customFetch<{ ok: boolean; schedule: unknown; hasProofImage: boolean }>(`/api/public/payments/${scheduleId}/submit-proof`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reference, proofImageBase64: proofImageBase64 ?? null, proofImageMimeType: proofImageMimeType ?? 'image/jpeg' }),
+        // workspaceToken is sent so the server can verify ownership (P0-1 IDOR fix).
+        body: JSON.stringify({
+          workspaceToken: token,
+          reference,
+          proofImageBase64: proofImageBase64 ?? null,
+          proofImageMimeType: proofImageMimeType ?? 'image/jpeg',
+        }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workspace-invoices', token] });

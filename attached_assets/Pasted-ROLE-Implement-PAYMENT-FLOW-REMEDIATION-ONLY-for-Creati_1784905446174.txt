@@ -1,0 +1,571 @@
+ROLE
+
+Implement PAYMENT FLOW REMEDIATION ONLY
+for Creative AI Studio.
+
+Jangan mengubah auth global.
+Jangan menyentuh VITE_ADMIN_API_KEY.
+Jangan menyentuh AI provider configuration.
+Jangan menyentuh finance, accounting, tax, bank reconciliation,
+payment gateway, logistics, atau modul bisnis lain.
+
+Jangan deploy.
+Jangan merge langsung ke main.
+Jangan migration destruktif.
+Pertahankan behavior existing selama tidak terkait blocker payment.
+
+==================================================
+SCOPE
+==================================================
+
+Perbaiki blocker berikut:
+
+P0-1 — IDOR pada submit payment proof
+P0-2 — Re-upload setelah rejection gagal
+P0-3 — Verify payment tidak atomic
+P1-1 — Bukti pembayaran berada di public bucket
+P1-2 — Workflow dispatch setelah approve harus idempotent
+P2 — Status dan UX rejection tidak konsisten
+
+==================================================
+PHASE 0 — BASELINE
+==================================================
+
+Sebelum mengubah kode:
+
+1. Catat branch dan HEAD.
+2. Jalankan test payment yang sudah ada.
+3. Catat build API dan customer portal.
+4. Identifikasi file berikut dan seluruh call chain terkait:
+   - submitPaymentProof()
+   - rejectPayment()
+   - verifyPayment()
+   - generateScheduleForProject()
+   - runCreativeBriefWorkflow()
+   - endpoint /public/payments/:scheduleId/submit-proof
+   - proof-upload-card.tsx
+   - invoices.tsx
+   - supabaseStorage.ts
+   - payment audit logging
+5. Jangan mengubah kode sebelum baseline selesai.
+
+==================================================
+PHASE 1 — FIX IDOR / OWNERSHIP
+==================================================
+
+Masalah:
+
+POST /public/payments/:scheduleId/submit-proof
+hanya memeriksa scheduleId dan status.
+
+Tidak ada pemeriksaan bahwa payment tersebut milik customer
+yang sedang mengakses portal.
+
+Implementasikan ownership authorization yang server-side.
+
+Pilih mekanisme yang sesuai dengan arsitektur portal existing:
+
+Preferred:
+- authenticated customer session
+- project/customer identity dari server-side session
+
+Jika customer portal menggunakan public token:
+- gunakan payment/project access token yang cryptographically secure
+- token harus terikat pada project/payment tertentu
+- jangan menerima customerId dari request body
+- jangan percaya projectId dari frontend tanpa verifikasi
+
+Validasi wajib:
+
+payment schedule
+→ project
+→ customer/account/token identity
+
+Request harus ditolak jika:
+
+- schedule tidak ditemukan
+- customer bukan pemilik project
+- token tidak sesuai dengan schedule/project
+- token expired/revoked
+- payment sudah tidak menerima proof
+
+Gunakan:
+- 401 jika tidak authenticated
+- 403 jika authenticated tetapi bukan pemilik
+- 404 hanya jika resource benar-benar tidak ditemukan
+
+Jangan mengungkapkan data customer lain.
+
+Tambahkan test:
+
+1. Customer A dapat submit proof miliknya.
+2. Customer A tidak dapat submit proof payment Customer B.
+3. scheduleId valid tanpa token/session ditolak.
+4. scheduleId acak ditolak tanpa data leakage.
+5. projectId atau customerId dari body tidak dapat digunakan untuk bypass.
+
+==================================================
+PHASE 2 — FIX RE-UPLOAD AFTER REJECTION
+==================================================
+
+Backend saat ini menyimpan rejection sebagai:
+
+status = "failed"
+
+Frontend menampilkan form upload saat status "failed",
+tetapi backend hanya menerima "pending".
+
+Ubah lifecycle agar customer dapat resubmit secara resmi.
+
+Status yang diperbolehkan untuk submit proof:
+
+- pending
+- failed
+
+Pada resubmit dari failed:
+
+1. Simpan proof baru.
+2. Simpan reference number baru.
+3. Bersihkan atau tandai rejection state sebelumnya.
+4. Ubah status ke status yang konsisten untuk review,
+   misalnya:
+   - submitted
+   atau
+   - pending_verification
+
+Jika schema existing hanya menggunakan pending:
+- gunakan pending dengan field proofSubmittedAt
+- tetapi jangan kehilangan kemampuan membedakan
+  “belum upload” dan “sudah upload menunggu verifikasi”
+
+Jangan membuat status baru tanpa mengecek seluruh consumer.
+
+Pastikan:
+
+- customer dapat resubmit setelah rejection
+- admin melihat proof terbaru
+- previous rejection tetap ada di audit log
+- error message akurat
+- tidak perlu intervensi manual database
+
+Tambahkan test:
+
+1. pending → submit proof berhasil
+2. failed → resubmit berhasil
+3. paid → submit ditolak
+4. cancelled → submit ditolak
+5. proof terbaru menjadi proof aktif
+6. rejection history tidak hilang
+
+==================================================
+PHASE 3 — ATOMIC VERIFY PAYMENT
+==================================================
+
+Masalah:
+
+verifyPayment() menjalankan:
+
+1. UPDATE ai_payment_schedule
+2. UPDATE creative_projects
+
+secara terpisah.
+
+Pindahkan semua perubahan state payment dan project
+ke dalam satu db.transaction().
+
+Transaction minimal harus mencakup:
+
+- lock/read payment schedule yang relevan
+- validasi current status
+- update payment status menjadi paid
+- verifiedAt
+- verifiedBy dari identity server-side
+- update project payment status
+- update filesUnlocked bila seluruh installment selesai
+- audit event yang merupakan bagian state kritis,
+  jika audit logger mendukung transaction client
+
+Jika salah satu operasi gagal:
+- rollback seluruh perubahan
+
+Gunakan transaction executor yang sama.
+Jangan diam-diam fallback ke plain db client.
+
+Tambahkan conditional guard agar hanya status valid
+yang dapat di-approve.
+
+Contoh transition yang valid:
+
+pending/submitted/pending_verification
+→ paid
+
+Transition berikut harus ditolak:
+
+paid → paid
+failed → paid tanpa proof baru
+cancelled → paid
+
+Tambahkan test failure injection:
+
+1. payment update berhasil, project update gagal
+   → seluruh transaction rollback
+2. project update tidak boleh tersisa partial
+3. concurrent approve hanya satu yang berhasil
+4. second approve mendapat deterministic conflict response
+5. payment dan project selalu konsisten setelah sukses
+
+Gunakan HTTP 409 untuk invalid transition/race conflict
+jika sesuai pola API existing.
+
+==================================================
+PHASE 4 — IDEMPOTENT WORKFLOW DISPATCH
+==================================================
+
+Saat ini:
+
+runCreativeBriefWorkflow()
+dipanggil fire-and-forget setelah payment approved.
+
+Pastikan approve request berulang atau retry tidak membuat
+workflow/job ganda.
+
+Implementasikan idempotency dengan salah satu mekanisme existing:
+
+Preferred:
+- unique job key berdasarkan projectId + workflow type
+- existing job lookup dengan status active/completed
+- database uniqueness constraint jika schema mendukung
+- transactional outbox jika sudah ada foundation
+
+Jangan hanya memakai in-memory flag.
+
+Flow yang diharapkan:
+
+transaction payment commit
+→ dispatch workflow idempotently
+→ jika workflow sudah ada, return existing result/no-op
+
+Jika dispatch gagal setelah payment commit:
+
+- payment tetap paid
+- simpan explicit workflow_dispatch_failed state/event
+- sediakan retry mechanism existing
+- jangan mengubah payment kembali menjadi unpaid
+- kegagalan tidak boleh hilang karena fire-and-forget tanpa log
+
+Tambahkan test:
+
+1. approve pertama membuat satu workflow
+2. retry approve tidak membuat workflow kedua
+3. dispatch error tercatat
+4. retry worker dapat melanjutkan tanpa duplicate
+
+==================================================
+PHASE 5 — PRIVATE PAYMENT PROOF STORAGE
+==================================================
+
+Bukti transfer/payment proof tidak boleh disimpan di bucket publik.
+
+Pindahkan payment proof ke private storage path/bucket.
+
+Persyaratan:
+
+- file tidak dapat diakses melalui URL publik permanen
+- admin melihat proof melalui signed URL berumur pendek
+- customer hanya dapat melihat proof miliknya sendiri
+- signed URL dibuat server-side
+- expiration singkat dan configurable
+- jangan expose SUPABASE_SERVICE_ROLE_KEY ke frontend
+- jangan gunakan predictable public URL
+
+Path tetap boleh memakai scheduleId sebagai internal path,
+tetapi akses harus private.
+
+Contoh:
+
+private/payment-proofs/{projectId}/{scheduleId}/{uuid}.{ext}
+
+Gunakan UUID/random filename untuk mencegah overwrite dan guessing.
+
+Perhatikan file lama:
+
+- jangan melakukan destructive bulk migration tanpa instruksi
+- dokumentasikan legacy public files
+- proof baru wajib private
+- jika memungkinkan, admin viewer mendukung legacy URL sementara
+  tetapi tandai sebagai migration debt
+
+Tambahkan test:
+
+1. proof baru tidak menghasilkan public URL
+2. unauthenticated access ditolak
+3. signed URL expired tidak berlaku
+4. Customer A tidak dapat meminta signed URL Customer B
+5. admin authorized dapat memperoleh signed URL
+
+==================================================
+PHASE 6 — FILE VALIDATION AND ORPHAN CLEANUP
+==================================================
+
+Validasi proof upload server-side:
+
+- MIME type allowlist
+- extension tidak dipercaya sendirian
+- maximum file size
+- reject executable/script formats
+- filename generated server-side
+- image/PDF only sesuai product requirement
+
+Tangani orphan file:
+
+Jika storage upload berhasil tetapi DB update gagal:
+
+- hapus file yang baru di-upload
+  atau
+- catat orphan cleanup task secara deterministic
+
+Jangan biarkan file orphan tanpa trace.
+
+Untuk resubmit:
+
+- jangan overwrite file lama secara diam-diam
+- simpan proof baru dengan UUID
+- proof sebelumnya dapat dipertahankan untuk audit
+  atau diarsipkan sesuai retention policy
+
+==================================================
+PHASE 7 — SERVER-SIDE AUDIT IDENTITY
+==================================================
+
+Jangan percaya:
+
+verifiedBy
+rejectedBy
+
+dari req.body.
+
+Ambil identity reviewer dari:
+
+- authenticated admin session
+- middleware request context
+- authenticated actor id/email
+
+Request body boleh berisi:
+
+- rejection reason
+- optional internal note
+
+Tetapi actor identity wajib dari server.
+
+Audit event harus mencatat:
+
+- actorId
+- actor email/name bila tersedia
+- action
+- paymentScheduleId
+- projectId
+- old status
+- new status
+- timestamp
+- rejection reason
+- proof version/reference bila relevan
+
+Tambahkan test bahwa client tidak dapat memalsukan actor identity.
+
+==================================================
+PHASE 8 — STATUS CONSISTENCY
+==================================================
+
+Saat ini frontend memakai campuran:
+
+- failed
+- rejected
+
+Tentukan satu canonical backend status.
+
+Jika schema saat ini memakai "failed", pertahankan "failed"
+untuk meminimalkan perubahan, lalu mapping UI menjadi label
+“Ditolak”.
+
+Atau lakukan status migration hanya jika benar-benar aman
+dan seluruh consumer diperbarui.
+
+Periksa seluruh referensi status pada:
+
+- customer invoices page
+- proof upload card
+- admin payment page
+- API response mapper
+- filters
+- KPIs
+- audit log
+- tests
+
+Jangan menyisakan string "rejected" jika backend canonical "failed",
+kecuali sebagai UI label.
+
+==================================================
+PHASE 9 — CUSTOMER UX
+==================================================
+
+Customer portal harus menampilkan state berikut:
+
+1. Belum upload:
+   “Menunggu bukti pembayaran”
+
+2. Proof submitted:
+   “Bukti pembayaran sedang diverifikasi”
+
+3. Approved:
+   “Pembayaran disetujui”
+
+4. Rejected/failed:
+   - tampilkan alasan rejection yang aman untuk customer
+   - tombol “Unggah Bukti Baru”
+   - submit benar-benar berfungsi
+
+5. Resubmitted:
+   “Bukti baru sedang diverifikasi”
+
+Jangan tampilkan internal admin notes kepada customer.
+
+Perbaiki pesan error:
+
+- bukan “not found or already paid” untuk status failed
+- tampilkan pesan sesuai state sebenarnya
+
+==================================================
+PHASE 10 — ADMIN UX
+==================================================
+
+Admin payment review harus menampilkan:
+
+- customer
+- project/order
+- payment schedule/installment
+- nominal
+- proof terbaru
+- riwayat proof/rejection bila tersedia
+- current status
+- reviewer
+- timestamp
+
+Approve/reject button harus:
+
+- disabled setelah request dimulai
+- mencegah accidental double submit
+- menampilkan conflict jika state berubah dari request lain
+- refresh data setelah sukses
+
+Backend guard tetap wajib.
+Frontend disable bukan pengganti idempotency.
+
+==================================================
+PHASE 11 — TEST MATRIX
+==================================================
+
+Tambahkan test minimal untuk:
+
+OWNERSHIP
+- owner upload success
+- non-owner blocked
+- unauthenticated blocked
+
+LIFECYCLE
+- pending → submitted
+- submitted → paid
+- submitted → failed
+- failed → resubmitted
+- paid cannot resubmit
+- cancelled cannot resubmit
+- failed cannot approve tanpa proof baru
+
+ATOMICITY
+- rollback saat project update gagal
+- no partial payment/project state
+
+CONCURRENCY
+- double approve
+- approve vs reject race
+- double resubmit
+
+STORAGE
+- private path
+- signed URL authorization
+- invalid MIME
+- oversized file
+- orphan cleanup
+
+AUDIT
+- verifiedBy dari session
+- rejectedBy dari session
+- rejection reason tersimpan
+- spoofed actor body diabaikan
+
+WORKFLOW
+- one workflow per project/payment milestone
+- retry no duplicate
+- failed dispatch tercatat
+
+UI
+- failed status tampil konsisten
+- rejection reason tampil
+- re-upload berhasil
+- waiting verification tampil
+
+==================================================
+PHASE 12 — VERIFICATION
+==================================================
+
+Jalankan:
+
+- targeted payment tests
+- API server test
+- API build
+- customer portal typecheck/build
+- AI Platform typecheck/build jika admin page berubah
+
+Pisahkan:
+
+- error baru
+- error pre-existing
+
+Jangan menyatakan PASS jika ada regression baru.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Laporkan:
+
+1. Root cause setiap blocker
+2. File yang diubah
+3. Database transaction design
+4. Ownership model
+5. Payment state transition matrix
+6. Private storage design
+7. Idempotency design
+8. Tests ditambahkan
+9. Test result
+10. Build result
+11. Pre-existing errors
+12. Remaining risks
+13. Final verdict:
+
+PAYMENT READY
+
+atau
+
+PAYMENT BLOCKED
+
+Payment hanya boleh dinyatakan READY jika:
+
+- IDOR tertutup
+- re-upload setelah rejection berhasil
+- verify atomic
+- workflow tidak duplicate
+- proof baru private
+- tidak ada regression baru
+
+Jangan deploy.
+Jangan merge tanpa persetujuan eksplisit.

@@ -190,6 +190,7 @@ export function isSupabaseStorageAvailable(): boolean {
 
 /**
  * Upload a base64-encoded payment proof image to Supabase Storage.
+ * @deprecated Use uploadPrivatePaymentProof instead — this writes to the public bucket.
  * Stored under payment-proofs/<scheduleId>-<timestamp>.<ext>
  * Returns the permanent public CDN URL.
  */
@@ -204,4 +205,167 @@ export async function uploadPaymentProofImage(
   const ext = mimeType.includes("png") ? "png" : mimeType.includes("webp") ? "webp" : "jpg";
   const path = `payment-proofs/${scheduleId}-${Date.now()}.${ext}`;
   return uploadToSupabase(path, buffer, mimeType);
+}
+
+// ── Private payment proof storage ─────────────────────────────────────────────
+
+export const PAYMENT_PROOF_PRIVATE_BUCKET = "payment-proofs";
+
+/** MIME types accepted for payment proofs (server-side allowlist). */
+export const PAYMENT_PROOF_ALLOWED_MIME = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+]);
+
+/** Max proof file size in bytes (5 MB). */
+export const PAYMENT_PROOF_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Ensure the private `payment-proofs` bucket exists.
+ * Public = false so files are NOT accessible via public CDN URL.
+ */
+export async function ensurePrivatePaymentBucket(): Promise<void> {
+  const { url, serviceKey } = getCredentials();
+
+  const listRes = await fetch(`${url}/storage/v1/bucket`, {
+    headers: authHeaders(serviceKey),
+  });
+  if (!listRes.ok) {
+    logger.warn({ status: listRes.status }, "[supabaseStorage] Could not list buckets for private payment check");
+    return;
+  }
+  const buckets = (await listRes.json()) as Array<{ id: string; name: string }>;
+  if (buckets.some((b) => b.name === PAYMENT_PROOF_PRIVATE_BUCKET)) return;
+
+  const createRes = await fetch(`${url}/storage/v1/bucket`, {
+    method: "POST",
+    headers: { ...authHeaders(serviceKey), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: PAYMENT_PROOF_PRIVATE_BUCKET,
+      name: PAYMENT_PROOF_PRIVATE_BUCKET,
+      public: false, // PRIVATE — no public CDN access
+      file_size_limit: PAYMENT_PROOF_MAX_BYTES * 2,
+    }),
+  });
+  if (!createRes.ok) {
+    const text = await createRes.text();
+    logger.warn({ status: createRes.status, body: text }, "[supabaseStorage] Could not create private payment-proofs bucket — may already exist");
+  } else {
+    logger.info("[supabaseStorage] Created private bucket: payment-proofs");
+  }
+}
+
+/**
+ * Upload a payment proof to the private `payment-proofs` bucket.
+ * Path: payment-proofs/{projectUuid}/{scheduleId}/{uuid}.{ext}
+ * Returns the STORAGE PATH (not a URL). Use getPaymentProofSignedUrl() to serve it.
+ */
+export async function uploadPrivatePaymentProof(
+  base64Data: string,
+  mimeType: string,
+  projectUuid: string,
+  scheduleId: string | number,
+): Promise<string> {
+  if (!PAYMENT_PROOF_ALLOWED_MIME.has(mimeType)) {
+    throw new Error(`Tipe file tidak diizinkan: ${mimeType}`);
+  }
+
+  const raw = base64Data.includes(",") ? base64Data.split(",")[1]! : base64Data;
+  const buffer = Buffer.from(raw, "base64");
+
+  if (buffer.byteLength > PAYMENT_PROOF_MAX_BYTES) {
+    throw new Error(`Ukuran file melebihi batas ${PAYMENT_PROOF_MAX_BYTES / 1024 / 1024}MB`);
+  }
+
+  const ext = mimeType.includes("png") ? "png"
+    : mimeType.includes("webp") ? "webp"
+    : mimeType.includes("pdf") ? "pdf"
+    : "jpg";
+
+  // UUID-named file to prevent enumeration/overwrite
+  const uuid = crypto.randomUUID();
+  const storagePath = `${projectUuid}/${scheduleId}/${uuid}.${ext}`;
+
+  const { url, serviceKey } = getCredentials();
+  const cleanPath = storagePath.startsWith("/") ? storagePath.slice(1) : storagePath;
+  const uploadUrl = `${url}/storage/v1/object/${PAYMENT_PROOF_PRIVATE_BUCKET}/${cleanPath}`;
+
+  const res = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      ...authHeaders(serviceKey),
+      "Content-Type": mimeType,
+      "x-upsert": "false", // never silently overwrite
+    },
+    body: buffer,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Private storage upload failed (${res.status}): ${text}`);
+  }
+
+  return storagePath; // caller stores this path in DB
+}
+
+/**
+ * Generate a short-lived signed URL for a private payment proof.
+ * @param storagePath   The path stored in the DB (e.g. "uuid/123/file.jpg")
+ * @param expiresIn     Seconds until expiry (default 3600 = 1 hour)
+ */
+export async function getPaymentProofSignedUrl(
+  storagePath: string,
+  expiresIn = 3600,
+): Promise<string> {
+  const { url, serviceKey } = getCredentials();
+  const cleanPath = storagePath.startsWith("/") ? storagePath.slice(1) : storagePath;
+
+  const res = await fetch(
+    `${url}/storage/v1/object/sign/${PAYMENT_PROOF_PRIVATE_BUCKET}/${cleanPath}`,
+    {
+      method: "POST",
+      headers: { ...authHeaders(serviceKey), "Content-Type": "application/json" },
+      body: JSON.stringify({ expiresIn }),
+    },
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to generate signed URL (${res.status}): ${text}`);
+  }
+
+  const data = (await res.json()) as { signedURL?: string; signedUrl?: string };
+  const signedUrl = data.signedURL ?? data.signedUrl;
+  if (!signedUrl) throw new Error("Supabase did not return a signedURL");
+
+  // signedUrl is a relative path — prefix with Supabase base URL
+  return signedUrl.startsWith("http") ? signedUrl : `${url}${signedUrl}`;
+}
+
+/**
+ * Delete a file from the private payment-proofs bucket.
+ * Used for orphan cleanup when a DB write fails after upload.
+ */
+export async function deletePrivatePaymentProof(storagePath: string): Promise<void> {
+  const { url, serviceKey } = getCredentials();
+  const cleanPath = storagePath.startsWith("/") ? storagePath.slice(1) : storagePath;
+
+  const res = await fetch(
+    `${url}/storage/v1/object/${PAYMENT_PROOF_PRIVATE_BUCKET}/${cleanPath}`,
+    { method: "DELETE", headers: authHeaders(serviceKey) },
+  );
+
+  if (!res.ok) {
+    logger.warn({ status: res.status, path: storagePath }, "[supabaseStorage] Failed to delete orphan payment proof");
+  }
+}
+
+/**
+ * True if the given proof URL/path is a legacy public URL
+ * (stored before private-bucket migration).
+ */
+export function isLegacyPublicProofUrl(value: string): boolean {
+  return value.startsWith("http://") || value.startsWith("https://");
 }

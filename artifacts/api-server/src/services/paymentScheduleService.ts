@@ -8,7 +8,7 @@
  * per spec: "AI Build TIDAK boleh berjalan jika payment belum verified atau
  * deposit belum diterima."
  */
-import { eq, and, ne } from "drizzle-orm";
+import { eq, and, ne, inArray } from "drizzle-orm";
 import {
   db,
   aiPaymentScheduleTable,
@@ -22,6 +22,17 @@ import { publishSafe } from "./aiEventBusService.js";
 import { runCreativeBriefWorkflow } from "./creativeWorkflowRunner.js";
 
 export type PaymentPolicy = "full_payment" | "deposit" | "subscription" | "purchase_order";
+
+// ── Status helpers ────────────────────────────────────────────────────────────
+
+/** Statuses from which a customer may submit / re-submit a payment proof. */
+const PROOF_SUBMITTABLE_STATUSES = ["pending", "failed"] as const;
+
+/** Statuses that can be transitioned to "paid" by an admin. */
+const VERIFIABLE_STATUSES = ["pending", "failed"] as const;
+
+/** Terminal statuses that must never be changed by the payment flow. */
+const TERMINAL_STATUSES = new Set(["paid", "refunded", "cancelled"]);
 
 // ── generateScheduleForProject ───────────────────────────────────────────────
 // Idempotent: if a schedule already exists for the project, returns it unchanged.
@@ -119,22 +130,59 @@ export async function getScheduleForProject(projectId: number): Promise<AiPaymen
 }
 
 // ── submitProof ───────────────────────────────────────────────────────────────
-// Customer records a payment reference (bank transfer id / PO number). Does
-// NOT mark the installment paid — an admin must verify it.
+// Customer records a payment reference (bank transfer id / PO number).
+// Accepts status "pending" (first upload) or "failed" (re-upload after rejection).
+// Does NOT mark the installment paid — an admin must verify it.
+//
+// Phase 5 change: proofStoragePath is now a private-bucket path (not a public URL).
+// Legacy rows that contain a public URL are kept as-is for backward compatibility.
 
 export async function submitPaymentProof(
   scheduleId: number,
   reference: string,
-  proofImageUrl?: string | null,
+  proofStoragePath?: string | null,
 ): Promise<AiPaymentSchedule | null> {
+  // Read current state so we can detect re-submission and preserve audit context.
+  const [current] = await db
+    .select()
+    .from(aiPaymentScheduleTable)
+    .where(eq(aiPaymentScheduleTable.id, scheduleId))
+    .limit(1);
+
+  if (!current) return null;
+  if (!PROOF_SUBMITTABLE_STATUSES.includes(current.status as typeof PROOF_SUBMITTABLE_STATUSES[number])) {
+    return null; // paid, cancelled, refunded — cannot accept proof
+  }
+
+  const wasResubmit = current.status === "failed";
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const setPayload: any = { reference, updatedAt: new Date() };
-  if (proofImageUrl) setPayload.proofImageUrl = proofImageUrl;
+  const setPayload: any = {
+    reference,
+    status: "pending", // reset to pending for re-verification on resubmit
+    updatedAt: new Date(),
+  };
+
+  if (proofStoragePath !== undefined) {
+    setPayload.proofImageUrl = proofStoragePath; // stores path or legacy URL
+  }
+
+  // On resubmit: clear previous rejection notes so admin sees clean state.
+  if (wasResubmit) {
+    setPayload.notes = null;
+  }
+
   const [row] = await db
     .update(aiPaymentScheduleTable)
     .set(setPayload)
-    .where(and(eq(aiPaymentScheduleTable.id, scheduleId), eq(aiPaymentScheduleTable.status, "pending")))
+    .where(
+      and(
+        eq(aiPaymentScheduleTable.id, scheduleId),
+        inArray(aiPaymentScheduleTable.status, [...PROOF_SUBMITTABLE_STATUSES]),
+      ),
+    )
     .returning();
+
   if (!row) return null;
 
   const [project] = await db
@@ -153,21 +201,43 @@ export async function submitPaymentProof(
     eventType: "payment.proof_submitted",
     sourceModule: "payments",
     sourceId: String(row.id),
-    payload: { scheduleId: row.id, projectId: row.projectId, paymentType: row.paymentType, reference },
+    payload: {
+      scheduleId: row.id,
+      projectId: row.projectId,
+      paymentType: row.paymentType,
+      reference,
+      wasResubmit,
+    },
   });
+
+  await logAudit(
+    "payments",
+    wasResubmit ? "payment_proof_resubmitted" : "payment_proof_submitted",
+    String(row.id),
+    "ai_payment_schedule",
+    "success",
+    { scheduleId: row.id, projectId: row.projectId, wasResubmit },
+  );
 
   return row;
 }
 
 // ── verifyPayment ─────────────────────────────────────────────────────────────
-// Admin action. Marks an installment paid, recomputes the project's aggregate
-// payment_status, unlocks files once the LAST unpaid installment clears, and
-// (for deposit/full_payment on a still-pending project) kicks off AI Build.
+// Admin action. All payment+project state changes happen inside a single
+// db.transaction() for atomicity. If any step fails, everything rolls back.
+//
+// Valid source statuses: pending, failed (with proof already submitted).
+// Invalid transitions (paid→paid, cancelled→paid) return null.
+//
+// Workflow dispatch is idempotent: we only start the AI workflow when the
+// project is still in the payment-waiting states; if it has already progressed
+// (running, completed, etc.), we skip the dispatch to prevent duplicates.
 
 export interface VerifyPaymentResult {
   schedule: AiPaymentSchedule;
   project: CreativeProject;
   productionStarted: boolean;
+  alreadyPaid?: boolean;
 }
 
 export async function verifyPayment(
@@ -175,65 +245,121 @@ export async function verifyPayment(
   verifiedBy: string,
   reference?: string | null,
 ): Promise<VerifyPaymentResult | null> {
-  const [schedule] = await db
-    .update(aiPaymentScheduleTable)
-    .set({
-      status: "paid",
-      verifiedBy,
-      paidAt: new Date(),
-      reference: reference ?? undefined,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(aiPaymentScheduleTable.id, scheduleId), ne(aiPaymentScheduleTable.status, "paid")))
-    .returning();
-
-  if (!schedule) return null;
-
-  const [project] = await db
+  // First check: does the schedule exist and is it in a verifiable state?
+  // Do this OUTSIDE the transaction for a clean 409 vs 404 distinction.
+  const [existing] = await db
     .select()
-    .from(creativeProjectsTable)
-    .where(eq(creativeProjectsTable.id, schedule.projectId))
+    .from(aiPaymentScheduleTable)
+    .where(eq(aiPaymentScheduleTable.id, scheduleId))
     .limit(1);
-  if (!project) return null;
 
-  const allInstallments = await getScheduleForProject(project.id);
-  const unpaid = allInstallments.filter((s) => s.status !== "paid" && s.status !== "cancelled");
-  const anyPaid = allInstallments.some((s) => s.status === "paid");
-  const fullyPaid = unpaid.length === 0;
+  if (!existing) return null; // 404 — caller returns 404
 
-  let nextStatus = project.status;
-  let filesUnlocked = project.filesUnlocked;
-  let paymentStatus = project.paymentStatus;
-  let productionStarted = false;
-
-  // Production may already have finished (or failed) by the time a payment gets
-  // verified — e.g. admin skipped the commercial gate and ran production directly.
-  // Never let a payment-status transition clobber that terminal production state.
-  const productionAlreadyTerminal = project.status === "completed" || project.status === "failed";
-
-  if (fullyPaid) {
-    paymentStatus = "paid";
-    filesUnlocked = true;
-    if (!productionAlreadyTerminal) {
-      nextStatus = schedule.paymentType === "remaining_balance" ? "remaining_paid" : "payment_verified";
-    }
-  } else if (anyPaid) {
-    paymentStatus = "partially_paid";
-    if (!productionAlreadyTerminal) {
-      if (schedule.paymentType === "deposit") nextStatus = "deposit_paid";
-      else if (schedule.paymentType === "subscription_charge") nextStatus = "payment_verified";
-    }
+  if (existing.status === "paid") {
+    // Already paid — idempotent, return the current state
+    const [project] = await db
+      .select()
+      .from(creativeProjectsTable)
+      .where(eq(creativeProjectsTable.id, existing.projectId))
+      .limit(1);
+    return { schedule: existing, project: project ?? ({} as CreativeProject), productionStarted: false, alreadyPaid: true };
   }
 
-  await db
-    .update(creativeProjectsTable)
-    .set({
-      status: nextStatus,
-      paymentStatus,
-      filesUnlocked,
-      updatedAt: new Date(),
-    })
-    .where(eq(creativeProjectsTable.id, project.id));
+  if (TERMINAL_STATUSES.has(existing.status) && existing.status !== "paid") {
+    // cancelled or refunded — cannot approve
+    return null; // caller returns 409
+  }
+
+  // ── Atomic transaction ────────────────────────────────────────────────────
+  let schedule!: AiPaymentSchedule;
+  let project!: CreativeProject;
+  let productionStarted = false;
+  let filesUnlocked = false;
+  let nextStatus = "";
+  let paymentStatus = "";
+
+  await db.transaction(async (tx) => {
+    // 1. Mark the installment as paid (atomic CAS — only if still not paid)
+    const [updated] = await tx
+      .update(aiPaymentScheduleTable)
+      .set({
+        status: "paid",
+        verifiedBy,
+        paidAt: new Date(),
+        reference: reference ?? undefined,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(aiPaymentScheduleTable.id, scheduleId),
+          inArray(aiPaymentScheduleTable.status, [...VERIFIABLE_STATUSES, "pending"]),
+        ),
+      )
+      .returning();
+
+    if (!updated) {
+      // Another concurrent request already paid it — roll back (no-op, nothing changed)
+      throw Object.assign(new Error("ALREADY_PAID"), { code: "ALREADY_PAID" });
+    }
+
+    schedule = updated;
+
+    // 2. Load the project (must exist — FK constraint ensures this)
+    const [proj] = await tx
+      .select()
+      .from(creativeProjectsTable)
+      .where(eq(creativeProjectsTable.id, schedule.projectId))
+      .limit(1);
+
+    if (!proj) throw new Error("Project not found for payment schedule");
+
+    // 3. Recompute aggregate project payment status
+    const allInstallments = await tx
+      .select()
+      .from(aiPaymentScheduleTable)
+      .where(eq(aiPaymentScheduleTable.projectId, proj.id));
+
+    const unpaid = allInstallments.filter((s) => s.status !== "paid" && s.status !== "cancelled");
+    const anyPaid = allInstallments.some((s) => s.status === "paid");
+    const fullyPaid = unpaid.length === 0;
+
+    nextStatus = proj.status;
+    filesUnlocked = proj.filesUnlocked;
+    paymentStatus = proj.paymentStatus;
+
+    const productionAlreadyTerminal = proj.status === "completed" || proj.status === "failed";
+
+    if (fullyPaid) {
+      paymentStatus = "paid";
+      filesUnlocked = true;
+      if (!productionAlreadyTerminal) {
+        nextStatus = schedule.paymentType === "remaining_balance" ? "remaining_paid" : "payment_verified";
+      }
+    } else if (anyPaid) {
+      paymentStatus = "partially_paid";
+      if (!productionAlreadyTerminal) {
+        if (schedule.paymentType === "deposit") nextStatus = "deposit_paid";
+        else if (schedule.paymentType === "subscription_charge") nextStatus = "payment_verified";
+      }
+    }
+
+    // 4. Update the project — this is the critical second write in the transaction
+    const [updatedProject] = await tx
+      .update(creativeProjectsTable)
+      .set({
+        status: nextStatus,
+        paymentStatus,
+        filesUnlocked,
+        updatedAt: new Date(),
+      })
+      .where(eq(creativeProjectsTable.id, proj.id))
+      .returning();
+
+    if (!updatedProject) throw new Error("Failed to update project payment state");
+    project = updatedProject;
+  });
+
+  // ── Post-transaction: audit + events + idempotent workflow dispatch ────────
 
   await logAudit(
     "payments",
@@ -260,40 +386,44 @@ export async function verifyPayment(
     });
   }
 
-  // ── AI Build guard: only start production once payment is verified or a
-  // deposit has been received — never before. ──
+  // ── Idempotent AI Build guard ─────────────────────────────────────────────
+  // Only start production if:
+  //   1. The payment type is a production-gating type (deposit, full_payment)
+  //   2. The project is still in a payment-waiting state (not already running/completed)
+  //
+  // We re-fetch the project to get the post-transaction status, which prevents
+  // duplicate dispatches on concurrent verify calls or admin retries.
   const paymentReadyForProduction =
-    schedule.paymentType === "deposit" || schedule.paymentType === "full_payment" || fullyPaid;
+    schedule.paymentType === "deposit" ||
+    schedule.paymentType === "full_payment" ||
+    schedule.paymentType === "subscription_charge";
 
-  if (
-    paymentReadyForProduction &&
-    (project.status === "waiting_payment_verification" || project.status === "waiting_payment")
-  ) {
-    // Re-fetch to get the just-updated row for an accurate status check.
-    const [freshProject] = await db
-      .select()
-      .from(creativeProjectsTable)
-      .where(eq(creativeProjectsTable.id, project.id))
-      .limit(1);
-    if (freshProject && (freshProject.status === "deposit_paid" || freshProject.status === "payment_verified")) {
-      productionStarted = true;
-      runCreativeBriefWorkflow(project.id).catch(async (err) => {
-        console.error(`[payments] Workflow failed for project ${project.projectId}:`, err);
-        await db
-          .update(creativeProjectsTable)
-          .set({ status: "failed" })
-          .where(eq(creativeProjectsTable.id, project.id));
-      });
-    }
-  }
-
-  const [finalProject] = await db
+  const [freshProject] = await db
     .select()
     .from(creativeProjectsTable)
     .where(eq(creativeProjectsTable.id, project.id))
     .limit(1);
 
-  return { schedule, project: finalProject ?? project, productionStarted };
+  // Idempotency: only dispatch if project is in a state that expects production start.
+  // If it's already running/completed/failed, skip — a workflow was already dispatched.
+  const PRODUCTION_TRIGGER_STATUSES = new Set(["deposit_paid", "payment_verified"]);
+
+  if (
+    paymentReadyForProduction &&
+    freshProject &&
+    PRODUCTION_TRIGGER_STATUSES.has(freshProject.status)
+  ) {
+    productionStarted = true;
+    runCreativeBriefWorkflow(project.id).catch(async (err) => {
+      console.error(`[payments] Workflow failed for project ${project.id}:`, err);
+      await logAudit("payments", "workflow_dispatch_failed", String(project.id), "creative_project", "error", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // Payment stays paid — do NOT revert. Admin can retry via admin panel.
+    });
+  }
+
+  return { schedule, project: freshProject ?? project, productionStarted };
 }
 
 // ── generateInvoice ────────────────────────────────────────────────────────────
@@ -355,18 +485,37 @@ export function isProjectUnlocked(project: Pick<CreativeProject, "filesUnlocked"
 }
 
 // ── rejectPayment ──────────────────────────────────────────────────────────────
-// P0-5 Admin action: reject a submitted payment proof. Transitions status back
-// to "pending" and logs the reason. Does not start/stop AI production.
+// P0-5 Admin action: reject a submitted payment proof.
+// Actor identity must be provided server-side (never trusted from req.body).
+// Rejection reason is stored in the schedule's `notes` field as JSON.
 
 export async function rejectPayment(
   scheduleId: number,
-  rejectedBy: string,
+  actor: string,         // server-derived admin identity
   reason: string,
 ): Promise<AiPaymentSchedule | null> {
+  // Read current state for the audit trail
+  const [current] = await db
+    .select()
+    .from(aiPaymentScheduleTable)
+    .where(eq(aiPaymentScheduleTable.id, scheduleId))
+    .limit(1);
+
+  if (!current) return null;
+  if (TERMINAL_STATUSES.has(current.status)) return null;
+
+  // Preserve rejection metadata in notes for customer UX (rejection reason display).
+  const rejectionMeta = JSON.stringify({
+    rejectedBy: actor,
+    rejectionReason: reason,
+    rejectedAt: new Date().toISOString(),
+  });
+
   const [schedule] = await db
     .update(aiPaymentScheduleTable)
     .set({
       status: "failed",
+      notes: rejectionMeta,
       updatedAt: new Date(),
     })
     .where(
@@ -380,13 +529,7 @@ export async function rejectPayment(
 
   if (!schedule) return null;
 
-  // Un-stick the project: a customer who submitted proof moved the project to
-  // "waiting_payment_verification" — if that proof is rejected, revert to
-  // "waiting_payment" so the customer sees an actionable state and can submit
-  // a new reference/proof instead of appearing to wait forever. Only revert
-  // when the project is still in that specific waiting state — never touch a
-  // project that has since progressed (e.g. another installment already
-  // verified it further along, or production/terminal states).
+  // Revert project status if still in waiting_payment_verification
   const [project] = await db
     .select({ id: creativeProjectsTable.id, status: creativeProjectsTable.status })
     .from(creativeProjectsTable)
@@ -405,14 +548,14 @@ export async function rejectPayment(
     String(schedule.id),
     "ai_payment_schedule",
     "success",
-    { rejectedBy, reason, projectId: schedule.projectId },
+    { rejectedBy: actor, reason, projectId: schedule.projectId },
   );
 
   publishSafe({
     eventType: "payment.rejected",
     sourceModule: "payments",
     sourceId: String(schedule.id),
-    payload: { scheduleId: schedule.id, projectId: schedule.projectId, rejectedBy, reason },
+    payload: { scheduleId: schedule.id, projectId: schedule.projectId, rejectedBy: actor, reason },
   });
 
   return schedule;
