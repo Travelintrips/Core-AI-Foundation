@@ -1,0 +1,134 @@
+ROLE
+
+Implement FINAL SECURITY REMEDIATION.
+
+Gunakan hasil Final Security Validation sebagai satu-satunya dasar.
+
+Jangan memperbaiki issue lain.
+
+Jangan melakukan refactor.
+
+Jangan mengubah business logic.
+
+==================================================
+SCOPE
+==================================================
+
+Perbaiki HANYA:
+
+1. Plaintext credentials di .replit
+
+2. Hardcoded default admin email
+   (INITIAL_INTERNAL_ADMIN_EMAIL)
+
+==================================================
+TASK 1
+==================================================
+
+Sanitize .replit.
+
+Hapus seluruh nilai credential plaintext.
+
+Pertahankan seluruh konfigurasi Replit yang bukan secret.
+
+Jangan menghapus konfigurasi run command,
+deployment,
+ports,
+workflow,
+modules,
+atau setting lain.
+
+==================================================
+TASK 2
+==================================================
+
+Pastikan seluruh credential dibaca hanya dari:
+
+process.env
+
+atau
+
+Replit Secrets.
+
+Tidak boleh ada fallback credential.
+
+==================================================
+TASK 3
+==================================================
+
+Ubah:
+
+process.env["INITIAL_INTERNAL_ADMIN_EMAIL"] ?? "..."
+
+menjadi:
+
+wajib berasal dari environment.
+
+Apabila env tidak tersedia:
+
+fail dengan pesan yang jelas.
+
+Jangan menggunakan email default.
+
+==================================================
+TASK 4
+==================================================
+
+Tambahkan dokumentasi:
+
+SECURITY_ROTATION_REQUIRED.md
+
+berisi daftar credential yang wajib dirotasi.
+
+Jangan menuliskan nilainya.
+
+Hanya nama credential.
+
+==================================================
+TASK 5
+==================================================
+
+Verifikasi:
+
+- build
+- startup
+- health endpoint
+
+memastikan aplikasi tetap berjalan dengan credential dari environment.
+
+==================================================
+JANGAN
+==================================================
+
+Jangan rotate credential.
+
+Jangan membuat credential baru.
+
+Jangan melakukan history rewrite.
+
+Jangan force push.
+
+Jangan deploy.
+
+Jangan merge.
+
+Jangan memperbaiki TypeScript.
+
+Jangan menyentuh marketplace.
+
+Jangan menyentuh workflow.
+
+Jangan menyentuh AI.
+
+==================================================
+OUTPUT
+==================================================
+
+Laporkan:
+
+- file yang berubah
+- alasan perubahan
+- build status
+- health status
+- apakah seluruh credential sudah berasal dari environment
+- apakah tidak ada lagi plaintext credential di HEAD repository
