@@ -1,0 +1,128 @@
+ROLE
+
+Implement SECURE ADMIN AUTH REMEDIATION.
+
+Jangan mengubah modul bisnis.
+
+Jangan menyentuh Creative AI workflow, marketplace, payment, finance, atau database schema.
+
+==================================================
+MASALAH
+==================================================
+
+Audit menemukan bahwa AI Platform frontend menggunakan:
+
+VITE_ADMIN_API_KEY
+
+dan nilainya direncanakan sama dengan:
+
+ADMIN_API_KEY
+
+Ini tidak aman karena semua variable VITE_* dapat masuk ke browser bundle dan dapat dibaca pengguna.
+
+==================================================
+PHASE 1 — VERIFY
+==================================================
+
+Telusuri seluruh penggunaan:
+
+- VITE_ADMIN_API_KEY
+- ADMIN_API_KEY
+- useAdminApi.ts
+- main.tsx
+- adminAuth.ts
+- internalAuthService.ts
+- session cookie/token
+- login/logout/refresh flow
+
+Jawab terlebih dahulu:
+
+1. Apakah VITE_ADMIN_API_KEY masuk ke production browser bundle?
+2. Apakah admin UI dapat bekerja menggunakan authenticated session tanpa static API key?
+3. Endpoint mana yang masih bergantung pada X-Admin-Key atau header statis?
+4. Apakah cookie session menggunakan:
+   - HttpOnly
+   - Secure di production
+   - SameSite yang tepat
+   - expiration
+   - server-side verification
+
+Jangan berhenti pada route frontend. Ikuti full request path sampai middleware backend.
+
+==================================================
+PHASE 2 — IMPLEMENTATION
+==================================================
+
+Jika session-based internal authentication sudah tersedia:
+
+1. Hapus penggunaan VITE_ADMIN_API_KEY dari frontend.
+2. Jangan membaca ADMIN_API_KEY dari browser.
+3. Gunakan session cookie/token hasil login untuk request admin.
+4. Pastikan fetch menggunakan credentials: "include" bila cookie digunakan.
+5. Pertahankan ADMIN_API_KEY hanya sebagai server-to-server atau emergency internal credential.
+6. Jangan mengirim ADMIN_API_KEY ke browser dalam response, HTML, env injection, source map, atau JavaScript bundle.
+7. Pastikan unauthorized request menghasilkan 401.
+8. Pastikan authenticated admin request tetap berhasil.
+
+Jika session-based authentication belum cukup, jangan membuat solusi sementara dengan public static key. Bangun atau lengkapi session authentication yang sudah ada dengan perubahan minimal.
+
+==================================================
+PHASE 3 — ENV CLEANUP
+==================================================
+
+Setelah frontend tidak bergantung pada static key:
+
+- Hapus kebutuhan VITE_ADMIN_API_KEY.
+- Jangan memasukkannya kembali ke Replit Secrets.
+- ADMIN_API_KEY tetap server-side only.
+- Dokumentasikan variable mana yang server-only dan mana yang aman untuk frontend.
+
+Tambahkan validasi build yang gagal apabila secret server-side dengan nama berikut digunakan melalui import.meta.env:
+
+- ADMIN_API_KEY
+- SESSION_SECRET
+- SUPABASE_SERVICE_ROLE_KEY
+- SUPABASE_SERVICE_ROLE_KEY_DEV
+- SMTP_PASS
+- OPENAI_API_KEY
+- ANTHROPIC_API_KEY
+- GEMINI_API_KEY
+- MISTRAL_API_KEY
+- REPLICATE_API_TOKEN
+
+==================================================
+PHASE 4 — TESTS
+==================================================
+
+Tambahkan atau jalankan test untuk membuktikan:
+
+1. VITE_ADMIN_API_KEY tidak direferensikan frontend.
+2. ADMIN_API_KEY tidak terdapat dalam frontend bundle.
+3. Admin tanpa session mendapat 401.
+4. Admin dengan session valid dapat mengakses endpoint admin.
+5. Logout menginvalidasi akses.
+6. Session expired ditolak.
+7. API build PASS.
+8. AI Platform build PASS.
+
+Jangan menampilkan nilai credential di log atau laporan.
+
+==================================================
+OUTPUT
+==================================================
+
+Laporkan:
+
+- root cause
+- authentication flow sebelum perubahan
+- authentication flow setelah perubahan
+- file yang diubah
+- test yang dijalankan
+- build status
+- hasil pencarian akhir untuk VITE_ADMIN_API_KEY
+- konfirmasi bahwa ADMIN_API_KEY hanya tersedia server-side
+- apakah aman melanjutkan pengisian Replit Secrets dan restart workflow
+
+Jangan deploy.
+Jangan restart workflow.
+Jangan commit atau merge tanpa persetujuan.

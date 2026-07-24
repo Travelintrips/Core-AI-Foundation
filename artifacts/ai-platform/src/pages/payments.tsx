@@ -12,8 +12,8 @@ const API_BASE = "";
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {};
-  const key = import.meta.env.VITE_ADMIN_API_KEY;
-  if (key) headers["x-admin-api-key"] = key;
+
+
   if (init?.body) headers["Content-Type"] = "application/json";
 
   const res = await fetch(`${API_BASE}${path}`, {

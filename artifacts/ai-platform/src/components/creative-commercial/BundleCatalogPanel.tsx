@@ -37,7 +37,7 @@ export default function BundleCatalogPanel() {
   useEffect(() => {
     setLoading(true);
     fetch(`${BASE}/bundles`, {
-      headers: { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
+
     })
       .then((r) => r.json())
       .then((d) => setBundles(Array.isArray(d) ? d : []))

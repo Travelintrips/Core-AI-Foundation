@@ -33,12 +33,12 @@ import { useToast } from "@/hooks/use-toast";
 const API_BASE = "";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-  const key = import.meta.env.VITE_ADMIN_API_KEY;
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
       ...(opts?.body ? { "Content-Type": "application/json" } : {}),
-      ...(key ? { "x-admin-api-key": key } : {}),
+
       ...(opts?.headers ?? {}),
     },
   });
@@ -131,7 +131,7 @@ function TemplateThumbnail({ url, name }: { url?: string | null; name: string })
 
 function VersionPreview({ templateId, versionId }: { templateId: number; versionId: number }) {
   const [errored, setErrored] = useState(false);
-  const key = import.meta.env.VITE_ADMIN_API_KEY;
+
   // We use a POST endpoint, but for simple <img> display we use GET preview data endpoint
   // to avoid triggering expensive renders on every card.
   // The detail page shows a placeholder; on demand the user can view via thumbnail.

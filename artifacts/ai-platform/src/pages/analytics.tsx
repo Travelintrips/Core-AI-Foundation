@@ -23,8 +23,8 @@ const API_BASE = "";
 
 async function apiFetch<T>(path: string): Promise<T> {
   const headers: Record<string, string> = {};
-  const key = import.meta.env.VITE_ADMIN_API_KEY;
-  if (key) headers["x-admin-api-key"] = key;
+
+
   const res = await fetch(`${API_BASE}${path}`, { headers });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<T>;

@@ -5,12 +5,12 @@ import { Plus, Play, Ban, CheckCircle, XCircle, Loader2, RefreshCcw, Images, Sta
 // ── API helpers ───────────────────────────────────────────────────────────────
 
 const API = "/api";
-const KEY = import.meta.env.VITE_ADMIN_API_KEY ?? "";
+
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", "x-admin-api-key": KEY, ...(init?.headers ?? {}) },
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

@@ -87,12 +87,12 @@ interface PatternMeta {
 // ── API helpers ───────────────────────────────────────────────────────────────
 
 function apiFetch(path: string, init?: RequestInit) {
-  const adminKey = import.meta.env["VITE_ADMIN_API_KEY"] ?? "";
+
   return fetch(`/api${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      "x-admin-api-key": adminKey,
+
       ...(init?.headers ?? {}),
     },
   });

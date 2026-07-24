@@ -862,10 +862,9 @@ function ClientReviewSection({ projectId }: { projectId: string }) {
     query: { queryKey: getListReviewCommentsQueryKey(projectId) },
   });
 
-  const adminKey = import.meta.env.VITE_ADMIN_API_KEY as string | undefined;
   const adminHeaders: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(adminKey ? { "x-admin-api-key": adminKey } : {}),
+
   };
   const apiBase = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -1526,10 +1525,10 @@ function ProjectDetail({ projectId }: { projectId: string }) {
     updateAssetStatus.mutate({ assetId, data: { status: "approved" } });
   };
   const handleAssetRevision = async (assetId: number, revisionNote: string) => {
-    const adminKey = import.meta.env.VITE_ADMIN_API_KEY as string | undefined;
+
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      ...(adminKey ? { "x-admin-api-key": adminKey } : {}),
+
     };
     try {
       const res = await fetch(`/api/creative-ai/assets/${assetId}/regenerate`, {
