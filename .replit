@@ -39,11 +39,13 @@ DESIGN_AI_MULTI_AGENT_ENABLED = "true"
 SUPABASE_URL_DEV = "https://xssrfshdrtdfupgqwfdw.supabase.co"
 VITE_SUPABASE_URL_DEV = "https://xssrfshdrtdfupgqwfdw.supabase.co"
 SUPABASE_STORAGE_BUCKET_DEV = "https://xssrfshdrtdfupgqwfdw.storage.supabase.co/storage/v1/s3"
+SUPABASE_DATABASE_URL_DEV = "postgresql://postgres.xssrfshdrtdfupgqwfdw:nvVEWjiHruxen4cE@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres"
 
 [userenv.production]
 SUPABASE_URL = "https://nzdweipzckfszczzqtuw.supabase.co"
 SUPABASE_STORAGE_BUCKET = "https://nzdweipzckfszczzqtuw.storage.supabase.co/storage/v1/s3"
 PUBLIC_APP_URL = "https://aicore.cstlogistic.co.id"
+SUPABASE_DATABASE_URL = "postgresql://postgres.nzdweipzckfszczzqtuw:AnTXXOl0t1ArQOEU@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres"
 
 [nix]
 channel = "stable-25_05"
