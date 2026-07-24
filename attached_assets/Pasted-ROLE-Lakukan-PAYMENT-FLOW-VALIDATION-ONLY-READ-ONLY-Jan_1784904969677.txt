@@ -1,0 +1,195 @@
+ROLE
+
+Lakukan PAYMENT FLOW VALIDATION ONLY.
+
+READ ONLY.
+
+Jangan mengubah file.
+Jangan membuat branch.
+Jangan commit.
+Jangan deploy.
+Jangan migration.
+Jangan menyentuh auth.
+Jangan menyentuh VITE_ADMIN_API_KEY.
+Jangan menyentuh AI provider keys.
+Jangan melakukan audit repository umum.
+
+==================================================
+TUJUAN
+==================================================
+
+Validasi apakah alur pembayaran Creative AI saat ini berjalan benar.
+
+Manual payment flow adalah desain yang sah.
+
+Tidak adanya payment gateway bukan blocker.
+
+==================================================
+PHASE 1 — PAYMENT ENTRY
+==================================================
+
+Telusuri alur dari:
+
+customer membuat project/order
+→ quotation
+→ payment schedule/payment record
+→ waiting_payment
+
+Laporkan:
+
+- endpoint
+- tabel
+- status awal
+- nominal
+- relasi payment ke project/order
+- sumber nilai pembayaran
+- apakah frontend dapat memanipulasi nominal
+
+==================================================
+PHASE 2 — PAYMENT PROOF
+==================================================
+
+Validasi:
+
+- upload bukti pembayaran
+- endpoint upload
+- auth dan ownership
+- validasi file
+- tipe file
+- ukuran file
+- lokasi storage
+- URL public/private
+- status setelah upload
+- kemungkinan overwrite
+- kemungkinan upload ke payment milik pihak lain
+
+==================================================
+PHASE 3 — ADMIN REVIEW
+==================================================
+
+Validasi:
+
+- daftar payment pending
+- detail payment
+- bukti pembayaran
+- approve
+- reject
+- alasan reject
+- reviewer identity
+- timestamp
+- audit log
+
+Pastikan:
+
+- approve tidak bisa dua kali
+- reject setelah approved tidak bisa sembarangan
+- status transition tervalidasi
+- payment lain tidak ikut berubah
+
+==================================================
+PHASE 4 — STATUS PROPAGATION
+==================================================
+
+Ikuti efek setelah approve:
+
+payment approved
+→ project/order paid
+→ status Creative AI berubah
+→ workflow/job dibuat
+→ job tidak duplicate
+→ customer melihat status terbaru
+
+Periksa:
+
+- transaksi database
+- rollback
+- idempotency
+- duplicate request
+- race condition
+
+==================================================
+PHASE 5 — FAILURE SCENARIOS
+==================================================
+
+Validasi:
+
+- payment tidak ditemukan
+- project tidak ditemukan
+- bukti tidak valid
+- nominal tidak sesuai
+- approve dua kali
+- reject dua kali
+- approve setelah reject
+- upload ulang setelah reject
+- database gagal saat approve
+- workflow gagal dibuat setelah approve
+- customer refresh halaman
+- request dikirim ulang
+
+==================================================
+PHASE 6 — PAYMENT SECURITY ONLY
+==================================================
+
+Periksa hanya yang langsung berkaitan dengan payment:
+
+- authentication
+- authorization
+- ownership
+- predictable payment proof URL
+- public payment proof
+- perubahan nominal dari frontend
+- replay request
+- audit trail
+- cross-project access
+
+Jangan memperluas ke audit security umum.
+
+==================================================
+PHASE 7 — UI/UX
+==================================================
+
+Customer harus dapat melihat:
+
+- belum bayar
+- bukti sudah dikirim
+- menunggu verifikasi
+- disetujui
+- ditolak
+- alasan penolakan
+- unggah ulang
+- project mulai diproses
+
+Admin harus dapat melihat:
+
+- payment pending
+- nominal
+- project/order
+- customer
+- bukti transfer
+- approve/reject
+- histori tindakan
+
+==================================================
+FINAL REPORT
+==================================================
+
+Berikan hanya:
+
+1. Current payment flow
+2. Confirmed payment blockers
+3. Non-blocking payment improvements
+4. Data integrity risks
+5. Security risks khusus payment
+6. UI/UX gaps
+7. Final verdict:
+
+PAYMENT READY
+
+atau
+
+PAYMENT BLOCKED
+
+Jangan memperbaiki apa pun.
+Jangan membahas auth frontend.
+Jangan membahas secret.
+Jangan membahas Git history.
