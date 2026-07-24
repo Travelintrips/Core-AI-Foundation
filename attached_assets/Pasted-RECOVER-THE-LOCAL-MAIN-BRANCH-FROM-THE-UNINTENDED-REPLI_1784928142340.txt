@@ -1,0 +1,101 @@
+RECOVER THE LOCAL MAIN BRANCH FROM THE UNINTENDED REPLIT AUTO-CHECKPOINT.
+
+Do not modify source files.
+Do not create another commit.
+Do not reinstall dependencies.
+Do not run a Replit checkpoint.
+
+Current history:
+
+2b4b44e  Update repl configuration and add checkpoint asset file
+482df12  chore(creative-ai): clean release artifacts and test fixtures
+e454b9a  origin/main
+
+The commit 2b4b44e is an unintended local-only Replit auto-checkpoint.
+The required cleanup commit is 482df12.
+The working tree is clean.
+
+PHASE 1 — INSPECT THE AUTO-CHECKPOINT
+
+Run:
+
+git show --stat --name-status 2b4b44e
+git show --format=fuller --no-ext-diff 2b4b44e
+
+Confirm that the commit only contains unintended Replit configuration/checkpoint asset changes.
+
+If it contains any legitimate source change, STOP and report it.
+
+PHASE 2 — RESTORE LOCAL HEAD
+
+If 2b4b44e is entirely unintended, run:
+
+git reset --hard 482df12
+
+This is allowed only because:
+
+- 2b4b44e is local-only
+- it has not been pushed
+- working tree is clean
+- 482df12 is the intended final commit
+
+Do not reset to origin/main.
+Do not remove 482df12.
+Do not use rebase.
+Do not create a revert commit.
+
+PHASE 3 — VERIFY BEFORE PUSH
+
+Run:
+
+git status -sb
+git rev-parse HEAD
+git rev-parse origin/main
+git log --oneline -3
+
+Required state:
+
+- HEAD = 482df12
+- origin/main = e454b9a
+- main is ahead by exactly 1
+- working tree is clean
+
+PHASE 4 — PUSH
+
+Attempt:
+
+git push origin main
+
+If authentication is unavailable, stop immediately and report:
+
+PUSH FAILED — AUTHENTICATION REQUIRED
+
+Do not create any additional checkpoint or commit.
+
+PHASE 5 — POST-PUSH VERIFICATION
+
+After a successful push, run:
+
+git fetch origin
+git rev-parse HEAD
+git rev-parse origin/main
+git status -sb
+git ls-tree -r --name-only HEAD | grep "Pasted-CONTINUE-FROM-THE-EXISTING-INTERIOR-DESIGN-E2E-ORDER\|Pasted-FINALIZE-THE-INTERIOR-DESIGN-WORKFLOW-FIX" || true
+
+PASS only if:
+
+- HEAD = 482df12
+- origin/main = 482df12
+- branch is neither ahead nor behind
+- working tree is clean
+- both accidental instruction files are absent
+
+FINAL VERDICT
+
+Choose exactly one:
+
+- CLEANUP PUSHED — READY FOR RELEASE
+- PUSH FAILED — AUTHENTICATION REQUIRED
+- AUTO-CHECKPOINT CONTAINS LEGITIMATE CHANGES — REVIEW REQUIRED
+- LOCAL HISTORY RECOVERY FAILED
+- REMOTE DIVERGENCE — MANUAL REVIEW REQUIRED
