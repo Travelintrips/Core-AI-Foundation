@@ -281,9 +281,9 @@ function useRegistry() {
   const [error, setError] = useState<string | null>(null);
 
   useState(() => {
-
+    const adminKey = import.meta.env.VITE_ADMIN_API_KEY ?? "";
     fetch(`/api/ai/design-components/registry`, {
-      credentials: "include",
+      headers: adminKey ? { "X-Admin-Api-Key": adminKey } : {},
     })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);

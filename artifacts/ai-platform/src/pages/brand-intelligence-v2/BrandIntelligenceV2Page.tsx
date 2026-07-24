@@ -75,7 +75,7 @@ export default function BrandIntelligenceV2Page() {
     try {
       const res = await fetch(`${BASE}/api/ai/brand-intelligence-v2/analyze`, {
         method: "POST",
-
+        headers: { "Content-Type": "application/json", "X-Admin-Api-Key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
         body: JSON.stringify({ clientId: clientId.trim() }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -94,7 +94,7 @@ export default function BrandIntelligenceV2Page() {
     try {
       const res = await fetch(`${BASE}/api/ai/brand-intelligence-v2/${profile.clientId}/refresh`, {
         method: "POST",
-
+        headers: { "X-Admin-Api-Key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
       });
       if (!res.ok) throw new Error(await res.text());
       setProfile(await res.json() as BrandIntelligenceV2);

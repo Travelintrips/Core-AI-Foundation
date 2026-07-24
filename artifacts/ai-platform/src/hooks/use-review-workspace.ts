@@ -2,19 +2,21 @@
  * use-review-workspace.ts — Team 16
  *
  * React Query hooks for the universal Review Workspace.
- * All requests are authenticated via the httpOnly session cookie
- * (credentials: "include").  The static VITE_ADMIN_API_KEY has been removed
- * — see main.tsx and useAdminApi.ts for the rationale.
+ * All requests are admin-authenticated via VITE_ADMIN_API_KEY.
+ * No direct DB access from the frontend.
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
+const ADMIN_KEY = import.meta.env["VITE_ADMIN_API_KEY"] as string | undefined;
+
 async function adminFetch<T>(url: string, opts?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    ...(ADMIN_KEY ? { "X-Admin-Api-Key": ADMIN_KEY } : {}),
     ...(opts?.headers as Record<string, string> | undefined),
   };
-  const res = await fetch(url, { ...opts, headers, credentials: "include" });
+  const res = await fetch(url, { ...opts, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { error?: string };
     throw new Error(body.error ?? `HTTP ${res.status}`);
@@ -36,14 +38,14 @@ export type ReviewPermission =
 
 export type WorkspaceStatus =
   | "pending"
-  | "shared"
-  | "viewed"
+  | "in_review"
   | "approved"
   | "rejected"
   | "revision_requested"
-  | "revoked"
   | "expired"
-  | "cancelled";
+  | "canceled"
+  | "revoked"
+  | "superseded";
 
 export interface WorkspaceMeta {
   id: number;

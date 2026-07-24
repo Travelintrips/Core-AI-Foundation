@@ -18,8 +18,8 @@ import {
 } from "recharts";
 
 function apiHeaders(): HeadersInit {
-
-  return {};
+  const key = import.meta.env.VITE_ADMIN_API_KEY;
+  return key ? { "x-admin-api-key": key } : {};
 }
 
 async function apiFetch<T>(path: string): Promise<T> {

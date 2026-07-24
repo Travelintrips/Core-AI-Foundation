@@ -44,7 +44,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
 const API = "";
-
+const ADMIN_HEADERS = { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" };
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -444,8 +444,8 @@ export default function Workforce() {
     setLoading(true);
     try {
       const [empRes, deptRes] = await Promise.all([
-        fetch(`${API}/api/ai/workforce/employees`, { credentials: "include" }),
-        fetch(`${API}/api/ai/workforce/departments`, { credentials: "include" }),
+        fetch(`${API}/api/ai/workforce/employees`, { headers: ADMIN_HEADERS }),
+        fetch(`${API}/api/ai/workforce/departments`, { headers: ADMIN_HEADERS }),
       ]);
       const [empData, deptData] = await Promise.all([empRes.json(), deptRes.json()]);
       setEmployees(Array.isArray(empData) ? empData : []);
@@ -463,7 +463,7 @@ export default function Workforce() {
     setSelected(emp);
     setDetailFull(null);
     try {
-      const res  = await fetch(`${API}/api/ai/workforce/employees/${emp.id}`, { credentials: "include" });
+      const res  = await fetch(`${API}/api/ai/workforce/employees/${emp.id}`, { headers: ADMIN_HEADERS });
       const data = await res.json();
       setDetailFull(data);
     } catch {
@@ -474,7 +474,7 @@ export default function Workforce() {
   const handleSeed = async () => {
     setSeeding(true);
     try {
-      const res  = await fetch(`${API}/api/ai/seed/all`, { method: "POST", credentials: "include" });
+      const res  = await fetch(`${API}/api/ai/seed/all`, { method: "POST", headers: ADMIN_HEADERS });
       const data = await res.json();
       toast({ title: "Seed complete", description: `${data.workforce?.employees ?? 0} employees, ${data.workforce?.departments ?? 0} departments seeded.` });
       await fetchData();

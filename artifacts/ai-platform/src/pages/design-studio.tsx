@@ -23,12 +23,12 @@ import { useToast } from "@/hooks/use-toast";
 const API_BASE = "";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-
+  const key = import.meta.env.VITE_ADMIN_API_KEY;
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
       ...(opts?.body ? { "Content-Type": "application/json" } : {}),
-
+      ...(key ? { "x-admin-api-key": key } : {}),
       ...(opts?.headers ?? {}),
     },
   });

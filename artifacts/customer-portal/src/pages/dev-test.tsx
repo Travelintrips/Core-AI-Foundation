@@ -197,13 +197,14 @@ function getBriefForService(categoryCode: string, serviceName: string): object {
 
 // ─── Admin API helper ─────────────────────────────────────────────────────────
 
+const ADMIN_KEY = import.meta.env.VITE_ADMIN_API_KEY as string | undefined;
 
 async function adminFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(url, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-
+      'x-admin-api-key': ADMIN_KEY ?? '',
       ...(init.headers as Record<string, string> ?? {}),
     },
   });

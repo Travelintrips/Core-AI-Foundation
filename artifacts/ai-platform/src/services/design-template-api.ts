@@ -5,7 +5,7 @@
  * via TanStack Query. Never inline fetch calls in page components.
  *
  * API base: "" (relative) so Vite proxies /api/* to the api-server port.
-
+ * Auth: VITE_ADMIN_API_KEY header (same pattern as design-studio.tsx).
  */
 
 import type {
@@ -19,14 +19,14 @@ import type {
 // ── Internal fetch helper ─────────────────────────────────────────────────────
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-
+  const key = import.meta.env.VITE_ADMIN_API_KEY;
   const hasBody = opts?.body != null;
   const res = await fetch(path, {
     ...opts,
     credentials: "include",
     headers: {
       ...(hasBody ? { "Content-Type": "application/json" } : {}),
-
+      ...(key ? { "x-admin-api-key": key } : {}),
       ...(opts?.headers ?? {}),
     },
   });
@@ -124,13 +124,13 @@ export async function renderPreview(
   data: Record<string, unknown>,
   opts: { format?: "png" | "jpg" | "webp"; templateVersionId?: number } = {},
 ): Promise<RenderedPreview> {
-
+  const key = import.meta.env.VITE_ADMIN_API_KEY;
   const res = await fetch(`/api/ai/design-templates/${templateId}/preview`, {
     method: "POST",
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
-
+      ...(key ? { "x-admin-api-key": key } : {}),
     },
     body: JSON.stringify({
       data,

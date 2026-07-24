@@ -102,10 +102,10 @@ interface PipelineDetail extends ProductionPipeline {
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-
+  const adminKey = import.meta.env.VITE_ADMIN_API_KEY as string | undefined;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-
+    ...(adminKey ? { "x-admin-api-key": adminKey } : {}),
   };
   const res = await fetch(`${BASE}${path}`, { ...opts, headers: { ...headers, ...(opts?.headers as Record<string, string> | undefined ?? {}) } });
   if (!res.ok) {

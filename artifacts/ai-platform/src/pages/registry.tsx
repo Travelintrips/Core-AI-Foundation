@@ -175,7 +175,7 @@ export default function Registry() {
   }, [checkAll, refreshProviders, toast]);
       const resp = await fetch(`${BASE}/api/ai/providers/${providerId}/health-check`, {
         method: "POST",
-
+        headers: { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
       });
       const data: HealthResult = await resp.json();
       setResults(prev => ({ ...prev, [providerId]: data }));

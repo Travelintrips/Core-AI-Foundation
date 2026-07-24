@@ -99,7 +99,7 @@ function useApi<T>(url: string | null) {
     setError(null);
     try {
       const res = await fetch(fetchUrl, {
-        credentials: "include",
+        headers: { "x-admin-api-key": (window as any).__ADMIN_API_KEY__ ?? import.meta.env.VITE_ADMIN_API_KEY ?? "" },
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? res.statusText);
@@ -357,7 +357,7 @@ function ValidatePanel() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-
+          "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "",
         },
         body: JSON.stringify(parsed),
       });
@@ -430,7 +430,7 @@ function CompatPanel() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-
+          "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "",
         },
         body: JSON.stringify({
           blueprintId,
@@ -530,6 +530,7 @@ export default function DesignBlueprintsPage() {
   const [loadingStats, setLoadingStats] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
+  const adminKey = import.meta.env.VITE_ADMIN_API_KEY ?? "";
 
   async function loadBlueprints() {
     setLoadingBps(true);
@@ -540,7 +541,7 @@ export default function DesignBlueprintsPage() {
       if (statusFilter) params.set("status", statusFilter);
       params.set("limit", "100");
       const res = await fetch(`${BASE}?${params}`, {
-        credentials: "include",
+        headers: { "x-admin-api-key": adminKey },
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? res.statusText);
@@ -555,7 +556,7 @@ export default function DesignBlueprintsPage() {
   async function loadStats() {
     setLoadingStats(true);
     try {
-      const res = await fetch(`${BASE}/stats`, { credentials: "include" });
+      const res = await fetch(`${BASE}/stats`, { headers: { "x-admin-api-key": adminKey } });
       const json = await res.json();
       setStats(json);
     } catch {
@@ -656,7 +657,7 @@ export default function DesignBlueprintsPage() {
 
             {fetchError && (
               <div className="bg-red-50 border border-red-200 rounded p-3 text-red-700 text-sm mb-4">
-                {fetchError} — make sure the API server is running and you are logged in.
+                {fetchError} — make sure the API server is running and <code>VITE_ADMIN_API_KEY</code> is set.
               </div>
             )}
 

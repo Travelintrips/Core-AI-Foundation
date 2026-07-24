@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
 const HEADERS = () => {
-
-  return { "Content-Type": "application/json", };
+  const k = import.meta.env.VITE_ADMIN_API_KEY;
+  return { "Content-Type": "application/json", ...(k ? { "x-admin-api-key": k } : {}) };
 };
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { headers: HEADERS(), ...init });

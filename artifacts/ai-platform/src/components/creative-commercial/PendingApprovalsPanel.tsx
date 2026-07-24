@@ -33,7 +33,7 @@ export default function PendingApprovalsPanel() {
   const load = useCallback(() => {
     setLoading(true);
     fetch(`${BASE}/approvals`, {
-
+      headers: { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
     })
       .then((r) => r.json())
       .then((d) => setApprovals(Array.isArray(d) ? d : []))
@@ -46,7 +46,7 @@ export default function PendingApprovalsPanel() {
     setProcessing(id);
     await fetch(`${BASE}/approvals/${id}/approve`, {
       method: "POST",
-
+      headers: { "Content-Type": "application/json", "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
       body: JSON.stringify({ approvedBy: "admin" }),
     });
     setProcessing(null);
@@ -57,7 +57,7 @@ export default function PendingApprovalsPanel() {
     setProcessing(id);
     await fetch(`${BASE}/approvals/${id}/reject`, {
       method: "POST",
-
+      headers: { "Content-Type": "application/json", "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
       body: JSON.stringify({ rejectedBy: "admin", reason: "rejected via dashboard" }),
     });
     setProcessing(null);
