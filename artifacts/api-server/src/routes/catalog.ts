@@ -421,6 +421,8 @@ async function assertServiceIsCommerciallyEligible(
       })
     : "category not found";
 
+  console.log("[eligibility-debug] ineligibilityReason=", ineligibilityReason);
+
   if (ineligibilityReason) {
     res.status(403).json({ error: "This service is not available for customer purchase." });
     return false;
