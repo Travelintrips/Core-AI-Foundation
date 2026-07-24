@@ -1,0 +1,201 @@
+ROLE
+
+Continue from the current Interior Design verification.
+
+Do not restart.
+
+Current verified state:
+
+✔ Purchase resolver fixed.
+✔ API restarted.
+✔ Build passed.
+✔ 5378 tests passed.
+✔ Real catalog order created.
+
+Request ID:
+
+f56cf50d-9f4b-443a-9dc7-a34bd9b3c069
+
+Service ID:
+
+21
+
+Current blocker:
+
+The order reaches the custom_project lifecycle,
+but checkout requires:
+
+- brief_completed
+- pricing_calculated
+
+I need to verify whether this is the correct lifecycle.
+
+================================================
+
+PHASE 1
+
+Trace the entire state machine for
+
+custom_project
+
+Show every transition.
+
+Example:
+
+request_created
+
+↓
+
+brief_completed
+
+↓
+
+pricing_calculated
+
+↓
+
+quotation_created
+
+↓
+
+quotation_approved
+
+↓
+
+commercial_gate_verified
+
+↓
+
+project_created
+
+↓
+
+waiting_payment
+
+↓
+
+payment_verified
+
+↓
+
+workflow_started
+
+↓
+
+completed
+
+Identify the exact transition that is currently missing.
+
+===============================================
+
+PHASE 2
+
+Find where
+
+creative_project_steps
+
+are inserted.
+
+Trace:
+
+project
+
+↓
+
+workflow dispatcher
+
+↓
+
+selected workflow
+
+↓
+
+step insertion
+
+↓
+
+creative_project_steps
+
+Do not guess.
+
+===============================================
+
+PHASE 3
+
+Advance the existing order using the canonical state transitions.
+
+Do not bypass guards.
+
+Do not edit database manually.
+
+Use the real business flow.
+
+===============================================
+
+PHASE 4
+
+After workflow starts,
+
+query:
+
+creative_project_steps
+
+PASS only if rows are:
+
+Design Concept
+
+Space Planning
+
+Material Specification
+
+Design Copy
+
+Interior Quality Control
+
+FAIL if any generic Brand Strategy steps exist.
+
+===============================================
+
+PHASE 5
+
+Verify:
+
+selected workflow
+
+runInteriorDesignWorkflow()
+
+documentType
+
+interior_design
+
+serviceCode
+
+interior-concept-design
+
+===============================================
+
+FINAL REPORT
+
+Include:
+
+✔ current lifecycle state
+
+✔ missing transition
+
+✔ selected workflow
+
+✔ inserted project steps
+
+✔ workflow dispatch count
+
+✔ final verdict
+
+Choose exactly one:
+
+INTERIOR WORKFLOW VERIFIED
+
+INTERIOR WORKFLOW STILL GENERIC
+
+STATE MACHINE BLOCKED
+
+CUSTOM PROJECT LIFECYCLE DEFECT
