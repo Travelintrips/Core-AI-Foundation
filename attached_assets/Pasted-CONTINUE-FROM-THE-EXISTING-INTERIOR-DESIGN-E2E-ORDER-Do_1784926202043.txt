@@ -1,0 +1,265 @@
+CONTINUE FROM THE EXISTING INTERIOR DESIGN E2E ORDER.
+
+Do not create another order.
+Do not restart the audit.
+
+Existing request:
+
+Service request ID:
+8
+
+Commercial gate ID:
+3
+
+Created project ID:
+8504401b-d135-4273-8563-3a43f78704dc
+
+Project payment policy:
+full_payment
+
+Current verified state:
+
+- brief completed
+- quotation approved
+- commercial gate waived
+- canonical conversion succeeded
+- project created with sourceType=service_catalog
+- serviceRequestId populated
+- payment schedule generation returned no rows
+- workflow has not started because payment cannot be verified
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Find the exact root cause why generateScheduleForProject()
+did not create a payment schedule for this converted project.
+
+Do not bypass the payment lifecycle.
+Do not manually insert a payment schedule until the root cause is proven.
+
+==================================================
+PHASE 1 — TRACE THE CALL
+==================================================
+
+Trace the exact call chain:
+
+commercial gate waive/verify
+→ triggerConversion
+→ serviceRequestConversionService
+→ project creation
+→ generateScheduleForProject
+→ payment schedule insert
+
+Report:
+
+- exact file and function
+- input project ID
+- paymentPolicy
+- project price/amount fields
+- currency
+- quotation/commercial total
+- package ID
+- service ID
+- expected schedule count
+- actual schedule count
+- caught error, if any
+
+Do not print secrets.
+
+==================================================
+PHASE 2 — FIND SILENT FAILURE
+==================================================
+
+Inspect all try/catch blocks around schedule creation.
+
+Determine whether:
+
+- error is swallowed
+- only warn log is emitted
+- transaction continues after failure
+- conversion is marked successful despite missing schedule
+- no retry is scheduled
+- no audit event is written
+
+Capture the exact error message safely.
+
+==================================================
+PHASE 3 — VALIDATE REQUIRED FIELDS
+==================================================
+
+Compare the existing project against the contract required by
+generateScheduleForProject().
+
+Check:
+
+- project ID format
+- total amount
+- currency
+- payment policy
+- payment terms
+- quotation total
+- package pricing
+- service request linkage
+- customer linkage
+- project status
+- due date calculation inputs
+
+Report every required field as:
+
+PRESENT
+MISSING
+INVALID
+MISMATCH
+
+==================================================
+PHASE 4 — CLASSIFY ROOT CAUSE
+==================================================
+
+Choose exactly one:
+
+- MISSING_PROJECT_AMOUNT
+- MISSING_CURRENCY
+- INVALID_PAYMENT_POLICY
+- QUOTATION_TOTAL_NOT_COPIED
+- PACKAGE_PRICE_NOT_RESOLVED
+- PROJECT_ID_TYPE_MISMATCH
+- DATABASE_INSERT_FAILURE
+- TRANSACTION_ORDERING_BUG
+- SWALLOWED_EXCEPTION
+- OTHER
+
+==================================================
+PHASE 5 — MINIMAL FIX
+==================================================
+
+Apply the smallest isolated fix only after the root cause is proven.
+
+Allowed examples:
+
+- copy approved quotation total into project before schedule generation
+- pass the correct project identifier
+- resolve package price before schedule creation
+- include currency/payment terms
+- move schedule generation inside the correct transaction/order
+- stop swallowing the error
+- fail conversion if schedule generation is mandatory
+- add an idempotent retry for schedule generation
+
+Do not:
+
+- hardcode IDR 105,000
+- manually insert one schedule as the permanent solution
+- bypass payment policy
+- mark payment paid
+- trigger workflow manually
+- weaken any guard
+
+==================================================
+PHASE 6 — RECOVER THE EXISTING PROJECT
+==================================================
+
+After the fix:
+
+1. Re-run schedule generation idempotently for project:
+   8504401b-d135-4273-8563-3a43f78704dc
+
+2. Verify exactly one schedule exists.
+
+3. Verify:
+   - amount = approved commercial total
+   - currency correct
+   - status correct
+   - project linkage correct
+   - no duplicate schedule
+
+4. Continue canonical payment verification.
+
+5. Confirm workflow dispatch count = 1.
+
+6. Query creative_project_steps.
+
+PASS only if the rows are exactly:
+
+- Design Concept
+- Space Planning
+- Material Specification
+- Design Copy
+- Interior Quality Control
+
+==================================================
+PHASE 7 — TESTS
+==================================================
+
+Add or run tests proving:
+
+- converted custom_project creates payment schedule
+- full_payment policy creates exactly one schedule
+- missing required commercial fields fail loudly
+- conversion cannot silently succeed without mandatory schedule
+- schedule generation is idempotent
+- Interior Design workflow starts only after verified payment
+- correct 5 Interior Design steps are inserted
+
+Run:
+
+- payment schedule service tests
+- conversion service tests
+- commercial gate tests
+- workflow runner tests
+- API build
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+## 1. Root Cause
+
+Exact classification and explanation.
+
+## 2. Evidence
+
+- project amount
+- quotation total
+- currency
+- policy
+- generator input
+- actual error
+- schedule count before fix
+
+## 3. Fix
+
+- files changed
+- behavior changed
+- why minimal
+
+## 4. Existing Project Recovery
+
+- schedule ID
+- amount
+- currency
+- status
+- duplicate count
+
+## 5. Workflow Proof
+
+- workflow dispatch count
+- resolved document type
+- selected workflow
+- exact creative_project_steps rows
+
+## 6. Tests
+
+All relevant results.
+
+## 7. Final Verdict
+
+Choose exactly one:
+
+- INTERIOR WORKFLOW VERIFIED — READY
+- PAYMENT SCHEDULE FIXED — INTERIOR WORKFLOW VERIFIED
+- PAYMENT SCHEDULE STILL MISSING
+- WORKFLOW STILL NOT TRIGGERED
+- VERIFICATION BLOCKED

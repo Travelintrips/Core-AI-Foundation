@@ -216,14 +216,33 @@ export async function convertServiceRequestToProject(
   // for the customer to ever submit payment proof. generateScheduleForProject
   // is idempotent (no-op if a schedule already exists), so this is safe to
   // call unconditionally on every conversion.
+  //
+  // MANDATORY: a project without a payment schedule cannot be paid, so the
+  // conversion must fail loudly rather than silently succeed. We audit the
+  // failure and re-throw so the caller gets a proper error response and the
+  // service request is NOT marked converted_to_project.
   await generateScheduleForProject({
     projectId: project.id,
     paymentPolicy: project.paymentPolicy as PaymentPolicy,
     depositPercentage: project.depositPercentage,
     totalAmount: quotationTotal,
     currency: quotationCurrency,
-  }).catch((err) => {
-    console.warn(`[conversion] generateScheduleForProject non-fatal error for project ${project.id}:`, err);
+  }).catch(async (err) => {
+    await logAudit(
+      "conversion",
+      "schedule_generation_failed",
+      String(project.id),
+      "creative_project",
+      "error",
+      {
+        error: err instanceof Error ? err.message : String(err),
+        projectId: project.id,
+        paymentPolicy: project.paymentPolicy,
+        totalAmount: quotationTotal,
+        currency: quotationCurrency,
+      },
+    ).catch(() => {}); // audit failure must never mask the original error
+    throw err; // surface loudly — conversion must not succeed without a payment schedule
   });
 
   // All preconditions met — perform the conversion with an atomic CAS update.
