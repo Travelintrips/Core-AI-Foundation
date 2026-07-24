@@ -1,0 +1,133 @@
+ROLE
+
+RECOVER FROM INCOMPLETE ADMIN AUTH REMEDIATION.
+
+Pekerjaan sebelumnya gagal di tengah proses setelah melakukan perubahan
+massal terkait VITE_ADMIN_API_KEY pada banyak file.
+
+Jangan melanjutkan refactor secara membabi buta.
+
+Jangan deploy.
+Jangan merge.
+Jangan migration.
+Jangan menyentuh payment flow.
+Jangan membuat perubahan baru sebelum baseline diperiksa.
+
+==================================================
+PHASE 1 — REPOSITORY STATE
+==================================================
+
+Laporkan terlebih dahulu:
+
+- branch aktif
+- HEAD commit
+- git status
+- seluruh file modified
+- file baru
+- file deleted
+- apakah ada commit yang dibuat oleh pekerjaan sebelumnya
+- apakah perubahan hanya ada di working tree
+
+Tampilkan ringkasan diff per file.
+
+==================================================
+PHASE 2 — IDENTIFY REGRESSION
+==================================================
+
+Cari seluruh error yang muncul akibat pekerjaan sebelumnya.
+
+Fokus pada:
+
+- identifier tidak ditemukan:
+  key
+  k
+  ADMIN_KEY
+  adminKey
+  apiKey
+
+- header authorization yang sekarang kosong
+- fetch yang kehilangan credentials
+- helper function yang kehilangan parameter
+- import yang tidak digunakan
+- syntax error
+- TypeScript error baru
+
+Bandingkan dengan HEAD sebelum remediation.
+
+Pisahkan:
+
+A. Error baru akibat remediation
+B. Error pre-existing
+
+==================================================
+PHASE 3 — DECISION
+==================================================
+
+Karena Secure Admin Auth bukan scope utama saat ini,
+gunakan keputusan berikut:
+
+Jika perubahan sebelumnya belum di-commit:
+
+- revert SELURUH perubahan yang dibuat oleh Secure Admin Auth Remediation
+- jangan revert perubahan security remediation sebelumnya pada:
+  .replit
+  seedInternalAdmin.ts
+  resetAdminPassword.ts
+  SECURITY_ROTATION_REQUIRED.md
+
+Jika perubahan sebelumnya sudah di-commit:
+
+- jangan hard reset
+- identifikasi commit khusus auth remediation
+- buat revert commit yang hanya membatalkan perubahan auth tersebut
+- pertahankan sanitasi secret sebelumnya
+
+==================================================
+PHASE 4 — REQUIRED PRESERVATION
+==================================================
+
+Perubahan berikut WAJIB dipertahankan:
+
+- plaintext credentials tetap tidak boleh kembali ke .replit
+- hardcoded admin email tidak boleh kembali
+- SECURITY_ROTATION_REQUIRED.md tetap ada
+
+Jangan mengembalikan secret lama ke repository.
+
+==================================================
+PHASE 5 — VERIFICATION
+==================================================
+
+Setelah rollback perubahan auth:
+
+Jalankan:
+
+- git diff
+- TypeScript check yang relevan
+- AI Platform build
+- API build
+
+Pastikan:
+
+- tidak ada error baru akibat identifier key/k/ADMIN_KEY
+- frontend kembali ke kondisi sebelum auth remediation
+- secret plaintext tetap tidak ada di HEAD
+- tidak ada perubahan pada payment flow
+
+==================================================
+OUTPUT
+==================================================
+
+Laporkan:
+
+1. Root cause error
+2. Perubahan auth yang dibatalkan
+3. Perubahan security yang dipertahankan
+4. File akhir yang masih modified
+5. Build status
+6. TypeScript status
+7. Konfirmasi bahwa payment flow tidak disentuh
+8. Apakah repository kembali stabil
+
+Jangan melanjutkan Secure Admin Auth Remediation.
+Jangan mulai audit payment pada pekerjaan ini.
