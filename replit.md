@@ -25,13 +25,12 @@ All services start automatically via Replit workflows. In development:
 
 ## Key Environment Variables
 
-Already configured in the Replit environment:
-
-- `SUPABASE_DEV_DATABASE_URL` / `SUPABASE_PROD_DATABASE_URL` — database connections
-- `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY` — admin authentication
-- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, etc. — AI providers
-- `SMTP_*` — email via Hostinger
-- `FONNTE_TOKEN` — WhatsApp notifications
+`SESSION_SECRET` is configured in the Replit environment. The API workflow
+also requires `SUPABASE_DEV_DATABASE_URL` before it can start; production uses
+`SUPABASE_PROD_DATABASE_URL` (or the documented legacy production alias).
+Admin authentication and provider features additionally require their
+corresponding `ADMIN_API_KEY`, `VITE_ADMIN_API_KEY`, AI provider, SMTP, and
+WhatsApp secrets when those features are used.
 
 ## Shared Libraries (lib/)
 
