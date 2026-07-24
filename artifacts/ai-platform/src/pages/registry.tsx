@@ -7,6 +7,7 @@ import {
   useHealthCheckAllProviders,
   useHealthCheckProvider,
   getListProvidersQueryKey,
+  useListSettings,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -41,6 +42,7 @@ import {
   Power,
   Wifi,
   WifiOff,
+  BellRing,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -154,6 +156,13 @@ export default function Registry() {
   const [modelSearch, setModelSearch] = useState("");
   const [countdown, setCountdown] = useState(AUTO_REFRESH_MS / 1000);
 
+  const { data: settings } = useListSettings();
+  const alertThreshold =
+    parseInt(
+      settings?.find((s: { key: string }) => s.key === "provider_alert.failure_threshold")?.value ?? "",
+      10,
+    ) || 3;
+
   const checkAll = useHealthCheckAllProviders();
   const checkOne = useHealthCheckProvider();
   const updateProvider = useUpdateProvider();
@@ -246,6 +255,9 @@ export default function Registry() {
   const unhealthyCount =
     providers?.filter((p) => p.lastCheckedAt != null && (p.consecutiveFailures > 0 || !p.keyConfigured)).length ?? 0;
   const uncheckedCount = providers?.filter((p) => p.lastCheckedAt == null).length ?? 0;
+  // Providers that have crossed the configured alert threshold
+  const alertingCount =
+    providers?.filter((p) => (p.consecutiveFailures ?? 0) >= alertThreshold).length ?? 0;
 
   const filteredProviders =
     providers?.filter(
@@ -273,6 +285,27 @@ export default function Registry() {
             </p>
           </div>
         </div>
+
+        {/* ── Alert banner ── */}
+        {alertingCount > 0 && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg border border-red-500/40 bg-red-500/10 animate-in fade-in duration-300">
+            <div className="flex items-center gap-2 text-sm text-red-400 min-w-0">
+              <BellRing className="size-4 shrink-0 animate-pulse" />
+              <span className="font-semibold shrink-0">
+                {alertingCount} provider{alertingCount > 1 ? "s" : ""} alerting
+              </span>
+              <span className="text-red-400/70 truncate hidden sm:block">
+                — consecutive failures ≥ threshold ({alertThreshold})
+              </span>
+            </div>
+            <a
+              href="/admin/settings"
+              className="text-xs font-mono text-red-400 underline underline-offset-2 hover:text-red-300 shrink-0"
+            >
+              View alert config →
+            </a>
+          </div>
+        )}
 
         {/* ── Health Monitor Panel ── */}
         <div className="space-y-4">
@@ -411,12 +444,22 @@ export default function Registry() {
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
                           <HealthStatusBadge
                             consecutiveFailures={failures}
                             lastCheckedAt={p.lastCheckedAt ? new Date(p.lastCheckedAt) : null}
                             keyConfigured={p.keyConfigured}
                           />
+                          {failures >= alertThreshold && (
+                            <a href="/admin/settings" title="View alert configuration">
+                              <Badge
+                                variant="outline"
+                                className="border-red-500/60 text-red-400 bg-red-500/15 font-mono text-[10px] uppercase cursor-pointer hover:bg-red-500/25 transition-colors"
+                              >
+                                <BellRing className="size-3 mr-1" /> Alerting
+                              </Badge>
+                            </a>
+                          )}
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
@@ -693,6 +736,16 @@ export default function Registry() {
                                     lastCheckedAt={provider.lastCheckedAt ? new Date(provider.lastCheckedAt) : null}
                                     keyConfigured={keyOk}
                                   />
+                                  {failures >= alertThreshold && (
+                                    <a href="/admin/settings" title="View alert configuration">
+                                      <Badge
+                                        variant="outline"
+                                        className="border-red-500/60 text-red-400 bg-red-500/15 font-mono text-[10px] uppercase w-fit cursor-pointer hover:bg-red-500/25 transition-colors"
+                                      >
+                                        <BellRing className="size-2.5 mr-1" /> Alerting
+                                      </Badge>
+                                    </a>
+                                  )}
                                   {!provider.isActive && (
                                     <Badge variant="outline" className="border-muted text-muted-foreground font-mono text-[10px] uppercase w-fit">
                                       <PowerOff className="size-2.5 mr-1" /> Disabled
