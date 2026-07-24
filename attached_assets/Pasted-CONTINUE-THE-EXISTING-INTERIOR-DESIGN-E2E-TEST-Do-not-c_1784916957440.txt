@@ -1,0 +1,262 @@
+CONTINUE THE EXISTING INTERIOR DESIGN E2E TEST.
+
+Do not create a new order.
+
+Existing identifiers:
+
+Request UUID:
+19d846c4-d612-46b0-b092-49098055c9fa
+
+Service request ID:
+1
+
+Quotation:
+ID 1
+Status approved
+
+Commercial gate:
+ID 1
+Status verified
+
+Project ID:
+de694691-b852-445e-b766-42bb9edf8f3d
+
+Payment schedule:
+ID 1
+Status waiting_payment
+
+Project status:
+waiting_payment
+
+API health:
+PASS
+
+Database connection:
+PASS
+
+Conversion idempotency already observed:
+- exactly one project
+- exactly one payment schedule
+
+==================================================
+FIRST — OWNERSHIP CREDENTIAL RESOLUTION
+==================================================
+
+Inspect the actual payment-proof route and determine which ownership mechanism applies to this order:
+
+A. Catalog flow using requestId
+B. Workspace flow using workspaceToken
+C. Another canonical credential mechanism
+
+Do not attempt to reverse hashes.
+Do not print any token or secret.
+Do not read or expose raw credential values.
+
+If requestId is valid for this flow, use:
+
+19d846c4-d612-46b0-b092-49098055c9fa
+
+If a workspace token is required and plaintext is unavailable:
+
+1. Search for an existing official resend, reissue, rotate, or regenerate access-token flow.
+2. If available, use it for the same existing order.
+3. Do not create a second project or order.
+4. Store any newly issued token only in a temporary local file.
+5. Do not print it in output.
+6. Report only TOKEN_REISSUED: YES/NO.
+
+If no official token reissue mechanism exists, report this as an E2E testability gap and do not bypass authentication.
+
+==================================================
+PAYMENT-PROOF TESTS
+==================================================
+
+Run negative tests first:
+
+1. Missing ownership credential
+   Expected: 400/401
+
+2. Invalid credential
+   Expected: 401/404
+
+3. Cross-customer credential against schedule ID 1
+   Expected: 403
+
+4. Forged fields:
+   - projectId
+   - customerId
+   - serviceRequestId
+
+   Expected:
+   fields ignored and ownership still enforced
+
+Then run valid submission using the canonical credential mechanism.
+
+Use a harmless generated fixture marked:
+
+E2E TEST PAYMENT PROOF
+NOT A REAL TRANSACTION
+
+Validate:
+
+- HTTP success
+- payment schedule ID remains 1
+- status changes:
+  waiting_payment
+  → waiting_payment_verification
+- stored proof value is a private object path
+- filename is randomized
+- no public CDN URL is stored
+- no duplicate payment record is created
+
+==================================================
+ADMIN PAYMENT VERIFICATION
+==================================================
+
+Using authenticated admin context:
+
+1. Read schedule ID 1.
+2. Generate a signed proof URL.
+3. Verify the signed URL is time-limited.
+4. Approve the payment.
+
+Validate:
+
+- schedule status becomes paid
+- project payment status updates
+- verified actor comes from server auth context
+- spoofed verifiedBy body fields are ignored
+- workflow dispatch count is exactly one
+- duplicate approval does not create a second workflow
+- no partial state remains
+
+==================================================
+WORKFLOW EXECUTION
+==================================================
+
+Trace the actual Interior Design workflow for project:
+
+de694691-b852-445e-b766-42bb9edf8f3d
+
+Do not invent stage names.
+
+For each real stage report:
+
+- actual stage name
+- status
+- startedAt
+- completedAt
+- provider/model
+- retry count
+- token/cost record presence
+- generated asset IDs
+
+Poll until terminal status.
+
+Do not mark PASS while any required job remains pending.
+
+==================================================
+OUTPUT VALIDATION
+==================================================
+
+Validate that the final customer-visible result is Interior Design, not Fashion Design or an unrelated category.
+
+Expected elements:
+
+- executive office
+- executive desk
+- four-person meeting zone
+- storage
+- logo wall
+- walnut material direction
+- charcoal/warm-grey palette
+- warm indirect lighting
+- premium professional office character
+
+Fail if the output is primarily:
+
+- fashion/apparel
+- bedroom
+- residential living room
+- exterior
+- abstract image unrelated to the brief
+
+==================================================
+CUSTOMER WORKSPACE
+==================================================
+
+Validate the existing project appears in the real customer workspace.
+
+Check:
+
+- payment shown as paid
+- project status visible
+- workflow progress visible
+- final deliverables visible
+- previews load
+- downloads work where supported
+- no provider key, prompt, internal secret, or admin metadata exposed
+
+==================================================
+REVIEW/REVISION
+==================================================
+
+Submit one revision request:
+
+“Please make the logo wall more prominent, increase the walnut material presence, and make the meeting zone feel more executive.”
+
+Validate:
+
+- revision stored
+- ownership enforced
+- correct project/asset linkage
+- audit event created
+- revision workflow starts at most once
+
+Then validate final approval if the state machine supports it.
+
+==================================================
+FINAL REPORT
+==================================================
+
+Return:
+
+1. Credential mechanism used:
+   REQUEST_ID / WORKSPACE_TOKEN / OTHER
+
+2. Token reissued:
+   YES / NO / NOT_REQUIRED
+
+3. Payment negative tests:
+   PASS/FAIL individually
+
+4. Valid proof upload:
+   PASS/FAIL
+
+5. Payment approval:
+   PASS/FAIL
+
+6. Workflow dispatch count:
+   exact number
+
+7. Workflow terminal status
+
+8. Final asset IDs
+
+9. Workspace visibility:
+   PASS/FAIL
+
+10. Review/revision:
+   PASS/FAIL
+
+11. Defects found
+
+12. Final verdict exactly one of:
+
+- E2E PASS — INTERIOR DESIGN ORDER READY
+- E2E FAIL — RELEASE BLOCKERS FOUND
+- E2E BLOCKED — CUSTOMER CREDENTIAL CANNOT BE LEGITIMATELY REISSUED
+
+Do not create another order.
+Do not bypass ownership.
+Do not print tokens or secrets.
