@@ -231,7 +231,8 @@ async function clearAlert(providerId: number, slug: string): Promise<void> {
 
 // ── Poll cycle ────────────────────────────────────────────────────────────────
 
-async function pollOnce(): Promise<void> {
+/** @internal Exported for unit testing only. */
+export async function pollOnce(): Promise<void> {
   const enabled = await getSetting("provider_alert.enabled");
   if (enabled === "false") return;
 
@@ -298,4 +299,9 @@ export function shutdown(): void {
 
 export function getAlertedProviders(): number[] {
   return [..._alertedProviders];
+}
+
+/** @internal Exported for unit testing only — clears in-memory alert state. */
+export function _resetAlertedProvidersForTest(): void {
+  _alertedProviders.clear();
 }
