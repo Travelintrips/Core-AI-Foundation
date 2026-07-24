@@ -26,6 +26,7 @@ import {
   DeleteModelResponse,
 } from "@workspace/api-zod";
 import { aiAuditLogsTable } from "@workspace/db";
+import { runHealthCheck, runAllHealthChecks } from "../services/providerHealthService.js";
 
 const router = Router();
 
@@ -33,49 +34,6 @@ async function logAudit(module: string, action: string, resourceId: string, reso
   await db.insert(aiAuditLogsTable).values({ module, action, resourceId, resourceType, status, details: details ?? null });
 }
 
-/**
- * Ping a provider's API with the configured key.
- * Returns httpStatus, ok flag, and error string if failed.
- */
-async function pingProvider(
-  slug: string,
-  baseUrl: string,
-  apiKey: string,
-): Promise<{ ok: boolean; httpStatus: number; error?: string }> {
-  try {
-    let url: string;
-    const headers: Record<string, string> = {};
-
-    if (slug === "anthropic") {
-      url = `${baseUrl}/models`;
-      headers["x-api-key"] = apiKey;
-      headers["anthropic-version"] = "2023-06-01";
-    } else if (slug === "gemini" || slug === "google-gemini" || slug === "google") {
-      url = `${baseUrl}/models?key=${encodeURIComponent(apiKey)}`;
-    } else if (slug === "replicate") {
-      url = `${baseUrl}/models`;
-      headers["Authorization"] = `Token ${apiKey}`;
-    } else {
-      // OpenAI, Mistral, and any other Bearer-based provider
-      url = `${baseUrl}/models`;
-      headers["Authorization"] = `Bearer ${apiKey}`;
-    }
-
-    const resp = await fetch(url, {
-      headers,
-      signal: AbortSignal.timeout(10_000),
-    });
-    const ok = resp.status >= 200 && resp.status < 300;
-    let error: string | undefined;
-    if (!ok) {
-      const body = await resp.text().catch(() => "");
-      error = `HTTP ${resp.status}: ${body.slice(0, 200)}`;
-    }
-    return { ok, httpStatus: resp.status, error };
-  } catch (err) {
-    return { ok: false, httpStatus: 0, error: String(err) };
-  }
-}
 
 // ── Providers ──────────────────────────────────────────────────────────────
 
@@ -142,97 +100,6 @@ router.delete("/ai/providers/:id", async (req, res): Promise<void> => {
   DeleteProviderResponse.parse(undefined);
 });
 
-/**
- * Shared helper: run a health check for one provider and persist results.
- */
-async function runHealthCheck(id: number): Promise<{
-  providerId: number;
-  slug: string;
-  keyConfigured: boolean;
-  envVar: string;
-  httpStatus: number | null;
-  isActive: boolean;
-  consecutiveFailures: number;
-  lastCheckedAt: Date;
-  lastSuccessAt: Date | null;
-  error: string | null;
-} | { error: string; notFound: true }> {
-  const [provider] = await db
-    .select()
-    .from(aiProvidersTable)
-    .where(eq(aiProvidersTable.id, id))
-    .limit(1);
-
-  if (!provider) return { error: "Provider not found", notFound: true };
-
-  const envVar = provider.apiKeyEnvVar ?? "";
-  const apiKey = envVar ? (process.env[envVar] ?? "") : "";
-  const keyConfigured = Boolean(apiKey);
-  const now = new Date();
-
-  if (!keyConfigured) {
-    const newFailures = (provider.consecutiveFailures ?? 0) + 1;
-    // Health check updates health metadata only — does NOT touch isActive.
-    // Admin enablement (isActive) is a separate administrative decision.
-    await db.update(aiProvidersTable)
-      .set({ consecutiveFailures: newFailures, lastCheckedAt: now })
-      .where(eq(aiProvidersTable.id, id));
-
-    return {
-      providerId: id,
-      slug: provider.slug,
-      keyConfigured: false,
-      envVar,
-      httpStatus: null,
-      isActive: provider.isActive,   // admin flag — unchanged by health checks
-      pingOk: false,                  // explicit runtime health result
-      consecutiveFailures: newFailures,
-      lastCheckedAt: now,
-      lastSuccessAt: provider.lastSuccessAt ?? null,
-      error: `Environment variable "${envVar}" is not set in Replit Secrets.`,
-    };
-  }
-
-  const ping = await pingProvider(provider.slug, provider.baseUrl, apiKey);
-  const newFailures = ping.ok ? 0 : (provider.consecutiveFailures ?? 0) + 1;
-  const lastSuccessAt = ping.ok ? now : (provider.lastSuccessAt ?? null);
-
-  // Health check updates health metadata only — does NOT touch isActive.
-  // isActive is exclusively controlled by the admin enable/disable toggle
-  // (PATCH /ai/providers/:id). This prevents health-check-all from silently
-  // re-enabling a provider an admin has manually disabled.
-  await db
-    .update(aiProvidersTable)
-    .set({
-      consecutiveFailures: newFailures,
-      lastCheckedAt: now,
-      lastSuccessAt,
-    })
-    .where(eq(aiProvidersTable.id, id));
-
-  await logAudit(
-    "registry",
-    "provider_health_check",
-    String(id),
-    "provider",
-    ping.ok ? "success" : "failure",
-    { slug: provider.slug, httpStatus: ping.httpStatus, error: ping.error, consecutiveFailures: newFailures },
-  );
-
-  return {
-    providerId: id,
-    slug: provider.slug,
-    keyConfigured: true,
-    envVar,
-    httpStatus: ping.httpStatus,
-    isActive: provider.isActive,   // admin flag — unchanged by health checks
-    pingOk: ping.ok,               // explicit runtime health result
-    consecutiveFailures: newFailures,
-    lastCheckedAt: now,
-    lastSuccessAt,
-    error: ping.error ?? null,
-  };
-}
 
 /**
  * POST /ai/providers/:id/health-check
@@ -257,8 +124,7 @@ router.post("/ai/providers/:id/health-check", async (req, res): Promise<void> =>
  * an array of diagnostic results.
  */
 router.post("/ai/providers/health-check-all", async (_req, res): Promise<void> => {
-  const providers = await db.select({ id: aiProvidersTable.id }).from(aiProvidersTable);
-  const results = await Promise.all(providers.map(p => runHealthCheck(p.id)));
+  const results = await runAllHealthChecks();
   res.json(results.filter(r => !("notFound" in r)));
 });
 

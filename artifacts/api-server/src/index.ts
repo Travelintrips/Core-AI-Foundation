@@ -29,6 +29,7 @@ if (process.env["NODE_ENV"] === "production") {
 import * as jobDispatcher from "./services/jobDispatcherService.js";
 import * as scheduler from "./services/aiSchedulerService.js";
 import * as sseManager from "./services/sseManager.js";
+import * as healthAlerts from "./services/providerHealthAlertService.js";
 import { ensureObservabilityTables } from "./services/observabilityService.js";
 import { ensureStorageBucket } from "./lib/supabaseStorage.js";
 import { resumeIncompleteDesignRenderBatches } from "./services/design-recovery/startupResume.js";
@@ -133,12 +134,20 @@ app.listen(port, (err) => {
   } else {
     logger.info("[scheduler] Auto-start disabled (set AI_SCHEDULER_ENABLED=true to enable in production)");
   }
+
+  // ── Provider health alert poller (Task #9) ───────────────────────────────
+  // Seeds default alert settings and starts the background poll loop.
+  // Non-fatal: failure here must not block server startup.
+  healthAlerts.start().catch((startErr) =>
+    logger.error({ err: startErr }, "[health-alerts] Failed to auto-start"),
+  );
 });
 
 // ── Graceful shutdown ──────────────────────────────────────────────────────
 function shutdown(signal: string): void {
-  logger.info(`${signal} received — shutting down dispatcher, scheduler, and SSE`);
+  logger.info(`${signal} received — shutting down dispatcher, scheduler, health alerts, and SSE`);
   sseManager.shutdown(); // close SSE connections first (fast, synchronous)
+  healthAlerts.shutdown();
   Promise.all([scheduler.shutdown(), jobDispatcher.shutdown()])
     .then(() => process.exit(0))
     .catch(() => process.exit(1));
