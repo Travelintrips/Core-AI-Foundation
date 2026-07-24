@@ -1,0 +1,23 @@
+kind = "mobile"
+previewPath = "/mobile/"
+title = "Creative AI Studio — Mobile"
+version = "1.0.0"
+id = "artifacts/customer-mobile"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/mobile/" ]
+localPort = 18229
+
+[services.development]
+run = "pnpm --filter @workspace/customer-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/customer-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/customer-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "18229"
+BASE_PATH = "/mobile/"
