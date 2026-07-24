@@ -48,3 +48,10 @@ Thumbs.db
 .cache/
 .local/
 .replit
+
+# Environment files — only .env.development is tracked (dev credentials, private repo)
+.env
+.env.local
+.env.production
+.env.production.local
+.env.*.local
