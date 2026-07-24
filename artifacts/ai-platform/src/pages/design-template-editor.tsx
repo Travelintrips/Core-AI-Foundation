@@ -44,12 +44,12 @@ import { useState } from "react";
 const API_BASE = "";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-  const key = import.meta.env.VITE_ADMIN_API_KEY;
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: {
       ...(opts?.body ? { "Content-Type": "application/json" } : {}),
-      ...(key ? { "x-admin-api-key": key } : {}),
+
       ...(opts?.headers ?? {}),
     },
   });
@@ -308,7 +308,7 @@ export default function DesignTemplateEditor() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(import.meta.env.VITE_ADMIN_API_KEY ? { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY } : {}),
+
         },
         body: JSON.stringify({ templateJson: canonical, data: sampleData, format: "png" }),
       });

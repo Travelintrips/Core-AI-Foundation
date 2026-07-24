@@ -36,7 +36,7 @@ interface QcCheck  { checkName: string; score: number; weight: number; passed: b
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const BASE_URL = import.meta.env.BASE_URL ?? "/admin/";
-const ADMIN_KEY = import.meta.env.VITE_ADMIN_API_KEY ?? "";
+
 
 function apiUrl(path: string): string {
   return `/api${path}`;

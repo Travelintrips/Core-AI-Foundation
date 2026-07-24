@@ -360,7 +360,10 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  // Always include credentials so the httpOnly session cookie is forwarded.
+  // The admin portal is always same-origin with the API (Vite proxy in dev,
+  // same host in production), so "include" is safe and required for cookie auth.
+  const response = await fetch(input, { ...init, method, headers, credentials: init.credentials ?? "include" });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

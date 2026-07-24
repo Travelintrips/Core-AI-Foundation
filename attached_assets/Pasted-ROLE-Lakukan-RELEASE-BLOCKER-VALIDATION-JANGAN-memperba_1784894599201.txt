@@ -1,0 +1,265 @@
+ROLE
+
+Lakukan RELEASE BLOCKER VALIDATION.
+
+JANGAN memperbaiki apa pun.
+
+JANGAN mengubah file.
+
+JANGAN membuat branch.
+
+JANGAN membuat commit.
+
+JANGAN menjalankan migration.
+
+JANGAN deploy.
+
+Gunakan repository saat ini sebagai satu-satunya sumber kebenaran.
+
+==================================================
+TUJUAN
+==================================================
+
+Audit sebelumnya menyatakan status:
+
+BLOCKED
+
+Saya ingin memverifikasi apakah keempat release blocker tersebut benar-benar valid.
+
+Jangan mengulang audit penuh.
+
+Hanya validasi blocker.
+
+Jika ternyata suatu blocker adalah false positive atau hanya partial issue, jelaskan alasannya.
+
+Semua kesimpulan harus didukung evidence nyata.
+
+==================================================
+BLOCKER 1
+==================================================
+
+Tracked Secrets
+
+Validasi:
+
+- apakah .replit memang masih git-tracked
+- apakah masih berisi credential production nyata
+- apakah credential tersebut benar-benar aktif atau hanya placeholder
+- apakah credential sudah tersedia di Replit Secrets
+- apakah repository history memang masih mengandung credential
+
+JANGAN tampilkan isi credential.
+
+Berikan hanya:
+
+VALID
+atau
+
+FALSE POSITIVE
+
+atau
+
+PARTIAL
+
+==================================================
+BLOCKER 2
+==================================================
+
+TypeScript
+
+Audit sebelumnya menyebut:
+
+136 diagnostics
+
+Validasi ulang.
+
+Pisahkan:
+
+Production package
+
+dan
+
+Non-production package.
+
+Buat tabel:
+
+Package
+
+Diagnostics
+
+Production Critical?
+
+YES / NO
+
+Apabila error hanya berasal dari:
+
+- experimental
+- artifact
+- sandbox
+- demo
+
+maka jangan jadikan release blocker.
+
+Kesimpulan harus menjawab:
+
+Apakah production release benar-benar gagal karena TypeScript?
+
+==================================================
+BLOCKER 3
+==================================================
+
+Tenant Isolation
+
+Audit sebelumnya menyebut:
+
+creative-ai.ts
+
+tidak memiliki tenant predicate.
+
+Validasi:
+
+- apakah tenant filtering dilakukan langsung di query
+
+atau
+
+- dilakukan oleh middleware
+
+atau
+
+- dilakukan oleh repository
+
+atau
+
+- dilakukan oleh security layer
+
+Ikuti seluruh execution path.
+
+Jangan berhenti di route.
+
+Jika tenant sudah dijamin oleh layer lain,
+
+jangan laporkan sebagai blocker.
+
+Berikan call chain lengkap.
+
+==================================================
+BLOCKER 4
+==================================================
+
+Background Image Pipeline
+
+Audit sebelumnya menyebut:
+
+HTTP 202 dikembalikan sebelum pipeline selesai.
+
+Validasi:
+
+- bagaimana lifecycle project berubah ketika pipeline gagal
+
+- apakah ada retry
+
+- apakah ada audit log
+
+- apakah ada failed state
+
+- apakah customer dapat mengetahui kegagalan
+
+Jika pipeline memang asynchronous by design,
+
+tentukan apakah implementasinya sudah benar.
+
+Jangan menganggap async = bug.
+
+==================================================
+DEPENDENCY VULNERABILITY
+==================================================
+
+Audit sebelumnya menemukan beberapa HIGH severity.
+
+Validasi:
+
+- apakah dependency berada pada runtime production
+
+- atau hanya dev dependency
+
+- atau transitive dependency
+
+- apakah vulnerability dapat dieksploitasi melalui aplikasi ini
+
+Jangan menggunakan severity scanner sebagai satu-satunya dasar.
+
+Berikan:
+
+Runtime Reachable
+
+YES / NO
+
+==================================================
+PUBLIC STORAGE
+==================================================
+
+Validasi:
+
+Apakah bucket public memang merupakan desain yang disengaja?
+
+atau
+
+Harus private?
+
+Cari evidence:
+
+- signedUrlService
+
+- asset delivery
+
+- marketplace
+
+- preview asset
+
+- customer asset
+
+Jelaskan apakah public bucket benar-benar melanggar security model aplikasi.
+
+==================================================
+FINAL
+==================================================
+
+Untuk setiap blocker tampilkan:
+
+Status
+
+VALID
+
+PARTIAL
+
+FALSE POSITIVE
+
+Evidence
+
+Impact
+
+Recommended Priority
+
+==================================================
+AKHIR LAPORAN
+==================================================
+
+Berikan tabel:
+
+Confirmed Release Blockers
+
+Potential Improvements
+
+False Positives
+
+Jika ternyata hanya tersisa 2 blocker,
+
+katakan hanya 2.
+
+Jika tinggal 1,
+
+katakan 1.
+
+Jangan mempertahankan blocker hanya karena audit sebelumnya menyebut demikian.
+
+Laporan ini harus menjadi dasar final sebelum remediation dimulai.

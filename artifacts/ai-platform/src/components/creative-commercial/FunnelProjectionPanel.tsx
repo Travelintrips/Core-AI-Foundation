@@ -47,7 +47,7 @@ export default function FunnelProjectionPanel() {
     setLoading(true);
     setError(null);
     fetch(`${BASE}/funnel/projection?periodDays=${periodDays}`, {
-      headers: { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
+
     })
       .then((r) => r.json())
       .then(setData)

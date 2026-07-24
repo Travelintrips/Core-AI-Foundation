@@ -29,7 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const API = "";
-const ADMIN_HEADERS = { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" };
+
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -174,9 +174,9 @@ export default function Operations() {
     setLoading(true);
     try {
       const [summaryRes, plansRes, tasksRes] = await Promise.all([
-        fetch(`${API}/api/ai/operations/summary`, { headers: ADMIN_HEADERS }),
-        fetch(`${API}/api/ai/execution-plans`, { headers: ADMIN_HEADERS }),
-        fetch(`${API}/api/ai/task-assignments`, { headers: ADMIN_HEADERS }),
+        fetch(`${API}/api/ai/operations/summary`, { credentials: "include" }),
+        fetch(`${API}/api/ai/execution-plans`, { credentials: "include" }),
+        fetch(`${API}/api/ai/task-assignments`, { credentials: "include" }),
       ]);
       if (summaryRes.ok) setSummary(await summaryRes.json());
       if (plansRes.ok) setPlans(await plansRes.json());
@@ -191,7 +191,7 @@ export default function Operations() {
   const handleRebalance = async (departmentId: number) => {
     setRebalancing(departmentId);
     try {
-      await fetch(`${API}/api/ai/workforce/${departmentId}/rebalance`, { method: "POST", headers: ADMIN_HEADERS });
+      await fetch(`${API}/api/ai/workforce/${departmentId}/rebalance`, { method: "POST", credentials: "include" });
       await fetchData();
     } finally {
       setRebalancing(null);

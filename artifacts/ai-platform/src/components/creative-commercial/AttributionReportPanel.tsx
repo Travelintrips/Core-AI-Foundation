@@ -34,7 +34,7 @@ export default function AttributionReportPanel() {
     setLoading(true);
     setError(null);
     fetch(`${BASE}/attribution/report?model=${model}&periodDays=${periodDays}`, {
-      headers: { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
+
     })
       .then((r) => r.json())
       .then(setData)

@@ -2,24 +2,20 @@
  * use-asset-browser.ts — Data-fetching hook for the Universal Asset Browser (Team 14)
  *
  * Fetches from the admin asset-browser API endpoint using the existing
- * x-admin-api-key pattern. No direct DB access from the frontend.
+
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AssetFilter, AssetSort, AssetPage, AssetSummary } from "./types";
 
 // ── Admin API fetch ───────────────────────────────────────────────────────────
-
-function adminHeaders(): Record<string, string> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const key = ((import.meta as any).env?.["VITE_ADMIN_API_KEY"] as string | undefined) ?? "";
-  return { "x-admin-api-key": key };
-}
+// Authentication is via the httpOnly session cookie (credentials: "include").
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...opts,
-    headers: { ...adminHeaders(), ...(opts?.headers ?? {}) },
+    credentials: "include",
+    headers: { ...(opts?.headers ?? {}) },
   });
   if (!res.ok) {
     let msg = `API error ${res.status}`;

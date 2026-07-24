@@ -10,11 +10,11 @@ import {
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const key = import.meta.env.VITE_ADMIN_API_KEY;
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
-      ...(key ? { "x-admin-api-key": key } : {}),
+
       ...(init?.body ? { "Content-Type": "application/json" } : {}),
       ...((init?.headers as Record<string, string>) ?? {}),
     },

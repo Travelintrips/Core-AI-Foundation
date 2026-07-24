@@ -59,9 +59,9 @@ import { cn } from "@/lib/utils";
 const API_BASE = "";
 
 async function apiFetch<T>(path: string): Promise<T> {
-  const key = import.meta.env.VITE_ADMIN_API_KEY;
+
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: key ? { "x-admin-api-key": key } : {},
+    credentials: "include",
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");

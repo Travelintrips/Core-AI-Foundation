@@ -5,9 +5,9 @@ import { Loader2, Lightbulb, TrendingUp, AlertTriangle, Info, CheckCircle2, BarC
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 async function apiFetch<T>(path: string): Promise<T> {
-  const key = import.meta.env.VITE_ADMIN_API_KEY;
+
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: key ? { "x-admin-api-key": key } : {},
+    credentials: "include",
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<T>;

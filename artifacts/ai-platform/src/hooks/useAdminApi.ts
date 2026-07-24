@@ -1,17 +1,19 @@
 /**
- * useAdminApi — thin hook that exposes an apiFetch helper pre-loaded with
- * the admin API key header.  Matches the inline apiFetch pattern used across
- * the admin panel pages (affiliates.tsx, analytics.tsx, etc.).
+ * useAdminApi — thin hook that exposes an apiFetch helper authenticated via
+ * the httpOnly session cookie (credentials: "include").
+ *
+ * The static VITE_ADMIN_API_KEY has been removed.  Authentication is now
+ * handled exclusively through the internal_session cookie issued by
+ * POST /api/internal/auth/login.  The adminAuth middleware on the backend
+ * checks the session cookie first (Path 1) before the API key (Path 2).
  */
 export function useAdminApi() {
   async function apiFetch(url: string, opts?: RequestInit): Promise<Response> {
-    const key = import.meta.env.VITE_ADMIN_API_KEY as string | undefined;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...(opts?.headers as Record<string, string>),
     };
-    if (key) headers["x-admin-api-key"] = key;
-    const res = await fetch(url, { ...opts, headers });
+    const res = await fetch(url, { ...opts, headers, credentials: "include" });
     if (!res.ok) {
       const text = await res.text().catch(() => res.statusText);
       throw new Error(`${res.status} ${text}`);

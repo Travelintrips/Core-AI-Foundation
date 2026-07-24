@@ -30,7 +30,7 @@ export default function AbandonedCheckoutPanel() {
   useEffect(() => {
     setLoading(true);
     fetch(`${BASE}/abandoned-checkouts?windowHours=${windowHours}&limit=50`, {
-      headers: { "x-admin-api-key": import.meta.env.VITE_ADMIN_API_KEY ?? "" },
+
     })
       .then((r) => r.json())
       .then((d) => {

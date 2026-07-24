@@ -173,6 +173,12 @@ export default function Registry() {
       toast({ title: "Check failed", variant: "destructive" });
     }
   }, [checkAll, refreshProviders, toast]);
+      const resp = await fetch(`${BASE}/api/ai/providers/${providerId}/health-check`, {
+        method: "POST",
+
+      });
+      const data: HealthResult = await resp.json();
+      setResults(prev => ({ ...prev, [providerId]: data }));
 
   const runCheckOne = useCallback(
     async (id: number, name: string) => {

@@ -8,14 +8,14 @@ import { useState } from 'react';
 import { CheckCircle, XCircle, Clock, Filter, Search, BarChart3, Users } from 'lucide-react';
 
 const BASE = "";
-const ADMIN_KEY = import.meta.env.VITE_ADMIN_API_KEY ?? '';
+
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}/api${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      'x-admin-api-key': ADMIN_KEY,
+
       ...(init?.headers ?? {}),
     },
   });
