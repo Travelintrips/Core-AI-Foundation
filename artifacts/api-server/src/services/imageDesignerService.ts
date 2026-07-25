@@ -24,6 +24,7 @@ import {
   aiProvidersTable,
   creativeAiAssetsTable,
 } from "@workspace/db";
+import { getConceptDraftForImagePipeline } from "../domains/interior-design/service.js";
 import { executeAI } from "./aiExecutionService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
 import { logAudit } from "./aiAuditService.js";
@@ -59,6 +60,157 @@ async function getModelById(id: number) {
 async function getProviderById(id: number) {
   const [provider] = await db.select().from(aiProvidersTable).where(eq(aiProvidersTable.id, id));
   return provider ?? null;
+}
+
+// ── Interior Design step detector ────────────────────────────────────────────
+
+const INTERIOR_STEP_NAMES = new Set([
+  "Design Concept",
+  "Space Planning",
+  "Material Specification",
+  "Design Copy",
+  "Interior Quality Control",
+]);
+
+function isInteriorDesignProject(steps: Array<{ stepName: string }>) {
+  return steps.some((s) => INTERIOR_STEP_NAMES.has(s.stepName));
+}
+
+// ── Interior Design Image Prompt Generator ────────────────────────────────────
+
+/**
+ * Builds interior-specific image generation prompts by reading the latest saved
+ * draft (or falling back to raw step outputs when no draft exists).
+ * Uses the same image-prompt-generator agent as the brand workflow.
+ */
+async function generateInteriorImagePrompts(
+  projectUuid: string,
+  steps: Array<{ stepName: string; output: unknown }>,
+  brief: Record<string, unknown>,
+  numVariations: number,
+): Promise<{ prompts: ImagePromptResult[]; latencyMs: number; tokensUsed: number }> {
+  const agent = await getAgentBySlug("image-prompt-generator");
+  if (!agent || !agent.modelId || !agent.providerId) {
+    throw new Error("image-prompt-generator agent not found. Run `pnpm seed` first.");
+  }
+
+  const [model, provider] = await Promise.all([
+    getModelById(agent.modelId),
+    getProviderById(agent.providerId),
+  ]);
+  if (!model || !provider) throw new Error("Model or provider not found for image-prompt-generator");
+
+  const systemPrompt =
+    (agent.metadata as { systemPrompt?: string } | null)?.systemPrompt ?? "";
+
+  // ── Resolve data source: approved draft > latest draft > raw step outputs ──
+  const draft = await getConceptDraftForImagePipeline(projectUuid);
+  const byName = Object.fromEntries(steps.map((s) => [s.stepName, s.output]));
+
+  const visualConcept =
+    draft?.visualConceptDraft ??
+    (() => {
+      const co = byName["Design Concept"];
+      if (typeof co === "string") return co;
+      if (co && typeof co === "object") {
+        const c = co as Record<string, unknown>;
+        return typeof c["visualConcept"] === "string" ? c["visualConcept"]
+             : typeof c["concept"]       === "string" ? c["concept"]
+             : null;
+      }
+      return null;
+    })() ?? "";
+
+  const spacePlan = draft?.spacePlanDraft ?? byName["Space Planning"] ?? {};
+  const materials = draft?.materialsDraft ?? byName["Material Specification"] ?? {};
+  const designCopy = draft?.furnitureDraft ?? byName["Design Copy"] ?? {};
+
+  // Summarise space zones
+  const zones: string[] = (() => {
+    const sp = spacePlan as Record<string, unknown> | null;
+    const rawZones = Array.isArray(sp?.["zones"]) ? (sp?.["zones"] as Array<Record<string, unknown>>) : [];
+    return rawZones.slice(0, 5).map((z) =>
+      `${z["name"] ?? z["zone"] ?? "Zone"}: ${z["function"] ?? z["purpose"] ?? ""}`.trim(),
+    ).filter(Boolean);
+  })();
+
+  // Summarise key materials
+  const matSummary: string[] = (() => {
+    const mat = materials as Record<string, unknown> | null;
+    const items = Array.isArray(mat?.["items"]) ? (mat?.["items"] as Array<Record<string, unknown>>) : [];
+    return items.slice(0, 6).map((m) =>
+      `${m["area"] ?? m["component"] ?? ""}/${m["materialType"] ?? m["material"] ?? m["type"] ?? ""}`.replace(/^\//, "").replace(/\/$/, ""),
+    ).filter(Boolean);
+  })();
+
+  const userPrompt = `Generate ${numVariations} distinct interior visualization image prompts.
+
+ROOM BRIEF:
+${JSON.stringify(brief, null, 2)}
+
+VISUAL CONCEPT:
+${visualConcept}
+
+KEY ZONES:
+${zones.length > 0 ? zones.join("\n") : "Open-plan layout"}
+
+SELECTED MATERIALS:
+${matSummary.length > 0 ? matSummary.join(", ") : "Mix of natural and contemporary materials"}
+
+DESIGN NOTES:
+${JSON.stringify(designCopy, null, 2).slice(0, 800)}
+
+Return a JSON array with EXACTLY ${numVariations} objects. Each must have:
+{
+  "prompt": "detailed interior visualization prompt, 60-150 words — describe camera angle, natural light, material textures, furniture arrangement, atmosphere, color palette",
+  "negativePrompt": "comma-separated list: text, watermark, people, low quality, blurry, distorted, unrealistic, cartoon",
+  "aspectRatio": "16:9",
+  "style": "photographic"
+}
+
+Valid aspectRatio: "16:9", "1:1", "3:2"
+Valid style: "photographic", "3d", "illustration"
+
+Make each variation show a DIFFERENT camera angle or focal area of the same room.
+
+CRITICAL: Respond with ONLY the JSON array. No markdown. No explanation.`;
+
+  const startTime = Date.now();
+  const output = await executeAI({
+    prompt: userPrompt,
+    systemPrompt,
+    model,
+    provider,
+    temperature: agent.temperature ? parseFloat(String(agent.temperature)) : 0.8,
+    maxTokens: agent.maxTokens ?? 2048,
+  });
+  const latencyMs = Date.now() - startTime;
+
+  const raw = output.content.trim().replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "");
+  const jsonStart = raw.indexOf("[");
+  const jsonEnd = raw.lastIndexOf("]") + 1;
+  const jsonStr = jsonStart >= 0 && jsonEnd > jsonStart ? raw.slice(jsonStart, jsonEnd) : raw;
+
+  let prompts: ImagePromptResult[];
+  try {
+    const parsed = JSON.parse(jsonStr);
+    const arr: ImagePromptResult[] = Array.isArray(parsed) ? parsed : [parsed];
+    prompts = arr.slice(0, numVariations).map((p) => ({
+      prompt:        String(p.prompt        ?? "interior visualization, photorealistic, natural light"),
+      negativePrompt: String(p.negativePrompt ?? "text, watermark, people, low quality, blurry, distorted"),
+      aspectRatio:   String(p.aspectRatio   ?? "16:9"),
+      style:         String(p.style         ?? "photographic"),
+    }));
+  } catch {
+    prompts = Array.from({ length: numVariations }, (_, i) => ({
+      prompt: `Photorealistic interior visualization of a ${String(brief["businessType"] ?? "room")}, variation ${i + 1}, ${String(visualConcept).slice(0, 120)}, natural light, professional interior photography`,
+      negativePrompt: "text, watermark, people, low quality, blurry, distorted, cartoon, unrealistic",
+      aspectRatio: "16:9",
+      style: "photographic",
+    }));
+  }
+
+  return { prompts, latencyMs, tokensUsed: output.tokensUsed };
 }
 
 // ── Step 1: Image Prompt Generator ───────────────────────────────────────────

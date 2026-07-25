@@ -127,3 +127,52 @@ export const idOutputsTable = appSchema.table("id_outputs", {
 
 export type InsertIdOutput = typeof idOutputsTable.$inferInsert;
 export type IdOutput       = typeof idOutputsTable.$inferSelect;
+
+// ── id_concept_drafts ─────────────────────────────────────────────────────────
+// Editable admin drafts for AI-generated Interior Design concept outputs.
+// Linked to creative_projects.project_id (UUID text), one draft per project.
+// Preserves original AI output; current draft is the editable working version.
+
+export const idConceptDraftsTable = appSchema.table("id_concept_drafts", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+
+  /** FK to creative_projects.project_id (UUID text) — one draft per creative project */
+  projectUuid: text("project_uuid").notNull().unique(),
+
+  // Original AI-generated outputs (set once at initialization, never overwritten)
+  originalSpacePlan:     jsonb("original_space_plan"),
+  originalMaterials:     jsonb("original_materials"),
+  originalFurniture:     jsonb("original_furniture"),
+  originalLighting:      jsonb("original_lighting"),
+  originalVisualConcept: text("original_visual_concept"),
+
+  // Editable current draft (starts as copy of AI output)
+  spacePlanDraft:     jsonb("space_plan_draft"),
+  materialsDraft:     jsonb("materials_draft"),
+  furnitureDraft:     jsonb("furniture_draft"),
+  lightingDraft:      jsonb("lighting_draft"),
+  visualConceptDraft: text("visual_concept_draft"),
+
+  // Review state
+  reviewState: text("review_state").notNull().default("ai_generated"),
+  hasUnsavedEdits: boolean("has_unsaved_edits").notNull().default(false),
+
+  // Audit
+  lastEditedBy: text("last_edited_by"),
+  lastEditedAt: timestamp("last_edited_at", { withTimezone: true }),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type InsertIdConceptDraft = typeof idConceptDraftsTable.$inferInsert;
+export type IdConceptDraft       = typeof idConceptDraftsTable.$inferSelect;
+
+export const CONCEPT_DRAFT_REVIEW_STATES = [
+  "ai_generated",
+  "edited_by_admin",
+  "ready_for_review",
+  "revision_requested",
+  "approved_for_rendering",
+] as const;
+export type ConceptDraftReviewState = (typeof CONCEPT_DRAFT_REVIEW_STATES)[number];

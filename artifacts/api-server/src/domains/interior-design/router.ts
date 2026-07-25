@@ -30,6 +30,10 @@ import {
   generateOutputs,
   getLatestOutput,
   listOutputs,
+  getOrInitializeDraftByProjectUuid,
+  updateConceptDraft,
+  updateDraftReviewState,
+  resetDraftToOriginal,
 } from "./service.js";
 
 const router = Router();
@@ -274,6 +278,121 @@ router.get("/ai/interior-design/projects/:id/outputs", async (req, res): Promise
     res.json({ items: outputs, total: outputs.length });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+// ── Admin: Concept Draft CRUD ─────────────────────────────────────────────────
+//
+// Drafts are keyed by creative_projects.project_id (UUID text).
+// Admin edits space plan, materials, furniture, lighting, and visual concept.
+// Original AI output is preserved separately and can be restored.
+
+/**
+ * GET /ai/interior-design/drafts/:projectUuid
+ * Get (or lazily initialise) the concept draft for a creative project.
+ * Safe to call multiple times — idempotent initialisation.
+ */
+router.get("/ai/interior-design/drafts/:projectUuid", async (req, res): Promise<void> => {
+  try {
+    const projectUuid = req.params["projectUuid"] ?? "";
+    if (!projectUuid) { res.status(400).json({ error: "projectUuid is required" }); return; }
+
+    const draft = await getOrInitializeDraftByProjectUuid(projectUuid);
+    if (!draft) { res.status(404).json({ error: "Creative project not found or has no Interior Design steps yet" }); return; }
+
+    res.json({ draft });
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 500;
+    res.status(status).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+/**
+ * PATCH /ai/interior-design/drafts/:projectUuid
+ * Update one or more sections of the editable draft.
+ * Supports optimistic concurrency via optional X-Expected-Updated-At header or body.updatedAt.
+ *
+ * Body: { spacePlan?, materials?, furniture?, lighting?, visualConcept?, updatedAt?, editorId? }
+ */
+router.patch("/ai/interior-design/drafts/:projectUuid", async (req, res): Promise<void> => {
+  try {
+    const projectUuid = req.params["projectUuid"] ?? "";
+    if (!projectUuid) { res.status(400).json({ error: "projectUuid is required" }); return; }
+
+    const body = req.body as Record<string, unknown>;
+    const editorId = typeof body["editorId"] === "string" ? body["editorId"] : "admin";
+    const expectedUpdatedAt = typeof body["updatedAt"] === "string" ? body["updatedAt"] : undefined;
+
+    const sections: Record<string, unknown> = {};
+    if ("spacePlan"     in body) sections["spacePlan"]     = body["spacePlan"];
+    if ("materials"     in body) sections["materials"]     = body["materials"];
+    if ("furniture"     in body) sections["furniture"]     = body["furniture"];
+    if ("lighting"      in body) sections["lighting"]      = body["lighting"];
+    if ("visualConcept" in body) sections["visualConcept"] = body["visualConcept"];
+
+    if (Object.keys(sections).length === 0) {
+      res.status(400).json({ error: "At least one section (spacePlan, materials, furniture, lighting, visualConcept) must be provided" });
+      return;
+    }
+
+    const draft = await updateConceptDraft(projectUuid, sections, editorId, expectedUpdatedAt);
+    res.json({ draft });
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 500;
+    res.status(status).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+/**
+ * PATCH /ai/interior-design/drafts/:projectUuid/review-state
+ * Transition the draft to a new review state.
+ * Body: { state: string, editorId?: string }
+ */
+router.patch("/ai/interior-design/drafts/:projectUuid/review-state", async (req, res): Promise<void> => {
+  try {
+    const projectUuid = req.params["projectUuid"] ?? "";
+    if (!projectUuid) { res.status(400).json({ error: "projectUuid is required" }); return; }
+
+    const body = req.body as Record<string, unknown>;
+    if (!body["state"] || typeof body["state"] !== "string") {
+      res.status(400).json({ error: "state is required" }); return;
+    }
+
+    const editorId = typeof body["editorId"] === "string" ? body["editorId"] : "admin";
+    const draft = await updateDraftReviewState(projectUuid, body["state"], editorId);
+    res.json({ draft });
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 500;
+    res.status(status).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+/**
+ * POST /ai/interior-design/drafts/:projectUuid/reset
+ * Restore one or more sections to the original AI-generated values.
+ * Body: { sections: string[], editorId?: string }
+ */
+router.post("/ai/interior-design/drafts/:projectUuid/reset", async (req, res): Promise<void> => {
+  try {
+    const projectUuid = req.params["projectUuid"] ?? "";
+    if (!projectUuid) { res.status(400).json({ error: "projectUuid is required" }); return; }
+
+    const body = req.body as Record<string, unknown>;
+    const rawSections = Array.isArray(body["sections"]) ? body["sections"] as string[] : [];
+    const validSections = ["spacePlan", "materials", "furniture", "lighting", "visualConcept"] as const;
+    const sections = rawSections.filter((s): s is typeof validSections[number] =>
+      (validSections as readonly string[]).includes(s),
+    );
+    if (sections.length === 0) {
+      res.status(400).json({ error: `sections must be a non-empty array of: ${validSections.join(", ")}` }); return;
+    }
+
+    const editorId = typeof body["editorId"] === "string" ? body["editorId"] : "admin";
+    const draft = await resetDraftToOriginal(projectUuid, sections, editorId);
+    res.json({ draft });
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 500;
+    res.status(status).json({ error: err instanceof Error ? err.message : "Unknown error" });
   }
 });
 
