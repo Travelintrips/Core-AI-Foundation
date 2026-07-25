@@ -1,0 +1,327 @@
+FINAL AUDIT — PHASE 3 IMPLEMENTATION EQUIVALENCE
+
+Current branch:
+
+integration/material-intelligence-v2
+
+Important finding:
+
+The originally verified Phase 3 foundation commit:
+
+5eb3984
+
+was not available in this repository.
+
+Phase 3 was reimplemented directly and committed as:
+
+d8c8a23
+
+Do not merge to main yet.
+
+The purpose of this task is to prove that the reimplemented Phase 3 foundation is contract-equivalent to the originally approved Phase 3 specification.
+
+Do not redesign or expand the feature.
+Do not begin Phase 4.
+Do not activate Phase 3.
+Do not mount routes.
+Do not register providers at production startup.
+
+========================================================
+1. INVENTORY THE ACTUAL IMPLEMENTATION
+========================================================
+
+List every file added by commit d8c8a23.
+
+Report:
+
+- exact path
+- purpose
+- exported contracts
+- test file covering it
+
+Confirm whether all Phase 3 files are isolated under:
+
+artifacts/api-server/src/domains/material-catalog-integration/
+
+Report any Phase 3 code outside this directory.
+
+========================================================
+2. CONTRACT EQUIVALENCE MATRIX
+========================================================
+
+Create a PASS / PARTIAL / MISSING matrix for every requirement below.
+
+Provider contract:
+
+- providerId
+- displayName
+- sourceType
+- getCapabilities()
+- validateConfig()
+- fetchCatalog()
+
+Provider registry:
+
+- register
+- unregister
+- get by ID
+- deterministic listing
+- duplicate-ID rejection
+- enable/disable state
+- capability filtering
+- reset method for tests
+- empty at startup
+- dependency injection
+
+External catalog DTO:
+
+- externalId
+- providerId
+- sourceUrl
+- brand
+- productCode
+- productName
+- category
+- subcategory
+- materialType
+- description
+- color
+- finish
+- texture
+- pattern
+- priceTier
+- unit
+- dimensions
+- technicalData
+- certifications
+- thumbnailReference
+- previewReferences
+- country
+- locale
+- sourceUpdatedAt
+- sourceMetadata
+
+Validation:
+
+- provider configuration schema
+- fetch-context schema
+- external-result schema
+- catalog-item schema
+- import-options schema
+- preview-result schema
+- import-report schema
+- media-reference schema
+
+Import behavior:
+
+- dryRun must be literal true
+- dryRun false rejected
+- normalization
+- per-item validation
+- invalid records isolated
+- duplicate classification
+- result counts
+- warnings
+- errors
+- next cursor
+- execution duration
+- maximum 500 records
+- no database writes
+
+Duplicate detection:
+
+- providerId + externalId
+- brand + productCode
+- normalized brand + productName
+- source URL
+- exact_duplicate
+- possible_duplicate
+- conflicting_identity
+- invalid
+- new
+
+Media safety:
+
+- HTTPS accepted
+- HTTP rejected
+- FTP rejected
+- file scheme rejected
+- data scheme rejected
+- path traversal rejected
+- absolute local path rejected
+- opaque provider asset IDs supported
+- unresolved state supported
+
+Security:
+
+- secret redaction
+- token redaction
+- password redaction
+- credential redaction
+- API key redaction
+- no credential logging
+- typed errors
+- no raw stack exposure
+- payload-limit contract
+- record-limit enforcement
+- AbortSignal support
+
+Feature safety:
+
+- feature flag defaults false
+- no route mounted
+- no startup provider registration
+- no startup fetch
+- no external network call
+- no cron
+- no background job
+- no canonical material write
+
+========================================================
+3. MOCK PROVIDER EQUIVALENCE
+========================================================
+
+Verify the test mock provider has:
+
+- providerId mock-official-catalog
+- sourceType manual_fixture
+- at least 25 records
+- at least 22 valid records
+- at least 3 intentionally invalid records
+- multiple categories
+- multiple brands
+- deterministic timestamps
+- pagination or cursor support
+- AbortSignal support
+- no network access
+- no credentials
+- never registered in production startup
+
+Report exact fixture counts and categories.
+
+========================================================
+4. TEST COVERAGE AUDIT
+========================================================
+
+Do not report only the number 98.
+
+Map each of the required Phase 3 scenarios to an exact test name.
+
+At minimum prove coverage for:
+
+1. provider registration
+2. duplicate-provider rejection
+3. provider lookup
+4. capability filtering
+5. configuration validation
+6. DTO validation
+7. whitespace normalization
+8. brand normalization
+9. category normalization
+10. price-tier normalization
+11. unit normalization
+12. invalid-item rejection
+13. deterministic preview
+14. dryRun false rejection
+15. exact duplicate
+16. possible duplicate
+17. conflicting identity
+18. invalid identity
+19. media validation
+20. unsupported URL scheme
+21. secret redaction
+22. maximum-record limit
+23. provider errors
+24. partial-invalid catalog
+25. structured report
+26. no DB write
+27. no canonical catalog mutation
+28. no active route
+29. disabled feature flag
+30. no mock network request
+31. deterministic ordering
+32. AbortSignal handling
+
+Report any requirement that is not tested explicitly.
+
+========================================================
+5. PHASE 2 REGRESSION CONFIRMATION
+========================================================
+
+Re-run:
+
+- Phase 1 tests
+- Phase 2 tests
+- MaterialSelectorDialog tests
+- portal regression tests
+- Phase 3 tests
+
+Confirm:
+
+- strict category filter
+- strict brand filter
+- strict finish filter
+- strict priceTier filter
+- strict color filter
+- analytics anonymous request returns 401/403
+- authorized analytics request returns 200
+
+Report exact totals.
+
+========================================================
+6. RUNTIME DORMANCY CHECK
+========================================================
+
+Search the repository for:
+
+- MATERIAL_CATALOG_INTEGRATION_ENABLED
+- registerProvider(
+- mockOfficialCatalogProvider
+- import-preview
+- material-catalog
+- setInterval
+- cron
+- startup hooks
+
+Prove:
+
+- no Phase 3 route is mounted
+- no mock provider is registered
+- no production fetch occurs
+- no background execution occurs
+- no database write occurs
+
+========================================================
+7. GIT AND PROVENANCE REPORT
+========================================================
+
+Report:
+
+- base commit
+- Phase 2 acceptance-fix commit
+- Phase 3 reimplementation commit
+- integration-report commit
+- whether d8c8a23 is a merge, cherry-pick, or fresh implementation
+- whether original commit 5eb3984 is available in any remote
+- whether file contents can be compared against 5eb3984
+
+If 5eb3984 is available remotely, fetch it without merging and produce a file-level diff.
+
+Do not alter the integration branch while performing the comparison.
+
+========================================================
+8. FINAL VERDICT
+========================================================
+
+Use one verdict only:
+
+A. PHASE 3 REIMPLEMENTATION IS CONTRACT-EQUIVALENT — INTEGRATION SAFE FOR MAIN REVIEW
+
+B. PHASE 3 REIMPLEMENTATION HAS MINOR GAPS
+
+C. PHASE 3 REIMPLEMENTATION IS NOT EQUIVALENT
+
+Do not merge to main.
+Do not activate Phase 3.
+Do not begin Phase 4.
+STOP.
