@@ -273,7 +273,7 @@ export default function WorkspaceDownloadsPage({ params }: { params: { token: st
                       )}
                       {isInvoice && (
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-muted text-muted-foreground shrink-0">
-                          {d.category.toUpperCase()}
+                          {(d.category ?? "invoice").toUpperCase()}
                         </span>
                       )}
                     </div>

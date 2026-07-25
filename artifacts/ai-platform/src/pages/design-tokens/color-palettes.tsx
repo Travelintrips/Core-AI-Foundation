@@ -298,7 +298,7 @@ function PaletteDetailDialog({ palette, onClose }: { palette: ColorPalette; onCl
   const [printCheck, setPrintCheck] = useState<PrintCheckResult[] | null>(null);
   const printMutation = useMutation({
     mutationFn: () =>
-      apiFetch("/api/ai/design-tokens/color-palettes/print-safe-check", {
+      apiFetch<{ data: PrintCheckResult[] }>("/api/ai/design-tokens/color-palettes/print-safe-check", {
         method: "POST",
         body: JSON.stringify({ colors: palette.colors }),
       }).then((r) => r.data),

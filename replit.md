@@ -42,6 +42,21 @@ All workflows start automatically. To restart individually:
 - **Admin Portal**: `pnpm --filter @workspace/ai-platform run dev`
 - **Customer Portal**: `pnpm --filter @workspace/customer-portal run dev`
 - **Cargo Finder**: `pnpm --filter @workspace/cargo-finder run dev`
+- **Customer Mobile**: `pnpm --filter @workspace/customer-mobile run dev`
+- **Component Preview Server**: `pnpm --filter @workspace/mockup-sandbox run dev`
+
+## Setup verification
+
+The imported lockfile installs successfully with `pnpm install --frozen-lockfile`.
+All six configured workflows start successfully, the four web previews return
+HTTP 200, and the API health checks pass at `/api/healthz` and
+`/api/healthz/full`.
+
+The focused typechecks for the frontend, mobile, preview, and scripts packages
+pass. The aggregate `pnpm run typecheck` currently stops in the API-server
+package on existing type drift across unrelated tests and services; this does
+not prevent the API bundle from building or the running API from passing its
+health checks.
 
 ## Key shared libraries (under `lib/`)
 

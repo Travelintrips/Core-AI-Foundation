@@ -168,19 +168,19 @@ export default function WorkspaceDashboardPage({ params }: { params: { token: st
             </Link>
           </div>
           <div className="space-y-3">
-            {recentProjects.map((p: { id: number; title: string; status: string; stage: string; progress?: number; updatedAt: string }, i) => (
-              <motion.div key={p.id}
+            {recentProjects.map((p, i) => (
+              <motion.div key={p.projectNumber}
                 initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.1 + i * 0.05, duration: 0.3 }}
                 className="bg-card border border-card-border rounded-xl p-4 hover:border-primary/25 transition-colors"
               >
                 <div className="flex items-start justify-between gap-3 mb-2">
-                  <h3 className="font-medium text-sm leading-snug line-clamp-1">{p.title}</h3>
-                  <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ${stageColor(p.stage)}`}>
-                    {p.status}
+                  <h3 className="font-medium text-sm leading-snug line-clamp-1">{p.brandName || p.serviceName}</h3>
+                  <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ${stageColor(p.currentStage)}`}>
+                    {p.currentStageLabel}
                   </span>
                 </div>
-                {typeof p.progress === "number" && <ProgressBar value={p.progress} />}
+                <ProgressBar value={p.progressPercent} />
                 <p className="text-xs text-muted-foreground mt-2">{fmtDate(p.updatedAt)}</p>
               </motion.div>
             ))}

@@ -65,12 +65,12 @@ export function DesignTokensPage() {
 
   const { data: industries = [] } = useQuery<string[]>({
     queryKey: ["design-tokens-industries"],
-    queryFn: () => apiFetch("/api/ai/design-tokens/industries").then((r) => r.data),
+    queryFn: () => apiFetch<{ data: string[] }>("/api/ai/design-tokens/industries").then((r) => r.data),
   });
 
   const { data: recommendation, isLoading: recLoading } = useQuery<IndustryRecommendation>({
     queryKey: ["design-tokens-industry-rec", selectedIndustry],
-    queryFn: () => apiFetch(`/api/ai/design-tokens/industries/${selectedIndustry}`),
+    queryFn: () => apiFetch<IndustryRecommendation>(`/api/ai/design-tokens/industries/${selectedIndustry}`),
     enabled: !!selectedIndustry,
   });
 

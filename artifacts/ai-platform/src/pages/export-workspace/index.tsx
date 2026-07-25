@@ -87,6 +87,7 @@ interface ExportFormatDefinition {
   supportsPageSelection: boolean;
   supportsVersionSelection: boolean;
   supportsMetadata: boolean;
+  supportsAnnotations: boolean;
   supportsFilename: boolean;
 }
 

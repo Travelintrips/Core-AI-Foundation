@@ -19,9 +19,8 @@ import { id as idLocale } from "@/locales/id";
 import { en as enLocale } from "@/locales/en";
 
 export type Lang = "id" | "en";
-export type Translations = typeof idLocale;
 
-const LOCALES: Record<Lang, Translations> = { id: idLocale, en: enLocale };
+const LOCALES = { id: idLocale, en: enLocale } as const;
 const LS_KEY = "cs_lang";
 
 /** Resolve a dot-separated key against a nested object — returns raw value. */
@@ -46,7 +45,7 @@ function resolve(obj: Record<string, unknown>, key: string): string {
 type I18nCtx = {
   lang: Lang;
   setLang: (l: Lang) => void;
-  t: (key: string, vars?: Record<string, string | number>) => string;
+  t: (key: string, vars?: Record<string, string | number> | string) => string;
   /** Resolve a key that maps to a string array in the locale files. */
   tArr: (key: string) => string[];
 };
@@ -72,9 +71,10 @@ export function LangProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const t = useCallback(
-    (key: string, vars?: Record<string, string | number>): string => {
+    (key: string, vars?: Record<string, string | number> | string): string => {
       const raw = resolve(LOCALES[lang] as unknown as Record<string, unknown>, key);
       if (!vars) return raw;
+      if (typeof vars === "string") return raw === key ? vars : raw;
       return raw.replace(/\{\{(\w+)\}\}/g, (_, k) => String(vars[k] ?? `{{${k}}}`));
     },
     [lang]

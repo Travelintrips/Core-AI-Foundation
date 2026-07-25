@@ -776,6 +776,10 @@ export default function DesignPatternsPage() {
               meta={meta}
               initial={{
                 ...editTarget,
+                description: editTarget.description ?? "",
+                license: editTarget.license ?? "",
+                cultural_origin: editTarget.cultural_origin ?? "",
+                cultural_notes: editTarget.cultural_notes ?? "",
                 tags: editTarget.tags.join(", "),
               }}
               onSubmit={handleFormSubmit}

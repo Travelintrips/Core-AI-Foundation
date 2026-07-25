@@ -40,7 +40,7 @@ function Sparkline({ entries }: { entries: { isActive: boolean; checkedAt: strin
 export function ProviderHealthHistory({ providerId, providerName }: Props) {
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useGetProviderHealthHistory(providerId, { limit: 50 }, {
-    query: { enabled: open },
+    query: { enabled: open, queryKey: [] },
   });
 
   return (

@@ -21,7 +21,4 @@ export const modules: ModuleMap = {
   "./components/mockups/cp-portal/SubmitBrief.tsx": () => import("../components/mockups/cp-portal/SubmitBrief.tsx"),
   "./components/mockups/cp-portal/SuccessOnboarding.tsx": () => import("../components/mockups/cp-portal/SuccessOnboarding.tsx"),
   "./components/mockups/cp-portal/Workspace.tsx": () => import("../components/mockups/cp-portal/Workspace.tsx")
-  "./components/mockups/cp-portal/Workspace.tsx": () => import("../components/mockups/cp-portal/Workspace.tsx"),
-  "./components/mockups/apex-admin/AdminDesktop.tsx": () => import("../components/mockups/apex-admin/AdminDesktop.tsx"),
-  "./components/mockups/apex-admin/AdminMobile.tsx": () => import("../components/mockups/apex-admin/AdminMobile.tsx")
 };
