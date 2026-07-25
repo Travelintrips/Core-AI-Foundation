@@ -9,6 +9,7 @@ import Login from "@/pages/login";
 import ChangePassword from "@/pages/change-password";
 import { InternalAuthProvider } from "@/hooks/use-internal-auth";
 import { RequireAuth } from "@/components/require-auth";
+import { LangProvider } from "@/lib/i18n";
 
 import Dashboard from "@/pages/dashboard";
 import Analytics from "@/pages/analytics";
@@ -211,6 +212,7 @@ function AdminRouter() {
 
 function App() {
   return (
+    <LangProvider>
     <ThemeProvider defaultTheme="dark" storageKey="ai-platform-theme">
       <QueryClientProvider client={queryClient}>
         <InternalAuthProvider>
@@ -235,6 +237,7 @@ function App() {
         </InternalAuthProvider>
       </QueryClientProvider>
     </ThemeProvider>
+    </LangProvider>
   );
 }
 

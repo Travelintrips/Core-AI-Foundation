@@ -28,7 +28,8 @@ import {
 } from "@workspace/api-zod";
 import { logAudit } from "../services/aiAuditService.js";
 import { publishSafe } from "../services/aiEventBusService.js";
-import { runImageDesignerPipeline, regenerateSingleAsset } from "../services/imageDesignerService.js";
+import { runImageDesignerPipeline, regenerateSingleAsset, isInteriorDesignProject } from "../services/imageDesignerService.js";
+import { getConceptDraftForImagePipeline } from "../domains/interior-design/service.js";
 
 const router = Router();
 
@@ -222,6 +223,25 @@ router.post("/creative-ai/projects/:id/generate-image", async (req, res): Promis
   if (pendingCount > 0) {
     res.status(409).json({ error: "Image generation already in progress for this project" });
     return;
+  }
+
+  // ── Interior Design approval guard ────────────────────────────────────────
+  // Interior Design projects MUST have an approved concept snapshot before
+  // image generation begins. Generating from an unapproved (mutable) draft is
+  // blocked to prevent prompt drift between approval and rendering.
+  const projectSteps = await db
+    .select({ stepName: creativeProjectStepsTable.stepName })
+    .from(creativeProjectStepsTable)
+    .where(eq(creativeProjectStepsTable.projectId, project.id));
+
+  if (isInteriorDesignProject(projectSteps)) {
+    const conceptDraft = await getConceptDraftForImagePipeline(project.projectId);
+    if (!conceptDraft || conceptDraft.reviewState !== "approved_for_rendering") {
+      res.status(409).json({
+        error: "Interior Design concept must be approved for rendering before image generation.",
+      });
+      return;
+    }
   }
 
   // Fire off in background — never await

@@ -21,12 +21,29 @@ export interface CreativeBriefInput {
   notes?:           string | null;
 }
 
+// ── Language helper ───────────────────────────────────────────────────────────
+
+/**
+ * Extracts [OUTPUT_LANGUAGE:xx] from notes and returns a language instruction
+ * string suitable for injection into system prompts.
+ * Default: Bahasa Indonesia (matching the product's primary audience).
+ */
+export function extractLanguageInstruction(notes?: string | null): string {
+  const match = notes?.match(/\[OUTPUT_LANGUAGE:(id|en)\]/);
+  const lang = match?.[1] ?? "id";
+  if (lang === "en") {
+    return "You MUST write ALL content values inside the JSON (strings, lists, descriptions, copy, recommendations, etc.) in English.";
+  }
+  return "Anda WAJIB menulis SEMUA nilai konten di dalam JSON (string, daftar, deskripsi, copywriting, rekomendasi, dll.) dalam Bahasa Indonesia yang baik, benar, dan profesional.";
+}
+
 // ── Brand Strategist ──────────────────────────────────────────────────────────
 
 export function buildBrandStrategistPrompt(
   brief: CreativeBriefInput,
 ): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = `You are an expert Brand Strategist with 20+ years of experience building iconic brands across Southeast Asia and globally. You craft precise, actionable brand strategies grounded in market research and consumer psychology. Always respond in valid JSON.`;
+  const langInstruction = extractLanguageInstruction(brief.notes);
+  const systemPrompt = `You are an expert Brand Strategist with 20+ years of experience building iconic brands across Southeast Asia and globally. You craft precise, actionable brand strategies grounded in market research and consumer psychology. Always respond in valid JSON. ${langInstruction}`;
 
   const userPrompt = `Develop a comprehensive brand strategy for the following brief:
 
@@ -62,7 +79,8 @@ export function buildCreativeDirectorPrompt(
   brief: CreativeBriefInput,
   brandStrategy: Record<string, unknown>,
 ): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = `You are a world-class Creative Director specialising in brand identity, visual storytelling, and integrated campaigns. You translate brand strategy into compelling creative direction. Always respond in valid JSON.`;
+  const langInstruction = extractLanguageInstruction(brief.notes);
+  const systemPrompt = `You are a world-class Creative Director specialising in brand identity, visual storytelling, and integrated campaigns. You translate brand strategy into compelling creative direction. Always respond in valid JSON. ${langInstruction}`;
 
   const userPrompt = `Create a detailed creative direction brief based on this brand strategy:
 
@@ -111,7 +129,8 @@ export function buildCopywriterPrompt(
   brandStrategy: Record<string, unknown>,
   creativeDirection: Record<string, unknown>,
 ): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = `You are an award-winning Copywriter and Brand Voice specialist. You craft copy that converts, inspires, and stays true to the brand's personality. Your words sell without feeling like a sales pitch. Always respond in valid JSON.`;
+  const langInstruction = extractLanguageInstruction(brief.notes);
+  const systemPrompt = `You are an award-winning Copywriter and Brand Voice specialist. You craft copy that converts, inspires, and stays true to the brand's personality. Your words sell without feeling like a sales pitch. Always respond in valid JSON. ${langInstruction}`;
 
   const userPrompt = `Write compelling brand copy for this campaign:
 
@@ -158,7 +177,8 @@ export function buildQcPrompt(
   creativeDirection: Record<string, unknown>,
   copyOutput: Record<string, unknown>,
 ): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = `You are a rigorous Quality Control specialist and Brand Guardian. You review all creative outputs against brand strategy, brief requirements, and industry best practices. You provide constructive feedback and a clear approval decision. Always respond in valid JSON.`;
+  const langInstruction = extractLanguageInstruction(brief.notes);
+  const systemPrompt = `You are a rigorous Quality Control specialist and Brand Guardian. You review all creative outputs against brand strategy, brief requirements, and industry best practices. You provide constructive feedback and a clear approval decision. Always respond in valid JSON. ${langInstruction}`;
 
   const userPrompt = `Review all outputs from the Creative Brief pipeline:
 
