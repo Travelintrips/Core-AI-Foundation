@@ -2,8 +2,11 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { ServiceFaq } from "@/hooks/use-portfolio";
+import { useTranslation } from "@/lib/i18n";
+import { localizeFaq } from "@/lib/catalog-i18n";
 
 export function ServiceFaqSection({ faqs }: { faqs: ServiceFaq[] }) {
+  const { lang } = useTranslation();
   const [openId, setOpenId] = useState<number | null>(faqs[0]?.id ?? null);
   if (faqs.length === 0) return null;
 
@@ -12,7 +15,8 @@ export function ServiceFaqSection({ faqs }: { faqs: ServiceFaq[] }) {
       className="divide-y rounded-2xl overflow-hidden"
       style={{ border: "1px solid rgba(46,66,112,0.5)", background: "rgba(13,21,38,0.6)" }}
     >
-      {faqs.map((f) => {
+      {faqs.map((rawFaq) => {
+        const f = localizeFaq(rawFaq, lang);
         const open = openId === f.id;
         return (
           <div key={f.id}>

@@ -1,78 +1,80 @@
 import { CheckCircle2, FileText, Brain, Palette, Image, PenLine, ShieldCheck, MessageSquare, RotateCcw, Package } from "lucide-react";
+import { useTranslation } from "@/lib/i18n";
 
 const WORKFLOW_STEPS = [
   {
     icon: FileText,
-    label: "Creative Brief",
-    description: "You submit your brand details, style preferences, and goals.",
+    label: "creativeBrief",
+    description: "creativeBriefDesc",
     color: "text-blue-500",
     bg: "bg-blue-500/10",
   },
   {
     icon: Brain,
-    label: "Brand Strategy",
-    description: "AI Brand Strategist analyzes your market, competitors, and positioning.",
+    label: "brandStrategy",
+    description: "brandStrategyDesc",
     color: "text-violet-500",
     bg: "bg-violet-500/10",
   },
   {
     icon: Palette,
-    label: "Creative Direction",
-    description: "Creative Director defines color palette, typography, and visual language.",
+    label: "creativeDirection",
+    description: "creativeDirectionDesc",
     color: "text-pink-500",
     bg: "bg-pink-500/10",
   },
   {
     icon: Image,
-    label: "Image Generation",
-    description: "AI Image Designer renders concepts at production resolution.",
+    label: "imageGeneration",
+    description: "imageGenerationDesc",
     color: "text-orange-500",
     bg: "bg-orange-500/10",
   },
   {
     icon: PenLine,
-    label: "Copywriting",
-    description: "AI Copywriter crafts headlines, taglines, and supporting copy.",
+    label: "copywriting",
+    description: "copywritingDesc",
     color: "text-yellow-600",
     bg: "bg-yellow-500/10",
   },
   {
     icon: ShieldCheck,
-    label: "Quality Control",
-    description: "Automated and human checks for consistency, accuracy, and brand fit.",
+    label: "qualityControl",
+    description: "qualityControlDesc",
     color: "text-green-600",
     bg: "bg-green-500/10",
   },
   {
     icon: MessageSquare,
-    label: "Client Review",
-    description: "You review the deliverables and request revisions if needed.",
+    label: "clientReview",
+    description: "clientReviewDesc",
     color: "text-teal-500",
     bg: "bg-teal-500/10",
   },
   {
     icon: RotateCcw,
-    label: "Revision",
-    description: "Our team refines based on your feedback until you're satisfied.",
+    label: "revision",
+    description: "revisionDesc",
     color: "text-cyan-500",
     bg: "bg-cyan-500/10",
   },
   {
     icon: Package,
-    label: "Final Delivery",
-    description: "All production-ready files delivered in your required formats.",
+    label: "finalDelivery",
+    description: "finalDeliveryDesc",
     color: "text-primary",
     bg: "bg-primary/10",
   },
 ];
 
 export function ServiceWorkflow() {
+  const { t } = useTranslation();
   return (
     <section>
       <div className="flex items-center gap-2 mb-6">
         <CheckCircle2 className="w-5 h-5 text-primary" />
-        <h2 className="font-serif text-lg font-medium">How It Works</h2>
-        <span className="text-xs text-muted-foreground">AI-powered, human-reviewed</span>
+        <h2 className="font-serif text-lg font-medium">{t("serviceDetail.workflow.title")}</h2>
+        <span className="text-xs text-muted-foreground">{t("serviceDetail.workflow.subtitle")}</span>
       </div>
 
       <div className="relative">
@@ -93,9 +95,9 @@ export function ServiceWorkflow() {
                 <div className={`flex-1 pb-2 ${isLast ? "" : "border-b border-border/40"}`}>
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="text-xs font-mono text-muted-foreground/60 w-5">{String(i + 1).padStart(2, "0")}</span>
-                    <p className="font-medium text-sm">{step.label}</p>
+                    <p className="font-medium text-sm">{t(`serviceDetail.workflow.${step.label}`)}</p>
                   </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed pl-7">{step.description}</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed pl-7">{t(`serviceDetail.workflow.${step.description}`)}</p>
                 </div>
               </div>
             );

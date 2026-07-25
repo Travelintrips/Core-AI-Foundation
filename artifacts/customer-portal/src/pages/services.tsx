@@ -12,6 +12,7 @@ import {
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "@/lib/i18n";
+import { localizeCategory, localizeService, serviceSearchText } from "@/lib/catalog-i18n";
 import {
   trackCatalogCategoryViewed,
   trackCatalogServiceSelected,
@@ -482,7 +483,7 @@ function EmptyState({ onReset }: { onReset: () => void }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ServicesPage() {
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
   const searchQuery = useSearch();
 
   const SORT_OPTIONS = SORT_KEYS.map((o) => ({ ...o, label: t(o.tKey) }));
@@ -506,6 +507,14 @@ export default function ServicesPage() {
 
   const { data: categories = [], isLoading: loadingCategories } = useCategories();
   const { data: allServices = [], isLoading: loadingServices }  = useServices(undefined);
+  const displayCategories = useMemo(
+    () => categories.map((category) => localizeCategory(category, lang)),
+    [categories, lang],
+  );
+  const displayServices = useMemo(
+    () => allServices.map((service) => localizeService(service, lang)),
+    [allServices, lang],
+  );
 
   // Read template seed from sessionStorage
   useEffect(() => {
@@ -595,16 +604,16 @@ export default function ServicesPage() {
   // Services grouped by category (for category cards)
   const servicesByCategory = useMemo(() => {
     const map: Record<number, CatalogService[]> = {};
-    for (const s of allServices) {
+    for (const s of displayServices) {
       if (!map[s.categoryId]) map[s.categoryId] = [];
       map[s.categoryId].push(s);
     }
     return map;
-  }, [allServices]);
+  }, [displayServices]);
 
   // Filtered services for search / category view
   const filtered = useMemo(() => {
-    let list = [...allServices];
+    let list = [...displayServices];
 
     if (categoryId !== undefined) list = list.filter((s) => s.categoryId === categoryId);
 
@@ -612,10 +621,7 @@ export default function ServicesPage() {
       const q = search.toLowerCase();
       list = list.filter(
         (s) =>
-          s.serviceName.toLowerCase().includes(q) ||
-          (s.shortDescription ?? "").toLowerCase().includes(q) ||
-          s.serviceCode.toLowerCase().includes(q) ||
-          (s.aliases ?? []).some((alias) => alias.toLowerCase().includes(q)),
+          serviceSearchText(s, lang).includes(q),
       );
     }
 
@@ -632,7 +638,7 @@ export default function ServicesPage() {
     }
 
     return list;
-  }, [allServices, categoryId, search, maxDelivery, sort]);
+  }, [displayServices, lang, categoryId, search, maxDelivery, sort]);
 
   const totalPages  = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated   = filtered.slice(0, page * PAGE_SIZE);
@@ -653,11 +659,11 @@ export default function ServicesPage() {
     setTimeout(() => { setPage((p) => p + 1); setLoadingMore(false); }, 500);
   };
 
-  const recentServices     = allServices.filter((s) => recentlyViewed.includes(s.id));
+  const recentServices     = displayServices.filter((s) => recentlyViewed.includes(s.id));
   const isLoading          = loadingServices || loadingCategories;
   const activeSort         = SORT_OPTIONS.find((o) => o.key === sort)!;
   const showDropdown       = searchFocused && !search.trim();
-  const selectedCategory   = categories.find((c) => c.id === categoryId);
+  const selectedCategory   = displayCategories.find((c) => c.id === categoryId);
   const hasFilters         = maxDelivery < 30 || search.trim().length > 0;
   const smartChoiceResults = useMemo(() => {
     if (!smartChoiceGoal) return [];
@@ -670,14 +676,14 @@ export default function ServicesPage() {
       specialized: ["fashion-brand-brief", "interior-concept-design"],
     };
     const preferredCodes = terms[smartChoiceGoal] ?? [];
-    return [...allServices]
+    return [...displayServices]
       .sort((a, b) =>
         (preferredCodes.indexOf(a.serviceCode) < 0 ? 999 : preferredCodes.indexOf(a.serviceCode)) -
         (preferredCodes.indexOf(b.serviceCode) < 0 ? 999 : preferredCodes.indexOf(b.serviceCode)) ||
         Number(b.displayAsPrimary) - Number(a.displayAsPrimary) ||
         (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
       .slice(0, 3);
-  }, [allServices, smartChoiceGoal]);
+  }, [displayServices, smartChoiceGoal]);
 
   const openSmartChoice = () => {
     setSmartChoiceGoal(null);
@@ -822,7 +828,7 @@ export default function ServicesPage() {
             </motion.div>
 
             {/* Shortcuts */}
-            {categories.length > 0 && (
+            {displayCategories.length > 0 && (
               <motion.div
                 variants={fadeUp}
                 initial="hidden"
@@ -831,7 +837,7 @@ export default function ServicesPage() {
                 className="flex items-center justify-center gap-2 mt-4 flex-wrap"
               >
                 <span className="text-xs text-[#8B9BC4]">Kategori:</span>
-                {categories.map((cat) => (
+                {displayCategories.map((cat) => (
                   <button
                     key={cat.id}
                     onClick={() => chooseCategory(cat)}
@@ -940,11 +946,11 @@ export default function ServicesPage() {
                 </h2>
                 <div className="flex-1 h-px bg-[#243352]" />
                 <span className="text-xs text-[#8B9BC4] bg-[#131E35] border border-[#2E4270] px-2.5 py-1 rounded-full">
-                  {categories.length} kategori
+                  {displayCategories.length} {t("services.categoryLabel")}
                 </span>
               </div>
 
-              {categories.length === 0 ? (
+              {displayCategories.length === 0 ? (
                 <div className="py-24 text-center text-[#8B9BC4]">
                   <Sparkles className="w-10 h-10 mx-auto mb-4 opacity-30" />
                   <p>Tidak ada kategori tersedia.</p>
@@ -956,7 +962,7 @@ export default function ServicesPage() {
                   animate="show"
                   className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"
                 >
-                  {categories.map((cat, idx) => (
+                  {displayCategories.map((cat, idx) => (
                     <CategoryCard
                       key={cat.id}
                       category={cat}

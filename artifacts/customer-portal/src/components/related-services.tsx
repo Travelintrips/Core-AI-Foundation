@@ -1,6 +1,8 @@
 import { Link } from "wouter";
 import { ArrowUpRight, Clock, Shield } from "lucide-react";
 import type { CatalogService } from "@/hooks/use-catalog";
+import { useTranslation } from "@/lib/i18n";
+import { localizeService } from "@/lib/catalog-i18n";
 
 function formatMoney(value: number, currency: string) {
   if (currency === "IDR") return `Rp ${Math.round(value).toLocaleString("id-ID")}`;
@@ -8,11 +10,14 @@ function formatMoney(value: number, currency: string) {
 }
 
 export function RelatedServices({ services }: { services: CatalogService[] }) {
+  const { lang, t } = useTranslation();
   if (services.length === 0) return null;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      {services.map((s) => (
+      {services.map((rawService) => {
+        const s = localizeService(rawService, lang);
+        return (
         <Link
           key={s.id}
           href={`/services/${s.id}`}
@@ -21,7 +26,7 @@ export function RelatedServices({ services }: { services: CatalogService[] }) {
             background: "rgba(13,21,38,0.7)",
             border: "1px solid rgba(46,66,112,0.5)",
           }}
-          aria-label={`View ${s.serviceName}`}
+          aria-label={`${t("common.view")} ${s.serviceName}`}
         >
           {/* Hover glow */}
           <div
@@ -58,7 +63,8 @@ export function RelatedServices({ services }: { services: CatalogService[] }) {
             </div>
           </div>
         </Link>
-      ))}
+        );
+      })}
     </div>
   );
 }

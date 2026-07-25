@@ -17,6 +17,7 @@ import {
   Cpu, LayoutGrid, Palette, Camera, Presentation,
 } from "lucide-react";
 import { usePublicCatalog, type CatalogService } from "@/hooks/use-catalog";
+import { useTranslation, type Lang } from "@/lib/i18n";
 
 /* ─────────────────────────────────────────────────────────
    CONSTANTS
@@ -35,6 +36,37 @@ export const PROJECT_CATEGORIES = [
   { id: "creative_marketing",emoji: "🎬", label: "Creative Marketing",     labelId: "Pemasaran Kreatif",     icon: Megaphone,     color: "#EAB308", keywords: ["marketing", "campaign", "iklan"] },
 ];
 
+const CATEGORY_LABELS: Record<Lang, Record<string, string>> = {
+  id: {
+    branding: "Branding & Logo",
+    packaging: "Packaging Produk",
+    fashion: "Desain Fashion",
+    interior: "Desain Interior",
+    company_profile: "Profil Perusahaan",
+    pitch_deck: "Pitch Deck",
+    social_media: "Konten Media Sosial",
+    website: "Website",
+    ai_image: "Kampanye AI Visual",
+    creative_marketing: "Pemasaran Kreatif",
+  },
+  en: {
+    branding: "Branding & Logo",
+    packaging: "Product Packaging",
+    fashion: "Fashion Design",
+    interior: "Interior Design",
+    company_profile: "Company Profile",
+    pitch_deck: "Pitch Deck",
+    social_media: "Social Media Content",
+    website: "Website",
+    ai_image: "AI Image Campaign",
+    creative_marketing: "Creative Marketing",
+  },
+};
+
+function categoryLabel(categoryId: string, lang: Lang) {
+  return CATEGORY_LABELS[lang][categoryId] ?? CATEGORY_LABELS.en[categoryId] ?? "Creative Project";
+}
+
 /* Workflow steps shown per category */
 const CATEGORY_WORKFLOWS: Record<string, string[]> = {
   branding:          ["Brand Research", "Logo Design", "Identity System", "Brand Guidelines", "Asset Kit"],
@@ -48,6 +80,24 @@ const CATEGORY_WORKFLOWS: Record<string, string[]> = {
   ai_image:          ["Creative Briefing", "AI Generation", "Quality Review", "Text Overlay", "Final Delivery"],
   creative_marketing:["Campaign Strategy", "Creative Concept", "Visual Production", "Copywriting", "Campaign Report"],
 };
+
+const CATEGORY_WORKFLOWS_ID: Record<string, string[]> = {
+  branding: ["Riset Brand", "Desain Logo", "Sistem Identitas", "Panduan Brand", "Asset Kit"],
+  packaging: ["Riset Pasar", "Desain Konsep", "Mockup Kemasan", "File Siap Cetak", "Integrasi Brand"],
+  fashion: ["Strategi Brand", "Brief Koleksi", "Kampanye Visual", "Copy Kampanye", "Lookbook"],
+  interior: ["Brief Klien", "Konsep & Moodboard", "Visualisasi 3D", "Spesifikasi Material", "Presentasi"],
+  company_profile: ["Analisis Bisnis", "Strategi Konten", "Desain & Layout", "Arahan Fotografi", "PDF & Cetak"],
+  pitch_deck: ["Kerangka Cerita", "Desain Slide", "Visualisasi Data", "Ringkasan Eksekutif", "Investor Pack"],
+  social_media: ["Strategi Konten", "Template Visual", "Copy Caption", "Kalender Posting", "Laporan Analitik"],
+  website: ["Strategi UX", "Wireframe", "Desain Visual", "Copy & SEO", "Serah Terima Desain"],
+  ai_image: ["Brief Kreatif", "Generasi AI", "Review Kualitas", "Overlay Teks", "Pengiriman Final"],
+  creative_marketing: ["Strategi Kampanye", "Konsep Kreatif", "Produksi Visual", "Copywriting", "Laporan Kampanye"],
+};
+
+function workflowFor(categoryId: string, lang: Lang) {
+  return (lang === "id" ? CATEGORY_WORKFLOWS_ID : CATEGORY_WORKFLOWS)[categoryId]
+    ?? (lang === "id" ? CATEGORY_WORKFLOWS_ID.branding : CATEGORY_WORKFLOWS.branding);
+}
 
 const PACKAGE_TIERS = [
   {
@@ -104,6 +154,11 @@ const WIZARD_STEPS = [
   { id: 5, label: "Referensi" },
 ];
 
+const WIZARD_STEP_LABELS: Record<Lang, string[]> = {
+  id: ["Apa yang dibuat", "Profil Anda", "Konteks", "Tujuan", "Referensi"],
+  en: ["What to create", "Your profile", "Context", "Goals", "References"],
+};
+
 /* Category-adaptive content for steps 1–5 */
 const CATEGORY_DESC_PLACEHOLDER: Record<string, string> = {
   interior:          'Contoh: "Saya ingin mendesain ulang ruang makan keluarga, konsep Japandi, sekitar 4x5 meter, untuk 6 orang."',
@@ -117,6 +172,211 @@ const CATEGORY_DESC_PLACEHOLDER: Record<string, string> = {
   ai_image:          'Contoh: "Butuh 20 foto editorial produk tas kulit premium, background studio, mood elegan dan modern."',
   creative_marketing:'Contoh: "Campaign Ramadan untuk brand makanan, butuh konsep kreatif, visual, dan copy untuk semua platform digital."',
 };
+
+const CATEGORY_DESC_PLACEHOLDER_EN: Record<string, string> = {
+  interior:          'Example: "I want to redesign our family dining room in a Japandi style, around 4x5 meters, for six people."',
+  branding:          'Example: "I want to create a premium womenswear brand for ages 25–35, with a minimalist and elegant feel."',
+  packaging:         'Example: "My skincare product needs premium packaging in black and gold for an upscale segment."',
+  fashion:           'Example: "I want a casual womenswear ready-to-wear collection with a modern batik touch for millennials."',
+  company_profile:   'Example: "A 10-year logistics company needs a new profile for investor and corporate-client pitches."',
+  pitch_deck:        'Example: "A seed-stage fintech startup needs a Series A fundraising deck for Southeast Asian investors."',
+  social_media:      'Example: "A new café in South Jakarta needs consistent Instagram content—feed, Reels, and Stories—for three months."',
+  website:           'Example: "I need a landing page for an online graphic-design course targeting students and recent graduates."',
+  ai_image:          'Example: "I need 20 editorial product photos of premium leather bags with a studio background and elegant mood."',
+  creative_marketing:'Example: "A Ramadan campaign for a food brand with creative concept, visuals, and copy across digital platforms."',
+};
+
+const CATEGORY_STYLE_PLACEHOLDER_EN: Record<string, string> = {
+  interior:          "Example: Japandi — natural wood, cream linen, no excessive ornament. Avoid bright colors.",
+  branding:          "Example: Black and gold, premium and minimal, avoiding bright colors.",
+  packaging:         "Example: Clean and premium, serif typography, earth tones. References: Aesop, Le Labo.",
+  fashion:           "Example: Modern-feminine, pastel and nude palette, clean silhouettes. References: COS, Theory.",
+  company_profile:   "Example: Professional and modern, navy and gray, A4 portrait layout.",
+  pitch_deck:        "Example: Modern minimal, dark mode, yellow highlights. Avoid too much text per slide.",
+  social_media:      "Example: Warm and cozy mood, golden filter preset, rounded typography. Reference: @kompas.com.",
+  website:           "Example: Clean, generous whitespace, purple accent. References: Stripe.com, Linear.app.",
+  ai_image:          "Example: Editorial—soft studio lighting, clean white background, dramatic shadows.",
+  creative_marketing:"Example: Bold and playful, high-contrast colors, large headlines. Inspiration: Nike, Tokopedia.",
+};
+
+const PACKAGE_FEATURES_EN: Record<string, string[]> = {
+  starter: ["3–5 deliverables", "2× revisions", "Standard AI model", "5 business days", "Final PDF"],
+  professional: ["8–12 deliverables", "5× revisions", "Premium AI model", "3 business days", "Human review", "Editable source file"],
+  enterprise: ["Unlimited", "Unlimited revisions", "Multi-AI workflow", "Priority queue", "Dedicated manager", "Extended usage rights"],
+};
+
+const PACKAGE_BADGES: Record<Lang, Record<string, string>> = {
+  id: { professional: "Paling Populer" },
+  en: { professional: "Most Popular" },
+};
+
+function packageDisplay(pkg: typeof PACKAGE_TIERS[number], lang: Lang) {
+  return {
+    ...pkg,
+    price: lang === "en" ? "Contact us" : pkg.price,
+    badge: PACKAGE_BADGES[lang][pkg.id] ?? pkg.badge,
+    features: lang === "en" ? PACKAGE_FEATURES_EN[pkg.id] ?? pkg.features : pkg.features,
+  };
+}
+
+const START_COPY: Record<Lang, Record<string, string>> = {
+  id: {
+    detected: "Terdeteksi",
+    changeCategory: "Ganti kategori ↓",
+    close: "↑ Tutup",
+    projectCategory: "Kategori project",
+    projectDescription: "Deskripsi project Anda *",
+    whatToCreate: "Apa yang dibuat",
+    whatDoYouWant: "Apa yang ingin Anda buat?",
+    explainNeed: "Jelaskan kebutuhan Anda. Semakin detail, semakin tepat workflow AI yang kami siapkan.",
+    projectProfile: "Profil proyek Anda",
+    tellBusiness: "Ceritakan bisnis Anda",
+    adaptWorkflow: "AI kami menyesuaikan workflow berdasarkan profil",
+    projectScale: " dan skala proyek",
+    businessScale: " bisnis Anda.",
+    clientType: "Tipe klien / lingkungan",
+    industry: "Industri",
+    aboutRoom: "Tentang ruangan & pengguna",
+    aboutRoomDesc: "Detail ini membantu AI memahami skala dan fungsi ruangan yang akan didesain.",
+    targetMarket: "Siapa target market Anda?",
+    targetMarketDesc: "Memahami audiens Anda membantu AI membuat konten yang beresonansi.",
+    roomUsers: "Siapa pengguna utama ruangan ini?",
+    audience: "Deskripsi target audiens *",
+    geography: "Jangkauan geografis",
+    projectLocation: "Lokasi proyek",
+    projectGoal: "Apa tujuan project ini?",
+    projectGoalDesc: "Tujuan yang jelas menghasilkan deliverable yang lebih tepat sasaran.",
+    mainGoal: "Tujuan utama *",
+    completionTarget: "Target waktu selesai",
+    referencesStyle: "Referensi & preferensi gaya",
+    optionalShare: "Opsional — bagikan referensi visual atau",
+    interiorDesigner: "desainer interior",
+    brand: "brand",
+    referenceLink: "Link referensi (website, Instagram, Behance, dll.)",
+    interiorReferenceLink: "Link referensi (Pinterest, Houzz, Instagram, dll.)",
+    pasteLinks: "Paste link referensi, satu per baris. Contoh:\nhttps://www.pinterest.com/...\nhttps://www.instagram.com/...",
+    styleNotes: "Catatan gaya & preferensi",
+    uploadInterior: "Upload foto kondisi ruangan saat ini, moodboard, atau denah bisa dilakukan setelah project dibuat, di halaman brief Anda.",
+    uploadWebsite: "Upload logo, aset brand, atau screenshot website lama bisa dilakukan setelah project dibuat, di halaman brief Anda.",
+    uploadDefault: "Upload logo, aset visual, atau file referensi bisa dilakukan setelah project dibuat, di halaman brief Anda.",
+    understanding: "Memahami kebutuhan project Anda…",
+    analyzingMarket: "Menganalisis target market…",
+    designingWorkflow: "Merancang workflow AI yang optimal…",
+    choosingDeliverables: "Memilih deliverable terbaik…",
+    preparingPlan: "Menyiapkan rencana project…",
+    analyzingTitle: "AI sedang menganalisis project Anda",
+    analysisDone: "Analisis selesai",
+    understandNeed: "Kami memahami kebutuhan Anda",
+    workflowIntro: "AI kami akan menjalankan workflow berikut untuk project",
+    workflowPlan: "AI Workflow Plan",
+    ai: "✓ AI",
+    choosePackage: "Pilih paket yang sesuai",
+    continueConfirmation: "Lanjut ke Konfirmasi",
+    confirmation: "Konfirmasi & mulai project",
+    confirmationDesc: "Tim kami akan meninjau kebutuhan Anda dan mengirimkan penawaran dalam 1×24 jam.",
+    summary: "Ringkasan Project",
+    category: "Kategori",
+    package: "Paket",
+    mainDeliverable: "Deliverable utama",
+    timeline: "Timeline",
+    flexible: "Fleksibel",
+    fullName: "Nama lengkap *",
+    yourName: "Nama Anda",
+    whatsapp: "WhatsApp (opsional)",
+    creating: "Membuat project…",
+    startMyProject: "Mulai Project Saya",
+    continue: "Lanjut",
+    analyzeAI: "Analisis AI",
+    homepage: "Beranda",
+    back: "Kembali",
+    skip: "Lewati — isi referensi nanti",
+    cancel: "Batal",
+    changePackage: "Ganti paket",
+    projectCreated: "Project Anda dibuat!",
+    redirecting: "Mengalihkan ke halaman brief…",
+    agreeContact: "Dengan melanjutkan, Anda menyetujui bahwa tim kami akan menghubungi Anda untuk diskusi lebih lanjut.",
+  },
+  en: {
+    detected: "Detected",
+    changeCategory: "Change category ↓",
+    close: "↑ Close",
+    projectCategory: "Project category",
+    projectDescription: "Describe your project *",
+    whatToCreate: "What to create",
+    whatDoYouWant: "What would you like to create?",
+    explainNeed: "Describe your needs. The more detail you provide, the more precise your AI workflow will be.",
+    projectProfile: "Your project profile",
+    tellBusiness: "Tell us about your business",
+    adaptWorkflow: "Our AI will tailor the workflow to your",
+    projectScale: " and project scale",
+    businessScale: " business profile.",
+    clientType: "Client / environment type",
+    industry: "Industry",
+    aboutRoom: "About the space & users",
+    aboutRoomDesc: "These details help our AI understand the scale and function of the space to be designed.",
+    targetMarket: "Who is your target market?",
+    targetMarketDesc: "Understanding your audience helps our AI create content that resonates.",
+    roomUsers: "Who will use this space most?",
+    audience: "Target audience description *",
+    geography: "Geographic reach",
+    projectLocation: "Project location",
+    projectGoal: "What is the goal of this project?",
+    projectGoalDesc: "A clear goal produces more focused deliverables.",
+    mainGoal: "Primary goal *",
+    completionTarget: "Target completion time",
+    referencesStyle: "References & style preferences",
+    optionalShare: "Optional — share visual references or a",
+    interiorDesigner: "interior designer",
+    brand: "brand",
+    referenceLink: "Reference links (website, Instagram, Behance, etc.)",
+    interiorReferenceLink: "Reference links (Pinterest, Houzz, Instagram, etc.)",
+    pasteLinks: "Paste one reference link per line. Example:\nhttps://www.pinterest.com/...\nhttps://www.instagram.com/...",
+    styleNotes: "Style notes & preferences",
+    uploadInterior: "You can upload current room photos, moodboards, or floor plans after the project is created, on your brief page.",
+    uploadWebsite: "You can upload your logo, brand assets, or old website screenshots after the project is created, on your brief page.",
+    uploadDefault: "You can upload your logo, visual assets, or reference files after the project is created, on your brief page.",
+    understanding: "Understanding your project needs…",
+    analyzingMarket: "Analyzing your target market…",
+    designingWorkflow: "Designing the optimal AI workflow…",
+    choosingDeliverables: "Selecting the best deliverables…",
+    preparingPlan: "Preparing your project plan…",
+    analyzingTitle: "AI is analyzing your project",
+    analysisDone: "Analysis complete",
+    understandNeed: "We understand what you need",
+    workflowIntro: "Our AI will run the following workflow for your",
+    workflowPlan: "AI Workflow Plan",
+    ai: "✓ AI",
+    choosePackage: "Choose the right package",
+    continueConfirmation: "Continue to Confirmation",
+    confirmation: "Confirm & start project",
+    confirmationDesc: "Our team will review your needs and send a quotation within 24 hours.",
+    summary: "Project Summary",
+    category: "Category",
+    package: "Package",
+    mainDeliverable: "Main deliverable",
+    timeline: "Timeline",
+    flexible: "Flexible",
+    fullName: "Full name *",
+    yourName: "Your name",
+    whatsapp: "WhatsApp (optional)",
+    creating: "Creating project…",
+    startMyProject: "Start My Project",
+    continue: "Continue",
+    analyzeAI: "Analyze with AI",
+    homepage: "Home",
+    back: "Back",
+    skip: "Skip — add references later",
+    cancel: "Cancel",
+    changePackage: "Change package",
+    projectCreated: "Your project is ready!",
+    redirecting: "Redirecting to your brief…",
+    agreeContact: "By continuing, you agree that our team may contact you to discuss your project.",
+  },
+};
+
+function startText(lang: Lang, key: string) {
+  return START_COPY[lang][key] ?? START_COPY.en[key] ?? key;
+}
 
 const CATEGORY_STYLE_PLACEHOLDER: Record<string, string> = {
   interior:          'Contoh: Konsep Japandi — kayu natural, linen krem, tanpa ornamen berlebihan. Hindari warna mencolok.',
@@ -175,6 +435,44 @@ const CATEGORY_STEP2: Record<string, {
   },
 };
 
+const CATEGORY_STEP2_EN: typeof CATEGORY_STEP2 = {
+  interior: {
+    profileLabel: "Studio / brand name (optional)",
+    profilePlaceholder: "Example: Santoso Family or ABC Interior Studio",
+    industryOptions: ["Private residence", "Hospitality (Hotel/Villa)", "F&B (Café/Restaurant)", "Office / Corporate", "Retail / Showroom", "Other"],
+    stageLabel: "Interior project type",
+    stageOptions: ["New project (empty space)", "Renovation (existing space)", "Redecoration (no structural changes)", "Showroom / display"],
+  },
+  website: {
+    profileLabel: "Business / brand name *",
+    profilePlaceholder: "Example: Budi's Design Course",
+    industryOptions: ["E-commerce / Online store", "Services & Consulting", "Technology / SaaS", "Education", "Media / Blog", "F&B", "Other"],
+    stageLabel: "Current website status",
+    stageOptions: ["No website yet", "Have a website, want a redesign", "Adding a new page", "Building a new version from scratch"],
+  },
+  social_media: {
+    profileLabel: "Brand / account name *",
+    profilePlaceholder: "Example: @coffee.nusantara",
+    industryOptions: ["F&B", "Fashion & Beauty", "Technology", "Education", "Lifestyle", "Retail", "Other"],
+    stageLabel: "Current account status",
+    stageOptions: ["New account (0–1k followers)", "Growing (1k–10k)", "Established (10k+)", "Large brand / corporate account"],
+  },
+  pitch_deck: {
+    profileLabel: "Startup / company name *",
+    profilePlaceholder: "Example: Finku Technologies",
+    industryOptions: ["Fintech", "Healthtech", "Edtech", "E-commerce", "SaaS / B2B", "Consumer Brand", "Other"],
+    stageLabel: "Funding stage",
+    stageOptions: ["Pre-seed / bootstrapped", "Seed", "Series A", "Series B+", "Established company"],
+  },
+  default: {
+    profileLabel: "Business / brand name *",
+    profilePlaceholder: "Example: Aurora Fashion Studio",
+    industryOptions: ["Fashion", "Retail", "F&B", "Technology", "Healthcare", "Property", "Education", "Services", "Other"],
+    stageLabel: "Business stage",
+    stageOptions: ["Just starting (0–1 year)", "Growing (1–3 years)", "Established (3+ years)", "Enterprise"],
+  },
+};
+
 const CATEGORY_STEP3: Record<string, { title: string; subtitle: string; audienceLabel: string; audiencePlaceholder: string }> = {
   interior: {
     title: "Tentang ruangan & pengguna",
@@ -190,6 +488,21 @@ const CATEGORY_STEP3: Record<string, { title: string; subtitle: string; audience
   },
 };
 
+const CATEGORY_STEP3_EN: typeof CATEGORY_STEP3 = {
+  interior: {
+    title: "About the space & users",
+    subtitle: "These details help our AI understand the scale and function of the space to be designed.",
+    audienceLabel: "Who will use this space most?",
+    audiencePlaceholder: "Example: A family with two children who eat together often and needs a six-person table. Semi-formal lifestyle.",
+  },
+  default: {
+    title: "Who is your target market?",
+    subtitle: "Understanding your audience helps our AI create content that resonates.",
+    audienceLabel: "Target audience description *",
+    audiencePlaceholder: "Example: Urban women aged 25–35, upper-middle income, interested in premium lifestyle and fashion.",
+  },
+};
+
 const CATEGORY_GOALS: Record<string, string[]> = {
   interior:           ["Desain hunian baru", "Renovasi ruangan", "Dekorasi ulang", "Desain kantor / komersial", "Showroom / display", "Lainnya"],
   website:            ["Buat website baru", "Redesign website lama", "Tambah fitur / halaman", "Optimalkan konversi", "Meningkatkan SEO", "Lainnya"],
@@ -198,6 +511,16 @@ const CATEGORY_GOALS: Record<string, string[]> = {
   ai_image:           ["Foto produk katalog", "Campaign editorial", "Konten media sosial", "Iklan digital", "Lookbook / portofolio", "Lainnya"],
   company_profile:    ["Presentasi ke investor", "Pitching klien korporat", "Rekrutmen & employer branding", "Rebranding perusahaan", "Anniversary / milestone", "Lainnya"],
   default:            ["Membangun brand baru", "Rebranding", "Meningkatkan penjualan", "Ekspansi pasar", "Peluncuran produk", "Meningkatkan awareness", "Lainnya"],
+};
+
+const CATEGORY_GOALS_EN: Record<string, string[]> = {
+  interior: ["New residential design", "Room renovation", "Redecoration", "Office / commercial design", "Showroom / display", "Other"],
+  website: ["Build a new website", "Redesign an old website", "Add a feature / page", "Optimize conversions", "Improve SEO", "Other"],
+  social_media: ["Consistent content", "Increase engagement", "Product / brand launch", "Build a community", "Lead generation", "Other"],
+  pitch_deck: ["Investor fundraising", "Partnership / MOU", "Internal presentation", "Demo Day / competition", "IPO / go public", "Other"],
+  ai_image: ["Product catalog photos", "Editorial campaign", "Social media content", "Digital advertising", "Lookbook / portfolio", "Other"],
+  company_profile: ["Investor presentation", "Corporate-client pitch", "Recruitment & employer branding", "Company rebrand", "Anniversary / milestone", "Other"],
+  default: ["Build a new brand", "Rebrand", "Increase sales", "Market expansion", "Product launch", "Increase awareness", "Other"],
 };
 
 /* ─────────────────────────────────────────────────────────

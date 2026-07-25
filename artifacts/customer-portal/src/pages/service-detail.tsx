@@ -19,6 +19,7 @@ import { RelatedServices } from "@/components/related-services";
 import { LiveAiPreview } from "@/components/live-ai-preview";
 import { ServiceWorkflow } from "@/components/service-workflow";
 import { useToast } from "@/hooks/use-toast";
+import { localizePackage, localizeService } from "@/lib/catalog-i18n";
 import {
   Loader2, ArrowLeft, CheckCircle2, Sparkles, Star, Clock, Shield,
   Zap, ChevronRight, Users, Award, Cpu, Package, Settings2,
@@ -113,7 +114,7 @@ function MobileStickyBar({
   submitting: boolean;
   addonTotal: number;
 }) {
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
   const [sheetOpen, setSheetOpen] = useState(false);
   const total = (breakdown?.total ?? Number(service.startingPrice)) + addonTotal;
   const currency = breakdown?.currency ?? service.currency;
@@ -248,7 +249,7 @@ export default function ServiceDetailPage() {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const { toast } = useToast();
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
 
   const { data: service, isLoading } = useServiceDetail(
     Number.isFinite(serviceId) ? serviceId : undefined,
@@ -369,6 +370,8 @@ export default function ServiceDetailPage() {
 
   if (isLoading || !service) return <DetailSkeleton />;
 
+  const displayService = localizeService(service, lang);
+  const displayPackages = service.packages.map((pkg) => localizePackage(pkg, service.serviceCode, lang));
   const currency = service.currency;
   const hasStats = showcase && showcase.stats.reviewCount > 0;
   const hasPortfolio = showcase && showcase.portfolios.length > 0;
@@ -376,8 +379,8 @@ export default function ServiceDetailPage() {
   const hasFaq = showcase?.faqs && showcase.faqs.length > 0;
   const hasRelated = showcase?.relatedServices && showcase.relatedServices.length > 0;
   // Split packages: standard tier picks vs service-level add-ons
-  const tierPackages = service.packages.filter(p => ['standard', 'pro', 'enterprise'].includes(p.packageType));
-  const addonPackages = service.packages.filter(p => p.packageType.startsWith('addon-'));
+  const tierPackages = displayPackages.filter(p => ['standard', 'pro', 'enterprise'].includes(p.packageType));
+  const addonPackages = displayPackages.filter(p => p.packageType.startsWith('addon-'));
   const hasPackages = tierPackages.length > 0;
   const hasAddonPackages = addonPackages.length > 0;
 
@@ -387,7 +390,7 @@ export default function ServiceDetailPage() {
     return sum + Number(pkg?.oneTimePrice ?? 0);
   }, 0);
 
-  const hasDeliverables = service.deliverables && service.deliverables.length > 0;
+  const hasDeliverables = displayService.deliverables && displayService.deliverables.length > 0;
 
   // ── Scroll helpers ───────────────────────────────────────────────────────────
   const scrollTo = (id: string) => {
@@ -480,12 +483,12 @@ export default function ServiceDetailPage() {
                 className="font-bold text-3xl md:text-4xl lg:text-5xl leading-tight text-[#F0F4FF]"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               >
-                {service.serviceName}
+                {displayService.serviceName}
               </h1>
 
               {/* Value proposition */}
               <p className="text-base text-[#8B9BC4] leading-relaxed max-w-xl">
-                {service.shortDescription || service.fullDescription.slice(0, 120) + "…"}
+                {displayService.shortDescription || displayService.fullDescription.slice(0, 120) + "…"}
               </p>
 
               {/* Stats row */}
@@ -637,7 +640,7 @@ export default function ServiceDetailPage() {
             {/* Overview */}
             <section id="overview">
               <SectionHead icon={LayoutGrid} title={t("serviceDetail.sections.overview")} />
-              <p className="text-base text-[#8B9BC4] leading-relaxed mb-6">{service.fullDescription}</p>
+              <p className="text-base text-[#8B9BC4] leading-relaxed mb-6">{displayService.fullDescription}</p>
             </section>
 
             {/* What You'll Receive */}
@@ -653,7 +656,7 @@ export default function ServiceDetailPage() {
                         {t("serviceDetail.sections.included")}
                       </p>
                       <ul className="space-y-3">
-                        {service.deliverables!.map((d, i) => (
+                        {displayService.deliverables!.map((d, i) => (
                           <li key={i} className="flex items-start gap-3 text-sm">
                             <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)" }}>
                               <Check className="w-3 h-3 text-emerald-400" />
