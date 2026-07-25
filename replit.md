@@ -3,6 +3,25 @@
 A full-stack AI-powered creative services platform for PT CST Logistic / cstlogistic.co.id. Customers submit creative project briefs; AI agents generate deliverables (branding, packaging, fashion design, company profiles, etc.). Staff manage jobs, quotations, invoices, and approvals through an internal admin portal.
 
 ## Architecture
+## Replit setup
+
+This repository is configured as a pnpm workspace with artifact-owned workflows.
+The customer portal is the primary preview at `/`; the internal dashboard is
+available at `/admin/`, and the API is served at `/api`.
+
+The post-merge setup is deterministic (`pnpm install --frozen-lockfile`) and
+validates the shared libraries plus API bundle before workflows are reconciled.
+For a fresh local setup, run:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm run typecheck:libs
+pnpm --filter @workspace/api-server run build
+```
+
+## Architecture
+A pnpm monorepo powering an AI-driven creative services platform for **CST Logistic / PT Cahaya Sejati Teknologi**.
+# Creative AI Studio — AI Platform (CST Logistic)
 
 pnpm monorepo with 6 artifacts:
 
