@@ -166,6 +166,12 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
   { method: "GET",  pattern: /^\/material-library\/categories$/ },
   { method: "GET",  pattern: /^\/material-library\/brands$/ },
   { method: "GET",  pattern: /^\/material-library\/\d+$/ },
+  // Phase 2 Material Intelligence — read-only search, suggestions, similar
+  // materials, and in-memory analytics for the selector and catalog browser.
+  { method: "GET",  pattern: /^\/material-library\/search$/ },
+  { method: "GET",  pattern: /^\/material-library\/suggestions$/ },
+  { method: "GET",  pattern: /^\/material-library\/\d+\/similar$/ },
+  { method: "GET",  pattern: /^\/material-library\/intelligence\/analytics$/ },
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {
