@@ -312,6 +312,97 @@ const LEGACY_ID_TRANSLATIONS: Record<string, string> = {
   "Cost (USD)": "Biaya (USD)",
   "Agent Performance": "Kinerja Agen",
   "Service Request Funnel": "Corong Permintaan Layanan",
+
+  // ── Service Catalog page (services.tsx) ────────────────────────────────
+  "AI Service Catalog": "Katalog Layanan AI",
+  "Browse every AI department's services and pricing — request work directly from here.":
+    "Jelajahi semua layanan dan harga departemen AI — minta pekerjaan langsung dari sini.",
+  "All categories": "Semua kategori",
+  "Loading services…": "Memuat layanan…",
+  "No services published in this category yet.": "Belum ada layanan yang dipublikasikan di kategori ini.",
+  "Human Review": "Tinjauan Manusia",
+  "AI Only": "Hanya AI",
+  "Subscription": "Langganan",
+  "Enterprise": "Enterprise",
+  "starting": "mulai dari",
+  "/mo": "/bln",
+
+  // ── Service Detail page (service-detail.tsx) ───────────────────────────
+  "Back to catalog": "Kembali ke katalog",
+  "Request this service": "Minta layanan ini",
+  "Loading service…": "Memuat layanan…",
+  "Service not found.": "Layanan tidak ditemukan.",
+  "Workflow": "Alur Kerja",
+  "Estimated time": "Estimasi waktu",
+  "AI employees involved": "Karyawan AI yang terlibat",
+  "Deliverables": "Hasil yang diserahkan",
+  "Revision policy": "Kebijakan revisi",
+  "Pricing options": "Opsi harga",
+  "No pricing packages published yet.": "Belum ada paket harga yang dipublikasikan.",
+  "Custom": "Kustom",
+  "Select": "Pilih",
+  "Your name": "Nama Anda",
+  "Company (optional)": "Perusahaan (opsional)",
+  "Notes for the AI Orchestrator (optional)": "Catatan untuk AI Orchestrator (opsional)",
+  "Submitting…": "Mengirim…",
+  "Submit request": "Kirim permintaan",
+  "Request submitted": "Permintaan terkirim",
+  "Our AI Orchestrator will route this to the right department shortly.":
+    "AI Orchestrator kami akan mengarahkan ini ke departemen yang tepat segera.",
+  "Request failed": "Permintaan gagal",
+  "Missing info": "Informasi kurang",
+  "Name and email are required.": "Nama dan email wajib diisi.",
+  "/yr": "/thn",
+
+  // ── DB category names (from seedCatalog.ts, displayed via c.name) ──────
+  "Brand & Identity": "Brand & Identitas",
+  "Content & Marketing": "Konten & Marketing",
+  "AI Visual Design": "Desain Visual AI",
+  "Presentation & Business Documents": "Presentasi & Dokumen Bisnis",
+  "Product & Commercial Design": "Desain Produk & Komersial",
+  "Specialized Design": "Desain Spesialis",
+  "Creative AI (Legacy)": "Creative AI (Lama)",
+  "Presentation & Document AI (Legacy)": "Presentasi & Dokumen AI (Lama)",
+  "Graphic Design AI (Legacy)": "Desain Grafis AI (Lama)",
+  "Marketing AI": "Marketing AI",
+  "Sales AI": "Sales AI",
+  "Finance AI": "Finance AI",
+  "Accounting AI": "Accounting AI",
+  "Tax AI": "Tax AI",
+  "HR & Payroll AI": "SDM & Penggajian AI",
+  "Executive AI": "Eksekutif AI",
+  "Customer Service AI": "Layanan Pelanggan AI",
+  "Logistics AI": "Logistik AI",
+  "Procurement AI": "Pengadaan AI",
+  "Customs & PPJK AI": "Bea Cukai & PPJK AI",
+
+  // ── DB category descriptions (visible in service catalog sidebar) ───────
+  "Legacy category retained for historical compatibility.":
+    "Kategori lama yang dipertahankan untuk kompatibilitas historis.",
+  "Legacy department retained for internal operations.":
+    "Departemen lama yang dipertahankan untuk operasi internal.",
+
+  // ── Commercial / funnel page labels ────────────────────────────────────
+  "Portfolio View": "Lihat Portofolio",
+  "Portfolio Open": "Buka Portofolio",
+  "Preview Start": "Mulai Pratinjau",
+  "Preview Complete": "Pratinjau Selesai",
+  "Package Select": "Pilih Paket",
+  "Checkout": "Pembayaran",
+  "Payment": "Pembayaran",
+  "Project Created": "Proyek Dibuat",
+  "Repeat Order": "Pesanan Ulang",
+  "Referral": "Referral",
+  "Deposit": "Deposit",
+
+  // ── Service request / payment status labels ────────────────────────────
+  "Verified": "Terverifikasi",
+  "Pending": "Menunggu",
+  "Rejected": "Ditolak",
+  "Paid": "Dibayar",
+  "Overdue": "Jatuh Tempo",
+  "Cancelled": "Dibatalkan",
+  "Refunded": "Dikembalikan",
 };
 
 function getLocaleTextMap(lang: Lang): Record<string, string> {
