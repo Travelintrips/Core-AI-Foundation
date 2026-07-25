@@ -26,6 +26,7 @@ import {
   useSendProjectQuotation,
   getProjectQuotationQueryKey,
   type CreativeProject,
+  type CreativeProjectDetail,
   type FeedbackEntry,
   type CreativeAiAsset,
   type ClientReview,
@@ -85,6 +86,10 @@ import {
   Eye,
   Trash2,
   Receipt,
+  Home,
+  Sofa,
+  Layers,
+  Lightbulb,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -131,6 +136,33 @@ const SPECIALIST_AGENTS = [
     capabilities: ["Spatial Concept", "Material Spec", "Client Proposal", "Style Direction"],
   },
 ];
+
+// ── Interior step detection ────────────────────────────────────────────────────
+
+/** Step names exclusively used by the Interior Design workflow */
+const INTERIOR_STEP_NAMES = new Set([
+  "Design Concept",
+  "Space Planning",
+  "Material Specification",
+  "Design Copy",
+  "Interior Quality Control",
+]);
+
+/** Derive the best-fit Lucide icon from a step name */
+function getStepIcon(stepName: string): typeof Zap {
+  const lower = stepName.toLowerCase();
+  if (lower.includes("concept") || lower.includes("architect")) return Layers;
+  if (lower.includes("space") || lower.includes("plan")) return Home;
+  if (lower.includes("material") || lower.includes("specification")) return Palette;
+  if (lower.includes("light")) return Lightbulb;
+  if (lower.includes("furniture") || lower.includes("placement") || lower.includes("sofa")) return Sofa;
+  if (lower.includes("quality") || lower.includes("control") || lower.includes("qc")) return ShieldCheck;
+  if (lower.includes("copy") || lower.includes("writing") || lower.includes("brief")) return FileText;
+  if (lower.includes("strategy") || lower.includes("brand")) return Zap;
+  if (lower.includes("direction") || lower.includes("creative") || lower.includes("color")) return Palette;
+  if (lower.includes("trend") || lower.includes("fashion") || lower.includes("collection")) return Sparkles;
+  return FileText;
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -445,7 +477,7 @@ function FeedbackBar({ projectId: _projectId, stepId, stepName, stepOutput, exis
 // ── Step Card ──────────────────────────────────────────────────────────────────
 
 interface StepCardProps {
-  stepDef: typeof PIPELINE_STEPS[0];
+  stepDef: { label: string; icon: typeof Zap };
   step?: {
     id?: number;
     status: string;
@@ -458,12 +490,13 @@ interface StepCardProps {
   };
   projectStatus: string;
   index: number;
+  totalSteps: number;
   projectId: string;
   stepFeedback: FeedbackEntry[];
   onFeedback: (data: Parameters<FeedbackBarProps["onSubmit"]>[0]) => Promise<void>;
 }
 
-function StepCard({ stepDef, step, projectStatus, index, projectId: _projectId, stepFeedback, onFeedback }: StepCardProps) {
+function StepCard({ stepDef, step, projectStatus, index, totalSteps, projectId: _projectId, stepFeedback, onFeedback }: StepCardProps) {
   const Icon = stepDef.icon;
   const effectiveStatus = step?.status ?? "pending";
   const isRunning = effectiveStatus === "running" || (projectStatus === "running" && !step);
@@ -504,7 +537,7 @@ function StepCard({ stepDef, step, projectStatus, index, projectId: _projectId, 
           </div>
           <div>
             <p className="text-sm font-medium font-mono">{stepDef.label}</p>
-            <p className="text-[10px] text-muted-foreground font-mono">Step {index + 1} of {PIPELINE_STEPS.length}</p>
+            <p className="text-[10px] text-muted-foreground font-mono">Step {index + 1} of {totalSteps}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -1453,6 +1486,87 @@ function QuotationSection({ projectId }: { projectId: string }) {
   );
 }
 
+// ── Interior Design Output ─────────────────────────────────────────────────────
+
+type CreativeStep = NonNullable<CreativeProjectDetail["steps"]>[number];
+
+/** Renders interior-specific output sections from creative_project_steps outputs.
+ *  Shows Moodboard, Space Plan, Materials, Design Copy, and QC sections when
+ *  the project ran the Interior Design workflow. */
+function InteriorDesignOutput({ steps }: { steps: CreativeStep[] }) {
+  const byName: Record<string, CreativeStep> = Object.fromEntries(steps.map((s) => [s.stepName, s]));
+
+  const conceptOut   = byName["Design Concept"]?.output ?? null;
+  const spacePlanOut = byName["Space Planning"]?.output ?? null;
+  const materialOut  = byName["Material Specification"]?.output ?? null;
+  const copyOut      = byName["Design Copy"]?.output ?? null;
+  const qcOut        = byName["Interior Quality Control"]?.output ?? null;
+
+  const hasAny = [conceptOut, spacePlanOut, materialOut, copyOut, qcOut].some(Boolean);
+  if (!hasAny) return null;
+
+  return (
+    <div className="mt-2 space-y-3">
+      <div className="flex items-center gap-2 mb-1">
+        <Home className="size-4 text-teal-400" />
+        <span className="font-mono text-sm font-semibold">Interior Design Output</span>
+      </div>
+
+      {/* Moodboard & Visual Concept */}
+      {conceptOut && (
+        <div className="border rounded-lg p-4 border-teal-500/20 bg-teal-500/5">
+          <h4 className="text-xs font-mono font-semibold text-teal-400 mb-3 flex items-center gap-1.5">
+            <Layers className="size-3.5" /> Moodboard &amp; Visual Concept
+          </h4>
+          {renderOutput(conceptOut as Record<string, unknown>)}
+        </div>
+      )}
+
+      {/* Space Plan */}
+      {spacePlanOut && (
+        <div className="border rounded-lg p-4 border-border/50 bg-muted/10">
+          <h4 className="text-xs font-mono font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
+            <Home className="size-3.5" /> Space Plan
+          </h4>
+          {renderOutput(spacePlanOut as Record<string, unknown>)}
+        </div>
+      )}
+
+      {/* Material Recommendations */}
+      {materialOut && (
+        <div className="border rounded-lg p-4 border-border/50 bg-muted/10">
+          <h4 className="text-xs font-mono font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
+            <Palette className="size-3.5" /> Material Recommendations
+          </h4>
+          {renderOutput(materialOut as Record<string, unknown>)}
+        </div>
+      )}
+
+      {/* Furniture Placement / Lighting from copy step */}
+      {copyOut && (
+        <div className="border rounded-lg p-4 border-border/50 bg-muted/10">
+          <h4 className="text-xs font-mono font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
+            <Sofa className="size-3.5" /> Design Copy &amp; Lighting Recommendations
+          </h4>
+          {renderOutput(copyOut as Record<string, unknown>)}
+        </div>
+      )}
+
+      {/* QC */}
+      {qcOut && (
+        <div className="border rounded-lg p-4 border-green-500/15 bg-green-500/5">
+          <h4 className="text-xs font-mono font-semibold text-green-400 mb-3 flex items-center gap-1.5">
+            <ShieldCheck className="size-3.5" /> Interior Quality Control
+          </h4>
+          {renderOutput(qcOut as Record<string, unknown>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Project Detail ─────────────────────────────────────────────────────────────
+
 function ProjectDetail({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -1602,7 +1716,8 @@ function ProjectDetail({ projectId }: { projectId: string }) {
     return <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm font-mono">Project not found</div>;
   }
 
-  const stepsByName = Object.fromEntries((project.steps ?? []).map((s) => [s.stepName, s]));
+  const dbSteps = project.steps ?? [];
+  const stepsByName = Object.fromEntries(dbSteps.map((s) => [s.stepName, s]));
 
   const feedbackByStep: Record<string, FeedbackEntry[]> = {};
   for (const fb of allFeedback) {
@@ -1612,7 +1727,19 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   }
 
   const isCompleted = project.status === "completed";
-  const hasBudgetBlocked = (project.steps ?? []).some((s) => (s.status as string) === "blocked_by_budget");
+  const hasBudgetBlocked = dbSteps.some((s) => (s.status as string) === "blocked_by_budget");
+
+  // Detect workflow type from stored step names — no backend schema change needed
+  const isInteriorDesign = dbSteps.some((s) => INTERIOR_STEP_NAMES.has(s.stepName));
+
+  // All concept steps completed → concept phase done; safe to generate images
+  const conceptWorkflowComplete = dbSteps.length > 0 && dbSteps.every((s) => s.status === "completed");
+
+  // "Generate Images" gate: concept done (or project already completed) and not currently running
+  const canGenerateImages = (isCompleted || conceptWorkflowComplete) && !generateImages.isPending;
+
+  // Step count for the "Step X of Y" counter in StepCard
+  const totalSteps = dbSteps.length > 0 ? dbSteps.length : PIPELINE_STEPS.length;
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -1635,7 +1762,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
         </div>
         <div className="flex flex-col items-end gap-1.5 shrink-0">
           <div className="flex items-center gap-2">
-            {isCompleted && (
+            {canGenerateImages && (
               <Button
                 variant="outline"
                 size="sm"
@@ -1692,25 +1819,52 @@ function ProjectDetail({ projectId }: { projectId: string }) {
               Workflow paused — per-workflow budget limit reached. Adjust guardrail settings to increase the limit.
             </div>
           )}
-          {PIPELINE_STEPS.map((def, i) => {
-            const dbName = STEP_NAME_MAP[def.slug];
-            const step = stepsByName[dbName];
-            return (
-              <StepCard
-                key={def.slug}
-                stepDef={def}
-                step={step}
-                projectStatus={project.status}
-                index={i}
-                projectId={projectId}
-                stepFeedback={feedbackByStep[dbName] ?? []}
-                onFeedback={handleFeedback}
-              />
-            );
-          })}
+          {/* ── Dynamic workflow steps from DB ───────────────────────── */}
+          {dbSteps.length > 0 ? (
+            // PHASE 1-2: Render real steps stored in creative_project_steps
+            dbSteps.map((s, i) => {
+              const stepDef = { label: s.stepName, icon: getStepIcon(s.stepName) };
+              return (
+                <StepCard
+                  key={s.id}
+                  stepDef={stepDef}
+                  step={s}
+                  projectStatus={project.status}
+                  index={i}
+                  totalSteps={totalSteps}
+                  projectId={projectId}
+                  stepFeedback={feedbackByStep[s.stepName] ?? []}
+                  onFeedback={handleFeedback}
+                />
+              );
+            })
+          ) : (
+            // Fallback: show PIPELINE_STEPS as pending placeholders for new projects
+            PIPELINE_STEPS.map((def, i) => {
+              const dbName = STEP_NAME_MAP[def.slug];
+              const step = stepsByName[dbName];
+              return (
+                <StepCard
+                  key={def.slug}
+                  stepDef={def}
+                  step={step}
+                  projectStatus={project.status}
+                  index={i}
+                  totalSteps={totalSteps}
+                  projectId={projectId}
+                  stepFeedback={feedbackByStep[dbName] ?? []}
+                  onFeedback={handleFeedback}
+                />
+              );
+            })
+          )}
+
+          {/* ── PHASE 3: Interior Design Output sections ─────────────── */}
+          {isInteriorDesign && <InteriorDesignOutput steps={dbSteps} />}
 
           {/* ── Image Concepts Section ────────────────────────────────── */}
-          {(isCompleted || assets.length > 0) && (
+          {/* Phase 5: show when concept workflow is done or assets already exist */}
+          {(isCompleted || conceptWorkflowComplete || assets.length > 0) && (
             <div className="mt-2 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1740,7 +1894,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
                       )}
                     </div>
                   )}
-                  {isCompleted && (
+                  {canGenerateImages && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1757,7 +1911,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
                 </div>
               </div>
 
-              {assets.length === 0 && isCompleted && !generateImages.isPending && (
+              {assets.length === 0 && (isCompleted || conceptWorkflowComplete) && !generateImages.isPending && (
                 <div className="border border-dashed border-border/40 rounded-lg p-8 flex flex-col items-center gap-3 text-center">
                   <div className="size-10 rounded-lg border border-border/40 bg-muted/20 flex items-center justify-center">
                     <Wand2 className="size-5 text-muted-foreground" />
