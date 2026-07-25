@@ -1,0 +1,137 @@
+Proceed to the final controlled verification phase: Generate Images runtime integration.
+
+OBJECTIVE
+
+Prove that Interior Design image generation uses the correct approved concept data and starts exactly once.
+
+Do not change the commercial lifecycle, workflow dispatcher, payment flow, or Fashion Design behavior.
+
+PHASE 1 — TRACE THE FULL CALL PATH
+
+Trace:
+
+POST /creative-ai/projects/:id/generate-image
+→ route handler
+→ runImageDesignerPipeline()
+→ Interior Design branch
+→ concept data loader
+→ prompt builder
+→ image provider call
+→ asset persistence
+
+Report exact files and functions.
+
+PHASE 2 — DATA SOURCE RULE
+
+For Interior Design, the image pipeline must use:
+
+1. approved snapshot fields when reviewState === approved_for_rendering:
+   - approvedSpacePlan
+   - approvedMaterials
+   - approvedFurniture
+   - approvedLighting
+   - approvedVisualConcept
+
+2. Do not use mutable draft fields once an approved snapshot exists.
+
+3. Do not fall back to original AI step outputs when an approved snapshot exists.
+
+4. If no approved snapshot exists:
+   - reject Generate Images with HTTP 409
+   - message:
+     "Interior Design concept must be approved for rendering before image generation."
+
+Do not silently generate from unapproved data.
+
+PHASE 3 — PROMPT VERIFICATION
+
+Create or expose a testable prompt-construction function.
+
+Prove that the generated image prompt contains:
+
+- approved visual concept
+- approved space plan
+- approved selected materials
+- approved furniture placement
+- approved lighting
+- project brief constraints
+
+Do not include stale original values that were replaced during editing.
+
+PHASE 4 — DUPLICATE JOB PROTECTION
+
+Verify that:
+
+- first Generate Images request starts one job
+- second concurrent request returns 409
+- refresh/retry does not create duplicate assets
+- existing idempotency or job lock is used
+- lock is released on success and failure
+
+PHASE 5 — RUNTIME E2E
+
+Use a real development Interior Design project.
+
+Demonstrate:
+
+1. initialize concept draft
+2. edit Space Planning
+3. edit at least one material
+4. edit furniture or lighting
+5. move to ready_for_review
+6. approve for rendering
+7. confirm approved snapshot contains edited values
+8. click Generate Images
+9. capture the actual prompt or structured provider input
+10. prove the edited approved values are present
+11. prove only one image generation job starts
+12. prove generated assets are linked to the correct project
+
+PHASE 6 — REVISION SAFETY
+
+After images are generated:
+
+1. request revision
+2. edit the draft
+3. confirm the old approved snapshot remains unchanged
+4. confirm Generate Images is blocked until the revised draft is approved again
+5. after re-approval, confirm the new snapshot replaces the render source for the next generation
+
+PHASE 7 — TESTS
+
+Add tests proving:
+
+1. unapproved Interior Design draft returns 409
+2. approved snapshot is used by prompt builder
+3. mutable draft is ignored when approved snapshot exists
+4. original AI output is ignored when approved snapshot exists
+5. duplicate concurrent generation is rejected
+6. project mismatch is rejected
+7. revision_requested blocks generation
+8. re-approved revision uses the new approved snapshot
+9. Fashion Design behavior remains unchanged
+10. standard non-Interior image generation remains unchanged
+
+Run:
+
+- targeted API tests
+- imageDesignerService tests
+- Interior Design workflow tests
+- typecheck
+- production build where available
+
+FINAL REPORT
+
+Return:
+
+- exact call path
+- exact render data source
+- prompt evidence
+- duplicate-job evidence
+- runtime project used
+- asset persistence evidence
+- revision-cycle evidence
+- tests/typecheck/build results
+- remaining limitations
+
+Do not declare success based only on a mocked prompt. Include live development runtime evidence.

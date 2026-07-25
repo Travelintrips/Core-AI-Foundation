@@ -73,8 +73,109 @@ const INTERIOR_STEP_NAMES = new Set([
   "Interior Quality Control",
 ]);
 
-function isInteriorDesignProject(steps: Array<{ stepName: string }>) {
+/** Exported for use by route guards. */
+export function isInteriorDesignProject(steps: Array<{ stepName: string }>) {
   return steps.some((s) => INTERIOR_STEP_NAMES.has(s.stepName));
+}
+
+// ── Testable data-resolution helper ──────────────────────────────────────────
+
+/**
+ * Resolves the render data source for an Interior Design image prompt.
+ *
+ * Priority (strict):
+ *   1. Approved snapshot (approvedSpacePlan / approvedMaterials / approvedFurniture /
+ *      approvedLighting / approvedVisualConcept) — used when reviewState is
+ *      "approved_for_rendering" and approvedAt is non-null.
+ *   2. Current mutable draft fields — used when a draft exists but is not approved.
+ *   3. Raw step outputs — last resort when no draft row exists at all.
+ *
+ * Mutable draft fields are NEVER used when an approved snapshot exists.
+ * Original step outputs are NEVER used when an approved snapshot exists.
+ */
+export function buildInteriorImagePromptContext(
+  draft: {
+    reviewState: string;
+    approvedAt: Date | null;
+    approvedVisualConcept: string | null;
+    approvedSpacePlan: unknown;
+    approvedMaterials: unknown;
+    approvedFurniture: unknown;
+    approvedLighting: unknown;
+    visualConceptDraft: string | null;
+    spacePlanDraft: unknown;
+    materialsDraft: unknown;
+    furnitureDraft: unknown;
+    lightingDraft: unknown;
+  } | null,
+  stepsByName: Record<string, unknown>,
+): {
+  visualConcept: string;
+  spacePlan: unknown;
+  materials: unknown;
+  furniture: unknown;
+  lighting: unknown;
+  renderSource: "approved_snapshot" | "draft" | "step_outputs";
+} {
+  const useApprovedSnapshot =
+    draft?.reviewState === "approved_for_rendering" && draft.approvedAt != null;
+
+  if (useApprovedSnapshot && draft) {
+    return {
+      visualConcept:  draft.approvedVisualConcept ?? "",
+      spacePlan:      draft.approvedSpacePlan  ?? {},
+      materials:      draft.approvedMaterials  ?? {},
+      furniture:      draft.approvedFurniture  ?? {},
+      lighting:       draft.approvedLighting   ?? {},
+      renderSource:   "approved_snapshot",
+    };
+  }
+
+  // Draft fields (mutable) — only when NOT approved
+  if (draft) {
+    const rawConcept = stepsByName["Design Concept"];
+    const fallbackConcept: string = (() => {
+      if (typeof rawConcept === "string") return rawConcept;
+      if (rawConcept && typeof rawConcept === "object") {
+        const co = rawConcept as Record<string, unknown>;
+        return typeof co["visualConcept"] === "string" ? co["visualConcept"]
+             : typeof co["concept"]       === "string" ? co["concept"]
+             : "";
+      }
+      return "";
+    })();
+
+    return {
+      visualConcept:  draft.visualConceptDraft ?? fallbackConcept,
+      spacePlan:      draft.spacePlanDraft  ?? stepsByName["Space Planning"]          ?? {},
+      materials:      draft.materialsDraft  ?? stepsByName["Material Specification"]  ?? {},
+      furniture:      draft.furnitureDraft  ?? stepsByName["Design Copy"]             ?? {},
+      lighting:       draft.lightingDraft   ?? stepsByName["Design Copy"]             ?? {},
+      renderSource:   "draft",
+    };
+  }
+
+  // Raw step outputs — no draft exists at all
+  const rawConcept = stepsByName["Design Concept"];
+  const visualConcept: string = (() => {
+    if (typeof rawConcept === "string") return rawConcept;
+    if (rawConcept && typeof rawConcept === "object") {
+      const co = rawConcept as Record<string, unknown>;
+      return typeof co["visualConcept"] === "string" ? co["visualConcept"]
+           : typeof co["concept"]       === "string" ? co["concept"]
+           : "";
+    }
+    return "";
+  })();
+
+  return {
+    visualConcept,
+    spacePlan:    stepsByName["Space Planning"]         ?? {},
+    materials:    stepsByName["Material Specification"] ?? {},
+    furniture:    stepsByName["Design Copy"]            ?? {},
+    lighting:     stepsByName["Design Copy"]            ?? {},
+    renderSource: "step_outputs",
+  };
 }
 
 // ── Interior Design Image Prompt Generator ────────────────────────────────────
@@ -104,34 +205,22 @@ async function generateInteriorImagePrompts(
   const systemPrompt =
     (agent.metadata as { systemPrompt?: string } | null)?.systemPrompt ?? "";
 
-  // ── Resolve data source: approved draft > latest draft > raw step outputs ──
+  // ── Resolve data source via canonical helper ──────────────────────────────
+  // RULE: approved snapshot is used when reviewState === "approved_for_rendering".
+  //       Mutable draft fields are NEVER used once an approved snapshot exists.
+  //       Raw step outputs are NEVER used once an approved snapshot exists.
   const draft = await getConceptDraftForImagePipeline(projectUuid);
   const byName = Object.fromEntries(steps.map((s) => [s.stepName, s.output]));
 
-  const visualConcept =
-    draft?.visualConceptDraft ??
-    (() => {
-      const co = byName["Design Concept"];
-      if (typeof co === "string") return co;
-      if (co && typeof co === "object") {
-        const c = co as Record<string, unknown>;
-        return typeof c["visualConcept"] === "string" ? c["visualConcept"]
-             : typeof c["concept"]       === "string" ? c["concept"]
-             : null;
-      }
-      return null;
-    })() ?? "";
-
-  const spacePlan = draft?.spacePlanDraft ?? byName["Space Planning"] ?? {};
-  const materials = draft?.materialsDraft ?? byName["Material Specification"] ?? {};
-  const designCopy = draft?.furnitureDraft ?? byName["Design Copy"] ?? {};
+  const ctx = buildInteriorImagePromptContext(draft, byName);
+  const { visualConcept, spacePlan, materials, furniture, lighting } = ctx;
 
   // Summarise space zones
   const zones: string[] = (() => {
     const sp = spacePlan as Record<string, unknown> | null;
     const rawZones = Array.isArray(sp?.["zones"]) ? (sp?.["zones"] as Array<Record<string, unknown>>) : [];
     return rawZones.slice(0, 5).map((z) =>
-      `${z["name"] ?? z["zone"] ?? "Zone"}: ${z["function"] ?? z["purpose"] ?? ""}`.trim(),
+      `${z["name"] ?? z["label"] ?? z["zone"] ?? "Zone"}: ${z["function"] ?? z["purpose"] ?? ""}`.trim(),
     ).filter(Boolean);
   })();
 
@@ -144,7 +233,23 @@ async function generateInteriorImagePrompts(
     ).filter(Boolean);
   })();
 
+  // Summarise lighting
+  const lightingSummary: string[] = (() => {
+    const lg = lighting as Record<string, unknown> | null;
+    if (!lg) return [];
+    const parts: string[] = [];
+    const ambient = lg["ambient"] as Record<string, unknown> | undefined;
+    const task_   = lg["task"]   as Record<string, unknown> | undefined;
+    const accent  = lg["accent"] as Record<string, unknown> | undefined;
+    if (ambient?.["type"])  parts.push(`Ambient: ${ambient["type"]} @ ${ambient["colorTemp"] ?? ""}`);
+    if (task_?.["type"])    parts.push(`Task: ${task_["type"]}`);
+    if (accent?.["type"])   parts.push(`Accent: ${accent["type"]}`);
+    return parts;
+  })();
+
   const userPrompt = `Generate ${numVariations} distinct interior visualization image prompts.
+
+DATA SOURCE: ${ctx.renderSource === "approved_snapshot" ? "APPROVED SNAPSHOT (admin-approved, immutable)" : ctx.renderSource === "draft" ? "CURRENT DRAFT" : "STEP OUTPUTS"}
 
 ROOM BRIEF:
 ${JSON.stringify(brief, null, 2)}
@@ -158,8 +263,11 @@ ${zones.length > 0 ? zones.join("\n") : "Open-plan layout"}
 SELECTED MATERIALS:
 ${matSummary.length > 0 ? matSummary.join(", ") : "Mix of natural and contemporary materials"}
 
-DESIGN NOTES:
-${JSON.stringify(designCopy, null, 2).slice(0, 800)}
+FURNITURE PLACEMENT:
+${JSON.stringify(furniture, null, 2).slice(0, 600)}
+
+LIGHTING DESIGN:
+${lightingSummary.length > 0 ? lightingSummary.join("; ") : JSON.stringify(lighting, null, 2).slice(0, 400)}
 
 Return a JSON array with EXACTLY ${numVariations} objects. Each must have:
 {
