@@ -2,6 +2,22 @@
 
 A full-stack monorepo for an AI-powered creative services platform used by CST Logistic.
 
+## Replit setup
+
+This repository is configured as a pnpm workspace with artifact-owned workflows.
+The customer portal is the primary preview at `/`; the internal dashboard is
+available at `/admin/`, and the API is served at `/api`.
+
+The post-merge setup is deterministic (`pnpm install --frozen-lockfile`) and
+validates the shared libraries plus API bundle before workflows are reconciled.
+For a fresh local setup, run:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm run typecheck:libs
+pnpm --filter @workspace/api-server run build
+```
+
 ## Architecture
 
 This is a pnpm workspace monorepo with six artifacts:
