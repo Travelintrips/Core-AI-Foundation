@@ -1,0 +1,187 @@
+Resume the interrupted Phase 1 remediation from the current working tree.
+
+Do not restart implementation.
+Do not begin Phase 2.
+Do not revert passing frontend work.
+Do not recreate files that already exist.
+
+Current verified state:
+
+- working tree contains the Phase 1 remediation changes
+- 36 frontend tests pass
+- categories endpoint passes
+- brands endpoint passes
+- material detail endpoint passes
+- GET /api/material-library returns 400 in existing and new tests
+- the failure is isolated to parseSearchParams() or its schema/constants
+- one priceTier validation mismatch also remains
+- quota expired while inspecting the exact thrown error
+
+========================================================
+STEP 1 — RECOVERY CHECK
+========================================================
+
+Run:
+
+1. git status --short
+2. git diff --stat
+3. list all files modified in the current remediation
+4. rerun only the failing catalog test with verbose output
+
+Do not modify anything until the exact error body and stack are captured.
+
+Capture and report:
+
+- HTTP status
+- response body
+- error code
+- validation issue path
+- thrown exception stack
+- exact query string used by the first failing test
+
+========================================================
+STEP 2 — DEBUG parseSearchParams()
+========================================================
+
+Inspect:
+
+- parseSearchParams()
+- the query schema
+- priceTier constants
+- status constants
+- sort constants
+- pagination coercion
+- Express req.query value types
+
+Check specifically for these common causes:
+
+1. optional query values being passed as undefined strings
+2. z.enum receiving an empty string
+3. z.coerce.number parsing undefined incorrectly
+4. arrays returned by Express query parser
+5. priceTier vocabulary mismatch:
+   - Standard
+   - Mid-range
+   - Premium
+   - Luxury
+6. default status being injected before validation
+7. sort default not included in the enum
+8. page/pageSize defaults applied in the wrong order
+9. a schema-level refinement failing when no filters are supplied
+10. request query object being parsed as a null-prototype object
+
+Add a focused unit test for:
+
+parseSearchParams({})
+
+Expected result:
+
+- page = 1
+- pageSize = the canonical default
+- status = active
+- no validation error
+
+Also test each query parameter independently.
+
+========================================================
+STEP 3 — FIX priceTier CONTRACT
+========================================================
+
+Identify the canonical database/API values.
+
+Do not mix editor display labels with API values.
+
+Use one canonical backend vocabulary and map only in the frontend where necessary.
+
+For example, if backend values are:
+
+- Budget
+- Standard
+- Premium
+- Luxury
+
+then the editor may display:
+
+- Budget
+- Mid-range
+- Premium
+- Luxury
+
+through normalizePriceTier(), but the API schema must accept the actual stored values.
+
+Add tests for all valid price tiers and one invalid value.
+
+========================================================
+STEP 4 — RESTORE CATALOG TESTS
+========================================================
+
+After fixing parseSearchParams(), rerun:
+
+- existing material-library-catalog tests
+- new default-active-filter tests
+- new authentication tests
+- pagination tests
+- sorting tests
+- price-tier tests
+
+Expected:
+
+- GET /api/material-library with no query returns 200
+- inactive records excluded by default
+- authenticated customer read succeeds
+- admin read succeeds
+- unauthenticated access follows the intended platform policy
+- seed endpoint remains admin-only
+- invalid query values return the expected validation status
+
+Do not change tests merely to match a broken route.
+
+========================================================
+STEP 5 — COMPLETE REMAINING VERIFICATION
+========================================================
+
+Once API tests pass, run:
+
+1. all Material Library tests
+2. all frontend selector/editor tests
+3. persistence tests
+4. approval snapshot tests
+5. image prompt tests
+6. targeted API server typecheck
+7. targeted AI platform typecheck
+8. production build
+
+Then perform the live walkthrough from the approved Phase 1 checklist.
+
+========================================================
+FINAL REPORT
+========================================================
+
+Report:
+
+- root cause of the 400 response
+- exact parseSearchParams fix
+- canonical priceTier vocabulary
+- files changed
+- final seed count
+- unique material-code count
+- category count
+- API test totals
+- frontend test totals
+- persistence and approval test results
+- image prompt test result
+- typecheck
+- build
+- live walkthrough
+- remaining pre-existing failures
+- git diff summary
+
+Only declare:
+
+CANONICAL MATERIAL LIBRARY PHASE 1 VERIFIED
+
+when all Phase 1 acceptance criteria pass.
+
+STOP.
+Do not begin Phase 2.
+Do not commit or push until reviewed.
