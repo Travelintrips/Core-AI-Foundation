@@ -62,23 +62,3 @@ PUBLIC_APP_URL = "https://aicore.cstlogistic.co.id"
 
 [nix]
 channel = "stable-25_05"
-
-[[ports]]
-localPort = 8080
-externalPort = 8080
-
-[[ports]]
-localPort = 8081
-externalPort = 8081
-
-[[ports]]
-localPort = 20404
-externalPort = 3000
-
-[[ports]]
-localPort = 20785
-externalPort = 3001
-
-[[ports]]
-localPort = 23434
-externalPort = 80
