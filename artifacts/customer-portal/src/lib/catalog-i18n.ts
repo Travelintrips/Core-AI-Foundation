@@ -14,29 +14,128 @@ type CategoryCopy = {
   description: string;
 };
 
+const CATALOG_TEXT: Record<string, Record<Lang, string>> = {
+  "Copy on-brand untuk caption, landing page, atau kampanye.": {
+    id: "Copy on-brand untuk caption, landing page, atau kampanye.",
+    en: "On-brand copy for captions, landing pages, or campaigns.",
+  },
+  "Desain konten sosial media on-brand per batch.": {
+    id: "Desain konten sosial media on-brand per batch.",
+    en: "On-brand social media content designs delivered in batches.",
+  },
+  "Campaign copy document": { id: "Dokumen copy kampanye", en: "Campaign copy document" },
+  "Product descriptions": { id: "Deskripsi produk", en: "Product descriptions" },
+  "Social captions": { id: "Caption media sosial", en: "Social captions" },
+  "Content ideas": { id: "Ide konten", en: "Content ideas" },
+  "Captions": { id: "Caption", en: "Captions" },
+  "Content calendar": { id: "Kalender konten", en: "Content calendar" },
+  "Editorial image set": { id: "Set gambar editorial", en: "Editorial image set" },
+  "Lookbook visuals": { id: "Visual lookbook", en: "Lookbook visuals" },
+  "Brand strategy document": { id: "Dokumen strategi brand", en: "Brand strategy document" },
+  "Consumer persona": { id: "Persona konsumen", en: "Consumer persona" },
+  "Market positioning": { id: "Positioning pasar", en: "Market positioning" },
+  "Interior mood board visuals": { id: "Visual mood board interior", en: "Interior mood board visuals" },
+  "Room atmosphere renders": { id: "Render suasana ruangan", en: "Room atmosphere renders" },
+  "Client proposal PDF": { id: "PDF proposal klien", en: "Client proposal PDF" },
+  "Scope of work": { id: "Ruang lingkup pekerjaan", en: "Scope of work" },
+  "Material specification": { id: "Spesifikasi material", en: "Material specification" },
+  "Brand guideline": { id: "Panduan brand", en: "Brand guideline" },
+  "Logo suite": { id: "Set logo", en: "Logo suite" },
+  "Visual identity system": { id: "Sistem identitas visual", en: "Visual identity system" },
+  "Pengerjaan standar": { id: "Pengerjaan standar", en: "Standard delivery" },
+  "Pengerjaan prioritas": { id: "Pengerjaan prioritas", en: "Priority delivery" },
+  "1 kali revisi": { id: "1 kali revisi", en: "1 revision round" },
+  "2 kali revisi": { id: "2 kali revisi", en: "2 revision rounds" },
+  "Termasuk review manusia": { id: "Termasuk review manusia", en: "Human review included" },
+  "Cakupan kustom": { id: "Cakupan kustom", en: "Custom scope" },
+  "Kapasitas departemen khusus": { id: "Kapasitas departemen khusus", en: "Dedicated department capacity" },
+  "Pengiriman bergaransi SLA": { id: "Pengiriman bergaransi SLA", en: "SLA-backed delivery" },
+  "Dukungan prioritas": { id: "Dukungan prioritas", en: "Priority support" },
+  "Copy document": { id: "Dokumen copy", en: "Copy document" },
+  "Image set": { id: "Set gambar", en: "Image set" },
+  "Print-ready PDF": { id: "PDF siap cetak", en: "Print-ready PDF" },
+  "PNG preview": { id: "Pratinjau PNG", en: "PNG preview" },
+  "Digital JPG": { id: "JPG digital", en: "Digital JPG" },
+  "Pitch deck (PDF/PPTX)": { id: "Pitch deck (PDF/PPTX)", en: "Pitch deck (PDF/PPTX)" },
+  "Proposal PDF": { id: "PDF proposal", en: "Proposal PDF" },
+  "Executive summary": { id: "Ringkasan eksekutif", en: "Executive summary" },
+  "Case study PDF": { id: "PDF studi kasus", en: "Case study PDF" },
+  "Product catalog PDF": { id: "PDF katalog produk", en: "Product catalog PDF" },
+  "Visual concept kemasan": { id: "Konsep visual kemasan", en: "Packaging visual concept" },
+  "Collection concept document": { id: "Dokumen konsep koleksi", en: "Collection concept document" },
+  "Brand narrative": { id: "Narasi brand", en: "Brand narrative" },
+  "Aesthetic direction guide": { id: "Panduan arah estetik", en: "Aesthetic direction guide" },
+  "Interior concept document": { id: "Dokumen konsep interior", en: "Interior concept document" },
+  "1 arah warna": { id: "1 arah warna", en: "1 color direction" },
+  "PNG/JPG concept": { id: "Konsep PNG/JPG", en: "PNG/JPG concept" },
+};
+
+const PACKAGE_NAME_COPY: Record<string, Record<Lang, string>> = {
+  "Konten Media Sosial Bulanan": { id: "Konten Media Sosial Bulanan", en: "Monthly Social Media Content" },
+  "Fashion Visual Campaign (AI Image)": { id: "Kampanye Visual Fashion (Gambar AI)", en: "Fashion Visual Campaign (AI Image)" },
+  "Fashion Campaign Copy": { id: "Copy Kampanye Fashion", en: "Fashion Campaign Copy" },
+  "Fashion Brand Strategy": { id: "Strategi Brand Fashion", en: "Fashion Brand Strategy" },
+  "Mood Board (AI Render)": { id: "Mood Board (Render AI)", en: "Mood Board (AI Render)" },
+  "Interior Client Proposal": { id: "Proposal Klien Interior", en: "Interior Client Proposal" },
+  "Interior Brand Identity": { id: "Identitas Brand Interior", en: "Interior Brand Identity" },
+};
+
+function localizeText(value: string, lang: Lang): string {
+  return CATALOG_TEXT[value]?.[lang] ?? value;
+}
+
+export function localizeDelivery(value: string | null | undefined, lang: Lang): string | null | undefined {
+  if (!value) return value;
+  if (lang === "en") {
+    return value
+      .replace(/\bhari\b/gi, "days")
+      .replace(/\bjam\b/gi, "hours")
+      .replace(/\bmenit\b/gi, "minutes")
+      .replace(/\bminggu\b/gi, "weeks")
+      .replace(/\bbulan\b/gi, "months");
+  }
+  return value
+    .replace(/\bdays?\b/gi, "hari")
+    .replace(/\bhours?\b/gi, "jam")
+    .replace(/\bminutes?\b/gi, "menit")
+    .replace(/\bweeks?\b/gi, "minggu")
+    .replace(/\bmonths?\b/gi, "bulan");
+}
+
+export function localizePaymentPolicy(policy: string, lang: Lang): string {
+  const key = policy.toLowerCase();
+  const copy: Record<string, Record<Lang, string>> = {
+    full_payment: { id: "Pembayaran penuh", en: "Full payment" },
+    deposit: { id: "Uang muka", en: "Deposit" },
+    subscription: { id: "Berlangganan", en: "Subscription" },
+    purchase_order: { id: "Purchase order", en: "Purchase order" },
+  };
+  return copy[key]?.[lang] ?? policy.replace(/_/g, " ");
+}
+
 const CATEGORY_COPY: Record<string, Record<Lang, CategoryCopy>> = {
   "brand-identity": {
-    id: { name: "Brand & Identity", description: "Bangun fondasi brand: logo, positioning, strategi, dan sistem identitas visual." },
+    id: { name: "Brand & Identitas", description: "Bangun fondasi brand: logo, positioning, strategi, dan sistem identitas visual." },
     en: { name: "Brand & Identity", description: "Build your brand foundation: logos, positioning, strategy, and a complete visual identity system." },
   },
   "content-marketing": {
-    id: { name: "Content & Marketing", description: "Copy, konten sosial, kampanye, dan materi edukasi yang siap dipublikasikan." },
+    id: { name: "Konten & Marketing", description: "Copy, konten sosial, kampanye, dan materi edukasi yang siap dipublikasikan." },
     en: { name: "Content & Marketing", description: "On-brand copy, social content, campaigns, and educational materials ready to publish." },
   },
   "ai-visual-design": {
-    id: { name: "AI Visual Design", description: "Visual AI untuk kampanye, sosial media, poster, banner, brosur, dan ilustrasi." },
+    id: { name: "Desain Visual AI", description: "Visual AI untuk kampanye, media sosial, poster, banner, brosur, dan ilustrasi." },
     en: { name: "AI Visual Design", description: "AI visuals for campaigns, social media, posters, banners, brochures, and illustrations." },
   },
   "presentation-documents": {
-    id: { name: "Presentation & Business Documents", description: "Pitch deck, company profile, proposal, laporan, dan dokumen bisnis profesional." },
+    id: { name: "Presentasi & Dokumen Bisnis", description: "Pitch deck, company profile, proposal, laporan, dan dokumen bisnis profesional." },
     en: { name: "Presentation & Business Documents", description: "Investor decks, company profiles, proposals, reports, and polished business documents." },
   },
   "product-commercial": {
-    id: { name: "Product & Commercial Design", description: "Katalog produk, product sheet, packaging, dan aset komersial yang konsisten." },
+    id: { name: "Desain Produk & Komersial", description: "Katalog produk, product sheet, packaging, dan aset komersial yang konsisten." },
     en: { name: "Product & Commercial Design", description: "Product catalogs, product sheets, packaging, and consistent commercial assets." },
   },
   "specialized-design": {
-    id: { name: "Specialized Design", description: "Konsep khusus untuk fashion dan interior dengan arahan visual yang lebih spesifik." },
+    id: { name: "Desain Khusus", description: "Konsep khusus untuk fashion dan interior dengan arahan visual yang lebih spesifik." },
     en: { name: "Specialized Design", description: "Specialist concepts for fashion and interiors with a more focused visual direction." },
   },
 };
@@ -221,59 +320,66 @@ const FAQ_COPY: Record<string, Record<Lang, { question: string; answer: string }
 
 export function localizeCategory(category: ServiceCategory, lang: Lang): ServiceCategory {
   const copy = CATEGORY_COPY[category.code]?.[lang];
-  return copy ? { ...category, name: copy.name, description: copy.description } : category;
+  const localized = copy ? { ...category, name: copy.name, description: copy.description } : category;
+  return {
+    ...localized,
+    ...(category.services?.length
+      ? { services: category.services.map((service) => localizeService(service, lang)) }
+      : {}),
+    ...(category.exampleOutputs?.length
+      ? { exampleOutputs: category.exampleOutputs.map((output) => localizeText(output, lang)) }
+      : {}),
+  };
 }
 
 export function localizeService(service: CatalogService, lang: Lang): CatalogService {
   const copy = SERVICE_COPY[service.serviceCode]?.[lang];
-  if (!copy) return service;
-  return {
-    ...service,
-    serviceName: copy.name,
-    shortDescription: copy.short,
-    fullDescription: copy.full ?? copy.short,
-    deliverables: copy.deliverables ?? service.deliverables,
-  };
+  const localized = copy
+    ? {
+        ...service,
+        serviceName: copy.name,
+        shortDescription: copy.short,
+        fullDescription: copy.full ?? copy.short,
+        deliverables: copy.deliverables ?? service.deliverables,
+      }
+    : service;
+  return { ...localized, estimatedDelivery: localizeDelivery(localized.estimatedDelivery, lang) ?? localized.estimatedDelivery };
 }
 
 export function localizePackage(pkg: ServicePackage, serviceCode: string, lang: Lang): ServicePackage {
+  const isAddon = pkg.packageType.startsWith("addon-");
   const features = (pkg.featuresJson ?? []).map((feature, index) => {
-    if (index === 0) {
+    if (index === 0 && !isAddon) {
       const copy = SERVICE_COPY[serviceCode]?.[lang];
       if (copy) return copy.short;
     }
-    const common: Record<string, string> = lang === "en"
-      ? {
-        "Pengerjaan standar": "Standard delivery",
-        "Pengerjaan prioritas": "Priority delivery",
-        "1 kali revisi": "1 revision round",
-        "2 kali revisi": "2 revision rounds",
-        "Termasuk review manusia": "Human review included",
-        "Cakupan kustom": "Custom scope",
-        "Kapasitas departemen khusus": "Dedicated department capacity",
-        "Pengiriman bergaransi SLA": "SLA-backed delivery",
-        "Dukungan prioritas": "Priority support",
-      }
-      : {
-        "Standard delivery": "Pengerjaan standar",
-        "Priority delivery": "Pengerjaan prioritas",
-        "1 revision round": "1 kali revisi",
-        "2 revision rounds": "2 kali revisi",
-        "Human review included": "Termasuk review manusia",
-        "Custom scope": "Cakupan kustom",
-        "Dedicated department capacity": "Kapasitas departemen khusus",
-        "SLA-backed delivery": "Pengiriman bergaransi SLA",
-        "Priority support": "Dukungan prioritas",
-      };
-    return common[feature] ?? feature;
+    return localizeText(feature, lang);
   });
   return {
     ...pkg,
-    packageName: lang === "en"
-      ? ({ Standard: "Standard", Pro: "Pro", Enterprise: "Enterprise" }[pkg.packageName] ?? pkg.packageName)
-      : pkg.packageName,
+    packageName: PACKAGE_NAME_COPY[pkg.packageName]?.[lang] ??
+      (lang === "en"
+        ? ({ Standard: "Standard", Pro: "Pro", Enterprise: "Enterprise" }[pkg.packageName] ?? pkg.packageName)
+        : pkg.packageName),
     featuresJson: features,
   };
+}
+
+/** Localizes API strings that are stored as labels instead of catalog objects. */
+export function localizeServiceLabel(serviceCode: string | null | undefined, fallback: string, lang: Lang): string {
+  const byCode = serviceCode ? SERVICE_COPY[serviceCode]?.[lang]?.name : undefined;
+  if (byCode) return byCode;
+  for (const copy of Object.values(SERVICE_COPY)) {
+    if (copy.id.name === fallback || copy.en.name === fallback) return copy[lang].name;
+  }
+  return fallback;
+}
+
+export function localizePackageLabel(fallback: string, lang: Lang): string {
+  return PACKAGE_NAME_COPY[fallback]?.[lang] ??
+    (lang === "en"
+      ? ({ Standard: "Standard", Pro: "Pro", Enterprise: "Enterprise" }[fallback] ?? fallback)
+      : fallback);
 }
 
 export function localizeFaq(faq: ServiceFaq, lang: Lang): ServiceFaq {

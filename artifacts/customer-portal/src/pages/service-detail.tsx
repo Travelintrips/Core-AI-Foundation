@@ -19,7 +19,7 @@ import { RelatedServices } from "@/components/related-services";
 import { LiveAiPreview } from "@/components/live-ai-preview";
 import { ServiceWorkflow } from "@/components/service-workflow";
 import { useToast } from "@/hooks/use-toast";
-import { localizePackage, localizeService } from "@/lib/catalog-i18n";
+import { localizePackage, localizePaymentPolicy, localizeService } from "@/lib/catalog-i18n";
 import {
   Loader2, ArrowLeft, CheckCircle2, Sparkles, Star, Clock, Shield,
   Zap, ChevronRight, Users, Award, Cpu, Package, Settings2,
@@ -469,12 +469,12 @@ export default function ServiceDetailPage() {
                 {service.humanReview && (
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-full border bg-emerald-500/10 text-emerald-400 border-emerald-500/30 flex items-center gap-1">
                     <Shield className="w-3 h-3" />
-                    Human Review
+                    {t("servicesBadge.humanReview")}
                   </span>
                 )}
                 <span className="text-xs font-semibold px-2.5 py-1 rounded-full border border-border text-[#8B9BC4] flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {service.estimatedDelivery}
+                  {displayService.estimatedDelivery}
                 </span>
               </div>
 
@@ -573,7 +573,7 @@ export default function ServiceDetailPage() {
                 <div className="space-y-1.5 mb-4">
                   {[
                     service.humanReview && t("serviceDetail.hero.humanReviewIncluded"),
-                    `${service.estimatedDelivery} ${t("serviceDetail.hero.standardDelivery")}`,
+                    `${displayService.estimatedDelivery} ${t("serviceDetail.hero.standardDelivery")}`,
                     service.serviceFlow === "fixed_price" && t("serviceDetail.hero.instantCheckout"),
                     service.serviceFlow !== "fixed_price" && t("serviceDetail.hero.customQuotation"),
                   ].filter(Boolean).map((item, i) => (
@@ -678,7 +678,7 @@ export default function ServiceDetailPage() {
                     <div className="p-5 sm:p-6 space-y-4">
                       <p className="text-xs font-bold text-[#8B9BC4] uppercase tracking-wider mb-4">{t("serviceDetail.sections.projectDetails")}</p>
                       {[
-                        { icon: Clock, label: t("serviceDetail.sections.deliveryTime"), value: service.estimatedDelivery },
+                         { icon: Clock, label: t("serviceDetail.sections.deliveryTime"), value: displayService.estimatedDelivery },
                         { icon: Globe, label: t("serviceDetail.sections.flowType"), value: flowLabel(service.serviceFlow, t) },
                         { icon: Shield, label: t("serviceDetail.sections.humanReview"), value: service.humanReview ? t("serviceDetail.sections.includedLabel") : t("serviceDetail.sections.notIncluded") },
                         { icon: RefreshCw, label: t("serviceDetail.sections.revisions"), value: t("serviceDetail.sections.perPackage") },
@@ -767,7 +767,7 @@ export default function ServiceDetailPage() {
                           )}
                           {p.paymentPolicy && (
                             <p className="text-[11px] text-[#8B9BC4] capitalize mb-3">
-                              {p.paymentPolicy.replace(/_/g, " ")}
+                              {localizePaymentPolicy(p.paymentPolicy, lang)}
                             </p>
                           )}
                           {p.featuresJson && p.featuresJson.length > 0 && (
@@ -880,10 +880,10 @@ export default function ServiceDetailPage() {
                   </p>
                   <div className="flex flex-wrap gap-2" role="group" aria-label="Delivery speed options">
                     {[
-                      { value: "",         label: `Standar (${service.estimatedDelivery})`, addl: "" },
-                      { value: "48h",      label: "Rush 48 Jam",  addl: "+biaya" },
-                      { value: "24h",      label: "Rush 24 Jam",  addl: "+biaya" },
-                      { value: "same_day", label: "Hari Sama",    addl: "+biaya" },
+                      { value: "",         label: `${t("serviceDetail.deliveryOptions.standard")} (${displayService.estimatedDelivery})`, addl: "" },
+                      { value: "48h",      label: t("serviceDetail.deliveryOptions.rush48"),  addl: t("serviceDetail.deliveryOptions.fee") },
+                      { value: "24h",      label: t("serviceDetail.deliveryOptions.rush24"),  addl: t("serviceDetail.deliveryOptions.fee") },
+                      { value: "same_day", label: t("serviceDetail.deliveryOptions.sameDay"), addl: t("serviceDetail.deliveryOptions.fee") },
                     ].map((opt) => {
                       const active = (selections.rushSpeed ?? "") === opt.value;
                       return (
