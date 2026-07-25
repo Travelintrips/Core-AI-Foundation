@@ -1,60 +1,73 @@
-# Creative AI Studio
+# Creative AI Studio — Enterprise Platform
 
-AI-powered creative agency platform for CST Logistic. Customers submit creative briefs, AI agents execute the work, and results flow through a commercial approval pipeline.
+An AI-powered creative services platform for managing client projects, AI-generated assets, and multi-tenant workflows. Built for **PT CST Logistic** (cstlogistic.co.id).
 
 ## Architecture
 
-pnpm monorepo with six artifacts:
+pnpm monorepo with multiple artifacts:
 
-| Artifact | Path | Preview | Description |
-|---|---|---|---|
-| Customer Portal | `artifacts/customer-portal` | `/` | Public-facing landing page + client workspace |
-| AI Platform (Admin) | `artifacts/ai-platform` | `/admin/` | Internal staff/admin portal |
-| API Server | `artifacts/api-server` | `/api` | Express + esbuild backend, Supabase DB |
-| Cargo Rate Finder | `artifacts/cargo-finder` | `/cargo-finder/` | Standalone cargo rate calculator |
-| Customer Mobile | `artifacts/customer-mobile` | `/mobile/` | Expo React Native app |
-| Mockup Sandbox | `artifacts/mockup-sandbox` | `/__mockup` | Design component preview server |
+| Artifact | Path | Preview |
+|---|---|---|
+| Customer Portal (public site) | `artifacts/customer-portal` | `/` |
+| Admin Dashboard (AI Platform) | `artifacts/ai-platform` | `/admin/` |
+| API Server (Express backend) | `artifacts/api-server` | `/api` |
+| Cargo Rate Finder | `artifacts/cargo-finder` | `/cargo-finder/` |
+| Mobile App (Expo) | `artifacts/customer-mobile` | `/mobile/` |
+| Mockup Sandbox (Canvas) | `artifacts/mockup-sandbox` | `/__mockup` |
 
-Shared libraries live in `lib/`: `api-spec`, `api-client-react`, `api-zod`, `db`, `design-components`, `design-workflow`.
+Shared libraries live in `lib/`:
+- `lib/db` — Drizzle ORM + Supabase Postgres
+- `lib/api-spec` — OpenAPI spec + Orval codegen
+- `lib/api-client-react` — Generated React Query hooks
+- `lib/api-zod` — Generated Zod schemas
+- `lib/design-components` — Shared UI components
 
-## How to run (development)
+## Running the Project
+
+All workflows start automatically. To restart any service:
 
 ```bash
-# Install all workspace dependencies (run once after clone/import)
+# Install dependencies (first time or after merge)
 pnpm install
 
-# Build shared TypeScript libraries (required before starting any service)
+# Build shared libraries
 pnpm run typecheck:libs
 
-# Start all services via the workflow buttons in the UI, or individually:
-pnpm --filter @workspace/api-server run dev       # API on port 8080
-pnpm --filter @workspace/ai-platform run dev      # Admin UI on port 20785
-pnpm --filter @workspace/customer-portal run dev  # Portal on port 23434
-pnpm --filter @workspace/cargo-finder run dev     # Cargo finder on port 20404
+# Build API server
+pnpm run build:api
+
+# Run all services via Replit workflows (managed automatically)
 ```
 
-The API server reads secrets from `.env.development` in dev (`--env-file` flag).
+The API server dev script builds and loads `.env.development` automatically:
+```bash
+pnpm --filter @workspace/api-server run dev
+```
 
-## Environment / Secrets
+## Environment Variables
 
-Non-secret config is in `.replit` under `[userenv]`. Secrets required (see `.env.example` for full list):
+All secrets are stored in Replit Secrets (shared/dev/prod environments). Key variables:
 
-- **Database**: `SUPABASE_DEV_DATABASE_URL`, `SUPABASE_DATABASE_URL` (prod)
-- **AI Providers**: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `REPLICATE_API_TOKEN`
-- **Auth**: `ADMIN_API_KEY`, `VITE_ADMIN_API_KEY` (same value, frontend needs the VITE_ prefix), `SESSION_SECRET`
-- **Email**: `SMTP_PASS`
-- **WhatsApp**: `FONNTE_TOKEN`
+- `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY` — Admin authentication
+- `SUPABASE_DEV_DATABASE_URL` / `SUPABASE_DATABASE_URL` — Database (dev/prod)
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, etc. — AI providers
+- `SESSION_SECRET` — Express session signing
+- `SMTP_*` — Email via Hostinger SMTP
+- `FONNTE_TOKEN` — WhatsApp notifications
 
-In development, all secrets are read from `.env.development` (not committed to production).
+See `.env.example` for the full list.
 
-## Key conventions
+## Database
 
-- Never import `zod` directly in `artifacts/api-server` routes — use `@workspace/api-zod` schemas only.
-- Run `pnpm run typecheck:libs` (`tsc --build`) before `pnpm typecheck` or the api-server typecheck; lib types must be compiled first.
-- Admin auth is a single global middleware mount (`adminAuthWithExceptions`) in `app.ts`, never per-route.
-- Route files omit the app-level `/api` prefix — it's added at mount time.
-- Database uses Supabase with `ai_platform` schema (not `public`); set `search_path` for raw SQL.
+Supabase Postgres with Drizzle ORM. Schema lives in the `ai_platform` schema (not `public`). Migrations are hand-written DDL (drizzle-kit push is not used in production — see memory notes).
 
-## User preferences
+Seed the database after a fresh setup:
+```bash
+pnpm --filter @workspace/api-server run seed
+```
 
-- Keep existing project structure and stack; do not restructure or migrate.
+## User Preferences
+
+- Keep the existing monorepo structure and stack
+- Do not migrate to a different database or ORM
+- Preserve all existing API contracts and route paths
