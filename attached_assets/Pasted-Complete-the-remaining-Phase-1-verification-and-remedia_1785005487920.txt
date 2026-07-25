@@ -1,0 +1,235 @@
+Complete the remaining Phase 1 verification and remediation only.
+
+Do not begin Phase 2.
+Do not add fuzzy search, semantic search, suggestions, similarity, analytics, AI recommendation, OCR, scraping, marketplace, suppliers, or ordering.
+
+========================================================
+1. FIX SEED ACCEPTANCE CRITERIA
+========================================================
+
+The current seed contains only 480 materials.
+
+Increase it to at least 500 valid materials.
+
+Verify:
+
+- total materials >= 500
+- exactly 13 intended categories
+- all materialCode values are unique
+- no placeholder or duplicate records
+- seed remains idempotent
+- no destructive truncation
+
+Add automated assertions for these requirements.
+
+========================================================
+2. FIX DEFAULT ACTIVE FILTER
+========================================================
+
+Inspect the actual repository query.
+
+GET /api/material-library must exclude inactive materials by default.
+
+Required behavior:
+
+- no status parameter → active records only
+- status=active → active records
+- status=inactive → inactive records only, only when caller has appropriate permission
+- invalid status → validation error
+
+Add tests proving inactive records are not returned by the default customer-facing catalog search.
+
+Do not claim inactive exclusion unless the repository query explicitly enforces it.
+
+========================================================
+3. FIX AUTHENTICATION CONTRACT
+========================================================
+
+The MaterialSelectorDialog is used by the customer-facing Interior Design editor.
+
+Do not require an admin API key for normal catalog reads.
+
+Use the canonical existing authentication convention:
+
+- customer/portal authenticated users may read catalog list, categories, brands, and detail
+- admin users may also read them
+- seed and future mutation endpoints remain admin-only
+
+Required endpoints:
+
+GET /api/material-library
+GET /api/material-library/categories
+GET /api/material-library/brands
+GET /api/material-library/:id
+
+Admin-only:
+
+POST /api/material-library/seed
+
+Do not make the endpoints anonymously public unless the existing platform architecture explicitly uses a public catalog middleware.
+
+Fix the 14 failing API tests using the real intended middleware behavior.
+Do not bypass authentication merely by hard-coding a test key.
+
+========================================================
+4. ADD MISSING FRONTEND TESTS
+========================================================
+
+Add tests for InteriorDesignEditor and MaterialSelectorDialog:
+
+1. Browse Library button is rendered
+2. Clicking it opens the selector
+3. Selector receives the row category as an initial filter
+4. Selecting a material fills:
+   - source
+   - libraryMaterialId
+   - materialCode
+   - materialType
+   - name
+   - brand
+   - category
+   - subcategory
+   - color
+   - finish
+   - description
+   - priceTier
+   - thumbnailUrl
+   - previewImages
+   - technicalData
+5. User can edit populated values afterward
+6. Clear Library removes library identity without deleting edited detail values
+7. Add Material creates a custom material
+8. Existing legacy materials without library fields still render
+9. Only one MaterialSelectorDialog instance is mounted
+
+========================================================
+5. ADD PERSISTENCE AND APPROVAL TESTS
+========================================================
+
+Add integration tests proving:
+
+Material selection
+→ saveDraft
+→ materialsDraft JSONB
+→ reload
+→ same library fields restored
+→ approved_for_rendering
+→ approvedMaterials snapshot contains the same fields
+
+Verify that no second draft store is involved.
+
+========================================================
+6. VERIFY IMAGE PROMPT CONTENT
+========================================================
+
+Use an approved material fixture containing:
+
+- name
+- brand
+- component
+- color
+- finish
+- texture
+- description
+- thumbnailUrl
+- libraryMaterialId
+
+Generate the final Interior Design image prompt.
+
+Assert that the prompt contains useful visual fields:
+
+- material name
+- component/location
+- color
+- finish
+- texture
+- brand only when visually useful
+
+Assert that it does not expose:
+
+- libraryMaterialId
+- thumbnail URL
+- preview URL
+- raw JSON
+- internal technical keys
+
+If the current prompt builder does not produce this behavior, make the smallest backward-compatible change necessary.
+
+========================================================
+7. OPTIMIZE STARTUP SEEDING
+========================================================
+
+Do not run 500+ upserts on every server boot.
+
+Use a safe guard:
+
+- check whether the material catalog is empty or below the expected baseline
+- seed only when needed
+
+Alternatively, use the canonical explicit seed command if that is the established repository convention.
+
+Database unavailability must remain non-blocking for application startup, with clear logging.
+
+========================================================
+8. FULL VERIFICATION
+========================================================
+
+Run:
+
+- all Material Library repository/service/API tests
+- all MaterialSelectorDialog tests
+- all InteriorDesignEditor tests
+- concept draft persistence tests
+- approval snapshot tests
+- image prompt tests
+- targeted TypeScript checks
+- production build
+
+Perform live runtime verification:
+
+1. Open an Interior Design draft
+2. Add a material row
+3. Open Browse Library
+4. Search and filter materials
+5. Select a material
+6. Edit one populated field
+7. Save
+8. Reload the page
+9. Confirm all fields remain
+10. Approve for rendering
+11. Inspect approvedMaterials
+12. Generate the final image prompt
+13. Confirm useful material attributes appear in the prompt
+14. Confirm no internal URL or ID appears
+
+========================================================
+FINAL REPORT
+========================================================
+
+Report:
+
+- exact final seed count
+- exact unique code count
+- category count
+- default active-filter evidence
+- authentication decision and middleware used
+- API test results
+- frontend test results
+- persistence test result
+- approval snapshot evidence
+- final generated prompt excerpt
+- typecheck result
+- build result
+- live walkthrough result
+- git diff summary
+- remaining pre-existing errors
+
+Only declare:
+
+CANONICAL MATERIAL LIBRARY PHASE 1 VERIFIED
+
+when all Phase 1 acceptance criteria pass.
+
+STOP.
+Do not begin Phase 2.
+Do not commit or push until reviewed.
