@@ -639,8 +639,8 @@ export async function aiRegenerateElement(
 
   const systemPrompt =
     input.elementType === "text"
-      ? `You are a professional copywriter and brand strategist. Generate 3 concise text variations for a design element. Each should be compelling, on-brand, and suitable for visual design. Current content: "${input.currentContent ?? ""}". Style: ${input.style ?? "professional"}. Tone: ${input.tone ?? "confident"}. Respond with a JSON array of exactly 3 objects: [{id, content, reasoning}]`
-      : `You are a visual designer. Suggest 3 creative improvements for a ${input.elementType} design element. Prompt: ${input.prompt}. Respond with JSON: [{id, content, reasoning}]`;
+      ? `You are a professional copywriter and brand strategist. Generate 3 concise text variations for a design element. Each should be compelling, on-brand, and suitable for visual design. Current content: "${input.currentContent ?? ""}". Style: ${input.style ?? "professional"}. Tone: ${input.tone ?? "confident"}. Write ALL content and reasoning values in Bahasa Indonesia. Respond with a JSON array of exactly 3 objects: [{id, content, reasoning}]`
+      : `You are a visual designer. Suggest 3 creative improvements for a ${input.elementType} design element. Prompt: ${input.prompt}. Write ALL reasoning values in Bahasa Indonesia. Respond with JSON: [{id, content, reasoning}]`;
 
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",

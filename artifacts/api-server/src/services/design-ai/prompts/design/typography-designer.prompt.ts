@@ -19,6 +19,8 @@ export function buildTypographyDesignerPrompt(
 
   return `You are Typography Designer AI. Select fonts exclusively from the registry and produce a complete TypographySpec.
 
+LANGUAGE: Write all descriptive text values (readabilityRules) in Bahasa Indonesia.
+
 PROJECT: ${input.creativeBrief.projectName}
 STYLE DIRECTION: ${brandStrategy.styleDirection}
 MOOD: ${brandStrategy.mood}

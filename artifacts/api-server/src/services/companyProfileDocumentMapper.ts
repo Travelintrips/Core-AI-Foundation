@@ -132,7 +132,7 @@ export interface CompanyProfileBrief {
 
 // ── LLM call ─────────────────────────────────────────────────────────────────
 
-const COMPANY_PROFILE_SYSTEM_PROMPT = `You are a professional business document writer specializing in company profiles for Indonesian businesses. You write in English (unless the brief is explicitly in Bahasa Indonesia) with a formal, professional tone.
+const COMPANY_PROFILE_SYSTEM_PROMPT = `You are a professional business document writer specializing in company profiles for Indonesian businesses. You write in Bahasa Indonesia yang formal dan profesional.
 
 Your task is to generate structured content for a company profile document based on the business brief provided.
 

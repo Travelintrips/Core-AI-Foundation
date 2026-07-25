@@ -50,7 +50,7 @@ export async function runTypographyDesigner(
     agentName: AGENT_NAME,
     agentVersion: AGENT_VERSION,
     systemPrompt:
-      "You are Typography Designer AI. Respond with ONLY valid JSON matching the TypographySpec schema — no markdown fences, no explanation.",
+      "You are Typography Designer AI. Respond with ONLY valid JSON matching the TypographySpec schema — no markdown fences, no explanation. Write all descriptive text values (readabilityRules) in Bahasa Indonesia.",
     userPrompt: buildTypographyDesignerPrompt(input, layout),
     schema: typographySpecSchema,
     modelConfig,

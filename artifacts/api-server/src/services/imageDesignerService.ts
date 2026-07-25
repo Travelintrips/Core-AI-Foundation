@@ -565,7 +565,7 @@ Scoring:
 Respond with ONLY valid JSON:
 {
   "score": <integer 1-100>,
-  "notes": "<2-3 sentences: what works, what could be improved — explicitly mention any garbled/gibberish text if present>",
+  "notes": "<2-3 kalimat dalam Bahasa Indonesia: apa yang berhasil, apa yang bisa diperbaiki — sebutkan secara eksplisit teks yang rusak/tidak terbaca jika ada>",
   "brand_alignment": "<pass|warning|fail>",
   "visual_clarity": "<pass|warning|fail>",
   "text_legible": "<pass|warning|fail|not_applicable>",
@@ -1288,18 +1288,19 @@ REVISION INSTRUCTION (what the client wants changed):
 ${revisionNote}
 
 Only adjust the parts the client asked to change. Keep the same brand, mood, and overall style. Output 60–150 words for the revised prompt.
+IMPORTANT: "prompt" and "negativePrompt" values MUST stay in English (required by image generation models).
 
 Respond with ONLY valid JSON (no markdown):
 {
-  "prompt": "<revised prompt>",
-  "negativePrompt": "<comma-separated negatives>",
+  "prompt": "<revised prompt in English>",
+  "negativePrompt": "<comma-separated negatives in English>",
   "aspectRatio": "${aspectRatio ?? "1:1"}"
 }`;
 
   try {
     const output = await executeAI({
       prompt: userPrompt,
-      systemPrompt: "You are an expert image prompt engineer for AI diffusion models. Respond only with valid JSON.",
+      systemPrompt: "You are an expert image prompt engineer for AI diffusion models. Respond only with valid JSON. IMPORTANT: The 'prompt' and 'negativePrompt' fields must stay in English (required by image generation models). All other descriptive text fields must be in Bahasa Indonesia.",
       model,
       provider,
       temperature: 0.6,

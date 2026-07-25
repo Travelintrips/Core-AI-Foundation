@@ -42,7 +42,7 @@ export async function runDecorationDesigner(
     agentName: AGENT_NAME,
     agentVersion: AGENT_VERSION,
     systemPrompt:
-      "You are Decoration Designer AI. Respond with ONLY valid JSON matching the DecorationSpec schema — no markdown fences, no explanation.",
+      "You are Decoration Designer AI. Respond with ONLY valid JSON matching the DecorationSpec schema — no markdown fences, no explanation. Write all descriptive text values (purpose) in Bahasa Indonesia.",
     userPrompt: buildDecorationDesignerPrompt(input, layout, composition, colors),
     schema: decorationSpecSchema,
     modelConfig,

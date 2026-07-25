@@ -777,7 +777,7 @@ Return ONLY JSON (no markdown):
 
     const step = await runLlmStep(
       "brand-strategist",
-      "You are a senior Brand Strategist creating fictional demo brand concepts for an AI creative agency portfolio showcase. Output strict JSON only — no markdown, no commentary.",
+      "You are a senior Brand Strategist creating fictional demo brand concepts for an AI creative agency portfolio showcase. Output strict JSON only — no markdown, no commentary. Anda WAJIB menulis SEMUA nilai teks (tagline, shortDescription, fullDescription, businessType, targetMarket) dalam Bahasa Indonesia yang baik dan profesional.",
       userPrompt, 0.85, 800,
     );
     totalCost += step.cost;
