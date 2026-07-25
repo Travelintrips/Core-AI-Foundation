@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { InteriorDesignEditor } from "@/components/interior-design/InteriorDesignEditor";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateCreativeBrief,
@@ -1687,6 +1688,12 @@ function ProjectDetail({ projectId }: { projectId: string }) {
     });
   };
 
+  // Interior Design approval state — must be declared before early returns (Rules of Hooks)
+  const [conceptApproved, setConceptApproved] = useState(false);
+  const handleConceptReadyStateChange = useCallback((approved: boolean) => {
+    setConceptApproved(approved);
+  }, []);
+
   const handleExportMarkdown = async () => {
     if (!project) return;
     setExporting(true);
@@ -1735,8 +1742,12 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   // All concept steps completed → concept phase done; safe to generate images
   const conceptWorkflowComplete = dbSteps.length > 0 && dbSteps.every((s) => s.status === "completed");
 
-  // "Generate Images" gate: concept done (or project already completed) and not currently running
-  const canGenerateImages = (isCompleted || conceptWorkflowComplete) && !generateImages.isPending;
+  // "Generate Images" gate: concept done (or completed) AND, for interior design,
+  // concept draft must be approved for rendering before images can run.
+  const canGenerateImages =
+    (isCompleted || conceptWorkflowComplete) &&
+    (!isInteriorDesign || isCompleted || conceptApproved) &&
+    !generateImages.isPending;
 
   // Step count for the "Step X of Y" counter in StepCard
   const totalSteps = dbSteps.length > 0 ? dbSteps.length : PIPELINE_STEPS.length;
@@ -1861,6 +1872,17 @@ function ProjectDetail({ projectId }: { projectId: string }) {
 
           {/* ── PHASE 3: Interior Design Output sections ─────────────── */}
           {isInteriorDesign && <InteriorDesignOutput steps={dbSteps} />}
+
+          {/* ── Interior Design Concept Approval ─────────────────────── */}
+          {/* Must be approved before "Generate Images" unlocks */}
+          {isInteriorDesign && conceptWorkflowComplete && (
+            <div className="mt-2">
+              <InteriorDesignEditor
+                projectUuid={projectId}
+                onReadyStateChange={handleConceptReadyStateChange}
+              />
+            </div>
+          )}
 
           {/* ── Image Concepts Section ────────────────────────────────── */}
           {/* Phase 5: show when concept workflow is done or assets already exist */}

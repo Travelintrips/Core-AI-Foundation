@@ -1026,7 +1026,9 @@ export async function runImageDesignerPipeline(
   let promptGenTokens: number;
 
   try {
-    const result = await generateImagePrompts(brief, brandStrategy, creativeDirection, maxVariations);
+    const result = isInteriorDesignProject(steps)
+      ? await generateInteriorImagePrompts(projectUuid, steps, brief, maxVariations)
+      : await generateImagePrompts(brief, brandStrategy, creativeDirection, maxVariations);
     imagePrompts = result.prompts;
     promptGenLatency = result.latencyMs;
     promptGenTokens = result.tokensUsed;
