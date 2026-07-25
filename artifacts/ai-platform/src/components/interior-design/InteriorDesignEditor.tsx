@@ -45,7 +45,12 @@ import {
   ArrowUp,
   ArrowDown,
   AlertTriangle,
+  BookOpen,
 } from "lucide-react";
+import {
+  MaterialSelectorDialog,
+  type LibraryMaterial,
+} from "@/components/material-library/MaterialSelectorDialog";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -101,6 +106,15 @@ interface MaterialItem {
   priceTier: string;
   notes: string;
   status: "selected" | "rejected" | "pending";
+  // Library enrichment — optional for backward compat with existing stored data
+  source?: "custom" | "material_library";
+  libraryMaterialId?: number | null;
+  name?: string;
+  subcategory?: string;
+  description?: string;
+  thumbnailUrl?: string;
+  previewImages?: string[];
+  technicalData?: Record<string, unknown>;
 }
 
 interface FurnitureItem {
@@ -201,6 +215,14 @@ const STATE_COLORS: Record<ReviewState, string> = {
   approved_for_rendering: "bg-green-500/10 text-green-400 border-green-500/20",
 };
 
+// ── Helpers for library integration ──────────────────────────────────────────
+
+/** Map library price tiers to editor tiers (Standard → Mid-range). */
+function normalizePriceTier(tier: string): string {
+  if (tier === "Standard") return "Mid-range";
+  return tier;
+}
+
 // ── Sub-editors ───────────────────────────────────────────────────────────────
 
 function SpacePlanEditor({ zones, onChange }: { zones: SpaceZone[]; onChange: (z: SpaceZone[]) => void }) {
@@ -246,10 +268,54 @@ function SpacePlanEditor({ zones, onChange }: { zones: SpaceZone[]; onChange: (z
 
 function MaterialEditor({ items, onChange }: { items: MaterialItem[]; onChange: (v: MaterialItem[]) => void }) {
   const [newCategory, setNewCategory] = useState("Floor");
+  const [dialogOpenForId, setDialogOpenForId] = useState<string | null>(null);
+
+  const dialogItem = dialogOpenForId ? (items.find((m) => m.id === dialogOpenForId) ?? null) : null;
+
   const update = (id: string, field: keyof MaterialItem, value: string) =>
     onChange(items.map((m) => m.id === id ? { ...m, [field]: value } : m));
   const remove = (id: string) => onChange(items.filter((m) => m.id !== id));
-  const add = () => onChange([...items, { id: uid(), area: newCategory, component: "", category: newCategory, materialType: "", color: "", finish: "", texture: "", brand: "", productCode: "", priceTier: "Mid-range", notes: "", status: "pending" }]);
+  const add = () => onChange([...items, {
+    id: uid(), area: newCategory, component: "", category: newCategory, materialType: "",
+    color: "", finish: "", texture: "", brand: "", productCode: "", priceTier: "Mid-range",
+    notes: "", status: "pending",
+    source: "custom" as const, libraryMaterialId: null,
+    name: "", subcategory: "", description: "", thumbnailUrl: "", previewImages: [], technicalData: {},
+  }]);
+
+  /** Populate a row from a library selection. */
+  const applyLibraryMaterial = (itemId: string, lib: LibraryMaterial) => {
+    onChange(items.map((item) =>
+      item.id !== itemId ? item : {
+        ...item,
+        source:            "material_library" as const,
+        libraryMaterialId: lib.id,
+        name:              lib.name,
+        materialType:      lib.materialType ?? item.materialType,
+        brand:             lib.brand        ?? item.brand,
+        category:          lib.category,
+        subcategory:       lib.subcategory  ?? "",
+        color:             lib.color        ?? item.color,
+        finish:            lib.finish       ?? item.finish,
+        texture:           lib.texture      ?? item.texture,
+        description:       lib.description  ?? "",
+        priceTier:         normalizePriceTier(lib.priceTier),
+        thumbnailUrl:      lib.thumbnailUrl ?? "",
+        productCode:       lib.materialCode,
+        previewImages:     [],
+        technicalData:     {},
+      },
+    ));
+  };
+
+  /** Reset a row back to a blank custom entry. */
+  const clearLibrary = (itemId: string) =>
+    onChange(items.map((item) =>
+      item.id !== itemId ? item : {
+        ...item, source: "custom" as const, libraryMaterialId: null,
+        name: "", thumbnailUrl: "", subcategory: "", description: "",
+      },
+    ));
 
   return (
     <div className="space-y-2">
@@ -260,18 +326,74 @@ function MaterialEditor({ items, onChange }: { items: MaterialItem[]; onChange: 
         </Select>
         <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 shrink-0" onClick={add}><Plus className="size-3" /> Add</Button>
       </div>
+
       {items.map((m) => (
         <div key={m.id} className="border border-border/50 rounded-lg p-3 space-y-2 bg-muted/5">
-          <div className="flex items-center gap-2 justify-between">
-            <Badge variant="outline" className={cn("text-[10px] px-1.5 h-4 font-mono", m.status === "selected" ? "text-green-400 border-green-500/30" : m.status === "rejected" ? "text-red-400 border-red-500/30" : "text-muted-foreground")}>{m.area}</Badge>
-            <div className="flex gap-1">
+          {/* Row header: area badge + Browse Library + status + delete */}
+          <div className="flex items-center gap-2 justify-between flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <Badge
+                variant="outline"
+                className={cn("text-[10px] px-1.5 h-4 font-mono",
+                  m.status === "selected" ? "text-green-400 border-green-500/30"
+                  : m.status === "rejected" ? "text-red-400 border-red-500/30"
+                  : "text-muted-foreground",
+                )}
+              >{m.area}</Badge>
+              {m.source === "material_library" && (
+                <Badge variant="outline" className="text-[10px] px-1.5 h-4 font-mono text-teal-400 border-teal-500/30">
+                  Library
+                </Badge>
+              )}
+            </div>
+            <div className="flex gap-1 items-center">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-5 text-[10px] px-2 gap-1 border-border/50 text-muted-foreground hover:text-foreground shrink-0"
+                onClick={() => setDialogOpenForId(m.id)}
+              >
+                <BookOpen className="size-2.5" /> Browse Library
+              </Button>
               <Select value={m.status} onValueChange={(v) => update(m.id, "status", v)}>
                 <SelectTrigger className="h-5 text-[10px] px-1.5 w-24 border-border/50"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="pending" className="text-xs">Pending</SelectItem><SelectItem value="selected" className="text-xs">Selected</SelectItem><SelectItem value="rejected" className="text-xs">Rejected</SelectItem></SelectContent>
+                <SelectContent>
+                  <SelectItem value="pending"  className="text-xs">Pending</SelectItem>
+                  <SelectItem value="selected" className="text-xs">Selected</SelectItem>
+                  <SelectItem value="rejected" className="text-xs">Rejected</SelectItem>
+                </SelectContent>
               </Select>
-              <Button variant="ghost" size="icon" className="size-6 text-destructive hover:text-destructive" onClick={() => remove(m.id)}><Trash2 className="size-3" /></Button>
+              <Button variant="ghost" size="icon" className="size-6 text-destructive hover:text-destructive" onClick={() => remove(m.id)}>
+                <Trash2 className="size-3" />
+              </Button>
             </div>
           </div>
+
+          {/* Library-sourced material summary card */}
+          {m.source === "material_library" && m.name && (
+            <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-teal-500/5 border border-teal-500/15">
+              {m.thumbnailUrl && (
+                <img src={m.thumbnailUrl} alt={m.name} className="w-8 h-8 rounded object-cover shrink-0 border border-border/30" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-foreground truncate">{m.name}</p>
+                <p className="text-[10px] text-muted-foreground truncate">
+                  {[m.category, m.subcategory].filter(Boolean).join(" › ")}
+                  {m.productCode ? ` · ${m.productCode}` : ""}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 text-[10px] px-1.5 text-muted-foreground shrink-0"
+                onClick={() => clearLibrary(m.id)}
+              >
+                Clear
+              </Button>
+            </div>
+          )}
+
+          {/* Editable fields — populated by library selection; user can modify freely */}
           <div className="grid grid-cols-2 gap-2">
             <div><Label className="text-[10px]">Component / Area</Label><Input className="h-7 text-xs mt-0.5" value={m.component} onChange={(e) => update(m.id, "component", e.target.value)} placeholder="e.g. Main floor" /></div>
             <div>
@@ -279,7 +401,9 @@ function MaterialEditor({ items, onChange }: { items: MaterialItem[]; onChange: 
               <Select value={m.materialType || ""} onValueChange={(v) => update(m.id, "materialType", v)}>
                 <SelectTrigger className="h-7 text-xs mt-0.5"><SelectValue placeholder="Select…" /></SelectTrigger>
                 <SelectContent>
-                  {(MATERIAL_CATEGORIES[m.category] ?? MATERIAL_CATEGORIES["Other"]).map((t) => <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>)}
+                  {(MATERIAL_CATEGORIES[m.category] ?? MATERIAL_CATEGORIES["Other"]).map((t) => (
+                    <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -297,6 +421,17 @@ function MaterialEditor({ items, onChange }: { items: MaterialItem[]; onChange: 
           <div><Label className="text-[10px]">Notes</Label><Input className="h-7 text-xs mt-0.5" value={m.notes} onChange={(e) => update(m.id, "notes", e.target.value)} placeholder="Additional notes…" /></div>
         </div>
       ))}
+
+      {/* Single shared dialog instance — opens for whichever row triggered it */}
+      <MaterialSelectorDialog
+        open={dialogOpenForId !== null}
+        onOpenChange={(open) => { if (!open) setDialogOpenForId(null); }}
+        initialCategory={dialogItem?.category}
+        onSelect={(lib) => {
+          if (dialogOpenForId) applyLibraryMaterial(dialogOpenForId, lib);
+          setDialogOpenForId(null);
+        }}
+      />
     </div>
   );
 }
@@ -425,7 +560,13 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
     if (!draft) return;
     setLocalConcept(draft.visualConceptDraft ?? "");
     setLocalZones(parseZones(draft.spacePlanDraft));
-    setLocalMaterials(parseItems<MaterialItem>(draft.materialsDraft, { id: "", area: "Floor", component: "", category: "Floor", materialType: "", color: "", finish: "", texture: "", brand: "", productCode: "", priceTier: "Mid-range", notes: "", status: "pending" }));
+    setLocalMaterials(parseItems<MaterialItem>(draft.materialsDraft, {
+      id: "", area: "Floor", component: "", category: "Floor", materialType: "",
+      color: "", finish: "", texture: "", brand: "", productCode: "", priceTier: "Mid-range",
+      notes: "", status: "pending",
+      source: "custom", libraryMaterialId: null, name: "", subcategory: "",
+      description: "", thumbnailUrl: "", previewImages: [], technicalData: {},
+    }));
     setLocalFurniture(parseItems<FurnitureItem>(draft.furnitureDraft, { id: "", item: "", zone: "", quantity: "1", dimensions: "", notes: "" }));
     setLocalLighting(parseItems<LightingItem>(draft.lightingDraft, { id: "", zone: "", lightingType: "", fixtureType: "", colorTemperature: "3000K – Warm Neutral", purpose: "Ambient", quantity: "1", notes: "" }));
     setEditMode(true);
@@ -711,12 +852,24 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
               <MaterialEditor items={localMaterials} onChange={setLocalMaterials} />
             ) : (
               <div className="space-y-1.5">
-                {parseItems<MaterialItem>(draft.materialsDraft, { id: "", area: "", component: "", category: "", materialType: "", color: "", finish: "", texture: "", brand: "", productCode: "", priceTier: "", notes: "", status: "pending" }).map((m, i) => (
+                {parseItems<MaterialItem>(draft.materialsDraft, {
+                  id: "", area: "", component: "", category: "", materialType: "",
+                  color: "", finish: "", texture: "", brand: "", productCode: "",
+                  priceTier: "", notes: "", status: "pending",
+                  source: "custom", libraryMaterialId: null, name: "", subcategory: "",
+                  description: "", thumbnailUrl: "", previewImages: [], technicalData: {},
+                }).map((m, i) => (
                   <div key={i} className="border border-border/30 rounded p-2.5 text-xs flex items-start gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="font-semibold">{m.area || m.category}</span>
+                    {m.thumbnailUrl && (
+                      <img src={m.thumbnailUrl} alt={m.name ?? ""} className="w-10 h-10 rounded object-cover shrink-0 border border-border/30 mt-0.5" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                        <span className="font-semibold">{m.name || m.area || m.category}</span>
                         {m.component && <span className="text-muted-foreground">/ {m.component}</span>}
+                        {m.source === "material_library" && (
+                          <Badge className="text-[9px] h-3.5 px-1 bg-teal-500/10 text-teal-400 border border-teal-500/20">Library</Badge>
+                        )}
                         {m.status === "selected" && <Badge className="text-[9px] h-3.5 px-1 bg-green-500/10 text-green-400 border-green-500/20">Selected</Badge>}
                         {m.status === "rejected" && <Badge className="text-[9px] h-3.5 px-1 bg-red-500/10 text-red-400 border-red-500/20">Rejected</Badge>}
                       </div>
@@ -725,7 +878,12 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
                     </div>
                   </div>
                 ))}
-                {parseItems<MaterialItem>(draft.materialsDraft, { id:"",area:"",component:"",category:"",materialType:"",color:"",finish:"",texture:"",brand:"",productCode:"",priceTier:"",notes:"",status:"pending" }).length === 0 && (
+                {parseItems<MaterialItem>(draft.materialsDraft, {
+                  id:"",area:"",component:"",category:"",materialType:"",color:"",finish:"",
+                  texture:"",brand:"",productCode:"",priceTier:"",notes:"",status:"pending",
+                  source:"custom",libraryMaterialId:null,name:"",subcategory:"",
+                  description:"",thumbnailUrl:"",previewImages:[],technicalData:{},
+                }).length === 0 && (
                   <p className="text-xs text-muted-foreground italic">No materials specified.</p>
                 )}
               </div>
