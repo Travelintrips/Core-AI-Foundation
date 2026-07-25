@@ -23,16 +23,14 @@ pnpm --filter @workspace/api-server run build
 A pnpm monorepo powering an AI-driven creative services platform for **CST Logistic / PT Cahaya Sejati Teknologi**.
 # Creative AI Studio — AI Platform (CST Logistic)
 
-pnpm monorepo with 6 artifacts:
+pnpm monorepo with 4 registered artifacts:
 
 | Artifact | Preview Path | Port | Purpose |
 |---|---|---|---|
 | `artifacts/customer-portal` | `/` | 23434 | Public-facing customer site (Indonesian) |
 | `artifacts/ai-platform` | `/admin/` | 20785 | Internal staff / admin portal |
 | `artifacts/api-server` | `/api` | 8080 | Express + Drizzle ORM backend |
-| `artifacts/cargo-finder` | `/cargo-finder/` | 20404 | Cargo rate calculator tool |
-| `artifacts/customer-mobile` | `/mobile/` | — | Expo React Native mobile app |
-| `artifacts/mockup-sandbox` | `/__mockup` | — | Component preview dev tool |
+| `artifacts/mockup-sandbox` | `/__mockup` | 8081 | Component preview dev tool |
 
 ## How to run
 
@@ -41,15 +39,13 @@ All workflows start automatically. To restart individually:
 - **API Server**: `pnpm --filter @workspace/api-server run dev`
 - **Admin Portal**: `pnpm --filter @workspace/ai-platform run dev`
 - **Customer Portal**: `pnpm --filter @workspace/customer-portal run dev`
-- **Cargo Finder**: `pnpm --filter @workspace/cargo-finder run dev`
-- **Customer Mobile**: `pnpm --filter @workspace/customer-mobile run dev`
 - **Component Preview Server**: `pnpm --filter @workspace/mockup-sandbox run dev`
 
 ## Setup verification
 
 The imported lockfile installs successfully with `pnpm install --frozen-lockfile`.
-All six configured workflows start successfully, the four web previews return
-HTTP 200, and the API health checks pass at `/api/healthz` and
+All four configured workflows start successfully, the customer and admin
+previews render, and the API health check passes at `/api/healthz` and
 `/api/healthz/full`.
 
 The focused typechecks for the frontend, mobile, preview, and scripts packages
