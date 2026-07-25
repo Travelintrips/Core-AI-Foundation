@@ -157,6 +157,22 @@ export const idConceptDraftsTable = appSchema.table("id_concept_drafts", {
   reviewState: text("review_state").notNull().default("ai_generated"),
   hasUnsavedEdits: boolean("has_unsaved_edits").notNull().default(false),
 
+  // ── Approved snapshot (immutable — captured on transition to approved_for_rendering) ──
+  // These columns are written once per approval cycle and never overwritten by draft edits.
+  // After a revision is requested, they survive as a record of what was last approved.
+  approvedSpacePlan:     jsonb("approved_space_plan"),
+  approvedMaterials:     jsonb("approved_materials"),
+  approvedFurniture:     jsonb("approved_furniture"),
+  approvedLighting:      jsonb("approved_lighting"),
+  approvedVisualConcept: text("approved_visual_concept"),
+  approvedAt:            timestamp("approved_at", { withTimezone: true }),
+  approvedBy:            text("approved_by"),
+
+  // ── Revision tracking (populated by requestRevision()) ────────────────────
+  revisionRequestedBy:  text("revision_requested_by"),
+  revisionRequestedAt:  timestamp("revision_requested_at", { withTimezone: true }),
+  revisionReason:       text("revision_reason"),
+
   // Audit
   lastEditedBy: text("last_edited_by"),
   lastEditedAt: timestamp("last_edited_at", { withTimezone: true }),

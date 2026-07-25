@@ -497,6 +497,33 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
     setSaving(false);
   };
 
+  // ── Request revision (unlock from approved_for_rendering) ─────────────────
+
+  const requestRevision = async () => {
+    if (!draft) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/ai/interior-design/drafts/${projectUuid}/request-revision`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ editorId: "admin" }),
+      });
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        toast({ title: err.error ?? "Failed to request revision", variant: "destructive" });
+        setSaving(false);
+        return;
+      }
+      const data = await res.json() as { draft: ConceptDraft };
+      setDraft(data.draft);
+      toast({ title: "Concept unlocked — you can now edit and re-approve" });
+      onReadyStateChange?.(false, false);
+    } catch (e) {
+      toast({ title: String(e), variant: "destructive" });
+    }
+    setSaving(false);
+  };
+
   // ── Reset to original ──────────────────────────────────────────────────────
 
   const resetSection = async (section: string) => {
@@ -568,8 +595,8 @@ export function InteriorDesignEditor({ projectUuid, onReadyStateChange }: Interi
                 </Button>
               )}
               {isApproved && (
-                <Button variant="outline" size="sm" className="h-6 gap-1 text-[10px] font-mono border-orange-500/30 text-orange-400 hover:bg-orange-500/10" onClick={() => void setReviewState("revision_requested")} disabled={saving}>
-                  Revision Requested
+                <Button variant="outline" size="sm" className="h-6 gap-1 text-[10px] font-mono border-orange-500/30 text-orange-400 hover:bg-orange-500/10" onClick={() => void requestRevision()} disabled={saving}>
+                  <RotateCcw className="size-3" /> Request Revision
                 </Button>
               )}
             </>

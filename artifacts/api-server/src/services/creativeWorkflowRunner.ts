@@ -24,6 +24,7 @@ import {
   creativeProjectsTable,
   creativeProjectStepsTable,
   aiAgentsTable,
+  aiServiceRequestsTable,
 } from "@workspace/db";
 import { executeAI, type ExecutionInput, type ExecutionOutput, type ObservabilityContext } from "./aiExecutionService.js";
 import { getProviderApiKey } from "./aiSecretService.js";
@@ -377,6 +378,18 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
   // Phase 4.5: Read guardrails once at start
   const guardrails = await readGuardrails();
 
+  // Fetch briefJson from the linked service request.
+  // creativeProjectsTable has no brief_json column — the brief payload lives on
+  // ai_service_requests. Legacy projects with no serviceRequestId get an empty map.
+  let srBriefJson: Record<string, string> = {};
+  if (project.serviceRequestId != null) {
+    const [svcReq] = await db
+      .select({ briefJson: aiServiceRequestsTable.briefJson })
+      .from(aiServiceRequestsTable)
+      .where(eq(aiServiceRequestsTable.id, project.serviceRequestId));
+    srBriefJson = (svcReq?.briefJson as Record<string, string>) ?? {};
+  }
+
   // Mark project as running
   await db
     .update(creativeProjectsTable)
@@ -397,7 +410,7 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
     const guardrails = await readGuardrails();
     const { stepOutputs, anyFailed } = await runFashionDesignWorkflow(
       { id: project.id, projectId: project.projectId, brandName: project.brandName, targetMarket: project.targetMarket, stylePreference: project.stylePreference, goal: project.goal, notes: project.notes },
-      (project.briefJson as Record<string, string>) ?? {},
+      srBriefJson,
       { maxCostPerWorkflow: guardrails.maxCostPerWorkflow, maxRetries: 2, timeoutMs: 120000 },
     );
     const aggregatedResult = {
@@ -424,7 +437,7 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
     const guardrails = await readGuardrails();
     const { stepOutputs, anyFailed } = await runInteriorDesignWorkflow(
       { id: project.id, projectId: project.projectId, brandName: project.brandName, targetMarket: project.targetMarket, stylePreference: project.stylePreference, goal: project.goal, notes: project.notes },
-      (project.briefJson as Record<string, string>) ?? {},
+      srBriefJson,
       { maxCostPerWorkflow: guardrails.maxCostPerWorkflow, maxRetries: 2, timeoutMs: 120000 },
     );
     const aggregatedResult = {

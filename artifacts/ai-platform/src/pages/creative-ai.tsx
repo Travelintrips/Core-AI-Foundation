@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { InteriorDesignEditor } from "@/components/interior-design/InteriorDesignEditor";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateCreativeBrief,
@@ -41,6 +42,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -279,6 +281,7 @@ function renderOutput(output: Record<string, unknown> | null | undefined) {
 const EMPTY_FORM = {
   brandName: "", businessType: "", targetMarket: "",
   productOrService: "", stylePreference: "", goal: "", notes: "",
+  language: "id",
 };
 
 interface BriefFormProps {
@@ -328,9 +331,23 @@ function BriefForm({ onSubmit, isLoading, onCancel }: BriefFormProps) {
           <Input id="stylePreference" placeholder="e.g. Minimalist, earthy, premium" className="h-8 text-sm font-mono" {...field("stylePreference")} />
         </div>
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="notes" className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Additional Notes</Label>
-        <Textarea id="notes" rows={2} placeholder="Any extra context, constraints, or inspiration..." className="text-sm font-mono resize-none" {...field("notes")} />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Bahasa Output <span className="text-red-400">*</span></Label>
+          <Select value={form.language} onValueChange={(v) => setForm((prev) => ({ ...prev, language: v }))}>
+            <SelectTrigger className="h-8 text-sm font-mono">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="id" className="font-mono text-sm">🇮🇩 Bahasa Indonesia</SelectItem>
+              <SelectItem value="en" className="font-mono text-sm">🇬🇧 English</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="notes" className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Additional Notes</Label>
+          <Textarea id="notes" rows={1} placeholder="Context tambahan, constraint, inspirasi..." className="text-sm font-mono resize-none" {...field("notes")} />
+        </div>
       </div>
       <div className="flex items-center gap-2 pt-1">
         <Button type="submit" disabled={!required || isLoading} className="gap-2 font-mono">
@@ -1687,6 +1704,12 @@ function ProjectDetail({ projectId }: { projectId: string }) {
     });
   };
 
+  // Interior Design approval state — must be declared before early returns (Rules of Hooks)
+  const [conceptApproved, setConceptApproved] = useState(false);
+  const handleConceptReadyStateChange = useCallback((approved: boolean) => {
+    setConceptApproved(approved);
+  }, []);
+
   const handleExportMarkdown = async () => {
     if (!project) return;
     setExporting(true);
@@ -1735,8 +1758,12 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   // All concept steps completed → concept phase done; safe to generate images
   const conceptWorkflowComplete = dbSteps.length > 0 && dbSteps.every((s) => s.status === "completed");
 
-  // "Generate Images" gate: concept done (or project already completed) and not currently running
-  const canGenerateImages = (isCompleted || conceptWorkflowComplete) && !generateImages.isPending;
+  // "Generate Images" gate: concept done (or completed) AND, for interior design,
+  // concept draft must be approved for rendering before images can run.
+  const canGenerateImages =
+    (isCompleted || conceptWorkflowComplete) &&
+    (!isInteriorDesign || isCompleted || conceptApproved) &&
+    !generateImages.isPending;
 
   // Step count for the "Step X of Y" counter in StepCard
   const totalSteps = dbSteps.length > 0 ? dbSteps.length : PIPELINE_STEPS.length;
@@ -1861,6 +1888,17 @@ function ProjectDetail({ projectId }: { projectId: string }) {
 
           {/* ── PHASE 3: Interior Design Output sections ─────────────── */}
           {isInteriorDesign && <InteriorDesignOutput steps={dbSteps} />}
+
+          {/* ── Interior Design Concept Approval ─────────────────────── */}
+          {/* Must be approved before "Generate Images" unlocks */}
+          {isInteriorDesign && conceptWorkflowComplete && (
+            <div className="mt-2">
+              <InteriorDesignEditor
+                projectUuid={projectId}
+                onReadyStateChange={handleConceptReadyStateChange}
+              />
+            </div>
+          )}
 
           {/* ── Image Concepts Section ────────────────────────────────── */}
           {/* Phase 5: show when concept workflow is done or assets already exist */}
@@ -2020,6 +2058,10 @@ export default function CreativeAI() {
   const [showForm, setShowForm] = useState(false);
 
   const handleNewBrief = async (form: typeof EMPTY_FORM) => {
+    // Embed language preference in notes so the API (which has no language field)
+    // can pass it through to the prompt builders without a schema change.
+    const langTag = `[OUTPUT_LANGUAGE:${form.language}]`;
+    const notesWithLang = [form.notes.trim(), langTag].filter(Boolean).join("\n");
     await createBrief.mutateAsync({
       data: {
         brandName: form.brandName,
@@ -2028,7 +2070,7 @@ export default function CreativeAI() {
         productOrService: form.productOrService,
         stylePreference: form.stylePreference || null,
         goal: form.goal,
-        notes: form.notes || null,
+        notes: notesWithLang,
       },
     });
   };

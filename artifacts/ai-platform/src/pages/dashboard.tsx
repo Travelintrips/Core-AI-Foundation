@@ -3,8 +3,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Activity, Box, Database, FileText, GitMerge, Layers, Cpu, Code2 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { format } from "date-fns";
+import { useLang } from "@/lib/i18n";
 
 export default function Dashboard() {
+  const { t } = useLang();
   const { data: overview, isLoading: overviewLoading } = useGetAnalyticsOverview();
   const { data: usage, isLoading: usageLoading } = useGetAnalyticsUsage({ days: 7 });
   const { data: providerBreakdown, isLoading: providerBreakdownLoading } = useGetProviderBreakdown();
@@ -13,30 +15,30 @@ export default function Dashboard() {
   return (
     <div className="p-8 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Platform Overview</h1>
-        <p className="text-muted-foreground mt-1">Control plane telemetry and real-time usage metrics.</p>
+        <h1 className="text-3xl font-bold tracking-tight">{t("pages.dashboard.title")}</h1>
+        <p className="text-muted-foreground mt-1">{t("pages.dashboard.subtitle")}</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
-        <StatCard title="Providers" value={overview?.totalProviders} icon={Layers} loading={overviewLoading} />
-        <StatCard title="Models" value={overview?.totalModels} icon={Box} loading={overviewLoading} />
-        <StatCard title="Workflows" value={overview?.totalWorkflows} icon={GitMerge} loading={overviewLoading} />
-        <StatCard title="Prompts" value={overview?.totalPrompts} icon={FileText} loading={overviewLoading} />
-        <StatCard title="Knowledge" value={overview?.totalKnowledgeBases} icon={Database} loading={overviewLoading} />
-        <StatCard title="Memory" value={overview?.totalMemoryEntries} icon={Cpu} loading={overviewLoading} />
-        <StatCard title="Tokens" value={overview?.totalTokensUsed?.toLocaleString()} icon={Code2} loading={overviewLoading} />
-        <StatCard title="Executions" value={overview?.totalExecutions?.toLocaleString()} icon={Activity} loading={overviewLoading} />
+        <StatCard title={t("pages.dashboard.stats.providers")} value={overview?.totalProviders} icon={Layers} loading={overviewLoading} />
+        <StatCard title={t("pages.dashboard.stats.models")} value={overview?.totalModels} icon={Box} loading={overviewLoading} />
+        <StatCard title={t("pages.dashboard.stats.workflows")} value={overview?.totalWorkflows} icon={GitMerge} loading={overviewLoading} />
+        <StatCard title={t("pages.dashboard.stats.prompts")} value={overview?.totalPrompts} icon={FileText} loading={overviewLoading} />
+        <StatCard title={t("pages.dashboard.stats.knowledge")} value={overview?.totalKnowledgeBases} icon={Database} loading={overviewLoading} />
+        <StatCard title={t("pages.dashboard.stats.memory")} value={overview?.totalMemoryEntries} icon={Cpu} loading={overviewLoading} />
+        <StatCard title={t("pages.dashboard.stats.tokens")} value={overview?.totalTokensUsed?.toLocaleString()} icon={Code2} loading={overviewLoading} />
+        <StatCard title={t("pages.dashboard.stats.executions")} value={overview?.totalExecutions?.toLocaleString()} icon={Activity} loading={overviewLoading} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <Card className="col-span-2 border-border/50 bg-card/50 backdrop-blur">
           <CardHeader>
-            <CardTitle className="text-sm font-medium font-mono uppercase tracking-wider text-muted-foreground">Token Usage (7 Days)</CardTitle>
+            <CardTitle className="text-sm font-medium font-mono uppercase tracking-wider text-muted-foreground">{t("pages.dashboard.charts.tokenUsage")}</CardTitle>
           </CardHeader>
           <CardContent className="pl-0">
             <div className="h-[300px] w-full">
               {usageLoading ? (
-                <div className="w-full h-full flex items-center justify-center text-muted-foreground font-mono text-sm">Loading telemetry...</div>
+                <div className="w-full h-full flex items-center justify-center text-muted-foreground font-mono text-sm">{t("pages.dashboard.loading.telemetry")}</div>
               ) : usage && usage.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={usage} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
@@ -64,7 +66,7 @@ export default function Dashboard() {
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-muted-foreground font-mono text-sm">No telemetry data available</div>
+                <div className="w-full h-full flex items-center justify-center text-muted-foreground font-mono text-sm">{t("pages.dashboard.empty.telemetry")}</div>
               )}
             </div>
           </CardContent>
@@ -72,12 +74,12 @@ export default function Dashboard() {
 
         <Card className="border-border/50 bg-card/50 backdrop-blur">
           <CardHeader>
-            <CardTitle className="text-sm font-medium font-mono uppercase tracking-wider text-muted-foreground">Provider Distribution</CardTitle>
+            <CardTitle className="text-sm font-medium font-mono uppercase tracking-wider text-muted-foreground">{t("pages.dashboard.charts.providerDistribution")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
               {providerBreakdownLoading ? (
-                 <div className="w-full h-full flex items-center justify-center text-muted-foreground font-mono text-sm">Loading breakdown...</div>
+                 <div className="w-full h-full flex items-center justify-center text-muted-foreground font-mono text-sm">{t("pages.dashboard.loading.breakdown")}</div>
               ) : providerBreakdown && providerBreakdown.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={providerBreakdown} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -92,7 +94,7 @@ export default function Dashboard() {
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                 <div className="w-full h-full flex items-center justify-center text-muted-foreground font-mono text-sm">No provider data</div>
+                 <div className="w-full h-full flex items-center justify-center text-muted-foreground font-mono text-sm">{t("pages.dashboard.empty.provider")}</div>
               )}
             </div>
           </CardContent>
@@ -101,11 +103,11 @@ export default function Dashboard() {
 
       <Card className="border-border/50 bg-card/50 backdrop-blur">
         <CardHeader>
-          <CardTitle className="text-sm font-medium font-mono uppercase tracking-wider text-muted-foreground">Recent Audit Activity</CardTitle>
+          <CardTitle className="text-sm font-medium font-mono uppercase tracking-wider text-muted-foreground">{t("pages.dashboard.charts.recentAudit")}</CardTitle>
         </CardHeader>
         <CardContent>
           {auditLogsLoading ? (
-            <div className="py-8 text-center text-muted-foreground font-mono text-sm">Loading activity stream...</div>
+            <div className="py-8 text-center text-muted-foreground font-mono text-sm">{t("pages.dashboard.loading.activity")}</div>
           ) : auditLogs?.items && auditLogs.items.length > 0 ? (
             <div className="space-y-4">
               {auditLogs.items.map((log) => (
@@ -115,7 +117,7 @@ export default function Dashboard() {
                       <span className="font-mono text-xs text-primary bg-primary/10 px-1.5 py-0.5 rounded">{log.module}</span>
                       <span className="font-mono text-xs text-muted-foreground">{log.action}</span>
                     </div>
-                    <span className="text-sm text-foreground/80">Actor: {log.actorId || 'system'}</span>
+                    <span className="text-sm text-foreground/80">{t("pages.dashboard.actor")}: {log.actorId || 'system'}</span>
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <span className="text-xs font-mono text-muted-foreground">{format(new Date(log.createdAt), 'MMM d, HH:mm:ss')}</span>
@@ -125,7 +127,7 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-             <div className="py-8 text-center text-muted-foreground font-mono text-sm">No recent activity</div>
+             <div className="py-8 text-center text-muted-foreground font-mono text-sm">{t("pages.dashboard.empty.activity")}</div>
           )}
         </CardContent>
       </Card>

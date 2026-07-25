@@ -1,0 +1,114 @@
+Proceed with the next controlled checkpoint.
+
+OBJECTIVE
+
+Close the approved-draft integrity gap without changing the existing commercial lifecycle, workflow dispatcher, or image generation behavior.
+
+PHASE 1 — APPROVED STATE GUARD
+
+Update updateConceptDraft() in:
+
+artifacts/api-server/src/domains/interior-design/service.ts
+
+Rules:
+
+1. If existing.reviewState === "approved_for_rendering":
+   - reject changes to:
+     - spacePlanDraft
+     - materialsDraft
+     - furnitureDraft
+     - lightingDraft
+     - visualConceptDraft
+   - return HTTP 409
+   - message:
+     "Draft is approved for rendering and cannot be edited. Request revision first."
+
+2. Do not block idempotent reads.
+
+3. Do not silently downgrade approved_for_rendering.
+
+4. Preserve optimistic concurrency checks.
+
+PHASE 2 — EXPLICIT REVISION PATH
+
+Add or verify a controlled transition:
+
+approved_for_rendering
+→ revision_requested
+→ edited_by_admin
+→ ready_for_review
+→ approved_for_rendering
+
+Requirements:
+
+- only authorized admin actions may request revision
+- revision request must record:
+  - requestedBy
+  - requestedAt
+  - optional reason
+- approved content must remain preserved
+- draft editing may resume only after revision_requested or edited_by_admin
+- no direct transition from approved_for_rendering to edited_by_admin without a revision action
+
+Prefer a dedicated action route, for example:
+
+POST /interior-design/projects/:projectId/request-revision
+
+Do not overload the generic PATCH route with hidden state transitions.
+
+PHASE 3 — APPROVED SNAPSHOT
+
+Verify whether approved_for_rendering currently preserves an immutable approved snapshot.
+
+If not, add the smallest safe implementation so that approval stores:
+
+- approvedSpacePlan
+- approvedMaterials
+- approvedFurniture
+- approvedLighting
+- approvedVisualConcept
+- approvedAt
+- approvedBy
+
+Use either:
+- explicit approved snapshot columns, or
+- a version record/table if already available.
+
+Do not rely only on current mutable draft fields as proof of what was approved.
+
+PHASE 4 — TESTS
+
+Add tests proving:
+
+1. approved draft section edits return 409
+2. approved draft cannot be silently downgraded
+3. request-revision action succeeds for authorized admin
+4. editing is allowed after revision_requested
+5. approved snapshot remains unchanged after revision begins
+6. unauthorized revision request is rejected
+7. optimistic concurrency still works
+8. existing initialize/edit/save behavior remains unchanged
+
+PHASE 5 — DATABASE
+
+If schema changes are required:
+
+- create an idempotent migration
+- apply it to the active development database
+- verify columns/indexes/constraints
+- run insert/update/select smoke tests
+
+PHASE 6 — STOP CHECKPOINT
+
+After completing this phase, stop and report:
+
+- exact guard implemented
+- revision transition rules
+- approved snapshot strategy
+- routes added or changed
+- migration evidence
+- tests
+- typecheck impact
+- remaining blockers
+
+Do not proceed to Generate Images runtime verification yet.

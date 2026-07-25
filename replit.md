@@ -1,73 +1,86 @@
 # Creative AI Studio — Enterprise Platform
 
-An AI-powered creative services platform for managing client projects, AI-generated assets, and multi-tenant workflows. Built for **PT CST Logistic** (cstlogistic.co.id).
+A full-stack AI-powered creative services platform for PT CST Logistic / cstlogistic.co.id. Customers submit creative project briefs; AI agents generate deliverables (branding, packaging, fashion design, company profiles, etc.). Staff manage jobs, quotations, invoices, and approvals through an internal admin portal.
 
 ## Architecture
+## Replit setup
 
-pnpm monorepo with multiple artifacts:
+This repository is configured as a pnpm workspace with artifact-owned workflows.
+The customer portal is the primary preview at `/`; the internal dashboard is
+available at `/admin/`, and the API is served at `/api`.
 
-| Artifact | Path | Preview |
-|---|---|---|
-| Customer Portal (public site) | `artifacts/customer-portal` | `/` |
-| Admin Dashboard (AI Platform) | `artifacts/ai-platform` | `/admin/` |
-| API Server (Express backend) | `artifacts/api-server` | `/api` |
-| Cargo Rate Finder | `artifacts/cargo-finder` | `/cargo-finder/` |
-| Mobile App (Expo) | `artifacts/customer-mobile` | `/mobile/` |
-| Mockup Sandbox (Canvas) | `artifacts/mockup-sandbox` | `/__mockup` |
-
-Shared libraries live in `lib/`:
-- `lib/db` — Drizzle ORM + Supabase Postgres
-- `lib/api-spec` — OpenAPI spec + Orval codegen
-- `lib/api-client-react` — Generated React Query hooks
-- `lib/api-zod` — Generated Zod schemas
-- `lib/design-components` — Shared UI components
-
-## Running the Project
-
-All workflows start automatically. To restart any service:
+The post-merge setup is deterministic (`pnpm install --frozen-lockfile`) and
+validates the shared libraries plus API bundle before workflows are reconciled.
+For a fresh local setup, run:
 
 ```bash
-# Install dependencies (first time or after merge)
-pnpm install
-
-# Build shared libraries
+pnpm install --frozen-lockfile
 pnpm run typecheck:libs
-
-# Build API server
-pnpm run build:api
-
-# Run all services via Replit workflows (managed automatically)
+pnpm --filter @workspace/api-server run build
 ```
 
-The API server dev script builds and loads `.env.development` automatically:
-```bash
-pnpm --filter @workspace/api-server run dev
-```
+## Architecture
+A pnpm monorepo powering an AI-driven creative services platform for **CST Logistic / PT Cahaya Sejati Teknologi**.
+# Creative AI Studio — AI Platform (CST Logistic)
 
-## Environment Variables
+pnpm monorepo with 6 artifacts:
 
-All secrets are stored in Replit Secrets (shared/dev/prod environments). Key variables:
+| Artifact | Preview Path | Port | Purpose |
+|---|---|---|---|
+| `artifacts/customer-portal` | `/` | 23434 | Public-facing customer site (Indonesian) |
+| `artifacts/ai-platform` | `/admin/` | 20785 | Internal staff / admin portal |
+| `artifacts/api-server` | `/api` | 8080 | Express + Drizzle ORM backend |
+| `artifacts/cargo-finder` | `/cargo-finder/` | 20404 | Cargo rate calculator tool |
+| `artifacts/customer-mobile` | `/mobile/` | — | Expo React Native mobile app |
+| `artifacts/mockup-sandbox` | `/__mockup` | — | Component preview dev tool |
 
-- `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY` — Admin authentication
-- `SUPABASE_DEV_DATABASE_URL` / `SUPABASE_DATABASE_URL` — Database (dev/prod)
-- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, etc. — AI providers
-- `SESSION_SECRET` — Express session signing
-- `SMTP_*` — Email via Hostinger SMTP
-- `FONNTE_TOKEN` — WhatsApp notifications
+## How to run
 
-See `.env.example` for the full list.
+All workflows start automatically. To restart individually:
+
+- **API Server**: `pnpm --filter @workspace/api-server run dev`
+- **Admin Portal**: `pnpm --filter @workspace/ai-platform run dev`
+- **Customer Portal**: `pnpm --filter @workspace/customer-portal run dev`
+- **Cargo Finder**: `pnpm --filter @workspace/cargo-finder run dev`
+
+## Key shared libraries (under `lib/`)
+
+- `lib/db` — Drizzle ORM schema + pool (Supabase Postgres)
+- `lib/api-zod` — Zod validation schemas generated from OpenAPI spec
+- `lib/api-client-react` — React Query hooks (generated via orval)
+- `lib/api-spec` — OpenAPI YAML spec (source of truth for codegen)
 
 ## Database
 
-Supabase Postgres with Drizzle ORM. Schema lives in the `ai_platform` schema (not `public`). Migrations are hand-written DDL (drizzle-kit push is not used in production — see memory notes).
+- **Dev**: Supabase project `xssrfshdrtdfupgqwfdw` (schema: `ai_platform`)
+- **Prod**: Supabase project `nzdweipzckfszczzqtuw` (schema: `ai_platform`)
+- All DB credentials are in `.replit` userenv. **These should be rotated and moved to Replit Secrets.**
 
-Seed the database after a fresh setup:
+## Environment variables
+
+All config is in `.replit` (userenv). API keys for OpenAI, Anthropic, Gemini, Mistral, Cohere, and Replicate are stored there. See `.env.example` for the full list of expected variables.
+
+> ⚠️ **Security note**: API keys, DB credentials, and tokens are stored in plaintext in `.replit`. Consider rotating them and storing via Replit Secrets.
+
+## Admin login
+
+- Portal: `/admin/`
+- Default password: set in `INITIAL_INTERNAL_ADMIN_PASSWORD` env var
+- API key: `ADMIN_API_KEY` env var (also `VITE_ADMIN_API_KEY` for frontend)
+
+## Codegen (after changing the OpenAPI spec)
+
 ```bash
-pnpm --filter @workspace/api-server run seed
+pnpm run build:generated   # regenerate api-zod + api-client-react
+pnpm run build:libs        # compile lib/db TypeScript
+pnpm run build:api         # compile api-server
 ```
 
-## User Preferences
+## Production URL
 
-- Keep the existing monorepo structure and stack
-- Do not migrate to a different database or ORM
-- Preserve all existing API contracts and route paths
+https://aicore.cstlogistic.co.id
+
+## User preferences
+
+- Keep existing project structure — do not restructure or migrate stack
+- Use pnpm for all package management

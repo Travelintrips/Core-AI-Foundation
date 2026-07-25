@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { useLang } from "@/lib/i18n";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -108,6 +109,7 @@ function PromptDialog({
   onSave: (data: PromptFormData) => void;
   isPending: boolean;
 }) {
+  const { t } = useLang();
   const [form, setForm] = useState<PromptFormData>(initial ?? DEFAULT_FORM);
   const set = (k: keyof PromptFormData) => (v: string | boolean) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -126,18 +128,18 @@ function PromptDialog({
       <DialogContent className="max-w-2xl bg-card border-border max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-mono text-sm uppercase tracking-wider">
-            {isEditing ? "Edit Prompt" : "New Prompt"}
+            {isEditing ? "Edit Prompt" : t("pages.prompts.dialog.title")}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="font-mono text-xs uppercase text-muted-foreground">Name *</Label>
-              <Input placeholder="Brand Prompt" value={form.name} onChange={(e) => set("name")(e.target.value)} className="bg-background/50" />
+              <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.prompts.dialog.name")} *</Label>
+              <Input placeholder={t("pages.prompts.dialog.namePh")} value={form.name} onChange={(e) => set("name")(e.target.value)} className="bg-background/50" />
             </div>
             <div className="space-y-1.5">
-              <Label className="font-mono text-xs uppercase text-muted-foreground">Category *</Label>
+              <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.prompts.dialog.category")} *</Label>
               <Select value={form.category} onValueChange={set("category")}>
                 <SelectTrigger className="bg-background/50"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -149,7 +151,7 @@ function PromptDialog({
               </Select>
               {form.category === "__custom__" && (
                 <Input
-                  placeholder="Category name"
+                  placeholder={t("pages.prompts.dialog.categoryPh")}
                   value={form.customCategory}
                   onChange={(e) => set("customCategory")(e.target.value)}
                   className="bg-background/50 mt-1.5"
@@ -159,17 +161,17 @@ function PromptDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Description</Label>
-            <Input placeholder="What this prompt does" value={form.description} onChange={(e) => set("description")(e.target.value)} className="bg-background/50" />
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.prompts.dialog.description")}</Label>
+            <Input placeholder={t("pages.prompts.dialog.descPh")} value={form.description} onChange={(e) => set("description")(e.target.value)} className="bg-background/50" />
           </div>
 
           <div className="space-y-1.5">
             <Label className="font-mono text-xs uppercase text-muted-foreground">
-              Prompt Content *
+              {t("pages.prompts.dialog.template")} *
               <span className="text-muted-foreground/60 ml-2 normal-case">Use &#123;&#123;variable&#125;&#125; for dynamic values</span>
             </Label>
             <Textarea
-              placeholder="You are a brand strategist. Given a brief about {{brand_name}}, create a comprehensive brand strategy..."
+              placeholder={t("pages.prompts.dialog.templatePh")}
               value={form.content}
               onChange={(e) => set("content")(e.target.value)}
               className="bg-background/50 font-mono text-sm resize-none"
@@ -180,10 +182,10 @@ function PromptDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="font-mono text-xs uppercase text-muted-foreground">
-                Variables <span className="text-muted-foreground/60">(comma-separated)</span>
+                {t("pages.prompts.dialog.variables")} <span className="text-muted-foreground/60">({t("pages.workflows.dialog.tagsHint")})</span>
               </Label>
               <Input
-                placeholder="brand_name, target_audience, tone"
+                placeholder={t("pages.prompts.dialog.variablesPh")}
                 value={form.variables}
                 onChange={(e) => set("variables")(e.target.value)}
                 className="bg-background/50"
@@ -191,10 +193,10 @@ function PromptDialog({
             </div>
             <div className="space-y-1.5">
               <Label className="font-mono text-xs uppercase text-muted-foreground">
-                Tags <span className="text-muted-foreground/60">(comma-separated)</span>
+                {t("pages.prompts.dialog.tags")} <span className="text-muted-foreground/60">({t("pages.workflows.dialog.tagsHint")})</span>
               </Label>
               <Input
-                placeholder="strategy, brand, identity"
+                placeholder={t("pages.prompts.dialog.tagsPh")}
                 value={form.tags}
                 onChange={(e) => set("tags")(e.target.value)}
                 className="bg-background/50"
@@ -210,18 +212,18 @@ function PromptDialog({
               onChange={(e) => set("isActive")(e.target.checked)}
               className="rounded"
             />
-            <Label htmlFor="isActive" className="font-mono text-xs text-muted-foreground cursor-pointer">Active (available for use)</Label>
+            <Label htmlFor="isActive" className="font-mono text-xs text-muted-foreground cursor-pointer">{t("pages.prompts.dialog.isActive")}</Label>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose} className="font-mono text-xs uppercase tracking-wider">Cancel</Button>
+          <Button variant="ghost" onClick={onClose} className="font-mono text-xs uppercase tracking-wider">{t("common.actions.cancel")}</Button>
           <Button
             onClick={() => onSave({ ...form, category: effectiveCategory })}
             disabled={isPending || !form.name.trim() || !form.content.trim()}
             className="font-mono text-xs uppercase tracking-wider"
           >
-            {isEditing ? <><Pencil className="size-3 mr-1.5" />{isPending ? "Saving…" : "Save Changes"}</> : <><Plus className="size-3 mr-1.5" />{isPending ? "Creating…" : "Create Prompt"}</>}
+            {isEditing ? <><Pencil className="size-3 mr-1.5" />{isPending ? t("common.actions.saving") : "Save Changes"}</> : <><Plus className="size-3 mr-1.5" />{isPending ? t("common.actions.creating") : "Create Prompt"}</>}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -232,6 +234,7 @@ function PromptDialog({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Prompts() {
+  const { t } = useLang();
   const { data: prompts, isLoading } = useListPrompts();
   const createPrompt = useCreatePrompt();
   const updatePrompt = useUpdatePrompt();
@@ -272,11 +275,11 @@ export default function Prompts() {
           },
         },
         {
-          onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListPromptsQueryKey() }); toast({ title: "Prompt created" }); setCreateOpen(false); },
+          onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListPromptsQueryKey() }); toast({ title: t("pages.prompts.toast.created") }); setCreateOpen(false); },
         },
       );
     } catch {
-      toast({ title: "Failed to create", variant: "destructive" });
+      toast({ title: t("pages.prompts.toast.createFailed"), variant: "destructive" });
     }
   };
 
@@ -297,11 +300,11 @@ export default function Prompts() {
           },
         },
         {
-          onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListPromptsQueryKey() }); toast({ title: "Prompt updated" }); setEditTarget(null); },
+          onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListPromptsQueryKey() }); toast({ title: t("pages.prompts.toast.updated") }); setEditTarget(null); },
         },
       );
     } catch {
-      toast({ title: "Failed to update", variant: "destructive" });
+      toast({ title: t("pages.prompts.toast.updateFailed"), variant: "destructive" });
     }
   };
 
@@ -310,11 +313,11 @@ export default function Prompts() {
       await deletePrompt.mutateAsync(
         { id },
         {
-          onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListPromptsQueryKey() }); toast({ title: "Prompt deleted" }); },
+          onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListPromptsQueryKey() }); toast({ title: t("pages.prompts.toast.deleted") }); },
         },
       );
     } catch {
-      toast({ title: "Failed to delete", variant: "destructive" });
+      toast({ title: t("pages.prompts.toast.deleteFailed"), variant: "destructive" });
     }
   };
 
@@ -333,11 +336,11 @@ export default function Prompts() {
     <div className="p-8 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Prompt Library</h1>
-          <p className="text-muted-foreground mt-1">All prompts stored in the database — no hardcoding.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t("pages.prompts.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("pages.prompts.subtitle")}</p>
         </div>
         <Button onClick={() => setCreateOpen(true)} className="font-mono text-xs uppercase tracking-wider">
-          <Plus className="size-4 mr-2" /> New Prompt
+          <Plus className="size-4 mr-2" /> {t("pages.prompts.dialog.title")}
         </Button>
       </div>
 
@@ -346,7 +349,7 @@ export default function Prompts() {
         <div className="space-y-2">
           <Card className="border-border/50 bg-card/50 backdrop-blur">
             <CardHeader className="pb-3">
-              <CardTitle className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Categories</CardTitle>
+              <CardTitle className="text-xs font-mono uppercase tracking-wider text-muted-foreground">{t("pages.prompts.categories")}</CardTitle>
             </CardHeader>
             <CardContent className="p-0 pb-2">
               <div className="space-y-0.5 px-2">
@@ -381,7 +384,7 @@ export default function Prompts() {
           <div className="relative">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search prompts…"
+              placeholder={t("pages.prompts.search")}
               className="pl-10 bg-card/50 border-border/50"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -389,12 +392,12 @@ export default function Prompts() {
           </div>
 
           {isLoading ? (
-            <div className="py-12 text-center text-muted-foreground font-mono text-sm border border-border/50 rounded-lg bg-card/50">Loading…</div>
+            <div className="py-12 text-center text-muted-foreground font-mono text-sm border border-border/50 rounded-lg bg-card/50">{t("pages.prompts.empty.loading")}</div>
           ) : filtered.length === 0 ? (
             <div className="py-16 text-center space-y-3 border border-border/50 rounded-lg bg-card/50">
               <BookOpen className="size-10 text-muted-foreground/20 mx-auto" />
-              <p className="text-muted-foreground font-mono text-sm">No prompts found</p>
-              <p className="text-muted-foreground/60 text-xs">Create your first prompt to build the library.</p>
+              <p className="text-muted-foreground font-mono text-sm">{t("pages.prompts.empty.none")}</p>
+              <p className="text-muted-foreground/60 text-xs">{t("pages.prompts.empty.hint")}</p>
             </div>
           ) : (
             filtered.map((prompt) => (
@@ -410,7 +413,7 @@ export default function Prompts() {
                           <h3 className="font-semibold">{prompt.name}</h3>
                           <Badge variant="outline" className="font-mono text-[10px] border-primary/20 text-primary bg-primary/5">v{prompt.version}</Badge>
                           {prompt.isActive && (
-                            <Badge variant="outline" className="font-mono text-[10px] border-green-500/30 text-green-400 bg-green-500/10">Active</Badge>
+                            <Badge variant="outline" className="font-mono text-[10px] border-green-500/30 text-green-400 bg-green-500/10">{t("pages.prompts.active")}</Badge>
                           )}
                           <Badge variant="secondary" className="font-mono text-[10px] capitalize bg-secondary/50">{prompt.category}</Badge>
                         </div>
@@ -427,10 +430,10 @@ export default function Prompts() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="bg-popover border-border">
                           <DropdownMenuItem className="font-mono text-xs cursor-pointer" onClick={() => setEditTarget(prompt)}>
-                            <Pencil className="mr-2 h-3 w-3" /> Edit
+                            <Pencil className="mr-2 h-3 w-3" /> {t("common.actions.edit")}
                           </DropdownMenuItem>
                           <DropdownMenuItem className="font-mono text-xs text-destructive focus:text-destructive cursor-pointer" onClick={() => handleDelete(prompt.id)}>
-                            <Trash2 className="mr-2 h-3 w-3" /> Delete
+                            <Trash2 className="mr-2 h-3 w-3" /> {t("common.actions.delete")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

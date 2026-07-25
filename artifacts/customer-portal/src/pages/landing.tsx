@@ -287,7 +287,7 @@ function HeroProjectPicker() {
                   }}
                 >
                   <span className="text-2xl">{cat.emoji}</span>
-                  <span className="text-xs leading-tight text-center" style={{ color: "#C8D0E8" }}>{cat.label}</span>
+                  <span className="text-xs leading-tight text-center" style={{ color: "#C8D0E8" }}>{lang === "id" ? cat.labelId : cat.label}</span>
                 </button>
               ))}
             </div>
