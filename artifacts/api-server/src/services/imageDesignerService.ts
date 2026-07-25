@@ -224,13 +224,33 @@ async function generateInteriorImagePrompts(
     ).filter(Boolean);
   })();
 
-  // Summarise key materials
+  // Summarise key materials — include visual attributes useful for image prompting.
+  // Legacy material objects (missing name/color/finish) are handled gracefully.
   const matSummary: string[] = (() => {
     const mat = materials as Record<string, unknown> | null;
     const items = Array.isArray(mat?.["items"]) ? (mat?.["items"] as Array<Record<string, unknown>>) : [];
-    return items.slice(0, 6).map((m) =>
-      `${m["area"] ?? m["component"] ?? ""}/${m["materialType"] ?? m["material"] ?? m["type"] ?? ""}`.replace(/^\//, "").replace(/\/$/, ""),
-    ).filter(Boolean);
+    return items.slice(0, 8).map((m) => {
+      const parts: string[] = [];
+      const component = String(m["component"] ?? m["area"] ?? "").trim();
+      const name      = String(m["name"]      ?? "").trim();
+      const matType   = String(m["materialType"] ?? m["material"] ?? m["type"] ?? "").trim();
+      const color     = String(m["color"]   ?? "").trim();
+      const finish    = String(m["finish"]  ?? "").trim();
+      const texture   = String(m["texture"] ?? "").trim();
+      const brand     = String(m["brand"]   ?? "").trim();
+      // Location / component always leads
+      if (component) parts.push(component);
+      // Material identity: prefer specific product name over generic type
+      if (name) parts.push(name);
+      else if (matType) parts.push(matType);
+      // Visual attributes
+      if (color)   parts.push(color);
+      if (finish)  parts.push(finish);
+      if (texture && texture !== "Smooth") parts.push(texture);
+      // Brand only when it adds visual context (short, recognised names)
+      if (brand && brand.length <= 20) parts.push(`(${brand})`);
+      return parts.join(", ");
+    }).filter(Boolean);
   })();
 
   // Summarise lighting

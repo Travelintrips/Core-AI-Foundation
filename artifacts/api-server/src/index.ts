@@ -31,7 +31,7 @@ import * as scheduler from "./services/aiSchedulerService.js";
 import * as sseManager from "./services/sseManager.js";
 import * as healthAlerts from "./services/providerHealthAlertService.js";
 import { ensureObservabilityTables } from "./services/observabilityService.js";
-import { ensureMaterialLibraryTables, seedMaterialLibrary } from "./domains/material-library/seed.js";
+import { ensureMaterialLibraryTables, seedMaterialLibraryIfEmpty } from "./domains/material-library/seed.js";
 import { ensureStorageBucket } from "./lib/supabaseStorage.js";
 import { resumeIncompleteDesignRenderBatches } from "./services/design-recovery/startupResume.js";
 import { ensureSubmitIdempotencyTable } from "./services/submitIdempotencyService.js";
@@ -73,9 +73,11 @@ app.listen(port, (err) => {
     logger.warn({ err }, "[submit-idempotency] Table init failed (non-blocking)"),
   );
 
-  // ── Material Library tables + seed (Phase 1, idempotent) ─────────────────
+  // ── Material Library tables + conditional seed (Phase 1) ─────────────────
+  // Only seeds when catalog is empty / below baseline — avoids 500+ upserts
+  // on every boot. Use POST /api/material-library/seed (admin) for a full sync.
   ensureMaterialLibraryTables()
-    .then(() => seedMaterialLibrary())
+    .then(() => seedMaterialLibraryIfEmpty())
     .catch((err) =>
       logger.warn({ err }, "[material-library] Table/seed init failed (non-blocking)"),
     );

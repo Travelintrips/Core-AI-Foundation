@@ -60,8 +60,24 @@ router.get("/material-library/brands", async (req, res) => {
 
 // ── GET /material-library ─────────────────────────────────────────────────────
 // Query params: search, category, brand, priceTier, finish, color, status, page, pageSize, sort
+// status=inactive is admin-only; all other params are open to authenticated callers.
 router.get("/material-library", async (req, res) => {
   try {
+    const rawStatus = (req.query as Record<string, unknown>)["status"];
+    if (typeof rawStatus === "string" && rawStatus === "inactive") {
+      const adminKey = process.env["ADMIN_API_KEY"];
+      if (adminKey) {
+        const authHeader = req.headers["authorization"] as string | undefined;
+        const xKey = (req.headers["x-admin-api-key"] ?? req.headers["x-admin-key"]) as string | undefined;
+        const provided = authHeader?.startsWith("Bearer ")
+          ? authHeader.slice(7).trim()
+          : xKey?.trim();
+        if (provided !== adminKey) {
+          res.status(403).json({ error: "status=inactive requires admin authentication" });
+          return;
+        }
+      }
+    }
     const params = parseSearchParams(req.query as Record<string, unknown>);
     const result = await searchMaterials(params);
     res.json(result);

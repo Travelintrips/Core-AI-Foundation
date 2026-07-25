@@ -29,7 +29,7 @@ function mat(
   return { materialCode: code, name, slug, category: cat, subcategory: sub, brand, materialType: type, color, finish, texture, pattern, description: desc, priceTier: tier, searchKeywords: keywords };
 }
 
-// ── WALL (MAT-WAL-001 to MAT-WAL-040) ────────────────────────────────────────
+// ── WALL (MAT-WAL-001 to MAT-WAL-045) ────────────────────────────────────────
 const WALL: SeedMaterial[] = [
   mat("MAT-WAL-001","Dulux Pure White Matt Paint","Wall","Paint","Dulux","Paint","Pure White","Matt","Smooth","Solid","Interior wall paint with excellent coverage and washable finish.","Budget",["paint","white","dulux","matt","interior"]),
   mat("MAT-WAL-002","Nippon Easy Wash Magnolia","Wall","Paint","Nippon Paint","Paint","Magnolia","Eggshell","Smooth","Solid","Easy-clean eggshell paint suitable for high-traffic areas.","Budget",["paint","magnolia","nippon","eggshell","washable"]),
@@ -71,6 +71,11 @@ const WALL: SeedMaterial[] = [
   mat("MAT-WAL-038","Sandimas Exposed Brick Panel","Wall","Brick Panel","Sandimas","Brick Veneer","Old Red","Natural","Rough","Brick","Thin brick veneer for industrial-style feature walls.","Standard",["brick","veneer","red","sandimas","industrial"]),
   mat("MAT-WAL-039","Jotun Stratus Light Grey","Wall","Paint","Jotun","Paint","Light Grey","Matt","Smooth","Solid","Versatile light grey paint for any interior space.","Standard",["paint","grey","jotun","light","versatile"]),
   mat("MAT-WAL-040","Avitex Pearl White Ceiling & Wall","Wall","Paint","Avitex","Paint","Pearl White","Sheen","Smooth","Solid","Pearl finish paint suitable for walls and ceilings.","Budget",["paint","pearl","white","avitex","ceiling"]),
+  mat("MAT-WAL-041","Jotun Essence Dusty Rose","Wall","Paint","Jotun","Paint","Dusty Rose","Matt","Smooth","Solid","Warm dusty rose paint for bedroom feature walls.","Standard",["paint","rose","pink","jotun","bedroom"]),
+  mat("MAT-WAL-042","Roman Travertine Porcelain Panel 60x120","Wall","Porcelain Tile","Roman","Porcelain Tile","Travertine Beige","Matt","Textured","Stone","Large-format travertine-effect porcelain for accent walls.","Premium",["travertine","porcelain","beige","roman","large format"]),
+  mat("MAT-WAL-043","Shera Lap Fibre Cement Horizontal","Wall","Fibre Cement","Shera","Fibre Cement","Light Grey","Matt","Smooth","Lap","Horizontal lap fibre cement cladding for modern facades.","Standard",["lap","cladding","fibre cement","shera","horizontal"]),
+  mat("MAT-WAL-044","Betek Micro-Cement Texture Warm Grey","Wall","Texture Paint","Betek","Texture Paint","Warm Grey","Matt","Micro","Smooth","Micro-cement texture paint for contemporary seamless walls.","Standard",["micro cement","texture","grey","betek","seamless"]),
+  mat("MAT-WAL-045","Asian Paints Royale Deep Navy","Wall","Paint","Asian Paints","Paint","Deep Navy","Silk","Smooth","Solid","Rich deep navy silk-finish paint for statement interiors.","Standard",["paint","navy","blue","asian paints","silk"]),
 ];
 
 // ── FLOOR (MAT-FLR-001 to MAT-FLR-045) ───────────────────────────────────────
@@ -423,6 +428,11 @@ const OUTDOOR: SeedMaterial[] = [
   mat("MAT-OUT-033","Roman Porcelain Anti-Slip 45x45 Grey","Outdoor","Paving","Roman","Porcelain Tile","Mid Grey","Anti-Slip","Textured","Plain","Anti-slip mid-grey porcelain for wet outdoor zones.","Budget",["anti-slip","grey","porcelain","roman","45x45"]),
   mat("MAT-OUT-034","Teka Green Slate Paving 30x30","Outdoor","Paving","Teka","Natural Stone","Green","Natural","Rough","Irregular","Natural green slate for garden stepping areas.","Standard",["green","slate","paving","teka","garden"]),
   mat("MAT-OUT-035","Fibreglass Raised Planter Box Brown","Outdoor","Garden Feature","Fibreglass Direct","Fibreglass","Chocolate Brown","Matt","Textured","Plain","Lightweight fibreglass raised planter for roof gardens.","Standard",["planter","fibreglass","raised","roof garden","outdoor"]),
+  mat("MAT-OUT-036","Teak Outdoor Dining Table 2.4m","Outdoor","Furniture","Teak World","Solid Wood","Natural Teak","Oiled","Smooth","Plain","Grade-A teak dining table for outdoor terrace use.","Premium",["teak","table","dining","outdoor","terrace"]),
+  mat("MAT-OUT-037","Rattan Weave Outdoor Sofa Set","Outdoor","Furniture","Rattan World","Synthetic Rattan","Natural Brown","Matt","Woven","Basket","All-weather synthetic rattan 3-piece sofa set.","Standard",["rattan","sofa","outdoor","synthetic","wicker"]),
+  mat("MAT-OUT-038","Aluminium Pergola Powder Coat White","Outdoor","Structure","Pergola Direct","Aluminium","White","Powder Coat","Smooth","Linear","Modular aluminium pergola for outdoor shade structures.","Premium",["pergola","aluminium","white","shade","structure"]),
+  mat("MAT-OUT-039","Composite Decking Grey 140x25mm","Outdoor","Decking","Trex","Composite Wood","Mid Grey","Textured","Wood Grain","Plank","Low-maintenance composite wood decking board.","Premium",["composite","decking","grey","trex","wood grain"]),
+  mat("MAT-OUT-040","Stainless Steel Outdoor Kitchen Panel","Outdoor","Kitchen","Outdoor Kitchen Co","Stainless Steel","Silver","Brushed","Metallic","Plain","Grade 316 stainless steel panel for outdoor kitchen islands.","Luxury",["stainless steel","outdoor kitchen","silver","marine grade","brushed"]),
 ];
 
 // ── DECORATIVE (MAT-DEC-001 to MAT-DEC-040) ──────────────────────────────────
@@ -530,6 +540,11 @@ const WINDOWS: SeedMaterial[] = [
   mat("MAT-WIN-023","PPG Solar Control Glass Bronze","Windows","Glazing","PPG","Glass","Bronze Tint","Solar Control","Smooth","Plain","Solar control glass reducing heat and glare.","Standard",["solar control","bronze","glass","ppg","heat reduction"]),
   mat("MAT-WIN-024","Schuco Roof Window Skylight","Windows","Skylight","Schuco","Aluminium & Glass","Clear","Anodised","Smooth","Plain","Aluminium roof window / skylight for natural light.","Luxury",["skylight","roof window","schuco","natural light","aluminium"]),
   mat("MAT-WIN-025","Aluminco Burglar-Resistant Window","Windows","Security Window","Aluminco","Aluminium","Silver","Powder Coat","Smooth","Plain","Reinforced aluminium window with security grille.","Standard",["security","reinforced","window","aluminco","burglar resistant"]),
+  mat("MAT-WIN-026","Alexindo Tilt-and-Turn Window White","Windows","Tilt & Turn Window","Alexindo","Aluminium","White","Powder Coat","Smooth","Plain","Dual-function tilt-and-turn aluminium window for ventilation.","Standard",["tilt and turn","white","alexindo","aluminium","ventilation"]),
+  mat("MAT-WIN-027","YKK Louvre Blade Window Aluminium","Windows","Louvre Window","YKK","Aluminium","Silver","Anodised","Smooth","Blade","Adjustable aluminium blade louvre for continuous airflow.","Standard",["louvre","blade","ykk","aluminium","airflow"]),
+  mat("MAT-WIN-028","Mulia Decorative Stained Glass Panel","Windows","Decorative Glass","Mulia","Art Glass","Multi Colour","Leaded","Smooth","Geometric","Handcrafted stained glass panel for decorative windows.","Luxury",["stained glass","decorative","art glass","mulia","coloured"]),
+  mat("MAT-WIN-029","Aluminco Pivot Window Black Frame","Windows","Pivot Window","Aluminco","Aluminium","Matte Black","Powder Coat","Smooth","Plain","Centre-pivot aluminium window for contemporary facades.","Premium",["pivot","black","window","aluminco","contemporary"]),
+  mat("MAT-WIN-030","Saint-Gobain Switchable Privacy Glass","Windows","Smart Glass","Saint-Gobain","Smart Glass","Frosted Clear","Electrochromic","Smooth","Plain","Switchable PDLC film glass for instant privacy on demand.","Luxury",["switchable","privacy","pdlc","saint-gobain","smart glass"]),
 ];
 
 // ── LANDSCAPE (MAT-LSC-001 to MAT-LSC-025) ────────────────────────────────────
@@ -559,6 +574,11 @@ const LANDSCAPE: SeedMaterial[] = [
   mat("MAT-LSC-023","Gardenia Japanese Boxwood Hedge","Landscape","Hedge Plant","Gardenia","Live Plant","Deep Green","Natural","Smooth","Dense","Japanese boxwood for formal clipped hedges.","Standard",["boxwood","hedge","japanese","formal","gardenia"]),
   mat("MAT-LSC-024","Bali Stone Carved Stone Water Feature","Landscape","Water Feature","Bali Stone","Natural Stone","Natural Grey","Natural","Carved","Traditional","Carved stone water fountain for Balinese gardens.","Premium",["water feature","carved stone","balinese","fountain","bali"]),
   mat("MAT-LSC-025","Natural Stone Basalt Column Feature","Landscape","Feature Stone","Natural Stone","Natural Stone","Black","Natural","Rough","Columnar","Polished basalt column for contemporary gardens.","Premium",["basalt","column","feature stone","polished","garden"]),
+  mat("MAT-LSC-026","Bengkirai Hardwood Outdoor Decking","Landscape","Decking","Kayu Nusantara","Solid Timber","Golden Brown","Oiled","Wood Grain","Plank","Indonesian bengkirai hardwood deck board for outdoor areas.","Premium",["bengkirai","hardwood","decking","timber","outdoor"]),
+  mat("MAT-LSC-027","River Pebble White Polished 2-4cm","Landscape","Aggregate","Natural Stone","Natural Stone","Bright White","Natural","Smooth","Pebble","Polished white river pebbles for water features and paths.","Budget",["pebble","white","river stone","polished","aggregate"]),
+  mat("MAT-LSC-028","Tropika Premium Artificial Turf 40mm","Landscape","Artificial Grass","Tropika","Synthetic","Lush Green","Matt","Soft","Plain","High-pile 40mm artificial turf with natural look and feel.","Premium",["artificial turf","40mm","green","tropika","synthetic grass"]),
+  mat("MAT-LSC-029","Bali Stone Stepping Stone Round 40cm","Landscape","Paving","Bali Stone","Natural Stone","Natural Grey","Natural","Rough","Round","Circular natural stone stepping stone for garden paths.","Standard",["stepping stone","round","natural stone","bali","path"]),
+  mat("MAT-LSC-030","PlantPro Coco Coir Mulch 50L","Landscape","Growing Media","PlantPro","Organic","Tan Brown","Natural","Fibrous","Plain","Coconut coir mulch for moisture retention and weed suppression.","Budget",["coco coir","mulch","organic","plantpro","moisture"]),
 ];
 
 export const ALL_MATERIALS: SeedMaterial[] = [

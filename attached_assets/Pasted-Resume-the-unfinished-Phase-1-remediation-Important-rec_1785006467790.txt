@@ -1,0 +1,246 @@
+Resume the unfinished Phase 1 remediation.
+
+Important recovery fact:
+The previous session only inspected files and gathered context. It stopped before writing any code.
+
+Do not restart the full audit.
+Do not begin Phase 2.
+Do not add semantic search, fuzzy search, suggestions, similarity, analytics, OCR, scraping, suppliers, ordering, recommendations, or marketplace features.
+
+First confirm:
+
+1. git status --short
+2. git diff --stat
+3. whether the previous session created or modified any files
+
+Expected result:
+No new changes from the interrupted session.
+
+If the working tree contains changes, inspect them before continuing and do not overwrite blindly.
+
+Then complete the remaining eight Phase 1 tasks below.
+
+========================================================
+TASK 1 — COMPLETE SEED TO 500+
+========================================================
+
+The current catalog has 480 materials.
+
+Add at least 20 valid, non-placeholder material records so the final seed contains at least 500 materials.
+
+Requirements:
+
+- preserve the existing 13 categories
+- all materialCode values must be unique
+- use the existing seed-data conventions
+- do not add duplicate names merely to satisfy the count
+- do not truncate or reset the database
+- keep seed execution idempotent
+
+Add tests asserting:
+
+- total seed records >= 500
+- unique material code count equals total record count
+- category count is exactly 13
+
+========================================================
+TASK 2 — ENFORCE DEFAULT ACTIVE FILTER
+========================================================
+
+Fix the actual repository/service query so:
+
+- no status parameter returns active materials only
+- status=active returns active only
+- status=inactive is allowed only for authorized admin callers
+- invalid status returns a validation error
+
+Do not rely only on frontend filtering.
+
+Add API/repository tests proving an inactive fixture is excluded from the default search result.
+
+========================================================
+TASK 3 — FIX AUTH CONTRACT
+========================================================
+
+The Interior Design selector must be able to read the catalog without an admin API key.
+
+Use the existing canonical portal/customer authentication middleware.
+
+Readable by authenticated customer/portal and admin users:
+
+- GET /api/material-library
+- GET /api/material-library/categories
+- GET /api/material-library/brands
+- GET /api/material-library/:id
+
+Admin-only:
+
+- POST /api/material-library/seed
+
+Do not make the catalog anonymously public unless that is already the platform convention.
+
+Fix the 14 failing integration tests using the intended middleware behavior.
+Do not hard-code or bypass authentication in production code.
+
+========================================================
+TASK 4 — ADD FRONTEND TESTS
+========================================================
+
+Add tests covering:
+
+1. Browse Library button renders
+2. clicking opens MaterialSelectorDialog
+3. the row category is passed as the initial filter
+4. selecting a material populates all supported library fields
+5. populated values remain editable
+6. Clear Library removes library identity fields but preserves edited detail values
+7. Add Material creates source: custom and libraryMaterialId: null
+8. legacy material objects render without errors
+9. only one selector dialog instance is mounted
+
+Use existing test conventions and mocks.
+
+========================================================
+TASK 5 — ADD PERSISTENCE AND APPROVAL TESTS
+========================================================
+
+Prove this flow automatically:
+
+MaterialSelectorDialog
+→ InteriorDesignEditor local state
+→ saveDraft
+→ materialsDraft JSONB
+→ reload
+→ same fields restored
+→ approved_for_rendering
+→ approvedMaterials contains the same enriched material
+
+Assert that no separate material draft store is introduced.
+
+========================================================
+TASK 6 — VERIFY AND FIX IMAGE PROMPT OUTPUT
+========================================================
+
+Create an approved material fixture containing:
+
+- name
+- brand
+- component
+- color
+- finish
+- texture
+- description
+- thumbnailUrl
+- previewImages
+- libraryMaterialId
+- technicalData
+
+Generate the final Interior Design image prompt.
+
+Assert that the prompt includes useful visual information:
+
+- material name
+- component or location
+- color
+- finish
+- texture
+- brand only when useful
+
+Assert that it does not contain:
+
+- libraryMaterialId
+- thumbnailUrl
+- preview URLs
+- raw JSON
+- internal technical-data keys
+
+If the current builder does not satisfy this, apply the smallest backward-compatible change.
+Legacy material records must continue to work.
+
+========================================================
+TASK 7 — OPTIMIZE STARTUP SEED
+========================================================
+
+Do not perform 500+ upserts on every application boot.
+
+Use the existing canonical pattern, preferably:
+
+- query the current material count
+- seed only when the catalog is empty or below the expected baseline
+
+Keep:
+
+- non-blocking startup behavior
+- clear logging
+- graceful handling when the database is unavailable
+- explicit admin seed endpoint or seed command
+
+Do not perform destructive resets.
+
+========================================================
+TASK 8 — FULL VERIFICATION
+========================================================
+
+Run:
+
+- Material Library repository tests
+- service tests
+- API tests
+- selector component tests
+- InteriorDesignEditor tests
+- draft persistence tests
+- approval snapshot tests
+- image prompt tests
+- targeted typecheck for changed packages
+- production build
+
+Then perform a live walkthrough:
+
+1. Open an Interior Design draft
+2. add a material row
+3. open Browse Library
+4. search and filter
+5. select a material
+6. edit one populated field
+7. save
+8. reload
+9. verify persistence
+10. approve for rendering
+11. inspect approvedMaterials
+12. generate the final image prompt
+13. verify useful visual attributes appear
+14. verify internal IDs and URLs do not appear
+
+========================================================
+FINAL REPORT
+========================================================
+
+Report:
+
+- confirmation that the interrupted session made no changes
+- exact files modified now
+- final material count
+- unique material-code count
+- category count
+- default active-filter evidence
+- authentication middleware decision
+- API test results
+- frontend test results
+- persistence and approval evidence
+- generated prompt excerpt
+- startup seed behavior
+- typecheck result
+- build result
+- live walkthrough result
+- remaining pre-existing failures
+- git diff summary
+
+Only declare:
+
+CANONICAL MATERIAL LIBRARY PHASE 1 VERIFIED
+
+when every Phase 1 acceptance criterion above passes.
+
+STOP.
+Do not begin Phase 2.
+Do not commit or push until the report is reviewed.
