@@ -1,0 +1,384 @@
+MASTER TASK — FINAL INTEGRATION
+MATERIAL INTELLIGENCE PHASE 2
++
+MATERIAL CATALOG PHASE 3 FOUNDATION
+
+Current verified work:
+
+Phase 2:
+- Material Intelligence implementation complete
+- all four live routes verified
+- alias, fuzzy search, cache, analytics and similarity verified
+- 5,569 backend tests passed
+- 12 failures reported as pre-existing in provider-health.test.ts
+- 36 selector/editor tests passed
+- validation report:
+  docs/phase2-material-intelligence-validation-report.md
+
+Phase 3:
+- branch: feature/material-phase3-catalog-foundation
+- commit: 5eb3984
+- 98/98 Phase 3 tests passed
+- 74/74 Phase 1 regression tests passed
+- feature flag defaults to false
+- routes remain unmounted
+- no network or database writes
+
+Work only on:
+
+integration/material-intelligence-v2
+
+Do not merge directly into main.
+
+========================================================
+1. VERIFY PHASE 2 BRANCH
+========================================================
+
+Identify and report:
+
+- exact Phase 2 branch name
+- final Phase 2 commit hash
+- git status
+- changed files
+- untracked files
+- validation-report status
+
+The working tree must be clean before integration.
+
+If Phase 2 is not committed yet:
+
+- commit only the verified Phase 2 files
+- do not include unrelated files
+- report the commit hash
+
+========================================================
+2. PHASE 2 ACCEPTANCE GAPS
+========================================================
+
+Before merging, verify these three points.
+
+A. Explicit UI filters
+
+Confirm that explicit request parameters remain hard filters:
+
+- category
+- brand
+- finish
+- priceTier
+- color where supported
+
+Query terms may affect ranking, but explicit filter parameters must restrict the result set.
+
+Required test example:
+
+q=marble&priceTier=Budget
+
+Every returned material must have priceTier=Budget.
+
+Add equivalent tests for category, brand and finish.
+
+Do not convert explicit UI filters into ranking boosts.
+
+B. Analytics authorization
+
+Verify:
+
+GET /material-library/intelligence/analytics
+
+Requirements:
+
+- anonymous request returns 401 or 403
+- authorized admin/platform request returns 200
+- endpoint is not in the public catalog auth exception
+- no user identity or credentials are stored
+- all counters are bounded
+
+C. Pre-existing backend failures
+
+Prove that the 12 provider-health.test.ts failures are pre-existing:
+
+- run the same tests against the Phase 1 baseline or known pre-Phase-2 commit
+- compare failure names and error signatures
+- confirm Phase 2 touched no related files
+
+Report them as:
+
+12 verified pre-existing failures, zero newly introduced failures
+
+Do not claim the full test suite is green while these failures remain.
+
+========================================================
+3. CREATE INTEGRATION BRANCH
+========================================================
+
+Create from the approved canonical base:
+
+integration/material-intelligence-v2
+
+Record:
+
+- base branch
+- base commit
+- branch creation command
+- clean working-tree status
+
+========================================================
+4. MERGE ORDER
+========================================================
+
+Merge in this exact order:
+
+1. Phase 2 Material Intelligence branch
+2. feature/material-phase3-catalog-foundation
+
+Do not squash unless explicitly requested.
+
+Do not merge main into either feature branch.
+
+Resolve conflicts only inside the integration branch.
+
+========================================================
+5. PHASE 3 MUST REMAIN DORMANT
+========================================================
+
+Keep:
+
+MATERIAL_CATALOG_INTEGRATION_ENABLED=false
+
+Do not:
+
+- mount a Phase 3 HTTP route
+- register mockOfficialCatalogProvider at production startup
+- register an external provider
+- enable network requests
+- enable database imports
+- enable background jobs
+- enable cron jobs
+- write to the canonical material table
+
+Phase 3 remains foundation-only.
+
+========================================================
+6. ROUTING REVIEW
+========================================================
+
+Verify final route order prevents dynamic routes from swallowing static routes.
+
+The following must work:
+
+GET /material-library/search
+GET /material-library/suggestions
+GET /material-library/:id/similar
+GET /material-library/intelligence/analytics
+GET /material-library/:id
+
+Check source and production dist output.
+
+Required results:
+
+- valid search → 200
+- valid suggestions → 200
+- valid similar ID → 200
+- unknown similar ID → 404
+- invalid mode → 400
+- catalog item ID → existing Phase 1 behavior
+
+========================================================
+7. COMBINED TEST SUITE
+========================================================
+
+Run:
+
+A. Phase 1
+- Material Library catalog tests
+- Material Library seed tests
+- prompt-generation tests
+- persistence tests
+- approval snapshot tests
+- image-generation tests
+
+B. Phase 2
+- normalization
+- aliases
+- fuzzy matching
+- hybrid ranking
+- similarity
+- suggestions
+- cache
+- cache invalidation
+- analytics
+- selector/editor integration
+- explicit hard-filter tests
+- analytics authorization tests
+
+C. Phase 3
+- all 98 material-catalog-integration tests
+
+D. Portal regression
+- MaterialSelectorDialog
+- InteriorDesignEditor
+- customer portal suite
+
+Report exact totals by suite.
+
+Do not modify tests to hide failures.
+
+========================================================
+8. CACHE INVALIDATION REVIEW
+========================================================
+
+Verify that the version signature:
+
+count:latestUpdatedAt
+
+changes when:
+
+- a material is inserted
+- a material is updated
+- a material is activated or deactivated
+
+Confirm:
+
+- stale search results are invalidated
+- stale suggestion results are invalidated
+- stale similar-material results are invalidated
+- the in-memory catalog snapshot reloads
+- the canonical catalog remains the source of truth
+
+If deletion can reduce count without changing latestUpdatedAt, confirm the count portion invalidates it.
+
+========================================================
+9. PERFORMANCE CHECK
+========================================================
+
+After a clean restart, measure:
+
+- first-ever catalog load
+- subsequent uncached unique query
+- warm cached query
+- suggestions
+- similar-material request
+
+Use:
+
+- marble
+- marmer putih
+- kayu jati
+- matte black
+- travertine beige
+- marbel
+
+Report:
+
+- status
+- mode
+- result count
+- cold latency
+- warm latency
+- cache hit/miss
+
+Use the existing Phase 2 measurements as comparison, not as substituted results.
+
+========================================================
+10. BUILD AND TYPECHECK
+========================================================
+
+Run:
+
+- API production build
+- customer portal production build
+- admin/AI platform production build
+- targeted typecheck for Phase 2 files
+- targeted typecheck for Phase 3 files
+
+Report:
+
+- zero new errors in changed files
+- all pre-existing errors separately
+- exact build commands
+- exact environment variables needed by managed Vite builds
+
+========================================================
+11. LIVE WORKFLOW REGRESSION
+========================================================
+
+Perform:
+
+1. open MaterialSelectorDialog
+2. search using “marmer putih”
+3. verify marble-related results
+4. search typo “marbel”
+5. verify fuzzy results
+6. apply explicit price-tier filter
+7. verify every result respects the filter
+8. select a material
+9. open similar materials
+10. select an alternative
+11. confirm the canonical material object is returned
+12. save the Interior Design draft
+13. reload the draft
+14. approve the design
+15. confirm the approved-material snapshot remains correct
+16. verify the image-generation prompt remains unchanged
+17. verify no Phase 3 route or provider is active
+
+Check browser console and server logs.
+
+========================================================
+12. DOCUMENTATION ALIGNMENT
+========================================================
+
+Update the Phase 2 report wording from:
+
+“Ready for review before Phase 3 begins”
+
+to:
+
+“Phase 2 verified and ready for combined integration review with the completed Phase 3 foundation.”
+
+Do not rewrite unrelated documentation.
+
+========================================================
+13. FINAL REPORT
+========================================================
+
+Return:
+
+1. integration branch
+2. base commit
+3. Phase 2 commit
+4. Phase 3 commit
+5. merge commits
+6. conflicts and resolutions
+7. files changed after merge
+8. explicit-filter behavior
+9. analytics authorization result
+10. proof of pre-existing failures
+11. Phase 1 test totals
+12. Phase 2 test totals
+13. Phase 3 test totals
+14. portal regression totals
+15. cache invalidation result
+16. performance results
+17. typecheck result
+18. build result
+19. live workflow result
+20. feature-flag status
+21. Phase 3 route status
+22. provider-registration status
+23. git status
+24. git diff summary
+25. remaining blockers
+
+Use one verdict only:
+
+A. PHASE 2 + PHASE 3 FOUNDATION INTEGRATION VERIFIED
+
+B. INTEGRATION COMPLETE WITH BLOCKERS
+
+C. INTEGRATION FAILED
+
+Do not merge the integration branch into main.
+Do not enable Phase 3.
+Do not begin Phase 4.
+STOP.
