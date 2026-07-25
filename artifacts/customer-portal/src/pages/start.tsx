@@ -23,16 +23,16 @@ import { usePublicCatalog, type CatalogService } from "@/hooks/use-catalog";
 ───────────────────────────────────────────────────────── */
 
 export const PROJECT_CATEGORIES = [
-  { id: "branding",          emoji: "🎨", label: "Branding & Logo",       icon: Palette,       color: "#7C6EFA", keywords: ["brand", "logo", "identity"] },
-  { id: "packaging",         emoji: "📦", label: "Packaging Produk",      icon: Package,       color: "#F97316", keywords: ["packaging", "kemasan"] },
-  { id: "fashion",           emoji: "👗", label: "Fashion Design",         icon: Sparkles,      color: "#EC4899", keywords: ["fashion", "koleksi", "collection"] },
-  { id: "interior",          emoji: "🏠", label: "Interior Design",        icon: LayoutGrid,    color: "#22D3EE", keywords: ["interior", "ruang", "space"] },
-  { id: "company_profile",   emoji: "🏢", label: "Company Profile",        icon: Building2,     color: "#10B981", keywords: ["company", "profile", "profil"] },
-  { id: "pitch_deck",        emoji: "📊", label: "Pitch Deck",             icon: Presentation,  color: "#F59E0B", keywords: ["pitch", "deck", "presentation", "investor"] },
-  { id: "social_media",      emoji: "📱", label: "Social Media Content",   icon: Camera,        color: "#8B5CF6", keywords: ["social", "media", "content", "konten"] },
-  { id: "website",           emoji: "🌐", label: "Website",                icon: Globe,         color: "#06B6D4", keywords: ["web", "website", "landing"] },
-  { id: "ai_image",          emoji: "📸", label: "AI Image Campaign",      icon: Image,         color: "#F43F5E", keywords: ["image", "visual", "campaign", "foto"] },
-  { id: "creative_marketing",emoji: "🎬", label: "Creative Marketing",     icon: Megaphone,     color: "#EAB308", keywords: ["marketing", "campaign", "iklan"] },
+  { id: "branding",          emoji: "🎨", label: "Branding & Logo",       labelId: "Branding & Logo",       icon: Palette,       color: "#7C6EFA", keywords: ["brand", "logo", "identity"] },
+  { id: "packaging",         emoji: "📦", label: "Packaging Produk",      labelId: "Packaging Produk",      icon: Package,       color: "#F97316", keywords: ["packaging", "kemasan"] },
+  { id: "fashion",           emoji: "👗", label: "Fashion Design",         labelId: "Desain Fashion",        icon: Sparkles,      color: "#EC4899", keywords: ["fashion", "koleksi", "collection"] },
+  { id: "interior",          emoji: "🏠", label: "Interior Design",        labelId: "Desain Interior",       icon: LayoutGrid,    color: "#22D3EE", keywords: ["interior", "ruang", "space"] },
+  { id: "company_profile",   emoji: "🏢", label: "Company Profile",        labelId: "Profil Perusahaan",     icon: Building2,     color: "#10B981", keywords: ["company", "profile", "profil"] },
+  { id: "pitch_deck",        emoji: "📊", label: "Pitch Deck",             labelId: "Pitch Deck",            icon: Presentation,  color: "#F59E0B", keywords: ["pitch", "deck", "presentation", "investor"] },
+  { id: "social_media",      emoji: "📱", label: "Social Media Content",   labelId: "Konten Media Sosial",   icon: Camera,        color: "#8B5CF6", keywords: ["social", "media", "content", "konten"] },
+  { id: "website",           emoji: "🌐", label: "Website",                labelId: "Website",               icon: Globe,         color: "#06B6D4", keywords: ["web", "website", "landing"] },
+  { id: "ai_image",          emoji: "📸", label: "AI Image Campaign",      labelId: "Kampanye AI Visual",    icon: Image,         color: "#F43F5E", keywords: ["image", "visual", "campaign", "foto"] },
+  { id: "creative_marketing",emoji: "🎬", label: "Creative Marketing",     labelId: "Pemasaran Kreatif",     icon: Megaphone,     color: "#EAB308", keywords: ["marketing", "campaign", "iklan"] },
 ];
 
 /* Workflow steps shown per category */
