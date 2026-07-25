@@ -1,154 +1,67 @@
+# Creative AI Studio — Enterprise Platform
 
-# Creative AI Studio
+A full-stack AI-powered creative services platform for PT CST Logistic / cstlogistic.co.id. Customers submit creative project briefs; AI agents generate deliverables (branding, packaging, fashion design, company profiles, etc.). Staff manage jobs, quotations, invoices, and approvals through an internal admin portal.
 
-A pnpm monorepo powering an AI-driven creative services platform for **CST Logistic / PT Cahaya Sejati Teknologi**.
-# Creative AI Studio — AI Platform (CST Logistic)
+## Architecture
 
-## Project Overview
+pnpm monorepo with 6 artifacts:
 
-A pnpm monorepo powering an end-to-end AI creative services platform for CST Logistic (`aicore.cstlogistic.co.id`). Customers submit creative briefs (branding, packaging, fashion design, etc.), an AI pipeline generates deliverables, and an internal admin team reviews/approves them through a multi-stage commercial workflow.
+| Artifact | Preview Path | Port | Purpose |
+|---|---|---|---|
+| `artifacts/customer-portal` | `/` | 23434 | Public-facing customer site (Indonesian) |
+| `artifacts/ai-platform` | `/admin/` | 20785 | Internal staff / admin portal |
+| `artifacts/api-server` | `/api` | 8080 | Express + Drizzle ORM backend |
+| `artifacts/cargo-finder` | `/cargo-finder/` | 20404 | Cargo rate calculator tool |
+| `artifacts/customer-mobile` | `/mobile/` | — | Expo React Native mobile app |
+| `artifacts/mockup-sandbox` | `/__mockup` | — | Component preview dev tool |
 
-## Project overview
+## How to run
 
-| Artifact | Preview path | Description |
-|---|---|---|
-| Customer Portal | `/` | Public-facing storefront + client workspace (Bahasa Indonesia / English) |
-| AI Platform (Admin) | `/admin/` | Internal staff dashboard — owner, admin, manager roles |
-| API Server | `/api` | REST API backend (Express + Drizzle + Supabase PostgreSQL) |
-| Cargo Rate Finder | `/cargo-finder/` | Standalone cargo rate calculator tool |
-| Customer Mobile | `/mobile/` | Expo React Native mobile app |
-| Mockup Sandbox | `/__mockup` | Design component preview server (internal tooling) |
+All workflows start automatically. To restart individually:
 
-## Running the project
+- **API Server**: `pnpm --filter @workspace/api-server run dev`
+- **Admin Portal**: `pnpm --filter @workspace/ai-platform run dev`
+- **Customer Portal**: `pnpm --filter @workspace/customer-portal run dev`
+- **Cargo Finder**: `pnpm --filter @workspace/cargo-finder run dev`
 
-All 6 services start automatically via their registered workflows. No manual step needed.
+## Key shared libraries (under `lib/`)
 
-- **Customer Portal** — port 23434
-- **Admin Dashboard** — port 20785
-- **API Server** — port 8080 (builds with esbuild then runs with Node)
-- **Cargo Finder** — port 20404
-- **Mobile** — Expo dev server (port from `$PORT`)
-- **Mockup Sandbox** — port 8081
-
-## Stack
-
-- **Runtime**: Node 20, pnpm workspaces
-- **Frontend**: React + Vite + Tailwind (all web apps)
-- **Backend**: Express 5, Drizzle ORM, Zod validation
-- **Database**: Supabase (PostgreSQL) — `ai_platform` schema
-  - Dev DB: `SUPABASE_DATABASE_URL_DEV`
-  - Prod DB: `SUPABASE_DATABASE_URL`
-- **AI providers**: OpenAI, Anthropic, Gemini, Mistral, Cohere, Replicate
-- **Mobile**: Expo / React Native
-- **Email**: Nodemailer via Hostinger SMTP
-- **WhatsApp notifications**: Fonnte
-
-## Environment variables
-
-All secrets are stored in `.replit` under `[userenv]`. Non-secret config (SMTP host, allowed origins, etc.) is in `[userenv.shared]`. Development Supabase credentials are under `[userenv.development]`, production under `[userenv.production]`.
-
-See `.env.example` for the full list of variable names.
-
-## Useful commands
-
-```bash
-# Install dependencies
-pnpm install
-
-# Type-check all packages
-pnpm typecheck
-
-# Build entire workspace
-pnpm build:workspace
-
-# Run API server in dev mode only
-pnpm --filter @workspace/api-server run dev
-
-# Run database seed (providers, models, agents)
-pnpm --filter @workspace/api-server run seed
-```
-
-## Key directories
-
-```
-artifacts/
-  ai-platform/      Admin dashboard (React + Vite)
-  api-server/       REST API (Express + Drizzle)
-  cargo-finder/     Cargo rate tool
-  customer-mobile/  Expo mobile app
-  customer-portal/  Customer-facing portal
-  mockup-sandbox/   UI mockup dev server
-lib/
-  api-client-react/ React hooks (orval-generated from OpenAPI)
-  api-zod/          Zod schemas (generated from OpenAPI)
-  db/               Drizzle schema + shared DB pool
-scripts/            Workspace health, migrations, security scan
-```
-
-## User preferences
-
-- Keep the existing monorepo structure — do not restructure or migrate to a different stack.
-- Use `pnpm` exclusively (yarn/npm are blocked by the preinstall script).
-- Never put secrets in `.replit` plain-text — use Replit Secrets. (Note: current credentials are already in `.replit [userenv]` from the original project.)
-| Artifact | Path | Preview | Port | Description |
-|---|---|---|---|---|
-| `api-server` | `artifacts/api-server` | `/api` | 8080 | Express + Drizzle ORM backend, Supabase (PostgreSQL) |
-| `ai-platform` | `artifacts/ai-platform` | `/admin/` | 20785 | React/Vite internal admin dashboard |
-| `customer-portal` | `artifacts/customer-portal` | `/` | 23434 | React/Vite public-facing customer portal |
-| `cargo-finder` | `artifacts/cargo-finder` | `/cargo-finder/` | 20404 | Cargo rate finder tool |
-| `customer-mobile` | `artifacts/customer-mobile` | `/mobile/` | — | Expo React Native mobile app |
-| `mockup-sandbox` | `artifacts/mockup-sandbox` | `/__mockup` | 8081 | Component preview sandbox |
-
-Shared libraries live in `lib/` (api-client-react, api-zod, db, etc.).
-
-## How to Run
-
-Dependencies are managed with pnpm. All workflows start automatically. To install:
-
-```bash
-pnpm install
-```
-
-Individual services:
-```bash
-# API server (builds then runs)
-pnpm --filter @workspace/api-server run dev
-
-# Admin frontend
-pnpm --filter @workspace/ai-platform run dev
-
-# Customer portal
-pnpm --filter @workspace/customer-portal run dev
-
-# Cargo finder
-pnpm --filter @workspace/cargo-finder run dev
-
-# Mobile (Expo)
-pnpm --filter @workspace/customer-mobile run dev
-```
+- `lib/db` — Drizzle ORM schema + pool (Supabase Postgres)
+- `lib/api-zod` — Zod validation schemas generated from OpenAPI spec
+- `lib/api-client-react` — React Query hooks (generated via orval)
+- `lib/api-spec` — OpenAPI YAML spec (source of truth for codegen)
 
 ## Database
 
-Uses Supabase PostgreSQL in the `ai_platform` schema (not `public`).  
-- **Dev**: `SUPABASE_DATABASE_URL_DEV` (configured in `.replit`)  
-- **Prod**: `SUPABASE_DATABASE_URL` (configured in `.replit`)
+- **Dev**: Supabase project `xssrfshdrtdfupgqwfdw` (schema: `ai_platform`)
+- **Prod**: Supabase project `nzdweipzckfszczzqtuw` (schema: `ai_platform`)
+- All DB credentials are in `.replit` userenv. **These should be rotated and moved to Replit Secrets.**
 
-Run migrations manually with hand-written DDL (do not use `drizzle-kit push` on existing environments — see memory notes).
+## Environment variables
 
-Seed the database:
+All config is in `.replit` (userenv). API keys for OpenAI, Anthropic, Gemini, Mistral, Cohere, and Replicate are stored there. See `.env.example` for the full list of expected variables.
+
+> ⚠️ **Security note**: API keys, DB credentials, and tokens are stored in plaintext in `.replit`. Consider rotating them and storing via Replit Secrets.
+
+## Admin login
+
+- Portal: `/admin/`
+- Default password: set in `INITIAL_INTERNAL_ADMIN_PASSWORD` env var
+- API key: `ADMIN_API_KEY` env var (also `VITE_ADMIN_API_KEY` for frontend)
+
+## Codegen (after changing the OpenAPI spec)
+
 ```bash
-pnpm --filter @workspace/api-server run seed
+pnpm run build:generated   # regenerate api-zod + api-client-react
+pnpm run build:libs        # compile lib/db TypeScript
+pnpm run build:api         # compile api-server
 ```
 
-## Key Environment Variables
+## Production URL
 
-Non-secret config is in `.replit` `[userenv]`. Secrets that still need to be set in Replit Secrets:
-- `SMTP_PASS` — Hostinger email password
-- `INITIAL_INTERNAL_ADMIN_EMAIL` — bootstrap admin email
-- `SUPABASE_DEV_DATABASE_URL` / `SUPABASE_PROD_DATABASE_URL` (aliases, see memory)
+https://aicore.cstlogistic.co.id
 
-Note: `OPENAI_API_KEY` in `.replit` is currently invalid — the OpenAI provider health check will show failures until a valid key is supplied.
+## User preferences
 
-## User Preferences
-
-_None recorded yet._
+- Keep existing project structure — do not restructure or migrate stack
+- Use pnpm for all package management
