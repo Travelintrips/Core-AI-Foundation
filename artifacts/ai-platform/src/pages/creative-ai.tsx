@@ -1688,6 +1688,12 @@ function ProjectDetail({ projectId }: { projectId: string }) {
     });
   };
 
+  // Interior Design approval state — must be declared before early returns (Rules of Hooks)
+  const [conceptApproved, setConceptApproved] = useState(false);
+  const handleConceptReadyStateChange = useCallback((approved: boolean) => {
+    setConceptApproved(approved);
+  }, []);
+
   const handleExportMarkdown = async () => {
     if (!project) return;
     setExporting(true);
@@ -1735,12 +1741,6 @@ function ProjectDetail({ projectId }: { projectId: string }) {
 
   // All concept steps completed → concept phase done; safe to generate images
   const conceptWorkflowComplete = dbSteps.length > 0 && dbSteps.every((s) => s.status === "completed");
-
-  // Interior Design approval state — updated by InteriorDesignEditor via onReadyStateChange
-  const [conceptApproved, setConceptApproved] = useState(false);
-  const handleConceptReadyStateChange = useCallback((approved: boolean) => {
-    setConceptApproved(approved);
-  }, []);
 
   // "Generate Images" gate: concept done (or completed) AND, for interior design,
   // concept draft must be approved for rendering before images can run.
