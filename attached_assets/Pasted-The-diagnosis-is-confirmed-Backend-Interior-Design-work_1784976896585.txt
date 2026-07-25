@@ -1,0 +1,159 @@
+The diagnosis is confirmed:
+
+- Backend Interior Design workflow already creates 5 correct steps.
+- creative_project_steps contains the correct Interior Design steps.
+- The admin /creative-ai page still renders a hardcoded generic PIPELINE_STEPS array.
+- Therefore the UI displays Brand Strategy even when the backend project is Interior Design.
+- A separate /interior-design page contains the richer Interior Design output sections, but it is disconnected from the main Creative AI project lifecycle.
+
+Implement the smallest architectural correction.
+
+OBJECTIVE
+
+Make /creative-ai render the real project workflow dynamically from creative_project_steps.
+
+Do not add another hardcoded Interior Design-only step array if the database steps already exist.
+
+PHASE 1 — REMOVE GENERIC DISPLAY DEPENDENCY
+
+Inspect:
+
+artifacts/ai-platform/src/pages/creative-ai.tsx
+
+Find PIPELINE_STEPS.
+
+Determine every place where it is used.
+
+Replace its use for project progress with data returned from the project workflow API or creative_project_steps.
+
+Keep a safe fallback only for projects that genuinely have no stored steps.
+
+PHASE 2 — DYNAMIC WORKFLOW DISPLAY
+
+For every project, render:
+
+- stepName
+- status
+- sequence/order
+- description
+- output availability
+- failure state
+
+The UI must display whatever steps are stored for that project.
+
+Expected Interior Design display:
+
+1. Design Concept
+2. Space Planning
+3. Material Specification
+4. Design Copy
+5. Interior Quality Control
+
+Expected generic Brand display remains:
+
+1. Brand Strategy
+2. Creative Direction
+3. Copy Production
+4. Quality Control
+
+Do not change backend workflow definitions.
+
+PHASE 3 — INTEGRATE INTERIOR OUTPUT
+
+Inspect the existing /interior-design/{projectId} page.
+
+Reuse its output sections inside the Creative AI project detail when:
+
+serviceCode === "interior-concept-design"
+or
+documentType === "interior_design"
+
+Interior-specific sections:
+
+- Moodboard
+- Visual Concept
+- Space Plan
+- Furniture Placement
+- Material Recommendations
+- Lighting Recommendations
+
+Do not duplicate business logic or database queries unnecessarily.
+
+Prefer extracting a reusable InteriorDesignOutput component.
+
+PHASE 4 — CORRECT PRODUCTION FLOW
+
+For Interior Design:
+
+Payment verified
+→ Start Production
+→ runInteriorDesignWorkflow
+→ save structured concept outputs
+→ stop and wait for review
+→ Generate Images button
+→ runImageDesignerPipeline
+→ QC
+→ Review
+→ Completed
+
+Confirm that image generation does not start automatically.
+
+PHASE 5 — BUTTON STATE RULES
+
+Implement or verify:
+
+- Start Production enabled only after commercial gate/payment requirements pass
+- Generate Images disabled until Interior Design concept workflow completes
+- Generate Images disabled while image generation is running
+- Generate Images cannot trigger duplicate concurrent jobs
+- Customer review link available only after reviewable concept output exists
+- Complete button available only after required review/QC state
+
+PHASE 6 — LEGACY PROJECTS
+
+For old projects that contain generic Brand steps:
+
+- do not rewrite project history
+- display their stored steps as legacy execution
+- do not falsely replace them with Interior Design steps
+
+PHASE 7 — TESTS
+
+Add tests proving:
+
+1. /creative-ai displays DB workflow steps dynamically
+2. Interior Design displays exactly 5 Interior steps
+3. Brand projects still display 4 Brand steps
+4. no hardcoded Brand pipeline overrides Interior Design
+5. Interior output sections appear only for Interior Design
+6. Generate Images is gated until concept workflow completes
+7. clicking Generate Images calls the existing manual route once
+8. old legacy projects preserve stored workflow history
+
+Run:
+
+- ai-platform tests
+- customer/admin UI tests
+- API workflow tests
+- typecheck
+- build
+
+FINAL REPORT
+
+Return:
+
+1. Root cause
+2. Files changed
+3. Removed hardcoded behavior
+4. Dynamic data source used
+5. Interior output integration
+6. Button state behavior
+7. Tests/builds
+8. Screenshots or runtime evidence
+
+Final verdict:
+
+- DYNAMIC WORKFLOW UI VERIFIED
+- PARTIAL — WORKFLOW FIXED, INTERIOR OUTPUT NOT INTEGRATED
+- STILL HARDCODED
+- VERIFICATION BLOCKED

@@ -1,0 +1,271 @@
+Continue from the dynamic Interior Design workflow implementation.
+
+Do not modify the commercial lifecycle, payment flow, workflow dispatcher, or existing Generate Images route.
+
+OBJECTIVE
+
+Make the structured Interior Design concept editable before image rendering.
+
+The current Interior Design output includes:
+
+- moodboard
+- visualConcept
+- spacePlan
+- furniturePlacement
+- materialRecommendations
+- lightingRecommendations
+
+These outputs must no longer be display-only.
+
+PHASE 1 — AUDIT CURRENT DATA MODEL
+
+Inspect:
+
+- Interior Design project detail page
+- existing output JSON structure
+- database tables storing Interior Design output
+- API routes used by /interior-design/{projectId}
+- reusable components integrated into /creative-ai
+
+Report the current source of truth for:
+
+- spacePlan
+- furniturePlacement
+- materialRecommendations
+- lightingRecommendations
+
+Do not create duplicate storage if these fields already exist.
+
+PHASE 2 — EDITABLE SPACE PLANNING
+
+Allow admin to edit each space planning item:
+
+- zone/room name
+- function
+- approximate size
+- priority
+- adjacency or relationship to other rooms
+- notes
+
+Support:
+
+- add zone
+- edit zone
+- remove zone
+- reorder zone
+- save draft
+- cancel unsaved changes
+
+Do not require image regeneration when saving these edits.
+
+PHASE 3 — EDITABLE MATERIAL SPECIFICATION
+
+Allow admin to edit material recommendations by component or area.
+
+Fields should support:
+
+- area/room
+- component
+- material category
+- material type
+- color
+- finish
+- texture
+- optional brand
+- optional product code
+- price tier
+- notes
+- selected/rejected status
+
+Provide controlled dropdown options for common material categories, but also allow a Custom option.
+
+Initial material categories should include:
+
+Floor:
+- porcelain tile
+- ceramic tile
+- granite
+- marble
+- terrazzo
+- SPC
+- vinyl
+- engineered wood
+- solid wood
+- carpet
+- polished concrete
+- epoxy
+
+Wall:
+- paint
+- wallpaper
+- wood panel
+- HPL
+- stone
+- marble
+- ceramic tile
+- acoustic panel
+- fabric panel
+- exposed concrete
+
+Ceiling:
+- gypsum
+- wood slat
+- metal
+- acoustic ceiling
+- exposed ceiling
+- PVC
+- stretch ceiling
+
+Countertop:
+- granite
+- marble
+- quartz
+- solid surface
+- stainless steel
+- concrete
+
+Do not hardcode brands as mandatory choices.
+
+Brands or supplier products should come from a future or existing material catalog when available.
+
+PHASE 4 — EDITABLE FURNITURE AND LIGHTING
+
+Furniture Placement must support:
+
+- furniture item
+- room/zone
+- quantity
+- approximate dimensions
+- placement notes
+- replace
+- add
+- remove
+
+Lighting Recommendations must support:
+
+- room/zone
+- lighting type
+- fixture type
+- color temperature
+- lighting purpose
+- quantity
+- placement notes
+
+Lighting type options may include:
+
+- downlight
+- track light
+- pendant
+- chandelier
+- cove light
+- hidden LED
+- wall washer
+- wall lamp
+- floor lamp
+- table lamp
+
+PHASE 5 — SAVE AND VERSIONING
+
+Create or reuse an authenticated API to update the structured Interior Design concept.
+
+Requirements:
+
+- tenant/project authorization
+- schema validation
+- optimistic concurrency or updatedAt check
+- audit log
+- save editor identity and timestamp
+- preserve the original AI-generated output
+- store edited output as the current approved draft
+- do not silently overwrite customer-approved data
+
+Prefer a versioned structure such as:
+
+- aiGeneratedVersion
+- currentDraftVersion
+- approvedVersion
+
+Use the existing project output model where possible.
+
+PHASE 6 — REVIEW STATE
+
+Add clear states:
+
+- AI Generated
+- Edited by Admin
+- Ready for Customer Review
+- Revision Requested
+- Approved for Rendering
+
+Generate Images must only use the latest approved or explicitly selected draft.
+
+If there is an unsaved edit, disable Generate Images or warn the user.
+
+PHASE 7 — IMAGE PROMPT INTEGRATION
+
+Trace how runImageDesignerPipeline builds its prompt.
+
+Ensure the render prompt uses the latest saved Interior Design draft, including:
+
+- space plan
+- selected materials
+- furniture placement
+- lighting
+- visual concept
+
+It must not use stale original AI output after edits have been saved.
+
+Do not automatically run image generation after saving an edit.
+
+PHASE 8 — UI
+
+Inside the Interior Design project view, provide:
+
+- View mode
+- Edit mode
+- Save Draft
+- Cancel
+- Mark Ready for Review
+
+Use structured forms, dropdowns, repeatable rows, and cards.
+
+Do not implement a drag-and-drop floor-plan editor in this phase.
+
+Do not implement live 3D editing in this phase.
+
+PHASE 9 — TESTS
+
+Add tests proving:
+
+1. Space Planning can be edited and saved
+2. zones can be added, removed, and reordered
+3. Material Specification supports dropdown and custom values
+4. furniture and lighting can be edited
+5. unauthorized users cannot edit
+6. original AI output remains preserved
+7. latest saved draft is used by Generate Images
+8. saving an edit does not trigger image generation
+9. Generate Images is blocked or warns when edits are unsaved
+10. customer-approved data cannot be silently overwritten
+
+Run:
+
+- API tests
+- AI platform UI tests
+- typecheck
+- build
+
+FINAL REPORT
+
+Return:
+
+- current data model found
+- files changed
+- edit APIs
+- validation schemas
+- versioning behavior
+- render prompt integration
+- test results
+- remaining limitations
+
+Do not claim drag-and-drop layout editing, CAD editing, or live 3D editing unless actually implemented.

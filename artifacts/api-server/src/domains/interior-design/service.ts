@@ -8,11 +8,14 @@
  * - Interior Design stores only: preference snapshot, sourceBrandProfileId/Version, overrides
  * - No RAB / pricing calculations
  */
-import { db } from "@workspace/db";
+import { db, creativeProjectsTable, creativeProjectStepsTable } from "@workspace/db";
 import {
   idProjectsTable,
   idBriefsTable,
   idOutputsTable,
+  idConceptDraftsTable,
+  CONCEPT_DRAFT_REVIEW_STATES,
+  type IdConceptDraft,
 } from "./schema.js";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -455,6 +458,244 @@ Return ONLY a JSON object (no markdown) with exactly this structure:
   await updateProjectStatus(projectId, "outputs_ready");
 
   return { output: output!, validationResult, safetyDisclaimers };
+}
+
+// ── Interior Design Concept Drafts ────────────────────────────────────────────
+
+/**
+ * Extract step outputs into draft-compatible structure.
+ * The Interior Design workflow stores: Design Concept, Space Planning,
+ * Material Specification, Design Copy, Interior Quality Control.
+ */
+function stepsToInitialDraftData(steps: Array<{ stepName: string; output: unknown }>) {
+  const byName = Object.fromEntries(steps.map((s) => [s.stepName, s.output]));
+
+  const conceptOut  = byName["Design Concept"]           ?? null;
+  const spacePlan   = byName["Space Planning"]            ?? null;
+  const materials   = byName["Material Specification"]   ?? null;
+  // Design Copy step contains furniture & lighting recommendations alongside copy
+  const designCopy  = byName["Design Copy"]              ?? null;
+
+  // Extract visual concept text from the Design Concept step output
+  let visualConcept: string | null = null;
+  if (typeof conceptOut === "string") {
+    visualConcept = conceptOut;
+  } else if (conceptOut && typeof conceptOut === "object") {
+    const co = conceptOut as Record<string, unknown>;
+    visualConcept = typeof co["visualConcept"] === "string" ? co["visualConcept"]
+                  : typeof co["concept"]       === "string" ? co["concept"]
+                  : JSON.stringify(co).slice(0, 1000);
+  }
+
+  return { spacePlan, materials, furniture: designCopy, lighting: designCopy, visualConcept };
+}
+
+/**
+ * Get existing draft or create one by initialising from creative_project_steps.
+ * Idempotent — safe to call multiple times; after first call subsequent calls
+ * return the existing row without overwriting any edits.
+ */
+export async function getOrInitializeDraftByProjectUuid(
+  projectUuid: string,
+): Promise<IdConceptDraft | null> {
+  // Return existing draft if it exists
+  const [existing] = await db
+    .select()
+    .from(idConceptDraftsTable)
+    .where(eq(idConceptDraftsTable.projectUuid, projectUuid))
+    .limit(1);
+  if (existing) return existing;
+
+  // Look up the creative project and its steps
+  const [project] = await db
+    .select()
+    .from(creativeProjectsTable)
+    .where(eq(creativeProjectsTable.projectId, projectUuid))
+    .limit(1);
+  if (!project) return null;
+
+  const steps = await db
+    .select({ stepName: creativeProjectStepsTable.stepName, output: creativeProjectStepsTable.output })
+    .from(creativeProjectStepsTable)
+    .where(eq(creativeProjectStepsTable.projectId, project.id));
+
+  const { spacePlan, materials, furniture, lighting, visualConcept } = stepsToInitialDraftData(steps);
+
+  const [draft] = await db
+    .insert(idConceptDraftsTable)
+    .values({
+      projectUuid,
+      originalSpacePlan:     spacePlan     as never,
+      originalMaterials:     materials     as never,
+      originalFurniture:     furniture     as never,
+      originalLighting:      lighting      as never,
+      originalVisualConcept: visualConcept,
+      spacePlanDraft:     spacePlan     as never,
+      materialsDraft:     materials     as never,
+      furnitureDraft:     furniture     as never,
+      lightingDraft:      lighting      as never,
+      visualConceptDraft: visualConcept,
+      reviewState:    "ai_generated",
+      hasUnsavedEdits: false,
+    })
+    .onConflictDoNothing()   // race-safe: second request returns existing row
+    .returning();
+
+  // If onConflictDoNothing discarded the insert, fetch the winner
+  if (!draft) {
+    const [winner] = await db
+      .select()
+      .from(idConceptDraftsTable)
+      .where(eq(idConceptDraftsTable.projectUuid, projectUuid))
+      .limit(1);
+    return winner ?? null;
+  }
+
+  return draft;
+}
+
+export interface UpdateDraftSections {
+  spacePlan?:     unknown;
+  materials?:     unknown;
+  furniture?:     unknown;
+  lighting?:      unknown;
+  visualConcept?: string | null;
+}
+
+/**
+ * Update one or more sections of the editable draft.
+ * Uses optimistic concurrency: if expectedUpdatedAt is provided and does not
+ * match the stored updatedAt, throws a conflict error rather than overwriting.
+ */
+export async function updateConceptDraft(
+  projectUuid:     string,
+  sections:        UpdateDraftSections,
+  editorId:        string,
+  expectedUpdatedAt?: string,   // ISO string — client sends its copy of updatedAt
+): Promise<IdConceptDraft> {
+  const [existing] = await db
+    .select()
+    .from(idConceptDraftsTable)
+    .where(eq(idConceptDraftsTable.projectUuid, projectUuid))
+    .limit(1);
+  if (!existing) throw new Error(`No concept draft found for project ${projectUuid}. Call GET first to initialise.`);
+
+  // Optimistic concurrency guard
+  if (expectedUpdatedAt) {
+    const clientTs = new Date(expectedUpdatedAt).getTime();
+    const storedTs = new Date(existing.updatedAt).getTime();
+    if (Math.abs(clientTs - storedTs) > 1000) {
+      throw Object.assign(new Error("Concurrent edit conflict: draft was modified by another editor. Refresh and try again."), { status: 409 });
+    }
+  }
+
+  const updates: Partial<typeof idConceptDraftsTable.$inferInsert> = {
+    hasUnsavedEdits: false,
+    lastEditedBy:    editorId,
+    lastEditedAt:    new Date(),
+    updatedAt:       new Date(),
+    // Promote state from ai_generated → edited_by_admin on first edit
+    reviewState: existing.reviewState === "ai_generated" ? "edited_by_admin" : existing.reviewState,
+  };
+
+  if ("spacePlan"     in sections) updates.spacePlanDraft     = sections.spacePlan     as never;
+  if ("materials"     in sections) updates.materialsDraft     = sections.materials     as never;
+  if ("furniture"     in sections) updates.furnitureDraft     = sections.furniture     as never;
+  if ("lighting"      in sections) updates.lightingDraft      = sections.lighting      as never;
+  if ("visualConcept" in sections) updates.visualConceptDraft = sections.visualConcept ?? null;
+
+  const [updated] = await db
+    .update(idConceptDraftsTable)
+    .set(updates)
+    .where(eq(idConceptDraftsTable.projectUuid, projectUuid))
+    .returning();
+
+  return updated!;
+}
+
+/**
+ * Change the review state of a draft.
+ * Valid transitions are enforced — only states in CONCEPT_DRAFT_REVIEW_STATES allowed.
+ */
+export async function updateDraftReviewState(
+  projectUuid: string,
+  newState:    string,
+  editorId:    string,
+): Promise<IdConceptDraft> {
+  if (!(CONCEPT_DRAFT_REVIEW_STATES as readonly string[]).includes(newState)) {
+    throw Object.assign(new Error(`Invalid review state: ${newState}. Must be one of: ${CONCEPT_DRAFT_REVIEW_STATES.join(", ")}`), { status: 400 });
+  }
+
+  const [existing] = await db
+    .select()
+    .from(idConceptDraftsTable)
+    .where(eq(idConceptDraftsTable.projectUuid, projectUuid))
+    .limit(1);
+  if (!existing) throw Object.assign(new Error(`No concept draft found for project ${projectUuid}`), { status: 404 });
+
+  const [updated] = await db
+    .update(idConceptDraftsTable)
+    .set({
+      reviewState:   newState,
+      lastEditedBy:  editorId,
+      lastEditedAt:  new Date(),
+      updatedAt:     new Date(),
+    })
+    .where(eq(idConceptDraftsTable.projectUuid, projectUuid))
+    .returning();
+
+  return updated!;
+}
+
+/**
+ * Restore original AI-generated output to a specific section (or all sections).
+ * Does NOT change reviewState — caller is responsible for resetting state if needed.
+ */
+export async function resetDraftToOriginal(
+  projectUuid: string,
+  sections:    Array<"spacePlan" | "materials" | "furniture" | "lighting" | "visualConcept">,
+  editorId:    string,
+): Promise<IdConceptDraft> {
+  const [existing] = await db
+    .select()
+    .from(idConceptDraftsTable)
+    .where(eq(idConceptDraftsTable.projectUuid, projectUuid))
+    .limit(1);
+  if (!existing) throw Object.assign(new Error(`No concept draft found for project ${projectUuid}`), { status: 404 });
+
+  const updates: Partial<typeof idConceptDraftsTable.$inferInsert> = {
+    lastEditedBy: editorId,
+    lastEditedAt: new Date(),
+    updatedAt:    new Date(),
+  };
+  if (sections.includes("spacePlan"))     updates.spacePlanDraft     = existing.originalSpacePlan     as never;
+  if (sections.includes("materials"))     updates.materialsDraft     = existing.originalMaterials     as never;
+  if (sections.includes("furniture"))     updates.furnitureDraft     = existing.originalFurniture     as never;
+  if (sections.includes("lighting"))      updates.lightingDraft      = existing.originalLighting      as never;
+  if (sections.includes("visualConcept")) updates.visualConceptDraft = existing.originalVisualConcept;
+
+  const [updated] = await db
+    .update(idConceptDraftsTable)
+    .set(updates)
+    .where(eq(idConceptDraftsTable.projectUuid, projectUuid))
+    .returning();
+
+  return updated!;
+}
+
+/**
+ * Read latest approved draft data for use in image generation pipelines.
+ * Returns null if no draft exists for this project.
+ */
+export async function getConceptDraftForImagePipeline(
+  projectUuid: string,
+): Promise<IdConceptDraft | null> {
+  const [draft] = await db
+    .select()
+    .from(idConceptDraftsTable)
+    .where(eq(idConceptDraftsTable.projectUuid, projectUuid))
+    .limit(1);
+  return draft ?? null;
 }
 
 // ── Rule-based fallback ───────────────────────────────────────────────────────
