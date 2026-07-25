@@ -1,97 +1,58 @@
-# Creative AI Studio — Enterprise Platform
+# Creative AI Studio — Enterprise
 
-A full-stack AI-powered creative services platform for PT CST Logistic / cstlogistic.co.id. Customers submit creative project briefs; AI agents generate deliverables (branding, packaging, fashion design, company profiles, etc.). Staff manage jobs, quotations, invoices, and approvals through an internal admin portal.
+AI-powered creative services platform built for an Indonesian agency (CST Logistic / cstlogistic.co.id). Customers submit creative briefs, the platform routes them through AI agents, and delivers finished assets (branding, packaging, fashion design, company profiles, pitch decks, etc.).
 
 ## Architecture
-## Replit setup
 
-This repository is configured as a pnpm workspace with artifact-owned workflows.
-The customer portal is the primary preview at `/`; the internal dashboard is
-available at `/admin/`, and the API is served at `/api`.
+pnpm monorepo with four artifacts:
 
-The post-merge setup is deterministic (`pnpm install --frozen-lockfile`) and
-validates the shared libraries plus API bundle before workflows are reconciled.
-For a fresh local setup, run:
+| Artifact | Path | Preview |
+|---|---|---|
+| Customer Portal (public) | `artifacts/customer-portal` | `/` |
+| Admin Dashboard | `artifacts/ai-platform` | `/admin/` |
+| API Server (Express + Supabase) | `artifacts/api-server` | `/api` |
+| Canvas / Mockup Sandbox | `artifacts/mockup-sandbox` | `/__mockup` |
+
+Shared libraries in `lib/` (api-client-react, api-zod, db, etc.).
+
+## Stack
+
+- **Frontend**: React 19 + Vite + TailwindCSS (both portals)
+- **Backend**: Node.js / Express, esbuild-bundled, TypeScript
+- **Database**: Supabase (PostgreSQL) — `ai_platform` schema; dev and prod projects separate
+- **AI Providers**: OpenAI, Anthropic (Claude), Google Gemini, Mistral, Cohere, Replicate
+- **Storage**: Supabase Object Storage (`ai-assets` bucket)
+- **Email**: SMTP via Hostinger (nodemailer)
+- **WhatsApp**: Fonnte API
+
+## Running the project
+
+All four workflows are configured. Start them from the Workflows panel or run:
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm run typecheck:libs
-pnpm --filter @workspace/api-server run build
+pnpm install   # first time only
+# then start each workflow from the Replit UI
 ```
 
-## Architecture
-A pnpm monorepo powering an AI-driven creative services platform for **CST Logistic / PT Cahaya Sejati Teknologi**.
-# Creative AI Studio — AI Platform (CST Logistic)
-
-pnpm monorepo with 4 registered artifacts:
-
-| Artifact | Preview Path | Port | Purpose |
-|---|---|---|---|
-| `artifacts/customer-portal` | `/` | 23434 | Public-facing customer site (Indonesian) |
-| `artifacts/ai-platform` | `/admin/` | 20785 | Internal staff / admin portal |
-| `artifacts/api-server` | `/api` | 8080 | Express + Drizzle ORM backend |
-| `artifacts/mockup-sandbox` | `/__mockup` | 8081 | Component preview dev tool |
-
-## How to run
-
-All workflows start automatically. To restart individually:
-
-- **API Server**: `pnpm --filter @workspace/api-server run dev`
-- **Admin Portal**: `pnpm --filter @workspace/ai-platform run dev`
-- **Customer Portal**: `pnpm --filter @workspace/customer-portal run dev`
-- **Component Preview Server**: `pnpm --filter @workspace/mockup-sandbox run dev`
-
-## Setup verification
-
-The imported lockfile installs successfully with `pnpm install --frozen-lockfile`.
-All four configured workflows start successfully, the customer and admin
-previews render, and the API health check passes at `/api/healthz` and
-`/api/healthz/full`.
-
-The focused typechecks for the frontend, mobile, preview, and scripts packages
-pass. The aggregate `pnpm run typecheck` currently stops in the API-server
-package on existing type drift across unrelated tests and services; this does
-not prevent the API bundle from building or the running API from passing its
-health checks.
-
-## Key shared libraries (under `lib/`)
-
-- `lib/db` — Drizzle ORM schema + pool (Supabase Postgres)
-- `lib/api-zod` — Zod validation schemas generated from OpenAPI spec
-- `lib/api-client-react` — React Query hooks (generated via orval)
-- `lib/api-spec` — OpenAPI YAML spec (source of truth for codegen)
-
-## Database
-
-- **Dev**: Supabase project `xssrfshdrtdfupgqwfdw` (schema: `ai_platform`)
-- **Prod**: Supabase project `nzdweipzckfszczzqtuw` (schema: `ai_platform`)
-- All DB credentials are in `.replit` userenv. **These should be rotated and moved to Replit Secrets.**
-
-## Environment variables
-
-All config is in `.replit` (userenv). API keys for OpenAI, Anthropic, Gemini, Mistral, Cohere, and Replicate are stored there. See `.env.example` for the full list of expected variables.
-
-> ⚠️ **Security note**: API keys, DB credentials, and tokens are stored in plaintext in `.replit`. Consider rotating them and storing via Replit Secrets.
+After first run the API server auto-creates the Supabase storage bucket and registers workers. Database migrations must be applied manually (see `artifacts/api-server/src/migrations/`).
 
 ## Admin login
 
-- Portal: `/admin/`
-- Default password: set in `INITIAL_INTERNAL_ADMIN_PASSWORD` env var
-- API key: `ADMIN_API_KEY` env var (also `VITE_ADMIN_API_KEY` for frontend)
+- URL: `/admin/`
+- Default credentials set via `INITIAL_INTERNAL_ADMIN_EMAIL` / `INITIAL_INTERNAL_ADMIN_PASSWORD` env vars (see `.replit [userenv.development]`)
+- Admin API key: `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY` (same value, both required)
 
-## Codegen (after changing the OpenAPI spec)
+## Environment variables
 
-```bash
-pnpm run build:generated   # regenerate api-zod + api-client-react
-pnpm run build:libs        # compile lib/db TypeScript
-pnpm run build:api         # compile api-server
-```
+All secrets are in `.replit [userenv.*]` — no manual `.env` setup needed on Replit. See `.env.example` for the full list of required variables.
 
-## Production URL
-
-https://aicore.cstlogistic.co.id
+Key secrets:
+- `SUPABASE_DEV_DATABASE_URL` / `SUPABASE_DATABASE_URL` — dev and prod Supabase connection strings
+- `ADMIN_API_KEY` + `VITE_ADMIN_API_KEY` — admin authentication (same value)
+- `SESSION_SECRET` — session signing
+- AI provider keys: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `REPLICATE_API_TOKEN`, `COHERE_API_KEY`
 
 ## User preferences
 
-- Keep existing project structure — do not restructure or migrate stack
-- Use pnpm for all package management
+- Keep the existing monorepo structure (pnpm workspace) — do not restructure
+- Preserve Indonesian-language UI copy in both portals
