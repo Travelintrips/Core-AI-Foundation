@@ -23,6 +23,7 @@ import {
   aiModelsTable,
   aiProvidersTable,
   creativeAiAssetsTable,
+  aiServiceRequestsTable,
 } from "@workspace/db";
 import { getConceptDraftForImagePipeline } from "../domains/interior-design/service.js";
 import { executeAI } from "./aiExecutionService.js";
@@ -834,8 +835,18 @@ export async function runImageDesignerPipeline(
   // ── Template-first path untuk layanan logo ────────────────────────────────
   // Cek apakah ini proyek logo — kalau iya, coba render dari template dulu
   // (biaya ~$0.0005 vs $0.003–0.025 via FLUX). Fallback ke FLUX jika gagal.
-  const briefJson = project.briefJson as Record<string, unknown> | null;
-  const serviceCode = String(briefJson?.serviceCode ?? "");
+  //
+  // serviceCode is read from the linked aiServiceRequestsTable row (via
+  // creativeProjectsTable.serviceRequestId). creativeProjectsTable has no
+  // briefJson column — the brief payload lives on the service request row.
+  let serviceCode = "";
+  if (project.serviceRequestId != null) {
+    const [svcReq] = await db
+      .select({ briefJson: aiServiceRequestsTable.briefJson })
+      .from(aiServiceRequestsTable)
+      .where(eq(aiServiceRequestsTable.id, project.serviceRequestId));
+    serviceCode = String(svcReq?.briefJson?.["serviceCode"] ?? "");
+  }
   const isLogoService = ["logo-design", "GD-LOGO"].includes(serviceCode);
 
   if (isLogoService) {
