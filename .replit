@@ -43,6 +43,7 @@ INITIAL_INTERNAL_ADMIN_PASSWORD = "#Admin12345@$"
 MISTRAL_API_KEY = "bDsdCOTE5H0BMsAZ7OIccWw0lPgpajyk"
 OPENAI_API_KEY = "bDsdCOTE5H0BMsAZ7OIccWw0lPgpajyk"
 VITE_ADMIN_API_KEY = "6ea91a548c1f7620bc9bf53afda744fd49a3976b1efb8468"
+VITE_CANVAS_WORKSPACE_ENABLED = "true"
 
 [userenv.development]
 SUPABASE_URL_DEV = "https://xssrfshdrtdfupgqwfdw.supabase.co"
