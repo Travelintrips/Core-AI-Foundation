@@ -62,6 +62,32 @@ export async function seedMaterialLibrary(): Promise<{
   return { categories: categoriesSeeded, materials: materialsSeeded, total };
 }
 
+const SEED_BASELINE = 500; // minimum expected material count after a full seed
+
+/**
+ * seedMaterialLibraryIfEmpty — only runs the full seed when the catalog is
+ * empty or below the expected baseline. Avoids 500+ upserts on every boot.
+ *
+ * The explicit POST /material-library/seed endpoint (admin-only) always runs
+ * the full upsert, so new materials added to seedData.ts can be pushed to any
+ * existing installation without restarting.
+ */
+export async function seedMaterialLibraryIfEmpty(): Promise<void> {
+  const current = await countMaterials();
+  if (current >= SEED_BASELINE) {
+    logger.info(
+      { domain: "material-library-seed", currentCount: current, baseline: SEED_BASELINE },
+      "Material library already seeded — skipping startup seed",
+    );
+    return;
+  }
+  logger.info(
+    { domain: "material-library-seed", currentCount: current, baseline: SEED_BASELINE },
+    "Material library below baseline — seeding now",
+  );
+  await seedMaterialLibrary();
+}
+
 /**
  * ensureMaterialLibraryTables — run DDL idempotently at startup.
  * This prevents the service from crashing if the tables don't exist yet.

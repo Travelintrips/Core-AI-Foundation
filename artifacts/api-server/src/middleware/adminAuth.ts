@@ -158,6 +158,14 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
   { method: "GET",  pattern: /^\/ai\/design\/v1\/projects\/\d+\/stages$/ },
   { method: "GET",  pattern: /^\/ai\/design\/v1\/projects\/\d+\/artifacts$/ },
   { method: "GET",  pattern: /^\/ai\/design\/v1\/projects\/\d+\/events$/ },
+  // Phase 1 Material Library Catalog — readable by authenticated customer/portal
+  // and admin users (Interior Design selector, customer-facing catalog browsing).
+  // POST /material-library/seed is NOT listed — it stays admin-only.
+  // status=inactive is guarded inside the route handler for admin-only access.
+  { method: "GET",  pattern: /^\/material-library$/ },
+  { method: "GET",  pattern: /^\/material-library\/categories$/ },
+  { method: "GET",  pattern: /^\/material-library\/brands$/ },
+  { method: "GET",  pattern: /^\/material-library\/\d+$/ },
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {
