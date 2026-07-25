@@ -166,12 +166,15 @@ const PUBLIC_ROUTE_RULES: { method: string; pattern: RegExp }[] = [
   { method: "GET",  pattern: /^\/material-library\/categories$/ },
   { method: "GET",  pattern: /^\/material-library\/brands$/ },
   { method: "GET",  pattern: /^\/material-library\/\d+$/ },
-  // Phase 2 Material Intelligence — read-only search, suggestions, similar
-  // materials, and in-memory analytics for the selector and catalog browser.
+  // Phase 2 Material Intelligence — read-only search, suggestions, and similar
+  // materials for the selector and catalog browser. Public because they support
+  // the customer-facing Interior Design selector (no PII, aggregate data only).
+  // NOTE: /material-library/intelligence/analytics is intentionally NOT listed
+  // here — it returns aggregate operational stats and requires admin auth.
+  // (Phase 2 acceptance gap 2B: anonymous requests must receive 401/403.)
   { method: "GET",  pattern: /^\/material-library\/search$/ },
   { method: "GET",  pattern: /^\/material-library\/suggestions$/ },
   { method: "GET",  pattern: /^\/material-library\/\d+\/similar$/ },
-  { method: "GET",  pattern: /^\/material-library\/intelligence\/analytics$/ },
 ];
 
 export function adminAuthWithExceptions(req: Request, res: Response, next: NextFunction): void {

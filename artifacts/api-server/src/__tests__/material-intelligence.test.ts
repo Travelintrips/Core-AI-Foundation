@@ -17,6 +17,42 @@ import { rankSimilarMaterials } from "../domains/material-intelligence/materialS
 import { buildMaterialSuggestions } from "../domains/material-intelligence/materialSuggestions.js";
 import { performance } from "node:perf_hooks";
 
+// ── Shared test catalog (used by hard-filter tests) ──────────────────────────
+
+function makeCatalog(): MaterialRecord[] {
+  const base = (overrides: Partial<MaterialRecord>): MaterialRecord => ({
+    id: 1,
+    materialCode: "MAT-001",
+    name: "Roman Carrara Marble Tile",
+    slug: "mat-001",
+    category: "Floor",
+    subcategory: "Porcelain Tile",
+    brand: "Roman",
+    materialType: "Porcelain Tile",
+    color: "White",
+    finish: "Polished",
+    texture: "Smooth",
+    pattern: "Marble Veining",
+    description: "White marble-look floor tile",
+    priceTier: "Premium",
+    thumbnailUrl: null,
+    previewImages: null,
+    technicalData: null,
+    searchKeywords: ["marble", "tile"],
+    status: "active",
+    createdAt: new Date("2026-01-01T00:00:00Z"),
+    updatedAt: new Date("2026-01-01T00:00:00Z"),
+    ...overrides,
+  });
+  return [
+    base({ id: 1, name: "Roman Carrara Marble Tile", category: "Floor", brand: "Roman",    finish: "Polished", color: "White",  priceTier: "Premium",  searchKeywords: ["marble", "tile"] }),
+    base({ id: 2, name: "Asia Tile Granite Budget",   category: "Floor", brand: "Asia Tile", finish: "Matte",    color: "Grey",   priceTier: "Budget",   searchKeywords: ["granite", "tile"] }),
+    base({ id: 3, name: "Dulux Blue Wall Paint",       category: "Wall",  brand: "Dulux",     finish: "Matte",    color: "Blue",   priceTier: "Budget",   searchKeywords: ["paint", "wall"]  }),
+    base({ id: 4, name: "Bellagio Marble Wall Tile",   category: "Wall",  brand: "Bellagio",  finish: "Polished", color: "White",  priceTier: "Standard", searchKeywords: ["marble", "wall"] }),
+    base({ id: 5, name: "Vinyl Plank Wood Floor",      category: "Floor", brand: "Pergo",     finish: "Matte",    color: "Brown",  priceTier: "Standard", searchKeywords: ["vinyl", "wood"]  }),
+  ];
+}
+
 function material(overrides: Partial<MaterialRecord> = {}): MaterialRecord {
   return {
     id: 1,
@@ -43,6 +79,153 @@ function material(overrides: Partial<MaterialRecord> = {}): MaterialRecord {
     ...overrides,
   };
 }
+
+// ── Phase 2 Acceptance Gap 2A: Explicit UI filters must be hard filters ───────
+
+describe("Material Intelligence Phase 2 — Explicit UI Hard Filters", () => {
+  it("priceTier=Budget restricts result set to Budget materials only", () => {
+    const catalog = makeCatalog();
+    const results = rankMaterials(catalog, { query: "marble", priceTier: "Budget" });
+    expect(results.length).toBeGreaterThan(0);
+    for (const { material } of results) {
+      expect(material.priceTier).toBe("Budget");
+    }
+  });
+
+  it("priceTier=Budget with q=marble: every returned material has priceTier=Budget", () => {
+    const catalog = makeCatalog();
+    // The required test example from the integration spec
+    const results = rankMaterials(catalog, { query: "marble", priceTier: "Budget" });
+    for (const { material } of results) {
+      expect(material.priceTier).toBe("Budget");
+    }
+  });
+
+  it("priceTier=Premium excludes Budget and Standard materials", () => {
+    const catalog = makeCatalog();
+    const results = rankMaterials(catalog, { query: "", priceTier: "Premium" });
+    expect(results.length).toBeGreaterThan(0);
+    for (const { material } of results) {
+      expect(material.priceTier).toBe("Premium");
+    }
+  });
+
+  it("category=Floor excludes Wall and other categories", () => {
+    const catalog = makeCatalog();
+    const results = rankMaterials(catalog, { query: "tile", category: "Floor" });
+    expect(results.length).toBeGreaterThan(0);
+    for (const { material } of results) {
+      expect(material.category).toBe("Floor");
+    }
+  });
+
+  it("category=Wall excludes Floor materials even when query matches Floor items", () => {
+    const catalog = makeCatalog();
+    const results = rankMaterials(catalog, { query: "marble", category: "Wall" });
+    for (const { material } of results) {
+      expect(material.category).toBe("Wall");
+    }
+    // Marble Floor items must NOT appear
+    expect(results.some((r) => r.material.id === 1)).toBe(false);
+  });
+
+  it("brand=Roman excludes all non-Roman brands", () => {
+    const catalog = makeCatalog();
+    const results = rankMaterials(catalog, { query: "", brand: "Roman" });
+    expect(results.length).toBeGreaterThan(0);
+    for (const { material } of results) {
+      expect(material.brand).toBe("Roman");
+    }
+  });
+
+  it("brand=Dulux returns only Dulux materials", () => {
+    const catalog = makeCatalog();
+    const results = rankMaterials(catalog, { query: "paint", brand: "Dulux" });
+    expect(results.length).toBeGreaterThan(0);
+    for (const { material } of results) {
+      expect(material.brand).toBe("Dulux");
+    }
+  });
+
+  it("finish=Polished excludes Matte materials", () => {
+    const catalog = makeCatalog();
+    const results = rankMaterials(catalog, { query: "tile", finish: "Polished" });
+    expect(results.length).toBeGreaterThan(0);
+    for (const { material } of results) {
+      expect(material.finish).toBe("Polished");
+    }
+  });
+
+  it("finish=Matte excludes Polished materials", () => {
+    const catalog = makeCatalog();
+    const results = rankMaterials(catalog, { query: "", finish: "Matte" });
+    expect(results.length).toBeGreaterThan(0);
+    for (const { material } of results) {
+      expect(material.finish).toBe("Matte");
+    }
+  });
+
+  it("color=White excludes Grey, Blue, Brown materials", () => {
+    const catalog = makeCatalog();
+    const results = rankMaterials(catalog, { query: "tile", color: "White" });
+    expect(results.length).toBeGreaterThan(0);
+    for (const { material } of results) {
+      expect(material.color).toBe("White");
+    }
+  });
+
+  it("color=Blue returns only Blue materials", () => {
+    const catalog = makeCatalog();
+    const results = rankMaterials(catalog, { query: "", color: "Blue" });
+    expect(results.length).toBeGreaterThan(0);
+    for (const { material } of results) {
+      expect(material.color).toBe("Blue");
+    }
+  });
+
+  it("combined hard filters: category=Floor AND priceTier=Budget", () => {
+    const catalog = makeCatalog();
+    const results = rankMaterials(catalog, { query: "granite", category: "Floor", priceTier: "Budget" });
+    expect(results.length).toBeGreaterThan(0);
+    for (const { material } of results) {
+      expect(material.category).toBe("Floor");
+      expect(material.priceTier).toBe("Budget");
+    }
+  });
+
+  it("combined hard filters: brand=Roman AND finish=Polished", () => {
+    const catalog = makeCatalog();
+    const results = rankMaterials(catalog, { query: "", brand: "Roman", finish: "Polished" });
+    expect(results.length).toBeGreaterThan(0);
+    for (const { material } of results) {
+      expect(material.brand).toBe("Roman");
+      expect(material.finish).toBe("Polished");
+    }
+  });
+
+  it("impossible filter combination returns empty array", () => {
+    const catalog = makeCatalog();
+    const results = rankMaterials(catalog, { query: "marble", brand: "Roman", priceTier: "Budget" });
+    // Roman only has Premium — expect no results
+    expect(results).toHaveLength(0);
+  });
+
+  it("filter values are case-insensitive (normalized)", () => {
+    const catalog = makeCatalog();
+    const upper = rankMaterials(catalog, { query: "", priceTier: "BUDGET" });
+    const lower = rankMaterials(catalog, { query: "", priceTier: "budget" });
+    expect(upper.map((r) => r.material.id)).toEqual(lower.map((r) => r.material.id));
+  });
+
+  it("omitting a filter does not restrict results on that dimension", () => {
+    const catalog = makeCatalog();
+    const withoutBrand = rankMaterials(catalog, { query: "tile" });
+    const withBrand    = rankMaterials(catalog, { query: "tile", brand: "Roman" });
+    expect(withoutBrand.length).toBeGreaterThanOrEqual(withBrand.length);
+  });
+});
+
+// ── Core Phase 2 tests ────────────────────────────────────────────────────────
 
 describe("Material Intelligence Phase 2", () => {
   beforeEach(() => resetMaterialAnalytics());
