@@ -1,0 +1,396 @@
+MASTER RULE — PHASE 2 ONLY
+AI SMART SEARCH & MATCHING
+
+STATUS
+
+Canonical Material Library Phase 1 is VERIFIED.
+
+Baseline:
+
+- 500 materials
+- 13 categories
+- canonical Material Library API
+- InteriorDesignEditor integration
+- persistence verified
+- approval snapshot verified
+- image generation compatibility verified
+- regression baseline established
+
+DO NOT MODIFY OR REGRESS ANY PHASE 1 BEHAVIOR.
+
+========================================================
+STRICT SCOPE
+========================================================
+
+Implement ONLY Phase 2.
+
+Do NOT implement:
+
+- OCR
+- website scraping
+- supplier integration
+- marketplace
+- purchasing
+- ordering
+- AI recommendation engine
+- catalog import
+- external APIs
+
+Those belong to later phases.
+
+========================================================
+NON-NEGOTIABLE RULES
+========================================================
+
+Do NOT modify:
+
+- Material schema
+- Material migration
+- Seed structure
+- Existing CRUD contract
+- Existing Material Library API behavior
+- Approval workflow
+- Image generation workflow
+- Draft persistence
+- Existing tests
+
+Phase 2 must be ADDITIVE ONLY.
+
+========================================================
+ARCHITECTURE
+========================================================
+
+Create a new isolated domain:
+
+artifacts/api-server/src/domains/material-intelligence/
+
+Suggested structure:
+
+materialNormalizer.ts
+materialAliases.ts
+materialSearchEngine.ts
+materialHybridRanker.ts
+materialSimilarity.ts
+materialSuggestions.ts
+materialCache.ts
+materialAnalytics.ts
+types.ts
+index.ts
+
+Keep everything independent.
+
+========================================================
+SEARCH MODES
+========================================================
+
+Implement:
+
+1. Exact Match
+
+2. Keyword Match
+
+3. Fuzzy Match
+
+4. Semantic-ready Match
+
+5. Hybrid Ranking
+
+The semantic layer MUST be provider-independent.
+
+Create only the abstraction.
+
+Do NOT call OpenAI,
+Anthropic,
+Gemini,
+or any external AI.
+
+========================================================
+NORMALIZATION
+========================================================
+
+Support aliases such as:
+
+marmer → marble
+
+travertine → travertine
+
+kayu jati → teak
+
+granit → granite
+
+doff → matte
+
+glossy → gloss
+
+keramik → ceramic
+
+ubin → tile
+
+vinyl → vinyl plank
+
+HPL → high pressure laminate
+
+Support both Indonesian and English.
+
+========================================================
+HYBRID RANKING
+========================================================
+
+Ranking should combine:
+
+Exact score
+
+Keyword score
+
+Alias score
+
+Category score
+
+Brand score
+
+Style score
+
+Component score
+
+Color similarity
+
+Finish similarity
+
+Material similarity
+
+Return deterministic scores.
+
+========================================================
+SIMILAR MATERIALS
+========================================================
+
+Create endpoint:
+
+GET /api/material-library/:id/similar
+
+Return similar materials using:
+
+category
+
+subcategory
+
+finish
+
+color
+
+texture
+
+price tier
+
+brand
+
+Exclude the current material.
+
+========================================================
+SEARCH SUGGESTIONS
+========================================================
+
+Create endpoint:
+
+GET /api/material-library/suggestions
+
+Suggestions should come from:
+
+material names
+
+brands
+
+categories
+
+subcategories
+
+aliases
+
+popular searches
+
+Do NOT call AI.
+
+========================================================
+ANALYTICS
+========================================================
+
+Track in-memory only:
+
+search count
+
+top keywords
+
+top materials
+
+top categories
+
+average response time
+
+cache hit ratio
+
+No database migration.
+
+========================================================
+CACHE
+========================================================
+
+Implement lightweight in-memory cache.
+
+Requirements:
+
+TTL
+
+version awareness
+
+automatic invalidation
+
+Must use the existing Material Library versioning.
+
+Never duplicate the catalog.
+
+========================================================
+INTERIOR DESIGN INTEGRATION
+========================================================
+
+Update MaterialSelectorDialog.
+
+New capabilities:
+
+live search
+
+live suggestions
+
+similar materials
+
+hybrid ranking
+
+No UI redesign.
+
+No workflow changes.
+
+========================================================
+BACKWARD COMPATIBILITY
+========================================================
+
+Existing endpoints MUST behave identically.
+
+Existing tests MUST continue to pass.
+
+Do NOT remove or rename endpoints.
+
+========================================================
+TESTS
+========================================================
+
+Add tests for:
+
+normalization
+
+alias mapping
+
+fuzzy matching
+
+hybrid ranking
+
+cache
+
+cache invalidation
+
+suggestions
+
+similar materials
+
+analytics
+
+ranking stability
+
+search latency
+
+Interior selector integration
+
+Regression tests ensuring all Phase 1 functionality still passes.
+
+========================================================
+PERFORMANCE
+========================================================
+
+Target:
+
+Search <100 ms
+
+Suggestions <50 ms
+
+Cache hit <10 ms
+
+========================================================
+VERIFICATION
+========================================================
+
+Run:
+
+1. Material Library API tests
+
+2. Material Intelligence tests
+
+3. InteriorDesignEditor tests
+
+4. MaterialSelectorDialog tests
+
+5. Persistence tests
+
+6. Approval snapshot tests
+
+7. Image generation tests
+
+8. Production builds
+
+9. Live walkthrough:
+
+- search
+- filter
+- suggestions
+- similar materials
+- save
+- reload
+- approve
+- generate image
+
+========================================================
+FINAL REPORT
+========================================================
+
+Return:
+
+Files created
+
+Files modified
+
+Architecture
+
+New endpoints
+
+Performance metrics
+
+Cache metrics
+
+Test totals
+
+Regression status
+
+Typecheck status
+
+Build status
+
+Live verification
+
+Git diff summary
+
+Important:
+
+Do NOT implement Phase 3.
+
+Do NOT commit.
+
+Do NOT push.
+
+STOP after Phase 2 implementation and verification.

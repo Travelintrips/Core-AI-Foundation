@@ -4,7 +4,7 @@
  * Single-responsibility: all SQL via Drizzle ORM. No business logic here.
  */
 
-import { eq, ilike, and, or, asc, desc, count, SQL } from "drizzle-orm";
+import { eq, ilike, and, or, asc, desc, count, max, SQL } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { materialsTable, materialCategoriesTable } from "@workspace/db/schema";
 import type {
@@ -121,6 +121,19 @@ export async function findMaterialById(id: number): Promise<MaterialRecord | und
   return rows[0] as MaterialRecord | undefined;
 }
 
+/**
+ * Additive read helper for Material Intelligence. It reads the canonical
+ * active catalog in one query; the Phase 1 paginated contract is unchanged.
+ */
+export async function findAllActiveMaterials(): Promise<MaterialRecord[]> {
+  const rows = await db
+    .select()
+    .from(materialsTable)
+    .where(eq(materialsTable.status, "active"))
+    .orderBy(asc(materialsTable.name), asc(materialsTable.id));
+  return rows as MaterialRecord[];
+}
+
 export async function findMaterialByCode(code: string): Promise<MaterialRecord | undefined> {
   const rows = await db
     .select()
@@ -203,6 +216,19 @@ export async function upsertMaterial(data: {
 export async function countMaterials(): Promise<number> {
   const rows = await db.select({ count: count() }).from(materialsTable);
   return Number(rows[0]?.count ?? 0);
+}
+
+/**
+ * A cheap catalog fingerprint for additive consumers such as Material
+ * Intelligence. It deliberately uses the canonical table rather than a
+ * duplicated in-memory catalog, and changes when a material is inserted or
+ * updated.
+ */
+export async function getMaterialCatalogVersion(): Promise<string> {
+  const [row] = await db
+    .select({ count: count(), latestUpdatedAt: max(materialsTable.updatedAt) })
+    .from(materialsTable);
+  return `${Number(row?.count ?? 0)}:${row?.latestUpdatedAt?.toISOString() ?? "empty"}`;
 }
 
 export async function getDistinctBrands(): Promise<string[]> {
