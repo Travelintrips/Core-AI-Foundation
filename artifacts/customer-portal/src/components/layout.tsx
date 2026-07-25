@@ -5,26 +5,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation, type Lang } from "@/lib/i18n";
 
 const FOOTER_COLS_KEYS = [
-  {
-    key: "product",
-    links: ["AI Service Catalog", "Workspace Dashboard", "Analytics", "API Access", "Integrations", "Changelog"],
-  },
-  {
-    key: "solutions",
-    links: ["Creative & Marketing", "Finance & Tax", "Legal & Compliance", "HR & Payroll", "Logistics & Customs", "Enterprise Custom"],
-  },
-  {
-    key: "resources",
-    links: ["Documentation", "API Reference", "Case Studies", "Blog & Insights", "Webinar", "Community"],
-  },
-  {
-    key: "company",
-    links: null, // translated
-  },
-  {
-    key: "legal",
-    links: ["Privacy Policy", "Terms of Service", "Security", "ISO 27001", "SLA", "Compliance"],
-  },
+  { key: "product",   linksKey: "footer.productLinks"   },
+  { key: "solutions", linksKey: "footer.solutionsLinks" },
+  { key: "resources", linksKey: "footer.resourcesLinks" },
+  { key: "company",   linksKey: "footer.companyLinks"   },
+  { key: "legal",     linksKey: "footer.legalLinks"     },
 ];
 
 const TRUST_BADGES = [
@@ -70,7 +55,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const FOOTER_COLS = FOOTER_COLS_KEYS.map((col) => ({
     heading: t(`footer.${col.key}`),
-    links: col.links ?? tArr('footer.companyLinks'),
+    links: tArr(col.linksKey),
   }));
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link, useParams, useLocation, useSearch } from "wouter";
+import { useTranslation } from "@/lib/i18n";
 import { motion, AnimatePresence } from "framer-motion";
 import { Layout } from "@/components/layout";
 import { FlowStepper } from "@/components/flow-stepper";
@@ -37,10 +38,10 @@ function formatMoney(value: number, currency: string) {
   return `$${value.toLocaleString()}`;
 }
 
-function flowLabel(flow: string) {
-  if (flow === "fixed_price") return "Fixed Price";
-  if (flow === "custom_project") return "Custom Project";
-  return "Enterprise";
+function flowLabel(flow: string, t: (k: string) => string) {
+  if (flow === "fixed_price") return t("serviceDetail.flow.fixedPrice");
+  if (flow === "custom_project") return t("serviceDetail.flow.customProject");
+  return t("serviceDetail.flow.enterprise");
 }
 
 function flowColor(flow: string) {
@@ -112,6 +113,7 @@ function MobileStickyBar({
   submitting: boolean;
   addonTotal: number;
 }) {
+  const { t } = useTranslation();
   const [sheetOpen, setSheetOpen] = useState(false);
   const total = (breakdown?.total ?? Number(service.startingPrice)) + addonTotal;
   const currency = breakdown?.currency ?? service.currency;
@@ -130,7 +132,7 @@ function MobileStickyBar({
             aria-label="View quote details"
           >
             <p className="text-[11px] text-[#8B9BC4] mb-0.5">
-              {isPending ? "Calculating…" : breakdown ? "Your quote" : "Starting from"}
+              {isPending ? t("serviceDetail.sticky.calculating") : breakdown ? t("serviceDetail.sticky.yourQuote") : t("serviceDetail.sticky.startingFrom")}
             </p>
             <p className="font-bold text-lg text-[#F0F4FF] leading-none" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               {formatMoney(total, currency)}
@@ -143,7 +145,7 @@ function MobileStickyBar({
             className="btn-primary shrink-0 px-5 py-2.5 text-sm disabled:opacity-60"
             aria-label="Continue to brief"
           >
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Continue →"}
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : t("serviceDetail.sticky.continueBtn")}
           </button>
         </div>
       </div>
@@ -169,7 +171,7 @@ function MobileStickyBar({
             >
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-bold text-base text-[#F0F4FF]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Quote Summary
+                  {t("serviceDetail.sticky.quoteSummary")}
                 </h3>
                 <button
                   onClick={() => setSheetOpen(false)}
@@ -208,18 +210,18 @@ function MobileStickyBar({
                 </div>
               ) : (
                 <p className="text-sm text-[#8B9BC4]">
-                  Select a package and options above to calculate your exact price.
+                  {t("serviceDetail.sticky.selectAbove")}
                 </p>
               )}
               <div className="space-y-2 pt-1">
                 <div className="text-[11px] text-[#8B9BC4] flex items-center gap-1.5">
-                  <Lock className="w-3 h-3 text-emerald-400" /> No hidden fees
+                  <Lock className="w-3 h-3 text-emerald-400" /> {t("serviceDetail.sticky.noHiddenFees")}
                 </div>
                 <div className="text-[11px] text-[#8B9BC4] flex items-center gap-1.5">
                   <CreditCard className="w-3 h-3 text-violet" />
                   {service.serviceFlow === "fixed_price"
-                    ? "Instant checkout after brief"
-                    : "Commercial verification before production"}
+                    ? t("serviceDetail.quote.instantCheckout")
+                    : t("serviceDetail.quote.commercialVerification")}
                 </div>
               </div>
               <button
@@ -228,7 +230,7 @@ function MobileStickyBar({
                 className="btn-primary w-full justify-center mt-2 disabled:opacity-60"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {submitting ? "Submitting…" : "Request This Service"}
+                {submitting ? t("serviceDetail.sticky.submitting") : t("serviceDetail.sticky.requestService")}
               </button>
             </motion.div>
           </>
@@ -246,6 +248,7 @@ export default function ServiceDetailPage() {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   const { data: service, isLoading } = useServiceDetail(
     Number.isFinite(serviceId) ? serviceId : undefined,
@@ -311,8 +314,8 @@ export default function ServiceDetailPage() {
   const onSubmitRequest = () => {
     if (!contact.customerName || !contact.customerEmail) {
       toast({
-        title: "Missing details",
-        description: "Please provide your name and email.",
+        title: t("serviceDetail.errors.missingDetails"),
+        description: t("serviceDetail.errors.missingDetailsDesc"),
         variant: "destructive",
       });
       return;
@@ -323,8 +326,8 @@ export default function ServiceDetailPage() {
         onSuccess: (res) => setLocation(`/request-service/${res.requestId}/brief`),
         onError: (err) =>
           toast({
-            title: "Request failed",
-            description: err instanceof Error ? err.message : "Something went wrong.",
+            title: t("serviceDetail.errors.requestFailed"),
+            description: err instanceof Error ? err.message : t("serviceDetail.errors.somethingWrong"),
             variant: "destructive",
           }),
       },
@@ -398,24 +401,24 @@ export default function ServiceDetailPage() {
 
   // ── Trust pills (data-driven) ────────────────────────────────────────────────
   const trustPills = [
-    service.humanReview && { icon: Shield, label: "Human Reviewed", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/25" },
-    service.serviceFlow !== "enterprise" && { icon: CreditCard, label: "Transparent Pricing", color: "text-violet", bg: "bg-violet/10 border-violet/25" },
-    { icon: Lock, label: "Secure Project", color: "text-cyan", bg: "bg-cyan/10 border-cyan/25" },
-    service.serviceFlow === "fixed_price" && { icon: Globe, label: "Commercial Ready", color: "text-gold", bg: "bg-gold/10 border-gold/25" },
+    service.humanReview && { icon: Shield, label: t("serviceDetail.trust.humanReviewed"), color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/25" },
+    service.serviceFlow !== "enterprise" && { icon: CreditCard, label: t("serviceDetail.trust.transparentPricing"), color: "text-violet", bg: "bg-violet/10 border-violet/25" },
+    { icon: Lock, label: t("serviceDetail.trust.secureProject"), color: "text-cyan", bg: "bg-cyan/10 border-cyan/25" },
+    service.serviceFlow === "fixed_price" && { icon: Globe, label: t("serviceDetail.trust.commercialReady"), color: "text-gold", bg: "bg-gold/10 border-gold/25" },
   ].filter(Boolean) as { icon: React.ElementType; label: string; color: string; bg: string }[];
 
   // ── In-page nav sections ─────────────────────────────────────────────────────
   const NAV_SECTIONS = [
-    { id: "overview",     label: "Overview"    },
-    { id: "deliverables", label: "Deliverables" },
-    ...(hasPackages      ? [{ id: "packages",      label: "Packages"          }] : []),
-    ...(hasAddonPackages ? [{ id: "service-addons", label: "Layanan Tambahan" }] : []),
-    { id: "customize",   label: "Add-ons"     },
-    ...(hasPortfolio ? [{ id: "preview",     label: "Portfolio"   }] : []),
-    ...(hasReviews   ? [{ id: "reviews",     label: "Reviews"     }] : []),
-    { id: "workflow",     label: "How It Works" },
-    { id: "live-preview", label: "AI Preview"   },
-    ...(hasFaq       ? [{ id: "faq",         label: "FAQ"         }] : []),
+    { id: "overview",     label: t("serviceDetail.nav.overview")    },
+    { id: "deliverables", label: t("serviceDetail.nav.deliverables") },
+    ...(hasPackages      ? [{ id: "packages",      label: t("serviceDetail.nav.packages")          }] : []),
+    ...(hasAddonPackages ? [{ id: "service-addons", label: t("serviceDetail.nav.addonServices") }] : []),
+    { id: "customize",   label: t("serviceDetail.nav.addons")     },
+    ...(hasPortfolio ? [{ id: "preview",     label: t("serviceDetail.nav.portfolio")   }] : []),
+    ...(hasReviews   ? [{ id: "reviews",     label: t("serviceDetail.nav.reviews")     }] : []),
+    { id: "workflow",     label: t("serviceDetail.nav.howItWorks") },
+    { id: "live-preview", label: t("serviceDetail.nav.aiPreview")   },
+    ...(hasFaq       ? [{ id: "faq",         label: t("serviceDetail.nav.faq")         }] : []),
   ];
 
   // ── Package recommended logic ────────────────────────────────────────────────
@@ -449,7 +452,7 @@ export default function ServiceDetailPage() {
             className="inline-flex items-center gap-1.5 text-sm text-[#8B9BC4] hover:text-[#F0F4FF] transition-colors mb-6 group"
           >
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-            All Services
+            {t("serviceDetail.backToServices")}
           </Link>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-10 items-start">
@@ -458,7 +461,7 @@ export default function ServiceDetailPage() {
               {/* Badges row */}
               <div className="flex flex-wrap gap-2">
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${flowColor(service.serviceFlow)}`}>
-                  {flowLabel(service.serviceFlow)}
+                  {flowLabel(service.serviceFlow, t)}
                 </span>
                 {service.humanReview && (
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-full border bg-emerald-500/10 text-emerald-400 border-emerald-500/30 flex items-center gap-1">
@@ -498,11 +501,11 @@ export default function ServiceDetailPage() {
                     {showcase.stats.avgRating != null && (
                       <span className="text-sm font-bold ml-1 text-[#F0F4FF]">{showcase.stats.avgRating.toFixed(1)}</span>
                     )}
-                    <span className="text-sm text-[#8B9BC4]">({showcase.stats.reviewCount} reviews)</span>
+                    <span className="text-sm text-[#8B9BC4]">({showcase.stats.reviewCount} {t("serviceDetail.hero.reviews")})</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-sm text-[#8B9BC4]">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    {showcase.stats.totalProjects}+ projects delivered
+                    {showcase.stats.totalProjects}{t("serviceDetail.hero.projectsDelivered")}
                   </div>
                 </div>
               )}
@@ -525,7 +528,7 @@ export default function ServiceDetailPage() {
                   aria-label="Choose a package"
                 >
                   <Package className="w-4 h-4" />
-                  Choose Package
+                  {t("serviceDetail.hero.choosePackage")}
                 </button>
                 <button
                   onClick={() => scrollTo(hasPortfolio ? "preview" : "live-preview")}
@@ -534,7 +537,7 @@ export default function ServiceDetailPage() {
                   aria-label="Preview sample work"
                 >
                   <Sparkles className="w-4 h-4 text-violet" />
-                  Preview Sample
+                  {t("serviceDetail.hero.previewSample")}
                 </button>
               </div>
 
@@ -544,10 +547,10 @@ export default function ServiceDetailPage() {
                   <Sparkles className="w-5 h-5 text-violet shrink-0 mt-0.5 animate-pulse-ring" />
                   <div className="text-sm">
                     <p className="font-semibold mb-0.5 text-[#F0F4FF]">
-                      Continuing with Concept {seededConcept.selectedConcept}: {seededConcept.conceptData.name}
+                      {t("serviceDetail.hero.continuingConcept", { num: String(seededConcept.selectedConcept), name: seededConcept.conceptData.name })}
                     </p>
                     <p className="text-[#8B9BC4] text-xs leading-relaxed">
-                      Your AI preview concept is carried into this brief — no need to regenerate. Pick a package and submit below.
+                      {t("serviceDetail.hero.continuingDesc")}
                     </p>
                   </div>
                 </div>
@@ -560,16 +563,16 @@ export default function ServiceDetailPage() {
                 className="rounded-2xl p-5 border"
                 style={{ background: "rgba(13,21,38,0.8)", borderColor: "rgba(46,66,112,0.7)", backdropFilter: "blur(12px)" }}
               >
-                <p className="text-xs font-semibold text-[#8B9BC4] uppercase tracking-wider mb-1">Starting from</p>
+                <p className="text-xs font-semibold text-[#8B9BC4] uppercase tracking-wider mb-1">{t("serviceDetail.hero.startingFrom")}</p>
                 <p className="font-bold text-3xl text-[#F0F4FF] mb-3" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   {formatMoney(Number(service.startingPrice), currency)}
                 </p>
                 <div className="space-y-1.5 mb-4">
                   {[
-                    service.humanReview && "Human expert review included",
-                    `${service.estimatedDelivery} standard delivery`,
-                    service.serviceFlow === "fixed_price" && "Instant checkout — no back-and-forth",
-                    service.serviceFlow !== "fixed_price" && "Custom quotation available",
+                    service.humanReview && t("serviceDetail.hero.humanReviewIncluded"),
+                    `${service.estimatedDelivery} ${t("serviceDetail.hero.standardDelivery")}`,
+                    service.serviceFlow === "fixed_price" && t("serviceDetail.hero.instantCheckout"),
+                    service.serviceFlow !== "fixed_price" && t("serviceDetail.hero.customQuotation"),
                   ].filter(Boolean).map((item, i) => (
                     <div key={i} className="flex items-center gap-2 text-xs text-[#8B9BC4]">
                       <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -581,7 +584,7 @@ export default function ServiceDetailPage() {
                   onClick={() => scrollTo(hasPackages ? "packages" : "customize")}
                   className="btn-primary w-full justify-center"
                 >
-                  Choose Package
+                  {t("serviceDetail.hero.choosePackage")}
                   <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
@@ -633,13 +636,13 @@ export default function ServiceDetailPage() {
 
             {/* Overview */}
             <section id="overview">
-              <SectionHead icon={LayoutGrid} title="Overview" />
+              <SectionHead icon={LayoutGrid} title={t("serviceDetail.sections.overview")} />
               <p className="text-base text-[#8B9BC4] leading-relaxed mb-6">{service.fullDescription}</p>
             </section>
 
             {/* What You'll Receive */}
             <section id="deliverables">
-              <SectionHead icon={FileText} title="What You'll Receive" />
+              <SectionHead icon={FileText} title={t("serviceDetail.sections.whatYouReceive")} />
               {hasDeliverables ? (
                 <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(46,66,112,0.5)", background: "rgba(13,21,38,0.6)" }}>
                   <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x" style={{ "--tw-divide-color": "rgba(46,66,112,0.4)" } as React.CSSProperties}>
@@ -647,7 +650,7 @@ export default function ServiceDetailPage() {
                     <div className="p-5 sm:p-6">
                       <p className="flex items-center gap-2 text-xs font-bold text-emerald-400 uppercase tracking-wider mb-4">
                         <CheckCircle2 className="w-4 h-4" />
-                        Included
+                        {t("serviceDetail.sections.included")}
                       </p>
                       <ul className="space-y-3">
                         {service.deliverables!.map((d, i) => (
@@ -663,19 +666,19 @@ export default function ServiceDetailPage() {
                             <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)" }}>
                               <Check className="w-3 h-3 text-emerald-400" />
                             </div>
-                            <span className="text-[#C8D5F0]">Human quality review before delivery</span>
+                            <span className="text-[#C8D5F0]">{t("serviceDetail.sections.humanQualityReview")}</span>
                           </li>
                         )}
                       </ul>
                     </div>
                     {/* Meta */}
                     <div className="p-5 sm:p-6 space-y-4">
-                      <p className="text-xs font-bold text-[#8B9BC4] uppercase tracking-wider mb-4">Project Details</p>
+                      <p className="text-xs font-bold text-[#8B9BC4] uppercase tracking-wider mb-4">{t("serviceDetail.sections.projectDetails")}</p>
                       {[
-                        { icon: Clock, label: "Delivery Time", value: service.estimatedDelivery },
-                        { icon: Globe, label: "Flow Type", value: flowLabel(service.serviceFlow) },
-                        { icon: Shield, label: "Human Review", value: service.humanReview ? "Included" : "Not included" },
-                        { icon: RefreshCw, label: "Revisions", value: "Per package" },
+                        { icon: Clock, label: t("serviceDetail.sections.deliveryTime"), value: service.estimatedDelivery },
+                        { icon: Globe, label: t("serviceDetail.sections.flowType"), value: flowLabel(service.serviceFlow, t) },
+                        { icon: Shield, label: t("serviceDetail.sections.humanReview"), value: service.humanReview ? t("serviceDetail.sections.includedLabel") : t("serviceDetail.sections.notIncluded") },
+                        { icon: RefreshCw, label: t("serviceDetail.sections.revisions"), value: t("serviceDetail.sections.perPackage") },
                       ].map(({ icon: Icon, label, value }) => (
                         <div key={label} className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
@@ -692,7 +695,7 @@ export default function ServiceDetailPage() {
                 <div className="rounded-2xl p-6 flex items-center gap-3" style={{ border: "1px solid rgba(46,66,112,0.4)", background: "rgba(13,21,38,0.5)" }}>
                   <FileText className="w-5 h-5 text-[#8B9BC4] shrink-0" />
                   <p className="text-sm text-[#8B9BC4]">
-                    Deliverables are customised per brief. You'll confirm the full scope with our team after submission.
+                    {t("serviceDetail.sections.deliverablesCustom")}
                   </p>
                 </div>
               )}
@@ -701,7 +704,7 @@ export default function ServiceDetailPage() {
             {/* Packages */}
             {hasPackages && (
               <section id="packages">
-                <SectionHead icon={Package} title="Choose a Package" />
+                <SectionHead icon={Package} title={t("serviceDetail.sections.choosePackage")} />
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" role="radiogroup" aria-label="Service packages">
                   {tierPackages.map((p, idx) => {
                     const price = p.oneTimePrice ?? p.monthlyPrice ?? p.yearlyPrice;
@@ -713,7 +716,7 @@ export default function ServiceDetailPage() {
                           <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
                             <span className="flex items-center gap-1 px-3 py-0.5 rounded-full text-[11px] font-bold bg-gradient-primary text-white shadow-lg whitespace-nowrap">
                               <Star className="w-3 h-3 fill-white" />
-                              Most Popular
+                              {t("serviceDetail.sections.mostPopular")}
                             </span>
                           </div>
                         )}
@@ -773,7 +776,7 @@ export default function ServiceDetailPage() {
                                 </li>
                               ))}
                               {p.featuresJson.length > 4 && (
-                                <li className="text-[11px] text-violet ml-5">+{p.featuresJson.length - 4} more</li>
+                                <li className="text-[11px] text-violet ml-5">{t("serviceDetail.sections.moreFeatures", { count: String(p.featuresJson.length - 4) })}</li>
                               )}
                             </ul>
                           )}
@@ -788,10 +791,10 @@ export default function ServiceDetailPage() {
             {/* ── Service-level Add-ons ── companion services from same specialist ── */}
             {hasAddonPackages && (
               <section id="service-addons">
-                <SectionHead icon={PlusCircle} title="Layanan Tambahan" />
+                <SectionHead icon={PlusCircle} title={t("serviceDetail.sections.additionalServices")} />
                 <div className="rounded-2xl overflow-hidden space-y-2" style={{ border: "1px solid rgba(46,66,112,0.5)", background: "rgba(13,21,38,0.6)" }}>
                   <p className="px-5 pt-5 text-xs text-[#8B9BC4] leading-relaxed">
-                    Lengkapi pesanan Anda dengan layanan terkait dari spesialis yang sama — dikerjakan dalam satu brief.
+                    {t("serviceDetail.sections.addonComplement")}
                   </p>
                   <div className="p-3 space-y-2">
                     {addonPackages.map((pkg) => {
@@ -822,7 +825,7 @@ export default function ServiceDetailPage() {
                                 {pkg.packageName}
                               </span>
                               <span className={`text-sm font-bold whitespace-nowrap ${selected ? "text-violet" : "text-[#8B9BC4]"}`}>
-                                +{price > 0 ? formatMoney(price, currency) : "Custom"}
+                                +{price > 0 ? formatMoney(price, currency) : t("serviceDetail.addons.customCost")}
                               </span>
                             </div>
                             {desc && <p className="text-xs text-[#6B7FA3] mt-1 leading-snug">{desc}</p>}
@@ -853,7 +856,7 @@ export default function ServiceDetailPage() {
                   </div>
                   {selectedAddonIds.length > 0 && (
                     <div className="px-5 pb-4 flex items-center justify-between">
-                      <span className="text-xs text-[#8B9BC4]">{selectedAddonIds.length} layanan tambahan dipilih</span>
+                      <span className="text-xs text-[#8B9BC4]">{t("serviceDetail.sections.addonSelected", { count: String(selectedAddonIds.length) })}</span>
                       <span className="text-sm font-bold text-violet">+{formatMoney(addonTotal, currency)}</span>
                     </div>
                   )}
@@ -863,14 +866,14 @@ export default function ServiceDetailPage() {
 
             {/* ── Add-ons & Customization ── shown right after package pick */}
             <section id="customize">
-              <SectionHead icon={Settings2} title="Add-ons & Customization" />
+              <SectionHead icon={Settings2} title={t("serviceDetail.sections.addonCustomization")} />
               <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(46,66,112,0.5)", background: "rgba(13,21,38,0.6)" }}>
 
                 {/* Delivery speed */}
                 <div className="p-5 border-b" style={{ borderColor: "rgba(46,66,112,0.4)" }}>
                   <p className="text-xs font-bold text-[#8B9BC4] uppercase tracking-wider mb-3 flex items-center gap-1.5">
                     <Zap className="w-3.5 h-3.5 text-cyan" />
-                    Kecepatan Pengiriman
+                    {t("serviceDetail.sections.deliverySpeed")}
                   </p>
                   <div className="flex flex-wrap gap-2" role="group" aria-label="Delivery speed options">
                     {[
@@ -903,15 +906,15 @@ export default function ServiceDetailPage() {
                 {/* Optional add-ons — checkbox list */}
                 <div className="p-5 space-y-2.5">
                   <p className="text-xs font-bold text-[#8B9BC4] uppercase tracking-wider mb-3">
-                    Pilih Add-on Opsional
+                    {t("serviceDetail.sections.optionalAddons")}
                   </p>
                   {(
                     [
-                      ["humanReviewRequested", "Human Review",          Shield,    "text-violet",     "Pakar manusia meninjau output akhir untuk kualitas & kesesuaian merek.",          ""],
-                      ["bilingual",            "Pengiriman Bilingual",  LayoutGrid,"text-cyan",       "Terima semua copy & materi dalam dua bahasa.",                                   ""],
-                      ["editableSourceFile",   "File Sumber Editable",  Settings2, "text-gold",       "Dapatkan file asli yang bisa diedit (AI, PSD, Figma, dll.).",                    ""],
-                      ["extendedUsageRights",  "Hak Penggunaan Luas",   Award,     "text-emerald-400","Lisensi komersial penuh untuk saluran media tak terbatas.",                       ""],
-                      ["extraRevisions",       "Revisi Tambahan (×1)",  RefreshCw, "text-[#FB923C]",  "Tambahkan satu putaran revisi ekstra di atas jumlah revisi paket Anda.",          "revisions"],
+                      ["humanReviewRequested", t("serviceDetail.addons.humanReview"),    Shield,    "text-violet",     t("serviceDetail.addons.humanReviewDesc"),    ""],
+                      ["bilingual",            t("serviceDetail.addons.bilingual"),       LayoutGrid,"text-cyan",       t("serviceDetail.addons.bilingualDesc"),      ""],
+                      ["editableSourceFile",   t("serviceDetail.addons.editableSource"), Settings2, "text-gold",       t("serviceDetail.addons.editableSourceDesc"), ""],
+                      ["extendedUsageRights",  t("serviceDetail.addons.extendedRights"), Award,     "text-emerald-400",t("serviceDetail.addons.extendedRightsDesc"), ""],
+                      ["extraRevisions",       t("serviceDetail.addons.extraRevisions"), RefreshCw, "text-[#FB923C]",  t("serviceDetail.addons.extraRevisionsDesc"),"revisions"],
                     ] as const
                   ).map(([key, label, Icon, iconCls, tooltip, special]) => {
                     const isRevisions = special === "revisions";
@@ -949,7 +952,7 @@ export default function ServiceDetailPage() {
                         </div>
 
                         {/* Price hint */}
-                        <span className="text-[11px] text-[#8B9BC4] shrink-0">+biaya</span>
+                        <span className="text-[11px] text-[#8B9BC4] shrink-0">{t("serviceDetail.addons.additionalCost")}</span>
 
                         <input
                           type="checkbox"
@@ -972,7 +975,7 @@ export default function ServiceDetailPage() {
                 <div className="px-5 pb-5 pt-1 border-t flex items-center justify-between gap-4" style={{ borderColor: "rgba(46,66,112,0.4)" }}>
                   <label className="text-xs font-bold text-[#8B9BC4] uppercase tracking-wider flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5 text-violet" />
-                    Jumlah
+                    {t("serviceDetail.sections.quantity")}
                   </label>
                   <div className="flex items-center gap-2">
                     <button
@@ -994,7 +997,7 @@ export default function ServiceDetailPage() {
             {/* Portfolio */}
             {hasPortfolio && (
               <section id="preview">
-                <SectionHead icon={Award} title="Portfolio & Sample Output" />
+                <SectionHead icon={Award} title={t("serviceDetail.sections.portfolioOutput")} />
                 <PortfolioGallery portfolios={showcase.portfolios} />
               </section>
             )}
@@ -1002,20 +1005,20 @@ export default function ServiceDetailPage() {
             {/* Reviews */}
             {hasReviews && (
               <section id="reviews">
-                <SectionHead icon={Star} title="Client Reviews" />
+                <SectionHead icon={Star} title={t("serviceDetail.sections.clientReviews")} />
                 <PortfolioReviews reviews={showcase!.reviews!} avgRating={showcase!.stats.avgRating} />
               </section>
             )}
 
             {/* How It Works */}
             <section id="workflow">
-              <SectionHead icon={ChevronRight} title="How It Works" />
+              <SectionHead icon={ChevronRight} title={t("serviceDetail.sections.howItWorks")} />
               <ServiceWorkflow />
             </section>
 
             {/* Live AI Preview */}
             <section id="live-preview">
-              <SectionHead icon={Sparkles} title="Try a Free AI Preview" />
+              <SectionHead icon={Sparkles} title={t("serviceDetail.sections.aiPreview")} />
               <LiveAiPreview
                 serviceId={serviceId}
                 onConceptContinued={(res) => {
@@ -1030,7 +1033,7 @@ export default function ServiceDetailPage() {
             {/* FAQ */}
             {hasFaq && (
               <section id="faq">
-                <SectionHead icon={HelpCircle} title="Frequently Asked Questions" />
+                <SectionHead icon={HelpCircle} title={t("serviceDetail.sections.faqSection")} />
                 <ServiceFaqSection faqs={showcase!.faqs!} />
               </section>
             )}
@@ -1038,7 +1041,7 @@ export default function ServiceDetailPage() {
             {/* Related services */}
             {hasRelated && (
               <section id="related">
-                <SectionHead icon={LayoutGrid} title="You Might Also Like" />
+                <SectionHead icon={LayoutGrid} title={t("serviceDetail.sections.youMightLike")} />
                 <RelatedServices services={showcase!.relatedServices!} />
               </section>
             )}
@@ -1053,7 +1056,7 @@ export default function ServiceDetailPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Receipt className="w-4 h-4 text-violet" />
-                    <h3 className="font-bold text-base text-[#F0F4FF]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Your Quote</h3>
+                    <h3 className="font-bold text-base text-[#F0F4FF]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{t("serviceDetail.quote.yourQuote")}</h3>
                   </div>
                   {!displayBreakdown && (
                     <button
@@ -1061,7 +1064,7 @@ export default function ServiceDetailPage() {
                       disabled={quote.isPending}
                       className="text-xs text-violet hover:text-violet-hover font-medium transition-colors disabled:opacity-50"
                     >
-                      Calculate
+                      {t("serviceDetail.quote.calculate")}
                     </button>
                   )}
                 </div>
@@ -1078,24 +1081,24 @@ export default function ServiceDetailPage() {
                       ))}
                       {displayBreakdown.discount > 0 && (
                         <div className="flex justify-between text-sm text-emerald-400">
-                          <span>Discount</span>
+                          <span>{t("serviceDetail.quote.discount")}</span>
                           <span>−{formatMoney(displayBreakdown.discount, displayBreakdown.currency)}</span>
                         </div>
                       )}
                       {displayBreakdown.tax > 0 && (
                         <div className="flex justify-between text-sm text-[#8B9BC4]">
-                          <span>Tax ({displayBreakdown.taxPercent}%)</span>
+                          <span>{t("serviceDetail.quote.tax")} ({displayBreakdown.taxPercent}%)</span>
                           <span>{formatMoney(displayBreakdown.tax, displayBreakdown.currency)}</span>
                         </div>
                       )}
                       {addonTotal > 0 && (
                         <div className="flex justify-between text-sm text-violet">
-                          <span>Layanan Tambahan ({selectedAddonIds.length}×)</span>
+                          <span>{t("serviceDetail.sections.additionalServices")} ({selectedAddonIds.length}×)</span>
                           <span>+{formatMoney(addonTotal, displayBreakdown.currency)}</span>
                         </div>
                       )}
                       <div className="border-t pt-3 flex justify-between items-baseline" style={{ borderColor: "rgba(46,66,112,0.5)" }}>
-                        <span className="font-bold text-[#F0F4FF]">Total</span>
+                        <span className="font-bold text-[#F0F4FF]">{t("serviceDetail.quote.total")}</span>
                         <span className="font-bold text-xl text-gradient-primary" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                           {formatMoney(displayBreakdown.total + addonTotal, displayBreakdown.currency)}
                         </span>
@@ -1103,13 +1106,13 @@ export default function ServiceDetailPage() {
                     </div>
                   ) : (
                     <div className="rounded-xl border border-border/60 bg-surface-1/50 p-4 text-center">
-                      <p className="text-xs text-[#8B9BC4] mb-2">Select options above to see live pricing</p>
+                      <p className="text-xs text-[#8B9BC4] mb-2">{t("serviceDetail.quote.selectOptions")}</p>
                       <button
                         onClick={() => runQuote(selections)}
                         className="text-xs font-medium text-violet hover:text-violet-hover transition-colors"
-                      >
-                        Update Quote →
-                      </button>
+                       >
+                         {t("serviceDetail.quote.updateQuote")}
+                       </button>
                     </div>
                   )}
                   {/* Recalculating spinner overlay */}
@@ -1131,11 +1134,11 @@ export default function ServiceDetailPage() {
                 {/* Microcopy */}
                 <div className="space-y-1.5 border-t pt-4" style={{ borderColor: "rgba(46,66,112,0.4)" }}>
                   {[
-                    { icon: Lock,       text: "No hidden fees" },
+                     { icon: Lock,       text: t("serviceDetail.quote.noHiddenFees") },
                     { icon: BadgeCheck, text: service.serviceFlow === "fixed_price"
-                        ? "Instant checkout after brief"
-                        : "Commercial verification before production" },
-                    { icon: FileText,   text: "Price may adjust based on submitted brief" },
+                         ? t("serviceDetail.quote.instantCheckout")
+                         : t("serviceDetail.quote.commercialVerification") },
+                     { icon: FileText,   text: t("serviceDetail.quote.priceAdjust") },
                   ].map(({ icon: Icon, text }) => (
                     <p key={text} className="text-[11px] text-[#8B9BC4] flex items-start gap-1.5">
                       <Icon className="w-3 h-3 text-violet shrink-0 mt-0.5" />
@@ -1149,12 +1152,12 @@ export default function ServiceDetailPage() {
               <div className="rounded-2xl p-6 space-y-4" style={{ border: "1px solid rgba(46,66,112,0.6)", background: "rgba(13,21,38,0.7)", backdropFilter: "blur(12px)" }}>
                 <div className="flex items-center gap-2 mb-1">
                   <Sparkles className="w-4 h-4 text-violet" />
-                  <h3 className="font-bold text-base text-[#F0F4FF]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Request This Service</h3>
+                  <h3 className="font-bold text-base text-[#F0F4FF]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{t("serviceDetail.form.title")}</h3>
                 </div>
                 <fieldset className="space-y-3" aria-label="Contact information">
                   <input
                     className="input-field"
-                    placeholder="Your name *"
+                     placeholder={t("serviceDetail.form.namePlaceholder")}
                     autoComplete="name"
                     value={contact.customerName}
                     onChange={(e) => setContact({ ...contact, customerName: e.target.value })}
@@ -1163,7 +1166,7 @@ export default function ServiceDetailPage() {
                   />
                   <input
                     className="input-field"
-                    placeholder="Email address *"
+                     placeholder={t("serviceDetail.form.emailPlaceholder")}
                     type="email"
                     autoComplete="email"
                     value={contact.customerEmail}
@@ -1173,7 +1176,7 @@ export default function ServiceDetailPage() {
                   />
                   <input
                     className="input-field"
-                    placeholder="Phone (optional)"
+                     placeholder={t("serviceDetail.form.phonePlaceholder")}
                     autoComplete="tel"
                     value={contact.customerPhone}
                     onChange={(e) => setContact({ ...contact, customerPhone: e.target.value })}
@@ -1181,7 +1184,7 @@ export default function ServiceDetailPage() {
                   />
                   <input
                     className="input-field"
-                    placeholder="Company (optional)"
+                     placeholder={t("serviceDetail.form.companyPlaceholder")}
                     autoComplete="organization"
                     value={contact.companyName}
                     onChange={(e) => setContact({ ...contact, companyName: e.target.value })}
@@ -1190,7 +1193,7 @@ export default function ServiceDetailPage() {
                   <textarea
                     className="input-field resize-none"
                     rows={3}
-                    placeholder="Anything we should know? (optional)"
+                     placeholder={t("serviceDetail.form.notesPh")}
                     value={contact.notes}
                     onChange={(e) => setContact({ ...contact, notes: e.target.value })}
                     aria-label="Additional notes"
@@ -1207,11 +1210,10 @@ export default function ServiceDetailPage() {
                   ) : (
                     <Sparkles className="w-4 h-4" aria-hidden="true" />
                   )}
-                  {requestService.isPending ? "Submitting…" : "Request This Service"}
+                  {requestService.isPending ? t("serviceDetail.form.submitting") : t("serviceDetail.form.submitBtn")}
                 </button>
                 <p className="text-[11px] text-center text-[#8B9BC4] leading-relaxed">
-                  By submitting you agree to our Terms of Service.{" "}
-                  No payment required at this step.
+                  {t("serviceDetail.form.terms")}
                 </p>
               </div>
 
@@ -1219,9 +1221,9 @@ export default function ServiceDetailPage() {
               <div className="rounded-2xl p-4" style={{ border: "1px solid rgba(46,66,112,0.5)", background: "rgba(13,21,38,0.5)" }}>
                 <div className="grid grid-cols-3 gap-2 text-center">
                   {[
-                    { icon: Shield, label: "Secure" },
-                    { icon: Award,  label: "Quality" },
-                    { icon: Zap,    label: "Fast"    },
+                    { icon: Shield, label: t("serviceDetail.trust2.secure") },
+                    { icon: Award,  label: t("serviceDetail.trust2.quality") },
+                    { icon: Zap,    label: t("serviceDetail.trust2.fast")    },
                   ].map(({ icon: Icon, label }) => (
                     <div key={label} className="flex flex-col items-center gap-1.5">
                       <div className="w-8 h-8 rounded-lg bg-surface-2 border border-border flex items-center justify-center">

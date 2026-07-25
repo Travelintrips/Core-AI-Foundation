@@ -42,13 +42,13 @@ function deliveryDays(est: string | null | undefined): number {
   }
 }
 
-type BadgeKind = "Enterprise" | "Pengiriman Cepat" | "Baru" | "Terpopuler" | "Trending" | "Direview Manusia" | "Siap Komersial";
+type BadgeKey = "enterprise" | "featured" | "humanReview" | "fastDelivery";
 
-function serviceBadge(s: CatalogService): { label: BadgeKind; color: string } | null {
-  if (s.serviceFlow === "enterprise") return { label: "Enterprise", color: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" };
-  if (s.isFeatured) return { label: "Terpopuler", color: "bg-[#7C6EFA]/10 text-[#7C6EFA] border-[#7C6EFA]/30" };
-  if (s.humanReview) return { label: "Direview Manusia", color: "bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30" };
-  if (deliveryDays(s.estimatedDelivery) <= 2) return { label: "Pengiriman Cepat", color: "bg-[#22D3EE]/10 text-[#22D3EE] border-[#22D3EE]/30" };
+function serviceBadgeKey(s: CatalogService): { key: BadgeKey; color: string } | null {
+  if (s.serviceFlow === "enterprise") return { key: "enterprise", color: "bg-[#F59E0B]/10 text-[#F59E0B] border-[#F59E0B]/30" };
+  if (s.isFeatured) return { key: "featured", color: "bg-[#7C6EFA]/10 text-[#7C6EFA] border-[#7C6EFA]/30" };
+  if (s.humanReview) return { key: "humanReview", color: "bg-[#10B981]/10 text-[#10B981] border-[#10B981]/30" };
+  if (deliveryDays(s.estimatedDelivery) <= 2) return { key: "fastDelivery", color: "bg-[#22D3EE]/10 text-[#22D3EE] border-[#22D3EE]/30" };
   return null;
 }
 
@@ -268,7 +268,7 @@ function CategoryCard({
 
 function ServiceCard({ s, onView }: { s: CatalogService; onView: (service: CatalogService) => void }) {
   const { t } = useTranslation();
-  const badge = serviceBadge(s);
+  const badgeInfo = serviceBadgeKey(s);
   const CategoryIcon = getCategoryIcon({ id: s.categoryId, name: s.serviceCode, code: s.serviceCode } as ServiceCategory);
 
   return (
@@ -300,9 +300,9 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (service: Catal
               </p>
             </div>
           </div>
-          {badge && (
-            <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${badge.color}`}>
-              {badge.label}
+          {badgeInfo && (
+            <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${badgeInfo.color}`}>
+              {t(`servicesBadge.${badgeInfo.key}`)}
             </span>
           )}
         </div>
