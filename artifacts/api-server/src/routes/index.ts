@@ -86,6 +86,8 @@ import assetBrowserRouter from "./asset-browser.js";
 import { annotationRouter } from "../domains/annotation-system/index.js";
 // ── Team 21: Universal Material Library ───────────────────────────────────
 import materialLibraryRouter from "./material-library.js";
+// ── Interior Design Material Library (Phase 1) ────────────────────────────
+import materialLibraryCatalogRouter from "./material-library-catalog.js";
 // ── Team 23: Design Knowledge & Recommendation Adapter ────────────────────────
 import designKnowledgeRouter from "./design-knowledge.js";
 // ── Team 17 / Team 34: Universal Design Export Workspace ─────────────────────
@@ -299,6 +301,8 @@ router.use(assetBrowserRouter);
 router.use(annotationRouter);
 // ── Team 21: Universal Material Library ───────────────────────────────────────
 router.use(materialLibraryRouter);
+// ── Interior Design Material Library (Phase 1) ────────────────────────────────
+router.use(materialLibraryCatalogRouter);
 // ── Team 23: Design Knowledge & Recommendation Adapter ────────────────────────
 router.use(designKnowledgeRouter);
 // ── Team 17 / Team 34: Universal Design Export Workspace ─────────────────────
