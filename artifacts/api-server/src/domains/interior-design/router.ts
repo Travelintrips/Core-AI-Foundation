@@ -34,6 +34,7 @@ import {
   updateConceptDraft,
   updateDraftReviewState,
   resetDraftToOriginal,
+  requestRevision,
 } from "./service.js";
 
 const router = Router();
@@ -360,6 +361,33 @@ router.patch("/ai/interior-design/drafts/:projectUuid/review-state", async (req,
 
     const editorId = typeof body["editorId"] === "string" ? body["editorId"] : "admin";
     const draft = await updateDraftReviewState(projectUuid, body["state"], editorId);
+    res.json({ draft });
+  } catch (err) {
+    const status = (err as { status?: number }).status ?? 500;
+    res.status(status).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+/**
+ * POST /ai/interior-design/drafts/:projectUuid/request-revision
+ *
+ * Request revision on an approved draft.
+ * This is the ONLY valid way to leave approved_for_rendering state.
+ * Transitions: approved_for_rendering → revision_requested.
+ *
+ * Body: { requestedBy?: string, reason?: string }
+ * Protected by global adminAuth middleware — unauthorized requests receive 401.
+ */
+router.post("/ai/interior-design/drafts/:projectUuid/request-revision", async (req, res): Promise<void> => {
+  try {
+    const projectUuid = req.params["projectUuid"] ?? "";
+    if (!projectUuid) { res.status(400).json({ error: "projectUuid is required" }); return; }
+
+    const body = req.body as Record<string, unknown>;
+    const requestedBy = typeof body["requestedBy"] === "string" ? body["requestedBy"] : "admin";
+    const reason      = typeof body["reason"]      === "string" ? body["reason"]      : undefined;
+
+    const draft = await requestRevision(projectUuid, requestedBy, reason);
     res.json({ draft });
   } catch (err) {
     const status = (err as { status?: number }).status ?? 500;

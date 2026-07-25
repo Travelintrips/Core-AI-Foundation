@@ -580,6 +580,15 @@ export async function updateConceptDraft(
     .limit(1);
   if (!existing) throw new Error(`No concept draft found for project ${projectUuid}. Call GET first to initialise.`);
 
+  // Approved-state guard — an approved draft is immutable.
+  // Admin must call requestRevision() first to re-open editing.
+  if (existing.reviewState === "approved_for_rendering") {
+    throw Object.assign(
+      new Error("Draft is approved for rendering and cannot be edited. Request revision first."),
+      { status: 409 },
+    );
+  }
+
   // Optimistic concurrency guard
   if (expectedUpdatedAt) {
     const clientTs = new Date(expectedUpdatedAt).getTime();
@@ -594,8 +603,10 @@ export async function updateConceptDraft(
     lastEditedBy:    editorId,
     lastEditedAt:    new Date(),
     updatedAt:       new Date(),
-    // Promote state from ai_generated → edited_by_admin on first edit
-    reviewState: existing.reviewState === "ai_generated" ? "edited_by_admin" : existing.reviewState,
+    // Promote from ai_generated or revision_requested → edited_by_admin on first edit
+    reviewState: (existing.reviewState === "ai_generated" || existing.reviewState === "revision_requested")
+      ? "edited_by_admin"
+      : existing.reviewState,
   };
 
   if ("spacePlan"     in sections) updates.spacePlanDraft     = sections.spacePlan     as never;
@@ -616,6 +627,9 @@ export async function updateConceptDraft(
 /**
  * Change the review state of a draft.
  * Valid transitions are enforced — only states in CONCEPT_DRAFT_REVIEW_STATES allowed.
+ *
+ * Transition FROM approved_for_rendering is blocked here; use requestRevision() instead.
+ * Transition TO approved_for_rendering captures an immutable approved snapshot.
  */
 export async function updateDraftReviewState(
   projectUuid: string,
@@ -633,13 +647,90 @@ export async function updateDraftReviewState(
     .limit(1);
   if (!existing) throw Object.assign(new Error(`No concept draft found for project ${projectUuid}`), { status: 404 });
 
+  // Block any direct state change FROM approved_for_rendering.
+  // Approved drafts must transition via requestRevision() (approved_for_rendering → revision_requested).
+  // This prevents silent downgrade of an approved draft.
+  if (existing.reviewState === "approved_for_rendering") {
+    throw Object.assign(
+      new Error("Cannot change state directly from approved_for_rendering. Use the request-revision action."),
+      { status: 409 },
+    );
+  }
+
+  // Capture an immutable approved snapshot when transitioning TO approved_for_rendering.
+  // The snapshot records exactly what the admin approved — subsequent revision cycles
+  // do not overwrite it until a new approval is recorded.
+  const approvalFields = newState === "approved_for_rendering"
+    ? {
+        approvedSpacePlan:     existing.spacePlanDraft as never,
+        approvedMaterials:     existing.materialsDraft as never,
+        approvedFurniture:     existing.furnitureDraft as never,
+        approvedLighting:      existing.lightingDraft  as never,
+        approvedVisualConcept: existing.visualConceptDraft,
+        approvedAt:            new Date(),
+        approvedBy:            editorId,
+      }
+    : {};
+
   const [updated] = await db
     .update(idConceptDraftsTable)
     .set({
-      reviewState:   newState,
-      lastEditedBy:  editorId,
-      lastEditedAt:  new Date(),
-      updatedAt:     new Date(),
+      reviewState:  newState,
+      lastEditedBy: editorId,
+      lastEditedAt: new Date(),
+      updatedAt:    new Date(),
+      ...approvalFields,
+    })
+    .where(eq(idConceptDraftsTable.projectUuid, projectUuid))
+    .returning();
+
+  return updated!;
+}
+
+/**
+ * Request revision on an approved draft.
+ *
+ * This is the ONLY way to transition out of approved_for_rendering.
+ * After this call the draft moves to revision_requested and editing may resume.
+ * The approved snapshot (approvedSpacePlan, etc.) is preserved — it remains as
+ * an immutable record of what was approved before the revision was requested.
+ *
+ * Full revision cycle:
+ *   approved_for_rendering → revision_requested → edited_by_admin
+ *   → ready_for_review → approved_for_rendering
+ */
+export async function requestRevision(
+  projectUuid: string,
+  requestedBy: string,
+  reason?:     string,
+): Promise<IdConceptDraft> {
+  const [existing] = await db
+    .select()
+    .from(idConceptDraftsTable)
+    .where(eq(idConceptDraftsTable.projectUuid, projectUuid))
+    .limit(1);
+  if (!existing) {
+    throw Object.assign(new Error(`No concept draft found for project ${projectUuid}`), { status: 404 });
+  }
+
+  // Only drafts in approved_for_rendering may be moved to revision_requested
+  if (existing.reviewState !== "approved_for_rendering") {
+    throw Object.assign(
+      new Error(`Revision can only be requested on an approved draft (current state: ${existing.reviewState}).`),
+      { status: 409 },
+    );
+  }
+
+  const [updated] = await db
+    .update(idConceptDraftsTable)
+    .set({
+      reviewState:         "revision_requested",
+      revisionRequestedBy: requestedBy,
+      revisionRequestedAt: new Date(),
+      revisionReason:      reason ?? null,
+      lastEditedBy:        requestedBy,
+      lastEditedAt:        new Date(),
+      updatedAt:           new Date(),
     })
     .where(eq(idConceptDraftsTable.projectUuid, projectUuid))
     .returning();
