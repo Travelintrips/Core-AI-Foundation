@@ -1,97 +1,71 @@
-# Creative AI Studio — Enterprise Platform
+# Creative AI Studio — Enterprise
 
-A full-stack AI-powered creative services platform for PT CST Logistic / cstlogistic.co.id. Customers submit creative project briefs; AI agents generate deliverables (branding, packaging, fashion design, company profiles, etc.). Staff manage jobs, quotations, invoices, and approvals through an internal admin portal.
+AI-powered creative services platform for cstlogistic.co.id. Clients submit briefs, receive AI-generated deliverables (branding, company profiles, marketing assets), and manage everything via a customer workspace.
 
 ## Architecture
-## Replit setup
 
-This repository is configured as a pnpm workspace with artifact-owned workflows.
-The customer portal is the primary preview at `/`; the internal dashboard is
-available at `/admin/`, and the API is served at `/api`.
+pnpm monorepo with four artifacts:
 
-The post-merge setup is deterministic (`pnpm install --frozen-lockfile`) and
-validates the shared libraries plus API bundle before workflows are reconciled.
-For a fresh local setup, run:
+| Artifact | Path | Preview | Purpose |
+|---|---|---|---|
+| Customer Portal | `artifacts/customer-portal` | `/` | Public-facing landing page + client workspace |
+| AI Platform (Admin) | `artifacts/ai-platform` | `/admin/` | Internal staff/admin dashboard |
+| API Server | `artifacts/api-server` | `/api` | Express backend — all business logic, AI calls, DB |
+| Mockup Sandbox | `artifacts/mockup-sandbox` | `/__mockup` | Design component preview canvas |
+
+Shared libraries live in `lib/`:
+- `lib/api-spec/` — OpenAPI YAML (source of truth for all API contracts)
+- `lib/api-zod/` — generated Zod schemas (from codegen)
+- `lib/api-client-react/` — generated React Query hooks (from codegen)
+- `lib/db/` — Drizzle ORM schema + Supabase pool
+
+## How to Run
+
+All four dev servers start automatically via Replit workflows. No manual steps needed.
+
+## Key Scripts
 
 ```bash
-pnpm install --frozen-lockfile
+# Install all deps
+pnpm install
+
+# Rebuild generated code (after OpenAPI spec changes)
+pnpm run build:generated
+
+# Typecheck shared libs
 pnpm run typecheck:libs
-pnpm --filter @workspace/api-server run build
+
+# Build API server
+pnpm run build:api
+
+# Run all tests
+pnpm -r run test
 ```
 
-## Architecture
-A pnpm monorepo powering an AI-driven creative services platform for **CST Logistic / PT Cahaya Sejati Teknologi**.
-# Creative AI Studio — AI Platform (CST Logistic)
+## Environment
 
-pnpm monorepo with 4 registered artifacts:
+All secrets are pre-configured in `.replit` `[userenv]`. Key vars:
 
-| Artifact | Preview Path | Port | Purpose |
-|---|---|---|---|
-| `artifacts/customer-portal` | `/` | 23434 | Public-facing customer site (Indonesian) |
-| `artifacts/ai-platform` | `/admin/` | 20785 | Internal staff / admin portal |
-| `artifacts/api-server` | `/api` | 8080 | Express + Drizzle ORM backend |
-| `artifacts/mockup-sandbox` | `/__mockup` | 8081 | Component preview dev tool |
+- `ADMIN_API_KEY` / `VITE_ADMIN_API_KEY` — admin portal auth
+- `SESSION_SECRET` — express-session
+- `SUPABASE_DEV_DATABASE_URL` / `SUPABASE_DATABASE_URL_DEV` — dev DB (same value, two names for legacy compat)
+- `SUPABASE_DATABASE_URL` — production DB
+- AI provider keys: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `REPLICATE_API_TOKEN`
+- `SMTP_*` — Hostinger SMTP for email
+- `FONNTE_TOKEN` — WhatsApp notifications
 
-## How to run
+## Admin Login
 
-All workflows start automatically. To restart individually:
-
-- **API Server**: `pnpm --filter @workspace/api-server run dev`
-- **Admin Portal**: `pnpm --filter @workspace/ai-platform run dev`
-- **Customer Portal**: `pnpm --filter @workspace/customer-portal run dev`
-- **Component Preview Server**: `pnpm --filter @workspace/mockup-sandbox run dev`
-
-## Setup verification
-
-The imported lockfile installs successfully with `pnpm install --frozen-lockfile`.
-All four configured workflows start successfully, the customer and admin
-previews render, and the API health check passes at `/api/healthz` and
-`/api/healthz/full`.
-
-The focused typechecks for the frontend, mobile, preview, and scripts packages
-pass. The aggregate `pnpm run typecheck` currently stops in the API-server
-package on existing type drift across unrelated tests and services; this does
-not prevent the API bundle from building or the running API from passing its
-health checks.
-
-## Key shared libraries (under `lib/`)
-
-- `lib/db` — Drizzle ORM schema + pool (Supabase Postgres)
-- `lib/api-zod` — Zod validation schemas generated from OpenAPI spec
-- `lib/api-client-react` — React Query hooks (generated via orval)
-- `lib/api-spec` — OpenAPI YAML spec (source of truth for codegen)
+- Email: `abing2267@gmail.com`
+- Password: `admin12345`
 
 ## Database
 
-- **Dev**: Supabase project `xssrfshdrtdfupgqwfdw` (schema: `ai_platform`)
-- **Prod**: Supabase project `nzdweipzckfszczzqtuw` (schema: `ai_platform`)
-- All DB credentials are in `.replit` userenv. **These should be rotated and moved to Replit Secrets.**
+Supabase PostgreSQL, `ai_platform` schema (not `public`). Dev and prod are separate Supabase projects.
 
-## Environment variables
+## User Preferences
 
-All config is in `.replit` (userenv). API keys for OpenAI, Anthropic, Gemini, Mistral, Cohere, and Replicate are stored there. See `.env.example` for the full list of expected variables.
-
-> ⚠️ **Security note**: API keys, DB credentials, and tokens are stored in plaintext in `.replit`. Consider rotating them and storing via Replit Secrets.
-
-## Admin login
-
-- Portal: `/admin/`
-- Default password: set in `INITIAL_INTERNAL_ADMIN_PASSWORD` env var
-- API key: `ADMIN_API_KEY` env var (also `VITE_ADMIN_API_KEY` for frontend)
-
-## Codegen (after changing the OpenAPI spec)
-
-```bash
-pnpm run build:generated   # regenerate api-zod + api-client-react
-pnpm run build:libs        # compile lib/db TypeScript
-pnpm run build:api         # compile api-server
-```
-
-## Production URL
-
-https://aicore.cstlogistic.co.id
-
-## User preferences
-
-- Keep existing project structure — do not restructure or migrate stack
-- Use pnpm for all package management
+- Keep existing project structure — do not restructure or migrate
+- Use `pnpm` (not npm/yarn)
+- Never import `zod/v4` directly in `api-server` routes — use `@workspace/api-zod` schemas only
+- Hand-write DDL for new tables instead of using `drizzle-kit push` (false-positive schema drops)
