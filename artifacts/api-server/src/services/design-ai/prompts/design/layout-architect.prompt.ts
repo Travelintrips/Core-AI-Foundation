@@ -12,6 +12,8 @@ export function buildLayoutArchitectPrompt(
 
   return `You are Layout Architect AI. Your task is to produce a LayoutSpec JSON for the following design project.
 
+LANGUAGE: Write all descriptive text values (whitespaceRules, section names) in Bahasa Indonesia.
+
 PROJECT: ${creativeBrief.projectName}
 CANVAS: ${canvas.width}×${canvas.height}px
 PROJECT TYPE: ${creativeBrief.projectType}

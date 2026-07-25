@@ -10,6 +10,8 @@
  *   5. fashion-quality-control   — Final QC & scoring
  */
 
+import { extractLanguageInstruction } from "./creativeAiService.js";
+
 export interface FashionDesignBriefInput {
   brandName:         string;
   fashionSegment:    string; // luxury | streetwear | modest_fashion | casual | sportswear | workwear | kidswear | bridal
@@ -31,7 +33,8 @@ export interface FashionDesignBriefInput {
 export function buildFashionBrandStrategistPrompt(
   brief: FashionDesignBriefInput,
 ): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = `You are a Senior Fashion Brand Strategist with 15+ years in Southeast Asia and global fashion markets. You have worked with luxury houses, contemporary brands, and emerging labels. You understand fashion consumer psychology, cultural nuances, trend cycles, and brand DNA building. You craft positioning strategies that translate into compelling collections. Always respond in valid JSON.`;
+  const langInstruction = extractLanguageInstruction(brief.notes);
+  const systemPrompt = `You are a Senior Fashion Brand Strategist with 15+ years in Southeast Asia and global fashion markets. You have worked with luxury houses, contemporary brands, and emerging labels. You understand fashion consumer psychology, cultural nuances, trend cycles, and brand DNA building. You craft positioning strategies that translate into compelling collections. Always respond in valid JSON. ${langInstruction}`;
 
   const userPrompt = `Develop a comprehensive fashion brand strategy for the following brief:
 
@@ -91,7 +94,8 @@ export function buildFashionCreativeDirectorPrompt(
   brief: FashionDesignBriefInput,
   brandStrategy: Record<string, unknown>,
 ): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = `You are a world-class Fashion Creative Director with experience directing collections for major fashion weeks and premium labels. You translate brand strategy into cohesive collection concepts, mood boards, and visual direction. You understand garment construction, fabric properties, color theory in fashion, and how to create looks that photograph well and sell. Always respond in valid JSON.`;
+  const langInstruction = extractLanguageInstruction(brief.notes);
+  const systemPrompt = `You are a world-class Fashion Creative Director with experience directing collections for major fashion weeks and premium labels. You translate brand strategy into cohesive collection concepts, mood boards, and visual direction. You understand garment construction, fabric properties, color theory in fashion, and how to create looks that photograph well and sell. Always respond in valid JSON. ${langInstruction}`;
 
   const userPrompt = `Create a detailed creative direction for this fashion collection:
 
@@ -157,7 +161,8 @@ export function buildFashionCollectionWriterPrompt(
   brandStrategy: Record<string, unknown>,
   creativeDirection: Record<string, unknown>,
 ): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = `You are an award-winning Fashion Copywriter and Collection Editor. You write collection names, lookbook narratives, product descriptions, press releases, and campaign copy that makes fashion sell. You understand how luxury and contemporary fashion brands communicate — aspirational but accessible, specific but poetic. Always respond in valid JSON.`;
+  const langInstruction = extractLanguageInstruction(brief.notes);
+  const systemPrompt = `You are an award-winning Fashion Copywriter and Collection Editor. You write collection names, lookbook narratives, product descriptions, press releases, and campaign copy that makes fashion sell. You understand how luxury and contemporary fashion brands communicate — aspirational but accessible, specific but poetic. Always respond in valid JSON. ${langInstruction}`;
 
   const userPrompt = `Write all collection copy for this fashion project:
 
@@ -219,7 +224,8 @@ export function buildFashionTrendAnalystPrompt(
   creativeDirection: Record<string, unknown>,
   collectionCopy: Record<string, unknown>,
 ): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = `You are a Senior Fashion Trend Analyst and Market Intelligence Expert. You track runway reports from WGSN, Pantone forecasts, street style data, and consumer behavior in fashion. You evaluate collections against current and upcoming trend cycles and provide actionable market fit analysis. Always respond in valid JSON.`;
+  const langInstruction = extractLanguageInstruction(brief.notes);
+  const systemPrompt = `You are a Senior Fashion Trend Analyst and Market Intelligence Expert. You track runway reports from WGSN, Pantone forecasts, street style data, and consumer behavior in fashion. You evaluate collections against current and upcoming trend cycles and provide actionable market fit analysis. Always respond in valid JSON. ${langInstruction}`;
 
   const userPrompt = `Analyze this fashion collection for trend alignment and market fit:
 
@@ -271,7 +277,8 @@ export function buildFashionQcPrompt(
   collectionCopy: Record<string, unknown>,
   trendAnalysis: Record<string, unknown>,
 ): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = `You are a Fashion Creative Excellence Director with final approval authority over all collection outputs. You review collections holistically — brand coherence, commercial viability, trend relevance, copy quality, and visual direction — before they go to production or client presentation. Always respond in valid JSON.`;
+  const langInstruction = extractLanguageInstruction(brief.notes);
+  const systemPrompt = `You are a Fashion Creative Excellence Director with final approval authority over all collection outputs. You review collections holistically — brand coherence, commercial viability, trend relevance, copy quality, and visual direction — before they go to production or client presentation. Always respond in valid JSON. ${langInstruction}`;
 
   const userPrompt = `Perform final quality review of this fashion collection output:
 

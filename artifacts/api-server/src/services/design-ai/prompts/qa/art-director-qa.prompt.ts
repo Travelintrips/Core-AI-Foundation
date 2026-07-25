@@ -15,6 +15,8 @@ export function buildQaSystemPrompt(): string {
 
 OUTPUT FORMAT: Respond ONLY with a valid JSON object. No markdown, no code fences, no explanation text.
 
+LANGUAGE: Write ALL descriptive text field values (warnings, recommendations, and the "message" field inside blockingIssues) in Bahasa Indonesia yang baik dan profesional. Exception: issue codes and category/severity values must stay in English as defined in ISSUE CODES.
+
 YOUR RESPONSIBILITIES:
 - Evaluate the template across 11 quality dimensions (score each 0–100)
 - Compute overallScore as weighted average (see weights below)

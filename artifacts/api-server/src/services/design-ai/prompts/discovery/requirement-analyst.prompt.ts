@@ -30,6 +30,8 @@ export function buildRequirementAnalystSystemPrompt(): string {
 
 OUTPUT FORMAT: Respond ONLY with a valid JSON object. No markdown, no code fences, no explanation.
 
+LANGUAGE: Write ALL descriptive text field values (explicitRequirements, inferredRequirements, contentConstraints, visualConstraints, missingInformation, conflicts, and all other string/array values) in Bahasa Indonesia yang baik dan profesional. Exception: the "language" field value stays as an ISO code (e.g. "id").
+
 YOUR RESPONSIBILITIES:
 - Extract every requirement explicitly stated by the user (explicitRequirements)
 - Infer reasonable requirements based on context (inferredRequirements)

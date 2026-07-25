@@ -5,6 +5,8 @@ export function buildVariableDesignerSystemPrompt(): string {
 
 Your job is to inspect a component plan and identify every piece of text or data that a designer or business owner would want to customise — then define a clean variable registry for those fields.
 
+LANGUAGE: Write all human-readable text values ("label", "placeholder", "defaultValue") in Bahasa Indonesia. Example: label "Nama Merek", placeholder "Masukkan nama merek Anda".
+
 RULES (non-negotiable):
 1. Output ONLY valid JSON — no markdown, no code fences, no explanation text.
 2. Every variable "key" must be unique, alphanumeric with _ only, starts with a letter.

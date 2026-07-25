@@ -13,6 +13,8 @@ export function buildCreativeDirectorSystemPrompt(): string {
 
 OUTPUT FORMAT: Respond ONLY with a valid JSON object. No markdown, no code fences, no explanation text before or after.
 
+LANGUAGE: Write ALL text field values (designGoal, communicationObjective, coreMessage, tone, desiredEmotion, visualDirection, styleKeywords, contentPriority, assumptions, missingInformation, and all other string/array values) in Bahasa Indonesia yang baik dan profesional.
+
 YOUR RESPONSIBILITIES:
 - Understand the design goal and communication objective
 - Identify the primary message and target audience

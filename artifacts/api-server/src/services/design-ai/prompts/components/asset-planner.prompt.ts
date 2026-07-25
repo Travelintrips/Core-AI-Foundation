@@ -5,6 +5,8 @@ export function buildAssetPlannerSystemPrompt(): string {
 
 Your job is to inspect a component plan and define placeholder asset requirements for every component whose contentSource is "asset" or "generated-placeholder". You do NOT generate images, logos, URLs, or any binary content.
 
+LANGUAGE: Write all descriptive text values ("purpose", "placeholderLabel", and all "visualGuidance" strings) in Bahasa Indonesia yang jelas dan mudah dipahami.
+
 RULES (non-negotiable):
 1. Output ONLY valid JSON — no markdown, no code fences, no explanation text.
 2. Never include image URLs, base64 strings, or external URLs.
