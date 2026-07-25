@@ -7,8 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format, formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useLang } from "@/lib/i18n";
 
 export default function WorkflowExecutions() {
+  const { t } = useLang();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const { data: executions, isLoading, refetch, isRefetching } = useListWorkflowExecutions({
     status: statusFilter === "all" ? null : statusFilter
@@ -38,8 +40,8 @@ export default function WorkflowExecutions() {
     <div className="p-8 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Executions Log</h1>
-          <p className="text-muted-foreground mt-1">Audit trail and state for all workflow runs.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t("pages.executions.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("pages.executions.subtitle")}</p>
         </div>
       </div>
 
@@ -51,14 +53,14 @@ export default function WorkflowExecutions() {
           <div className="flex items-center gap-4">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[150px] h-8 bg-background/50 font-mono text-xs border-border/50">
-                <SelectValue placeholder="Filter by status" />
+                <SelectValue placeholder={t("pages.executions.filterStatus")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" className="font-mono text-xs">All Statuses</SelectItem>
-                <SelectItem value="completed" className="font-mono text-xs text-green-400">Completed</SelectItem>
-                <SelectItem value="failed" className="font-mono text-xs text-destructive">Failed</SelectItem>
-                <SelectItem value="running" className="font-mono text-xs text-primary">Running</SelectItem>
-                <SelectItem value="pending" className="font-mono text-xs text-yellow-400">Pending</SelectItem>
+                <SelectItem value="all" className="font-mono text-xs">{t("pages.executions.allStatuses")}</SelectItem>
+                <SelectItem value="completed" className="font-mono text-xs text-green-400">{t("common.status.completed")}</SelectItem>
+                <SelectItem value="failed" className="font-mono text-xs text-destructive">{t("common.status.failed")}</SelectItem>
+                <SelectItem value="running" className="font-mono text-xs text-primary">{t("common.status.running")}</SelectItem>
+                <SelectItem value="pending" className="font-mono text-xs text-yellow-400">{t("common.status.pending")}</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => refetch()} disabled={isRefetching}>
@@ -68,19 +70,19 @@ export default function WorkflowExecutions() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-             <div className="py-12 text-center text-muted-foreground font-mono text-sm">Loading execution logs...</div>
+             <div className="py-12 text-center text-muted-foreground font-mono text-sm">{t("pages.executions.loading")}</div>
           ) : executions?.length === 0 ? (
-             <div className="py-12 text-center text-muted-foreground font-mono text-sm">No executions found matching criteria.</div>
+             <div className="py-12 text-center text-muted-foreground font-mono text-sm">{t("pages.executions.empty")}</div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow className="border-border/50 hover:bg-transparent">
-                  <TableHead className="font-mono text-xs uppercase text-muted-foreground">Run ID</TableHead>
-                  <TableHead className="font-mono text-xs uppercase text-muted-foreground">Workflow</TableHead>
-                  <TableHead className="font-mono text-xs uppercase text-muted-foreground">Status</TableHead>
-                  <TableHead className="font-mono text-xs uppercase text-muted-foreground text-right">Duration</TableHead>
-                  <TableHead className="font-mono text-xs uppercase text-muted-foreground text-right">Tokens</TableHead>
-                  <TableHead className="font-mono text-xs uppercase text-muted-foreground text-right">Started</TableHead>
+                  <TableHead className="font-mono text-xs uppercase text-muted-foreground">{t("pages.executions.headers.runId")}</TableHead>
+                  <TableHead className="font-mono text-xs uppercase text-muted-foreground">{t("pages.executions.headers.workflow")}</TableHead>
+                  <TableHead className="font-mono text-xs uppercase text-muted-foreground">{t("pages.executions.headers.status")}</TableHead>
+                  <TableHead className="font-mono text-xs uppercase text-muted-foreground text-right">{t("pages.executions.headers.duration")}</TableHead>
+                  <TableHead className="font-mono text-xs uppercase text-muted-foreground text-right">{t("pages.executions.headers.tokens")}</TableHead>
+                  <TableHead className="font-mono text-xs uppercase text-muted-foreground text-right">{t("pages.executions.headers.started")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -95,7 +97,7 @@ export default function WorkflowExecutions() {
                     <TableCell>
                       <Badge variant="outline" className={`font-mono text-[10px] uppercase px-1.5 py-0 h-5 flex items-center gap-1.5 w-fit ${getStatusColor(exec.status)}`}>
                         {getStatusIcon(exec.status)}
-                        {exec.status}
+                        {t(`common.status.${exec.status}`) || exec.status}
                       </Badge>
                       {exec.status === 'failed' && exec.errorMessage && (
                         <div className="text-[10px] text-destructive mt-1 font-mono max-w-[200px] truncate" title={exec.errorMessage}>

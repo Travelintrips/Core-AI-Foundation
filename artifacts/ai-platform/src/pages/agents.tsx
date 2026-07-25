@@ -10,6 +10,7 @@ import {
   getListAgentCapabilitiesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useLang } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,7 @@ function CapabilityPanel({ agentId, agentName }: { agentId: number; agentName: s
   const deleteCap = useDeleteAgentCapability();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { t } = useLang();
 
   const [newName, setNewName] = useState("");
   const [newCategory, setNewCategory] = useState("");
@@ -106,9 +108,9 @@ function CapabilityPanel({ agentId, agentName }: { agentId: number; agentName: s
           queryClient.invalidateQueries({ queryKey: getListAgentCapabilitiesQueryKey(agentId) });
           setNewName("");
           setNewCategory("");
-          toast({ title: "Capability added" });
+          toast({ title: t("pages.agents.toast.capAdded") });
         },
-        onError: () => toast({ title: "Failed to add capability", variant: "destructive" }),
+        onError: () => toast({ title: t("pages.agents.toast.capFailed"), variant: "destructive" }),
       },
     );
   };
@@ -119,9 +121,9 @@ function CapabilityPanel({ agentId, agentName }: { agentId: number; agentName: s
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListAgentCapabilitiesQueryKey(agentId) });
-          toast({ title: "Capability removed" });
+          toast({ title: t("pages.agents.toast.capRemoved") });
         },
-        onError: () => toast({ title: "Failed to remove capability", variant: "destructive" }),
+        onError: () => toast({ title: t("pages.agents.toast.capFailed"), variant: "destructive" }),
       },
     );
   };
@@ -167,11 +169,11 @@ function CapabilityPanel({ agentId, agentName }: { agentId: number; agentName: s
 
       {/* Grouped capabilities */}
       {isLoading ? (
-        <div className="py-8 text-center text-muted-foreground font-mono text-sm">Loading…</div>
+        <div className="py-8 text-center text-muted-foreground font-mono text-sm">{t("pages.agents.empty.loading")}</div>
       ) : (caps ?? []).length === 0 ? (
         <div className="py-10 text-center space-y-2">
           <Zap className="size-8 text-muted-foreground/30 mx-auto" />
-          <p className="text-muted-foreground text-sm">No capabilities yet.</p>
+          <p className="text-muted-foreground text-sm">{t("pages.agents.empty.noCaps")}</p>
           <p className="text-muted-foreground/60 text-xs font-mono">Add skills this agent can perform.</p>
         </div>
       ) : (
@@ -217,6 +219,7 @@ function CreateAgentDialog({
   const createAgent = useCreateAgent();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { t } = useLang();
   const { data: providers } = useListProviders();
   const { data: models } = useListModels();
 
@@ -243,7 +246,7 @@ function CreateAgentDialog({
 
   const handleSubmit = async () => {
     if (!form.name.trim() || !form.slug.trim() || !form.role.trim()) {
-      toast({ title: "Name, slug, and role are required", variant: "destructive" });
+      toast({ title: t("pages.agents.toast.nameRequired"), variant: "destructive" });
       return;
     }
     await createAgent.mutateAsync(
@@ -261,16 +264,16 @@ function CreateAgentDialog({
           status: form.status,
           version: form.version || "1.0.0",
           owner: form.owner || undefined,
-          allowedTools: form.allowedTools ? form.allowedTools.split(",").map((t) => t.trim()).filter(Boolean) : [],
+          allowedTools: form.allowedTools ? form.allowedTools.split(",").map((tool) => tool.trim()).filter(Boolean) : [],
         },
       },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListAgentsQueryKey() });
-          toast({ title: "Agent created" });
+          toast({ title: t("pages.agents.toast.created") });
           onClose();
         },
-        onError: () => toast({ title: "Failed to create agent", variant: "destructive" }),
+        onError: () => toast({ title: t("pages.agents.toast.createFailed"), variant: "destructive" }),
       },
     );
   };
@@ -279,15 +282,15 @@ function CreateAgentDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-2xl bg-card border-border max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-mono text-sm uppercase tracking-wider">Register New Agent</DialogTitle>
+          <DialogTitle className="font-mono text-sm uppercase tracking-wider">{t("pages.agents.dialog.title")}</DialogTitle>
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-4 py-2">
           {/* Name */}
           <div className="space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Name *</Label>
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.agents.dialog.name")} *</Label>
             <Input
-              placeholder="Brand AI"
+              placeholder={t("pages.agents.dialog.namePh")}
               value={form.name}
               onChange={(e) => {
                 set("name")(e.target.value);
@@ -301,9 +304,9 @@ function CreateAgentDialog({
 
           {/* Slug */}
           <div className="space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Slug *</Label>
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.agents.dialog.slug")} *</Label>
             <Input
-              placeholder="brand-ai"
+              placeholder={t("pages.agents.dialog.slugPh")}
               value={form.slug}
               onChange={(e) => set("slug")(e.target.value)}
               className="bg-background/50 font-mono text-sm"
@@ -312,9 +315,9 @@ function CreateAgentDialog({
 
           {/* Role */}
           <div className="col-span-2 space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Role *</Label>
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.agents.dialog.role")} *</Label>
             <Input
-              placeholder="Brand Strategist"
+              placeholder={t("pages.agents.dialog.rolePh")}
               value={form.role}
               onChange={(e) => set("role")(e.target.value)}
               className="bg-background/50"
@@ -323,9 +326,9 @@ function CreateAgentDialog({
 
           {/* Description */}
           <div className="col-span-2 space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Description</Label>
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.agents.dialog.description")}</Label>
             <Textarea
-              placeholder="What does this agent do?"
+              placeholder={t("pages.agents.dialog.descPh")}
               value={form.description}
               onChange={(e) => set("description")(e.target.value)}
               className="bg-background/50 resize-none"
@@ -335,7 +338,7 @@ function CreateAgentDialog({
 
           {/* Provider */}
           <div className="space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Provider</Label>
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.agents.dialog.provider")}</Label>
             <Select value={form.providerId} onValueChange={set("providerId")}>
               <SelectTrigger className="bg-background/50">
                 <SelectValue placeholder="Select provider" />
@@ -350,7 +353,7 @@ function CreateAgentDialog({
 
           {/* Model */}
           <div className="space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Model</Label>
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.agents.dialog.model")}</Label>
             <Select value={form.modelId} onValueChange={set("modelId")}>
               <SelectTrigger className="bg-background/50">
                 <SelectValue placeholder="Select model" />
@@ -367,7 +370,7 @@ function CreateAgentDialog({
 
           {/* Priority */}
           <div className="space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Priority</Label>
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.agents.dialog.priority")}</Label>
             <Input
               type="number"
               placeholder="100"
@@ -379,7 +382,7 @@ function CreateAgentDialog({
 
           {/* Temperature */}
           <div className="space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Temperature</Label>
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.agents.dialog.temperature")}</Label>
             <Input
               type="number"
               step="0.1"

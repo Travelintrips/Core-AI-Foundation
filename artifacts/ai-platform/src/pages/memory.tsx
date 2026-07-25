@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useLang } from "@/lib/i18n";
 
 export default function Memory() {
+  const { t } = useLang();
   const [memoryType, setMemoryType] = useState<string>("all");
   const { data: memoryEntries, isLoading } = useListMemoryEntries();
 
@@ -36,8 +38,8 @@ export default function Memory() {
     <div className="p-8 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">AI Memory</h1>
-          <p className="text-muted-foreground mt-1">Contextual storage and entity state tracking.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t("pages.memory.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("pages.memory.subtitle")}</p>
         </div>
       </div>
 
@@ -49,20 +51,20 @@ export default function Memory() {
           <div className="flex items-center gap-4">
             <Select value={memoryType} onValueChange={setMemoryType}>
               <SelectTrigger className="w-[150px] h-8 bg-background/50 font-mono text-xs border-border/50">
-                <SelectValue placeholder="Memory Type" />
+                <SelectValue placeholder={t("pages.memory.typeFilter")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" className="font-mono text-xs">All Types</SelectItem>
-                <SelectItem value="short_term" className="font-mono text-xs text-yellow-400">Short Term</SelectItem>
-                <SelectItem value="long_term" className="font-mono text-xs text-blue-400">Long Term</SelectItem>
-                <SelectItem value="episodic" className="font-mono text-xs text-purple-400">Episodic</SelectItem>
-                <SelectItem value="semantic" className="font-mono text-xs text-green-400">Semantic</SelectItem>
+                <SelectItem value="all" className="font-mono text-xs">{t("pages.memory.allTypes")}</SelectItem>
+                <SelectItem value="short_term" className="font-mono text-xs text-yellow-400">{t("pages.memory.types.shortTerm")}</SelectItem>
+                <SelectItem value="long_term" className="font-mono text-xs text-blue-400">{t("pages.memory.types.longTerm")}</SelectItem>
+                <SelectItem value="episodic" className="font-mono text-xs text-purple-400">{t("pages.memory.types.episodic")}</SelectItem>
+                <SelectItem value="semantic" className="font-mono text-xs text-green-400">{t("pages.memory.types.semantic")}</SelectItem>
               </SelectContent>
             </Select>
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search agent or session..."
+                placeholder={t("pages.memory.searchPh")}
                 className="pl-8 w-[250px] bg-background/50 h-8 text-xs font-mono border-border/50"
               />
             </div>
@@ -70,18 +72,18 @@ export default function Memory() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-             <div className="py-12 text-center text-muted-foreground font-mono text-sm">Scanning memory banks...</div>
+             <div className="py-12 text-center text-muted-foreground font-mono text-sm">{t("pages.memory.loading")}</div>
           ) : memoryEntries?.length === 0 ? (
-             <div className="py-12 text-center text-muted-foreground font-mono text-sm">No memory entries recorded.</div>
+             <div className="py-12 text-center text-muted-foreground font-mono text-sm">{t("pages.memory.empty")}</div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow className="border-border/50 hover:bg-transparent">
-                  <TableHead className="font-mono text-xs uppercase text-muted-foreground">Entity</TableHead>
-                  <TableHead className="font-mono text-xs uppercase text-muted-foreground">Type</TableHead>
-                  <TableHead className="font-mono text-xs uppercase text-muted-foreground">Key / Context</TableHead>
-                  <TableHead className="font-mono text-xs uppercase text-muted-foreground text-right">Importance</TableHead>
-                  <TableHead className="font-mono text-xs uppercase text-muted-foreground text-right">Stored</TableHead>
+                  <TableHead className="font-mono text-xs uppercase text-muted-foreground">{t("pages.memory.table.entity")}</TableHead>
+                  <TableHead className="font-mono text-xs uppercase text-muted-foreground">{t("pages.memory.table.type")}</TableHead>
+                  <TableHead className="font-mono text-xs uppercase text-muted-foreground">{t("pages.memory.table.keyCtx")}</TableHead>
+                  <TableHead className="font-mono text-xs uppercase text-muted-foreground text-right">{t("pages.memory.table.importance")}</TableHead>
+                  <TableHead className="font-mono text-xs uppercase text-muted-foreground text-right">{t("pages.memory.table.stored")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

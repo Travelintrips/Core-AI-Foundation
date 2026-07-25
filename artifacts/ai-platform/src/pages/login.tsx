@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useLang } from "@/lib/i18n";
 
 export default function Login() {
+  const { t } = useLang();
   const { login, user } = useInternalAuth();
   const [, navigate] = useLocation();
   const [email, setEmail] = useState("");
@@ -26,7 +28,7 @@ export default function Login() {
     const result = await login(email, password);
     setSubmitting(false);
     if (!result.ok) {
-      setError(result.error ?? "Login failed");
+      setError(result.error ?? t("pages.login.errorMsg"));
       return;
     }
     navigate("/");
@@ -36,13 +38,13 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Internal AI Portal</CardTitle>
-          <CardDescription>Staff sign-in — owner, admin, manager, and internal staff only.</CardDescription>
+          <CardTitle>{t("pages.login.title")}</CardTitle>
+          <CardDescription>{t("pages.login.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t("pages.login.email")}</Label>
               <Input
                 id="email"
                 type="email"
@@ -54,7 +56,7 @@ export default function Login() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t("pages.login.password")}</Label>
               <Input
                 id="password"
                 type="password"
@@ -67,7 +69,7 @@ export default function Login() {
             </div>
             {error && <p className="text-sm text-destructive" data-testid="text-login-error">{error}</p>}
             <Button type="submit" className="w-full" disabled={submitting} data-testid="button-login">
-              {submitting ? "Signing in…" : "Sign in"}
+              {submitting ? t("pages.login.submitting") : t("pages.login.submit")}
             </Button>
           </form>
         </CardContent>

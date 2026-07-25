@@ -55,19 +55,20 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { useLang } from "@/lib/i18n";
 
 // ── Step type definitions ─────────────────────────────────────────────────────
 
 const STEP_TYPES = [
-  { value: "reception",  label: "Reception",  icon: Inbox,        color: "text-blue-400",    bg: "bg-blue-500/10",    border: "border-blue-500/30" },
-  { value: "brief",      label: "Brief",       icon: FileText,     color: "text-yellow-400",  bg: "bg-yellow-500/10",  border: "border-yellow-500/30" },
-  { value: "brand",      label: "Brand",       icon: Sparkles,     color: "text-purple-400",  bg: "bg-purple-500/10",  border: "border-purple-500/30" },
-  { value: "creative",   label: "Creative",    icon: Palette,      color: "text-pink-400",    bg: "bg-pink-500/10",    border: "border-pink-500/30" },
-  { value: "design",     label: "Design",      icon: PenLine,      color: "text-cyan-400",    bg: "bg-cyan-500/10",    border: "border-cyan-500/30" },
-  { value: "review",     label: "Review",      icon: Eye,          color: "text-orange-400",  bg: "bg-orange-500/10",  border: "border-orange-500/30" },
-  { value: "qc",         label: "QC",          icon: CheckCircle,  color: "text-green-400",   bg: "bg-green-500/10",   border: "border-green-500/30" },
-  { value: "approval",   label: "Approval",    icon: ShieldCheck,  color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/30" },
-  { value: "custom",     label: "Custom",      icon: Zap,          color: "text-muted-foreground", bg: "bg-muted/30",  border: "border-border/50" },
+  { value: "reception",  icon: Inbox,        color: "text-blue-400",    bg: "bg-blue-500/10",    border: "border-blue-500/30" },
+  { value: "brief",      icon: FileText,     color: "text-yellow-400",  bg: "bg-yellow-500/10",  border: "border-yellow-500/30" },
+  { value: "brand",      icon: Sparkles,     color: "text-purple-400",  bg: "bg-purple-500/10",  border: "border-purple-500/30" },
+  { value: "creative",   icon: Palette,      color: "text-pink-400",    bg: "bg-pink-500/10",    border: "border-pink-500/30" },
+  { value: "design",     icon: PenLine,      color: "text-cyan-400",    bg: "bg-cyan-500/10",    border: "border-cyan-500/30" },
+  { value: "review",     icon: Eye,          color: "text-orange-400",  bg: "bg-orange-500/10",  border: "border-orange-500/30" },
+  { value: "qc",         icon: CheckCircle,  color: "text-green-400",   bg: "bg-green-500/10",   border: "border-green-500/30" },
+  { value: "approval",   icon: ShieldCheck,  color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/30" },
+  { value: "custom",     icon: Zap,          color: "text-muted-foreground", bg: "bg-muted/30",  border: "border-border/50" },
 ];
 
 type StepType = { id: string; order: number; name: string; type: string; description: string };
@@ -83,11 +84,14 @@ function genId() {
 // ── Step pipeline display ─────────────────────────────────────────────────────
 
 function PipelineView({ steps }: { steps: StepType[] }) {
+  const { t } = useLang();
+  const getStepLabel = (value: string) => t(`pages.workflows.stepTypes.${value}`) || value;
+
   const sorted = [...steps].sort((a, b) => a.order - b.order);
   if (sorted.length === 0) {
     return (
       <div className="py-8 text-center text-muted-foreground font-mono text-xs">
-        No steps yet
+        {t("pages.workflows.noSteps")}
       </div>
     );
   }
@@ -103,7 +107,7 @@ function PipelineView({ steps }: { steps: StepType[] }) {
                 <Icon className={`size-3.5 ${def.color}`} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-semibold ${def.color}`}>{step.name}</p>
+                <p className={`text-sm font-semibold ${def.color}`}>{step.name || getStepLabel(step.type)}</p>
                 {step.description && (
                   <p className="text-[10px] text-muted-foreground truncate">{step.description}</p>
                 )}
@@ -133,6 +137,9 @@ function StepEditor({
   steps: StepType[];
   onChange: (steps: StepType[]) => void;
 }) {
+  const { t } = useLang();
+  const getStepLabel = (value: string) => t(`pages.workflows.stepTypes.${value}`) || value;
+
   const sorted = [...steps].sort((a, b) => a.order - b.order);
 
   const addStep = () => {
@@ -197,7 +204,7 @@ function StepEditor({
             {/* Fields */}
             <div className="flex-1 grid grid-cols-[1fr_160px] gap-2">
               <Input
-                placeholder="Step name (e.g. Brief)"
+                placeholder={t("pages.workflows.editor.stepNamePh")}
                 value={step.name}
                 onChange={(e) => updateStep(step.id, { name: e.target.value })}
                 className="bg-background/50 h-8 text-sm"
@@ -210,15 +217,15 @@ function StepEditor({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {STEP_TYPES.map((t) => (
-                    <SelectItem key={t.value} value={t.value} className="text-xs">
-                      {t.label}
+                  {STEP_TYPES.map((st) => (
+                    <SelectItem key={st.value} value={st.value} className="text-xs">
+                      {getStepLabel(st.value)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <Input
-                placeholder="Description (optional)"
+                placeholder={t("pages.workflows.editor.descPh")}
                 value={step.description}
                 onChange={(e) => updateStep(step.id, { description: e.target.value })}
                 className="bg-background/50 h-7 text-xs col-span-2 text-muted-foreground"
@@ -242,7 +249,7 @@ function StepEditor({
         onClick={addStep}
         className="w-full border border-dashed border-border/50 hover:border-primary/30 font-mono text-xs text-muted-foreground hover:text-primary mt-2"
       >
-        <Plus className="size-3 mr-1.5" /> Add Step
+        <Plus className="size-3 mr-1.5" /> {t("pages.workflows.editor.addStep")}
       </Button>
     </div>
   );
@@ -257,6 +264,7 @@ function CreateWorkflowDialog({
   open: boolean;
   onClose: () => void;
 }) {
+  const { t } = useLang();
   const create = useCreateWorkflow();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -268,7 +276,7 @@ function CreateWorkflowDialog({
   const [steps, setSteps] = useState<StepType[]>([]);
 
   const handleSubmit = async () => {
-    if (!name.trim()) { toast({ title: "Name is required", variant: "destructive" }); return; }
+    if (!name.trim()) { toast({ title: t("pages.workflows.toast.nameRequired"), variant: "destructive" }); return; }
     try {
       await create.mutateAsync(
         {
@@ -276,21 +284,21 @@ function CreateWorkflowDialog({
             name,
             description: description || undefined,
             status,
-            tags: tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
+            tags: tags ? tags.split(",").map((tg) => tg.trim()).filter(Boolean) : [],
             steps: steps.sort((a, b) => a.order - b.order),
           },
         },
         {
           onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: getListWorkflowsQueryKey() });
-            toast({ title: "Workflow created" });
+            toast({ title: t("pages.workflows.toast.created") });
             onClose();
             setName(""); setDescription(""); setStatus("draft"); setTags(""); setSteps([]);
           },
         },
       );
     } catch {
-      toast({ title: "Failed to create workflow", variant: "destructive" });
+      toast({ title: t("pages.workflows.toast.createFailed"), variant: "destructive" });
     }
   };
 
@@ -298,45 +306,45 @@ function CreateWorkflowDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-3xl bg-card border-border max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-mono text-sm uppercase tracking-wider">New Workflow</DialogTitle>
+          <DialogTitle className="font-mono text-sm uppercase tracking-wider">{t("pages.workflows.dialog.title")}</DialogTitle>
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-4 py-2">
           <div className="space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Name *</Label>
-            <Input placeholder="Logo Project" value={name} onChange={(e) => setName(e.target.value)} className="bg-background/50" />
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.workflows.dialog.name")} *</Label>
+            <Input placeholder={t("pages.workflows.dialog.namePh")} value={name} onChange={(e) => setName(e.target.value)} className="bg-background/50" />
           </div>
           <div className="space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Status</Label>
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.workflows.dialog.status")}</Label>
             <Select value={status} onValueChange={(v: typeof status) => setStatus(v)}>
               <SelectTrigger className="bg-background/50"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="paused">Paused</SelectItem>
+                <SelectItem value="draft">{t("common.status.draft")}</SelectItem>
+                <SelectItem value="active">{t("common.status.active")}</SelectItem>
+                <SelectItem value="paused">{t("common.status.paused")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="col-span-2 space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Description</Label>
-            <Textarea placeholder="What does this workflow do?" value={description} onChange={(e) => setDescription(e.target.value)} className="bg-background/50 resize-none" rows={2} />
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.workflows.dialog.description")}</Label>
+            <Textarea placeholder={t("pages.workflows.dialog.descPh")} value={description} onChange={(e) => setDescription(e.target.value)} className="bg-background/50 resize-none" rows={2} />
           </div>
           <div className="col-span-2 space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Tags <span className="text-muted-foreground/60">(comma-separated)</span></Label>
-            <Input placeholder="branding, logo, design" value={tags} onChange={(e) => setTags(e.target.value)} className="bg-background/50" />
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.workflows.dialog.tags")} <span className="text-muted-foreground/60">{t("pages.workflows.dialog.tagsHint")}</span></Label>
+            <Input placeholder={t("pages.workflows.dialog.tagsPh")} value={tags} onChange={(e) => setTags(e.target.value)} className="bg-background/50" />
           </div>
 
           {/* Step builder */}
           <div className="col-span-2 space-y-3 border-t border-border/50 pt-4">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Pipeline Steps</Label>
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.workflows.pipelineSteps")}</Label>
             <StepEditor steps={steps} onChange={setSteps} />
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose} className="font-mono text-xs uppercase tracking-wider">Cancel</Button>
+          <Button variant="ghost" onClick={onClose} className="font-mono text-xs uppercase tracking-wider">{t("common.actions.cancel")}</Button>
           <Button onClick={handleSubmit} disabled={create.isPending} className="font-mono text-xs uppercase tracking-wider">
-            <Plus className="size-3 mr-1.5" />{create.isPending ? "Creating…" : "Create Workflow"}
+            <Plus className="size-3 mr-1.5" />{create.isPending ? t("common.actions.creating") : t("common.actions.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -353,6 +361,7 @@ function WorkflowDetail({
   workflow: { id: number; name: string; description?: string | null; status: string; steps: unknown; tags: string[]; updatedAt: string };
   onClose: () => void;
 }) {
+  const { t } = useLang();
   const update = useUpdateWorkflow();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -370,13 +379,13 @@ function WorkflowDetail({
         {
           onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: getListWorkflowsQueryKey() });
-            toast({ title: "Pipeline saved" });
+            toast({ title: t("pages.workflows.toast.saved") });
             setDirty(false);
           },
         },
       );
     } catch {
-      toast({ title: "Failed to save", variant: "destructive" });
+      toast({ title: t("pages.workflows.toast.saveFailed"), variant: "destructive" });
     }
   };
 
@@ -396,10 +405,10 @@ function WorkflowDetail({
           {/* Tabs: edit vs preview */}
           <div className="border-t border-border/50 pt-4 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Pipeline Steps</span>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{t("pages.workflows.pipelineSteps")}</span>
               {dirty && (
                 <Button size="sm" onClick={handleSave} disabled={update.isPending} className="h-6 font-mono text-[10px] uppercase tracking-wider px-2">
-                  <Save className="size-3 mr-1" /> {update.isPending ? "Saving…" : "Save"}
+                  <Save className="size-3 mr-1" /> {update.isPending ? t("common.actions.saving") : t("common.actions.save")}
                 </Button>
               )}
             </div>
@@ -409,7 +418,7 @@ function WorkflowDetail({
           {/* Preview */}
           {steps.length > 0 && (
             <div className="border-t border-border/50 pt-4 space-y-3">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Preview</span>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{t("pages.workflows.preview")}</span>
               <PipelineView steps={steps} />
             </div>
           )}
@@ -433,10 +442,13 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default function Workflows() {
+  const { t } = useLang();
   const { data: workflows, isLoading } = useListWorkflows();
   const deleteWorkflow = useDeleteWorkflow();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  const getStepLabel = (value: string) => t(`pages.workflows.stepTypes.${value}`) || value;
 
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -455,12 +467,12 @@ export default function Workflows() {
           onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: getListWorkflowsQueryKey() });
             if (selectedId === id) setSelectedId(null);
-            toast({ title: "Workflow deleted" });
+            toast({ title: t("pages.workflows.toast.deleted") });
           },
         },
       );
     } catch {
-      toast({ title: "Failed to delete", variant: "destructive" });
+      toast({ title: t("pages.workflows.toast.deleteFailed"), variant: "destructive" });
     }
   };
 
@@ -468,11 +480,11 @@ export default function Workflows() {
     <div className="p-8 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Workflows</h1>
-          <p className="text-muted-foreground mt-1">Data-driven AI pipelines with ordered steps.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t("pages.workflows.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("pages.workflows.subtitle")}</p>
         </div>
         <Button onClick={() => setCreateOpen(true)} className="font-mono text-xs uppercase tracking-wider">
-          <Plus className="size-4 mr-2" /> New Workflow
+          <Plus className="size-4 mr-2" /> {t("pages.workflows.newBtn")}
         </Button>
       </div>
 
@@ -482,11 +494,11 @@ export default function Workflows() {
           <Card className="border-border/50 bg-card/50 backdrop-blur">
             <CardHeader className="flex flex-row items-center justify-between pb-4">
               <CardTitle className="text-sm font-medium font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                <GitMerge className="size-4" /> Workflow Engine
+                <GitMerge className="size-4" /> {t("pages.workflows.engine")}
               </CardTitle>
               <div className="relative">
                 <Input
-                  placeholder="Search workflows…"
+                  placeholder={t("pages.workflows.search")}
                   className="w-[240px] bg-background/50"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -495,12 +507,12 @@ export default function Workflows() {
             </CardHeader>
             <CardContent className="p-0">
               {isLoading ? (
-                <div className="py-12 text-center text-muted-foreground font-mono text-sm">Loading…</div>
+                <div className="py-12 text-center text-muted-foreground font-mono text-sm">{t("pages.workflows.empty.loading")}</div>
               ) : filtered.length === 0 ? (
                 <div className="py-16 text-center space-y-2">
                   <GitMerge className="size-10 text-muted-foreground/20 mx-auto" />
-                  <p className="text-muted-foreground font-mono text-sm">No workflows yet</p>
-                  <p className="text-muted-foreground/60 text-xs">Create one to define your AI pipeline.</p>
+                  <p className="text-muted-foreground font-mono text-sm">{t("pages.workflows.empty.none")}</p>
+                  <p className="text-muted-foreground/60 text-xs">{t("pages.workflows.empty.hint")}</p>
                 </div>
               ) : (
                 <div className="divide-y divide-border/30">
@@ -523,11 +535,11 @@ export default function Workflows() {
                           <div className="flex items-center gap-2 mb-1">
                             <span className="font-medium">{wf.name}</span>
                             <Badge variant="outline" className={`font-mono text-[10px] uppercase px-1.5 h-5 ${STATUS_STYLES[wf.status] ?? STATUS_STYLES.draft}`}>
-                              {wf.status}
+                              {t(`common.status.${wf.status}`) || wf.status}
                             </Badge>
-                            {(wf.tags ?? []).map((t) => (
-                              <Badge key={t} variant="secondary" className="font-mono text-[10px] bg-secondary/50 h-5">
-                                {t}
+                            {(wf.tags ?? []).map((tg) => (
+                              <Badge key={tg} variant="secondary" className="font-mono text-[10px] bg-secondary/50 h-5">
+                                {tg}
                               </Badge>
                             ))}
                           </div>
@@ -543,7 +555,7 @@ export default function Workflows() {
                                   <div key={step.id} className="flex items-center gap-1">
                                     <div className={`flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded border ${def.bg} ${def.border} ${def.color}`}>
                                       <Icon className="size-2.5" />
-                                      {step.name || def.label}
+                                      {step.name || getStepLabel(step.type)}
                                     </div>
                                     {i < stepsArr.length - 1 && <span className="text-muted-foreground/30 text-[10px]">→</span>}
                                   </div>
@@ -556,7 +568,7 @@ export default function Workflows() {
                         {/* Meta */}
                         <div className="flex items-center gap-3 flex-shrink-0">
                           <div className="text-right">
-                            <p className="font-mono text-xs text-muted-foreground">{stepsArr.length} steps</p>
+                            <p className="font-mono text-xs text-muted-foreground">{stepsArr.length} {t("pages.workflows.steps")}</p>
                             <p className="font-mono text-[10px] text-muted-foreground/60">{format(new Date(wf.updatedAt), "MMM d")}</p>
                           </div>
                           <DropdownMenu>
@@ -570,7 +582,7 @@ export default function Workflows() {
                                 className="font-mono text-xs text-destructive focus:text-destructive cursor-pointer"
                                 onClick={(e) => { e.stopPropagation(); handleDelete(wf.id); }}
                               >
-                                <Trash2 className="mr-2 h-3 w-3" /> Delete
+                                <Trash2 className="mr-2 h-3 w-3" /> {t("common.actions.delete")}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>

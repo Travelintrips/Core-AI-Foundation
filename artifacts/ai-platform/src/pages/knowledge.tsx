@@ -50,6 +50,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { useLang } from "@/lib/i18n";
 
 // ── Embedding model options ───────────────────────────────────────────────────
 
@@ -68,6 +69,7 @@ const CONTENT_TYPES = [
 // ── Documents sub-panel ───────────────────────────────────────────────────────
 
 function DocumentsPanel({ kbId, kbName }: { kbId: number; kbName: string }) {
+  const { t } = useLang();
   const { data: docs, isLoading } = useListKnowledgeDocuments(kbId);
   const addDoc = useAddKnowledgeDocument();
   const deleteDoc = useDeleteKnowledgeDocument();
@@ -81,12 +83,12 @@ function DocumentsPanel({ kbId, kbName }: { kbId: number; kbName: string }) {
     setDocForm((f) => ({ ...f, [k]: v }));
 
   const handleAdd = async () => {
-    if (!docForm.title.trim()) { toast({ title: "Title is required", variant: "destructive" }); return; }
+    if (!docForm.title.trim()) { toast({ title: t("pages.knowledge.toast.titleRequired"), variant: "destructive" }); return; }
     if (docForm.contentType === "url" && !docForm.sourceUrl.trim()) {
-      toast({ title: "URL is required for URL type", variant: "destructive" }); return;
+      toast({ title: t("pages.knowledge.toast.urlRequired"), variant: "destructive" }); return;
     }
     if (docForm.contentType !== "url" && !docForm.content.trim()) {
-      toast({ title: "Content is required", variant: "destructive" }); return;
+      toast({ title: t("pages.knowledge.toast.contentRequired"), variant: "destructive" }); return;
     }
     try {
       await addDoc.mutateAsync(
@@ -102,14 +104,14 @@ function DocumentsPanel({ kbId, kbName }: { kbId: number; kbName: string }) {
         {
           onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: getListKnowledgeDocumentsQueryKey(kbId) });
-            toast({ title: "Document added" });
+            toast({ title: t("pages.knowledge.toast.docAdded") });
             setAddOpen(false);
             setDocForm({ title: "", contentType: "text", content: "", sourceUrl: "" });
           },
         },
       );
     } catch {
-      toast({ title: "Failed to add document", variant: "destructive" });
+      toast({ title: t("pages.knowledge.toast.docFailed"), variant: "destructive" });
     }
   };
 
@@ -120,12 +122,12 @@ function DocumentsPanel({ kbId, kbName }: { kbId: number; kbName: string }) {
         {
           onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: getListKnowledgeDocumentsQueryKey(kbId) });
-            toast({ title: "Document removed" });
+            toast({ title: t("pages.knowledge.toast.docRemoved") });
           },
         },
       );
     } catch {
-      toast({ title: "Failed to delete", variant: "destructive" });
+      toast({ title: t("pages.knowledge.toast.docFailed"), variant: "destructive" });
     }
   };
 
@@ -149,17 +151,17 @@ function DocumentsPanel({ kbId, kbName }: { kbId: number; kbName: string }) {
           <p className="text-xs text-muted-foreground mt-0.5 font-mono">{docs?.length ?? 0} documents indexed</p>
         </div>
         <Button size="sm" onClick={() => setAddOpen(true)} className="font-mono text-xs uppercase tracking-wider">
-          <Plus className="size-3 mr-1.5" /> Add Document
+          <Plus className="size-3 mr-1.5" /> {t("pages.knowledge.addDoc")}
         </Button>
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <div className="py-12 text-center text-muted-foreground font-mono text-sm">Loading documents…</div>
+          <div className="py-12 text-center text-muted-foreground font-mono text-sm">{t("pages.knowledge.empty.loadingDocs")}</div>
         ) : (docs ?? []).length === 0 ? (
           <div className="py-16 text-center space-y-2">
             <DatabaseZap className="size-10 text-muted-foreground/20 mx-auto" />
-            <p className="text-muted-foreground font-mono text-sm">No documents yet</p>
-            <p className="text-muted-foreground/60 text-xs">Add text, markdown, or URLs to index into this knowledge base.</p>
+            <p className="text-muted-foreground font-mono text-sm">{t("pages.knowledge.empty.noDocs")}</p>
+            <p className="text-muted-foreground/60 text-xs">{t("pages.knowledge.empty.docsHint")}</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -209,15 +211,15 @@ function DocumentsPanel({ kbId, kbName }: { kbId: number; kbName: string }) {
       <Dialog open={addOpen} onOpenChange={(v) => !v && setAddOpen(false)}>
         <DialogContent className="max-w-xl bg-card border-border">
           <DialogHeader>
-            <DialogTitle className="font-mono text-sm uppercase tracking-wider">Add Document</DialogTitle>
+            <DialogTitle className="font-mono text-sm uppercase tracking-wider">{t("pages.knowledge.dialog.addDoc.title")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label className="font-mono text-xs uppercase text-muted-foreground">Title *</Label>
-              <Input placeholder="Brand Guidelines Overview" value={docForm.title} onChange={(e) => setDocField("title")(e.target.value)} className="bg-background/50" />
+              <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.knowledge.dialog.addDoc.docTitle")} *</Label>
+              <Input placeholder={t("pages.knowledge.dialog.addDoc.titlePh")} value={docForm.title} onChange={(e) => setDocField("title")(e.target.value)} className="bg-background/50" />
             </div>
             <div className="space-y-1.5">
-              <Label className="font-mono text-xs uppercase text-muted-foreground">Content Type</Label>
+              <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.knowledge.dialog.addDoc.contentType")}</Label>
               <div className="flex gap-2">
                 {CONTENT_TYPES.map(({ value, label, icon: Icon }) => (
                   <button
@@ -236,14 +238,14 @@ function DocumentsPanel({ kbId, kbName }: { kbId: number; kbName: string }) {
             </div>
             {docForm.contentType === "url" ? (
               <div className="space-y-1.5">
-                <Label className="font-mono text-xs uppercase text-muted-foreground">URL *</Label>
-                <Input placeholder="https://..." value={docForm.sourceUrl} onChange={(e) => setDocField("sourceUrl")(e.target.value)} className="bg-background/50 font-mono text-sm" />
+                <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.knowledge.dialog.addDoc.urlLabel")} *</Label>
+                <Input placeholder={t("pages.knowledge.dialog.addDoc.urlPh")} value={docForm.sourceUrl} onChange={(e) => setDocField("sourceUrl")(e.target.value)} className="bg-background/50 font-mono text-sm" />
               </div>
             ) : (
               <div className="space-y-1.5">
-                <Label className="font-mono text-xs uppercase text-muted-foreground">Content *</Label>
+                <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.knowledge.dialog.addDoc.content")} *</Label>
                 <Textarea
-                  placeholder="Paste your content here…"
+                  placeholder={t("pages.knowledge.dialog.addDoc.contentPh")}
                   value={docForm.content}
                   onChange={(e) => setDocField("content")(e.target.value)}
                   className="bg-background/50 resize-none font-mono text-xs"
@@ -253,9 +255,9 @@ function DocumentsPanel({ kbId, kbName }: { kbId: number; kbName: string }) {
             )}
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setAddOpen(false)} className="font-mono text-xs uppercase tracking-wider">Cancel</Button>
+            <Button variant="ghost" onClick={() => setAddOpen(false)} className="font-mono text-xs uppercase tracking-wider">{t("common.actions.cancel")}</Button>
             <Button onClick={handleAdd} disabled={addDoc.isPending} className="font-mono text-xs uppercase tracking-wider">
-              <Plus className="size-3 mr-1.5" />{addDoc.isPending ? "Adding…" : "Add Document"}
+              <Plus className="size-3 mr-1.5" />{addDoc.isPending ? t("common.actions.creating") : t("pages.knowledge.addDoc")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -267,6 +269,7 @@ function DocumentsPanel({ kbId, kbName }: { kbId: number; kbName: string }) {
 // ── Create KB dialog ──────────────────────────────────────────────────────────
 
 function CreateKBDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useLang();
   const create = useCreateKnowledgeBase();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -281,14 +284,14 @@ function CreateKBDialog({ open, onClose }: { open: boolean; onClose: () => void 
         {
           onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: getListKnowledgeBasesQueryKey() });
-            toast({ title: "Knowledge base created" });
+            toast({ title: t("pages.knowledge.toast.baseCreated") });
             onClose();
             setForm({ name: "", description: "", embeddingModel: "text-embedding-3-small" });
           },
         },
       );
     } catch {
-      toast({ title: "Failed to create", variant: "destructive" });
+      toast({ title: t("pages.knowledge.toast.baseFailed"), variant: "destructive" });
     }
   };
 
@@ -296,19 +299,19 @@ function CreateKBDialog({ open, onClose }: { open: boolean; onClose: () => void 
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="font-mono text-sm uppercase tracking-wider">New Knowledge Base</DialogTitle>
+          <DialogTitle className="font-mono text-sm uppercase tracking-wider">{t("pages.knowledge.dialog.newBase.title")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Name *</Label>
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.knowledge.dialog.newBase.name")} *</Label>
             <Input placeholder="Branding" value={form.name} onChange={(e) => set("name")(e.target.value)} className="bg-background/50" />
           </div>
           <div className="space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Description</Label>
-            <Textarea placeholder="What knowledge does this base contain?" value={form.description} onChange={(e) => set("description")(e.target.value)} className="bg-background/50 resize-none" rows={2} />
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.knowledge.dialog.newBase.desc")}</Label>
+            <Textarea placeholder={t("pages.knowledge.dialog.newBase.descPh")} value={form.description} onChange={(e) => set("description")(e.target.value)} className="bg-background/50 resize-none" rows={2} />
           </div>
           <div className="space-y-1.5">
-            <Label className="font-mono text-xs uppercase text-muted-foreground">Embedding Model</Label>
+            <Label className="font-mono text-xs uppercase text-muted-foreground">{t("pages.knowledge.dialog.newBase.model")}</Label>
             <Select value={form.embeddingModel} onValueChange={set("embeddingModel")}>
               <SelectTrigger className="bg-background/50"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -320,9 +323,9 @@ function CreateKBDialog({ open, onClose }: { open: boolean; onClose: () => void 
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose} className="font-mono text-xs uppercase tracking-wider">Cancel</Button>
+          <Button variant="ghost" onClick={onClose} className="font-mono text-xs uppercase tracking-wider">{t("common.actions.cancel")}</Button>
           <Button onClick={handleSubmit} disabled={create.isPending} className="font-mono text-xs uppercase tracking-wider">
-            <Plus className="size-3 mr-1.5" />{create.isPending ? "Creating…" : "Create"}
+            <Plus className="size-3 mr-1.5" />{create.isPending ? t("common.actions.creating") : t("common.actions.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -333,6 +336,7 @@ function CreateKBDialog({ open, onClose }: { open: boolean; onClose: () => void 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Knowledge() {
+  const { t } = useLang();
   const { data: knowledgeBases, isLoading } = useListKnowledgeBases();
   const deleteKB = useDeleteKnowledgeBase();
   const queryClient = useQueryClient();
@@ -351,12 +355,12 @@ export default function Knowledge() {
           onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: getListKnowledgeBasesQueryKey() });
             if (selectedId === id) setSelectedId(null);
-            toast({ title: "Knowledge base deleted" });
+            toast({ title: t("pages.knowledge.toast.baseDeleted") });
           },
         },
       );
     } catch {
-      toast({ title: "Failed to delete", variant: "destructive" });
+      toast({ title: t("pages.knowledge.toast.baseFailed"), variant: "destructive" });
     }
   };
 
@@ -364,11 +368,11 @@ export default function Knowledge() {
     <div className="p-8 max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Knowledge Base</h1>
-          <p className="text-muted-foreground mt-1">Indexed document collections for AI context retrieval.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t("pages.knowledge.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("pages.knowledge.subtitle")}</p>
         </div>
         <Button onClick={() => setCreateOpen(true)} className="font-mono text-xs uppercase tracking-wider">
-          <Plus className="size-4 mr-2" /> New Knowledge Base
+          <Plus className="size-4 mr-2" /> {t("pages.knowledge.newBase")}
         </Button>
       </div>
 
@@ -382,11 +386,11 @@ export default function Knowledge() {
           </CardHeader>
           <CardContent className="p-0">
             {isLoading ? (
-              <div className="py-8 text-center text-muted-foreground font-mono text-xs">Loading…</div>
+              <div className="py-8 text-center text-muted-foreground font-mono text-xs">{t("common.loading")}</div>
             ) : (knowledgeBases ?? []).length === 0 ? (
               <div className="py-10 text-center px-4 space-y-2">
                 <Database className="size-8 text-muted-foreground/20 mx-auto" />
-                <p className="text-muted-foreground text-xs font-mono">No knowledge bases yet</p>
+                <p className="text-muted-foreground text-xs font-mono">{t("pages.knowledge.empty.noBases")}</p>
               </div>
             ) : (
               <div className="pb-2">
@@ -422,7 +426,7 @@ export default function Knowledge() {
                             className="font-mono text-xs text-destructive focus:text-destructive cursor-pointer"
                             onClick={(e) => { e.stopPropagation(); handleDelete(kb.id); }}
                           >
-                            <Trash2 className="mr-2 h-3 w-3" /> Delete
+                            <Trash2 className="mr-2 h-3 w-3" /> {t("common.actions.delete")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -439,7 +443,7 @@ export default function Knowledge() {
           {!selected ? (
             <div className="py-24 flex flex-col items-center justify-center text-center">
               <DatabaseZap className="size-12 text-muted-foreground/20 mb-4" />
-              <p className="font-mono text-sm uppercase tracking-wider text-muted-foreground">Select a Knowledge Base</p>
+              <p className="font-mono text-sm uppercase tracking-wider text-muted-foreground">{t("pages.knowledge.select")}</p>
               <p className="text-xs text-muted-foreground/60 mt-2 max-w-xs">
                 Choose a collection from the sidebar to view and manage its indexed documents.
               </p>
