@@ -37,113 +37,116 @@ import {
   PackageSearch,
   Calculator,
   History,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
 import { useInternalAuth } from "@/hooks/use-internal-auth";
-import { LogOut } from "lucide-react";
+import { useLang } from "@/lib/i18n";
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
-const NAV_SECTIONS = [
+// Nav is defined as a function so it picks up translations dynamically.
+// Each item carries a `tKey` pointing into the locale files.
+const NAV_SECTIONS_DEF = [
   {
-    label: "Overview",
+    sectionKey: "overview",
     items: [
-      { href: "/", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/analytics", label: "Analytics", icon: BarChart2 },
+      { href: "/",          tKey: "nav.items.dashboard",          icon: LayoutDashboard },
+      { href: "/analytics", tKey: "nav.items.analytics",          icon: BarChart2 },
     ],
   },
   {
-    label: "AI Workforce",
+    sectionKey: "workforce",
     items: [
-      { href: "/workforce", label: "AI Workforce", icon: Building2 },
-      { href: "/operations", label: "Operations Center", icon: Crown },
-      { href: "/agents", label: "Agents", icon: Users },
-      { href: "/orchestrator", label: "Orchestrator", icon: Play },
-      { href: "/creative-ai", label: "Creative AI", icon: Sparkles },
-      { href: "/production-pipeline", label: "Production Pipeline", icon: GitMerge },
+      { href: "/workforce",           tKey: "nav.items.aiWorkforce",        icon: Building2 },
+      { href: "/operations",          tKey: "nav.items.operationsCenter",   icon: Crown },
+      { href: "/agents",              tKey: "nav.items.agents",             icon: Users },
+      { href: "/orchestrator",        tKey: "nav.items.orchestrator",       icon: Play },
+      { href: "/creative-ai",         tKey: "nav.items.creativeAI",         icon: Sparkles },
+      { href: "/production-pipeline", tKey: "nav.items.productionPipeline", icon: GitMerge },
     ],
   },
   {
-    label: "Automation",
+    sectionKey: "automation",
     items: [
-      { href: "/workflows", label: "Workflows", icon: GitMerge },
-      { href: "/workflow-executions", label: "Executions", icon: Activity },
-      { href: "/scheduler", label: "Scheduler", icon: CalendarClock },
-      { href: "/automation", label: "Automation Center", icon: Zap },
-      { href: "/events", label: "AI Events", icon: Zap },
+      { href: "/workflows",           tKey: "nav.items.workflows",       icon: GitMerge },
+      { href: "/workflow-executions", tKey: "nav.items.executions",      icon: Activity },
+      { href: "/scheduler",           tKey: "nav.items.scheduler",       icon: CalendarClock },
+      { href: "/automation",          tKey: "nav.items.automationCenter",icon: Zap },
+      { href: "/events",              tKey: "nav.items.aiEvents",        icon: Zap },
     ],
   },
   {
-    label: "Knowledge",
+    sectionKey: "knowledge",
     items: [
-      { href: "/prompts", label: "Prompts", icon: FileText },
-      { href: "/knowledge", label: "Knowledge", icon: Database },
-      { href: "/memory", label: "Memory", icon: Cpu },
+      { href: "/prompts",   tKey: "nav.items.prompts",   icon: FileText },
+      { href: "/knowledge", tKey: "nav.items.knowledge", icon: Database },
+      { href: "/memory",    tKey: "nav.items.memory",    icon: Cpu },
     ],
   },
   {
-    label: "Operations",
+    sectionKey: "operations",
     items: [
-      { href: "/queue", label: "Queue Center", icon: ListOrdered },
-      { href: "/human-tasks", label: "Human Tasks", icon: ClipboardCheck },
-      { href: "/registry", label: "Registry", icon: Box },
+      { href: "/queue",        tKey: "nav.items.queueCenter", icon: ListOrdered },
+      { href: "/human-tasks",  tKey: "nav.items.humanTasks",  icon: ClipboardCheck },
+      { href: "/registry",     tKey: "nav.items.registry",    icon: Box },
     ],
   },
   {
-    label: "Commerce",
+    sectionKey: "commerce",
     items: [
-      { href: "/marketplace", label: "Marketplace", icon: Store },
-      { href: "/services", label: "Service Catalog", icon: Tags },
-      { href: "/service-requests", label: "Service Requests", icon: ClipboardList },
-      { href: "/payments", label: "Payments", icon: Wallet },
-      { href: "/commercial", label: "Commercial", icon: TrendingUp },
-      { href: "/pricing-calculator", label: "Kalkulator Harga AI", icon: Calculator },
-      { href: "/promotions", label: "Promotions", icon: Tags },
-      { href: "/coupons", label: "Coupons", icon: Ticket },
+      { href: "/marketplace",        tKey: "nav.items.marketplace",      icon: Store },
+      { href: "/services",           tKey: "nav.items.serviceCatalog",   icon: Tags },
+      { href: "/service-requests",   tKey: "nav.items.serviceRequests",  icon: ClipboardList },
+      { href: "/payments",           tKey: "nav.items.payments",         icon: Wallet },
+      { href: "/commercial",         tKey: "nav.items.commercial",       icon: TrendingUp },
+      { href: "/pricing-calculator", tKey: "nav.items.pricingCalculator",icon: Calculator },
+      { href: "/promotions",         tKey: "nav.items.promotions",       icon: Tags },
+      { href: "/coupons",            tKey: "nav.items.coupons",          icon: Ticket },
     ],
   },
   {
-    label: "Growth",
+    sectionKey: "growth",
     items: [
-      { href: "/referrals", label: "Referrals", icon: Share2 },
-      { href: "/affiliates", label: "Affiliates", icon: Users2 },
-      { href: "/health-scores", label: "Health Scores", icon: Heart },
-      { href: "/ai-insights", label: "AI Insights", icon: Lightbulb },
-      { href: "/creative-intelligence", label: "Creative Intelligence", icon: Brain },
-      { href: "/template-marketplace", label: "Template Marketplace", icon: LayoutTemplate },
-      { href: "/template-engine", label: "Template Engine", icon: Layers },
-      { href: "/design-templates", label: "Design Templates", icon: LayoutTemplate },
+      { href: "/referrals",             tKey: "nav.items.referrals",            icon: Share2 },
+      { href: "/affiliates",            tKey: "nav.items.affiliates",           icon: Users2 },
+      { href: "/health-scores",         tKey: "nav.items.healthScores",         icon: Heart },
+      { href: "/ai-insights",           tKey: "nav.items.aiInsights",           icon: Lightbulb },
+      { href: "/creative-intelligence", tKey: "nav.items.creativeIntelligence", icon: Brain },
+      { href: "/template-marketplace",  tKey: "nav.items.templateMarketplace",  icon: LayoutTemplate },
+      { href: "/template-engine",       tKey: "nav.items.templateEngine",       icon: Layers },
+      { href: "/design-templates",      tKey: "nav.items.designTemplates",      icon: LayoutTemplate },
     ],
   },
   {
-    label: "Creative",
+    sectionKey: "creative",
     items: [
-      { href: "/design-studio", label: "Design Studio", icon: LayoutTemplate },
-      { href: "/export-workspace", label: "Export Workspace", icon: FileStack },
-      { href: "/design-templates", label: "Template Library", icon: FileStack },
-      { href: "/creative-marketplace", label: "Creative Marketplace", icon: Store },
-      { href: "/design-render-batches", label: "Bulk Render", icon: Layers },
-      { href: "/design-templates/ai-create", label: "AI Template Assistant", icon: Sparkles },
-      { href: "/version-timeline", label: "Version Timeline", icon: History },
+      { href: "/design-studio",           tKey: "nav.items.designStudio",         icon: LayoutTemplate },
+      { href: "/export-workspace",        tKey: "nav.items.exportWorkspace",      icon: FileStack },
+      { href: "/design-templates",        tKey: "nav.items.templateLibrary",      icon: FileStack },
+      { href: "/creative-marketplace",    tKey: "nav.items.creativeMarketplace",  icon: Store },
+      { href: "/design-render-batches",   tKey: "nav.items.bulkRender",           icon: Layers },
+      { href: "/design-templates/ai-create", tKey: "nav.items.aiTemplateAssistant", icon: Sparkles },
+      { href: "/version-timeline",        tKey: "nav.items.versionTimeline",      icon: History },
     ],
   },
   {
-    label: "Trade Tools",
+    sectionKey: "tradeTools",
     items: [
-      { href: "/customs-tariff", label: "Tarif BTKI & HS Code", icon: PackageSearch },
+      { href: "/customs-tariff", tKey: "nav.items.tarifsHsCode", icon: PackageSearch },
     ],
   },
   {
-    label: "Platform",
+    sectionKey: "platform",
     items: [
-      { href: "/catalog-admin", label: "Catalog Admin", icon: LayoutGrid },
-      { href: "/portfolio", label: "Portfolio", icon: Store },
-      { href: "/observability", label: "Observability", icon: Activity },
-      { href: "/audit", label: "Audit Log", icon: ShieldAlert },
-      { href: "/settings", label: "Settings", icon: Settings },
+      { href: "/catalog-admin",   tKey: "nav.items.catalogAdmin",   icon: LayoutGrid },
+      { href: "/portfolio",       tKey: "nav.items.portfolio",       icon: Store },
+      { href: "/observability",   tKey: "nav.items.observability",   icon: Activity },
+      { href: "/audit",           tKey: "nav.items.auditLog",        icon: ShieldAlert },
+      { href: "/settings",        tKey: "nav.items.settings",        icon: Settings },
     ],
   },
 ];
@@ -152,6 +155,7 @@ export function Layout({ children }: LayoutProps) {
   const [location] = useLocation();
   const { data: health, isLoading } = useHealthCheck();
   const { user, logout } = useInternalAuth();
+  const { lang, setLang, t } = useLang();
 
   const isOnline = !isLoading && health?.status === 'ok';
 
@@ -160,14 +164,11 @@ export function Layout({ children }: LayoutProps) {
       {/* ── SIDEBAR ── */}
       <aside
         className="w-60 flex flex-col flex-shrink-0 z-10"
-        style={{
-          background: '#0A1020',
-          borderRight: '1px solid #1E3057',
-        }}
+        style={{ background: '#0A1020', borderRight: '1px solid #1E3057' }}
       >
-        {/* Logo */}
-        <div className="h-14 flex items-center px-4 flex-shrink-0" style={{ borderBottom: '1px solid #1E3057' }}>
-          <div className="flex items-center gap-2.5">
+        {/* Logo + Language Toggle */}
+        <div className="h-14 flex items-center px-4 flex-shrink-0 gap-2" style={{ borderBottom: '1px solid #1E3057' }}>
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
             <div
               className="size-7 rounded-lg flex items-center justify-center flex-shrink-0"
               style={{ background: 'linear-gradient(135deg, #7C6EFA 0%, #5F52D0 100%)', boxShadow: '0 2px 10px rgba(124,110,250,0.40)' }}
@@ -175,59 +176,73 @@ export function Layout({ children }: LayoutProps) {
               <Cpu className="size-3.5 text-white" />
             </div>
             <span
-              className="font-semibold tracking-tight text-sm"
+              className="font-semibold tracking-tight text-sm truncate"
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", color: '#F0F4FF' }}
             >
               AI Platform
             </span>
             <span
-              className="text-[9px] font-mono tracking-widest px-1.5 py-0.5 rounded"
+              className="text-[9px] font-mono tracking-widest px-1.5 py-0.5 rounded flex-shrink-0"
               style={{ background: 'rgba(124,110,250,0.15)', color: '#9D91FB', border: '1px solid rgba(124,110,250,0.20)' }}
             >
               ENT
             </span>
           </div>
+
+          {/* Language toggle pill */}
+          <div
+            className="flex items-center flex-shrink-0 rounded-md overflow-hidden"
+            style={{ border: '1px solid #1E3057', background: '#060B18' }}
+          >
+            {(['id', 'en'] as const).map((l) => (
+              <button
+                key={l}
+                onClick={() => setLang(l)}
+                className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest transition-colors"
+                style={
+                  lang === l
+                    ? { background: '#7C6EFA', color: '#fff' }
+                    : { color: '#4F6494' }
+                }
+              >
+                {l.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Nav sections */}
         <div className="flex-1 overflow-y-auto py-3 scrollbar-none">
-          {NAV_SECTIONS.map((section) => (
-            <div key={section.label} className="mb-1">
+          {NAV_SECTIONS_DEF.map((section) => (
+            <div key={section.sectionKey} className="mb-1">
               <div
                 className="px-4 py-1 text-[10px] font-semibold uppercase tracking-widest"
                 style={{ color: '#4F6494' }}
               >
-                {section.label}
+                {t(`nav.sections.${section.sectionKey}`)}
               </div>
               <div className="px-2 space-y-0.5">
                 {section.items.map((item) => {
                   const isActive = location === item.href;
+                  const label = t(item.tKey);
                   return (
-                    <Link key={item.href} href={item.href}>
+                    <Link key={`${item.href}-${item.tKey}`} href={item.href}>
                       <div
                         className={cn(
                           "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors cursor-pointer group relative",
                         )}
                         style={
                           isActive
-                            ? {
-                                background: 'rgba(124,110,250,0.12)',
-                                color: '#9D91FB',
-                                borderLeft: '2px solid #7C6EFA',
-                                paddingLeft: '8px',
-                              }
-                            : {
-                                color: '#6B82B0',
-                                borderLeft: '2px solid transparent',
-                              }
+                            ? { background: 'rgba(124,110,250,0.12)', color: '#9D91FB', borderLeft: '2px solid #7C6EFA', paddingLeft: '8px' }
+                            : { color: '#6B82B0', borderLeft: '2px solid transparent' }
                         }
-                        data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                        data-testid={`nav-${label.toLowerCase().replace(/\s+/g, '-')}`}
                       >
                         <item.icon
                           className="size-3.5 flex-shrink-0"
                           style={{ color: isActive ? '#7C6EFA' : '#4F6494' }}
                         />
-                        <span className="truncate">{item.label}</span>
+                        <span className="truncate">{label}</span>
                       </div>
                     </Link>
                   );
@@ -270,11 +285,8 @@ export function Layout({ children }: LayoutProps) {
                 boxShadow: isLoading ? 'none' : isOnline ? '0 0 6px rgba(16,185,129,0.6)' : '0 0 6px rgba(244,63,94,0.6)',
               }}
             />
-            <span
-              className="text-[10px] font-mono uppercase tracking-widest"
-              style={{ color: '#4F6494' }}
-            >
-              {isLoading ? 'Pinging…' : isOnline ? 'System Online' : 'Degraded'}
+            <span className="text-[10px] font-mono uppercase tracking-widest" style={{ color: '#4F6494' }}>
+              {isLoading ? t('status.pinging') : isOnline ? t('status.online') : t('status.degraded')}
             </span>
           </div>
         </div>
