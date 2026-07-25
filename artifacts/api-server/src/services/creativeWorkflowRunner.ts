@@ -434,14 +434,11 @@ export async function runCreativeBriefWorkflow(projectDbId: number): Promise<voi
       interiorCopywriter:         stepOutputs["interior-copywriter"] ?? null,
       interiorQcReview:           stepOutputs["interior-quality-control"] ?? null,
     };
+    // Interior Design stops here and waits for explicit customer approval before
+    // rendering images. The "Generate Images" button (POST /creative-ai/projects/:id/generate-image)
+    // triggers runImageDesignerPipeline manually. Do NOT add auto-rendering here.
     const finalStatus = anyFailed ? "failed" : "generating_document";
     await db.update(creativeProjectsTable).set({ status: finalStatus, result: aggregatedResult }).where(eq(creativeProjectsTable.id, projectDbId));
-    if (!anyFailed) {
-      const { runImageDesignerPipeline } = await import("./imageDesignerService.js");
-      runImageDesignerPipeline(projectDbId, project.projectId, 2).catch(() => {}).finally(() => {
-        enqueue({ jobType: "pdf_export", payloadJson: { projectId: projectDbId, documentType: "interior_design" }, priority: 60 }).catch(() => {});
-      });
-    }
     return;
   }
 
