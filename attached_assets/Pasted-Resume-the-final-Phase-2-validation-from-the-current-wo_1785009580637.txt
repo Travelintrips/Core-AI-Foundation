@@ -1,0 +1,340 @@
+Resume the final Phase 2 validation from the current working tree.
+
+Do NOT restart implementation.
+Do NOT begin Phase 3.
+Do NOT redesign the selector.
+Do NOT modify Phase 1 schema, seed, CRUD, draft persistence, approval, or image generation.
+Do NOT commit or push yet.
+
+Current known state:
+
+- Phase 2 backend domain is implemented
+- intelligent search, suggestions, and similar-material routes are mounted
+- Phase 2 routes are mounted before the legacy /:id route
+- public catalog auth exceptions were added
+- frontend API base-path issue was fixed
+- selector integration is applied
+- Phase 1 + Phase 2 focused tests: 66 passed
+- API production build passed
+- live endpoints returned HTTP 200
+- cache hit latency observed around 0.13 ms
+- all managed workflows are running
+- quota expired during the final acceptance-criteria review
+
+========================================================
+STEP 1 — RECOVERY CHECK
+========================================================
+
+Run:
+
+1. git status --short
+2. git diff --stat
+3. list all new and modified Phase 2 files
+4. confirm no Phase 1 schema, migration, seed-count, approval, persistence, or image-generation contract was changed
+5. confirm no Phase 3 files were created
+
+Do not overwrite current work.
+
+========================================================
+STEP 2 — VERIFY ALL PHASE 2 CONTRACTS
+========================================================
+
+Inspect the implemented contracts and report the exact behavior for:
+
+1. intelligent catalog search
+2. suggestions
+3. similar materials
+4. normalization
+5. Indonesian-English aliases
+6. fuzzy matching
+7. hybrid ranking
+8. deterministic ordering
+9. cache
+10. catalog version signature
+11. snapshot reuse
+12. cache invalidation
+13. analytics
+14. selector integration
+15. filter preservation
+
+Confirm the exact endpoint paths and response shapes.
+
+========================================================
+STEP 3 — SEARCH BEHAVIOR TESTS
+========================================================
+
+Add or confirm explicit tests for:
+
+- exact material-name match
+- keyword match
+- Indonesian alias match
+- English alias match
+- multi-word query alias match
+- typo/fuzzy match
+- category match
+- brand match
+- component match
+- color match
+- finish match
+- style/context match where implemented
+- deterministic ranking for repeated identical queries
+- identical score tie-breaking
+- preservation of category filter
+- preservation of brand filter
+- preservation of priceTier filter
+- preservation of finish filter
+- preservation of color filter
+- empty query behavior
+- no-result behavior
+- invalid query values
+
+Do not relax assertions unless the contract itself intentionally allows multiple valid orders.
+
+========================================================
+STEP 4 — SUGGESTIONS VERIFICATION
+========================================================
+
+Verify:
+
+GET /api/material-library/suggestions
+
+Requirements:
+
+- deterministic output
+- deduplicated suggestions
+- bounded result count
+- suggestions sourced only from existing catalog and configured aliases
+- includes relevant material names
+- includes brands
+- includes categories/subcategories
+- supports partial query
+- does not expose inactive materials
+- no external AI or network call
+- safe empty-query behavior
+
+Add focused tests for each source type.
+
+========================================================
+STEP 5 — SIMILAR MATERIALS VERIFICATION
+========================================================
+
+Verify:
+
+GET /api/material-library/:id/similar
+
+Requirements:
+
+- excludes the source material
+- uses deterministic similarity
+- considers category
+- considers subcategory
+- considers finish
+- considers color
+- considers texture
+- considers price tier
+- considers brand when relevant
+- excludes inactive records
+- respects maximum result size
+- returns 404 for unknown material ID
+- does not mutate catalog data
+
+Add tests for source exclusion, stable order, and unknown ID.
+
+========================================================
+STEP 6 — CACHE AND VERSION INVALIDATION
+========================================================
+
+Verify the cache implementation with tests.
+
+Required evidence:
+
+1. first identical request is a cache miss
+2. second identical request is a cache hit
+3. cached result equals uncached result
+4. cache key includes relevant filters and pagination
+5. TTL expiry causes recomputation
+6. catalog version change invalidates cached search
+7. catalog snapshot version change reloads active materials
+8. no stale inactive/updated material remains after invalidation
+9. cache has a safe maximum size or bounded eviction policy
+10. cache does not duplicate permanent catalog storage
+
+Do not use a manual version counter disconnected from the canonical catalog.
+Use the implemented DB-derived version signature.
+
+========================================================
+STEP 7 — ANALYTICS VERIFICATION
+========================================================
+
+Verify in-memory analytics tracks only non-sensitive aggregate metrics:
+
+- total searches
+- top normalized keywords
+- top selected or returned materials, if implemented
+- top categories
+- average response time
+- cache hits
+- cache misses
+- cache-hit ratio
+
+Requirements:
+
+- no search user identity stored
+- no credentials stored
+- bounded keyword/material collections
+- deterministic reset for tests
+- no database migration
+- no startup persistence requirement
+
+If there is an analytics endpoint, confirm it is admin-only.
+If there is no endpoint, document the internal service contract.
+
+========================================================
+STEP 8 — SELECTOR UI ACCEPTANCE
+========================================================
+
+Run or add tests proving:
+
+1. existing MaterialSelectorDialog still opens
+2. existing filters still work
+3. search uses the Phase 2 intelligent endpoint
+4. live suggestions render
+5. clicking a suggestion updates the query
+6. similar-material section loads for the selected material
+7. selecting a similar material preserves the existing selection callback
+8. loading state is shown
+9. empty state is shown
+10. API failure has a safe fallback
+11. manual material entry remains unchanged
+12. no save/persistence workflow was changed
+13. no approval workflow was changed
+14. no image-generation workflow was changed
+
+Do not redesign the UI.
+
+========================================================
+STEP 9 — PERFORMANCE CHECKS
+========================================================
+
+After restarting with the final code, measure:
+
+- uncached search
+- cached search
+- suggestions
+- similar materials
+
+Use several representative queries:
+
+- marble
+- marmer putih
+- kayu jati
+- matte black
+- travertine beige
+
+Report:
+
+- cold request latency
+- warm request latency
+- catalog size
+- result count
+- cache hit or miss
+
+Targets are goals, not reasons to falsify results:
+
+- cached search <10 ms
+- suggestions <50 ms
+- search target <100 ms where feasible
+
+If cold search exceeds the target, report honestly and identify the remaining bottleneck.
+
+========================================================
+STEP 10 — FULL REGRESSION
+========================================================
+
+Run:
+
+- Phase 2 intelligence unit tests
+- Phase 1 Material Library API tests
+- MaterialSelectorDialog tests
+- InteriorDesignEditor tests
+- persistence tests
+- approval snapshot tests
+- image-generation tests
+- customer portal tests
+- API production build
+- customer portal production build
+- admin/AI platform production build using the exact managed workflow environment values
+
+For typecheck:
+
+- report all output
+- distinguish new errors from pre-existing errors
+- Phase 2 acceptance requires zero new type errors in changed files
+
+Do not claim a clean workspace typecheck if unrelated inherited errors remain.
+
+========================================================
+STEP 11 — LIVE WALKTHROUGH
+========================================================
+
+Perform:
+
+1. open Interior Design Material Selector
+2. search using an Indonesian alias
+3. confirm ranked results
+4. click a suggestion
+5. preserve a price-tier filter while searching
+6. select one material
+7. open similar materials
+8. select a similar alternative
+9. confirm the existing selection callback receives the canonical material object
+10. save the draft
+11. reload
+12. approve for rendering
+13. confirm Phase 1 persistence and approval behavior still works
+14. confirm image prompt workflow remains unchanged
+
+Check browser console and API logs for new errors.
+
+========================================================
+FINAL REPORT
+========================================================
+
+Return:
+
+1. exact files created
+2. exact files modified
+3. architecture summary
+4. endpoint paths
+5. request and response contracts
+6. ranking factors and weights
+7. alias examples
+8. fuzzy-matching behavior
+9. cache architecture
+10. catalog-version source
+11. cache invalidation evidence
+12. analytics behavior
+13. selector UI changes
+14. Phase 2 test totals
+15. Phase 1 regression totals
+16. performance results
+17. typecheck results
+18. production-build results
+19. live walkthrough result
+20. remaining pre-existing issues
+21. git diff summary
+22. merge-conflict risk with Phase 3
+23. whether any shared files were touched
+
+Use one final verdict only:
+
+A. MATERIAL INTELLIGENCE PHASE 2 VERIFIED — SAFE FOR INTEGRATION REVIEW
+
+B. MATERIAL INTELLIGENCE PHASE 2 COMPLETE WITH BLOCKERS
+
+C. MATERIAL INTELLIGENCE PHASE 2 INCOMPLETE
+
+STOP.
+
+Do not begin Phase 3.
+Do not commit or push until the report is reviewed.
