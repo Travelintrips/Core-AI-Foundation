@@ -252,9 +252,14 @@ router.use(designBlueprintsRouter);
 // ── Team 07: Domain Plugin Framework ─────────────────────────────────────
 router.use(designPluginsRouter);
 // ── Team 08: Design Components ───────────────────────────────────────────
-router.use(designComponentsRouter);
+// The router's paths are relative to /ai/design-components. Mounting it at
+// the API root would let its generic GET /:id handler intercept unrelated
+// endpoints such as /material-library.
+router.use("/ai/design-components", designComponentsRouter);
 // ── Team 09: Design Patterns ─────────────────────────────────────────────
-router.use(designPatternsRouter);
+// The router's paths are relative to /ai/design-patterns. Keep its generic
+// GET /:id route from intercepting unrelated API endpoints.
+router.use("/ai/design-patterns", designPatternsRouter);
 // ── Team 09: Design Version History & Revision System ────────────────────
 router.use(designVersioningRouter);
 // ── Team 10: Design Tokens ───────────────────────────────────────────────
