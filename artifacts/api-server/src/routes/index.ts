@@ -90,6 +90,8 @@ import materialLibraryRouter from "./material-library.js";
 import materialLibraryCatalogRouter from "./material-library-catalog.js";
 // ── Interior Design Material Library (Phase 2 intelligence, additive) ─────
 import materialIntelligenceRouter from "./material-intelligence.js";
+// ── Material Catalog Integration (Phase 4 official provider, admin-only) ──
+import materialCatalogIntegrationRouter from "./material-catalog-integration.js";
 // ── Team 23: Design Knowledge & Recommendation Adapter ────────────────────────
 import designKnowledgeRouter from "./design-knowledge.js";
 // ── Team 17 / Team 34: Universal Design Export Workspace ─────────────────────
@@ -313,6 +315,8 @@ router.use(materialLibraryRouter);
 // /suggestions and /:id/similar are resolved by the owning domain.
 router.use(materialIntelligenceRouter);
 router.use(materialLibraryCatalogRouter);
+// ── Material Catalog Integration — Phase 4 official provider (admin-only) ─────
+router.use(materialCatalogIntegrationRouter);
 // ── Team 23: Design Knowledge & Recommendation Adapter ────────────────────────
 router.use(designKnowledgeRouter);
 // ── Team 17 / Team 34: Universal Design Export Workspace ─────────────────────

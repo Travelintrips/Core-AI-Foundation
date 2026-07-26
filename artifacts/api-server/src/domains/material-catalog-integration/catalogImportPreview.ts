@@ -38,6 +38,8 @@ export interface RunImportPreviewParams {
   provider: MaterialCatalogProvider;
   providerConfig: unknown;
   options: ImportOptions;
+  /** Optional AbortSignal — propagated to the provider's fetch call for client-disconnect cancellation. */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -83,6 +85,7 @@ export async function runImportPreview(
       brand: options.brand,
       country: options.country,
       config: providerConfig,
+      abortSignal: params.abortSignal,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

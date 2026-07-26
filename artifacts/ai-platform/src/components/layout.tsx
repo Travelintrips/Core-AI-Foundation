@@ -143,6 +143,7 @@ const NAV_SECTIONS_DEF = [
     sectionKey: "platform",
     items: [
       { href: "/catalog-admin",   tKey: "nav.items.catalogAdmin",   icon: LayoutGrid },
+      { href: "/material-catalog-preview", tKey: "nav.items.materialCatalogPreview", icon: PackageSearch },
       { href: "/portfolio",       tKey: "nav.items.portfolio",       icon: Store },
       { href: "/observability",   tKey: "nav.items.observability",   icon: Activity },
       { href: "/audit",           tKey: "nav.items.auditLog",        icon: ShieldAlert },

@@ -95,6 +95,8 @@ import FashionDesignPage from "@/pages/fashion-design";
 import PackagingDesignPage from "@/pages/packaging-design";
 // ── Team 21: Universal Material Library ──────────────────────────────────
 import MaterialLibraryPage from "@/pages/material-library";
+// ── Phase 4: Material Catalog Provider Preview (admin-only) ──────────────
+import MaterialCatalogPreview from "@/pages/material-catalog-preview";
 // ── Team 22: Vendor Ecosystem ─────────────────────────────────────────────
 import VendorAdminPage from "@/pages/creative-vendors/VendorAdminPage";
 import VendorAdminDetailPage from "@/pages/creative-vendors/VendorAdminDetailPage";
@@ -190,6 +192,8 @@ function AdminRouter() {
         <Route path="/packaging-design" component={PackagingDesignPage} />
         {/* ── Team 21: Universal Material Library ─────────────────────── */}
         <Route path="/material-library" component={MaterialLibraryPage} />
+        {/* ── Phase 4: Material Catalog Provider Preview ───────────────── */}
+        <Route path="/material-catalog-preview" component={MaterialCatalogPreview} />
         {/* ── Team 22: Vendor Ecosystem ───────────────────────────────── */}
         <Route path="/creative-vendors/:id" component={VendorAdminDetailPage} />
         <Route path="/creative-vendors" component={VendorAdminPage} />

@@ -1,0 +1,294 @@
+RESUME PHASE 4 — OFFICIAL MATERIAL PROVIDER
+
+Continue exactly from the current feature branch.
+
+Do not recreate files that already exist.
+
+Do not redesign the provider architecture.
+
+Do not modify completed Phase 1, Phase 2 or Phase 3 code except for strictly additive integration.
+
+========================================================
+CURRENT VERIFIED STATUS
+========================================================
+
+Already completed:
+
+- feature branch created
+- baseline verified
+- provider foundation implemented
+- controlled official-feed foundation selected
+- configuration validation added
+- provider remains disabled by default
+- preview remains dryRun only
+- canonical Material Library remains untouched
+- no production registration
+- no startup activation
+- no canonical DB writes
+
+Continue from this point only.
+
+========================================================
+PHASE 4 REMAINING TASKS
+========================================================
+
+Complete only the unfinished work.
+
+1. Finish provider wiring.
+
+Verify:
+
+- provider registration helper
+- feature flag gating
+- provider-specific flag
+- registration only when both flags are enabled
+
+Do not enable either flag by default.
+
+========================================================
+2. Finish preview route.
+========================================================
+
+POST
+
+/api/material-catalog/import-preview
+
+Requirements:
+
+- admin authorization
+- provider validation
+- dryRun literal true
+- maxRecords <= 500
+- payload limit enforcement
+- AbortSignal support
+- structured ImportReport
+- zero database writes
+- zero canonical mutations
+
+========================================================
+3. Finish admin preview UI.
+========================================================
+
+Admin only.
+
+Show:
+
+- provider status
+- configuration validation
+- preview execution
+- valid
+- invalid
+- duplicates
+- warnings
+- errors
+- pagination
+- normalized item preview
+- media preview
+- source metadata
+- export preview report
+
+Do NOT add:
+
+Import
+Save
+Sync
+Overwrite
+Merge
+
+Preview only.
+
+========================================================
+4. Implement payload enforcement.
+========================================================
+
+Phase 3 declared:
+
+10 MB payload
+
+Now enforce it.
+
+Also enforce:
+
+500 record maximum
+
+Both require tests.
+
+========================================================
+5. Complete tests.
+========================================================
+
+Provider:
+
+- config validation
+- mapping
+- pagination
+- timeout
+- AbortSignal
+- retry
+- rate limit
+- malformed payload
+- oversized payload
+- oversized record count
+- media validation
+- duplicate detection
+- preview
+- feature flags
+- provider disabled
+- admin auth
+- dryRun false rejection
+
+Regression:
+
+Phase 1
+
+Phase 2
+
+Phase 3
+
+Phase 4
+
+Selector
+
+Editor
+
+API build
+
+Frontend build
+
+Zero new failures.
+
+========================================================
+6. Enterprise UAT
+========================================================
+
+Run UAT twice.
+
+A.
+
+Flags OFF
+
+Verify:
+
+- provider inactive
+- preview unavailable
+- Material Library unchanged
+- Material Intelligence unchanged
+
+B.
+
+Development only.
+
+Temporarily enable:
+
+MATERIAL_CATALOG_INTEGRATION_ENABLED=true
+
+MATERIAL_NIRO_GRANITE_PROVIDER_ENABLED=true
+
+Verify:
+
+- provider validation
+- preview
+- pagination
+- duplicate detection
+- normalized output
+- AbortSignal
+- timeout
+- invalid credentials
+- payload limit
+- record limit
+- no DB write
+- no canonical mutation
+
+Disable both flags again.
+
+Restart.
+
+Verify provider is inactive again.
+
+========================================================
+7. Git hygiene
+========================================================
+
+Remove:
+
+- uploaded TXT task files
+- attached_assets prompts
+- screenshots not required
+- secrets
+- PAT
+- unrelated .replit edits
+
+Commit only Phase 4 files.
+
+Push only:
+
+feature/material-phase4-official-provider
+
+========================================================
+8. Documentation
+========================================================
+
+Create:
+
+docs/material-phase4-official-provider-report.md
+
+Include:
+
+- provider
+- source assessment
+- security
+- payload enforcement
+- record limit
+- preview
+- UI
+- tests
+- builds
+- UAT
+- remaining limitations
+- Phase 5 recommendations
+
+========================================================
+FINAL REPORT
+========================================================
+
+Return:
+
+1. branch
+2. base commit
+3. final commit
+4. provider
+5. source status
+6. files created
+7. files modified
+8. payload enforcement
+9. record enforcement
+10. preview route
+11. preview UI
+12. provider registration
+13. feature flags
+14. DB write verification
+15. canonical mutation verification
+16. tests
+17. builds
+18. UAT
+19. git status
+20. remote push
+21. remaining blockers
+
+Use one verdict only:
+
+A. PHASE 4 OFFICIAL PROVIDER COMPLETE — SAFE FOR INTEGRATION REVIEW
+
+B. PHASE 4 FOUNDATION COMPLETE — LIVE SOURCE BLOCKED
+
+C. PHASE 4 COMPLETE WITH BLOCKERS
+
+D. PHASE 4 FAILED
+
+Do not merge to main.
+
+Do not enable provider in production.
+
+Do not begin Phase 5.
+
+STOP.
