@@ -1,0 +1,753 @@
+MASTER TASK — PHASE 4
+OFFICIAL MATERIAL CATALOG PROVIDER INTEGRATION
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Base branch:
+main
+
+Verified main HEAD:
+a85ed71a27a61730ca3254751d21a2919c7688ae
+
+Create a new branch:
+
+feature/material-phase4-official-provider
+
+Do not work directly on main.
+Do not modify Phase 1, Phase 2, or Phase 3 behavior unless integration requires an additive adapter.
+Do not enable automatic imports.
+Do not write external catalog data directly into the canonical Material Library.
+Do not begin marketplace, purchasing, supplier ordering, scraping, or OCR work.
+
+========================================================
+OBJECTIVE
+========================================================
+
+Implement the first real official catalog provider using the existing Phase 3 provider architecture.
+
+The provider must:
+
+- use an officially permitted data source;
+- support configuration validation;
+- fetch external catalog records;
+- normalize them into ExternalCatalogItem;
+- validate every record;
+- support cursor-based pagination;
+- respect AbortSignal;
+- redact credentials;
+- generate dry-run import previews;
+- never write directly to the canonical material table;
+- remain disabled by default.
+
+Use one provider only for Phase 4.
+
+Preferred first provider:
+
+Niro Granite official catalog
+
+If no official API, authorized feed, downloadable structured catalog, or approved data source is available, do not scrape the website.
+
+In that case, implement:
+
+official-feed provider foundation
+
+using a controlled local fixture or manually supplied official catalog export, while keeping the provider contract ready for a future official API.
+
+========================================================
+PHASE 0 — BASELINE AND BRANCH
+========================================================
+
+Before coding:
+
+1. Confirm repository identity.
+2. Confirm main HEAD.
+3. Confirm working tree is clean.
+4. Create:
+
+feature/material-phase4-official-provider
+
+5. Run baseline tests:
+
+- Phase 1 Material Library
+- Phase 2 Material Intelligence
+- Phase 3 Catalog Foundation
+- MaterialSelectorDialog
+- InteriorDesignEditor
+- API production build
+
+Record exact totals.
+
+========================================================
+PHASE 1 — PROVIDER SOURCE ASSESSMENT
+========================================================
+
+Document the proposed catalog source.
+
+Report:
+
+- provider name
+- provider ID
+- source type
+- official source owner
+- API/feed/file format
+- authentication requirement
+- pagination support
+- rate limits
+- update frequency
+- available fields
+- media URL behavior
+- legal or usage restrictions
+- whether data storage is permitted
+- whether attribution is required
+
+Do not use scraping unless written approval explicitly exists.
+
+If no usable official source is available, use:
+
+sourceType: "official_feed"
+
+and build against an approved fixture/export format.
+
+Create:
+
+docs/material-phase4-provider-source-assessment.md
+
+Do not continue with a live provider when source authorization is uncertain.
+
+========================================================
+PHASE 2 — PROVIDER IMPLEMENTATION
+========================================================
+
+Create the provider under:
+
+artifacts/api-server/src/domains/material-catalog-integration/providers/
+
+Suggested structure:
+
+providers/niroGranite/
+  niroGraniteProvider.ts
+  niroGraniteSchemas.ts
+  niroGraniteMapper.ts
+  niroGraniteClient.ts
+  niroGraniteConfig.ts
+  niroGraniteErrors.ts
+  index.ts
+  tests/
+
+Provider contract:
+
+interface MaterialCatalogProvider {
+  readonly providerId: string;
+  readonly displayName: string;
+  readonly sourceType:
+    | "official_api"
+    | "official_feed"
+    | "manual_fixture";
+
+  getCapabilities(): CatalogProviderCapabilities;
+
+  validateConfig(
+    config: unknown
+  ): Promise<CatalogProviderValidationResult>;
+
+  fetchCatalog(
+    context: CatalogFetchContext
+  ): Promise<ExternalCatalogResult>;
+}
+
+Required provider ID:
+
+niro-granite-official
+
+or another approved kebab-case ID based on the selected provider.
+
+========================================================
+PHASE 3 — CONFIGURATION SECURITY
+========================================================
+
+Provider configuration must be validated with Zod.
+
+Support only required fields such as:
+
+- baseUrl
+- apiKey
+- accessToken
+- feedUrl
+- locale
+- country
+- timeoutMs
+
+Never hard-code secrets.
+
+Never log:
+
+- apiKey
+- token
+- password
+- credential
+- authorization header
+- signed URL secrets
+
+Use redactProviderConfig() before returning validation errors or diagnostic data.
+
+Reject:
+
+- invalid URL
+- non-HTTPS URL
+- missing required credentials
+- malformed timeout
+- unsupported locale
+- unsupported country
+- unknown configuration fields where strict mode is appropriate
+
+========================================================
+PHASE 4 — OFFICIAL DATA MAPPING
+========================================================
+
+Map official source records into ExternalCatalogItem.
+
+Required mapping where source data is available:
+
+- externalId
+- providerId
+- sourceUrl
+- brand
+- productCode
+- productName
+- category
+- subcategory
+- materialType
+- description
+- color[]
+- finish[]
+- texture
+- pattern
+- priceTier
+- unit
+- dimensions
+- technicalData
+- certifications
+- thumbnailReference
+- previewReferences
+- country
+- locale
+- sourceUpdatedAt
+- sourceMetadata
+
+Do not invent missing values.
+
+When a source field is unavailable:
+
+- leave it undefined; or
+- preserve it in sourceMetadata if appropriate.
+
+Do not fabricate:
+
+- prices
+- certifications
+- dimensions
+- availability
+- stock
+- sustainability claims
+- technical ratings
+
+========================================================
+PHASE 5 — NORMALIZATION
+========================================================
+
+Use the Phase 3 catalogNormalizer.
+
+Ensure deterministic normalization for:
+
+- whitespace
+- brand
+- product name
+- category
+- material type
+- color
+- finish
+- unit
+- price tier
+- country
+- locale
+- URLs
+- source timestamps
+
+Do not introduce a second normalization engine.
+
+Provider-specific mapping must happen before canonical normalization.
+
+========================================================
+PHASE 6 — MEDIA SAFETY
+========================================================
+
+All remote media must use HTTPS.
+
+Reject or downgrade:
+
+- http
+- ftp
+- file
+- data
+- javascript
+- local absolute paths
+- path traversal
+
+Do not download media during the preview phase.
+
+Return only safe MediaReference objects.
+
+Support:
+
+- thumbnail reference
+- preview references
+- provider asset ID
+- unresolved media
+
+Do not store media locally in Phase 4.
+
+========================================================
+PHASE 7 — FETCHING AND PAGINATION
+========================================================
+
+The provider must support:
+
+- maximum record count
+- cursor or page token
+- deterministic page order
+- configurable timeout
+- AbortSignal
+- provider error translation
+- safe retry policy
+- rate-limit response handling
+- partial response handling
+
+Do not retry:
+
+- authentication failures
+- schema failures
+- invalid configuration
+- user cancellation
+
+Use bounded retries only for:
+
+- timeout
+- temporary network failure
+- HTTP 429
+- HTTP 502
+- HTTP 503
+- HTTP 504
+
+Do not create an infinite retry loop.
+
+========================================================
+PHASE 8 — PAYLOAD AND RECORD LIMITS
+========================================================
+
+Phase 3 already declares:
+
+MAX_RECORDS_PER_PREVIEW = 500
+MAX_PAYLOAD_SIZE_BYTES = 10MB
+
+In Phase 4, implement real payload-size enforcement.
+
+Required behavior:
+
+- response over 10MB is rejected safely;
+- preview over 500 records is rejected or truncated according to the documented contract;
+- errors are typed;
+- no raw provider response is returned;
+- no oversized payload is retained in memory unnecessarily.
+
+Add explicit tests for both limits.
+
+========================================================
+PHASE 9 — PROVIDER REGISTRATION
+========================================================
+
+Do not register the provider unconditionally.
+
+Add a separate provider-registration function such as:
+
+registerOfficialMaterialProviders()
+
+Registration must occur only when all are true:
+
+- MATERIAL_CATALOG_INTEGRATION_ENABLED=true
+- provider-specific feature flag is true
+- valid server-side configuration exists
+
+Add provider-specific flag:
+
+MATERIAL_NIRO_GRANITE_PROVIDER_ENABLED=false
+
+Default must be false.
+
+Do not register the mock provider in production.
+
+Do not activate the new provider during implementation or UAT unless explicitly requested.
+
+========================================================
+PHASE 10 — ADMIN PREVIEW ROUTE
+========================================================
+
+Create an admin-only route:
+
+POST /api/material-catalog/import-preview
+
+Requirements:
+
+- admin/platform authorization required;
+- feature flag required;
+- provider-specific flag required;
+- providerId must be registered;
+- options.dryRun must be true;
+- dryRun false must return 400;
+- request body schema validated;
+- maxRecords cannot exceed 500;
+- supports cursor;
+- supports locale and country where valid;
+- returns structured ImportReport;
+- no database write;
+- no canonical Material Library mutation;
+- no automatic activation.
+
+Anonymous request:
+
+401 or 403
+
+Unknown provider:
+
+404 or typed safe error
+
+Disabled feature:
+
+404 or 403 according to existing feature-gate conventions
+
+Do not expose provider credentials in response.
+
+========================================================
+PHASE 11 — IMPORT PREVIEW UI
+========================================================
+
+Add an admin-only preview interface.
+
+Suggested location:
+
+AI Platform / Material Library / External Catalog Preview
+
+UI must support:
+
+- provider selection;
+- provider status;
+- configuration validation status;
+- dry-run preview;
+- pagination;
+- valid count;
+- invalid count;
+- new count;
+- exact duplicate count;
+- possible duplicate count;
+- conflicting identity count;
+- warnings;
+- errors;
+- media preview reference;
+- normalized item detail;
+- raw source metadata view with secrets removed.
+
+Do not add an “Import to Library” button in Phase 4.
+
+Permitted actions:
+
+- Validate Provider
+- Preview Catalog
+- Load Next Page
+- Export Preview Report
+
+No production write action is allowed.
+
+========================================================
+PHASE 12 — DUPLICATE REVIEW
+========================================================
+
+Use the existing duplicate detector.
+
+Display classifications:
+
+- new
+- exact_duplicate
+- possible_duplicate
+- conflicting_identity
+- invalid
+
+For each duplicate, display the match reason:
+
+- providerId + externalId
+- brand + productCode
+- normalized brand + productName
+- source URL
+
+Do not automatically merge or overwrite materials.
+
+Do not mutate canonical catalog records.
+
+========================================================
+PHASE 13 — AUDIT AND OBSERVABILITY
+========================================================
+
+Add safe provider metrics:
+
+- provider ID
+- fetch start time
+- fetch duration
+- record count
+- valid count
+- invalid count
+- duplicate count
+- response size
+- pagination cursor presence
+- retry count
+- error category
+
+Never store:
+
+- credentials
+- authorization headers
+- full raw payloads
+- user PII
+
+Use bounded in-memory metrics or the existing approved analytics pattern.
+
+========================================================
+PHASE 14 — TEST REQUIREMENTS
+========================================================
+
+Add tests for:
+
+Provider:
+
+- valid configuration
+- invalid configuration
+- missing credential
+- secret redaction
+- capability reporting
+- deterministic mapping
+- pagination
+- AbortSignal
+- timeout
+- temporary provider failure
+- rate-limit handling
+- authentication failure
+- malformed provider response
+- partial-invalid response
+
+Mapping:
+
+- all available source fields
+- missing optional fields
+- color normalization
+- finish normalization
+- dimensions
+- technical data
+- certifications
+- media references
+- timestamp normalization
+- source metadata
+
+Limits:
+
+- maximum 500 records
+- payload under 10MB accepted
+- payload over 10MB rejected
+- timeout enforced
+- retry count bounded
+
+Security:
+
+- HTTP media rejected
+- unsafe schemes rejected
+- credentials absent from errors
+- credentials absent from logs
+- anonymous route rejected
+- non-admin route rejected
+- feature disabled by default
+- provider disabled by default
+
+Preview:
+
+- dryRun true accepted
+- dryRun false rejected
+- no DB write
+- no canonical mutation
+- structured report
+- duplicate classifications
+- invalid records isolated
+- deterministic result ordering
+
+Regression:
+
+- Phase 1 tests
+- Phase 2 tests
+- Phase 3 tests
+- MaterialSelectorDialog tests
+- InteriorDesignEditor tests
+- API production build
+- AI platform build
+
+Zero new failures allowed.
+
+========================================================
+PHASE 15 — LIVE UAT
+========================================================
+
+Run UAT first with provider flags disabled.
+
+Confirm:
+
+- existing Material Library works;
+- Material Intelligence works;
+- Phase 4 route is inaccessible while disabled;
+- no provider is registered;
+- no external fetch occurs.
+
+Then, only in a controlled development environment, temporarily enable:
+
+MATERIAL_CATALOG_INTEGRATION_ENABLED=true
+MATERIAL_NIRO_GRANITE_PROVIDER_ENABLED=true
+
+Do not enable in production.
+
+Perform:
+
+1. Validate provider configuration.
+2. Fetch first preview page.
+3. Confirm result counts.
+4. Confirm invalid records are isolated.
+5. Confirm duplicates are classified.
+6. Confirm media references are safe.
+7. Load next page.
+8. Abort an active request.
+9. Test invalid credentials.
+10. Test provider timeout.
+11. Confirm no database row is inserted.
+12. Confirm canonical Material Library is unchanged.
+13. Disable both flags after UAT.
+14. Restart and prove provider is no longer active.
+
+========================================================
+PHASE 16 — DOCUMENTATION
+========================================================
+
+Create:
+
+docs/material-phase4-official-provider-report.md
+
+Include:
+
+1. provider selected
+2. official source
+3. source authorization
+4. provider contract
+5. configuration schema
+6. mapped fields
+7. unavailable fields
+8. normalization behavior
+9. media behavior
+10. pagination
+11. rate limits
+12. retry behavior
+13. payload-size enforcement
+14. record limit
+15. duplicate behavior
+16. route authorization
+17. feature flags
+18. UI preview
+19. tests
+20. regressions
+21. builds
+22. UAT results
+23. database-write verification
+24. canonical catalog mutation verification
+25. security findings
+26. remaining limitations
+27. Phase 5 recommendations
+
+========================================================
+PHASE 17 — GIT HYGIENE
+========================================================
+
+Before committing:
+
+- remove uploaded task TXT files;
+- exclude attached_assets task specifications;
+- exclude local screenshots unless required;
+- exclude secret files;
+- inspect .replit for credentials;
+- confirm no token is stored in Git;
+- confirm working tree contains only intended Phase 4 files.
+
+Commit all approved changes.
+
+Push only:
+
+feature/material-phase4-official-provider
+
+Do not merge to main.
+
+========================================================
+FINAL REPORT
+========================================================
+
+Return:
+
+1. branch
+2. base commit
+3. final commit
+4. selected provider
+5. official source status
+6. authorization status
+7. files created
+8. files modified
+9. provider contract result
+10. mapping result
+11. payload-limit result
+12. record-limit result
+13. pagination result
+14. AbortSignal result
+15. rate-limit result
+16. media-security result
+17. credential-redaction result
+18. feature-flag status
+19. provider-registration status
+20. route status
+21. UI status
+22. database-write status
+23. canonical mutation status
+24. Phase 1 test totals
+25. Phase 2 test totals
+26. Phase 3 test totals
+27. Phase 4 test totals
+28. frontend regression totals
+29. build results
+30. typecheck result
+31. UAT result
+32. git status
+33. remote push result
+34. remaining blockers
+35. recommendation
+
+Use one verdict only:
+
+A. PHASE 4 OFFICIAL PROVIDER COMPLETE — SAFE FOR INTEGRATION REVIEW
+
+B. PHASE 4 FOUNDATION COMPLETE — LIVE SOURCE BLOCKED
+
+C. PHASE 4 COMPLETE WITH BLOCKERS
+
+D. PHASE 4 FAILED
+
+Do not merge to main.
+Do not activate the provider in production.
+Do not begin Phase 5.
+STOP.

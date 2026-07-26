@@ -110,6 +110,7 @@ export async function runCatalogImportPreview(
         warnings: [],
         errors: [message],
         items: [],
+        sourceMetadata: undefined,
         executionDurationMs: completedAt.getTime() - startedAt.getTime(),
       },
       providerErrors: [message],

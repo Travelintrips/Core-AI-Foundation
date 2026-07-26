@@ -35,6 +35,7 @@ import { ensureMaterialLibraryTables, seedMaterialLibraryIfEmpty } from "./domai
 import { ensureStorageBucket } from "./lib/supabaseStorage.js";
 import { resumeIncompleteDesignRenderBatches } from "./services/design-recovery/startupResume.js";
 import { ensureSubmitIdempotencyTable } from "./services/submitIdempotencyService.js";
+import { registerOfficialMaterialProviders } from "./domains/material-catalog-integration/officialProviderRegistration.js";
 
 // ── Startup recovery idempotency guard ────────────────────────────────────────
 // Prevents the recovery from running twice if the API server and job worker
@@ -62,6 +63,16 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  registerOfficialMaterialProviders().then((result) => {
+    if (result.registered) {
+      logger.info({ providerId: result.providerId }, "[material-catalog] Official provider registered");
+    } else {
+      logger.info({ providerId: result.providerId, reason: result.reason }, "[material-catalog] Official provider inactive");
+    }
+  }).catch((err) => {
+    logger.warn({ err }, "[material-catalog] Official provider registration failed safely");
+  });
 
   // ── Observability tables (additive DDL, idempotent) ──────────────────────
   ensureObservabilityTables().catch((err) =>

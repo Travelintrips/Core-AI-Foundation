@@ -75,6 +75,8 @@ export interface CatalogFetchContext {
   readonly brand?: string;
   readonly country?: string;
   readonly abortSignal?: AbortSignal;
+  /** Provider-specific server-side configuration, never supplied by callers. */
+  readonly config?: unknown;
 }
 
 export interface ExternalCatalogResult {
@@ -83,6 +85,8 @@ export interface ExternalCatalogResult {
   readonly totalAvailable?: number;
   readonly sourceMetadata?: Record<string, unknown>;
   readonly fetchedAt: Date;
+  /** Serialized response size when known, used for pre-normalization limits. */
+  readonly payloadSizeBytes?: number;
 }
 
 export interface CatalogProviderValidationResult {
@@ -143,6 +147,8 @@ export interface ImportPreviewResult {
   readonly errors: string[];
   readonly items: ClassifiedItem[];
   readonly nextCursor?: string;
+  readonly sourceMetadata?: Record<string, unknown>;
+  readonly payloadSizeBytes?: number;
   readonly executionDurationMs: number;
 }
 
@@ -174,5 +180,8 @@ export interface ImportReport {
   readonly validationErrors: string[];
   readonly providerErrors: string[];
   readonly previewSummary: string;
+  readonly items: ClassifiedItem[];
+  readonly nextCursor?: string;
+  readonly payloadSizeBytes?: number;
   readonly sourceMetadata?: Record<string, unknown>;
 }

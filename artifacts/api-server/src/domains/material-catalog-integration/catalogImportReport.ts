@@ -56,6 +56,9 @@ export function buildImportReport(params: {
     validationErrors: errors,
     providerErrors: providerErrors ?? [],
     previewSummary,
+    items: previewResult.items,
+    nextCursor: previewResult.nextCursor,
+    payloadSizeBytes: previewResult.payloadSizeBytes,
     sourceMetadata,
   };
 }
@@ -89,5 +92,6 @@ export function buildRejectedReport(params: {
     validationErrors: [],
     providerErrors: [params.reason],
     previewSummary: `Import rejected: ${params.reason}`,
+    items: [],
   };
 }

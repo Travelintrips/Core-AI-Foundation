@@ -84,6 +84,7 @@ export const ExternalCatalogResultSchema = z.object({
   totalAvailable: z.number().int().nonnegative().optional(),
   sourceMetadata: z.record(z.unknown()).optional(),
   fetchedAt: z.date(),
+  payloadSizeBytes: z.number().int().nonnegative().optional(),
 });
 
 export const CatalogProviderValidationResultSchema = z.object({
@@ -137,6 +138,8 @@ export const ImportPreviewResultSchema = z.object({
   errors: z.array(z.string()),
   items: z.array(ClassifiedItemSchema),
   nextCursor: z.string().optional(),
+  sourceMetadata: z.record(z.unknown()).optional(),
+  payloadSizeBytes: z.number().int().nonnegative().optional(),
   executionDurationMs: z.number().nonnegative(),
 });
 
@@ -169,6 +172,9 @@ export const ImportReportSchema = z.object({
   validationErrors: z.array(z.string()),
   providerErrors: z.array(z.string()),
   previewSummary: z.string(),
+  items: z.array(ClassifiedItemSchema),
+  nextCursor: z.string().optional(),
+  payloadSizeBytes: z.number().int().nonnegative().optional(),
   sourceMetadata: z.record(z.unknown()).optional(),
 });
 

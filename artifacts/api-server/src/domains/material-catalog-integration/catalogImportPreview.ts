@@ -14,7 +14,11 @@ import type {
   ImportOptions,
   ImportPreviewResult,
 } from "./types.js";
-import { ExternalCatalogItemSchema, MAX_RECORDS_PER_PREVIEW } from "./schemas.js";
+import {
+  ExternalCatalogItemSchema,
+  MAX_PAYLOAD_SIZE_BYTES,
+  MAX_RECORDS_PER_PREVIEW,
+} from "./schemas.js";
 import { normalizeExternalItem } from "./catalogNormalizer.js";
 import {
   classifyBatch,
@@ -22,6 +26,7 @@ import {
 } from "./catalogDuplicateDetector.js";
 import {
   CatalogPayloadTooLargeError,
+  CatalogResponseTooLargeError,
   CatalogProductionImportRejectedError,
   CatalogProviderError,
 } from "./errors.js";
@@ -77,6 +82,7 @@ export async function runImportPreview(
       limit,
       brand: options.brand,
       country: options.country,
+      config: providerConfig,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -89,6 +95,18 @@ export async function runImportPreview(
 
   const rawItems = fetchResult.items;
   const totalReceived = rawItems.length;
+
+  const payloadSizeBytes =
+    fetchResult.payloadSizeBytes ??
+    Buffer.byteLength(JSON.stringify({
+      items: rawItems,
+      nextCursor: fetchResult.nextCursor,
+      totalAvailable: fetchResult.totalAvailable,
+      sourceMetadata: fetchResult.sourceMetadata,
+    }), "utf8");
+  if (payloadSizeBytes > MAX_PAYLOAD_SIZE_BYTES) {
+    throw new CatalogResponseTooLargeError(payloadSizeBytes, MAX_PAYLOAD_SIZE_BYTES);
+  }
 
   // Safety: reject oversized payloads
   if (totalReceived > MAX_RECORDS_PER_PREVIEW) {
@@ -157,6 +175,8 @@ export async function runImportPreview(
     errors,
     items: classifiedItems,
     nextCursor: fetchResult.nextCursor,
+    sourceMetadata: fetchResult.sourceMetadata,
+    payloadSizeBytes,
     executionDurationMs,
   };
 }

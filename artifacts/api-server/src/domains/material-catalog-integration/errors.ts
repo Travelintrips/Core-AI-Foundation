@@ -67,6 +67,47 @@ export class CatalogPayloadTooLargeError extends Error {
   }
 }
 
+export class CatalogResponseTooLargeError extends Error {
+  readonly code = "CATALOG_RESPONSE_TOO_LARGE" as const;
+  readonly receivedBytes: number;
+  readonly limitBytes: number;
+  constructor(receivedBytes: number, limitBytes: number) {
+    super(`Catalog response too large: received ${receivedBytes} bytes, limit is ${limitBytes}`);
+    this.name = "CatalogResponseTooLargeError";
+    this.receivedBytes = receivedBytes;
+    this.limitBytes = limitBytes;
+  }
+}
+
+export type CatalogFetchErrorCategory =
+  | "authentication"
+  | "rate_limit"
+  | "timeout"
+  | "network"
+  | "schema"
+  | "aborted"
+  | "http"
+  | "payload";
+
+export class CatalogFetchError extends Error {
+  readonly code = "CATALOG_FETCH_ERROR" as const;
+  readonly category: CatalogFetchErrorCategory;
+  readonly statusCode?: number;
+  readonly retryCount: number;
+
+  constructor(
+    category: CatalogFetchErrorCategory,
+    message: string,
+    options?: { statusCode?: number; retryCount?: number },
+  ) {
+    super(message);
+    this.name = "CatalogFetchError";
+    this.category = category;
+    this.statusCode = options?.statusCode;
+    this.retryCount = options?.retryCount ?? 0;
+  }
+}
+
 export class CatalogUnsupportedUrlSchemeError extends Error {
   readonly code = "CATALOG_UNSUPPORTED_URL_SCHEME" as const;
   constructor(scheme: string) {
@@ -90,9 +131,10 @@ export class CatalogFeatureDisabledError extends Error {
 export function redactProviderConfig(config: unknown): unknown {
   if (config === null || typeof config !== "object") return config;
   const SENSITIVE_KEYS = /^(secret|key|token|password|credential|auth|apikey|api_key)/i;
+  if (Array.isArray(config)) return config.map((value) => redactProviderConfig(value));
   const redacted: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(config as Record<string, unknown>)) {
-    redacted[k] = SENSITIVE_KEYS.test(k) ? "[REDACTED]" : v;
+    redacted[k] = SENSITIVE_KEYS.test(k) ? "[REDACTED]" : redactProviderConfig(v);
   }
   return redacted;
 }

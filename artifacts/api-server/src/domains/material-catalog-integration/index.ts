@@ -37,8 +37,11 @@ export {
   CatalogProviderError,
   CatalogProductionImportRejectedError,
   CatalogPayloadTooLargeError,
+  CatalogResponseTooLargeError,
+  CatalogFetchError,
   CatalogUnsupportedUrlSchemeError,
   CatalogFeatureDisabledError,
+  CatalogFetchError,
   redactProviderConfig,
 } from "./errors.js";
 
@@ -93,3 +96,8 @@ export {
   setMaterialCatalogFlagOverride,
   clearMaterialCatalogFlagOverride,
 } from "./featureFlag.js";
+
+export {
+  registerOfficialMaterialProviders,
+  NIRO_GRANITE_PROVIDER_FLAG,
+} from "./officialProviderRegistration.js";
