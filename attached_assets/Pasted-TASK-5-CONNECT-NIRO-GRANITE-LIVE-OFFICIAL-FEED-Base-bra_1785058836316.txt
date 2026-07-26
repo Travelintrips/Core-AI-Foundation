@@ -1,0 +1,78 @@
+TASK #5 — CONNECT NIRO GRANITE LIVE OFFICIAL FEED
+
+Base branch:
+feature/material-phase4-official-provider
+
+Create branch:
+feature/material-phase4-niro-live-feed
+
+Do not merge to main.
+Do not activate in production.
+Do not modify Phase 5 workflow.
+
+Prerequisites that must be confirmed before implementation:
+
+- official HTTPS feed URL
+- valid server-side credentials
+- source owner authorization
+- permitted storage and usage terms
+- response format
+- authentication method
+- pagination contract
+- rate limits
+- update frequency
+- media usage rules
+
+If any prerequisite is missing, stop and report LIVE SOURCE BLOCKED.
+
+Implementation requirements:
+
+1. Replace controlled-fixture transport only through the existing provider client abstraction.
+2. Do not rewrite the provider contract, mapper, normalizer, registry, preview route, or admin UI.
+3. Keep:
+   MATERIAL_CATALOG_INTEGRATION_ENABLED=false
+   MATERIAL_NIRO_GRANITE_PROVIDER_ENABLED=false
+   by default.
+4. Credentials must come only from server environment variables.
+5. Never expose credentials in:
+   - API responses
+   - logs
+   - errors
+   - analytics
+   - UI
+6. Enforce:
+   - HTTPS only
+   - timeout
+   - AbortSignal
+   - bounded retries
+   - 10 MB payload maximum
+   - 500-record preview maximum
+   - safe pagination
+   - typed provider errors
+7. Do not write into canonical Material Library.
+8. Keep the route dryRun-only.
+9. Test:
+   - valid authentication
+   - invalid authentication
+   - timeout
+   - abort
+   - 429
+   - 502/503/504
+   - malformed payload
+   - oversized payload
+   - pagination
+   - secret redaction
+   - deterministic mapping
+10. Run controlled development UAT, then disable both flags again.
+11. Update:
+   docs/material-phase4-official-provider-report.md
+12. Commit and push only the feature branch.
+
+Use one verdict:
+
+A. LIVE OFFICIAL FEED CONNECTED — SAFE FOR CONTROLLED PREVIEW
+B. LIVE SOURCE BLOCKED
+C. LIVE CONNECTION COMPLETE WITH BLOCKERS
+D. LIVE CONNECTION FAILED
+
+STOP.
