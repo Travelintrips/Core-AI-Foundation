@@ -224,13 +224,33 @@ async function generateInteriorImagePrompts(
     ).filter(Boolean);
   })();
 
-  // Summarise key materials
+  // Summarise key materials — include visual attributes useful for image prompting.
+  // Legacy material objects (missing name/color/finish) are handled gracefully.
   const matSummary: string[] = (() => {
     const mat = materials as Record<string, unknown> | null;
     const items = Array.isArray(mat?.["items"]) ? (mat?.["items"] as Array<Record<string, unknown>>) : [];
-    return items.slice(0, 6).map((m) =>
-      `${m["area"] ?? m["component"] ?? ""}/${m["materialType"] ?? m["material"] ?? m["type"] ?? ""}`.replace(/^\//, "").replace(/\/$/, ""),
-    ).filter(Boolean);
+    return items.slice(0, 8).map((m) => {
+      const parts: string[] = [];
+      const component = String(m["component"] ?? m["area"] ?? "").trim();
+      const name      = String(m["name"]      ?? "").trim();
+      const matType   = String(m["materialType"] ?? m["material"] ?? m["type"] ?? "").trim();
+      const color     = String(m["color"]   ?? "").trim();
+      const finish    = String(m["finish"]  ?? "").trim();
+      const texture   = String(m["texture"] ?? "").trim();
+      const brand     = String(m["brand"]   ?? "").trim();
+      // Location / component always leads
+      if (component) parts.push(component);
+      // Material identity: prefer specific product name over generic type
+      if (name) parts.push(name);
+      else if (matType) parts.push(matType);
+      // Visual attributes
+      if (color)   parts.push(color);
+      if (finish)  parts.push(finish);
+      if (texture && texture !== "Smooth") parts.push(texture);
+      // Brand only when it adds visual context (short, recognised names)
+      if (brand && brand.length <= 20) parts.push(`(${brand})`);
+      return parts.join(", ");
+    }).filter(Boolean);
   })();
 
   // Summarise lighting
@@ -565,7 +585,7 @@ Scoring:
 Respond with ONLY valid JSON:
 {
   "score": <integer 1-100>,
-  "notes": "<2-3 sentences: what works, what could be improved — explicitly mention any garbled/gibberish text if present>",
+  "notes": "<2-3 kalimat dalam Bahasa Indonesia: apa yang berhasil, apa yang bisa diperbaiki — sebutkan secara eksplisit teks yang rusak/tidak terbaca jika ada>",
   "brand_alignment": "<pass|warning|fail>",
   "visual_clarity": "<pass|warning|fail>",
   "text_legible": "<pass|warning|fail|not_applicable>",
@@ -1288,18 +1308,19 @@ REVISION INSTRUCTION (what the client wants changed):
 ${revisionNote}
 
 Only adjust the parts the client asked to change. Keep the same brand, mood, and overall style. Output 60–150 words for the revised prompt.
+IMPORTANT: "prompt" and "negativePrompt" values MUST stay in English (required by image generation models).
 
 Respond with ONLY valid JSON (no markdown):
 {
-  "prompt": "<revised prompt>",
-  "negativePrompt": "<comma-separated negatives>",
+  "prompt": "<revised prompt in English>",
+  "negativePrompt": "<comma-separated negatives in English>",
   "aspectRatio": "${aspectRatio ?? "1:1"}"
 }`;
 
   try {
     const output = await executeAI({
       prompt: userPrompt,
-      systemPrompt: "You are an expert image prompt engineer for AI diffusion models. Respond only with valid JSON.",
+      systemPrompt: "You are an expert image prompt engineer for AI diffusion models. Respond only with valid JSON. IMPORTANT: The 'prompt' and 'negativePrompt' fields must stay in English (required by image generation models). All other descriptive text fields must be in Bahasa Indonesia.",
       model,
       provider,
       temperature: 0.6,

@@ -32,7 +32,7 @@ async function callAI(prompt: string): Promise<string> {
       messages: [
         {
           role: "system",
-          content: "You are an expert creative director and brand strategist. You generate structured template knowledge specifications in JSON format. Always respond with valid JSON only — no markdown, no explanation.",
+          content: "You are an expert creative director and brand strategist. You generate structured template knowledge specifications in JSON format. Always respond with valid JSON only — no markdown, no explanation. Write all descriptive text values (descriptions, rules, guidance) in Bahasa Indonesia.",
         },
         { role: "user", content: prompt },
       ],
@@ -273,7 +273,7 @@ function generateFallbackKnowledge(input: KnowledgeMatchInput): Record<string, u
     },
     outputSupport: { pdf: true, pptx: true, png: true, svg: false, html: false, socialMedia: false },
     promptGuidance: {
-      systemPrompt: `You are a professional ${style} designer creating content for the ${input.industry ?? "business"} industry.`,
+      systemPrompt: `You are a professional ${style} designer creating content for the ${input.industry ?? "business"} industry. Tulis semua konten teks dalam Bahasa Indonesia.`,
       designerPrompt: `Apply ${style} design principles. Target audience: ${input.targetAudience ?? "business professionals"}.`,
       artDirectionPrompt: `${style} composition, professional photography, clear hierarchy.`,
       imagePrompt: `Professional ${input.industry ?? "business"} environment, ${style} aesthetic, high quality`,

@@ -1,0 +1,274 @@
+Resume the interrupted canonical Phase 1 implementation.
+
+Do NOT restart the work.
+Do NOT recreate files that already exist.
+Do NOT begin Phase 2–6.
+Do NOT add AI search, website scraping, OCR, marketplace, recommendations, or supplier features.
+
+The previous session stopped while opening:
+
+MaterialSelectorDialog.tsx
+
+The likely unfinished task is integrating MaterialSelectorDialog into InteriorDesignEditor and completing verification.
+
+========================================================
+PHASE 0 — RECOVERY AUDIT
+========================================================
+
+Before modifying anything, inspect the current working tree.
+
+Report:
+
+1. git status --short
+2. git diff --stat
+3. git diff
+4. all untracked files
+5. all Phase 1 files already created or modified
+6. whether each file is complete, partial, duplicated, or unused
+
+Specifically locate and inspect:
+
+- Material Drizzle schema
+- database migration
+- material repository
+- material service
+- material router
+- seed implementation
+- route registration
+- startup seed wiring
+- MaterialSelectorDialog.tsx
+- InteriorDesignEditor.tsx
+- Phase 1 tests
+
+Do not overwrite working code blindly.
+
+========================================================
+PHASE 1 — COMPLETE INTERIOR EDITOR INTEGRATION
+========================================================
+
+Integrate MaterialSelectorDialog into the real InteriorDesignEditor.
+
+Required behavior:
+
+1. Each material row or component must provide:
+   - Browse Library
+   - manual entry fallback
+
+2. Clicking Browse Library opens MaterialSelectorDialog.
+
+3. Selecting a library material must populate the existing material draft entry with:
+
+   - libraryMaterialId
+   - materialCode
+   - materialType
+   - name
+   - brand
+   - category
+   - subcategory
+   - color
+   - finish
+   - texture
+   - description
+   - priceTier
+   - thumbnailUrl
+   - previewImages
+   - technicalData
+
+4. Preserve existing component/location fields such as:
+   - floor
+   - wall
+   - ceiling
+   - countertop
+   - cabinetry
+   - furniture upholstery
+   - other existing sections
+
+5. The user must be able to edit the populated values after selection.
+
+6. Manual custom material entry must remain available.
+
+7. Custom entries must be marked:
+   - source: custom
+   - libraryMaterialId: null
+
+8. Library selections must be marked:
+   - source: material_library
+
+9. Do not replace or redesign the existing concept-draft state model unnecessarily.
+
+========================================================
+PHASE 2 — PERSISTENCE FLOW
+========================================================
+
+Trace and verify:
+
+MaterialSelectorDialog
+→ InteriorDesignEditor local state
+→ PATCH concept draft API
+→ materialsDraft
+→ reload
+→ ready_for_review
+→ approved_for_rendering
+→ approvedMaterials
+
+Confirm the selected material survives:
+
+- save
+- browser refresh
+- API reload
+- approval snapshot
+
+Do not introduce a second material draft store.
+
+========================================================
+PHASE 3 — IMAGE PIPELINE COMPATIBILITY
+========================================================
+
+Verify buildInteriorImagePromptContext can safely consume the enriched approvedMaterials structure.
+
+Requirements:
+
+- include selected material name/type
+- include brand when present
+- include color
+- include finish
+- include texture
+- include component/location
+- ignore thumbnail URLs and internal IDs in the visual prompt unless explicitly useful
+- preserve support for legacy material objects already stored in projects
+
+Do not break previously verified Interior Design rendering behavior.
+
+========================================================
+PHASE 4 — SEED AND STARTUP SAFETY
+========================================================
+
+Verify the 500+ material seed implementation.
+
+Requirements:
+
+- idempotent
+- no duplicate material codes
+- no duplicate categories
+- no destructive reset
+- does not reseed all records on every server restart
+- uses the canonical Supabase/Drizzle connection
+- safe when the database is temporarily unavailable
+- clear logging
+
+Prefer an explicit seed command or guarded boot seed rather than unconditional heavy startup work.
+
+========================================================
+PHASE 5 — API VERIFICATION
+========================================================
+
+Verify the canonical API supports:
+
+GET /api/material-library
+
+Filters:
+
+- search
+- category
+- brand
+- priceTier
+- finish
+- color
+- pagination
+- sorting
+
+Also verify:
+
+- category endpoint
+- material detail endpoint
+- thumbnail/preview handling
+- input validation
+- maximum page size
+- inactive materials excluded by default
+- existing admin/tenant conventions are followed
+
+Do not expose a duplicate standalone Express server.
+
+========================================================
+PHASE 6 — TESTS
+========================================================
+
+Add or complete tests for:
+
+1. migration/schema shape
+2. seed count at least 500
+3. unique material codes
+4. category seed count
+5. search
+6. category filter
+7. brand filter
+8. price-tier filter
+9. finish filter
+10. color filter
+11. pagination
+12. sorting
+13. material detail
+14. selector opens
+15. selecting a material populates the draft
+16. manual entry remains available
+17. selected material persists after save/reload
+18. approval snapshot contains selected material
+19. image prompt uses approved selected material
+20. legacy material draft remains compatible
+
+========================================================
+PHASE 7 — VERIFICATION
+========================================================
+
+Run:
+
+- targeted Material Library tests
+- InteriorDesignEditor tests
+- concept draft integrity tests
+- Interior image pipeline tests
+- typecheck
+- production build
+
+Then perform live development verification:
+
+1. Open an Interior Design project
+2. Open Material Library
+3. Search for a material
+4. Filter by category
+5. Select one material
+6. Confirm fields autofill
+7. Save
+8. Reload
+9. Confirm persistence
+10. Approve for rendering
+11. Confirm approvedMaterials contains the selected record
+12. Generate or reconstruct the image prompt
+13. Confirm the approved material appears in the prompt
+
+========================================================
+FINAL STOP REPORT
+========================================================
+
+Return:
+
+- recovery audit findings
+- exact files completed
+- exact files still partial
+- database tables and migration
+- actual seed count
+- API endpoints
+- selector integration evidence
+- persistence evidence
+- approved snapshot evidence
+- image-prompt compatibility evidence
+- tests
+- typecheck
+- build
+- pre-existing failures
+- new blockers
+- git diff summary
+
+STOP.
+
+Do not commit or push until the report is reviewed.
+Do not continue to Phase 2.

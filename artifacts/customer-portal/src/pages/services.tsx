@@ -31,14 +31,14 @@ function formatPrice(value: string | number, currency: string) {
 }
 
 function deliveryDays(est: string | null | undefined): number {
-  const m = (est ?? "").toLowerCase().match(/(\d+)(?:\s*[-–]\s*\d+)?\s*(menit|jam|hari|minggu|bulan)/);
+  const m = (est ?? "").toLowerCase().match(/(\d+)(?:\s*[-–]\s*\d+)?\s*(menit|minute|minutes|jam|hour|hours|hari|day|days|minggu|week|weeks|bulan|month|months)/);
   if (!m) return 7;
   const value = parseInt(m[1], 10);
   switch (m[2]) {
-    case "menit": return value / (24 * 60);
-    case "jam": return value / 24;
-    case "minggu": return value * 7;
-    case "bulan": return value * 30;
+    case "menit": case "minute": case "minutes": return value / (24 * 60);
+    case "jam": case "hour": case "hours": return value / 24;
+    case "minggu": case "week": case "weeks": return value * 7;
+    case "bulan": case "month": case "months": return value * 30;
     default: return value;
   }
 }
@@ -165,6 +165,7 @@ function CategoryCard({
   accentIdx: number;
   onSelect: (id: number) => void;
 }) {
+  const { t } = useTranslation();
   const Icon = getCategoryIcon(category);
   const accent = CAT_ACCENTS[accentIdx % CAT_ACCENTS.length];
   const categoryServices = category.services?.length ? category.services : services;
@@ -181,7 +182,7 @@ function CategoryCard({
       onClick={() => onSelect(category.id)}
       className="group relative w-full text-left rounded-2xl cursor-pointer overflow-hidden"
       style={{ minHeight: 200 }}
-      aria-label={`Lihat layanan ${category.name}`}
+       aria-label={`${t("services.viewCategory")} ${category.name}`}
     >
       <div
         className="relative bg-[#0D1526] rounded-2xl p-6 flex flex-col gap-4 h-full transition-all duration-200"
@@ -206,7 +207,7 @@ function CategoryCard({
             <Icon className="w-6 h-6" style={{ color: accent.icon }} />
           </div>
           <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#131E35] border border-[#2E4270] text-[#8B9BC4]">
-            {count} {count === 1 ? "layanan" : "layanan"}
+             {count} {t("services.servicesLabel")}
           </span>
         </div>
 
@@ -242,7 +243,7 @@ function CategoryCard({
         <div className="flex items-center justify-between pt-3 border-t border-[#243352] mt-auto">
           {minPrice > 0 ? (
             <div>
-              <p className="text-[11px] text-[#8B9BC4] mb-0.5">Mulai dari</p>
+               <p className="text-[11px] text-[#8B9BC4] mb-0.5">{t("services.card.startingFrom")}</p>
               <p
                 className="font-bold text-sm text-[#F0F4FF]"
                 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
@@ -257,7 +258,7 @@ function CategoryCard({
             className="flex items-center gap-1 text-xs font-semibold transition-all duration-200 group-hover:gap-2"
             style={{ color: accent.icon }}
           >
-            Lihat Layanan <ArrowRight className="w-3.5 h-3.5" />
+             {t("services.viewServices")} <ArrowRight className="w-3.5 h-3.5" />
           </div>
         </div>
       </div>
@@ -323,7 +324,7 @@ function ServiceCard({ s, onView }: { s: CatalogService; onView: (service: Catal
         <div className="flex items-center gap-3 text-xs text-[#8B9BC4] flex-wrap">
           <span className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5 text-[#22D3EE]" />
-            {s.estimatedDelivery ?? "Waktu menyesuaikan"}
+            {s.estimatedDelivery ?? t("services.deliveryOptions.adapting")}
           </span>
           {s.humanReview && (
             <span className="flex items-center gap-1 text-[#7C6EFA]">
@@ -836,7 +837,7 @@ export default function ServicesPage() {
                 style={{ animationDelay: "200ms" }}
                 className="flex items-center justify-center gap-2 mt-4 flex-wrap"
               >
-                <span className="text-xs text-[#8B9BC4]">Kategori:</span>
+                <span className="text-xs text-[#8B9BC4]">{t("services.categoryShortcut")}</span>
                 {displayCategories.map((cat) => (
                   <button
                     key={cat.id}
@@ -852,7 +853,7 @@ export default function ServicesPage() {
                   style={{ borderColor: "rgba(124,110,250,0.5)", color: "#C9BFFF", background: "rgba(124,110,250,0.10)" }}
                 >
                   <Sparkles className="w-3 h-3" />
-                  Bantu saya memilih
+                  {t("services.helpChoose")}
                 </button>
               </motion.div>
             )}
@@ -876,7 +877,7 @@ export default function ServicesPage() {
                   className="flex items-center gap-1.5 text-[#8B9BC4] hover:text-[#7C6EFA] transition-colors"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  Semua Kategori
+                  {t("services.allCategories")}
                 </button>
                 {selectedCategory && (
                   <>
@@ -908,7 +909,7 @@ export default function ServicesPage() {
                 <section className="mb-12">
                   <div className="flex items-center gap-3 mb-5">
                     <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-bold text-base text-[#F0F4FF]">
-                      Terakhir Dilihat
+                       {t("services.lastViewed")}
                     </h2>
                     <div className="flex-1 h-px bg-[#243352]" />
                     <button
@@ -941,8 +942,8 @@ export default function ServicesPage() {
 
               {/* Category section header */}
               <div className="flex items-center gap-3 mb-6">
-                <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-bold text-lg text-[#F0F4FF]">
-                  Pilih Kategori Layanan
+                  <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} className="font-bold text-lg text-[#F0F4FF]">
+                   {t("services.chooseCategory")}
                 </h2>
                 <div className="flex-1 h-px bg-[#243352]" />
                 <span className="text-xs text-[#8B9BC4] bg-[#131E35] border border-[#2E4270] px-2.5 py-1 rounded-full">
@@ -953,7 +954,7 @@ export default function ServicesPage() {
               {displayCategories.length === 0 ? (
                 <div className="py-24 text-center text-[#8B9BC4]">
                   <Sparkles className="w-10 h-10 mx-auto mb-4 opacity-30" />
-                  <p>Tidak ada kategori tersedia.</p>
+                  <p>{t("services.noCategoryAvailable")}</p>
                 </div>
               ) : (
                 <motion.div
@@ -982,7 +983,7 @@ export default function ServicesPage() {
               <div className="flex items-center gap-3 mb-6 flex-wrap">
                 <p className="text-sm text-[#8B9BC4]">
                   <span className="font-semibold text-[#F0F4FF]">{filtered.length}</span> {t("services.servicesLabel")}
-                  {search.trim() && ` ditemukan`}
+                  {search.trim() && ` ${t("services.found")}`}
                 </p>
 
                 <div className="ml-auto flex items-center gap-2">
@@ -991,13 +992,13 @@ export default function ServicesPage() {
                     <select
                       value={maxDelivery}
                       onChange={(e) => setMaxDelivery(Number(e.target.value))}
-                      aria-label="Filter waktu pengerjaan"
+                       aria-label={t("services.deliveryOptions.filterLabel")}
                       className="appearance-none flex items-center gap-2 pl-3 pr-8 py-2 rounded-xl border border-[#2E4270] text-sm text-[#8B9BC4] bg-[#0D1526] hover:border-[#7C6EFA]/40 hover:text-[#F0F4FF] transition-colors cursor-pointer focus:outline-none focus:border-[#7C6EFA]/60"
                     >
-                      <option value={30}>Semua Waktu</option>
-                      <option value={2}>Hari ini</option>
-                      <option value={5}>Maks 5 hari</option>
-                      <option value={14}>Maks 2 minggu</option>
+                       <option value={30}>{t("services.deliveryOptions.all")}</option>
+                       <option value={2}>{t("services.deliveryOptions.today")}</option>
+                       <option value={5}>{t("services.deliveryOptions.upTo5")}</option>
+                       <option value={14}>{t("services.deliveryOptions.upTo14")}</option>
                     </select>
                     <Clock className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8B9BC4] pointer-events-none" />
                   </div>
@@ -1010,7 +1011,7 @@ export default function ServicesPage() {
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#2E4270] text-xs text-[#8B9BC4] hover:text-[#F0F4FF] hover:border-[#7C6EFA]/40 transition-colors bg-[#0D1526]"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
-                      Reset
+                       {t("services.reset")}
                     </button>
                   )}
 

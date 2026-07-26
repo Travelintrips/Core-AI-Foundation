@@ -99,6 +99,7 @@ export async function runAiQualityCheck(
     `You are a design quality auditor. Your task is to check one specific quality rule for a design artifact.
 Respond ONLY with valid JSON in this exact format:
 {"hasIssue": boolean, "reason": "brief explanation", "confidence": 0.0-1.0, "limitation": "known limitation of this check"}
+Write the "reason" and "limitation" values in Bahasa Indonesia.
 Do not include any other text.`;
 
   const aiResult = await tryExecuteAI(prompt, systemPrompt);

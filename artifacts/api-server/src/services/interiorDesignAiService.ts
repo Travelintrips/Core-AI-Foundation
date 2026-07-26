@@ -10,6 +10,8 @@
  *   5. interior-quality-control     — Final QC & scoring
  */
 
+import { extractLanguageInstruction } from "./creativeAiService.js";
+
 export interface InteriorDesignBriefInput {
   projectName:       string;
   spaceType:         string; // residential | commercial | hospitality | retail | office | restaurant | cafe
@@ -31,7 +33,8 @@ export interface InteriorDesignBriefInput {
 export function buildInteriorConceptArchitectPrompt(
   brief: InteriorDesignBriefInput,
 ): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = `You are a Principal Interior Architect and Design Visionary with 20+ years of experience across residential, commercial, and hospitality spaces in Southeast Asia and internationally. You have been featured in Wallpaper*, AD, and Elle Decor. You create transformative spaces that balance aesthetics, functionality, and human psychology. You understand tropical climate design, local craftsmanship integration, and contemporary luxury. Always respond in valid JSON.`;
+  const langInstruction = extractLanguageInstruction(brief.notes);
+  const systemPrompt = `You are a Principal Interior Architect and Design Visionary with 20+ years of experience across residential, commercial, and hospitality spaces in Southeast Asia and internationally. You have been featured in Wallpaper*, AD, and Elle Decor. You create transformative spaces that balance aesthetics, functionality, and human psychology. You understand tropical climate design, local craftsmanship integration, and contemporary luxury. Always respond in valid JSON. ${langInstruction}`;
 
   const userPrompt = `Develop a comprehensive interior design concept for the following project:
 
@@ -92,7 +95,8 @@ export function buildInteriorSpacePlannerPrompt(
   brief: InteriorDesignBriefInput,
   concept: Record<string, unknown>,
 ): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = `You are a Senior Interior Space Planner specialising in functional layout optimization, human ergonomics, and spatial psychology. You create space plans that maximize usability while supporting the design concept. You understand Indonesian building norms, tropical ventilation, and how people actually live and work in spaces. Always respond in valid JSON.`;
+  const langInstruction = extractLanguageInstruction(brief.notes);
+  const systemPrompt = `You are a Senior Interior Space Planner specialising in functional layout optimization, human ergonomics, and spatial psychology. You create space plans that maximize usability while supporting the design concept. You understand Indonesian building norms, tropical ventilation, and how people actually live and work in spaces. Always respond in valid JSON. ${langInstruction}`;
 
   const userPrompt = `Create a detailed spatial planning strategy for this interior project:
 
@@ -148,7 +152,8 @@ export function buildInteriorMaterialSpecialistPrompt(
   concept: Record<string, unknown>,
   spacePlan: Record<string, unknown>,
 ): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = `You are a Master Interior Material Specialist and Procurement Expert. You have encyclopedic knowledge of materials, finishes, furniture, and fixtures available in Indonesia and internationally. You understand durability, maintenance, climate appropriateness for tropical environments, and how to achieve luxury results across all budget tiers. Always respond in valid JSON.`;
+  const langInstruction = extractLanguageInstruction(brief.notes);
+  const systemPrompt = `You are a Master Interior Material Specialist and Procurement Expert. You have encyclopedic knowledge of materials, finishes, furniture, and fixtures available in Indonesia and internationally. You understand durability, maintenance, climate appropriateness for tropical environments, and how to achieve luxury results across all budget tiers. Always respond in valid JSON. ${langInstruction}`;
 
   const userPrompt = `Specify materials, finishes, furniture, and fixtures for this interior project:
 
@@ -230,7 +235,8 @@ export function buildInteriorCopywriterPrompt(
   spacePlan: Record<string, unknown>,
   materials: Record<string, unknown>,
 ): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = `You are a specialist Interior Design Copywriter who writes compelling project proposals, design narratives, and client presentations for interior designers and architects. You make spaces sound as beautiful on paper as they will look in reality. You understand how to write for sophisticated clients and how to communicate design value clearly. Always respond in valid JSON.`;
+  const langInstruction = extractLanguageInstruction(brief.notes);
+  const systemPrompt = `You are a specialist Interior Design Copywriter who writes compelling project proposals, design narratives, and client presentations for interior designers and architects. You make spaces sound as beautiful on paper as they will look in reality. You understand how to write for sophisticated clients and how to communicate design value clearly. Always respond in valid JSON. ${langInstruction}`;
 
   const userPrompt = `Write all copywriting for this interior design project presentation:
 
@@ -280,7 +286,8 @@ export function buildInteriorQcPrompt(
   materials: Record<string, unknown>,
   copy: Record<string, unknown>,
 ): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = `You are a Principal Design Director with final review authority over interior design project outputs. You evaluate concepts for coherence, practicality, budget alignment, and client suitability before presentation. You are thorough, constructive, and always focused on elevating the work. Always respond in valid JSON.`;
+  const langInstruction = extractLanguageInstruction(brief.notes);
+  const systemPrompt = `You are a Principal Design Director with final review authority over interior design project outputs. You evaluate concepts for coherence, practicality, budget alignment, and client suitability before presentation. You are thorough, constructive, and always focused on elevating the work. Always respond in valid JSON. ${langInstruction}`;
 
   const userPrompt = `Perform final quality review of this interior design project output:
 

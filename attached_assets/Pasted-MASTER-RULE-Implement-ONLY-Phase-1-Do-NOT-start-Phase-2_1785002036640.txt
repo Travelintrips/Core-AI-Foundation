@@ -1,0 +1,345 @@
+MASTER RULE
+
+Implement ONLY Phase 1.
+
+Do NOT start Phase 2–6.
+
+Do NOT modify existing Interior Design workflow logic except where integration is explicitly required.
+
+========================================================
+OBJECTIVE
+========================================================
+
+Build the foundation of the Interior Design Material Intelligence Library.
+
+This library will become the canonical material database used by:
+
+- Interior Design
+- Architecture
+- Furniture Design
+- Landscape Design (future)
+- Marketplace Material (future)
+
+The library must NOT depend on external websites.
+
+Everything must work offline using the internal database.
+
+========================================================
+PHASE 1 SCOPE
+========================================================
+
+Build ONLY:
+
+1.
+Material Library Database
+
+2.
+Material Categories
+
+3.
+Material Search API
+
+4.
+Material Thumbnail Support
+
+5.
+Material Selector UI
+
+6.
+Seeder
+
+Nothing else.
+
+========================================================
+DATABASE
+========================================================
+
+Create canonical tables.
+
+materials
+
+Fields:
+
+id
+materialCode
+name
+slug
+category
+subcategory
+brand
+materialType
+color
+finish
+texture
+pattern
+description
+
+priceTier
+
+enum
+
+Budget
+Standard
+Premium
+Luxury
+
+thumbnailUrl
+
+previewImages
+
+JSON
+
+technicalData
+
+JSON
+
+searchKeywords
+
+JSON
+
+status
+
+active
+inactive
+
+createdAt
+
+updatedAt
+
+--------------------------------------------------------
+
+material_categories
+
+id
+
+name
+
+icon
+
+displayOrder
+
+========================================================
+DEFAULT CATEGORIES
+========================================================
+
+Wall
+
+Floor
+
+Ceiling
+
+Furniture
+
+Lighting
+
+Fabric
+
+Kitchen
+
+Bathroom
+
+Outdoor
+
+Decorative
+
+Doors
+
+Windows
+
+Landscape
+
+========================================================
+SEARCH
+========================================================
+
+Build:
+
+GET
+
+/api/material-library
+
+Supports:
+
+search
+
+category
+
+brand
+
+priceTier
+
+finish
+
+color
+
+pagination
+
+sorting
+
+========================================================
+UI
+========================================================
+
+Replace manual material entry.
+
+User clicks
+
+Add Material
+
+↓
+
+Material Library Dialog
+
+Features:
+
+Search
+
+Category Filter
+
+Brand Filter
+
+Price Tier Filter
+
+Thumbnail Grid
+
+Preview Card
+
+Selecting a material automatically fills:
+
+Material Type
+
+Brand
+
+Finish
+
+Color
+
+Texture
+
+Description
+
+========================================================
+THUMBNAIL
+========================================================
+
+Support:
+
+thumbnail
+
+multiple preview images
+
+future 360 images
+
+Do NOT implement viewer yet.
+
+========================================================
+SEED DATA
+========================================================
+
+Seed at least
+
+500 materials
+
+distributed across categories.
+
+Use realistic sample data.
+
+No duplicate codes.
+
+========================================================
+ARCHITECTURE
+========================================================
+
+Single Responsibility
+
+Repository
+
+Service
+
+Route
+
+React hooks
+
+Typed API
+
+No duplicated logic.
+
+========================================================
+DO NOT
+========================================================
+
+Do NOT scrape websites.
+
+Do NOT call AI.
+
+Do NOT implement OCR.
+
+Do NOT implement marketplace.
+
+Do NOT implement recommendations.
+
+========================================================
+TESTS
+========================================================
+
+Add tests:
+
+database
+
+repository
+
+service
+
+API
+
+search
+
+filter
+
+pagination
+
+sorting
+
+UI selection
+
+No regressions.
+
+========================================================
+VERIFICATION
+========================================================
+
+Run:
+
+Typecheck
+
+Tests
+
+Production build
+
+========================================================
+FINAL REPORT
+========================================================
+
+Return:
+
+Files changed
+
+Tables created
+
+API endpoints
+
+Seed count
+
+Search performance
+
+Tests
+
+Typecheck
+
+Build
+
+Potential merge conflicts
+
+STOP.
+
+Do not continue to Phase 2.

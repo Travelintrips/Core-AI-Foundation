@@ -1,0 +1,483 @@
+MASTER TASK — PHASE 4A
+UNIVERSAL MATERIAL CATALOG IMPORT ENGINE
+
+Repository:
+Travelintrips/Core-AI-Foundation
+
+Base branch:
+main
+
+Create branch:
+
+feature/material-phase4-universal-catalog-import
+
+Do not work directly on main.
+
+Do not modify Phase 1, Phase 2, Phase 3, or completed Phase 4 implementation except through additive integration.
+
+This is NOT Phase 5.
+
+This phase only extracts and normalizes catalog data into a staging area.
+
+No data may enter the canonical Material Library automatically.
+
+========================================================
+OBJECTIVE
+========================================================
+
+Build one universal catalog ingestion engine that can import material catalogs from multiple sources using the same pipeline.
+
+Supported sources:
+
+- PDF Catalog
+- Public Website Catalog
+- CSV
+- Excel
+- JSON
+- XML
+- Official API (future)
+- ZIP Catalog Package (future)
+
+The architecture must be provider-independent.
+
+Never build vendor-specific business logic inside the core engine.
+
+========================================================
+ARCHITECTURE
+========================================================
+
+Every source must use the same pipeline:
+
+Catalog Source
+        │
+        ▼
+Catalog Discovery
+        │
+        ▼
+Document / Page Extractor
+        │
+        ▼
+AI Material Extractor
+        │
+        ▼
+Normalizer
+        │
+        ▼
+Duplicate Detection
+        │
+        ▼
+Staging Library
+        │
+        ▼
+Preview
+
+STOP.
+
+Do NOT continue into Material Library.
+
+========================================================
+SOURCE ADAPTERS
+========================================================
+
+Create adapters.
+
+PDF Adapter
+
+- embedded text extraction
+- OCR fallback
+- table detection
+- page batching
+
+Website Adapter
+
+- JSON-LD
+- embedded JSON
+- sitemap
+- public HTML
+
+CSV Adapter
+
+Excel Adapter
+
+JSON Adapter
+
+XML Adapter
+
+API Adapter (foundation only)
+
+Each adapter must implement one interface.
+
+========================================================
+UNIVERSAL MATERIAL SCHEMA
+========================================================
+
+Normalize every source into:
+
+brand
+
+collection
+
+series
+
+productCode
+
+productName
+
+variant
+
+category
+
+subcategory
+
+materialType
+
+description
+
+colors
+
+finish
+
+texture
+
+pattern
+
+dimensions
+
+workingSize
+
+thickness
+
+numberOfFaces
+
+peiRating
+
+shadeVariation
+
+technicalSpecifications
+
+application
+
+certifications
+
+thumbnailReference
+
+previewReferences
+
+sourceType
+
+sourceName
+
+sourceVersion
+
+sourceUrl
+
+sourcePage
+
+sourceMetadata
+
+Never fabricate values.
+
+========================================================
+PDF ENGINE
+========================================================
+
+Support:
+
+embedded text
+
+OCR fallback
+
+page images
+
+table recognition
+
+variant splitting
+
+catalog version detection
+
+page numbering
+
+checksum
+
+Do not OCR pages that already contain embedded text.
+
+========================================================
+WEBSITE ENGINE
+========================================================
+
+Support:
+
+robots check
+
+JSON-LD
+
+embedded JSON
+
+semantic HTML
+
+stable selectors
+
+Stop when:
+
+robots disallow
+
+login required
+
+CAPTCHA required
+
+anti-bot bypass required
+
+========================================================
+DUPLICATE DETECTION
+========================================================
+
+Use existing duplicate engine.
+
+Detect:
+
+exact duplicate
+
+possible duplicate
+
+conflicting identity
+
+new material
+
+========================================================
+STAGING LIBRARY
+========================================================
+
+Create staging only.
+
+Statuses:
+
+draft
+
+extracted
+
+normalized
+
+duplicate
+
+approved
+
+rejected
+
+needs_review
+
+Do NOT create canonical materials.
+
+========================================================
+BACKGROUND PROCESSING
+========================================================
+
+Support:
+
+large PDF
+
+large website
+
+resume
+
+batch
+
+progress
+
+retry failed page
+
+checksum
+
+idempotency
+
+========================================================
+ADMIN UI
+========================================================
+
+Create:
+
+Catalog Import
+
+Source selector
+
+Upload PDF
+
+Upload CSV
+
+Upload Excel
+
+Import Website
+
+Import JSON
+
+Preview
+
+Extraction progress
+
+Detected collections
+
+Detected products
+
+Detected variants
+
+Duplicate summary
+
+Warnings
+
+Errors
+
+No Import button.
+
+No Save button.
+
+Preview only.
+
+========================================================
+SUPPORTED BRANDS
+========================================================
+
+The engine must work for:
+
+Niro Granite
+
+Roman
+
+Granito
+
+TOTO
+
+Hafele
+
+IKEA
+
+Informa
+
+Caesarstone
+
+Silestone
+
+and future brands.
+
+No vendor-specific logic inside the engine.
+
+========================================================
+TESTS
+========================================================
+
+Test:
+
+PDF parsing
+
+OCR fallback
+
+Website parsing
+
+JSON-LD
+
+CSV
+
+Excel
+
+XML
+
+Duplicate detection
+
+Large catalog
+
+Resume
+
+Retry
+
+Normalization
+
+Variant split
+
+No canonical write
+
+Regression:
+
+Phase 1
+
+Phase 2
+
+Phase 3
+
+Phase 4
+
+API build
+
+Frontend build
+
+Zero new failures.
+
+========================================================
+DOCUMENTATION
+========================================================
+
+Create:
+
+docs/material-phase4a-universal-catalog-import.md
+
+Include:
+
+architecture
+
+adapters
+
+pipeline
+
+supported formats
+
+limitations
+
+future provider integration
+
+Phase 5 hand-off
+
+========================================================
+GIT
+========================================================
+
+Commit only:
+
+feature/material-phase4-universal-catalog-import
+
+Do not merge.
+
+========================================================
+FINAL REPORT
+========================================================
+
+Return:
+
+1. branch
+
+2. adapters created
+
+3. pipeline
+
+4. supported formats
+
+5. staging implementation
+
+6. UI
+
+7. tests
+
+8. builds
+
+9. regressions
+
+10. remaining blockers
+
+Use one verdict only:
+
+A.
+PHASE 4A UNIVERSAL CATALOG IMPORT COMPLETE — READY FOR PHASE 5
+
+B.
+PHASE 4A COMPLETE WITH BLOCKERS
+
+C.
+PHASE 4A FAILED
+
+STOP.

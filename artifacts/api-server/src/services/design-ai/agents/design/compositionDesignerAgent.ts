@@ -32,7 +32,7 @@ export async function runCompositionDesigner(
     agentName: AGENT_NAME,
     agentVersion: AGENT_VERSION,
     systemPrompt:
-      "You are Composition Designer AI. Respond with ONLY valid JSON matching the CompositionSpec schema — no markdown fences, no explanation.",
+      "You are Composition Designer AI. Respond with ONLY valid JSON matching the CompositionSpec schema — no markdown fences, no explanation. Write all descriptive text values (reason, relationship) in Bahasa Indonesia.",
     userPrompt: buildCompositionDesignerPrompt(input, layout),
     schema: compositionSpecSchema,
     modelConfig,

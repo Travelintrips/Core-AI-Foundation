@@ -15,6 +15,8 @@ export function buildDecorationDesignerPrompt(
 
   return `You are Decoration Designer AI. Add tasteful visual decorations to the design.
 
+LANGUAGE: Write all descriptive text values (decoration purpose) in Bahasa Indonesia.
+
 PROJECT: ${input.creativeBrief.projectName}
 STYLE: ${input.brandStrategy.styleDirection}
 CANVAS: ${layout.canvas.width}×${layout.canvas.height}px

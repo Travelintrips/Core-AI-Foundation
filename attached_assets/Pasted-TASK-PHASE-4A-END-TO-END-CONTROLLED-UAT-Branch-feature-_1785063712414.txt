@@ -1,0 +1,231 @@
+TASK — PHASE 4A END-TO-END CONTROLLED UAT
+
+Branch:
+feature/material-phase4-universal-catalog-import
+
+Do not merge.
+Do not implement Phase 5.
+Do not write to canonical materials.
+
+OBJECTIVE
+
+Prove that Phase 4A works end-to-end using one real official Niro Granite catalog.
+
+========================================================
+1. DATABASE SAFETY
+========================================================
+
+Apply:
+
+20260726_material_catalog_staging.sql
+
+to DEV Supabase only.
+
+Do not apply it to production.
+
+Verify:
+
+- material_catalog_import_jobs exists
+- material_catalog_staging exists
+- indexes exist
+- constraints exist
+- status values are valid
+- migration is repeat-safe or clearly documented as one-time
+
+Record row counts in:
+
+- canonical materials before UAT
+- staging tables before UAT
+
+========================================================
+2. REAL CATALOG UAT
+========================================================
+
+Use one official publicly available Niro Granite catalog.
+
+Do not scrape every catalog.
+
+Process the catalog using the real admin flow:
+
+Catalog Import
+→ upload/select source
+→ preview
+→ extraction
+→ normalization
+→ duplicate detection
+→ staging results
+
+Verify:
+
+- brand detected correctly
+- collections detected
+- product codes detected
+- variants split into separate staged records
+- shared specifications copied only when clearly applicable
+- missing values remain null
+- no fabricated specifications
+- source page preserved
+- source URL/file metadata preserved
+- catalog checksum recorded
+
+========================================================
+3. SAMPLE VERIFICATION
+========================================================
+
+Manually compare at least 20 staged materials against their source pages.
+
+Include products from at least 3 different collections when available.
+
+For each sample verify:
+
+- collection
+- product code
+- product name
+- color/variant
+- dimensions
+- finish
+- thickness
+- PEI
+- shade variation
+- description
+- source page
+- image reference
+
+Report exact mismatches.
+
+Do not silently correct source extraction errors.
+
+========================================================
+4. OCR BEHAVIOR
+========================================================
+
+Identify pages without usable embedded text.
+
+Verify those pages:
+
+- are marked _ocrNeeded=true or equivalent;
+- do not generate fabricated material records;
+- appear clearly in warnings;
+- can be retried in a future OCR workflow.
+
+OCR implementation is not required in this task.
+
+========================================================
+5. IDEMPOTENCY
+========================================================
+
+Process the same catalog twice.
+
+Verify:
+
+- same checksum resumes or resolves the existing job;
+- no duplicate job explosion;
+- no duplicate staging records;
+- duplicate classifications remain deterministic.
+
+========================================================
+6. FAILURE AND RESUME
+========================================================
+
+Simulate or test:
+
+- invalid PDF
+- partial page failure
+- malformed extracted record
+- duplicate product code
+- missing product code
+- unsafe image URL
+- interrupted job
+
+Verify failed pages/items are visible and retryable without restarting successful work.
+
+========================================================
+7. CANONICAL WRITE GUARD
+========================================================
+
+Compare canonical material row count before and after the complete UAT.
+
+Required result:
+
+canonical material row count unchanged.
+
+Also inspect code paths to prove no hidden write, upsert, or fallback can write into the canonical materials table.
+
+========================================================
+8. ADMIN UI
+========================================================
+
+Verify:
+
+- source selector works
+- PDF upload works
+- progress is visible
+- job status updates
+- detected collection count is correct
+- detected product count is correct
+- duplicate summary works
+- warnings and errors are readable
+- pagination works for large results
+- no Import button
+- no Save to Library button
+- refreshing the page restores the job state
+
+Capture screenshots for desktop viewport.
+
+========================================================
+9. REGRESSION
+========================================================
+
+Run:
+
+- universal catalog tests
+- Material Library tests
+- Material Intelligence tests
+- Phase 3 provider tests
+- Phase 4 provider tests
+- API build
+- frontend build
+- full test suite
+
+No new failures are allowed.
+
+========================================================
+10. REPORT
+========================================================
+
+Create:
+
+docs/material-phase4a-controlled-uat-report.md
+
+Include:
+
+- branch
+- commit
+- database environment
+- migration result
+- source catalog
+- checksum
+- page count
+- extracted count
+- normalized count
+- duplicate count
+- needs-review count
+- OCR-needed pages
+- 20-record manual comparison
+- mismatch details
+- idempotency proof
+- canonical before/after counts
+- screenshots
+- tests
+- builds
+- blockers
+
+Use one verdict only:
+
+A. PHASE 4A CONTROLLED UAT PASSED — READY FOR PHASE 5
+B. PHASE 4A UAT PASSED WITH CORRECTABLE EXTRACTION ISSUES
+C. PHASE 4A UAT BLOCKED
+D. PHASE 4A UAT FAILED
+
+Do not merge.
+STOP.

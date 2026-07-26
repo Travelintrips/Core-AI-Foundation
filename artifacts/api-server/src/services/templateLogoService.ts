@@ -116,7 +116,8 @@ Rules:
 - Brand/company name: use the actual brand name, 1–4 words max
 - Tagline: punchy, brand-appropriate, 4–8 words max  
 - Do NOT add quotes, ellipsis, or extra punctuation
-- Match the industry tone`;
+- Match the industry tone
+- Write all text values (tagline, supporting text) in Bahasa Indonesia yang singkat dan profesional`;
 
   const userPrompt = `Company brief:
 - Brand Name: ${String(brief.brandName ?? "Brand")}

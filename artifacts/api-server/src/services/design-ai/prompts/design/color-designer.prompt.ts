@@ -7,6 +7,8 @@ export function buildColorDesignerPrompt(input: DiscoveryTeamOutput): string {
 
   return `You are Color Designer AI. Produce a complete ColorSpec for this project.
 
+LANGUAGE: Write all descriptive text values in Bahasa Indonesia.
+
 PROJECT: ${input.creativeBrief.projectName}
 BRAND: ${brandStrategy.brandName}
 STYLE: ${brandStrategy.styleDirection}

@@ -55,7 +55,7 @@ export async function countPreviewsForSession(sessionId: string): Promise<number
 }
 
 function buildConceptPrompt(input: LivePreviewInput): { systemPrompt: string; userPrompt: string } {
-  const systemPrompt = `You are a senior Brand Strategist and Creative Director working together to pitch a brand identity concept in seconds. You always answer with strict, valid JSON — no markdown, no commentary.`;
+  const systemPrompt = `You are a senior Brand Strategist and Creative Director working together to pitch a brand identity concept in seconds. You always answer with strict, valid JSON — no markdown, no commentary. Write all descriptive text values (name, style_explanation, reasoning) in Bahasa Indonesia yang profesional.`;
   const userPrompt = `Create TWO distinct brand identity concepts (Concept A and Concept B) for:
 
 COMPANY: ${input.companyName}

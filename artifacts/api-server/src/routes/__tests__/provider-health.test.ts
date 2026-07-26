@@ -76,14 +76,33 @@ vi.mock("@workspace/db", () => {
     return builder;
   };
 
+  // Fluent builder for insert
+  const makeInsertBuilder = () => {
+    const builder = {
+      values: () => Promise.resolve(),
+    };
+    return builder;
+  };
+
+  // Fluent builder for delete
+  const makeDeleteBuilder = () => {
+    const builder = {
+      where: () => Promise.resolve(),
+    };
+    return builder;
+  };
+
   return {
     db: {
       select: (...args: unknown[]) => mockDbSelect(...args),
       update: (...args: unknown[]) => mockDbUpdate(...args),
+      insert: () => makeInsertBuilder(),
+      delete: () => makeDeleteBuilder(),
     },
-    aiProvidersTable: { id: "id", slug: "slug" },
+    aiProvidersTable: { id: "id", slug: "slug", consecutiveFailures: "consecutive_failures", lastCheckedAt: "last_checked_at", lastSuccessAt: "last_success_at", isActive: "is_active", apiKeyEnvVar: "api_key_env_var" },
     aiModelsTable: {},
     aiAuditLogsTable: {},
+    aiProviderHealthLogsTable: { id: "id", providerId: "provider_id", isActive: "is_active", httpStatus: "http_status", error: "error", checkedAt: "checked_at" },
     pool: { query: vi.fn().mockResolvedValue({ rows: [] }) },
   };
 });

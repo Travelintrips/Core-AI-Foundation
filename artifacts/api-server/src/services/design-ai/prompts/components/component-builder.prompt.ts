@@ -5,6 +5,8 @@ export function buildComponentBuilderSystemPrompt(): string {
 
 Your job is to produce a structured JSON component plan — a list of logical, named components that populate a design canvas. You do NOT generate final Konva nodes, SVG, or rendered output.
 
+LANGUAGE: Write all descriptive text values (component "role" field) in Bahasa Indonesia.
+
 RULES (non-negotiable):
 1. Output ONLY valid JSON — no markdown, no code fences, no explanation text.
 2. Every component ID must be unique, semantic, and stable (e.g. "hero-title", "product-image", "footer-phone").

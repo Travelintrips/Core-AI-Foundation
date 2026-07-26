@@ -171,7 +171,7 @@ async function generatePreviewPrompts(
   const agentCtx = await getAgentBySlug("image-prompt-generator");
   const systemPrompt = agentCtx
     ? ((agentCtx.agent.metadata as { systemPrompt?: string } | null)?.systemPrompt ?? "")
-    : "You are an expert AI image prompt engineer.";
+    : "You are an expert AI image prompt engineer. IMPORTANT: The 'prompt' and 'negativePrompt' fields must stay in English (required by image generation models). Write 'explanation', 'estimatedStyle', and 'estimatedTemplate' values in Bahasa Indonesia.";
 
   const userPrompt = `Generate ${count} DISTINCT preview concepts for a brand visual campaign.
 
@@ -327,7 +327,7 @@ Respond with ONLY valid JSON (no markdown):
   try {
     const output = await executeAI({
       prompt: userPrompt,
-      systemPrompt: "You are an expert image prompt engineer. Respond only with valid JSON.",
+      systemPrompt: "You are an expert image prompt engineer. Respond only with valid JSON. IMPORTANT: The 'prompt' and 'negativePrompt' fields must stay in English (required by image generation models). All other descriptive text must be in Bahasa Indonesia.",
       model: agentCtx.model,
       provider: agentCtx.provider,
       temperature: 0.5,

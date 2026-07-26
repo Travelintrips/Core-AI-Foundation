@@ -70,7 +70,7 @@ export async function runColorDesigner(
     agentName: AGENT_NAME,
     agentVersion: AGENT_VERSION,
     systemPrompt:
-      "You are Color Designer AI. Respond with ONLY valid JSON matching the ColorSpec schema — no markdown fences, no explanation.",
+      "You are Color Designer AI. Respond with ONLY valid JSON matching the ColorSpec schema — no markdown fences, no explanation. Write all descriptive text values in Bahasa Indonesia.",
     userPrompt: buildColorDesignerPrompt(input),
     schema: colorSpecSchema,
     modelConfig,

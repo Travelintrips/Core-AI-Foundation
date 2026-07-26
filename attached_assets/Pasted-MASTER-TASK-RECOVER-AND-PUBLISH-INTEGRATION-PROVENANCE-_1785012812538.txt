@@ -1,0 +1,269 @@
+MASTER TASK — RECOVER AND PUBLISH INTEGRATION PROVENANCE
+
+Problem:
+
+A final Phase 3 equivalence audit was run in another workspace, but the audit objects were absent.
+
+The audit workspace could not find:
+
+- branch integration/material-intelligence-v2
+- commit d8c8a23
+- commit 5eb3984
+- artifacts/api-server/src/domains/material-catalog-integration/
+
+The current task is NOT to reimplement Phase 2 or Phase 3.
+
+The goal is to locate the workspace/repository that actually contains the verified integration work, verify its provenance, and publish the integration branch to the approved Git remote so another workspace can audit it.
+
+Do not merge to main.
+Do not activate Phase 3.
+Do not begin Phase 4.
+Do not rewrite or recreate missing code until repository identity is proven.
+
+========================================================
+1. REPOSITORY IDENTITY
+========================================================
+
+Report:
+
+- pwd
+- repository root
+- git remote -v
+- current branch
+- current HEAD
+- git status --short
+- whether the repository is shallow
+- git branch --all
+- git log --oneline --decorate -20
+
+Confirm the expected repository is:
+
+Travelintrips/Core-AI-Foundation
+
+If this is not the expected repository, STOP and report the mismatch.
+
+========================================================
+2. LOCATE THE INTEGRATION OBJECTS
+========================================================
+
+Search all local refs and reachable objects for:
+
+- integration/material-intelligence-v2
+- d067a2a
+- 3c4aed0
+- d8c8a23
+- 8b96142
+- 5eb3984
+
+Use commands such as:
+
+git branch --all --contains <commit>
+git show-ref
+git reflog --all
+git fsck --no-reflogs --unreachable
+git cat-file -t <commit>
+git log --all --oneline --decorate
+
+Do not assume the commits exist.
+
+Report each object as:
+
+- reachable
+- reflog-only
+- unreachable object
+- absent
+
+========================================================
+3. VERIFY ACTUAL PHASE 3 FILES
+========================================================
+
+Search for:
+
+artifacts/api-server/src/domains/material-catalog-integration/
+
+Report:
+
+- whether the directory exists
+- all files inside it
+- total file count
+- test file count
+- git commit introducing each file
+
+Also search for:
+
+- MATERIAL_CATALOG_INTEGRATION_ENABLED
+- ExternalCatalogItem
+- MaterialCatalogProvider
+- mockOfficialCatalogProvider
+- dryRun
+- import-preview
+
+Confirm whether the implementation is actually present in this workspace.
+
+========================================================
+4. VERIFY THE INTEGRATION BRANCH
+========================================================
+
+If integration/material-intelligence-v2 exists locally:
+
+- checkout the branch
+- confirm a clean working tree
+- record its full commit history
+- verify the expected commits or their actual replacements
+- run git diff against its base
+- confirm Phase 2 and Phase 3 files are present
+
+Do not alter files.
+
+If the branch exists only in reflog or as an unreachable commit:
+
+- recover it into a new local branch named:
+  recovery/integration-material-intelligence-v2
+- do not modify the recovered commit contents
+- report the recovery command and recovered HEAD
+
+========================================================
+5. PROVENANCE CHECK
+========================================================
+
+Determine whether the Phase 3 integration was:
+
+- merged from a branch
+- cherry-picked
+- freshly reimplemented
+- copied as uncommitted files
+- lost due to workspace/repository mismatch
+
+For commit d8c8a23 or its actual equivalent, report:
+
+- parent commit
+- author
+- date
+- changed files
+- insertions/deletions
+- whether it is a merge commit
+- whether it contains the complete Phase 3 domain
+- whether its tests are included
+
+Do not infer equivalence from test counts alone.
+
+========================================================
+6. REMOTE ACCESS
+========================================================
+
+Check whether the approved Git remote is reachable.
+
+Do not print credentials or tokens.
+
+If authentication is missing:
+
+- report AUTHENTICATION REQUIRED
+- use the configured Replit GitHub integration or an approved secret
+- never place a token in source code, shell history, documentation, or the report
+
+After authentication is available, fetch all refs:
+
+git fetch --all --prune
+git fetch --unshallow origin || true
+
+Re-check whether the integration branch or reference commits already exist remotely.
+
+========================================================
+7. PUSH THE VERIFIED BRANCH
+========================================================
+
+Only when all of the following are true:
+
+- correct repository confirmed
+- integration branch recovered or found
+- Phase 2 files present
+- Phase 3 domain present
+- expected tests present
+- working tree clean
+- no unrelated files included
+
+Push:
+
+git push -u origin integration/material-intelligence-v2
+
+If the recovered branch has a different name, do not rename or push it over an existing remote branch without reporting first.
+
+Do not force-push.
+
+Do not push main.
+
+========================================================
+8. REMOTE VERIFICATION
+========================================================
+
+After push, verify:
+
+git ls-remote --heads origin integration/material-intelligence-v2
+
+Then perform a fresh remote checkout or temporary clone and confirm:
+
+- branch can be fetched
+- Phase 3 directory exists
+- Phase 3 tests exist
+- commit history is visible
+- d8c8a23 or its actual replacement is reachable
+- integration report exists
+
+Do not rely only on the original workspace after pushing.
+
+========================================================
+9. MINIMUM TEST VERIFICATION
+========================================================
+
+From the verified branch, run:
+
+- Phase 1 tests
+- Phase 2 tests
+- Phase 3 tests
+- MaterialSelectorDialog tests
+- portal regression tests
+- API production build
+
+Report exact totals.
+
+Do not claim full-suite success if known unrelated failures remain.
+
+========================================================
+10. FINAL REPORT
+========================================================
+
+Return:
+
+1. repository identity
+2. remote identity
+3. shallow-clone status
+4. branch found or recovered
+5. actual integration HEAD
+6. availability of d067a2a
+7. availability of 3c4aed0
+8. availability of d8c8a23
+9. availability of 8b96142
+10. availability of 5eb3984
+11. Phase 3 directory inventory
+12. provenance conclusion
+13. remote-auth status
+14. push result
+15. remote branch verification
+16. fresh-checkout verification
+17. test totals
+18. build result
+19. remaining blockers
+20. git status
+
+Use one verdict only:
+
+A. INTEGRATION PROVENANCE RECOVERED AND REMOTELY VERIFIABLE
+
+B. INTEGRATION FOUND LOCALLY BUT NOT PUBLISHED
+
+C. INTEGRATION OBJECTS NOT RECOVERABLE IN THIS WORKSPACE
+
+Do not merge to main.
+Do not activate Phase 3.
+Do not begin Phase 4.
+STOP.

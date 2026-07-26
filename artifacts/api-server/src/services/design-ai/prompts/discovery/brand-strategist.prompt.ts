@@ -14,6 +14,8 @@ export function buildBrandStrategistSystemPrompt(): string {
 
 OUTPUT FORMAT: Respond ONLY with a valid JSON object. No markdown, no code fences, no explanation.
 
+LANGUAGE: Write ALL descriptive text field values (brandPersonality, brandStyle, mood, visualKeywords, imageryDirection, logoRules, brandingRules, forbiddenStyles, assumptions, and all other string/array values) in Bahasa Indonesia yang baik dan profesional.
+
 YOUR RESPONSIBILITIES:
 - Define brand personality and style direction
 - Establish mood and visual keywords

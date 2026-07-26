@@ -86,6 +86,10 @@ import assetBrowserRouter from "./asset-browser.js";
 import { annotationRouter } from "../domains/annotation-system/index.js";
 // ── Team 21: Universal Material Library ───────────────────────────────────
 import materialLibraryRouter from "./material-library.js";
+// ── Interior Design Material Library (Phase 1) ────────────────────────────
+import materialLibraryCatalogRouter from "./material-library-catalog.js";
+// ── Interior Design Material Library (Phase 2 intelligence, additive) ─────
+import materialIntelligenceRouter from "./material-intelligence.js";
 // ── Team 23: Design Knowledge & Recommendation Adapter ────────────────────────
 import designKnowledgeRouter from "./design-knowledge.js";
 // ── Team 17 / Team 34: Universal Design Export Workspace ─────────────────────
@@ -150,6 +154,8 @@ import seedKnowledgeRouter from "./seedKnowledge.js";
 import imagePreviewPipelineRouter from "./image-preview-pipeline.js";
 // ── Customs Tariff (BTKI) ─────────────────────────────────────────────────
 import customsRouter from "./customs.js";
+// ── Phase 4A: Universal Material Catalog Import Engine ───────────────────
+import universalCatalogImportRouter from "./universal-catalog-import.js";
 // ── DEV-ONLY: Payment test adapter (never active in production) ───────────
 import devPaymentTestRouter from "./dev-payment-test.js";
 
@@ -248,9 +254,14 @@ router.use(designBlueprintsRouter);
 // ── Team 07: Domain Plugin Framework ─────────────────────────────────────
 router.use(designPluginsRouter);
 // ── Team 08: Design Components ───────────────────────────────────────────
-router.use(designComponentsRouter);
+// The router's paths are relative to /ai/design-components. Mounting it at
+// the API root would let its generic GET /:id handler intercept unrelated
+// endpoints such as /material-library.
+router.use("/ai/design-components", designComponentsRouter);
 // ── Team 09: Design Patterns ─────────────────────────────────────────────
-router.use(designPatternsRouter);
+// The router's paths are relative to /ai/design-patterns. Keep its generic
+// GET /:id route from intercepting unrelated API endpoints.
+router.use("/ai/design-patterns", designPatternsRouter);
 // ── Team 09: Design Version History & Revision System ────────────────────
 router.use(designVersioningRouter);
 // ── Team 10: Design Tokens ───────────────────────────────────────────────
@@ -299,6 +310,11 @@ router.use(assetBrowserRouter);
 router.use(annotationRouter);
 // ── Team 21: Universal Material Library ───────────────────────────────────────
 router.use(materialLibraryRouter);
+// ── Interior Design Material Library (Phase 1) ────────────────────────────────
+// Mount Phase 2 before Phase 1's generic /material-library/:id route so
+// /suggestions and /:id/similar are resolved by the owning domain.
+router.use(materialIntelligenceRouter);
+router.use(materialLibraryCatalogRouter);
 // ── Team 23: Design Knowledge & Recommendation Adapter ────────────────────────
 router.use(designKnowledgeRouter);
 // ── Team 17 / Team 34: Universal Design Export Workspace ─────────────────────
@@ -307,6 +323,9 @@ router.use(exportWorkspaceRouter);
 router.use(designCostAttributionRouter);
 // ── Team 35: Design Observability & Operations ────────────────────────────────
 router.use(designObservabilityOpsRouter);
+
+// ── Phase 4A: Universal Catalog Import Engine ─────────────────────────────────
+router.use(universalCatalogImportRouter);
 
 // ── DEV-ONLY: Payment test adapter ───────────────────────────────────────────
 // Never mounted in production. Requires explicit DEV_PAYMENT_TEST_ENABLED=true

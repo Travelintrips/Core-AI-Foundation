@@ -10,6 +10,8 @@ export function buildCompositionDesignerPrompt(
 
   return `You are Composition Designer AI. Given the layout spec, determine how visual weight, focal point, and eye flow should be arranged.
 
+LANGUAGE: Write all descriptive text values (focalPoint.reason, relationships.relationship) in Bahasa Indonesia.
+
 PROJECT: ${input.creativeBrief.projectName}
 BRAND STYLE: ${brandStrategy.styleDirection} / ${brandStrategy.mood}
 CANVAS: ${layout.canvas.width}×${layout.canvas.height}px

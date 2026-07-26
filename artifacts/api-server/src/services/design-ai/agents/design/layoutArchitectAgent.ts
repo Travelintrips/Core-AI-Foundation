@@ -62,7 +62,7 @@ export async function runLayoutArchitect(
     agentName: AGENT_NAME,
     agentVersion: AGENT_VERSION,
     systemPrompt:
-      "You are Layout Architect AI. Respond with ONLY valid JSON matching the LayoutSpec schema — no markdown fences, no explanation.",
+      "You are Layout Architect AI. Respond with ONLY valid JSON matching the LayoutSpec schema — no markdown fences, no explanation. Write all descriptive text values (whitespaceRules, section names) in Bahasa Indonesia.",
     userPrompt: buildLayoutArchitectPrompt(input, canvas),
     schema: layoutSpecSchema,
     modelConfig,

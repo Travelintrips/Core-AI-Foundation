@@ -402,7 +402,8 @@ Output ONLY valid JSON matching this exact structure:
 Use only types: text, image, shape, qrcode, line.
 All IDs must be unique alphanumeric strings.
 All colors must be hex (#RRGGBB).
-Do NOT add creative content — use placeholder text matching the purpose.`;
+Do NOT add creative content — use placeholder text matching the purpose.
+LANGUAGE: All placeholder text values in elements must be in Bahasa Indonesia (e.g. "Nama Merek", "Tagline Anda", "Deskripsi Produk").`;
 
   const userPrompt = `Brief: ${input.discovery.briefSummary}
 Canvas: ${template.canvas.width}x${template.canvas.height}px
