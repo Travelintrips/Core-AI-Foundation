@@ -39,9 +39,14 @@ export function rankMaterials(
   return materials
     .filter((material) =>
       material.status === "active"
-      && (!input.category || scoreOption(input.category, material.category) > 0)
-      && (!input.brand || scoreOption(input.brand, material.brand) > 0)
+      // ── Hard filters: explicit UI parameters restrict the result set exactly.
+      // Query terms may affect ranking/scoring, but these params must eliminate
+      // non-matching materials before scoring begins. (Phase 2 acceptance gap 2A.)
+      && (!input.category || normalizeField(material.category) === normalizeField(input.category))
+      && (!input.brand    || normalizeField(material.brand)    === normalizeField(input.brand))
       && (!input.priceTier || normalizeField(material.priceTier) === normalizeField(input.priceTier))
+      && (!input.finish   || normalizeField(material.finish)   === normalizeField(input.finish))
+      && (!input.color    || normalizeField(material.color)    === normalizeField(input.color))
     )
     .map((material) => scoreMaterial(material, input, normalizedQuery, mode, semanticMatcher))
     .filter((item) => shouldInclude(item, normalizedQuery.normalized, mode))
