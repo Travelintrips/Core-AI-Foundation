@@ -93,14 +93,28 @@ function safeSlug(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 120) || "material";
 }
 
-function rowToMaterial(row: Record<string, unknown>) {
+interface StagedMaterialRow extends Record<string, unknown> {
+  id: number;
+  status: string;
+  productCode: string;
+  category: string;
+  duplicateScore: number | null;
+  technicalSpecifications: Record<string, unknown>;
+  warnings: unknown[];
+  assetUrls: unknown[];
+}
+
+function rowToMaterial(row: Record<string, unknown>): StagedMaterialRow {
   return {
     ...row,
     id: Number(row.id),
+    status: String(row.status ?? "needs_review"),
+    productCode: String(row.product_code ?? ""),
+    category: String(row.category ?? ""),
     duplicateScore: row.duplicate_score == null ? null : Number(row.duplicate_score),
-    technicalSpecifications: row.technical_specifications ?? {},
-    warnings: row.warnings ?? [],
-    assetUrls: row.asset_urls ?? [],
+    technicalSpecifications: (row.technical_specifications as Record<string, unknown>) ?? {},
+    warnings: (row.warnings as unknown[]) ?? [],
+    assetUrls: (row.asset_urls as unknown[]) ?? [],
   };
 }
 
@@ -282,7 +296,7 @@ async function recordAudit(
     "material_import_staging",
     "success",
     { fromStatus, toStatus, reviewerId: actor?.id ?? null, reviewerName: actor?.name ?? null, ...extras, notes },
-    { actorId: actor?.id ?? null, actorType: actor?.type ?? "internal" },
+    { actorId: actor?.id ?? null, actorType: actor?.type === "system" ? ("system" as const) : ("internal_user" as const) },
   );
 }
 
@@ -381,7 +395,19 @@ export async function importApprovedMaterials(ids: number[] | "all", actor: Acto
   const query = ids === "all"
     ? await pool.query(`SELECT * FROM ai_platform.material_import_staging WHERE status = 'approved' ORDER BY id`)
     : await pool.query(`SELECT * FROM ai_platform.material_import_staging WHERE id = ANY($1::bigint[]) AND status = 'approved' ORDER BY id`, [ids]);
-  const report = { imported: 0, rejected: 0, duplicates: 0, updated: 0, failed: 0, pendingAssets: 0, processingTimeMs: 0, items: [] as Array<Record<string, unknown>> };
+  const approvedIds = new Set(query.rows.map((r) => Number((r as Record<string, unknown>).id)));
+  const requestedIds: number[] = ids === "all" ? [] : ids;
+  const report = { imported: 0, skipped: 0, rejected: 0, duplicates: 0, updated: 0, failed: 0, pendingAssets: 0, processingTimeMs: 0, items: [] as Array<Record<string, unknown>> };
+
+  // Count IDs that were requested but not approved (not in query result)
+  if (ids !== "all") {
+    for (const reqId of requestedIds) {
+      if (!approvedIds.has(reqId)) {
+        report.skipped++;
+        report.items.push({ id: reqId, status: "skipped" });
+      }
+    }
+  }
 
   for (const stagingRaw of query.rows) {
     const staging = stagingRaw as Record<string, unknown>;
@@ -398,6 +424,7 @@ export async function importApprovedMaterials(ids: number[] | "all", actor: Acto
       );
       if (!claim.rows[0]) {
         await client.query("ROLLBACK");
+        report.skipped++;
         report.items.push({ id, status: "skipped" });
         continue;
       }
@@ -462,7 +489,7 @@ export async function importApprovedMaterials(ids: number[] | "all", actor: Acto
       });
       await logAudit("material-search", "refresh_indexes", String(canonical.rows[0]?.id ?? id), "material", "success", {
         indexes: ["material_search", "material_intelligence", "similarity", "tags", "color", "finish", "texture"],
-      }, { actorId: actor.id ?? null, actorType: actor.type ?? "internal" });
+      }, { actorId: actor.id ?? null, actorType: actor.type === "system" ? ("system" as const) : ("internal_user" as const) });
       report.imported++;
       if (assetResult.status === "pending") report.pendingAssets++;
       report.updated += duplicate.rows[0] ? 1 : 0;
