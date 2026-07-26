@@ -173,7 +173,7 @@ PdfAdapter.prototype.extract = async function (input: AdapterInput): Promise<Ada
     };
   }
 
-  const pageTexts: string[] = parsed.pageTexts;
+  const pageTexts: string[] = (parsed as unknown as { pageTexts: string[] }).pageTexts ?? [];
   const totalPages: number = parsed.numpages ?? 0;
 
   const firstPageText = pageTexts[0] ?? "";
