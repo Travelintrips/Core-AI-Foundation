@@ -169,6 +169,7 @@ function isDisallowed(robotsTxt: string, path: string): boolean {
     } else if (currentAgentApplies && line.startsWith("Disallow:")) {
       const disallowedPath = line.slice(9).trim();
       // Empty Disallow: means "allow all" — path.startsWith("") is always true so we must guard
+      // Empty Disallow means "disallow nothing" — skip it
       if (disallowedPath && (disallowedPath === "/" || path.startsWith(disallowedPath))) return true;
     }
   }
