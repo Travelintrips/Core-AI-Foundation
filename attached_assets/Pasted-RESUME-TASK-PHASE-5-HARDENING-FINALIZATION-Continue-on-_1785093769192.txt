@@ -1,0 +1,431 @@
+RESUME TASK — PHASE 5 HARDENING FINALIZATION
+
+Continue on:
+
+feature/material-phase5-controlled-import
+
+Do not reset, hard-reset, clean, checkout another branch, or recreate the implementation.
+
+The current working tree contains a newly rebuilt Phase 5 implementation.
+
+First run:
+
+git status
+git diff --stat
+git diff --name-only
+git log --oneline -5
+
+Preserve all current valid changes.
+
+========================================================
+CURRENT VERIFIED STATUS
+========================================================
+
+- 31/31 Phase 5 focused tests passed.
+- Database imports were corrected to use @workspace/db.
+- Remaining known Phase 5 TypeScript issues:
+  1. incorrect Supabase storage/admin export usage;
+  2. PoolClient typing in materialStagingHandoff.
+- Build, full regression, UAT, commit, and push are not yet complete.
+
+Do not claim completion based only on the 31 focused tests.
+
+========================================================
+1. FIX THE REMAINING TYPESCRIPT ERRORS
+========================================================
+
+Inspect the actual exports from the existing Supabase storage module.
+
+Do not invent a new Supabase client if an existing project helper already exists.
+
+Fix the asset processor to use the correct exported client/helper.
+
+Verify:
+
+- upload API signature;
+- bucket/path handling;
+- returned URL/path shape;
+- error handling;
+- test mocking compatibility.
+
+Fix PoolClient typing using the actual type exported or returned by @workspace/db.
+
+Do not use broad any casts unless there is no typed project alternative.
+
+Then run focused typecheck for all new Phase 5 files.
+
+Required:
+
+- zero new Phase 5 TypeScript errors;
+- no suppression via ts-ignore unless technically unavoidable and documented.
+
+========================================================
+2. AUDIT ALL NEW FILES FOR PARTIAL WRITES
+========================================================
+
+The previous session stopped during targeted fixes.
+
+Inspect all newly created or modified Phase 5 files for:
+
+- truncated code;
+- duplicate functions;
+- missing exports;
+- stale imports;
+- placeholder comments;
+- incomplete route mounting;
+- inconsistent table/schema names;
+- partially implemented UI;
+- tests that only validate mocked shapes instead of real behavior.
+
+Review at minimum:
+
+- migration file
+- material import service
+- asset processor
+- staging handoff service
+- material import routes
+- API route index
+- API startup
+- Phase 5 tests
+- admin review UI
+- App route
+- documentation
+
+========================================================
+3. VERIFY PHASE 4A → PHASE 5 HANDOFF
+========================================================
+
+Prove the handoff from:
+
+- material_catalog_import_jobs
+- material_catalog_staging
+
+into the Phase 5 review/import flow.
+
+Requirements:
+
+- explicit source_staging_id;
+- explicit source_job_id;
+- checksum/provenance preserved;
+- idempotent handoff;
+- no duplicate Phase 5 row;
+- approved/rejected/imported decisions cannot be reset;
+- reviewer notes cannot be overwritten;
+- duplicate resolution cannot be cleared;
+- canonical material linkage cannot be lost.
+
+Add or correct tests for these invariants.
+
+========================================================
+4. VERIFY REAL DUPLICATE-RESOLUTION BEHAVIOR
+========================================================
+
+Confirm the implementation has distinct database behavior for:
+
+keep_existing
+- no canonical insert;
+- staging links to existing canonical item;
+- audit outcome recorded.
+
+replace_existing
+- target canonical ID required;
+- updates only approved mutable fields;
+- preserves immutable identity fields;
+- captures before/after audit;
+- creates no new row.
+
+merge
+- target canonical ID required;
+- validates field-level merge map;
+- applies keep_existing/use_incoming/combine;
+- records incoming, existing, merge map, and final result;
+- creates no new row.
+
+create_new
+- creates exactly one canonical row;
+- preserves provenance;
+- rejects unique identity conflicts.
+
+Each path must be:
+
+- transactional;
+- idempotent;
+- audited;
+- reflected in import report;
+- followed by search refresh.
+
+Do not allow replace or merge to silently behave like create_new.
+
+========================================================
+5. VERIFY MIGRATION AND STARTUP
+========================================================
+
+Use a formal SQL migration in the repository’s established migration path.
+
+The migration must cover:
+
+- Phase 5 review/import table or fields;
+- audit table;
+- source staging linkage;
+- duplicate-resolution metadata;
+- canonical linkage;
+- indexes;
+- status constraints;
+- actor fields;
+- timestamps.
+
+Normal API startup must not execute CREATE TABLE or ALTER TABLE.
+
+Startup may only verify required schema and return a clear migration-missing error.
+
+Run the migration in DEV only if credentials are available.
+
+Do not apply to production.
+
+========================================================
+6. VERIFY AUTHORIZATION
+========================================================
+
+Confirm granular permissions exist for:
+
+- material.review
+- material.reject
+- material.duplicate.resolve
+- material.import
+- material.asset.retry
+
+Minimum behavior:
+
+owner:
+all permissions
+
+admin:
+all permissions
+
+manager:
+review/reject/duplicate resolution;
+no import unless explicitly granted
+
+internal_staff:
+no automatic canonical import permission
+
+Test every write endpoint and sensitive action.
+
+Do not rely only on accountType === internal.
+
+========================================================
+7. COMPLETE ASSET PROCESSOR
+========================================================
+
+After fixing the Supabase integration, verify:
+
+- HTTPS only;
+- allowed source/domain policy;
+- redirect cap;
+- timeout;
+- MIME validation;
+- 10 MB or documented size limit;
+- WebP conversion;
+- thumbnail generation;
+- deterministic storage path;
+- checksum;
+- original source URL retained;
+- no binary stored in PostgreSQL;
+- asset failure sets asset_pending;
+- canonical import is not rolled back;
+- retry is idempotent.
+
+Prefer existing worker/job infrastructure.
+
+If still synchronous, enforce:
+
+- bounded batch size;
+- request time budget;
+- no unbounded import-all;
+- resumable retry.
+
+========================================================
+8. COMPLETE ADMIN UI
+========================================================
+
+Verify the page compiles and supports:
+
+- dashboard stats;
+- lifecycle status badges;
+- filters;
+- search;
+- sort;
+- pagination;
+- item detail;
+- extraction diff;
+- reviewer notes;
+- approve/reject;
+- bulk approve/reject;
+- duplicate comparison;
+- required target canonical ID for replace/merge;
+- field-level merge map;
+- explicit confirmation;
+- import action;
+- audit history;
+- asset retry;
+- import result report.
+
+Import report must show:
+
+- created;
+- kept existing;
+- replaced;
+- merged;
+- rejected;
+- failed;
+- pending assets.
+
+Do not allow replace or merge without a target canonical record.
+
+========================================================
+9. TEST AND BUILD
+========================================================
+
+Run in this order:
+
+1. Phase 5 focused tests
+2. Phase 4A tests
+3. Phase 4B tests
+4. Material Library tests
+5. Material Intelligence tests
+6. provider tests
+7. API build
+8. admin frontend build
+9. typecheck baseline comparison
+10. full regression suite
+
+Report exact totals.
+
+Required:
+
+- 31 existing Phase 5 tests remain passing;
+- add missing hardening tests as needed;
+- zero new failures;
+- zero new TypeScript errors against baseline;
+- no Phase 5 build errors.
+
+Do not report unrelated pre-existing failures as Phase 5 failures, but prove the baseline comparison.
+
+========================================================
+10. CONTROLLED DEV UAT
+========================================================
+
+Use real Niro Granite Phase 4A staging data in DEV Supabase.
+
+If no staging data exists:
+
+- rerun one controlled Phase 4A Niro Granite import in DEV;
+- do not fabricate normal UAT records manually.
+
+Test at minimum:
+
+- approve;
+- reject with required notes;
+- rejected item blocked from import;
+- keep_existing;
+- replace_existing;
+- merge with field map;
+- create_new;
+- one partial failure;
+- retry;
+- repeated import/idempotency;
+- successful Supabase Storage upload;
+- one asset_pending scenario;
+- asset retry;
+- search refresh;
+- complete audit trail.
+
+Record:
+
+- canonical count before;
+- created;
+- kept existing;
+- replaced;
+- merged;
+- rejected;
+- failed;
+- canonical count after.
+
+Required invariant:
+
+after count
+=
+before count
++
+successful create_new count
+
+keep_existing, replace_existing, merge, rejected, and failed must not increase canonical count.
+
+If DEV credentials or data are unavailable, stop and issue verdict C with the exact blocker. Do not fabricate UAT evidence.
+
+========================================================
+11. DOCUMENTATION
+========================================================
+
+Complete:
+
+docs/material-phase5-controlled-import.md
+
+and:
+
+docs/material-phase5-release-hardening-report.md
+
+Include:
+
+- final architecture;
+- migration path;
+- Phase 4A handoff;
+- duplicate-resolution semantics;
+- permission matrix;
+- transaction model;
+- asset architecture;
+- test totals;
+- build totals;
+- typecheck baseline;
+- UAT environment and evidence;
+- canonical before/after counts;
+- storage evidence;
+- search evidence;
+- remaining limitations.
+
+========================================================
+12. GIT DELIVERY
+========================================================
+
+Only after tests and builds are complete:
+
+- inspect final git diff;
+- remove accidental generated/untracked files;
+- commit all valid Phase 5 changes;
+- push to origin/feature/material-phase5-controlled-import;
+- verify remote commit hash.
+
+Do not merge to main.
+Do not activate Phase 5.
+Do not begin Phase 6.
+
+Use exactly one verdict:
+
+A. PHASE 5 CONTROLLED IMPORT COMPLETE — READY FOR RELEASE REVIEW
+
+B. PHASE 5 RELEASE HARDENING COMPLETE WITH MINOR NON-BLOCKING LIMITATIONS
+
+C. PHASE 5 BLOCKED
+
+D. PHASE 5 FAILED
+
+Verdict A is forbidden unless:
+
+- all four duplicate-resolution paths are proven against DEV database;
+- controlled UAT is complete;
+- canonical count invariant is proven;
+- Supabase Storage upload is proven;
+- search refresh is proven;
+- final commit is pushed and remotely verified.
+
+STOP.

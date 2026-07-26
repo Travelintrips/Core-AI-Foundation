@@ -71,15 +71,17 @@ vi.mock("@workspace/db", () => ({
       if (s.startsWith("create table")) return { rows: [] };
 
       // INSERT staging
+      // New schema: $1=source_staging_id,$2=source_job_id,$3=source_checksum,
+      //             $4=collection,$5=product_code,$6=variant,$7=brand,$8=category,
+      //             $9=material_type,$10=name,...
       if (s.includes("insert into ai_platform.material_import_staging")) {
         const id = nextId++;
-        // INSERT params: $1=collection,$2=product_code,$3=variant,$4=brand,$5=category,$6=material_type,$7=name,...
         const row = makeRow(
           {
-            productCode: String(params[1] ?? "PC-001"),
-            category: String(params[4] ?? "Floor"),
-            brand: params[3] as string | undefined,
-            name: params[6] as string | undefined,
+            productCode: String(params[4] ?? "PC-001"),
+            category: String(params[7] ?? "Floor"),
+            brand: params[6] as string | undefined,
+            name: params[9] as string | undefined,
           },
           id,
         );
@@ -144,7 +146,20 @@ vi.mock("@workspace/db", () => ({
         return { rows: [{ count: mockRows.length }] };
       }
 
-      // UPDATE staging SET status = $2
+      // UPDATE staging SET duplicate_resolution (resolveDuplicate)
+      if (s.startsWith("update ai_platform.material_import_staging") && s.includes("duplicate_resolution")) {
+        const id = Number(params[0]);
+        const row = mockRows.find((r) => r.id === id);
+        if (row) {
+          row.duplicate_resolution = params[1];
+          row.target_canonical_id = params[2];
+          row.merge_field_map = params[3] ? JSON.parse(params[3] as string) : null;
+          row.updated_at = new Date().toISOString();
+        }
+        return { rows: row ? [row] : [] };
+      }
+
+      // UPDATE staging SET status = $2 (transitionStagedMaterial)
       if (s.startsWith("update ai_platform.material_import_staging")) {
         const id = Number(params[0]);
         const row = mockRows.find((r) => r.id === id);
@@ -168,12 +183,44 @@ vi.mock("@workspace/db", () => ({
           if (s === "rollback") transactionOpen = false;
           return { rows: [] };
         }
-        // Simulate canonical insert returning an ID
-        if (s.includes("insert into ai_platform.canonical_materials")) {
+        // Claim: UPDATE staging SET status='importing' WHERE status='approved'
+        if (s.startsWith("update ai_platform.material_import_staging") && s.includes("importing")) {
+          const id = Number(params[0]);
+          const row = mockRows.find((r) => r.id === id && r.status === "approved");
+          if (row) {
+            row.status = "importing";
+            return { rows: [row] };
+          }
+          return { rows: [] };
+        }
+        // UPDATE staging (final status after import)
+        if (s.startsWith("update ai_platform.material_import_staging")) {
+          const id = Number(params[0]);
+          const row = mockRows.find((r) => r.id === id);
+          if (row && params[1] !== undefined) row.status = params[1] as string;
+          return { rows: row ? [row] : [] };
+        }
+        // SELECT * FROM staging WHERE id (used in claim loop)
+        if (s.includes("select * from ai_platform.material_import_staging where id =")) {
+          const id = Number(params[0]);
+          const row = mockRows.find((r) => r.id === id);
+          return { rows: row ? [row] : [] };
+        }
+        // SELECT id FROM materials WHERE material_code (conflict/duplicate check)
+        if (s.includes("select id from ai_platform.materials where material_code")) {
+          return { rows: [] }; // no duplicate by default
+        }
+        // INSERT INTO materials (create_new path)
+        if (s.includes("insert into ai_platform.materials")) {
           return { rows: [{ id: 9001 }] };
         }
-        if (s.includes("select id from ai_platform.canonical_materials")) {
-          return { rows: [] }; // no duplicate
+        // SELECT * FROM materials WHERE id (replace/merge path)
+        if (s.includes("select * from ai_platform.materials where id")) {
+          return { rows: [{ id: Number(params[0]), material_code: "EXISTING-001", name: "Existing Material", category: "Floor" }] };
+        }
+        // UPDATE materials (replace/merge path)
+        if (s.startsWith("update ai_platform.materials")) {
+          return { rows: [] };
         }
         return { rows: [] };
       }),
@@ -412,7 +459,14 @@ describe("8. Duplicate resolution", () => {
   for (const resolution of resolutions) {
     it(`accepts resolution: ${resolution}`, async () => {
       const m = await createStagedMaterial(validInput({ duplicateScore: 0.9 }), actor);
-      const result = await resolveDuplicate(m.id, resolution, actor, "Handled");
+      // replace_existing and merge require targetCanonicalId; merge also requires mergeFieldMap
+      const options =
+        resolution === "merge"
+          ? { targetCanonicalId: 99, mergeFieldMap: { name: "use_incoming" as const, finish: "keep_existing" as const } }
+          : resolution === "replace_existing"
+          ? { targetCanonicalId: 99 }
+          : undefined;
+      const result = await resolveDuplicate(m.id, resolution, actor, "Handled", options);
       expect(result.resolution).toBe(resolution);
       expect(result.saved).toBe(true);
     });

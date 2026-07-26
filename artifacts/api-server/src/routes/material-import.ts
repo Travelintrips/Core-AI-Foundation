@@ -18,6 +18,7 @@ import {
   transitionStagedMaterial,
   type Actor,
   type DuplicateResolution,
+  type MergeFieldMap,
   type ImportState,
   IMPORT_STATES,
 } from "../services/materialImportService.js";
@@ -101,7 +102,13 @@ router.post("/ai/material-import/review/bulk", async (req, res) => {
 });
 
 router.post("/ai/material-import/duplicates/:id/resolve", async (req, res) => {
-  try { res.json(await resolveDuplicate(Number(req.params.id), req.body?.resolution as DuplicateResolution, actor(req), req.body?.notes)); } catch (err) { handle(res, err); }
+  try {
+    const resolution = req.body?.resolution as DuplicateResolution;
+    const options: { targetCanonicalId?: number; mergeFieldMap?: MergeFieldMap } = {};
+    if (req.body?.targetCanonicalId != null) options.targetCanonicalId = Number(req.body.targetCanonicalId);
+    if (req.body?.mergeFieldMap != null) options.mergeFieldMap = req.body.mergeFieldMap as MergeFieldMap;
+    res.json(await resolveDuplicate(Number(req.params.id), resolution, actor(req), req.body?.notes, options));
+  } catch (err) { handle(res, err); }
 });
 
 router.post("/ai/material-import/import", async (req, res) => {

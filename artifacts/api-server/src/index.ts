@@ -35,7 +35,7 @@ import { ensureMaterialLibraryTables, seedMaterialLibraryIfEmpty } from "./domai
 import { ensureStorageBucket } from "./lib/supabaseStorage.js";
 import { resumeIncompleteDesignRenderBatches } from "./services/design-recovery/startupResume.js";
 import { ensureSubmitIdempotencyTable } from "./services/submitIdempotencyService.js";
-import { ensureMaterialImportTables } from "./services/materialImportService.js";
+import { verifyMaterialImportTables } from "./services/materialImportService.js";
 
 // ── Startup recovery idempotency guard ────────────────────────────────────────
 // Prevents the recovery from running twice if the API server and job worker
@@ -83,8 +83,8 @@ app.listen(port, (err) => {
       logger.warn({ err }, "[material-library] Table/seed init failed (non-blocking)"),
     );
 
-  ensureMaterialImportTables().catch((err) =>
-    logger.warn({ err }, "[material-import] Table init failed (non-blocking)"),
+  verifyMaterialImportTables().catch((err) =>
+    logger.warn({ err }, "[material-import] Phase 5 table verification failed (non-blocking)"),
   );
 
   // ── Supabase Storage bucket (create ai-assets if missing) ────────────────
