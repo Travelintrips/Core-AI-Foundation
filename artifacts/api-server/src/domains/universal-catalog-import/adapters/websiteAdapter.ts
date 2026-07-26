@@ -168,7 +168,8 @@ function isDisallowed(robotsTxt: string, path: string): boolean {
       currentAgentApplies = agent === "*" || agent.toLowerCase() === "catalogbot";
     } else if (currentAgentApplies && line.startsWith("Disallow:")) {
       const disallowedPath = line.slice(9).trim();
-      if (disallowedPath === "/" || path.startsWith(disallowedPath)) return true;
+      // Empty Disallow means "disallow nothing" — skip it
+      if (disallowedPath && (disallowedPath === "/" || path.startsWith(disallowedPath))) return true;
     }
   }
   return false;
