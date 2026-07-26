@@ -1,0 +1,285 @@
+RESUME PHASE 4 — FINAL TEST FIX AND UAT
+
+Continue from the current branch and current workspace.
+
+Do not recreate the Phase 4 implementation.
+Do not redesign the provider, route, UI, feature flags, or registry.
+Do not modify Phase 1–3 behavior.
+
+Current verified state:
+
+- Phase 4 provider foundation implemented
+- preview route implemented
+- route registered
+- AbortSignal support implemented
+- admin preview UI implemented
+- admin navigation wired
+- API production build passes
+- Phase 4 tests currently: 63 passed / 73 total
+- remaining failures are caused by incorrect dynamic import() paths inside test bodies
+
+========================================================
+1. FIX ONLY THE REMAINING TEST IMPORTS
+========================================================
+
+Inspect the failing Phase 4 tests.
+
+Correct every dynamic import() path so it resolves from:
+
+artifacts/api-server/src/__tests__/
+
+Use the full domain path consistently, for example:
+
+../domains/material-catalog-integration/...
+
+Do not change production behavior merely to satisfy a test.
+
+Run only the failing test files first.
+
+Expected:
+
+73 / 73 Phase 4 tests pass.
+
+========================================================
+2. RUN PHASE 4 TARGETED TESTS
+========================================================
+
+Run all Phase 4 tests and report exact totals.
+
+Verify coverage for:
+
+- provider configuration
+- feature flags
+- registration
+- mapping
+- pagination
+- AbortSignal
+- timeout
+- retries
+- rate limiting
+- malformed payload
+- 10 MB payload enforcement
+- 500-record enforcement
+- media safety
+- credential redaction
+- preview route
+- authorization
+- dryRun rejection
+- duplicate classification
+- no database write
+- no canonical mutation
+
+Zero Phase 4 failures allowed.
+
+========================================================
+3. RUN REGRESSION
+========================================================
+
+Run:
+
+- Phase 1 Material Library tests
+- Phase 2 Material Intelligence tests
+- Phase 3 Catalog Foundation tests
+- MaterialSelectorDialog tests
+- InteriorDesignEditor tests
+- full API server suite
+- API production build
+- admin frontend build with the managed workflow PORT environment
+- customer portal typecheck where applicable
+
+Separate all verified pre-existing failures from new failures.
+
+Do not fix unrelated pre-existing issues in this task.
+
+========================================================
+4. FLAGS-OFF UAT
+========================================================
+
+With these flags absent or false:
+
+MATERIAL_CATALOG_INTEGRATION_ENABLED=false
+MATERIAL_NIRO_GRANITE_PROVIDER_ENABLED=false
+
+Verify:
+
+- provider is not registered
+- preview route is unavailable according to feature-gate convention
+- no external fetch occurs
+- no database write occurs
+- Material Library remains unchanged
+- Material Intelligence remains unchanged
+
+========================================================
+5. CONTROLLED DEVELOPMENT UAT
+========================================================
+
+In development only, temporarily enable:
+
+MATERIAL_CATALOG_INTEGRATION_ENABLED=true
+MATERIAL_NIRO_GRANITE_PROVIDER_ENABLED=true
+
+Use only the controlled official fixture/feed.
+
+Verify:
+
+1. authorized admin can validate provider;
+2. anonymous request is rejected;
+3. first preview page loads;
+4. next-page cursor works;
+5. normalized records are deterministic;
+6. invalid records are isolated;
+7. duplicates are classified;
+8. unsafe media URLs are rejected;
+9. payload over 10 MB is rejected;
+10. more than 500 records is rejected or handled according to the documented contract;
+11. AbortSignal cancels the request;
+12. timeout is typed and safe;
+13. retry count is bounded;
+14. dryRun=false is rejected;
+15. no database record is inserted;
+16. canonical Material Library is unchanged;
+17. credentials are absent from responses and logs.
+
+After UAT:
+
+- disable both flags;
+- restart the API;
+- verify provider is inactive again.
+
+========================================================
+6. UI UAT
+========================================================
+
+Verify the admin preview screen supports:
+
+- provider status
+- configuration status
+- preview execution
+- valid count
+- invalid count
+- new count
+- exact duplicate count
+- possible duplicate count
+- conflicting identity count
+- warnings
+- errors
+- normalized item detail
+- safe media references
+- pagination
+- report export
+
+Confirm there are no actions named:
+
+- Import
+- Save to Library
+- Sync
+- Merge
+- Overwrite
+
+Phase 4 must remain preview-only.
+
+========================================================
+7. DOCUMENTATION
+========================================================
+
+Complete:
+
+docs/material-phase4-official-provider-report.md
+
+Include:
+
+- actual base commit
+- branch
+- provider and source type
+- official/live-source status
+- controlled fixture status
+- mapped fields
+- unavailable fields
+- payload enforcement
+- record limit
+- pagination
+- AbortSignal
+- retry and rate-limit behavior
+- media safety
+- credential redaction
+- route authorization
+- feature flags
+- UI result
+- tests
+- regression
+- builds
+- UAT
+- zero-write verification
+- canonical mutation verification
+- remaining limitations
+
+Be explicit if the live official source remains unavailable or unauthorized.
+
+========================================================
+8. GIT HYGIENE
+========================================================
+
+Before committing:
+
+- remove uploaded task specifications;
+- remove unrelated attached_assets files;
+- remove temporary logs;
+- remove unnecessary screenshots;
+- inspect .replit for credentials;
+- ensure no PAT, API key, or token is tracked;
+- ensure only intended Phase 4 files remain.
+
+Commit and push only:
+
+feature/material-phase4-official-provider
+
+Do not merge to main.
+
+========================================================
+FINAL REPORT
+========================================================
+
+Return:
+
+1. branch
+2. base commit
+3. final commit
+4. provider
+5. source status
+6. Phase 4 test totals
+7. regression totals
+8. pre-existing failures
+9. new failures
+10. payload-limit result
+11. record-limit result
+12. AbortSignal result
+13. pagination result
+14. authorization result
+15. credential-redaction result
+16. media-safety result
+17. flags-off UAT
+18. controlled UAT
+19. preview UI result
+20. database-write result
+21. canonical mutation result
+22. API build
+23. frontend build
+24. documentation status
+25. git status
+26. remote branch HEAD
+27. remaining blockers
+
+Use one verdict only:
+
+A. PHASE 4 OFFICIAL PROVIDER COMPLETE — SAFE FOR INTEGRATION REVIEW
+
+B. PHASE 4 FOUNDATION COMPLETE — LIVE SOURCE BLOCKED
+
+C. PHASE 4 COMPLETE WITH BLOCKERS
+
+D. PHASE 4 FAILED
+
+Do not merge to main.
+Do not activate the provider in production.
+Do not begin Phase 5.
+STOP.
